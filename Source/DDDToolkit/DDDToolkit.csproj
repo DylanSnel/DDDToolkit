@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentResults" Version="3.15.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Package the generator in the analyzer directory of the nuget package -->
+    <None Remove="$(OutputPath)/$(AssemblyName).Analyzers.dll" />
+    <None Include="$(OutputPath)/$(AssemblyName).Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" />
+  </ItemGroup>
+</Project>

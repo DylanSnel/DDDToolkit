@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DDD_Module>Api</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    
+    <ProjectReference Include="..\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Domain\ProductAggregate\" />
+    <Folder Include="Domain\UserAggregate\Entities\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,87 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34408.163
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit", "Source\DDDToolkit\DDDToolkit.csproj", "{C91EAD91-CEEB-4B2B-9E1C-18B0634847C6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{31D5E6FD-D1E8-47A5-961D-8C39706CCE8C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.EntityFramework", "Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj", "{778D5B79-88FD-4D48-8168-37A430264568}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.Analyzers", "Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj", "{0361699F-C08D-4E33-842C-38AF5C16CBFE}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.EntityFramework.Analyzers", "Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj", "{DAD90160-0035-459E-8830-4FD2337B210B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples", "Examples", "{A19529AE-DE98-48A7-8C8D-27BBBB4502C5}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.ExampleApi", "Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj", "{68D74001-ED22-435A-A483-90A89C195145}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{32B6757D-54FF-4CBE-A7D6-454619A8E372}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.ExampleLibrary", "Examples\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj", "{137CFABC-6AFD-4061-A573-AC6906916625}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.Tests", "Tests\DDDToolkit.Tests\DDDToolkit.Tests.csproj", "{EB319619-91B1-48BC-A4C9-F8442B47BED4}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SourceGeneratorsToolkit", "Source\SourceGeneratorsToolkit\SourceGeneratorsToolkit.csproj", "{67372DB6-8E1B-423E-9665-3E0C0D1D6ED5}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.Abstractions", "Source\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj", "{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C91EAD91-CEEB-4B2B-9E1C-18B0634847C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C91EAD91-CEEB-4B2B-9E1C-18B0634847C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C91EAD91-CEEB-4B2B-9E1C-18B0634847C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C91EAD91-CEEB-4B2B-9E1C-18B0634847C6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{778D5B79-88FD-4D48-8168-37A430264568}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{778D5B79-88FD-4D48-8168-37A430264568}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{778D5B79-88FD-4D48-8168-37A430264568}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{778D5B79-88FD-4D48-8168-37A430264568}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0361699F-C08D-4E33-842C-38AF5C16CBFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0361699F-C08D-4E33-842C-38AF5C16CBFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0361699F-C08D-4E33-842C-38AF5C16CBFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0361699F-C08D-4E33-842C-38AF5C16CBFE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DAD90160-0035-459E-8830-4FD2337B210B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DAD90160-0035-459E-8830-4FD2337B210B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DAD90160-0035-459E-8830-4FD2337B210B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DAD90160-0035-459E-8830-4FD2337B210B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68D74001-ED22-435A-A483-90A89C195145}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68D74001-ED22-435A-A483-90A89C195145}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68D74001-ED22-435A-A483-90A89C195145}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68D74001-ED22-435A-A483-90A89C195145}.Release|Any CPU.Build.0 = Release|Any CPU
+		{137CFABC-6AFD-4061-A573-AC6906916625}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{137CFABC-6AFD-4061-A573-AC6906916625}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{137CFABC-6AFD-4061-A573-AC6906916625}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{137CFABC-6AFD-4061-A573-AC6906916625}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EB319619-91B1-48BC-A4C9-F8442B47BED4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB319619-91B1-48BC-A4C9-F8442B47BED4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB319619-91B1-48BC-A4C9-F8442B47BED4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB319619-91B1-48BC-A4C9-F8442B47BED4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67372DB6-8E1B-423E-9665-3E0C0D1D6ED5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67372DB6-8E1B-423E-9665-3E0C0D1D6ED5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67372DB6-8E1B-423E-9665-3E0C0D1D6ED5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67372DB6-8E1B-423E-9665-3E0C0D1D6ED5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{68D74001-ED22-435A-A483-90A89C195145} = {A19529AE-DE98-48A7-8C8D-27BBBB4502C5}
+		{137CFABC-6AFD-4061-A573-AC6906916625} = {A19529AE-DE98-48A7-8C8D-27BBBB4502C5}
+		{EB319619-91B1-48BC-A4C9-F8442B47BED4} = {31D5E6FD-D1E8-47A5-961D-8C39706CCE8C}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D1B155E4-BA77-4C24-BD6C-A87AB2543BC8}
+	EndGlobalSection
+EndGlobal
