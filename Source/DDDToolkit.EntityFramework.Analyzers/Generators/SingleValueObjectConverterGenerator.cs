@@ -4,11 +4,13 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using SourceGeneratorsToolkit;
+using SourceGeneratorsToolkit.Providers;
 using SourceGeneratorsToolkit.SyntaxExtensions;
-using SourceGeneratorsToolkit.SyntaxExtensions.Attributes;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+
+namespace DDDToolkit.EntityFramework.Analyzers.Generators;
 
 [Generator]
 public class SingleValueObjectConverterGenerator : IIncrementalGenerator
@@ -16,12 +18,12 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
 
-#if DEBUG
-        if (!System.Diagnostics.Debugger.IsAttached)
-        {
-            System.Diagnostics.Debugger.Launch();
-        }
-#endif
+        //#if DEBUG
+        //        if (!System.Diagnostics.Debugger.IsAttached)
+        //        {
+        //            System.Diagnostics.Debugger.Launch();
+        //        }
+        //#endif
 
         var dddPropteriesProvider = context.AnalyzerConfigOptionsProvider
              .Select((provider, _) =>
@@ -34,10 +36,10 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
              });
 
 
-        var singleValueObjects = context.FindAttributesProvider<SingleValueObjectAttribute, ClassDeclarationSyntax, GenericObjectDefinition>(
+        var singleValueObjects = context.FindAttributesProvider<SingleValueObjectAttribute, RecordDeclarationSyntax, GenericObjectDefinition>(
               transform: static (ctx, _) =>
               {
-                  var classDeclaration = ctx.TargetNode as ClassDeclarationSyntax;
+                  var classDeclaration = ctx.TargetNode as RecordDeclarationSyntax;
                   GenericObjectDefinition singleValueObjectDefinition = new()
                   {
                       Name = classDeclaration!.Identifier.Text,
@@ -53,10 +55,10 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
                   return singleValueObjectDefinition;
 
               });
-        var entityIds = context.FindAttributesProvider<EntityIdAttribute, ClassDeclarationSyntax, GenericObjectDefinition>(
+        var entityIds = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax, GenericObjectDefinition>(
               transform: static (ctx, _) =>
               {
-                  var classDeclaration = ctx.TargetNode as ClassDeclarationSyntax;
+                  var classDeclaration = ctx.TargetNode as RecordDeclarationSyntax;
                   GenericObjectDefinition singleValueObjectDefinition = new()
                   {
                       Name = classDeclaration!.Identifier.Text,

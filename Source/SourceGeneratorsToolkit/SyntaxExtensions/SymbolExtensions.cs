@@ -1,8 +1,8 @@
-namespace SourceGeneratorsToolkit.SyntaxExtensions;
 
 using Microsoft.CodeAnalysis;
 using System.Linq;
 
+namespace SourceGeneratorsToolkit.SyntaxExtensions;
 internal static class SymbolExtensions
 {
     public static bool HasAttribute(this ISymbol symbol, string atrributeName)
@@ -11,7 +11,7 @@ internal static class SymbolExtensions
             .Any(_ => _.AttributeClass?.Name == atrributeName);
     }
 
-    public static AttributeData FindAttribute(this ISymbol symbol, string atrributeName)
+    public static AttributeData? FindAttribute(this ISymbol symbol, string atrributeName)
     {
         return symbol.GetAttributes()
             .FirstOrDefault(_ => _.AttributeClass?.Name == atrributeName);

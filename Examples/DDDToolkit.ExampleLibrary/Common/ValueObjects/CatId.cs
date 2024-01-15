@@ -3,6 +3,6 @@
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 [EntityId<Guid>]
-public partial class CatId
+public partial record CatId
 {
 }

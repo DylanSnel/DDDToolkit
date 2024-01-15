@@ -2,7 +2,7 @@
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
-[EntityId<Guid>]
-public partial class PersonId
+[EntityId<Guid>("PRS")]
+public partial record PersonId
 {
 }

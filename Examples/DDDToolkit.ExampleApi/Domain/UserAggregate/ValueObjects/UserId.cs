@@ -3,6 +3,6 @@
 namespace DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 
 [EntityId<Guid>]
-public partial class UserId
+public partial record UserId
 {
 }

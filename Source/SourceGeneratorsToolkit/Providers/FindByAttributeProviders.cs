@@ -1,13 +1,14 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using SourceGeneratorsToolkit.Providers.Contexts;
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 
-namespace SourceGeneratorsToolkit.SyntaxExtensions.Attributes;
-public static class AttributeSyntaxExtensions
+namespace SourceGeneratorsToolkit.Providers;
+public static class FindByAttributeProviders
 {
     //public static IncrementalValueProvider<ImmutableArray<AttributeSyntaxContext>> GetAttributeProvider<TAttribute>(this IncrementalGeneratorInitializationContext context) where TAttribute : Attribute
     //    => GetAttributeProvider(context, typeof(TAttribute));
@@ -66,31 +67,30 @@ public static class AttributeSyntaxExtensions
         }
     }
 
-    public static IncrementalValuesProvider<MemberAttributeSyntaxContext> FindAttributesProvider<TAttribute, TType>(this IncrementalGeneratorInitializationContext context) where TAttribute : Attribute where TType : MemberDeclarationSyntax
-    => FindAttributesProvider<TAttribute, TType, MemberAttributeSyntaxContext>(context, (ctx, _) => ctx);
+    public static IncrementalValuesProvider<TypeAttributeSyntaxContext> FindAttributesProvider<TAttribute, TType>(this IncrementalGeneratorInitializationContext context) where TAttribute : Attribute where TType : MemberDeclarationSyntax
+    => context.FindAttributesProvider<TAttribute, TType, TypeAttributeSyntaxContext>((ctx, _) => ctx);
 
-    public static IncrementalValuesProvider<MemberAttributeSyntaxContext> FindAttributesProvider<TAttribute, TType>(this IncrementalGeneratorInitializationContext context, Func<SyntaxNode, CancellationToken, bool> additionalPredicate) where TAttribute : Attribute where TType : MemberDeclarationSyntax
-    => FindAttributesProvider<TAttribute, TType, MemberAttributeSyntaxContext>(context, additionalPredicate: additionalPredicate, transform: (ctx, _) => ctx);
-
-    public static IncrementalValuesProvider<TReturn> FindAttributesProvider<TAttribute, TType, TReturn>(this IncrementalGeneratorInitializationContext context,
-                                                                   Func<MemberAttributeSyntaxContext, CancellationToken, TReturn> transform) where TAttribute : Attribute where TType : MemberDeclarationSyntax
-        => FindAttributesProvider<TAttribute, TType, TReturn>(context, null, transform);
-
+    public static IncrementalValuesProvider<TypeAttributeSyntaxContext> FindAttributesProvider<TAttribute, TType>(this IncrementalGeneratorInitializationContext context, Func<SyntaxNode, CancellationToken, bool> additionalPredicate) where TAttribute : Attribute where TType : MemberDeclarationSyntax
+    => context.FindAttributesProvider<TAttribute, TType, TypeAttributeSyntaxContext>(additionalPredicate: additionalPredicate, transform: (ctx, _) => ctx);
 
     public static IncrementalValuesProvider<TReturn> FindAttributesProvider<TAttribute, TType, TReturn>(this IncrementalGeneratorInitializationContext context,
-                                                                    Func<SyntaxNode, CancellationToken, bool> additionalPredicate,
-                                                                    Func<MemberAttributeSyntaxContext, CancellationToken, TReturn> transform,
+                                                                   Func<TypeAttributeSyntaxContext, CancellationToken, TReturn> transform) where TAttribute : Attribute where TType : MemberDeclarationSyntax
+        => context.FindAttributesProvider<TAttribute, TType, TReturn>(null, transform);
+
+    public static IncrementalValuesProvider<TReturn> FindAttributesProvider<TAttribute, TType, TReturn>(this IncrementalGeneratorInitializationContext context,
+                                                                    Func<SyntaxNode, CancellationToken, bool>? additionalPredicate,
+                                                                    Func<TypeAttributeSyntaxContext, CancellationToken, TReturn> transform,
                                                                     IncrementalValueProvider<ImmutableArray<AttributeSyntaxContext>>? attributeProvider = null) where TAttribute : Attribute where TType : MemberDeclarationSyntax
     {
-        return HandleFindAttributesProvide<TType, TReturn>(context, typeof(TAttribute), additionalPredicate, transform, attributeProvider);
+        return context.HandleFindAttributesProvide<TType, TReturn>(typeof(TAttribute), additionalPredicate, transform, attributeProvider);
 
 
     }
     public static IncrementalValuesProvider<TReturn> FindAttributesProvider<TAttribute, TType, TReturn>(this IncrementalGeneratorInitializationContext context,
-                                                                   Func<MemberAttributeSyntaxContext, CancellationToken, TReturn> transform,
+                                                                   Func<TypeAttributeSyntaxContext, CancellationToken, TReturn> transform,
                                                                    IncrementalValueProvider<ImmutableArray<AttributeSyntaxContext>>? attributeProvider = null) where TAttribute : Attribute where TType : MemberDeclarationSyntax
     {
-        return HandleFindAttributesProvide<TType, TReturn>(context, typeof(TAttribute), null, transform, attributeProvider);
+        return context.HandleFindAttributesProvide<TType, TReturn>(typeof(TAttribute), null, transform, attributeProvider);
 
 
     }
@@ -99,10 +99,10 @@ public static class AttributeSyntaxExtensions
     public static IncrementalValuesProvider<TReturn> FindAttributesProvider<TType, TReturn>(this IncrementalGeneratorInitializationContext context,
                                                                    Type attributeType,
                                                                    Func<SyntaxNode, CancellationToken, bool> additionalPredicate,
-                                                                   Func<MemberAttributeSyntaxContext, CancellationToken, TReturn> transform,
+                                                                   Func<TypeAttributeSyntaxContext, CancellationToken, TReturn> transform,
                                                                    IncrementalValueProvider<ImmutableArray<AttributeSyntaxContext>>? attributeProvider = null) where TType : MemberDeclarationSyntax
     {
-        return HandleFindAttributesProvide<TType, TReturn>(context, attributeType, additionalPredicate, transform, attributeProvider);
+        return context.HandleFindAttributesProvide<TType, TReturn>(attributeType, additionalPredicate, transform, attributeProvider);
 
 
     }
@@ -110,7 +110,7 @@ public static class AttributeSyntaxExtensions
     public static IncrementalValuesProvider<TReturn> HandleFindAttributesProvide<TType, TReturn>(this IncrementalGeneratorInitializationContext context,
                                                             Type attributeType,
                                                             Func<SyntaxNode, CancellationToken, bool>? additionalPredicate,
-                                                            Func<MemberAttributeSyntaxContext, CancellationToken, TReturn> transform,
+                                                            Func<TypeAttributeSyntaxContext, CancellationToken, TReturn> transform,
                                                             IncrementalValueProvider<ImmutableArray<AttributeSyntaxContext>>? attributeProvider = null)
                                                             where TType : MemberDeclarationSyntax
     {
@@ -118,7 +118,7 @@ public static class AttributeSyntaxExtensions
           predicate: (node, _) => node is TType type && type.AttributeLists.Count > 0 && (additionalPredicate?.Invoke(node, _) ?? true),
           transform: (ctx, cancellationToken) =>
             {
-                if (ctx.Node is not TType typedNode)
+                if (ctx.Node is not TType)
                 {
                     return default;
                 }
@@ -136,17 +136,16 @@ public static class AttributeSyntaxExtensions
                 }
                 List<(AttributeSyntaxContext attribute, bool match)> attributeList = memberAttributes.Select(x =>
                 {
-
-                    var name = x.AttributeClass?.ToDisplayString();
                     var attData = new AttributeSyntaxContext(x);
-                    return (attData, attData.FriendlyName == attributeType.FullName);
+                    return (attData, attData.Matches(attributeType));
                 }).ToList();
 
                 if (!attributeList.Exists(x => x.match))
                 {
-                    return default;
+                    var x = default(TReturn);
+                    return x;
                 }
-                return transform(new MemberAttributeSyntaxContext(ctx.Node, symbol, ctx.SemanticModel, attributeList.ToImmutableArray()), cancellationToken);
+                return transform(new TypeAttributeSyntaxContext(ctx.Node, symbol, ctx.SemanticModel, attributeList.ToImmutableArray()), cancellationToken);
             }
         ).Where(x => x is not null)!;
     }

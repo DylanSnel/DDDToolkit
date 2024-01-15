@@ -1,11 +1,14 @@
 ﻿using Microsoft.CodeAnalysis;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace SourceGeneratorsToolkit.SyntaxExtensions.Attributes;
+namespace SourceGeneratorsToolkit.Providers.Contexts;
 public class AttributeSyntaxContext(AttributeData attributeData)
 {
+#pragma warning disable S3604 // Member initializer values should not be redundant
     public AttributeData AttributeData { get; } = attributeData;
+
     public bool IsGeneric => AttributeData.AttributeClass?.IsGenericType ?? false;
     public IEnumerable<ITypeSymbol> GenericTypes => IsGeneric
                                        ? AttributeData.AttributeClass!.TypeArguments
@@ -25,8 +28,12 @@ public class AttributeSyntaxContext(AttributeData attributeData)
     {
         return typeof(T).FullName == FriendlyName;
     }
+    public bool Matches(Type attribute)
+    {
+        return FriendlyName == attribute.FullName;
+    }
 
-
+#pragma warning restore S3604 // Member initializer values should not be redundant
 }
 
 

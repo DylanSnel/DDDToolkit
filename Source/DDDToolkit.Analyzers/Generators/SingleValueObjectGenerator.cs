@@ -3,10 +3,12 @@ using DDDToolkit.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using SourceGeneratorsToolkit.Providers;
 using SourceGeneratorsToolkit.SyntaxExtensions;
-using SourceGeneratorsToolkit.SyntaxExtensions.Attributes;
 using System.Linq;
 using System.Text;
+
+namespace DDDToolkit.Analyzers.Generators;
 
 [Generator]
 public class SingleValueObjectGenerator : IIncrementalGenerator
@@ -21,10 +23,10 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
         //        }
         //#endif
 
-        var singleValueObjects = context.FindAttributesProvider<SingleValueObjectAttribute, ClassDeclarationSyntax, GenericObjectDefinition>(
+        var singleValueObjects = context.FindAttributesProvider<SingleValueObjectAttribute, RecordDeclarationSyntax, GenericObjectDefinition>(
               transform: static (ctx, _) =>
               {
-                  var classDeclaration = ctx.TargetNode as ClassDeclarationSyntax;
+                  var classDeclaration = ctx.TargetNode as RecordDeclarationSyntax;
                   GenericObjectDefinition singleValueObjectDefinition = new()
                   {
                       Name = classDeclaration!.Identifier.Text,
@@ -53,27 +55,15 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
                             #nullable enable
                             namespace {{{data.Namespace}}};
     
-                            {{{data.AccessModifier}}} partial class {{{data.Name}}} : SingleValueObject<{{{data.Type}}}>
+                            {{{data.AccessModifier}}} partial record {{{data.Name}}} : SingleValueObject<{{{data.Type}}}>
                             {
                                 private {{{data.Name}}}({{{data.Type}}} value) : base(value)
                                 {
                                 }
 
-                                public static bool operator ==({{{data.Name}}} left, {{{data.Name}}} right)
-                                {
-                                    return Equals(left, right);
-                                }
-
-                                public static bool operator !=({{{data.Name}}} left, {{{data.Name}}} right)
-                                {
-                                    return !Equals(left, right);
-                                }
-
                                 public override int GetHashCode()
                                     => base.GetHashCode();
 
-                                public override bool Equals(object? obj)
-                                    => base.Equals(obj);
 
                                 public static Result<{{{data.Name}}}> Create({{{data.Type}}} value)
                                 {

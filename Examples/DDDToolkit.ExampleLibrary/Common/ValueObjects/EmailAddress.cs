@@ -5,7 +5,7 @@ namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 
 [SingleValueObject<string>]
-public partial class EmailAddress
+public partial record EmailAddress
 {
 
     [MaxLength(255)]

@@ -3,7 +3,7 @@
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 [SingleValueObject<DateOnly>]
-public partial class DateOfBirth
+public partial record DateOfBirth
 {
 
 }
