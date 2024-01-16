@@ -7,6 +7,4 @@ public abstract record ValueObject
         => GetEqualityComponents()
             .Select(x => x?.GetHashCode() ?? 0)
             .Aggregate((x, y) => x ^ y);
-
-
 }

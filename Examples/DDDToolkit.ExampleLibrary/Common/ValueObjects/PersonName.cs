@@ -19,27 +19,6 @@ public sealed partial record PersonName
         LastName = lastName;
     }
 
-    //public override IEnumerable<object?> GetEqualityComponents()
-    //{
-    //    yield return FirstName;
-    //    yield return LastName;
-    //}
-
-    //public virtual bool Equals(PersonName? other)
-    //{
-    //    if (other is null)
-    //    {
-    //        return false;
-    //    }
-    //    return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
-    //}
-
-    //public override int GetHashCode()
-    //=> GetEqualityComponents()
-    //    .Select(x => x?.GetHashCode() ?? 0)
-    //    .Aggregate((x, y) => x ^ y);
-
-
     public string FirstName { get; }
     [DontCompare]
     public string? MiddleNames { get; }
@@ -50,5 +29,5 @@ public sealed partial record PersonName
     [DontCompare]
     public string Initials => string.Join("", FirstName[0], LastName[0]).Trim();
 
-    public sealed override string ToString() => FullName;
+    public override string ToString() => FullName;
 }

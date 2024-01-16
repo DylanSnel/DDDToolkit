@@ -2,7 +2,7 @@
 
 namespace DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 
-[EntityId<Guid>]
+[EntityId<Guid>("USER")]
 public partial record UserId
 {
 }

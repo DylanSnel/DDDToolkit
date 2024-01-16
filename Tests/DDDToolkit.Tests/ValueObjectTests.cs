@@ -14,4 +14,13 @@ public class ValueObjectTests
         (personname == personname2).Should().BeTrue();
         (personname == personname3).Should().BeFalse();
     }
+
+    [Fact]
+    public void WithOverridesTests()
+    {
+        //var personname = new PersonName("John", "Doe");
+        //var personname2 = personname with { MiddleNames = "Something" };
+        //(personname == personname2).Should().BeTrue();
+        //(personname == personname3).Should().BeFalse();
+    }
 }
