@@ -9,8 +9,8 @@ public class EntityIdObjectTests
     public void EqualityTests()
     {
         var catId1 = CatId.CreateUnique();
-        var catId2 = CatId.Create(catId1.Value).Value;
-        var personId1 = PersonId.Create(catId1.Value).Value;
+        var catId2 = CatId.Create(catId1.Value);
+        var personId1 = PersonId.Create(catId1.Value);
         var personId2 = PersonId.CreateUnique();
         (catId1 == catId2).Should().BeTrue();
         (catId1 == personId1).Should().BeFalse();
@@ -21,8 +21,16 @@ public class EntityIdObjectTests
     public void ToStringTests()
     {
         var catId1 = CatId.CreateUnique();
-        var personId1 = PersonId.Create(catId1.Value).Value;
+        var personId1 = PersonId.Create(catId1.Value);
         catId1.ToString().Should().Be(catId1.Value.ToString());
         personId1.ToString().Should().Be("PRS_" + personId1.Value.ToString());
     }
+
+    //[Fact]
+    //public void ReferenceEqualityTests()
+    //{
+    //    var productId = ProductId.CreateUnique();
+    //    var reference = new ProductIdReference(productId.Value);
+    //    (productId == reference).Should().BeTrue();
+    //}
 }

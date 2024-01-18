@@ -1,5 +1,7 @@
 using DDDToolkit.EntityFramework;
+using DDDToolkit.ExampleApi.Context;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -18,7 +20,11 @@ builder.Services.UseDomainEvents(
         }
     );
 
+builder.Services.AddDbContext<ExampleContext>();
+
 var app = builder.Build();
+
+app.Services.CreateScope().ServiceProvider.GetRequiredService<ExampleContext>().Database.Migrate();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

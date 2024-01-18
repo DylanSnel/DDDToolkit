@@ -11,8 +11,8 @@ public abstract partial class Entity<TId> : IEquatable<Entity<TId>>, IHasDomainE
 
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
-    public DateTime CreatedDateTime { get; private set; }
-    public DateTime UpdatedDateTime { get; private set; }
+    //public DateTime CreatedDateTime { get; private set; }
+    //public DateTime UpdatedDateTime { get; private set; }
 
     protected Entity(TId id)
         => Id = id;

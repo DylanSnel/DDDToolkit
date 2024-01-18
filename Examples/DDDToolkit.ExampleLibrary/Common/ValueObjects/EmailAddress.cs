@@ -1,5 +1,4 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using System.ComponentModel.DataAnnotations;
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
@@ -7,8 +6,7 @@ namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 [SingleValueObject<string>]
 public partial record EmailAddress
 {
+    public static EmailAddress Create(string value) => new(value);
 
-    [MaxLength(255)]
-    public new string Value { get; private set; } = string.Empty;
 }
 

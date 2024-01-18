@@ -1,5 +1,9 @@
-﻿namespace DDDToolkit.ExampleApi.Domain.UserAggregate;
+﻿using DDDToolkit.BaseTypes;
+using DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 
-//public partial class User : AggregateRootAttribute<UserId>
-//{
-//}
+namespace DDDToolkit.ExampleApi.Domain.UserAggregate;
+
+public partial class User : AggregateRoot<UserId, Guid>
+{
+
+}
