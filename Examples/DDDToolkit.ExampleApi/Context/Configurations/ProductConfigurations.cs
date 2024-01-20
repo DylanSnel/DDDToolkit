@@ -7,9 +7,9 @@ internal class ProductConfigurations : IEntityTypeConfiguration<Product>
 {
     public void Configure(EntityTypeBuilder<Product> builder)
     {
-        builder.HasKey(s => s.Id);
-        builder.Property(s => s.Id)
-                 .ValueGeneratedNever();
+        //builder.HasKey(s => s.Id);
+        //builder.Property(s => s.Id)
+        //         .ValueGeneratedNever();
     }
 
     //private static void ConfigureSeekerSeekerProfileIdsTable(EntityTypeBuilder<Seeker> builder)

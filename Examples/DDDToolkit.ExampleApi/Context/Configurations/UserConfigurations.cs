@@ -7,10 +7,10 @@ internal class UserConfigurations : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
-        builder.OwnsMany(h => h.Orders, (o) =>
-        {
-            o.OwnsMany(p => p.Products);
-        });
+        //builder.OwnsMany(h => h.Orders, (o) =>
+        //{
+        //    o.OwnsMany(p => p.Products);
+        //});
     }
 
     //private static void ConfigureSeekerSeekerProfileIdsTable(EntityTypeBuilder<Seeker> builder)

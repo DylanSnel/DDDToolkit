@@ -14,8 +14,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" />
-    <ProjectReference Include="..\SourceGeneratorsToolkit\SourceGeneratorsToolkit.csproj" OutputItemType="Analyzer" />
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
+    <ProjectReference Include="..\SourceGeneratorsToolkit\SourceGeneratorsToolkit.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true"/>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Providers\" />

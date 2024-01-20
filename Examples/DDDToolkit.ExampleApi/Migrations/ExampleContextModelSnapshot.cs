@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using DDDToolkit.ExampleApi.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -16,12 +17,23 @@ namespace DDDToolkit.ExampleApi.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "8.0.1");
+            modelBuilder
+                .HasAnnotation("ProductVersion", "8.0.1")
+                .HasAnnotation("Relational:MaxIdentifierLength", 128);
+
+            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
             modelBuilder.Entity("DDDToolkit.ExampleApi.Domain.ProductAggregate.Product", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Price")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -31,15 +43,15 @@ namespace DDDToolkit.ExampleApi.Migrations
             modelBuilder.Entity("DDDToolkit.ExampleApi.Domain.UserAggregate.User", b =>
                 {
                     b.Property<Guid>("Id")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Email")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(300)
-                        .HasColumnType("TEXT");
+                        .HasColumnType("nvarchar(300)");
 
                     b.ComplexProperty<Dictionary<string, object>>("Name", "DDDToolkit.ExampleApi.Domain.UserAggregate.User.Name#PersonName", b1 =>
                         {
@@ -47,14 +59,14 @@ namespace DDDToolkit.ExampleApi.Migrations
 
                             b1.Property<string>("FirstName")
                                 .IsRequired()
-                                .HasColumnType("TEXT");
+                                .HasColumnType("nvarchar(max)");
 
                             b1.Property<string>("LastName")
                                 .IsRequired()
-                                .HasColumnType("TEXT");
+                                .HasColumnType("nvarchar(max)");
 
                             b1.Property<string>("MiddleNames")
-                                .HasColumnType("TEXT");
+                                .HasColumnType("nvarchar(max)");
                         });
 
                     b.HasKey("Id");
@@ -67,13 +79,13 @@ namespace DDDToolkit.ExampleApi.Migrations
                     b.OwnsMany("DDDToolkit.ExampleApi.Domain.UserAggregate.Entities.Order", "Orders", b1 =>
                         {
                             b1.Property<Guid>("UserId")
-                                .HasColumnType("TEXT");
+                                .HasColumnType("uniqueidentifier");
 
                             b1.Property<Guid>("Id")
-                                .HasColumnType("TEXT");
+                                .HasColumnType("uniqueidentifier");
 
                             b1.Property<DateTime>("PlacedAt")
-                                .HasColumnType("TEXT");
+                                .HasColumnType("datetime2");
 
                             b1.HasKey("UserId", "Id");
 
@@ -85,17 +97,19 @@ namespace DDDToolkit.ExampleApi.Migrations
                             b1.OwnsMany("DDDToolkit.ExampleApi.Domain.ProductAggregate.ValueObjects.ProductId", "Products", b2 =>
                                 {
                                     b2.Property<Guid>("OrderUserId")
-                                        .HasColumnType("TEXT");
+                                        .HasColumnType("uniqueidentifier");
 
                                     b2.Property<Guid>("OrderId")
-                                        .HasColumnType("TEXT");
+                                        .HasColumnType("uniqueidentifier");
 
                                     b2.Property<int>("Id")
                                         .ValueGeneratedOnAdd()
-                                        .HasColumnType("INTEGER");
+                                        .HasColumnType("int");
+
+                                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b2.Property<int>("Id"));
 
                                     b2.Property<Guid>("Value")
-                                        .HasColumnType("TEXT");
+                                        .HasColumnType("uniqueidentifier");
 
                                     b2.HasKey("OrderUserId", "OrderId", "Id");
 

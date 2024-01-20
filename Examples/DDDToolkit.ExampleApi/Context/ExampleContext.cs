@@ -21,7 +21,7 @@ public class ExampleContext : DbContext
         DbPath = Path.Combine(baseDirectory, dbFileName);
     }
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite($"Data Source=example.db");
+        => options.UseSqlServer($"Server=127.0.0.1;Database=DDDToolkit;User Id=sa;Password=password123!;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
