@@ -29,8 +29,5 @@ public partial class User
         Orders.Add(order);
     }
 
-    private User()
-    {
-    }
 
 }

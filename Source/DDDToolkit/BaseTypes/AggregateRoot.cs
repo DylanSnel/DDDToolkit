@@ -1,9 +1,11 @@
+using DDDToolkit.Abstractions.Interfaces;
+
 namespace DDDToolkit.BaseTypes;
 
-public abstract class AggregateRoot<TIdObject, TIdType> : Entity<TIdObject>
-    where TIdObject : EntityId<TIdType> where TIdType : notnull
+public abstract class AggregateRoot<TIdObject> : Entity<TIdObject>
+    where TIdObject : IEntityId
 {
-    public new TIdObject Id { get; }
+    //public new TIdObject Id { get; }
 
     protected AggregateRoot(TIdObject id)
         => Id = id;

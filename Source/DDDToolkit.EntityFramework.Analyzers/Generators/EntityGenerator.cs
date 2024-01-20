@@ -10,7 +10,7 @@ using System.Text;
 namespace DDDToolkit.EntityFramework.Analyzers.Generators;
 
 [Generator]
-public class ValueObjectGenerator : IIncrementalGenerator
+public class EntityGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -22,13 +22,13 @@ public class ValueObjectGenerator : IIncrementalGenerator
         //        }
         //#endif
 
-        var singleValueObjects = context.FindAttributesProvider<ValueObjectAttribute, RecordDeclarationSyntax>();
+        var singleValueObjects = context.FindAttributesProvider<EntityIdAttribute, ClassDeclarationSyntax>();
         context.RegisterSourceOutput(singleValueObjects, Execute);
     }
 
     private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
     {
-        var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
+        var recordDeclaration = data.TargetNode as ClassDeclarationSyntax;
         if (recordDeclaration is null)
         {
             return;
@@ -44,8 +44,8 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{@namespace}}};
 
-                            [ComplexType]
-                            {{{accessModifier}}} partial record {{{name}}}
+                            [Owned]
+                            {{{accessModifier}}} partial class {{{name}}}
                             {
                             }
     

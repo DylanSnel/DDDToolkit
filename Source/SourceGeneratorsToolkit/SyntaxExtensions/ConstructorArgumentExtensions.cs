@@ -6,7 +6,6 @@ using System.Linq;
 namespace SourceGeneratorsToolkit.SyntaxExtensions;
 public static class ConstructorArgumentExtensions
 {
-
     public static T? GetArgument<T>(this Dictionary<string, TypedConstant> typedConstants, string key, T? defaultValue = default)
     {
         var argument = typedConstants.FirstOrDefault(_ => _.Key == key).Value;
