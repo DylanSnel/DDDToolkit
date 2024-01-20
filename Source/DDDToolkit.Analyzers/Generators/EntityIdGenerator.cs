@@ -23,8 +23,8 @@ public class EntityIdGenerator : IIncrementalGenerator
         //        }
         //#endif
 
-        var entityIds = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax>();
-        context.RegisterSourceOutput(entityIds, Execute);
+        var entities = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax>();
+        context.RegisterSourceOutput(entities, Execute);
     }
 
     private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
@@ -50,7 +50,7 @@ public class EntityIdGenerator : IIncrementalGenerator
                             #nullable enable
                             namespace {{{@namespace}}};
     
-                            {{{accessModifier}}} partial record {{{name}}} : EntityId<{{{type}}}>, IEntityId
+                            {{{accessModifier}}} partial record {{{name}}} : EntityId<{{{type}}}>
                             {
                                 protected {{{name}}}({{{type}}} value) : base(value, "{{{prefix}}}")
                                 {
@@ -61,7 +61,7 @@ public class EntityIdGenerator : IIncrementalGenerator
 
                             {{{(type == "Guid" ?
                          $$$"""
-                                    public static {{{name}}} CreateUnique() => new(Guid.NewGuid());
+                                public static {{{name}}} CreateUnique() => new(Guid.NewGuid());
                             """ : "")}}}  
 
                     

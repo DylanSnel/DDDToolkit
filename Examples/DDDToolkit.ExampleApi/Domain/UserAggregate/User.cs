@@ -1,10 +1,12 @@
-﻿using DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
+﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
 using DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using System.ComponentModel.DataAnnotations;
 
 namespace DDDToolkit.ExampleApi.Domain.UserAggregate;
 
+[AggregateRoot<UserId>()]
 public partial class User
 {
 

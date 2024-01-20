@@ -13,8 +13,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DDDToolkit.ExampleApi.Migrations
 {
     [DbContext(typeof(ExampleContext))]
-    [Migration("20240120163809_Products15")]
-    partial class Products15
+    [Migration("20240120175744_GenerateDatabase")]
+    partial class GenerateDatabase
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

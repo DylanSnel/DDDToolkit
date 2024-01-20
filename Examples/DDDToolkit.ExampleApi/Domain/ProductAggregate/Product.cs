@@ -1,7 +1,9 @@
-﻿using DDDToolkit.ExampleApi.Domain.ProductAggregate.ValueObjects;
+﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.ExampleApi.Domain.ProductAggregate.ValueObjects;
 
 namespace DDDToolkit.ExampleApi.Domain.ProductAggregate;
 
+[AggregateRoot<ProductId>]
 public partial class Product
 {
     public required string Name { get; init; }

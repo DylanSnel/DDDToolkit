@@ -74,7 +74,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
                                         .Aggregate((x, y) => x ^ y);
 
                             #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-                                private PersonName()
+                                protected {{{name}}}()
                             #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                                 {
 

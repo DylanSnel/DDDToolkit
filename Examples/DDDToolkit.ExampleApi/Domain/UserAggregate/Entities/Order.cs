@@ -8,13 +8,14 @@ namespace DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
 public partial class Order
 {
 
-    public Order() : base(OrderId.CreateUnique())
+    public Order(List<ProductId> products) : base()
     {
+        _products = products;
     }
 
     private readonly List<ProductId> _products = [];
 
-    public ICollection<ProductId> Products { get; set; } = [];
+    public IReadOnlyList<ProductId> Products => _products.AsReadOnly();
     public DateTime PlacedAt { get; set; } = DateTime.Now;
 
     public User User { get; set; } = default!;
