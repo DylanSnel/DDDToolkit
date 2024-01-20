@@ -8,8 +8,9 @@ namespace DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
 public partial class Order
 {
 
-    public Order(List<ProductId> products) : base()
+    public Order(OrderId id, List<ProductId> products) : base()
     {
+        Id = id;
         _products = products;
     }
 

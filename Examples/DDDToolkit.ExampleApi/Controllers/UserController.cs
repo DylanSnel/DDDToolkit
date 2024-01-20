@@ -28,7 +28,7 @@ public class UserController(ExampleContext context) : ControllerBase
         context.SaveChanges();
         var user = new User(UserId.CreateUnique(), new PersonName("John", "Doe"), EmailAddress.Create("johndoe@gmail.com"));
 
-        var order = new Order([ProductId.CreateUnique(), ProductId.CreateUnique(), ProductId.CreateUnique()])
+        var order = new Order(OrderId.CreateUnique(), [ProductId.CreateUnique(), ProductId.CreateUnique(), ProductId.CreateUnique()])
         {
         };
 
