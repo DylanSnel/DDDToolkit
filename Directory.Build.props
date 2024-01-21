@@ -6,8 +6,7 @@
     <RepositoryUrl>https://github.com/DylanSnel/DDDToolkit</RepositoryUrl>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
     <PackageLanguage>en-US</PackageLanguage>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
     <Version>0.5.4</Version>

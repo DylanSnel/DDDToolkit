@@ -11,6 +11,7 @@
     <Title>Domain Driven Design Toolkit - Analyers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;</PackageTags>
     <Description>A package for the DDDToolkit containing Source Generators and Analyzers</Description>
+    
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.8.0" />

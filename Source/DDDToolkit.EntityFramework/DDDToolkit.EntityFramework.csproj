@@ -8,6 +8,8 @@
     <Title>Domain Driven Design Toolkit - Entity Framework </Title>
     <PackageTags>ddd;doamin;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
     <Description>A package extending the DDDToolkit with Entity Framework configuration</Description>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>

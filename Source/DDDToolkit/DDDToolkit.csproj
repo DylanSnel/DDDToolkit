@@ -7,6 +7,8 @@
     <Title>Domain Driven Design Toolkit</Title>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
     <Description>A package with source generators that makes it easier to work with domain driven design in  .NET</Description>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
