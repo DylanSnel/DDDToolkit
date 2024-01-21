@@ -60,7 +60,7 @@ namespace DDDToolkit.ExampleApi.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "ProductId",
+                name: "UserProducts",
                 columns: table => new
                 {
                     OrderUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
@@ -71,9 +71,9 @@ namespace DDDToolkit.ExampleApi.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_ProductId", x => new { x.OrderUserId, x.OrderId, x.Id });
+                    table.PrimaryKey("PK_UserProducts", x => new { x.OrderUserId, x.OrderId, x.Id });
                     table.ForeignKey(
-                        name: "FK_ProductId_Order_OrderUserId_OrderId",
+                        name: "FK_UserProducts_Order_OrderUserId_OrderId",
                         columns: x => new { x.OrderUserId, x.OrderId },
                         principalTable: "Order",
                         principalColumns: new[] { "UserId", "Id" },
@@ -85,10 +85,10 @@ namespace DDDToolkit.ExampleApi.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "ProductId");
+                name: "Products");
 
             migrationBuilder.DropTable(
-                name: "Products");
+                name: "UserProducts");
 
             migrationBuilder.DropTable(
                 name: "Order");

@@ -28,7 +28,7 @@ public class ExampleContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ExampleContext).Assembly);
         modelBuilder.Entity<User>().OwnsMany(x => x.Orders, o =>
         {
-            o.OwnsMany(x => x.Products);
+            o.OwnsMany(x => x.Products, p => p.ToTable("UserProducts"));
         });
     }
 
