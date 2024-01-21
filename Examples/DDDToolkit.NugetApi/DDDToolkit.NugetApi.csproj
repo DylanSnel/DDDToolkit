@@ -12,10 +12,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DDDToolkit" Version="1.0.3" />
+    <!--<PackageReference Include="DDDToolkit" Version="1.0.3" />
     <PackageReference Include="DDDToolkit.Analyzers" Version="1.0.3" />
     <PackageReference Include="DDDToolkit.EntityFramework" Version="1.0.3" />
-    <PackageReference Include="DDDToolkit.EntityFramework.Analyzers" Version="1.0.3" />
+    <PackageReference Include="DDDToolkit.EntityFramework.Analyzers" Version="1.0.3" />-->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -28,6 +28,15 @@
 
   <ItemGroup>
     <PackageReference Include="MediatR" Version="12.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+
   </ItemGroup>
 
   <!--<ItemGroup>
