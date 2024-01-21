@@ -2,7 +2,7 @@
 
 namespace DDDToolkit.NugetApi.Common.ValueObjects;
 
-[SingleValueObject<DateOnly>]
+[SingleValueObject<DateTime>]
 public partial record DateOfBirth
 {
 

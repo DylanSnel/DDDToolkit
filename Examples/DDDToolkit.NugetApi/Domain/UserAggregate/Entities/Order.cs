@@ -17,7 +17,7 @@ public partial class Order
     private readonly List<ProductId> _products = [];
 
     public IReadOnlyList<ProductId> Products => _products.AsReadOnly();
-    public DateTime PlacedAt { get; set; } = DateTime.Now;
+    public DateTime PlacedAt { get; set; } = DateTime.UtcNow;
 
     public User User { get; set; } = default!;
 }

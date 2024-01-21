@@ -13,7 +13,7 @@ public class ExampleContext : DbContext
     public DbSet<Product> Products { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseNpgsql("postgresql://postgres:pass123@localhost:5432/DDDToolkit?sslmode=trust");// options.UseSqlServer($"Server=127.0.0.1;Database=DDDToolkit;User Id=sa;Password=password123!;TrustServerCertificate=True;");
+        => options.UseNpgsql("username=postgres;password=pass123;host=localhost;port=5432;database=DDDToolkit;Trust Server Certificate=true");// options.UseSqlServer($"Server=127.0.0.1;Database=DDDToolkit;User Id=sa;Password=password123!;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -26,6 +26,6 @@ public class ExampleContext : DbContext
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        configurationBuilder.AddDDDToolkitNugetApiConverters();
+        configurationBuilder.AddNugetTestConverters();
     }
 }

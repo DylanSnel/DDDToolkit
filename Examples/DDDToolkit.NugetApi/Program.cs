@@ -20,7 +20,7 @@ builder.Services.UseDomainEvents(
         }
     );
 
-var connectionString = builder.Configuration.GetConnectionString("ExampleContext");
+//var connectionString = builder.Configuration.GetConnectionString("ExampleContext");
 builder.Services.AddDbContext<ExampleContext>();
 
 var app = builder.Build();

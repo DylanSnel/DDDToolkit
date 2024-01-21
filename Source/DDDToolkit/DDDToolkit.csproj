@@ -15,9 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Package the generator in the analyzer directory of the nuget package --><!--
-    <None Remove="$(OutputPath)/$(AssemblyName).Analyzers.dll" />
-    <None Include="$(OutputPath)/$(AssemblyName).Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />-->
+
     <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
