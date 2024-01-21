@@ -5,10 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Title>Domain Driven Design Toolkit - EF </Title>
-    <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Title>Domain Driven Design Toolkit - Entity Framework </Title>
     <PackageTags>ddd;doamin;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
+    <Description>A package extending the DDDToolkit with Entity Framework configuration</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,7 +16,7 @@
 
   <ItemGroup>
     <!-- Package the generator in the analyzer directory of the nuget package -->
-    <None Remove="$(OutputPath)/$(AssemblyName).Analyzers.dll" />
+    <!--<None Remove="$(OutputPath)/$(AssemblyName).Analyzers.dll" />
     <None Include="$(OutputPath)/$(AssemblyName).Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\README.md">
       <Pack>True</Pack>
@@ -26,7 +25,7 @@
     <None Include="..\DDDToolkit\DDDToolkit-Icon.png">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
-    </None>
+    </None>-->
   </ItemGroup>
 
   <ItemGroup>

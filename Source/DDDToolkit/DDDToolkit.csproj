@@ -4,30 +4,18 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>Domain Driven Design Toolkit</Title>
-    <Copyright>Dylan Snel</Copyright>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
-    <EnforceCodeStyleInBuild>False</EnforceCodeStyleInBuild>
-    <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
+    <Description>A package with source generators that makes it easier to work with domain driven design in  .NET</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Package the generator in the analyzer directory of the nuget package -->
+    <!-- Package the generator in the analyzer directory of the nuget package --><!--
     <None Remove="$(OutputPath)/$(AssemblyName).Analyzers.dll" />
-    <None Include="$(OutputPath)/$(AssemblyName).Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
-    <None Include="..\..\README.md">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-    <None Update="DDDToolkit-Icon.png">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
+    <None Include="$(OutputPath)/$(AssemblyName).Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />-->
     <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 

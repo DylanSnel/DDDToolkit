@@ -36,6 +36,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.Tests", "Tests\D
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.Abstractions", "Source\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj", "{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.NugetApi", "Examples\DDDToolkit.NugetApi\DDDToolkit.NugetApi.csproj", "{288589B6-E944-4F6B-818A-43040B640EEA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,10 @@ Global
 		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C1075B8E-D31C-4858-AF5E-6EE568E8C4EB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{288589B6-E944-4F6B-818A-43040B640EEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{288589B6-E944-4F6B-818A-43040B640EEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{288589B6-E944-4F6B-818A-43040B640EEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{288589B6-E944-4F6B-818A-43040B640EEA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -82,6 +88,7 @@ Global
 		{68D74001-ED22-435A-A483-90A89C195145} = {A19529AE-DE98-48A7-8C8D-27BBBB4502C5}
 		{137CFABC-6AFD-4061-A573-AC6906916625} = {A19529AE-DE98-48A7-8C8D-27BBBB4502C5}
 		{EB319619-91B1-48BC-A4C9-F8442B47BED4} = {31D5E6FD-D1E8-47A5-961D-8C39706CCE8C}
+		{288589B6-E944-4F6B-818A-43040B640EEA} = {A19529AE-DE98-48A7-8C8D-27BBBB4502C5}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D1B155E4-BA77-4C24-BD6C-A87AB2543BC8}
