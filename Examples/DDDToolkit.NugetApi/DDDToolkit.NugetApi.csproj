@@ -12,8 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!--<PackageReference Include="DDDToolkit" Version="1.0.0" />
-    <PackageReference Include="DDDToolkit.EntityFramework" Version="1.0.0" />-->
+    <PackageReference Include="DDDToolkit" Version="1.0.0" />
+    <PackageReference Include="DDDToolkit.EntityFramework" Version="1.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

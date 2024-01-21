@@ -1,9 +1,9 @@
-﻿//using DDDToolkit.Abstractions.Attributes;
+﻿using DDDToolkit.Abstractions.Attributes;
 
-//namespace DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
+namespace DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
 
-//[EntityId<Guid>("ORD")]
-//public partial record OrderId
-//{
-//}
+[EntityId<Guid>("ORD")]
+public partial record OrderId
+{
+}
 
