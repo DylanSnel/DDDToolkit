@@ -1,4 +1,4 @@
-name: NuGet Release Packages
+name: NuGet Release
 
 on:
   release:
@@ -22,17 +22,12 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore
 
-    - name: Build DDDToolkit for Release
-      run: dotnet build --configuration Release --no-restore ./Source/DDDToolkit/DDDToolkit.csproj
-
-    - name: Build DDDToolkit.EntityFramework for Release
-      run: dotnet build --configuration Release --no-restore ./Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj
-
-    - name: Pack DDDToolkit
-      run: dotnet pack ./Source/DDDToolkit/DDDToolkit.csproj --configuration Release --output nupkgs /p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
-
-    - name: Pack DDDToolkit.EntityFramework
-      run: dotnet pack ./Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj --configuration Release --output nupkgs /p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+    - name: Build and Pack Projects
+      run: |
+        for csproj in $(find ./Source -name '*.csproj'); do
+          dotnet build --configuration Release --no-restore $csproj
+          dotnet pack $csproj --configuration Release --output nupkgs /p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+        done
 
     - name: Publish to NuGet
       run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
