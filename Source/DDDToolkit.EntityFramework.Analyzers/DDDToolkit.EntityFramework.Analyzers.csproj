@@ -17,6 +17,10 @@
     <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.1.201708" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Include source generators in the NuGet package -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
   </ItemGroup>

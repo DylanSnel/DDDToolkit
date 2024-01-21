@@ -1,9 +1,9 @@
-﻿using DDDToolkit.ExampleApi.Domain.ProductAggregate;
-using DDDToolkit.ExampleApi.Domain.UserAggregate;
-using DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
-using DDDToolkit.NugetApi.Common.ValueObjects;
+﻿using DDDToolkit.NugetApi.Common.ValueObjects;
 using DDDToolkit.NugetApi.Context;
+using DDDToolkit.NugetApi.Domain.ProductAggregate;
 using DDDToolkit.NugetApi.Domain.ProductAggregate.ValueObjects;
+using DDDToolkit.NugetApi.Domain.UserAggregate;
+using DDDToolkit.NugetApi.Domain.UserAggregate.Entities;
 using DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
 using Microsoft.AspNetCore.Mvc;
 
