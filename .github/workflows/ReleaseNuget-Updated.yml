@@ -1,4 +1,4 @@
-name: NuGet Release
+name: NuGet Release Packages
 
 on:
   release:
