@@ -1,9 +1,9 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+﻿//using DDDToolkit.Abstractions.Attributes;
 
-namespace DDDToolkit.NugetApi.Common.ValueObjects;
+//namespace DDDToolkit.NugetApi.Common.ValueObjects;
 
-[SingleValueObject<DateOnly>]
-public partial record DateOfBirth
-{
+//[SingleValueObject<DateOnly>]
+//public partial record DateOfBirth
+//{
 
-}
+//}

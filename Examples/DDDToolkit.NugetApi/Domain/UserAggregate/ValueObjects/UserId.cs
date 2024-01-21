@@ -1,8 +1,8 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+﻿//using DDDToolkit.Abstractions.Attributes;
 
-namespace DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
+//namespace DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
 
-[EntityId<Guid>("USER")]
-public partial record UserId
-{
-}
+//[EntityId<Guid>("USER")]
+//public partial record UserId
+//{
+//}

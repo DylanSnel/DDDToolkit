@@ -1,7 +1,7 @@
-﻿using DDDToolkit.Interfaces;
-using MediatR;
+﻿//using DDDToolkit.Interfaces;
+//using MediatR;
 
-namespace DDDToolkit.NugetApi.Common;
-public interface IBaseDomainEvent : IDomainEvent, INotification
-{
-}
+//namespace DDDToolkit.NugetApi.Common;
+//public interface IBaseDomainEvent : IDomainEvent, INotification
+//{
+//}

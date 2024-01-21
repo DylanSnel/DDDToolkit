@@ -1,10 +1,4 @@
-﻿using DDDToolkit.ExampleApi.Domain.ProductAggregate;
-using DDDToolkit.ExampleApi.Domain.UserAggregate;
-using DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
-using DDDToolkit.NugetApi.Common.ValueObjects;
-using DDDToolkit.NugetApi.Context;
-using DDDToolkit.NugetApi.Domain.ProductAggregate.ValueObjects;
-using DDDToolkit.NugetApi.Domain.UserAggregate.ValueObjects;
+﻿using DDDToolkit.NugetApi.Context;
 using Microsoft.AspNetCore.Mvc;
 
 namespace DDDToolkit.NugetApi.Controllers;
@@ -17,25 +11,25 @@ public class UserController(ExampleContext context) : ControllerBase
     public IActionResult Post()
     {
 
-        var product = new Product(ProductId.CreateUnique())
-        {
-            Name = "Test",
-            Price = 10
-        };
+        //var product = new Product(ProductId.CreateUnique())
+        //{
+        //    Name = "Test",
+        //    Price = 10
+        //};
 
 
-        context.Products.Add(product);
-        context.SaveChanges();
-        var user = new User(UserId.CreateUnique(), new PersonName("John", "Doe"), EmailAddress.Create("johndoe@gmail.com"));
+        //context.Products.Add(product);
+        //context.SaveChanges();
+        //var user = new User(UserId.CreateUnique(), new PersonName("John", "Doe"), EmailAddress.Create("johndoe@gmail.com"));
 
-        var order = new Order(OrderId.CreateUnique(), [ProductId.CreateUnique(), ProductId.CreateUnique(), ProductId.CreateUnique()])
-        {
-        };
+        //var order = new Order(OrderId.CreateUnique(), [ProductId.CreateUnique(), ProductId.CreateUnique(), ProductId.CreateUnique()])
+        //{
+        //};
 
-        user.AddOrder(order);
+        //user.AddOrder(order);
 
-        context.Users.Add(user);
-        context.SaveChanges();
+        //context.Users.Add(user);
+        //context.SaveChanges();
 
 
         return Ok();

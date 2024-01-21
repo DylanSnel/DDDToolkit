@@ -1,11 +1,11 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+﻿//using DDDToolkit.Abstractions.Attributes;
 
-namespace DDDToolkit.NugetApi.Domain.ProductAggregate.ValueObjects;
+//namespace DDDToolkit.NugetApi.Domain.ProductAggregate.ValueObjects;
 
-[EntityId<Guid>("PRDCT")]
-public partial record ProductId
-{
-}
+//[EntityId<Guid>("PRDCT")]
+//public partial record ProductId
+//{
+//}
 
 //[Owned]
 
