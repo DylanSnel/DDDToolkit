@@ -17,7 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="..\DDDToolkit\DDDToolkit.props" Pack="true" PackagePath="build" />
+    <None Include="..\DDDToolkit\DDDToolkit.props">
+      <Pack>True</Pack>
+      <PackagePath>\build\DDDToolkit.EntityFramework.Props</PackagePath>
+    </None>
+    <!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />-->
   </ItemGroup>
 
   <ItemGroup>
