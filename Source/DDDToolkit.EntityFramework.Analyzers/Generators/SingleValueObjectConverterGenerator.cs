@@ -1,5 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Analyzers.Models;
+using DDDToolkit.EntityFramework.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
