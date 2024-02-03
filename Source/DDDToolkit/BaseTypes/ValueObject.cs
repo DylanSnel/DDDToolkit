@@ -8,3 +8,9 @@ public abstract record ValueObject
             .Select(x => x?.GetHashCode() ?? 0)
             .Aggregate((x, y) => x ^ y);
 }
+public abstract record ValueObject<TDerived> : ValueObject
+{
+    //protected virtual TDerived Transform(TDerived value) => value
+
+    public virtual bool Validate() => true;
+}

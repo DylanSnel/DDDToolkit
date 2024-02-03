@@ -1,4 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
+using FluentValidation;
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
 
@@ -25,20 +26,26 @@ public partial record EmailAddress : IValidatable<EmailAddress.Validator>
     }
 
 
-    public Validate
 
-    public class Validator : FluentValidor
+
+    public class Validator : AbstractValidator<EmailAddress>
     {
-        Rule()
-            .ForProperty(x => x.Value)
-            .NotEmpty()
-            .Matches(EmailRegex);
+
 
     }
-
-
 }
-public partial record Unvalidated<T> where T : IValidatable
+
+public record RawEmailAddress : EmailAddress
+{
+
+    public bool IsValid { get; set; }
+    public static implicit operator EmailAddress(RawEmailAddress rawEmailAddress)
+    {
+        return new EmailAddress();
+    }
+}
+
+public record Unvalidated<T> where T : IValidatable
 {
     public string Value { get; init; }
 
