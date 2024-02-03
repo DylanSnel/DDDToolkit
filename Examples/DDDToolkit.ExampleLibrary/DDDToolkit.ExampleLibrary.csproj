@@ -4,13 +4,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <DDD_Module>Common</DDD_Module>
+    <DDD_Module>CommonMax</DDD_Module>
   </PropertyGroup>
   <ItemGroup>
     <CompilerVisibleProperty Include="DDD_Module" /> <!--Not neccesary when u get from nuget-->
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="11.9.0" />
     <PackageReference Include="MediatR" Version="12.2.0" />
   </ItemGroup>
   <ItemGroup>
@@ -19,5 +20,11 @@
 
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 </Project>

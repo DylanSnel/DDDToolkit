@@ -34,7 +34,7 @@ public class ExampleContext : DbContext
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        configurationBuilder.AddCommonConverters();
+        configurationBuilder.AddCommonMaxConverters();
         configurationBuilder.AddDDDToolkitExampleApiConverters();
     }
 }
