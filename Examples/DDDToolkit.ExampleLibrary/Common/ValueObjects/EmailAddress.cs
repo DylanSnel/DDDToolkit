@@ -9,6 +9,7 @@ public partial record EmailAddress //: IValidatable<EmailAddress.Validator>
     public const int MaxLength = 255;
 
     public const string EmailRegex = @"^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3})+)$";
+    public static EmailAddress Create(string value) => new(value);
 
 }
 

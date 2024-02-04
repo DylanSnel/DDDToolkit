@@ -12,12 +12,9 @@ public abstract record ValueObject : IValueObject
             .Select(x => x?.GetHashCode() ?? 0)
             .Aggregate((x, y) => x ^ y);
 
-    protected ValueObject(bool bypassValidation = false)
+    protected ValueObject()
     {
-        if (!bypassValidation && !this.Validate())
-        {
-            throw new InvalidOperationException("Validation failed.");
-        }
+
     }
 }
 

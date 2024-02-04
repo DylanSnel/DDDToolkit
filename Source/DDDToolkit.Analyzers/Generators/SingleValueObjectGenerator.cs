@@ -61,7 +61,7 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
                                 }
 
                                 [JsonConstructor]
-                                protected {{{data.Name}}}() : base(bypassValidation: true)
+                                protected {{{data.Name}}}()
                                 {
                                 }
 

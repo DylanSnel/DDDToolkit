@@ -10,7 +10,7 @@ public abstract record EntityId<TIdType> : SingleValueObject<TIdType>, IEntityId
         _prefix = prefix;
     }
 
-    protected EntityId(string prefix = "", bool bypassValidation = false) : base(bypassValidation)
+    protected EntityId(string prefix = "")
     {
         _prefix = prefix;
     }

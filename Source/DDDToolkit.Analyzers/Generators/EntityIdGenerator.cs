@@ -58,7 +58,7 @@ public class EntityIdGenerator : IIncrementalGenerator
                                 }
 
                                 [JsonConstructor]
-                                protected {{{name}}}() : base("{{{prefix}}}", bypassValidation: true)
+                                protected {{{name}}}() : base("{{{prefix}}}")
                                 {
                                 }
 

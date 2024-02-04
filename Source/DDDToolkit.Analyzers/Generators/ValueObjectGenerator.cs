@@ -77,7 +77,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
                                         .Aggregate((x, y) => x ^ y);
 
                                 [JsonConstructor]
-                                protected {{{name}}}() : base(bypassValidation: true)
+                                protected {{{name}}}()
                                 {
 
                                 }
