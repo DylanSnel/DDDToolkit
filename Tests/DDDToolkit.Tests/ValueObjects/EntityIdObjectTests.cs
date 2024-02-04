@@ -1,7 +1,7 @@
 using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using FluentAssertions;
 
-namespace DDDToolkit.Tests;
+namespace DDDToolkit.Tests.ValueObjects;
 
 public class EntityIdObjectTests
 {

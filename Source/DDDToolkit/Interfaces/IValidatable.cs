@@ -1,5 +1,5 @@
 ﻿namespace DDDToolkit.Interfaces;
-public interface IValidatable<>
-{
+//public interface IValidatable<>
+//{
 
-}
+//}
