@@ -9,10 +9,12 @@ public class ValueObjectTests
     public void EqualityTests()
     {
         var personname = new PersonName("John", "Doe");
-        var personname2 = new PersonName("John", "Someting", "Doe");
-        var personname3 = new PersonName("Johny", "Someting", "Doe");
+        var personname2 = new PersonName("John", "Doe");
+        var personname3 = new PersonName("John", "Someting", "Doe");
+        var personname4 = new PersonName("Johny", "Someting", "Doe");
         (personname == personname2).Should().BeTrue();
-        (personname == personname3).Should().BeFalse();
+        (personname == personname3).Should().BeTrue();
+        (personname == personname4).Should().BeFalse();
     }
 
     [Fact]

@@ -1,33 +1,59 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
+using DDDToolkit.Exceptions;
+using DDDToolkit.Serializers;
+using FluentAssertions;
 using System.Text.Json;
 
 namespace DDDToolkit.Tests.Serialization.SystemTextJson.ValueObjects;
-public class PersonNameSerialization
+public partial class PersonNameSerialization
 {
+    private readonly JsonSerializerOptions _options = new()
+    {
+        Converters = { new BlockDirectValueObjectDeserializationConverter() }
+    };
 
     [Fact]
     public void SerializeName()
     {
-
         var name = new PersonName("John", "Doe");
 
-        var json = JsonSerializer.Serialize(name);
+        var json = JsonSerializer.Serialize(name, _options);
+        Action act = () =>
+        {
+            var deserialized = JsonSerializer.Deserialize<PersonName>(json, _options);
+        };
 
-        var deserialized = JsonSerializer.Deserialize<PersonName>(json);
-
-        Assert.Equal(name, deserialized);
+        act.Should().Throw<SerializationNotAllowedException>();
     }
 
     [Fact]
-    public void SerializeInvalidName()
+    public void SerializeRawName()
     {
+        var json = """
+                   {"FirstName":"John","LastName":"Doe"}
+                   """;
 
+        var deserialized = JsonSerializer.Deserialize<PersonName.Raw>(json, _options);
+        PersonName newName = deserialized!;
+        Assert.Equal("Doe", newName.LastName);
+    }
+
+    [Fact]
+    public void SerializeRawInvalidName()
+    {
         var json = """
                    {"FirstName":"John","LastName":""}
                    """;
 
-        var deserialized = JsonSerializer.Deserialize<PersonName>(json);
+        var deserialized = JsonSerializer.Deserialize<PersonName.Raw>(json, _options);
 
-        Assert.Equal("", deserialized.LastName);
+        Assert.False(deserialized?.IsValid);
+
+        Assert.Equal("", deserialized!.LastName);
+        Action act = () =>
+        {
+            PersonName invalidName = deserialized;
+        };
+        act.Should().Throw<InvalidValueObjectException>();
     }
 }

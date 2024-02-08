@@ -1,4 +1,5 @@
-﻿using DDDToolkit.BaseTypes;
+﻿using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.BaseTypes;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;

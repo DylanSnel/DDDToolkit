@@ -2,7 +2,6 @@
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text.Json.Serialization;
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
@@ -68,7 +67,7 @@ public partial record PersonName
 }
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-public partial record PersonName : ValueObject
+public partial record PersonName : ValueObject, IAlwaysValid
 {
 
     public override IEnumerable<object?> GetEqualityComponents()
@@ -91,7 +90,6 @@ public partial record PersonName : ValueObject
             .Select(x => x?.GetHashCode() ?? 0)
             .Aggregate((x, y) => x ^ y);
 
-    [JsonConstructor]
     protected PersonName()
     {
     }
@@ -104,15 +102,6 @@ public partial record PersonName : ValueObject
         MiddleNames = raw.MiddleNames!;
         LastName = raw.LastName!;
     }
-
-    public PersonName(PersonName personName) : base(personName)
-    {
-        FirstName = personName.FirstName;
-        MiddleNames = personName.MiddleNames;
-        LastName = personName.LastName;
-        EnsureValidated();
-    }
-
 
     public record Raw : ValueObject, IRaw//., IPersonName
     {

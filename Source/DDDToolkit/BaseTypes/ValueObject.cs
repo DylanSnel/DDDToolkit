@@ -1,4 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.Exceptions;
 
 namespace DDDToolkit.BaseTypes;
 public abstract record ValueObject : IValueObject
@@ -19,7 +20,7 @@ public abstract record ValueObject : IValueObject
         Validate();
         if (!IsValid)
         {
-            throw new InvalidOperationException("Value object is not valid");
+            throw new InvalidValueObjectException(this.GetType());
         }
     }
 

@@ -1,5 +1,6 @@
 ﻿using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
+using DDDToolkit.Exceptions;
 using Newtonsoft.Json;
 
 
@@ -12,13 +13,13 @@ public class BlockDirectValueObjectDeserializationConverter : JsonConverter
         // Check if objectType is a subclass of ValueObject
         var isValueObject = objectType.IsSubclassOf(typeof(ValueObject));
         var isRaw = typeof(IRaw).IsAssignableFrom(objectType);
-        objectType.In
-        return isValueObject && !isRaw;
+        var alwaysValid = typeof(IAlwaysValid).IsAssignableFrom(objectType);
+        return isValueObject && alwaysValid && !isRaw;
     }
 
     public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
     {
-        throw new JsonSerializationException($"Direct deserialization of {objectType.Name} is not allowed. Please deserialize to Raw<{objectType.Name}> instead.");
+        throw new SerializationNotAllowedException(objectType);
     }
 
     public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
