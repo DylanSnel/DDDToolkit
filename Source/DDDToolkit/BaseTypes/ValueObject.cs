@@ -3,7 +3,25 @@
 namespace DDDToolkit.BaseTypes;
 public abstract record ValueObject : IValueObject
 {
-    public virtual bool Validate() => true;
+    public bool IsValidated => _isValid != null;
+
+    public bool IsValid => _isValid ??= Validate();
+
+    protected bool? _isValid = null;
+
+    protected virtual bool Validate() => true;
+
+    public virtual List<object> Errors { get; private set; } = [];
+
+
+    public virtual void EnsureValidated()
+    {
+        Validate();
+        if (!IsValid)
+        {
+            throw new InvalidOperationException("Value object is not valid");
+        }
+    }
 
     public abstract IEnumerable<object?> GetEqualityComponents();
 
@@ -14,7 +32,6 @@ public abstract record ValueObject : IValueObject
 
     protected ValueObject()
     {
-
     }
 }
 

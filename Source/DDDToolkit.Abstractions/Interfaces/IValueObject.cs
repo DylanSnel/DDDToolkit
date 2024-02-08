@@ -1,5 +1,8 @@
-﻿namespace DDDToolkit.Abstractions.Interfaces;
+﻿
+namespace DDDToolkit.Abstractions.Interfaces;
 public interface IValueObject
 {
-    bool Validate();
+    bool IsValidated { get; }
+    bool IsValid { get; }
+    List<object> Errors { get; }
 }
