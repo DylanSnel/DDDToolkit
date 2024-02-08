@@ -14,7 +14,7 @@ public class EntityIdObjectTests
         var personId2 = PersonId.CreateUnique();
         var personId3 = PersonId.Create(personId2.Value);
         (personId1 == personId1).Should().BeTrue();
-        (personId3.Value == personId1.Value).Should().BeTrue();
+        (personId3.Value == personId2.Value).Should().BeTrue();
         (personId3 == personId2).Should().BeTrue();
         (catId1 == catId2).Should().BeTrue();
         (catId1 == personId1).Should().BeFalse();

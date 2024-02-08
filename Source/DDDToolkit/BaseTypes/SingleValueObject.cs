@@ -1,5 +1,5 @@
-﻿
-namespace DDDToolkit.BaseTypes;
+﻿namespace DDDToolkit.BaseTypes;
+
 public abstract record SingleValueObject<T> : ValueObject where T : notnull
 {
     protected SingleValueObject(T value) => Value = value;

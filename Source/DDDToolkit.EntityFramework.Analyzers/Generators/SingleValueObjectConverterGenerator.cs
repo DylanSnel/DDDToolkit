@@ -32,6 +32,7 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
                  return new DDDOptions
                  {
                      ModuleName = options.GetOption("module", string.Empty),
+                     AlwaysValidValueObjects = options.GetOption("AlwaysValidValueObjects", true),
                  };
              });
 

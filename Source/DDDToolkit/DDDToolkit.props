@@ -1,6 +1,6 @@
 <Project>
   <ItemGroup>
     <CompilerVisibleProperty Include="DDD_Module" />
-    <CompilerVisibleProperty Include="DDD_AlwaysValid" />
+    <CompilerVisibleProperty Include="DDD_AlwaysValidValueObjects" />
   </ItemGroup>
 </Project>

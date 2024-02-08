@@ -62,6 +62,15 @@ public class EntityIdGenerator : IIncrementalGenerator
                                 {
                                 }
 
+                                public virtual bool Equals({{{name}}}? other)
+                                {
+                                    if (other is null)
+                                    {
+                                        return false;
+                                    }
+                                    return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
+                                }
+
                                 public override int GetHashCode()
                                     => base.GetHashCode();
 

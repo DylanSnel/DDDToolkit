@@ -66,7 +66,16 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
                                 }
 
                                 public override int GetHashCode()
-                                    => base.GetHashCode();    
+                                    => base.GetHashCode();
+                                
+                                public virtual bool Equals({{{data.Name}}}? other)
+                                {
+                                    if (other is null)
+                                    {
+                                        return false;
+                                    }
+                                    return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
+                                }
                             }
     
                             """;

@@ -7,8 +7,8 @@ using System.Text.RegularExpressions;
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 //UserCode
-//[SingleValueObject<string>(ColumnLength: MaxLength)] //Comments out the attribute to allow for partial classes
-public partial record EmailAddress //: IValidatable<EmailAddress.Validator>
+//[SingleValueObject<string>(ColumnLength: MaxLength)] //Comment out the attribute to allow for partial classes
+public partial record EmailAddress
 {
     public const int MaxLength = 255;
 
@@ -59,6 +59,15 @@ public partial record EmailAddress : SingleValueObject<string>
         raw.EnsureValidated();
         _isValid = true;
         Value = raw.Value!;
+    }
+
+    public virtual bool Equals(EmailAddress? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+        return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
     }
 
 

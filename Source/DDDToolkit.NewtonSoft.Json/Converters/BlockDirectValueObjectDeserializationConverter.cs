@@ -17,12 +17,12 @@ public class BlockDirectValueObjectDeserializationConverter : JsonConverter
         return isValueObject && alwaysValid && !isRaw;
     }
 
-    public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
     {
         throw new SerializationNotAllowedException(objectType);
     }
 
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
     {
         // Direct serialization of ValueObject descendants can be allowed or handled as needed
         serializer.Serialize(writer, value);
