@@ -6,38 +6,50 @@ public class SingleValueObjectConverter : JsonConverter
 {
     public override bool CanConvert(Type objectType)
     {
-        return objectType.IsGenericType &&
-               objectType.GetInterfaces().Any(i => i.GetGenericTypeDefinition() == typeof(SingleValueObject<>));
+        return typeof(ISingleValueObject).IsAssignableFrom(objectType);
     }
 
     public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
     {
-        var valueType = objectType.GetInterfaces().First(i => i.GetGenericTypeDefinition() == typeof(SingleValueObject<>)).GetGenericArguments()[0];
+        // Determine the type of T in SingleValueObject<T>
+        Type? baseType = objectType;
+        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
+        {
+            baseType = baseType.BaseType;
+        }
+        if (baseType == null)
+        {
+            throw new JsonSerializationException($"Type {objectType.Name} does not inherit from SingleValueObject<T>.");
+        }
+
+        var valueType = baseType.GetGenericArguments()[0];
         var value = serializer.Deserialize(reader, valueType);
 
-        // Inside the Read method for both System.Text.Json and Newtonsoft.Json converters
-        if (value is null)
+        if (value == null)
         {
             return null!;
         }
 
-        var constructor = objectType.GetConstructor(
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public,
-            null,
-            [valueType],
-            null);
+        // Find the protected constructor
+        var constructor = objectType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+                          .FirstOrDefault(c => c.GetParameters().Length == 1 && c.GetParameters()[0].ParameterType == valueType);
+
         if (constructor == null)
         {
-            throw new JsonException($"No suitable constructor found for type {typeof(T).Name}");
+            throw new JsonSerializationException($"No suitable constructor found for type {objectType.Name}.");
         }
-        var instance = constructor.Invoke(new object[] { value });
+
+        // Invoke the protected constructor
+        var instance = constructor.Invoke(BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { value }, null);
         return instance;
     }
-
     public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
     {
-        var valueType = value.GetType().GetInterfaces().First(i => i.GetGenericTypeDefinition() == typeof(SingleValueObject<>)).GetGenericArguments()[0];
-        var propValue = value.GetType().GetProperty("Value")!.GetValue(value);
-        serializer.Serialize(writer, propValue, valueType);
+        // Directly access the 'Value' property without assuming the type is generic.
+        var propValue = value.GetType().GetProperty("Value")?.GetValue(value);
+
+        // Serialize the 'Value' property directly. No need to specify the type.
+        serializer.Serialize(writer, propValue);
     }
+
 }

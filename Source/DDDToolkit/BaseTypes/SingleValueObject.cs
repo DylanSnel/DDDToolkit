@@ -1,6 +1,8 @@
 ﻿namespace DDDToolkit.BaseTypes;
 
-public abstract record SingleValueObject<T> : ValueObject where T : notnull
+
+
+public abstract record SingleValueObject<T> : ValueObject, ISingleValueObject where T : notnull
 {
     protected SingleValueObject(T value) => Value = value;
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
@@ -13,3 +15,4 @@ public abstract record SingleValueObject<T> : ValueObject where T : notnull
         yield return Value;
     }
 }
+public interface ISingleValueObject;
