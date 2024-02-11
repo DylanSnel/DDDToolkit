@@ -18,7 +18,7 @@ public class SingleValueObjectConverter : JsonConverter
     {
         // Determine the type of T in SingleValueObject<T>
         var baseType = objectType;
-        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
+        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<,>))
         {
             baseType = baseType.BaseType;
         }
@@ -48,12 +48,15 @@ public class SingleValueObjectConverter : JsonConverter
         var instance = constructor.Invoke(BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { value }, null);
         return instance;
     }
-    public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+    public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
     {
-        // Directly access the 'Value' property without assuming the type is generic.
-        var propValue = value.GetType().GetProperty("Value")?.GetValue(value);
+        if (value == null)
+        {
+            writer.WriteNull();
+            return;
+        }
 
-        // Serialize the 'Value' property directly. No need to specify the type.
+        var propValue = value.GetType().GetProperty("Value")?.GetValue(value);
         serializer.Serialize(writer, propValue);
     }
 

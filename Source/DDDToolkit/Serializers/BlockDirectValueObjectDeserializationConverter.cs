@@ -1,5 +1,4 @@
 ﻿using DDDToolkit.Abstractions.Interfaces;
-using DDDToolkit.BaseTypes;
 using DDDToolkit.Exceptions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,10 +8,9 @@ public class BlockDirectValueObjectDeserializationConverter : JsonConverter<IAlw
 {
     public override bool CanConvert(Type typeToConvert)
     {
-        var isValueObject = typeToConvert.IsSubclassOf(typeof(ValueObject));
-        var isRaw = typeof(IRaw).IsAssignableFrom(typeToConvert);
+        var isValueObject = typeof(IValueObject).IsAssignableFrom(typeToConvert);
         var alwaysValid = typeof(IAlwaysValid).IsAssignableFrom(typeToConvert);
-        return isValueObject && alwaysValid && !isRaw;
+        return isValueObject && alwaysValid;
     }
 
     public override IAlwaysValid Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

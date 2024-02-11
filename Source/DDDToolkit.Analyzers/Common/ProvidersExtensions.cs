@@ -1,6 +1,6 @@
 ﻿using DDDToolkit.Analyzers.Models;
 using Microsoft.CodeAnalysis;
-using SourceGeneratorsToolkit;
+using SourceGeneratorsToolkit.Providers;
 
 namespace DDDToolkit.Analyzers.Common;
 public static class ProvidersExtensions
@@ -14,7 +14,7 @@ public static class ProvidersExtensions
                  return new DDDOptions
                  {
                      ModuleName = options.GetOption("module", string.Empty),
-                     AlwaysValidValueObjects = options.GetOption("AlwaysValidValueObjects", false),
+                     AlwaysValidValueObjects = options.GetOption("alwaysvalidvalueobjects", false),
                  };
              });
     }

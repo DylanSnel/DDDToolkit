@@ -29,7 +29,6 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
 
         var singleValueObjectSyntax = context.FindAttributesProvider<SingleValueObjectAttribute, RecordDeclarationSyntax>();
         var entityIdSyntax = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax>();
-
         var typeDeclarations = singleValueObjectSyntax.Collect().Combine(entityIdSyntax.Collect()).SelectMany((x, y) => x.Left.Concat(x.Right));
 
         var singleValueObjects = typeDeclarations.Select((ctx, _) => GenericObjectDefinition.FromTypeDeclarationSyntax(ctx));

@@ -5,10 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DDD_Module>Common</DDD_Module>
+    <!--<DDD_AlwaysValidValueObjects>False</DDD_AlwaysValidValueObjects>-->
   </PropertyGroup>
   <ItemGroup>
     <CompilerVisibleProperty Include="DDD_Module" /> <!--Not neccesary when u get from nuget-->
-    <CompilerVisibleProperty Include="DDD_AlwaysValid" />
+    <CompilerVisibleProperty Include="DDD_AlwaysValidValueObjects" />
   </ItemGroup>
 
   <ItemGroup>

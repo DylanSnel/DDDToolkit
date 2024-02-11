@@ -1,4 +1,5 @@
-﻿using DDDToolkit.BaseTypes;
+﻿using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.BaseTypes;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -16,26 +17,28 @@ public class SingleValueObjectConverterFactory : JsonConverterFactory
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
     {
         var baseType = typeToConvert.BaseType;
-        if (baseType == null || !baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
+        if (baseType == null || !baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(SingleValueObject<,>))
         {
             throw new InvalidOperationException($"The type {typeToConvert.Name} is not supported by this converter.");
         }
 
         var valueType = baseType.GetGenericArguments()[0];
-        var converterType = typeof(SingleValueObjectConverter<,>).MakeGenericType(typeToConvert, valueType);
+        var interfaceType = baseType.GetGenericArguments()[1];
+        var converterType = typeof(SingleValueObjectConverter<,,>).MakeGenericType(typeToConvert, valueType, interfaceType);
         return (JsonConverter)Activator.CreateInstance(converterType)!;
     }
 }
 
 // Converter for single value objects
-public class SingleValueObjectConverter<TSingleValueObject, TValue> : JsonConverter<TSingleValueObject>
-    where TSingleValueObject : SingleValueObject<TValue>
+public class SingleValueObjectConverter<TSingleValueObject, TValue, TInterface> : JsonConverter<TSingleValueObject>
+    where TSingleValueObject : SingleValueObject<TValue, TInterface>
     where TValue : notnull
+    where TInterface : class, IValueObject<TInterface>
 {
     public override TSingleValueObject? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         TValue value = JsonSerializer.Deserialize<TValue>(ref reader, options)!;
-        var constructorInfo = typeToConvert.GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(TValue) }, null);
+        var constructorInfo = typeToConvert.GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(TValue)], null);
         if (constructorInfo == null)
         {
             throw new JsonException($"Could not find a constructor for '{typeToConvert.Name}'.");

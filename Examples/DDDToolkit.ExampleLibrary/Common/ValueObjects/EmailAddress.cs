@@ -39,7 +39,7 @@ public partial record EmailAddress
 //Everythin below this line is generated code. Any changes will be lost.
 
 //DDDToolkit.Analyzers generates this
-public partial record EmailAddress : SingleValueObject<string, IEmailAddress>, IEmailAddress
+public partial record EmailAddress : SingleValueObject<string, IEmailAddress>, IEmailAddress, IAlwaysValid
 {
     protected EmailAddress(string value) : base(value)
     {
