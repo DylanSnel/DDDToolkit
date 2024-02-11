@@ -1,11 +1,10 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.EntityFramework.Analyzers.Models;
+using DDDToolkit.Analyzers.Common;
+using DDDToolkit.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
-using SourceGeneratorsToolkit;
 using SourceGeneratorsToolkit.Providers;
-using SourceGeneratorsToolkit.SyntaxExtensions;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -25,72 +24,26 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
         //        }
         //#endif
 
-        var dddPropteriesProvider = context.AnalyzerConfigOptionsProvider
-             .Select((provider, _) =>
-             {
-                 var options = provider.ToProvider("build_property.ddd_");
-                 return new DDDOptions
-                 {
-                     ModuleName = options.GetOption("module", string.Empty),
-                     AlwaysValidValueObjects = options.GetOption("AlwaysValidValueObjects", true),
-                 };
-             });
+        var dddPropteriesProvider = context.DDDOptionsProvider();
 
 
-        var singleValueObjects = context.FindAttributesProvider<SingleValueObjectAttribute, RecordDeclarationSyntax, GenericObjectDefinition>(
-              transform: static (ctx, _) =>
-              {
-                  var classDeclaration = ctx.TargetNode as RecordDeclarationSyntax;
-                  GenericObjectDefinition singleValueObjectDefinition = new()
-                  {
-                      Name = classDeclaration!.Identifier.Text,
-                      Namespace = classDeclaration.Parent is BaseNamespaceDeclarationSyntax namespaceDeclaration ? namespaceDeclaration.Name.ToString() : "",
-                      Type = ctx.Attributes.First(x => x.match).attribute.GenericTypes.First().Name,
-                      Arguments = ctx.Attributes.First(x => x.match).attribute.Arguments,
-                      AccessModifier = classDeclaration.GetAccessModifier(),
-                  };
-                  if (singleValueObjectDefinition.Type == "String")
-                  {
-                      singleValueObjectDefinition.Type = "string";
-                  }
+        var singleValueObjectSyntax = context.FindAttributesProvider<SingleValueObjectAttribute, RecordDeclarationSyntax>();
+        var entityIdSyntax = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax>();
 
-                  return singleValueObjectDefinition;
+        var typeDeclarations = singleValueObjectSyntax.Collect().Combine(entityIdSyntax.Collect()).SelectMany((x, y) => x.Left.Concat(x.Right));
 
-              });
-        var entityIds = context.FindAttributesProvider<EntityIdAttribute, RecordDeclarationSyntax, GenericObjectDefinition>(
-              transform: static (ctx, _) =>
-              {
-                  var classDeclaration = ctx.TargetNode as RecordDeclarationSyntax;
-                  GenericObjectDefinition singleValueObjectDefinition = new()
-                  {
-                      Name = classDeclaration!.Identifier.Text,
-                      Namespace = classDeclaration.Parent is BaseNamespaceDeclarationSyntax namespaceDeclaration ? namespaceDeclaration.Name.ToString() : "",
-                      Type = ctx.Attributes.First(x => x.match).attribute.GenericTypes.First().Name,
-                      AccessModifier = classDeclaration.GetAccessModifier(),
-                  };
-                  if (singleValueObjectDefinition.Type == "String")
-                  {
-                      singleValueObjectDefinition.Type = "string";
-                  }
-
-                  return singleValueObjectDefinition;
-
-              });
+        var singleValueObjects = typeDeclarations.Select((ctx, _) => GenericObjectDefinition.FromTypeDeclarationSyntax(ctx));
 
 
         context.RegisterSourceOutput(singleValueObjects, GenerateValueConverter);
-        context.RegisterSourceOutput(entityIds, GenerateValueConverter);
 
-        var classes = singleValueObjects.Collect().Combine(entityIds.Collect()).SelectMany((x, y) => x.Left.Concat(x.Right));
-
-        var classesWithProperties = dddPropteriesProvider.Combine(classes.Collect());
+        var classesWithProperties = dddPropteriesProvider.Combine(singleValueObjects.Collect());
         var classesWithPropertiesAndCompilation = classesWithProperties.Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(classesWithPropertiesAndCompilation, GenerateConfigurationExtensions);
     }
     private static void GenerateValueConverter(SourceProductionContext context, GenericObjectDefinition data)
     {
-
         var converterName = $"{data.Name}Converter";
 
         var sourceCode = $$$"""
@@ -99,7 +52,7 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
 
                             namespace {{{data.Namespace}}};
     
-                            {{{data.AccessModifier}}} partial record {{{data.Name}}} 
+                            partial record {{{data.Name}}} 
                             {
                                 public class {{{converterName}}} : ValueConverter<{{{data.Name}}}, {{{data.Type}}}>
                                 {

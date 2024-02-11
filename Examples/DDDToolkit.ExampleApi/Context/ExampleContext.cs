@@ -1,6 +1,7 @@
 ﻿using DDDToolkit.ExampleApi.Converters;
 using DDDToolkit.ExampleApi.Domain.ProductAggregate;
 using DDDToolkit.ExampleApi.Domain.UserAggregate;
+using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.ExampleLibrary.Converters;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,5 +37,6 @@ public class ExampleContext : DbContext
     {
         configurationBuilder.AddCommonConverters();
         configurationBuilder.AddDDDToolkitExampleApiConverters();
+        configurationBuilder.Properties<EmailAddress>().HaveConversion<EmailAddress.Converter>().HaveMaxLength(EmailAddress.MaxLength);
     }
 }

@@ -35,7 +35,6 @@ public class EntityGenerator : IIncrementalGenerator
         }
         var name = recordDeclaration.GetName();
         var @namespace = recordDeclaration.GetNamespace();
-        var accessModifier = recordDeclaration.GetAccessModifier();
 
 
         var sourceCode = $$$"""
@@ -45,7 +44,7 @@ public class EntityGenerator : IIncrementalGenerator
                             namespace {{{@namespace}}};
 
                             [Owned]
-                            {{{accessModifier}}} partial class {{{name}}}
+                            partial class {{{name}}}
                             {
                             }
     

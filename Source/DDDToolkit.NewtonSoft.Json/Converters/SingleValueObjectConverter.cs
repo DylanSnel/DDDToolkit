@@ -2,6 +2,11 @@
 using Newtonsoft.Json;
 using System.Reflection;
 
+namespace DDDToolkit.NewtonSoft.Json.Converters;
+
+/// <summary>
+/// 
+/// </summary>
 public class SingleValueObjectConverter : JsonConverter
 {
     public override bool CanConvert(Type objectType)
@@ -12,7 +17,7 @@ public class SingleValueObjectConverter : JsonConverter
     public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
     {
         // Determine the type of T in SingleValueObject<T>
-        Type? baseType = objectType;
+        var baseType = objectType;
         while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
         {
             baseType = baseType.BaseType;

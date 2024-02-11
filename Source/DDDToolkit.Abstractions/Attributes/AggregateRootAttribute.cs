@@ -1,5 +1,6 @@
 ﻿#nullable enable
 using DDDToolkit.Abstractions.Interfaces;
+using System.ComponentModel;
 
 namespace DDDToolkit.Abstractions.Attributes;
 
@@ -13,6 +14,7 @@ public class AggregateRootAttribute<TType> : AggregateRootAttribute where TType 
 }
 
 [AttributeUsage(AttributeTargets.Class)]
+[EditorBrowsable(EditorBrowsableState.Never)]
 public abstract class AggregateRootAttribute : Attribute
 {
     internal AggregateRootAttribute() { }

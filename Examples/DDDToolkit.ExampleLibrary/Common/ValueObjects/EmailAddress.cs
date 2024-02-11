@@ -16,7 +16,7 @@ public partial record EmailAddress
 
     public static EmailAddress Create(string value) => new(value);
 
-    protected override bool Validate()
+    public override bool Validate(IEmailAddress var)
     {
         if (string.IsNullOrWhiteSpace(Value))
         {
@@ -27,7 +27,7 @@ public partial record EmailAddress
             return false;
         }
 
-        return base.Validate();
+        return true;
     }
 
     [GeneratedRegex(EmailRegex)]
@@ -39,7 +39,7 @@ public partial record EmailAddress
 //Everythin below this line is generated code. Any changes will be lost.
 
 //DDDToolkit.Analyzers generates this
-public partial record EmailAddress : SingleValueObject<string>
+public partial record EmailAddress : SingleValueObject<string, IEmailAddress>, IEmailAddress
 {
     protected EmailAddress(string value) : base(value)
     {
@@ -71,33 +71,23 @@ public partial record EmailAddress : SingleValueObject<string>
     }
 
 
-    public partial record Raw : ValueObject, IRaw//., IPersonName
+    public partial record Raw : SingleValueObject<string, IEmailAddress>, IRaw, IEmailAddress
     {
-
-        public string? Value { get; set; }
 
         [JsonConstructor]
         public Raw()
         {
         }
 
-        protected override bool Validate()
+        public override bool Validate(IEmailAddress email)
         {
-            if (string.IsNullOrWhiteSpace(Value))
-            {
-                return false;
-            }
-            if (!ValidEmail().Match(Value).Success)
-            {
-                return false;
-            }
-
-            return true;
+            EmailAddress emailAddress = new EmailAddress();
+            return emailAddress.Validate(this);
         }
 
         public static implicit operator EmailAddress(Raw raw) => new(raw);
 
-        public override IEnumerable<object?> GetEqualityComponents()
+        public override IEnumerable<object> GetEqualityComponents()
         {
             yield return Value;
         }
@@ -119,12 +109,17 @@ public partial record EmailAddress : SingleValueObject<string>
 
 }
 
+public interface IEmailAddress : IValueObject<IEmailAddress>
+{
+    string? Value { get; }
+}
+
 // DDDToolkit.EntityFramework
 public partial record EmailAddress
 {
-    public class EmailAddressConverter : ValueConverter<EmailAddress, string>
+    public class Converter : ValueConverter<EmailAddress, string>
     {
-        public EmailAddressConverter()
+        public Converter()
             : base(
                 v => v.Value,
                 v => new EmailAddress(v))
@@ -132,3 +127,6 @@ public partial record EmailAddress
         }
     }
 }
+
+
+

@@ -33,6 +33,7 @@ public class EntityIdGenerator : IIncrementalGenerator
         var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
         if (recordDeclaration is null)
         {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectShouldBeRecord, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
         var name = recordDeclaration.GetName();
@@ -51,7 +52,7 @@ public class EntityIdGenerator : IIncrementalGenerator
                             #nullable enable
                             namespace {{{@namespace}}};
     
-                            {{{accessModifier}}} partial record {{{name}}} : EntityId<{{{type}}}>
+                            partial record {{{name}}} : EntityId<{{{type}}}>
                             {
                                 protected {{{name}}}({{{type}}} value) : base(value, "{{{prefix}}}")
                                 {

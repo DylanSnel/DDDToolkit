@@ -33,6 +33,7 @@ public class EntityGenerator : IIncrementalGenerator
         var classDeclaration = data.TargetNode as ClassDeclarationSyntax;
         if (classDeclaration is null)
         {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.EntityShouldBeClass, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
         var name = classDeclaration.GetName();
@@ -51,11 +52,11 @@ public class EntityGenerator : IIncrementalGenerator
 
                             namespace {{{@namespace}}};
     
-                            {{{accessModifier}}} partial class {{{name}}} : Entity<{{{typeName}}}>
+                            partial class {{{name}}} : Entity<{{{typeName}}}>
                             {
-                               #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+                                #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                                 protected {{{name}}}()
-                            #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+                                #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                                 {
                             
                                 }                    

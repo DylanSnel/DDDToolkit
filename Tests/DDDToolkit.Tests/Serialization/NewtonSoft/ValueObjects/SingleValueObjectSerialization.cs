@@ -1,4 +1,5 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
+using DDDToolkit.NewtonSoft.Json.Converters;
 using Newtonsoft.Json;
 
 namespace DDDToolkit.Tests.Serialization.NewtonSoft.ValueObjects;

@@ -1,6 +1,7 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.BaseTypes;
+using System.Collections.ObjectModel;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
@@ -8,9 +9,6 @@ namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 //[ValueObject]
 public partial record PersonName
 {
-
-    private new readonly List<string> Errors = [];
-
     public PersonName(string firstName, string middleNames, string lastName)
     {
         FirstName = firstName;
@@ -33,22 +31,31 @@ public partial record PersonName
         LastName = lastName
     };
 
-    //public PersonName() { }
+    public ReadOnlyCollection<string> Errors => _errors.AsReadOnly();
 
-    protected override bool Validate()
+    private readonly List<string> _errors = [];
+
+    public override bool Validate(IPersonName valueObject)
     {
-        if (string.IsNullOrWhiteSpace(FirstName))
+        if (valueObject is null)
         {
-            Errors.Add("First name is required");
+            _errors.Add("Value object is null");
             return false;
         }
-        if (string.IsNullOrWhiteSpace(LastName))
+
+        if (string.IsNullOrWhiteSpace(valueObject.FirstName))
         {
-            Errors.Add("Last name is required");
+            _errors.Add("First name is required");
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(valueObject.LastName))
+        {
+            _errors.Add("Last name is required");
             return false;
         }
 
         return true;
+
     }
 
     public string FirstName { get; private set; }
@@ -67,9 +74,9 @@ public partial record PersonName
 }
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
-public partial record PersonName : ValueObject, IAlwaysValid
+public partial record PersonName : ValueObject<IPersonName>, IAlwaysValid, IPersonName
 {
-
+    [Internal]
     public override IEnumerable<object?> GetEqualityComponents()
     {
         yield return FirstName;
@@ -85,6 +92,7 @@ public partial record PersonName : ValueObject, IAlwaysValid
         return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
     }
 
+    [Internal]
     public override int GetHashCode()
         => GetEqualityComponents()
             .Select(x => x?.GetHashCode() ?? 0)
@@ -103,7 +111,7 @@ public partial record PersonName : ValueObject, IAlwaysValid
         LastName = raw.LastName!;
     }
 
-    public record Raw : ValueObject, IRaw//., IPersonName
+    public partial record Raw : ValueObject<IPersonName>, IRaw, IPersonName
     {
         public Raw()
         {
@@ -114,24 +122,15 @@ public partial record PersonName : ValueObject, IAlwaysValid
         public string? MiddleNames { get; set; }
         public string? LastName { get; set; }
 
-        protected override bool Validate()
+        public override bool Validate(IPersonName valueObject)
         {
-            if (string.IsNullOrWhiteSpace(FirstName))
-            {
-                return false;
-            }
-            if (string.IsNullOrWhiteSpace(LastName))
-            {
-                return false;
-            }
-
-            return true;
-
+            var personName = new PersonName();
+            return personName.Validate(valueObject);
         }
-
 
         public static implicit operator PersonName(Raw raw) => new(raw);
 
+        [Internal]
         public override IEnumerable<object?> GetEqualityComponents()
         {
             yield return FirstName;
@@ -156,6 +155,14 @@ public partial record PersonName : ValueObject, IAlwaysValid
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
 
 [ComplexType]
-public partial record PersonName : ValueObject
+public partial record PersonName
 {
+
+}
+
+public interface IPersonName : IValueObject<IPersonName>
+{
+    string? FirstName { get; }
+    string? MiddleNames { get; }
+    string? LastName { get; }
 }

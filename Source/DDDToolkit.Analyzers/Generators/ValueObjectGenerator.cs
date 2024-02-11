@@ -1,4 +1,7 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Abstractions.Attributes.Validation;
+using DDDToolkit.Analyzers.Common;
+using DDDToolkit.Analyzers.Models;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -23,24 +26,42 @@ public class ValueObjectGenerator : IIncrementalGenerator
         //        }
         //#endif
 
+        var dddOptions = context.DDDOptionsProvider();
         var singleValueObjects = context.FindAttributesProvider<ValueObjectAttribute, RecordDeclarationSyntax>();
-        context.RegisterSourceOutput(singleValueObjects, Execute);
+        var combined = singleValueObjects.Combine(dddOptions);
+        context.RegisterSourceOutput(combined, CreateValueObject);
     }
 
-    private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
+    private static void CreateValueObject(SourceProductionContext context, (TypeAttributeSyntaxContext data, DDDOptions options) arguments)
     {
+        var (data, options) = arguments;
         var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
         if (recordDeclaration is null)
         {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectShouldBeRecord, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
+
+        var hasAlwaysValidAttribute = recordDeclaration.HasAttribute<AlwaysValidAttribute>();
+        var hasAllowInvalidAttribute = recordDeclaration.HasAttribute<AllowInvalidAttribute>();
+
+        if (hasAlwaysValidAttribute && hasAllowInvalidAttribute)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectCannotHaveAlwaysValidAndAllowInvalid, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
+            return;
+        }
+
+        var alwaysValid = hasAlwaysValidAttribute || options.AlwaysValidValueObjects;
+        alwaysValid = alwaysValid && !hasAllowInvalidAttribute;
+
+
         var name = recordDeclaration.GetName();
         var @namespace = recordDeclaration.GetNamespace();
         var accessModifier = recordDeclaration.GetAccessModifier();
         var properties = recordDeclaration.GetProperties();
-        var attributesWithoutIgnore = properties.Where(x => !x.Attributes().Any(a => a.Matches<DontCompareAttribute>()));
+        var propertiesWithoutIgnore = properties.Where(x => !x.Attributes().Any(a => a.Matches<DontCompareAttribute>()));
 
-        var equalityComponents = string.Join("\n        ", attributesWithoutIgnore.Select(x => $"yield return {x.GetName()};"));
+        var equalityComponents = string.Join("\n        ", propertiesWithoutIgnore.Select(x => $"yield return {x.GetName()};"));
 
         var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
 
@@ -55,7 +76,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{@namespace}}};
     
-                            {{{accessModifier}}} {{{recordDeclaration.SealedModifier()}}}partial record {{{name}}} : ValueObject
+                            {{{recordDeclaration.SealedModifier()}}}partial record {{{name}}} : ValueObject
                             {
                                 public override IEnumerable<object?> GetEqualityComponents()
                                 {

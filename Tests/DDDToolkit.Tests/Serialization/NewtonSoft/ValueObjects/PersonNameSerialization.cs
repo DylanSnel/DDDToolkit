@@ -8,7 +8,7 @@ public partial class PersonNameSerialization
 {
     readonly JsonSerializerSettings _settings = new()
     {
-        Converters = { new BlockDirectValueObjectDeserializationConverter() }
+        Converters = { new BlockAlwaysValidSerialization() }
     };
 
 

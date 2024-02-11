@@ -10,7 +10,7 @@ public class SingleValueObjectSerialization
     public SingleValueObjectSerialization()
     {
         _options = new JsonSerializerOptions();
-        _options.Converters.Add(new SingleValueObjectConverterFactory()); // Assuming this is your converter factory
+        _options.Converters.Add(new SingleValueObjectConverterFactory());
     }
 
     [Fact]
