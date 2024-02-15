@@ -20,7 +20,7 @@ public partial class PersonNameSerialization
         var json = JsonSerializer.Serialize(name, _options);
         Action act = () =>
         {
-            var deserialized = JsonSerializer.Deserialize<PersonName>(json, _options);
+            var deserialized = JsonSerializer.Deserialize<ValidPersonName>(json, _options);
         };
 
         act.Should().Throw<SerializationNotAllowedException>();
@@ -33,7 +33,7 @@ public partial class PersonNameSerialization
                    {"FirstName":"John","LastName":"Doe"}
                    """;
 
-        var deserialized = JsonSerializer.Deserialize<PersonName.Raw>(json, _options);
+        var deserialized = JsonSerializer.Deserialize<PersonName>(json, _options);
         PersonName newName = deserialized!;
         Assert.Equal("Doe", newName.LastName);
     }
@@ -45,14 +45,14 @@ public partial class PersonNameSerialization
                    {"FirstName":"John","LastName":""}
                    """;
 
-        var deserialized = JsonSerializer.Deserialize<PersonName.Raw>(json, _options);
+        var deserialized = JsonSerializer.Deserialize<PersonName>(json, _options);
 
         Assert.False(deserialized?.IsValid);
 
         Assert.Equal("", deserialized!.LastName);
         Action act = () =>
         {
-            PersonName invalidName = deserialized;
+            ValidPersonName invalidName = deserialized.ToValid();
         };
         act.Should().Throw<InvalidValueObjectException>();
     }

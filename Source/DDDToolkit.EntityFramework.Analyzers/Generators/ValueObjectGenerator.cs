@@ -48,6 +48,11 @@ public class ValueObjectGenerator : IIncrementalGenerator
                             partial record {{{name}}}
                             {
                             }
+
+                            [ComplexType]
+                            partial record Valid{{{name}}}
+                            {
+                            }
     
                             """;
         // Add the generated source to the compilation

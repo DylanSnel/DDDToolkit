@@ -1,15 +1,51 @@
-﻿namespace DDDToolkit.ProtoTyping;
+﻿using DDDToolkit.BaseTypes;
 
-public record Class1
+namespace DDDToolkit.ProtoTyping;
+
+public record Class1 : ValueObject
 {
-    public int Id { get; init; }
+    public int Thing { get; protected set; }
 
-    public Class2 ToClass2() => new(this);
+    public List<string> MyList { get; init; } = new();
+
+    protected override bool Validate()
+    {
+        return Thing > 0;
+    }
+
+
+
+    public override IEnumerable<object?> GetEqualityComponents()
+    {
+        yield return Thing;
+    }
+
+    public ValidClass1 ToValid() => new(this);
 }
-public record Class2 : Class1
+public record ValidClass1 : Class1
 {
-    public Class2(Class1 raw) => Id = raw.Id;
+    internal ValidClass1(Class1 raw)
+    {
+        raw.EnsureValidated();
+        _isValid = true;
+        Thing = raw.Thing;
+    }
 
+
+}
+
+
+public class MyEntity
+{
+    public Class1 MyProperty { get; set; }
+
+    public MyEntity(Class1 myProperty)
+    {
+        if (myProperty.IsValid)
+        {
+
+        }
+    }
 
 }
 

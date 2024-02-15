@@ -5,12 +5,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DDD_Module>Common</DDD_Module>
-    <!--<DDD_AlwaysValidValueObjects>False</DDD_AlwaysValidValueObjects>-->
+    <EmitCompilerGeneratedFiles>True</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)\Generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <CompilerVisibleProperty Include="DDD_Module" /> <!--Not neccesary when u get from nuget-->
-    <CompilerVisibleProperty Include="DDD_AlwaysValidValueObjects" />
+    <CompilerVisibleProperty Include="DDD_Module" />
+    <!--Not neccesary when u get from nuget-->
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="Generated\**" />
+  </ItemGroup>
+
+
 
   <ItemGroup>
     <PackageReference Include="FluentValidation" Version="11.9.0" />

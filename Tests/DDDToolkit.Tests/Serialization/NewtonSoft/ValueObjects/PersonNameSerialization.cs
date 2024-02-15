@@ -1,5 +1,6 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.Exceptions;
+using DDDToolkit.NewtonSoft.Json.Resolver;
 using FluentAssertions;
 using Newtonsoft.Json;
 
@@ -8,7 +9,9 @@ public partial class PersonNameSerialization
 {
     readonly JsonSerializerSettings _settings = new()
     {
-        Converters = { new BlockAlwaysValidSerialization() }
+        Converters = { new BlockAlwaysValidSerialization() },
+        ContractResolver = new DDDContractResolver()
+
     };
 
 
@@ -20,7 +23,7 @@ public partial class PersonNameSerialization
         var json = JsonConvert.SerializeObject(name);
         Action act = () =>
         {
-            var deserialized = JsonConvert.DeserializeObject<PersonName>(json, _settings);
+            var deserialized = JsonConvert.DeserializeObject<ValidPersonName>(json, _settings);
         };
 
         act.Should().Throw<SerializationNotAllowedException>();
@@ -34,8 +37,8 @@ public partial class PersonNameSerialization
         var name = new PersonName("John", "Doe");
         var json = JsonConvert.SerializeObject(name);
 
-        var deserialized = JsonConvert.DeserializeObject<PersonName.Raw>(json, _settings);
-        PersonName newName = deserialized!;
+        var deserialized = JsonConvert.DeserializeObject<PersonName>(json, _settings);
+        ValidPersonName newName = deserialized!.ToValid();
         Assert.Equal(name, newName);
     }
 
@@ -46,7 +49,7 @@ public partial class PersonNameSerialization
                    {"FirstName":"John","LastName":""}
                    """;
 
-        var deserialized = JsonConvert.DeserializeObject<PersonName.Raw>(json, _settings);
+        var deserialized = JsonConvert.DeserializeObject<PersonName>(json, _settings);
 
         Assert.False(deserialized?.IsValid);
 
@@ -54,7 +57,7 @@ public partial class PersonNameSerialization
         Action act = () =>
         {
 
-            PersonName invalidName = deserialized;
+            ValidPersonName invalidName = deserialized.ToValid();
         };
         act.Should().Throw<InvalidValueObjectException>();
 

@@ -1,5 +1,6 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.NewtonSoft.Json.Converters;
+using DDDToolkit.NewtonSoft.Json.Resolver;
 using Newtonsoft.Json;
 
 namespace DDDToolkit.Tests.Serialization.NewtonSoft.ValueObjects;
@@ -11,7 +12,8 @@ public class NewtonsoftJsonSingleValueObjectConverterTests
     public NewtonsoftJsonSingleValueObjectConverterTests()
     {
         _settings = new JsonSerializerSettings();
-        _settings.Converters.Add(new SingleValueObjectConverter()); // Assuming this is your converter
+        _settings.Converters.Add(new SingleValueObjectConverter());
+        _settings.ContractResolver = new DDDContractResolver();// Assuming this is your converter
     }
 
     [Fact]

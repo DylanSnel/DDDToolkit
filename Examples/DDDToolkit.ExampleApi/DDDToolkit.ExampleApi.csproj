@@ -8,6 +8,8 @@
     <DDD_Module>Api</DDD_Module>
     <UserSecretsId>28d9d84f-d504-42b2-830a-58ecfd24c4e7</UserSecretsId>
     <InvariantGlobalization>false</InvariantGlobalization>
+    <!--<EmitCompilerGeneratedFiles>True</EmitCompilerGeneratedFiles>-->
+    <!--<CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)\Generated</CompilerGeneratedFilesOutputPath>-->
   </PropertyGroup>
 
   <ItemGroup>

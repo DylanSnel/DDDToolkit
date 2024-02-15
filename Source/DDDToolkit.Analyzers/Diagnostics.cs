@@ -38,11 +38,4 @@ internal static class Diagnostics
                isEnabledByDefault: true,
                description: "A record with non private setters can be cloned using the with keyword. This would allow for an object to be created in an invalid state.");
 
-    public static readonly DiagnosticDescriptor ValueObjectCannotHaveAlwaysValidAndAllowInvalid = new(
-               id: "DDD00005",
-               title: "DDDToolkit",
-               messageFormat: "DDDToolkit: {0} has both AlwaysValid and AllowInvalid attributes, only one can be used",
-               category: "ValueObjects",
-               DiagnosticSeverity.Error,
-               isEnabledByDefault: true);
 }

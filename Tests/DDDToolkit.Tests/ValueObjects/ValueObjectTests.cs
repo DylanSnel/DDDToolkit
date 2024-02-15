@@ -22,13 +22,19 @@ public class ValueObjectTests
     {
 
         var personname = new PersonName("John", "Doe");
-        var personname2 = new PersonName.Raw()
-        {
-            FirstName = "John",
-            LastName = ""
-        };
+        //var personname2 = new ValidPersonName()
+        //{
+        //    FirstName = "John",
+        //    LastName = ""
+        //};
 
-        var valid = personname2.IsValid;
+        //var valid = personname2.IsValid;        //var personname2 = new ValidPersonName()
+        //{
+        //    FirstName = "John",
+        //    LastName = ""
+        //};
+
+        //var valid = personname2.IsValid;
 
 
         //var personname2 = personname with { MiddleNames = "something" };

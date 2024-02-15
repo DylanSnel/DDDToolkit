@@ -18,7 +18,7 @@ public class SingleValueObjectConverter : JsonConverter
     {
         // Determine the type of T in SingleValueObject<T>
         var baseType = objectType;
-        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<,>))
+        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
         {
             baseType = baseType.BaseType;
         }

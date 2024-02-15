@@ -1,4 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Interfaces;
+using System.Text.Json.Serialization;
 
 namespace DDDToolkit.BaseTypes;
 
@@ -10,6 +11,7 @@ public abstract record SingleValueObject<T> : ValueObject, ISingleValueObject wh
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     protected SingleValueObject() { }
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
+    [JsonInclude]
     public T Value { get; protected set; }
 
     public override IEnumerable<object> GetEqualityComponents()
@@ -34,4 +36,4 @@ public abstract record SingleValueObject<T, TInterface> : ValueObject<TInterface
 
 
 
-public interface ISingleValueObject { }
+public interface ISingleValueObject : IValueObject { }

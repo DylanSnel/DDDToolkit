@@ -47,6 +47,11 @@ public class EntityGenerator : IIncrementalGenerator
                             partial class {{{name}}}
                             {
                             }
+
+                            [Owned]
+                            partial class Valid{{{name}}}
+                            {
+                            }
     
                             """;
         // Add the generated source to the compilation

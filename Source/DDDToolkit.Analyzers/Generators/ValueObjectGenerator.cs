@@ -1,5 +1,4 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Abstractions.Attributes.Validation;
 using DDDToolkit.Analyzers.Common;
 using DDDToolkit.Analyzers.Models;
 using Microsoft.CodeAnalysis;
@@ -20,17 +19,17 @@ public class ValueObjectGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-#if DEBUG
-        if (!System.Diagnostics.Debugger.IsAttached)
-        {
+        //#if DEBUG
+        //        if (!System.Diagnostics.Debugger.IsAttached)
+        //        {
 
-            System.Diagnostics.Debugger.Launch();
-        }
-#endif
+        //            System.Diagnostics.Debugger.Launch();
+        //        }
+        //#endif
 
         var dddOptions = context.DDDOptionsProvider();
-        var singleValueObjects = context.FindAttributesProvider<ValueObjectAttribute, RecordDeclarationSyntax>();
-        var combined = singleValueObjects.Combine(dddOptions);
+        var valueObjects = context.FindAttributesProvider<ValueObjectAttribute, RecordDeclarationSyntax>();
+        var combined = valueObjects.Combine(dddOptions);
         context.RegisterSourceOutput(combined, CreateValueObject);
     }
 
@@ -45,15 +44,6 @@ public class ValueObjectGenerator : IIncrementalGenerator
         }
 
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
-
-        // Now you can use valueObjectInfo for further processing
-        // For example, to check for conflicting attributes:
-        if (valueObjectInfo.HasAlwaysValidAttribute && valueObjectInfo.HasAllowInvalidAttribute)
-        {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectCannotHaveAlwaysValidAndAllowInvalid, data.TargetNode.GetLocation(), valueObjectInfo.Name));
-            return;
-        }
-
 
         var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
 
@@ -70,11 +60,11 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{valueObjectInfo.Namespace}}};
     
-                            {{{recordDeclaration.SealedModifier()}}}partial record {{{valueObjectInfo.Name}}} : ValueObject<I{{{valueObjectInfo.Name}}}>, {{{valueObjectInfo.ValidityInterface}}}, I{{{valueObjectInfo.Name}}}
+                            {{{recordDeclaration.SealedModifier()}}}partial record {{{valueObjectInfo.Name}}} : ValueObject
                             {
                                 public override IEnumerable<object?> GetEqualityComponents()
                                 {
-                                    {{{string.Join("\n       ", valueObjectInfo.EqualityComponents)}}}
+                                    {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                                 }
                             
                                 public {{{virtualEquals}}}bool Equals({{{valueObjectInfo.Name}}}? other)
@@ -96,14 +86,11 @@ public class ValueObjectGenerator : IIncrementalGenerator
                                 {
 
                                 }
-                                {{{AddAlwaysValid(valueObjectInfo)}}}
-                            }
 
-                            public interface I{{{valueObjectInfo.Name}}} : IValueObject<I{{{valueObjectInfo.Name}}}>
-                            {
-                                {{{string.Join("\n", valueObjectInfo.InterfaceProperties.Select(x => $"{x.GetReturnType().Replace("?", "")}? {x.Identifier.ValueText} {{ get; }}"))}}}
+                            public Valid{{{valueObjectInfo.Name}}} ToValid() => new(this);
+                                
                             }
-
+                            {{{AddAlwaysValid(valueObjectInfo)}}}
                             #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
     
                             """;
@@ -115,67 +102,32 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
     private static string AddAlwaysValid(ValueObjectInfo valueObjectInfo)
     {
-        if (!valueObjectInfo.AlwaysValid)
-        {
-            return "";
-        }
 
-        // Handling for regular and computed properties
-        var propertiesWithNullableTypes = valueObjectInfo.ConverterConstructorProperties.Select(property =>
-        {
-            var typeName = property.GetReturnType();
-            typeName = typeName.Replace("?", "");
-            return $"public {typeName}? {property.Identifier.ValueText} {{ get; set; }}";
-        }).ToList();
-
-        // Special handling for computed properties to ensure they are nullable
-        var computedProperties = valueObjectInfo.RecordDeclaration.GetProperties()
-            .Where(p => !p.HasAttribute<InternalAttribute>())
-            .Where(p => p.ExpressionBody != null || p.AccessorList!.Accessors.Any(a => a.Body != null || a.ExpressionBody != null))
-            .Select(computedProperty =>
-            {
-                var typeName = computedProperty.GetReturnType();
-                typeName.Replace("?", "");
-
-                return $"public {typeName}? {computedProperty.Identifier.ValueText} => {computedProperty.ExpressionBody?.Expression.ToString() ?? "null"};";
-            });
-
-        propertiesWithNullableTypes.AddRange(computedProperties);
 
         var propertiesInitialization = valueObjectInfo.ConverterConstructorProperties.Select(x =>
-            $"this.{x.Identifier.ValueText} = raw.{x.Identifier.ValueText}!;");
+            $"this.{x.Identifier.ValueText} = value.{x.Identifier.ValueText};");
 
         return $$$"""
-                    {{{valueObjectInfo.AccessModifier}}} {{{valueObjectInfo.Name}}}(Raw raw)
+                   
+
+                    {{{valueObjectInfo.AccessModifier}}} partial record Valid{{{valueObjectInfo.Name}}}  : {{{valueObjectInfo.Name}}}, IAlwaysValid
                     {
-                        raw.EnsureValidated();
-                        {{{string.Join("\n", propertiesInitialization)}}}
-                        _isValid = true;
-                    }
 
-                    {{{valueObjectInfo.AccessModifier}}} partial record Raw : ValueObject<I{{{valueObjectInfo.Name}}}>, IRaw, I{{{valueObjectInfo.Name}}}
-                    {
-                        {{{string.Join("\n", propertiesWithNullableTypes)}}}
 
-                        public Raw()
+                        {{{valueObjectInfo.AccessModifier}}} Valid{{{valueObjectInfo.Name}}}({{{valueObjectInfo.Name}}} value)
                         {
+                            value.EnsureValidated();
+                            {{{string.Join("\n", propertiesInitialization)}}}
+                            _isValid = true;
                         }
-
-                        public override bool Validate(I{{{valueObjectInfo.Name}}} valueObject)
-                        {
-                            var parentObject = new {{{valueObjectInfo.Name}}}();
-                            return parentObject.Validate(valueObject);
-                        }
-
-                        public static implicit operator {{{valueObjectInfo.Name}}}(Raw raw) => new(raw);
-
+                       
                         [Internal]
                         public override IEnumerable<object?> GetEqualityComponents()
                         {
-                            {{{string.Join("\n       ", valueObjectInfo.EqualityComponents)}}}
+                            {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                         }
 
-                        public virtual bool Equals(Raw? other)
+                        public virtual bool Equals(Valid{{{valueObjectInfo.Name}}}? other)
                         {
                             if (other is null)
                             {
@@ -185,23 +137,18 @@ public class ValueObjectGenerator : IIncrementalGenerator
                         }
 
                         public override int GetHashCode()
-                            => GetEqualityComponents()
-                                .Select(x => x?.GetHashCode() ?? 0)
-                                .Aggregate((x, y) => x ^ y);
+                                => base.GetHashCode();
                     }
             """;
     }
 
 
-    internal class ValueObjectInfo
+    internal class ValueObjectInfo(RecordDeclarationSyntax recordDeclaration, DDDOptions options)
     {
-        public RecordDeclarationSyntax RecordDeclaration { get; }
-        public DDDOptions Options { get; }
+        public RecordDeclarationSyntax RecordDeclaration { get; } = recordDeclaration;
+        public DDDOptions Options { get; } = options;
 
-        public bool HasAlwaysValidAttribute => RecordDeclaration.HasAttribute<AlwaysValidAttribute>();
-        public bool HasAllowInvalidAttribute => RecordDeclaration.HasAttribute<AllowInvalidAttribute>();
-        public bool AlwaysValid => (HasAlwaysValidAttribute || Options.AlwaysValidValueObjects) && !HasAllowInvalidAttribute;
-        public string Name => RecordDeclaration.Identifier.ValueText;
+        public string Name => RecordDeclaration.GetName();
         public string Namespace => RecordDeclaration.GetNamespace();
         public string AccessModifier => RecordDeclaration.GetAccessModifier();
         public IEnumerable<PropertyDeclarationSyntax> InterfaceProperties => RecordDeclaration.GetProperties()
@@ -211,13 +158,6 @@ public class ValueObjectGenerator : IIncrementalGenerator
         public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter());
         public IEnumerable<string> EqualityComponents => ComparisonProperties
             .Select(prop => $"yield return {prop.Identifier.ValueText};");
-        public string ValidityInterface => AlwaysValid ? "IAlwaysValid" : "IAllowInvalid";
-
-        public ValueObjectInfo(RecordDeclarationSyntax recordDeclaration, DDDOptions options)
-        {
-            RecordDeclaration = recordDeclaration;
-            Options = options;
-        }
     }
 
 }
