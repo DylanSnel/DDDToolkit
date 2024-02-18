@@ -16,7 +16,6 @@ public partial class User
         Email = email;
     }
 
-
     public PersonName Name { get; private set; }
 
     public EmailAddress? Email { get; private set; }

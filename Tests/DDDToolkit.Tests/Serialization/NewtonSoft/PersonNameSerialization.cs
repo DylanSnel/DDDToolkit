@@ -4,7 +4,7 @@ using DDDToolkit.Serialization.Converters;
 using FluentAssertions;
 using System.Text.Json;
 
-namespace DDDToolkit.Tests.Serialization.SystemTextJson.ValueObjects;
+namespace DDDToolkit.Tests.Serialization.NewtonSoft;
 public partial class PersonNameSerialization
 {
     private readonly JsonSerializerOptions _options = new()
@@ -34,7 +34,7 @@ public partial class PersonNameSerialization
                    """;
 
         var deserialized = JsonSerializer.Deserialize<PersonName>(json, _options);
-        PersonName newName = deserialized!;
+        var newName = deserialized!;
         Assert.Equal("Doe", newName.LastName);
     }
 
@@ -52,7 +52,7 @@ public partial class PersonNameSerialization
         Assert.Equal("", deserialized!.LastName);
         Action act = () =>
         {
-            ValidPersonName invalidName = deserialized.ToValid();
+            var invalidName = deserialized.ToValid();
         };
         act.Should().Throw<InvalidValueObjectException>();
     }
