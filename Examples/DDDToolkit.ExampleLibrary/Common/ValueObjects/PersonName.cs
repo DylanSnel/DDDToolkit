@@ -1,5 +1,4 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.BaseTypes;
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 

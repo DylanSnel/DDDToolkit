@@ -9,7 +9,7 @@
 
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
-    <Version>0.7.5 </Version>
+    <Version>0.7.6 </Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
