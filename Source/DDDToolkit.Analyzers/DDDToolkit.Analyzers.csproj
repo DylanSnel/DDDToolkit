@@ -16,7 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.8.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
-    <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.101722" />
+    <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.1.201708" />
   </ItemGroup>
   <ItemGroup>
     <!-- Include source generators in the NuGet package -->
