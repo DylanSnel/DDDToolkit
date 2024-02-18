@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.8.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" />
-    <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181556" />
+    <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.111301" />
     <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" />
   </ItemGroup>
   <ItemGroup>
