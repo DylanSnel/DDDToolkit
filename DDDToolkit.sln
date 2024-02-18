@@ -42,7 +42,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.NewtonSoft.Json"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ProtoTyping", "ProtoTyping", "{7C9E626C-1E77-4AF3-9994-1AECE0AD6BF9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDDToolkit.ProtoTyping", "Prototyping\DDDToolkit.ProtoTyping\DDDToolkit.ProtoTyping.csproj", "{80117D86-1D31-415C-8C95-F67357ADB1AC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.ProtoTyping", "Prototyping\DDDToolkit.ProtoTyping\DDDToolkit.ProtoTyping.csproj", "{80117D86-1D31-415C-8C95-F67357ADB1AC}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
