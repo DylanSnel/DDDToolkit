@@ -4,7 +4,6 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <LangVersion>Latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.1</Version>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsRoslynComponent>true</IsRoslynComponent>
     <Title>Domain Driven Design Toolkit - Entity Framework Analyzers </Title>
