@@ -9,11 +9,11 @@ public abstract record EntityId<TIdType> : SingleValueObject<TIdType>, IEntityId
     {
         _prefix = prefix;
     }
-#pragma warning disable CS8618
-    protected EntityId()
+
+    protected EntityId(string prefix = "")
     {
+        _prefix = prefix;
     }
-#pragma warning restore CS8618
 
     public override IEnumerable<object> GetEqualityComponents()
     {

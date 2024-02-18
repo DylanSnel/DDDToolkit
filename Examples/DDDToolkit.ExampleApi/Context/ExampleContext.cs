@@ -36,5 +36,6 @@ public class ExampleContext : DbContext
     {
         configurationBuilder.AddCommonConverters();
         configurationBuilder.AddDDDToolkitExampleApiConverters();
+        //configurationBuilder.Properties<EmailAddress>().HaveConversion<EmailAddress.EmailAddressConverter>().HaveMaxLength(EmailAddress.MaxLength);
     }
 }

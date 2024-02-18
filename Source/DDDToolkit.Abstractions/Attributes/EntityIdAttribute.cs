@@ -1,4 +1,6 @@
-﻿namespace DDDToolkit.Abstractions.Attributes;
+﻿using System.ComponentModel;
+
+namespace DDDToolkit.Abstractions.Attributes;
 
 #pragma warning disable CS9113 // Parameter is unread.
 #pragma warning disable IDE1006 // Naming Styles
@@ -13,6 +15,7 @@ public sealed class EntityIdAttribute<TType>(string Prefix = "", int ColumnLengt
 }
 
 [AttributeUsage(AttributeTargets.Class)]
+[EditorBrowsable(EditorBrowsableState.Never)]
 public abstract class EntityIdAttribute : Attribute
 {
     internal EntityIdAttribute() { }

@@ -45,7 +45,12 @@ public class ValueObjectGenerator : IIncrementalGenerator
                             namespace {{{@namespace}}};
 
                             [ComplexType]
-                            {{{accessModifier}}} partial record {{{name}}}
+                            partial record {{{name}}}
+                            {
+                            }
+
+                            [ComplexType]
+                            partial record Valid{{{name}}}
                             {
                             }
     
