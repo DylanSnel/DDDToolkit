@@ -15,7 +15,7 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore DDDToolkit.sln
+      run: dotnet restore --no-cache DDDToolkit.sln
 
     - name: Build
       run: dotnet build --no-restore DDDToolkit.sln
