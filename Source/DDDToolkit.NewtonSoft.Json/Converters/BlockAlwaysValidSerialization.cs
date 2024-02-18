@@ -2,7 +2,7 @@
 using DDDToolkit.Exceptions;
 using Newtonsoft.Json;
 
-namespace DDDToolkit.Tests.Serialization.NewtonSoft.ValueObjects;
+namespace DDDToolkit.NewtonSoft.Json.Converters;
 
 /// <summary>
 /// Blocks serialization of <see cref="IAlwaysValid"/> descendants.

@@ -1,5 +1,6 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.Exceptions;
+using DDDToolkit.NewtonSoft.Json.Converters;
 using DDDToolkit.NewtonSoft.Json.Resolver;
 using FluentAssertions;
 using Newtonsoft.Json;
@@ -29,11 +30,9 @@ public partial class PersonNameSerialization
         act.Should().Throw<SerializationNotAllowedException>();
     }
 
-
     [Fact]
     public void SerializeRawName()
     {
-
         var name = new PersonName("John", "Doe");
         var json = JsonConvert.SerializeObject(name);
 

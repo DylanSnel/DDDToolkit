@@ -1,6 +1,6 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.Exceptions;
-using DDDToolkit.Serializers;
+using DDDToolkit.Serialization.Converters;
 using FluentAssertions;
 using System.Text.Json;
 
@@ -9,7 +9,7 @@ public partial class PersonNameSerialization
 {
     private readonly JsonSerializerOptions _options = new()
     {
-        Converters = { new BlockDirectValueObjectDeserializationConverter() }
+        Converters = { new BlockAlwaysValidSerialization() }
     };
 
     [Fact]

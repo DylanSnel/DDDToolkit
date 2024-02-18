@@ -26,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj" />
     
     <ProjectReference Include="..\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
   </ItemGroup>

@@ -4,8 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 
+namespace DDDToolkit.Serialization.Converters;
 
-// Factory to create converters for single value objects
 public class SingleValueObjectConverterFactory : JsonConverterFactory
 {
     public override bool CanConvert(Type typeToConvert)

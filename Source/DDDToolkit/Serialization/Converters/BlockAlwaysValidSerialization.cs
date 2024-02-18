@@ -3,8 +3,8 @@ using DDDToolkit.Exceptions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace DDDToolkit.Serializers;
-public class BlockDirectValueObjectDeserializationConverter : JsonConverter<IAlwaysValid>
+namespace DDDToolkit.Serialization.Converters;
+public class BlockAlwaysValidSerialization : JsonConverter<IAlwaysValid>
 {
     public override bool CanConvert(Type typeToConvert)
     {

@@ -1,4 +1,5 @@
 ﻿using DDDToolkit.ExampleLibrary.Common.ValueObjects;
+using DDDToolkit.Serialization.Converters;
 using System.Text.Json;
 
 namespace DDDToolkit.Tests.Serialization.SystemTextJson.ValueObjects;

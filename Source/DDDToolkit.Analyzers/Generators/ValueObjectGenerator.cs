@@ -102,8 +102,6 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
     private static string AddAlwaysValid(ValueObjectInfo valueObjectInfo)
     {
-
-
         var propertiesInitialization = valueObjectInfo.ConverterConstructorProperties.Select(x =>
             $"this.{x.Identifier.ValueText} = value.{x.Identifier.ValueText};");
 
