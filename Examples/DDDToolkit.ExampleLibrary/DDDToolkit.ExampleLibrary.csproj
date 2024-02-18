@@ -5,15 +5,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <DDD_Module>Common</DDD_Module>
-    <EmitCompilerGeneratedFiles>True</EmitCompilerGeneratedFiles>
-    <CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)\Generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <CompilerVisibleProperty Include="DDD_Module" />
     <!--Not neccesary when u get from nuget-->
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Remove="Generated\**" />
   </ItemGroup>
 
 
