@@ -16,13 +16,13 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
   </ItemGroup>
 
-  <ItemGroup>
+  <!--<ItemGroup>
     <None Include="..\DDDToolkit\DDDToolkit.props">
       <Pack>True</Pack>
       <PackagePath>\build\DDDToolkit.EntityFramework.Props</PackagePath>
     </None>
-    <!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />-->
-  </ItemGroup>
+    --><!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />--><!--
+  </ItemGroup>-->
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" />

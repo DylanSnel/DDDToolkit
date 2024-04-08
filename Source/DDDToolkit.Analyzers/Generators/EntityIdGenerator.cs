@@ -32,7 +32,7 @@ public class EntityIdGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, Execute);
     }
 
-    private static void Execute(SourceProductionContext context, (TypeAttributeSyntaxContext data, DDDOptions options) arguments)
+    private static void Execute(SourceProductionContext context, (ResultTypeAttributeSyntaxContext data, DDDOptions options) arguments)
     {
         var (data, options) = arguments;
         var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;

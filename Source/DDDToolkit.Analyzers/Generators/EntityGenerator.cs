@@ -27,7 +27,7 @@ public class EntityGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(entityIds, Execute);
     }
 
-    private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
+    private static void Execute(SourceProductionContext context, ResultTypeAttributeSyntaxContext data)
     {
 
         var classDeclaration = data.TargetNode as ClassDeclarationSyntax;

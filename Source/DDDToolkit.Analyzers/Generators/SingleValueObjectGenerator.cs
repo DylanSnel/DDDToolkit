@@ -35,7 +35,7 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, CreateSingleValueObject);
     }
 
-    private static void CreateSingleValueObject(SourceProductionContext context, (TypeAttributeSyntaxContext data, DDDOptions options) arguments)
+    private static void CreateSingleValueObject(SourceProductionContext context, (ResultTypeAttributeSyntaxContext data, DDDOptions options) arguments)
     {
 
         var (data, options) = arguments;

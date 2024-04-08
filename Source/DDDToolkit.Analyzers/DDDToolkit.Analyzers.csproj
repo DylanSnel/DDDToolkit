@@ -10,39 +10,43 @@
     <Title>Domain Driven Design Toolkit - Analyers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;</PackageTags>
     <Description>A package for the DDDToolkit containing Source Generators and Analyzers</Description>
-    
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.8.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.8.0" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181906" GeneratePathProperty="true" PrivateAssets="all" />
-    <None Include="$(PKGSourceGeneratorsToolkit)\lib\netstandard2.0\*.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <PackageReference Include="SourceGeneratorsToolkit" Version="2.0.0" GeneratePathProperty="true" PrivateAssets="all" />
+    <None Include="$(PkgSourceGeneratorsToolkit)\lib\netstandard2.0\*.dll"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
   </ItemGroup>
 
   <PropertyGroup>
-    <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+    <GetTargetPathDependsOn>
+      $(GetTargetPathDependsOn);GetDependencyTargetPaths
+    </GetTargetPathDependsOn>
   </PropertyGroup>
 
   <Target Name="GetDependencyTargetPaths">
     <ItemGroup>
-      <TargetPathWithTargetPlatformMoniker Include="$(PKGSourceGeneratorsToolkit)\lib\netstandard2.0\SourceGeneratorsToolkit.dll" IncludeRuntimeDependency="false" />
+      <TargetPathWithTargetPlatformMoniker
+         Include="$(PkgSourceGeneratorsToolkit)\lib\netstandard2.0\SourceGeneratorsToolkit.dll"
+         IncludeRuntimeDependency="false" />
     </ItemGroup>
   </Target>
   
   <ItemGroup>
-    <!-- Include source generators in the NuGet package -->
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" /> 
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="CodeFixProviders\" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">

@@ -11,7 +11,7 @@ public class GenericObjectDefinition : BaseObjectDefinition
     public string Type { get; set; } = "";
     public Dictionary<string, TypedConstant>? Arguments { get; set; }
 
-    public static GenericObjectDefinition FromTypeDeclarationSyntax(TypeAttributeSyntaxContext ctx)
+    public static GenericObjectDefinition FromTypeDeclarationSyntax(ResultTypeAttributeSyntaxContext ctx)
     {
         if (ctx.TargetNode is not TypeDeclarationSyntax typeSyntax)
         {

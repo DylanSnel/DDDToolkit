@@ -33,7 +33,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, CreateValueObject);
     }
 
-    private static void CreateValueObject(SourceProductionContext context, (TypeAttributeSyntaxContext data, DDDOptions options) arguments)
+    private static void CreateValueObject(SourceProductionContext context, (ResultTypeAttributeSyntaxContext data, DDDOptions options) arguments)
     {
         var (data, options) = arguments;
         var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
