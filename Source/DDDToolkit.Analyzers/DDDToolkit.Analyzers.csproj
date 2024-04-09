@@ -22,8 +22,9 @@
 
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" PrivateAssets="all" />
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)\DDDToolkit.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
 
 </Project>

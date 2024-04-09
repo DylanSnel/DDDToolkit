@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    <None Include="$(OutputPath)\DDDToolkit.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
