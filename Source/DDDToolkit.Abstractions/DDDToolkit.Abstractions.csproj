@@ -11,6 +11,7 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <DevelopmentDependency>true</DevelopmentDependency>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <!--<ItemGroup>
