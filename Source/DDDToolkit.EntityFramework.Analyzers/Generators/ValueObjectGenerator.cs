@@ -26,7 +26,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(singleValueObjects, Execute);
     }
 
-    private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
+    private static void Execute(SourceProductionContext context, ResultTypeAttributeSyntaxContext data)
     {
         var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
         if (recordDeclaration is null)
@@ -45,7 +45,12 @@ public class ValueObjectGenerator : IIncrementalGenerator
                             namespace {{{@namespace}}};
 
                             [ComplexType]
-                            {{{accessModifier}}} partial record {{{name}}}
+                            partial record {{{name}}}
+                            {
+                            }
+
+                            [ComplexType]
+                            partial record Valid{{{name}}}
                             {
                             }
     

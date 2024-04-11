@@ -27,12 +27,13 @@ public class AggregateRootGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(entityIds, Execute);
     }
 
-    private static void Execute(SourceProductionContext context, TypeAttributeSyntaxContext data)
+    private static void Execute(SourceProductionContext context, ResultTypeAttributeSyntaxContext data)
     {
 
         var classDeclaration = data.TargetNode as ClassDeclarationSyntax;
         if (classDeclaration is null)
         {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.EntityShouldBeClass, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
         var name = classDeclaration.GetName();
@@ -51,7 +52,7 @@ public class AggregateRootGenerator : IIncrementalGenerator
 
                             namespace {{{@namespace}}};
     
-                            {{{accessModifier}}} partial class {{{name}}} : AggregateRoot<{{{typeName}}}>
+                            partial class {{{name}}} : AggregateRoot<{{{typeName}}}>
                             {
                                #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
                                 protected {{{name}}}()

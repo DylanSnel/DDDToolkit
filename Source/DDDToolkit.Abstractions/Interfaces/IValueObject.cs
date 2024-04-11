@@ -1,8 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
+﻿
 namespace DDDToolkit.Abstractions.Interfaces;
-internal interface IValueObject
+
+public interface IValueObject<T> : IValueObject where T : class
 {
+    bool Validate(T value);
+}
+
+
+public interface IValueObject
+{
+    bool IsValidated { get; }
+    bool IsValid { get; }
 }
