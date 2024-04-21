@@ -43,9 +43,28 @@ public class ValueObjectGenerator : IIncrementalGenerator
             return;
         }
 
+        if (recordDeclaration.IsSealed())
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectsCantBeSealed, recordDeclaration.GetLocation(), data.TargetSymbol.Name));
+            return;
+        }
+
+
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
 
-        var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
+
+        foreach (var property in valueObjectInfo.ConverterConstructorProperties)
+        {
+            if (!property.HasInitSetter())
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseInitSetters, property.GetLocation(), property.Identifier.ValueText));
+            }
+            if (!property.HasProtectedSetter())
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseProtectedSetters, property.GetLocation(), property.Identifier.ValueText));
+            }
+        }
+
 
 
         var sourceCode = $$$"""
@@ -60,14 +79,14 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{valueObjectInfo.Namespace}}};
     
-                            {{{recordDeclaration.SealedModifier()}}}partial record {{{valueObjectInfo.Name}}} : ValueObject
+                            partial record {{{valueObjectInfo.Name}}} : ValueObject
                             {
                                 public override IEnumerable<object?> GetEqualityComponents()
                                 {
                                     {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                                 }
                             
-                                public {{{virtualEquals}}}bool Equals({{{valueObjectInfo.Name}}}? other)
+                                public virtual bool Equals({{{valueObjectInfo.Name}}}? other)
                                 {
                                     if (other is null)
                                     {
@@ -153,7 +172,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
             .Where(prop => !prop.HasAttribute<InternalAttribute>());
         public IEnumerable<PropertyDeclarationSyntax> ComparisonProperties => InterfaceProperties
             .Where(prop => !prop.HasAttribute<DontCompareAttribute>());
-        public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter());
+        public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter() || x.HasInitSetter());
         public IEnumerable<string> EqualityComponents => ComparisonProperties
             .Select(prop => $"yield return {prop.Identifier.ValueText};");
     }

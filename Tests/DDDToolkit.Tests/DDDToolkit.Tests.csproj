@@ -8,6 +8,12 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="ObjectsUnderTest\**" />
+    <EmbeddedResource Remove="ObjectsUnderTest\**" />
+    <None Remove="ObjectsUnderTest\**" />
+  </ItemGroup>
   
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
@@ -33,10 +39,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj" />
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="ObjectsUnderTest\" />
   </ItemGroup>
 
   <ItemGroup>

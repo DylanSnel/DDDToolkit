@@ -26,6 +26,6 @@ public class BlockAlwaysValidSerialization : JsonConverter
     }
 
     public override bool CanRead => true;
-    public override bool CanWrite => false; // Adjust if you don't want to allow direct serialization
+    public override bool CanWrite => false;
 }
 

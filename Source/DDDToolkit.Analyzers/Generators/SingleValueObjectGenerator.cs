@@ -45,10 +45,16 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectShouldBeRecord, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
+        if (recordDeclaration.IsSealed())
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectsCantBeSealed, recordDeclaration.GetLocation(), data.TargetSymbol.Name));
+            return;
+        }
+
         var type = data.Attributes.First(x => x.match).attribute.GenericTypes.First().Name;
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
 
-        var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
+
 
 
         var sourceCode = $$$"""
@@ -63,10 +69,10 @@ public class SingleValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{valueObjectInfo.Namespace}}};
     
-                            {{{recordDeclaration.SealedModifier()}}}partial record {{{valueObjectInfo.Name}}} : SingleValueObject<{{{type}}}>
+                            partial record {{{valueObjectInfo.Name}}} : SingleValueObject<{{{type}}}>
                             {
                             
-                                public {{{virtualEquals}}}bool Equals({{{valueObjectInfo.Name}}}? other)
+                                public virtual bool Equals({{{valueObjectInfo.Name}}}? other)
                                 {
                                     if (other is null)
                                     {

@@ -5,27 +5,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Title>Domain Driven Design Toolkit - Entity Framework </Title>
-    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
+    <Title>Domain Driven Design Toolkit - FluentValidation Analyzers </Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation;</PackageTags>
     <Description>A package extending the DDDToolkit with Entity Framework configuration</Description>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.2" />
+    <PackageReference Include="FluentValidation" Version="11.9.0" />
   </ItemGroup>
 
-  <!--<ItemGroup>
-    <None Include="..\DDDToolkit\DDDToolkit.props">
-      <Pack>True</Pack>
-      <PackagePath>\build\DDDToolkit.EntityFramework.Props</PackagePath>
-    </None>
-    --><!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />--><!--
-  </ItemGroup>-->
-
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" />
+    <ProjectReference Include="..\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" />
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
   </ItemGroup>
 
@@ -37,3 +29,4 @@
   </ItemGroup>
 
 </Project>
+    
