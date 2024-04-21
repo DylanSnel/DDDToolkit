@@ -13,6 +13,16 @@ public class SingleValueObjectTests
         (email == email2).Should().BeTrue();
     }
 
+    [Fact]
+    public void ValidationTests()
+    {
+        var email = EmailAddress.Create("testexample.com");
+        email.IsValid.Should().BeFalse();
+
+        var email2 = EmailAddress.Create("test@example.com");
+        email2.IsValid.Should().BeTrue();
+    }
+
     //[Fact]
     //public void ReferenceEqualityTests()
     //{

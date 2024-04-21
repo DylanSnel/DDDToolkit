@@ -25,6 +25,9 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <!--<PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181906"/>-->
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj" />
+    <!--<PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181906"/>-->
+    <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">

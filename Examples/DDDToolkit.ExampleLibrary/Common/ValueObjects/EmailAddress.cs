@@ -1,5 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using System.Text.RegularExpressions;
+using FluentValidation;
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
@@ -13,19 +13,27 @@ public partial record EmailAddress
 
     public static EmailAddress Create(string value) => new(value);
 
-    protected override bool Validate()
-    {
-        if (string.IsNullOrWhiteSpace(Value))
-        {
-            return false;
-        }
-        if (!Regex.Match(Value, EmailRegex).Success)
-        {
-            return false;
-        }
 
-        return true;
+    partial class Validator
+    {
+        public Validator()
+        {
+            RuleFor(x => x.Value).Matches(EmailRegex);
+        }
     }
+    //protected override bool Validate()
+    //{
+    //    if (string.IsNullOrWhiteSpace(Value))
+    //    {
+    //        return false;
+    //    }
+    //    if (!Regex.Match(Value, EmailRegex).Success)
+    //    {
+    //        return false;
+    //    }
+
+    //    return true;
+    //}
 
     //[GeneratedRegex(EmailRegex)]
     //private static partial Regex ValidEmail();

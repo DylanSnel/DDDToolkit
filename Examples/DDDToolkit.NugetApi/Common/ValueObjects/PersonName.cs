@@ -1,5 +1,5 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
-using System.Collections.ObjectModel;
+using FluentValidation;
 using System.Text.Json.Serialization;
 
 namespace DDDToolkit.NugetApi.Common.ValueObjects;
@@ -23,27 +23,7 @@ public partial record PersonName
         LastName = lastName;
     }
 
-    [Internal]
-    public ReadOnlyCollection<string> Errors => _errors.AsReadOnly();
 
-    private readonly List<string> _errors = [];
-
-    protected override bool Validate()
-    {
-        if (string.IsNullOrWhiteSpace(FirstName))
-        {
-            _errors.Add("First name is required");
-            return false;
-        }
-        if (string.IsNullOrWhiteSpace(LastName))
-        {
-            _errors.Add("Last name is required");
-            return false;
-        }
-
-        return true;
-
-    }
 
     [JsonInclude]
     public string FirstName { get; protected init; }
@@ -61,5 +41,14 @@ public partial record PersonName
 
     public override string ToString() => FullName;
 
+
+    partial class Validator
+    {
+        public Validator()
+        {
+            RuleFor(x => x.FirstName).NotEmpty();
+            RuleFor(x => x.LastName).NotEmpty();
+        }
+    }
 }
 
