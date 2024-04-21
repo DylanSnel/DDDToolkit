@@ -52,7 +52,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
 
-        var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
+
 
 
         var sourceCode = $$$"""
@@ -74,7 +74,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
                                     {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                                 }
                             
-                                public {{{virtualEquals}}}bool Equals({{{valueObjectInfo.Name}}}? other)
+                                public virtual bool Equals({{{valueObjectInfo.Name}}}? other)
                                 {
                                     if (other is null)
                                     {
