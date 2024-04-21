@@ -12,11 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DDDToolkit" Version="2.0.3-preview01" />
+    <PackageReference Include="DDDToolkit" Version="2.0.3-preview02" />
 
-    <PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.3-preview01" />
+    <PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.3-preview02" />
 
-    <PackageReference Include="DDDToolkit.FluentValidation" Version="2.0.3-preview01" />
+    <PackageReference Include="DDDToolkit.FluentValidation" Version="2.0.3-preview02" />
 
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
       <PrivateAssets>all</PrivateAssets>
