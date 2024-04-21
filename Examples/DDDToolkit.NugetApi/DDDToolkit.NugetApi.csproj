@@ -12,18 +12,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DDDToolkit" Version="2.0.2" />
+    <PackageReference Include="DDDToolkit" Version="2.0.3-preview01" />
 
-    <PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.2" />
+    <PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.3-preview01" />
 
-    <PackageReference Include="FluentValidation" Version="11.9.0" />
+    <PackageReference Include="DDDToolkit.FluentValidation" Version="2.0.3-preview01" />
+
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.2">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.2" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.2" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0-preview.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
   </ItemGroup>
 

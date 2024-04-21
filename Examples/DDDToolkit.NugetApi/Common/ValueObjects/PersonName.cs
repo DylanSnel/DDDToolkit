@@ -23,8 +23,6 @@ public partial record PersonName
         LastName = lastName;
     }
 
-
-
     [JsonInclude]
     public string FirstName { get; protected init; }
 

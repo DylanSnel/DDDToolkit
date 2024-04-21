@@ -53,6 +53,18 @@ public class ValueObjectGenerator : IIncrementalGenerator
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
 
 
+        foreach (var property in valueObjectInfo.ConverterConstructorProperties)
+        {
+            if (!property.HasInitSetter())
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseInitSetters, property.GetLocation(), property.Identifier.ValueText));
+            }
+            if (!property.HasProtectedSetter())
+            {
+                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseProtectedSetters, property.GetLocation(), property.Identifier.ValueText));
+            }
+        }
+
 
 
         var sourceCode = $$$"""
