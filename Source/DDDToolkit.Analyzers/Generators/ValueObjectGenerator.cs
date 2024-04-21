@@ -172,7 +172,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
             .Where(prop => !prop.HasAttribute<InternalAttribute>());
         public IEnumerable<PropertyDeclarationSyntax> ComparisonProperties => InterfaceProperties
             .Where(prop => !prop.HasAttribute<DontCompareAttribute>());
-        public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter());
+        public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter() || x.HasInitSetter());
         public IEnumerable<string> EqualityComponents => ComparisonProperties
             .Select(prop => $"yield return {prop.Identifier.ValueText};");
     }

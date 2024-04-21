@@ -36,7 +36,7 @@ public partial record PersonName
     [DontCompare]
     public string Initials => string.Join("", FirstName?[0], LastName?[0]).Trim();
 
-    public override string ToString() => FullName;
+    public sealed override string ToString() => FullName;
 
     partial class Validator
     {
