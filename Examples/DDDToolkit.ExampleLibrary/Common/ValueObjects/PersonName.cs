@@ -7,7 +7,7 @@ namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 //User code
 [ValueObject]
-public partial record PersonName
+public sealed partial record PersonName
 {
     public PersonName(string firstName, string middleNames, string lastName)
     {

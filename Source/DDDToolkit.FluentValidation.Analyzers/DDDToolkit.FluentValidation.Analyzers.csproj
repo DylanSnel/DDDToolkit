@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsRoslynComponent>true</IsRoslynComponent>
-    <Title>Domain Driven Design Toolkit - Entity Framework Analyzers </Title>
-    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
-    <Description>A package for the DDDToolkit.EnityFramework containing Source Generators and Analyzers</Description>
+    <Title>Domain Driven Design Toolkit - FluentValidation Analyzers </Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation;</PackageTags>
+    <Description>A package for the DDDToolkit.FluentValidation containing Source Generators and Analyzers</Description>
     <DevelopmentDependency>true</DevelopmentDependency>
   </PropertyGroup>
   <ItemGroup>

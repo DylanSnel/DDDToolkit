@@ -43,6 +43,13 @@ public class ValueObjectGenerator : IIncrementalGenerator
             return;
         }
 
+        if (recordDeclaration.IsSealed())
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectsCantBeSealed, recordDeclaration.GetLocation(), data.TargetSymbol.Name));
+            return;
+        }
+
+
         var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
 
         var virtualEquals = recordDeclaration.IsSealed() ? "" : "virtual ";
@@ -60,7 +67,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
 
                             namespace {{{valueObjectInfo.Namespace}}};
     
-                            {{{recordDeclaration.SealedModifier()}}}partial record {{{valueObjectInfo.Name}}} : ValueObject
+                            partial record {{{valueObjectInfo.Name}}} : ValueObject
                             {
                                 public override IEnumerable<object?> GetEqualityComponents()
                                 {

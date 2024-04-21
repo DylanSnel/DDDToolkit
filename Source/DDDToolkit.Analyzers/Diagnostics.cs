@@ -38,4 +38,13 @@ internal static class Diagnostics
                isEnabledByDefault: true,
                description: "A record with non private setters can be cloned using the with keyword. This would allow for an object to be created in an invalid state.");
 
+    public static readonly DiagnosticDescriptor ValueObjectsCantBeSealed = new(
+               id: "DDD00005",
+               title: "DDDToolkit",
+               messageFormat: "DDDToolkit: {0} is sealed. This way the always-valid variant of the ValueObject can not be created.",
+               category: "ValueObjects",
+               DiagnosticSeverity.Error,
+               isEnabledByDefault: true,
+               description: "A record with non private setters can be cloned using the with keyword. This would allow for an object to be created in an invalid state.");
+
 }

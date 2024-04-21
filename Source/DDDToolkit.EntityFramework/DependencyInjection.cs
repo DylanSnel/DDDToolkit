@@ -10,7 +10,7 @@ public static class DependencyInjection
     public static IServiceCollection UseDomainEvents(this IServiceCollection services, Func<IServiceProvider, IDomainEvent, Task> interceptorAction)
     {
         services.AddScoped<PublishDomainEventsInterceptor>();
-        services.AddSingleton<DDDEntityFrameworkOptions>(serviceProvider =>
+        services.AddSingleton(serviceProvider =>
         {
             return new DDDEntityFrameworkOptions
             {

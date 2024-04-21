@@ -4,7 +4,7 @@ using DDDToolkit.Serialization.Converters;
 using FluentAssertions;
 using System.Text.Json;
 
-namespace DDDToolkit.Tests.Serialization.NewtonSoft;
+namespace DDDToolkit.Tests.Serialization.SystemTextJson.ValueObjects;
 public partial class PersonNameSerialization
 {
     private readonly JsonSerializerOptions _options = new()
