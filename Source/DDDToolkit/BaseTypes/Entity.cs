@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Interfaces;
 
@@ -6,10 +7,12 @@ namespace DDDToolkit.BaseTypes;
 public abstract partial class Entity<TIdObject> : IEquatable<Entity<TIdObject>>, IHasDomainEvents
     where TIdObject : IEntityId
 {
+    [Internal]
     private readonly List<IDomainEvent> _domainEvents = [];
 
     public TIdObject Id { get; protected set; }
 
+    [Internal]
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
 
