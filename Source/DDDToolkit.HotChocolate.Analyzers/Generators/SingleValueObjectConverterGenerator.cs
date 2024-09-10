@@ -140,11 +140,13 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
             }
             else
             {
-                if (_typeMappings.TryGetValue(objectDefinition.Type, out var graphQLType))
+                if (_typeMappings.TryGetValue(objectDefinition.Type, out var graphQLTypeName))
                 {
-                    runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.{objectDefinition.Name}, {graphQLType}>();");
+                    runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.{objectDefinition.Name}, {graphQLTypeName}>();");
+                    runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.Valid{objectDefinition.Name}, {graphQLTypeName}>();");
                 }
                 runtimeBindings.AppendLine($"builder.AddTypeConverter<{objectDefinition.Namespace}.{objectDefinition.Name}.ChangeTypeProvider>();");
+
             }
         }
 
