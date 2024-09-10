@@ -41,9 +41,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.NugetApi", "Exam
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.NewtonSoft.Json", "Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj", "{A7F41BE4-B5CF-497F-91B7-D642F9FC3D42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDDToolkit.FluentValidation", "Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj", "{28E74BAC-F250-40E9-AADC-68ED4F3DA882}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.FluentValidation", "Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj", "{28E74BAC-F250-40E9-AADC-68ED4F3DA882}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDDToolkit.FluentValidation.Analyzers", "Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj", "{5BEADC39-F390-47E1-B003-9E57A4318953}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.FluentValidation.Analyzers", "Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj", "{5BEADC39-F390-47E1-B003-9E57A4318953}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDDToolkit.HotChocolate", "Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj", "{6C58282E-C69F-46BD-8175-568FFCCC581E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDDToolkit.HotChocolate.Analyzers", "Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj", "{37FCF291-2076-4671-AE4F-9B99756196A1}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -99,6 +103,14 @@ Global
 		{5BEADC39-F390-47E1-B003-9E57A4318953}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5BEADC39-F390-47E1-B003-9E57A4318953}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5BEADC39-F390-47E1-B003-9E57A4318953}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6C58282E-C69F-46BD-8175-568FFCCC581E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6C58282E-C69F-46BD-8175-568FFCCC581E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6C58282E-C69F-46BD-8175-568FFCCC581E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6C58282E-C69F-46BD-8175-568FFCCC581E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37FCF291-2076-4671-AE4F-9B99756196A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37FCF291-2076-4671-AE4F-9B99756196A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37FCF291-2076-4671-AE4F-9B99756196A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37FCF291-2076-4671-AE4F-9B99756196A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

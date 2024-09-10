@@ -1,9 +1,12 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.HotChocolate.Attributes;
 using FluentValidation;
+using HotChocolate.Types;
 
 namespace DDDToolkit.ExampleLibrary.Common.ValueObjects;
 
 //UserCode
+[GraphQLType<EmailAddressType>]
 [SingleValueObject<string>(ColumnLength: MaxLength)] //Comment out the attribute to allow for partial classes
 public partial record EmailAddress
 {
