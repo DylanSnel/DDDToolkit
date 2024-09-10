@@ -57,12 +57,12 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
     
                             partial record {{{data.Name}}} 
                             {
-                                public class {{{data.Name}}}ChangeTypeProvider : IChangeTypeProvider
+                                internal class ChangeTypeProvider : IChangeTypeProvider
                                 {
                                     public bool TryCreateConverter(
                                         Type source,
                                         Type target,
-                                        ChangeTypeProvider root,
+                                        global::HotChocolate.Utilities.ChangeTypeProvider root,
                                         [NotNullWhen(true)] out ChangeType? converter)
                                     {
                                         if (source == typeof({{{data.Name}}}) && target == typeof({{{data.Type}}}))
@@ -143,6 +143,7 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
                 {
                     runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.{objectDefinition.Name}, {graphQLType}>();");
                 }
+                runtimeBindings.AppendLine($"builder.AddTypeConverter<{objectDefinition.Namespace}.{objectDefinition.Name}.ChangeTypeProvider>();");
             }
         }
 
