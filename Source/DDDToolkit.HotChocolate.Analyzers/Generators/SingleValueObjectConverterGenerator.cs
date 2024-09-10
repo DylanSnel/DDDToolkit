@@ -57,7 +57,7 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
     
                             partial record {{{data.Name}}} 
                             {
-                                internal class ChangeTypeProvider : IChangeTypeProvider
+                                public class ChangeTypeProvider : IChangeTypeProvider
                                 {
                                     public bool TryCreateConverter(
                                         Type source,
