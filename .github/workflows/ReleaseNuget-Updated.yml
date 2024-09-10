@@ -18,7 +18,8 @@ jobs:
     - name: Extract Release Version
       id: get_version
       run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/v}
-
+    - name: Clean
+      run: dotnet clean
     - name: Restore dependencies
       run: dotnet restore
 
