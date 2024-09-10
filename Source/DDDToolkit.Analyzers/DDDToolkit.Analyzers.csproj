@@ -10,7 +10,7 @@
     <Title>Domain Driven Design Toolkit - Analyers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;</PackageTags>
     <Description>A package for the DDDToolkit containing Source Generators and Analyzers</Description>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
   </PropertyGroup>
