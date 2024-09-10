@@ -10,7 +10,7 @@
     <Description>A package for the DDDToolkit containing shared abstractions</Description>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
   <!--<ItemGroup>
