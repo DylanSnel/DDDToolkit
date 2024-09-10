@@ -135,6 +135,7 @@ public class SingleValueObjectConverterGenerator : IIncrementalGenerator
                 {
                     var graphQLTypeName = graphQLType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.{objectDefinition.Name}, {graphQLTypeName}>();");
+                    runtimeBindings.AppendLine($"builder.BindRuntimeType<{objectDefinition.Namespace}.Valid{objectDefinition.Name}, {graphQLTypeName}>();");
                 }
             }
             else
