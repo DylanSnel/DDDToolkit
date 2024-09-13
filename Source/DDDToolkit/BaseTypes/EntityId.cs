@@ -15,7 +15,7 @@ public abstract record EntityId<TIdType> : SingleValueObject<TIdType>, IEntityId
         _prefix = prefix;
     }
 
-    public override IEnumerable<object> GetEqualityComponents()
+    protected override IEnumerable<object> GetEqualityComponents()
     {
         yield return Value;
     }

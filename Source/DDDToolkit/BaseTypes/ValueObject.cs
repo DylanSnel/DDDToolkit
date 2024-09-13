@@ -1,7 +1,6 @@
 ﻿using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
-using System.ComponentModel;
 
 namespace DDDToolkit.BaseTypes;
 public abstract record ValueObject : IValueObject
@@ -26,7 +25,7 @@ public abstract record ValueObject : IValueObject
     }
 
     [Internal]
-    public abstract IEnumerable<object?> GetEqualityComponents();
+    protected abstract IEnumerable<object?> GetEqualityComponents();
 
 
     public override int GetHashCode()
@@ -39,45 +38,45 @@ public abstract record ValueObject : IValueObject
     }
 }
 
-public abstract record ValueObject<TInterface> : IValueObject where TInterface : class, IValueObject<TInterface>
-{
-    [Internal]
-    public bool IsValidated => _isValid != null;
-    [Internal]
-    public bool IsValid => _isValid ??= Validate((this as TInterface)!);
+//public abstract record ValueObject<TInterface> : IValueObject where TInterface : class, IValueObject<TInterface>
+//{
+//    [Internal]
+//    public bool IsValidated => _isValid != null;
+//    [Internal]
+//    public bool IsValid => _isValid ??= Validate((this as TInterface)!);
 
 
-    protected bool? _isValid = null;
+//    protected bool? _isValid = null;
 
-    [Internal]
-    public virtual bool Validate(TInterface valueObject) => true;
+//    [Internal]
+//    public virtual bool Validate(TInterface valueObject) => true;
 
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    protected static bool ValidateRaw(TInterface valueObject)
-    {
-        return valueObject.Validate(valueObject);
-    }
+//    [EditorBrowsable(EditorBrowsableState.Never)]
+//    protected static bool ValidateRaw(TInterface valueObject)
+//    {
+//        return valueObject.Validate(valueObject);
+//    }
 
-    [Internal]
-    public virtual void EnsureValidated()
-    {
-        if (!IsValid)
-        {
-            throw new InvalidValueObjectException(this.GetType());
-        }
-    }
+//    [Internal]
+//    public virtual void EnsureValidated()
+//    {
+//        if (!IsValid)
+//        {
+//            throw new InvalidValueObjectException(this.GetType());
+//        }
+//    }
 
-    [Internal]
-    public abstract IEnumerable<object?> GetEqualityComponents();
+//    [Internal]
+//    public abstract IEnumerable<object?> GetEqualityComponents();
 
 
-    public override int GetHashCode()
-        => GetEqualityComponents()
-            .Select(x => x?.GetHashCode() ?? 0)
-            .Aggregate((x, y) => x ^ y);
+//    public override int GetHashCode()
+//        => GetEqualityComponents()
+//            .Select(x => x?.GetHashCode() ?? 0)
+//            .Aggregate((x, y) => x ^ y);
 
-    protected ValueObject()
-    {
-    }
-}
+//    protected ValueObject()
+//    {
+//    }
+//}
 
