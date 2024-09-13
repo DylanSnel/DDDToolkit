@@ -78,7 +78,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
                             partial record {{{valueObjectInfo.Name}}} : ValueObject
                             {
                                 [Internal]
-                                public override IEnumerable<object?> GetEqualityComponents()
+                                protected override IEnumerable<object?> GetEqualityComponents()
                                 {
                                     {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                                 }
@@ -137,7 +137,7 @@ public class ValueObjectGenerator : IIncrementalGenerator
                         }
                        
                         [Internal]
-                        public override IEnumerable<object?> GetEqualityComponents()
+                        protected override IEnumerable<object?> GetEqualityComponents()
                         {
                             {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
                         }

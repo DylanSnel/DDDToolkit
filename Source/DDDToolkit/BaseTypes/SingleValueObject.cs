@@ -16,7 +16,7 @@ public abstract record SingleValueObject<T> : ValueObject, ISingleValueObject wh
 
     object ISingleValueObject.GetValue() => Value;
 
-    public override IEnumerable<object> GetEqualityComponents()
+    protected override IEnumerable<object> GetEqualityComponents()
     {
         yield return Value;
     }

@@ -7,4 +7,7 @@
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Method)]
 public class InternalAttribute : Attribute
 {
+    public InternalAttribute() : base()
+    {
+    }
 }
