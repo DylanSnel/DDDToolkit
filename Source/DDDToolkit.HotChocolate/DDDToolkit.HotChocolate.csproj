@@ -28,6 +28,7 @@
   </ItemGroup>-->
 
   <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
     <ProjectReference Include="..\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" />
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
   </ItemGroup>
