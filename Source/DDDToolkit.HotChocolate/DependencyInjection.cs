@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.HotChocolate;
 public static class DependencyInjection
 {
-    public static IRequestExecutorBuilder RegisterDDDTypes(this IRequestExecutorBuilder builder)
+    public static IRequestExecutorBuilder AddDDDToolkitTypes(this IRequestExecutorBuilder builder)
     {
         builder.TryAddTypeInterceptor(new IgnoreInternalFieldsInterceptor());
         builder.AddHotChocolateTypes();
