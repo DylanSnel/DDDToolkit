@@ -102,7 +102,8 @@ public class ValueObjectGenerator : IIncrementalGenerator
                                 {
 
                                 }
-
+                            
+                            [Internal]
                             public Valid{{{valueObjectInfo.Name}}} ToValid() => new(this);
                                 
                             }
