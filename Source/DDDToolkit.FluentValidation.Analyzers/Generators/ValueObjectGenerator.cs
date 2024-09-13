@@ -53,12 +53,14 @@ public class ValueObjectGenerator : IIncrementalGenerator
                             using FluentValidation;
                             using FluentValidation.Results;
                             using System.Collections.ObjectModel;
+                            using System.ComponentModel.DataAnnotations.Schema;
 
                             namespace {{{valueObjectInfo.Namespace}}};
     
                             partial record {{{valueObjectInfo.Name}}}
                             {
                                 [Internal]
+                                [NotMapped]
                                 public ReadOnlyCollection<ValidationFailure> Errors => _errors.AsReadOnly();
 
                                 private List<ValidationFailure> _errors = [];
