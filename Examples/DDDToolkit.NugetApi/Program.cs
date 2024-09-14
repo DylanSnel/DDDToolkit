@@ -1,6 +1,4 @@
-using DDDToolkit.EntityFramework;
 using DDDToolkit.NugetApi.Context;
-using MediatR;
 using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,13 +10,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
 
-builder.Services.UseDomainEvents(
-    async (sp, domainEvent) =>
-        {
-            var mediator = sp.GetRequiredService<IMediator>();
-            await mediator.Publish(domainEvent);
-        }
-    );
+//builder.Services.UseDomainEvents(
+//    async (sp, domainEvent) =>
+//        {
+//            var mediator = sp.GetRequiredService<IMediator>();
+//            await mediator.Publish(domainEvent);
+//        }
+//    );
 
 //var connectionString = builder.Configuration.GetConnectionString("ExampleContext");
 builder.Services.AddDbContext<ExampleContext>();

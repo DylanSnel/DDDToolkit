@@ -41,9 +41,7 @@ public class PublishDomainEventsInterceptor(IServiceProvider serviceProvider, DD
 
         var interceptorAction = options.InterceptorAction;
         // Publish domain events
-        foreach (var domainEvent in domainEvents)
-        {
-            await interceptorAction.Invoke(serviceProvider, domainEvent);
-        }
+        await interceptorAction.Invoke(serviceProvider, domainEvents);
+
     }
 }
