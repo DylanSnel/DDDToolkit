@@ -23,7 +23,6 @@ public static class DependencyInjection
 
     public static void AddDomainEventInterceptor(this DbContextOptionsBuilder ctx, IServiceProvider scvc)
     {
-        var scope = scvc.CreateScope();
-        ctx.AddInterceptors(scope.ServiceProvider.GetRequiredService<PublishDomainEventsInterceptor>());
+        ctx.AddInterceptors(scvc.GetRequiredService<PublishDomainEventsInterceptor>());
     }
 }
