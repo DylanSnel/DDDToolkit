@@ -9,7 +9,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection UseDomainEvents(this IServiceCollection services, Func<IServiceProvider, IDomainEvent, Task> interceptorAction)
     {
-        services.AddScoped<PublishDomainEventsInterceptor>();
+        services.AddSingleton<PublishDomainEventsInterceptor>();
         services.AddSingleton(serviceProvider =>
         {
             return new DDDEntityFrameworkOptions
@@ -23,7 +23,6 @@ public static class DependencyInjection
 
     public static void AddDomainEventInterceptor(this DbContextOptionsBuilder ctx, IServiceProvider scvc)
     {
-        var scope = scvc.CreateScope();
-        ctx.AddInterceptors(scope.ServiceProvider.GetRequiredService<PublishDomainEventsInterceptor>());
+        ctx.AddInterceptors(scvc.GetRequiredService<PublishDomainEventsInterceptor>());
     }
 }
