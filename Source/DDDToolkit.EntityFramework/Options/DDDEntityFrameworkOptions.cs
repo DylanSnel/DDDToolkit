@@ -3,5 +3,5 @@
 namespace DDDToolkit.EntityFramework.Options;
 public class DDDEntityFrameworkOptions
 {
-    public required Func<IServiceProvider, IDomainEvent, Task> InterceptorAction { get; set; }
+    public required Func<IServiceProvider, List<IDomainEvent>, Task> InterceptorAction { get; set; }
 }
