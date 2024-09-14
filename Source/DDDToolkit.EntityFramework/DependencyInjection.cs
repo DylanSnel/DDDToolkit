@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.EntityFramework;
 public static class DependencyInjection
 {
-    public static IServiceCollection UseDomainEvents(this IServiceCollection services, Func<IServiceProvider, IDomainEvent, Task> interceptorAction)
+    public static IServiceCollection UseDomainEvents(this IServiceCollection services, Func<IServiceProvider, List<IDomainEvent>, Task> interceptorAction)
     {
         services.AddSingleton<PublishDomainEventsInterceptor>();
         services.AddSingleton(serviceProvider =>
