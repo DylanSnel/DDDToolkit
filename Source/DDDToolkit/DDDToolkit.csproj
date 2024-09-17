@@ -16,7 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-
     <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
