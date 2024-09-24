@@ -12,12 +12,18 @@ public class PublishDomainEventsInterceptor(IServiceProvider serviceProvider, DD
         return base.SavingChanges(eventData, result);
     }
 
-    public async override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
-    {
+    //public async override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    //{
 
-        var response = await base.SavingChangesAsync(eventData, result, cancellationToken);
+    //    var response = await base.SavingChangesAsync(eventData, result, cancellationToken);
+    //    await PublishDomainEvents(eventData.Context);
+    //    return response;
+    //}
+
+    public async override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)
+    {
         await PublishDomainEvents(eventData.Context);
-        return response;
+        return await base.SavedChangesAsync(eventData, result, cancellationToken);
     }
 
     private async Task PublishDomainEvents(DbContext? dbContext)
