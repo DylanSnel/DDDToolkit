@@ -6,6 +6,9 @@
     <File Path="global.json" />
     <File Path="README.md" />
   </Folder>
+  <Folder Name="/Benchmarks/">
+    <Project Path="Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj" />
+  </Folder>
   <Folder Name="/Source/">
     <Project Path="Source/DDDToolkit.Abstractions/DDDToolkit.Abstractions.csproj" />
     <Project Path="Source/DDDToolkit/DDDToolkit.csproj" />
@@ -27,6 +30,7 @@
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
