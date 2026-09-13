@@ -51,7 +51,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
         {
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".EntityId<" + value.FullyQualifiedName + ">"))
             {
-                writer.Line("/// <summary>Prefix written by ToString() and accepted (optionally) by Parse/TryParse.</summary>");
+                writer.Line(PrefixDocComment(value.CanParse));
                 writer.Line("public const string IdPrefix = \"" + Escape(definition.Prefix) + "\";");
                 writer.Line();
 
@@ -143,7 +143,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
             using (writer.Block(type.PartialHeader + " : " + string.Join(", ", interfaces)))
             {
-                writer.Line("/// <summary>Prefix written by ToString() and accepted (optionally) by Parse/TryParse.</summary>");
+                writer.Line(PrefixDocComment(value.CanParse));
                 writer.Line("public const string IdPrefix = \"" + Escape(definition.Prefix) + "\";");
                 writer.Line();
                 writer.Line("public " + value.FullyQualifiedName + " Value { get; }");
@@ -205,6 +205,15 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
     }
 
     // ------------------------------------------------------------------ shared pieces
+
+    /// <summary>
+    /// Parse and TryParse are only generated for values that can be parsed, so the prefix's
+    /// documentation must not promise them when they are absent.
+    /// </summary>
+    private static string PrefixDocComment(bool canParse)
+        => canParse
+            ? "/// <summary>Prefix written by ToString() and accepted (optionally) by Parse/TryParse.</summary>"
+            : "/// <summary>Prefix written by ToString().</summary>";
 
     private static void EmitGuidFactories(CodeWriter writer, string name)
     {
