@@ -1,6 +1,8 @@
 using DDDToolkit.HotChocolate.Interceptors;
+using DDDToolkit.HotChocolate.Subscriptions;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DDDToolkit.HotChocolate;
 
@@ -36,5 +38,37 @@ public static class DependencyInjection
         builder.TryAddTypeInterceptor(typeof(IgnoreInternalFieldsInterceptor));
         builder.AddHotChocolateTypes();
         return builder;
+    }
+
+    /// <summary>
+    /// Registers <see cref="GraphQlSubscriptionSink"/> and the map of contracts it pushes, so the outbox
+    /// can name it with <c>outbox.SendTo&lt;GraphQlSubscriptionSink&gt;()</c>.
+    /// <para>
+    /// You still register a subscription transport on the schema yourself:
+    /// <c>AddInMemorySubscriptions()</c> for a single process, and at HotChocolate 16.6.6 there are also
+    /// transports for Postgres, Redis, RabbitMQ and NATS when more than one server is holding sockets.
+    /// The Postgres one is worth knowing about if you are already on Postgres: it rides
+    /// <c>LISTEN</c>/<c>NOTIFY</c>, so several servers share subscriptions with no broker to run.
+    /// </para>
+    /// <para>
+    /// A subscription reaches the clients connected at that moment and nothing else. It is a way to
+    /// refresh a screen, not a way for another part of the system to find out what happened; that is
+    /// what the module sink and a real queue are for. See <c>docs/graphql.md</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configure">Names the contracts that reach clients and their topics.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
+    public static IServiceCollection AddIntegrationEventSubscriptions(this IServiceCollection services, Action<GraphQlSubscriptionMap> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var map = new GraphQlSubscriptionMap();
+        configure(map);
+
+        services.AddSingleton(map);
+        services.TryAddSingleton<GraphQlSubscriptionSink>();
+        return services;
     }
 }

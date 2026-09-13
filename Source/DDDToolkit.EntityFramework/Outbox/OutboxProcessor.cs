@@ -108,7 +108,34 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         foreach (var message in messages)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (await DeliverOneAsync(message, outbox, cancellationToken).ConfigureAwait(false))
+            {
+                processed++;
+            }
+        }
+
+        return processed;
+    }
+
+    /// <summary>
+    /// Attempts one message and saves the outcome. With
+    /// <see cref="OutboxOptions.DeliverInTransaction"/> the attempt and the mark share a transaction, so
+    /// a sink that writes to this database commits with the mark or not at all; otherwise the mark is
+    /// its own write and delivery is at-least-once, which is what a sink outside the database gives you
+    /// anyway.
+    /// </summary>
+    private async Task<bool> DeliverOneAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)
+    {
+        // Owned only when the caller has none: joining theirs is what lets a caller batch the whole run.
+        var transaction = outbox.DeliverInTransaction && _context.Database.CurrentTransaction is null
+            ? await _context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
+            : null;
+
+        try
+        {
             message.Attempts++;
+            var delivered = false;
 
             try
             {
@@ -116,23 +143,44 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
                 message.ProcessedAt = _options.TimeProvider.GetUtcNow();
                 message.LastError = null;
-                processed++;
+                delivered = true;
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 message.LastError = Describe(exception);
                 _logger.LogError(exception, "Delivery of outbox message {MessageId} ({EventName}) failed on attempt {Attempt}.", message.Id, message.EventName, message.Attempts);
+
+                if (transaction is not null)
+                {
+                    // Roll the failed attempt back with whatever the sinks wrote here, then record the
+                    // failure on its own so the attempt count and the error survive.
+                    await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+                    await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                    return false;
+                }
             }
 
             await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
 
-        return processed;
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return delivered;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     private async Task DeliverAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)
     {
-        var domainEvent = Deserialize(message, outbox);
+        var domainEvent = Deserialize(message, outbox, _options.Contracts);
 
         if (DispatchesInProcess(outbox))
         {
@@ -210,7 +258,16 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
     private static bool DispatchesInProcess(OutboxOptions outbox) => !outbox.HasSinks || outbox.AlsoDispatchInProcess;
 
-    private static IDomainEvent Deserialize(OutboxMessage message, OutboxOptions outbox)
+    /// <summary>
+    /// Reads the stored row back as the domain event it was written from.
+    /// <para>
+    /// The row says which shape it was written in. When that is the shape the registered type has today,
+    /// which is every row until somebody bumps a version, the payload is deserialized straight into it.
+    /// When it is older, the payload is read as the type registered under that name and version and then
+    /// upcast, so a row written before a deployment is still deliverable after it.
+    /// </para>
+    /// </summary>
+    private static IDomainEvent Deserialize(OutboxMessage message, OutboxOptions outbox, IntegrationEventContractRegistry contracts)
     {
         if (!outbox.EventTypes.TryResolve(message.EventName, out var eventType))
         {
@@ -218,8 +275,33 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                 $"No domain event type is registered under the name '{message.EventName}'. Register it with outbox.RegisterEventsFromAssembly(...) or outbox.RegisterEvent<T>().");
         }
 
+        // A column added to an existing table without a default reads as 0; that row predates versioning.
+        var storedVersion = message.Version < 1 ? 1 : message.Version;
+        var currentVersion = IntegrationEventContract.VersionOf(eventType);
+
+        if (storedVersion != currentVersion)
+        {
+            return Upcast(message, contracts, eventType, storedVersion, currentVersion);
+        }
+
         return JsonSerializer.Deserialize(message.Payload, eventType, outbox.JsonOptions) as IDomainEvent
             ?? throw new JsonException($"The payload of outbox message {message.Id} deserialized to null.");
+    }
+
+    private static IDomainEvent Upcast(OutboxMessage message, IntegrationEventContractRegistry contracts, Type currentType, int storedVersion, int currentVersion)
+    {
+        if (!contracts.TryResolve(message.EventName, storedVersion, out var storedType))
+        {
+            throw new InvalidOperationException(
+                $"Outbox message {message.Id} was written as '{message.EventName}' version {storedVersion}, but '{currentType}' is version {currentVersion} today and nothing is registered for the older shape. " +
+                $"Keep the old record and register it with options.MapIntegrationEvents(c => c.UpcastFrom<{message.EventName}V{storedVersion}, {currentType.Name}>(...)).");
+        }
+
+        var upcast = contracts.ReadAs(message.Payload, storedType, message.EventName, storedVersion);
+
+        return upcast as IDomainEvent
+            ?? throw new InvalidOperationException(
+                $"Outbox message {message.Id} upcast from '{storedType}' to '{upcast.GetType()}', which is not a domain event. The chain has to end at the type registered under '{message.EventName}'.");
     }
 
     private static string Describe(Exception exception)

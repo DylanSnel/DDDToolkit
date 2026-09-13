@@ -152,6 +152,10 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
                 {
                     Id = domainEvent.EventId,
                     EventName = DomainEventName.Of(domainEvent),
+                    // The shape, not just the name: a row read after a deployment has to say which
+                    // version of the event it was written as. Defaults to 1 for an event that never
+                    // carried [IntegrationEvent].
+                    Version = IntegrationEventContract.VersionOf(domainEvent.GetType()),
                     Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), outbox.JsonOptions),
                     OccurredAt = domainEvent.OccurredAt,
                     AggregateType = aggregateType,

@@ -3,7 +3,7 @@ using System.Text.Json;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Interfaces;
-using DDDToolkit.Serialization.Converters;
+using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.EntityFramework.Options;
 
@@ -24,7 +24,7 @@ public sealed class OutboxOptions
     /// are stored as their raw value. Replace or extend as needed; the same options are used to read
     /// the payload back, so change them with care once messages exist.
     /// </summary>
-    public JsonSerializerOptions JsonOptions { get; set; } = CreateDefaultJsonOptions();
+    public JsonSerializerOptions JsonOptions { get; set; } = IntegrationJson.CreateDefault();
 
     /// <summary>
     /// Messages whose <see cref="OutboxMessage.Attempts"/> reached this value are no longer picked up
@@ -97,6 +97,39 @@ public sealed class OutboxOptions
     }
 
     /// <summary>
+    /// Delivers published messages to the other modules in this process:
+    /// <see cref="ModuleIntegrationEventSink{TContext}"/> hands each message to every
+    /// <c>IIntegrationEventHandler&lt;TContract&gt;</c> registered against the published contract, each
+    /// one guarded by the inbox of <typeparamref name="TContext"/>.
+    /// <para>
+    /// This is the common case in a modular monolith, and it is the sink that earns the outbox: the
+    /// producing module's transaction has already committed, so a consumer that fails cannot take it
+    /// down with it. See <c>docs/integration-events.md</c>.
+    /// </para>
+    /// </summary>
+    public OutboxOptions SendToModules<TContext>() where TContext : DbContext => SendTo<ModuleIntegrationEventSink<TContext>>();
+
+    /// <summary>
+    /// Runs each message's delivery and its "processed" mark inside one database transaction, so a
+    /// crash between the two cannot leave a message delivered but unmarked. Off by default.
+    /// <para>
+    /// It only buys anything for a sink that writes to the same database as the outbox. The pgmq sink in
+    /// <c>DDDToolkit.EntityFramework.Postgres</c> is the case it exists for: the queue is a table, so
+    /// the enqueue and the mark commit together and the handoff from the outbox to the queue happens
+    /// exactly once. A sink that talks to a broker, an HTTP endpoint or anything else outside the
+    /// database is unaffected: that send cannot be rolled back, so turning this on only widens the
+    /// transaction for no gain.
+    /// </para>
+    /// <para>
+    /// It also changes what <see cref="SendToModules{TContext}"/> guarantees. The inbox joins the
+    /// caller's transaction, so with one transaction around the whole message a failing consumer rolls
+    /// back the consumers that already succeeded, and they run again on the retry. Leave this off when
+    /// you want per-consumer progress.
+    /// </para>
+    /// </summary>
+    public bool DeliverInTransaction { get; set; }
+
+    /// <summary>
     /// Publishes <typeparamref name="TDomainEvent"/> as <typeparamref name="TContract"/>. Shorthand for
     /// <see cref="IntegrationEventMap.PublishAs{TDomainEvent, TContract}"/>.
     /// </summary>
@@ -119,11 +152,4 @@ public sealed class OutboxOptions
     }
 
     private readonly List<IntegrationEventSinkRegistration> _sinks = [];
-
-    private static JsonSerializerOptions CreateDefaultJsonOptions()
-    {
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        options.Converters.Add(new SingleValueObjectConverterFactory());
-        return options;
-    }
 }

@@ -12,6 +12,7 @@
     <Project Path="Source/DDDToolkit.Analyzers/DDDToolkit.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.EntityFramework.Postgres/DDDToolkit.EntityFramework.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation.Analyzers/DDDToolkit.FluentValidation.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.HotChocolate/DDDToolkit.HotChocolate.csproj" />
