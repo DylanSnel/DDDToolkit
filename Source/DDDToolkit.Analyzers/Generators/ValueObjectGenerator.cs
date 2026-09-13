@@ -38,7 +38,8 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
-            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".ValueObject"))
+            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".ValueObject, "
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
@@ -55,6 +56,7 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
+                writer.Line("/// <summary>The always-valid twin. Throws when the value is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line(KnownTypes.InternalAttributeUsage);
                 writer.Line("public " + validName + " ToValid() => new(this);");
             }

@@ -8,7 +8,10 @@ namespace DDDToolkit.FluentValidation.Analyzers.Generators;
 /// <summary>
 /// Gives every value object, single value object and (reference) entity id a nested partial
 /// <c>Validator : AbstractValidator&lt;T&gt;</c>, an <c>Errors</c> collection and a <c>Validate()</c> override
-/// that runs the validator. The user supplies the rules in the other half of the partial class:
+/// that runs the validator. A second <c>Validate(ValidationErrorBuilder)</c> override copies the same
+/// failures into the toolkit's own shape, so <c>ValidationErrors</c> and <c>TryToValid()</c> work without
+/// the caller referencing FluentValidation. The user supplies the rules in the other half of the partial
+/// class:
 /// <code>
 /// partial class Validator { public Validator() { RuleFor(x => x.Value).EmailAddress(); } }
 /// </code>
@@ -58,6 +61,24 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                     writer.Line("var result = validator.Validate(this);");
                     writer.Line("_errors = result.Errors;");
                     writer.Line("return result.IsValid;");
+                }
+
+                writer.Line();
+                writer.Line("/// <summary>");
+                writer.Line("/// Copies the validator's failures into the toolkit's own shape, so a caller can read");
+                writer.Line("/// <c>ValidationErrors</c> and <c>TryToValid()</c> without referencing FluentValidation.");
+                writer.Line("/// The base type runs this straight after the overload above, so <c>_errors</c> is current.");
+                writer.Line("/// </summary>");
+                using (writer.Block("protected override void Validate(" + KnownTypes.ValidationNamespace + ".ValidationErrorBuilder errors)"))
+                {
+                    using (writer.Block("foreach (var failure in _errors)"))
+                    {
+                        writer.Line("errors.Add(new " + KnownTypes.ValidationNamespace + ".ValidationError(");
+                        writer.Line("    failure.ErrorMessage,");
+                        writer.Line("    failure.PropertyName,");
+                        writer.Line("    failure.ErrorCode,");
+                        writer.Line("    failure.AttemptedValue));");
+                    }
                 }
 
                 writer.Line();

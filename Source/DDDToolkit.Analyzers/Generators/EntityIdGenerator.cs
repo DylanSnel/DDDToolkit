@@ -54,7 +54,8 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
-            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".EntityId<" + value.FullyQualifiedName + ">"))
+            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".EntityId<" + value.FullyQualifiedName + ">, "
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
                 writer.Line(PrefixDocComment(value.CanParse));
                 writer.Line("public const string IdPrefix = \"" + Escape(definition.Prefix) + "\";");
@@ -90,6 +91,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
+                writer.Line("/// <summary>The always-valid twin. Throws when the id is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line("public " + validName + " ToValid() => new(this);");
             }
 
