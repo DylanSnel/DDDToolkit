@@ -17,7 +17,9 @@ The package does four things:
 It does not give you a repository abstraction or a message bus. `DbContext` is already the unit of
 work, and the delegate that hands events to your publisher is one you write. If your publisher is
 [Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator`
-writes that delegate for you; see [In-process dispatch](#in-process-dispatch).
+writes that delegate for you; see [In-process dispatch](#in-process-dispatch). If the events have to
+leave the process, the outbox delivers to a sink you implement; see
+[Integration events](integration-events.md).
 
 ## Install
 
@@ -250,6 +252,9 @@ Func<IServiceProvider, IReadOnlyList<IDomainEvent>, CancellationToken, Task>
 The provider is the scope that owns the saving `DbContext`, and the events arrive in the order they
 were raised.
 
+Both modes keep the event inside this process. To send it somewhere else, add a sink to the outbox:
+that is a third destination and a separate page, [Integration events](integration-events.md).
+
 ### In-process dispatch
 
 With `DispatchInProcess` and no outbox, handlers run inside `SaveChanges`, before the database is
@@ -369,6 +374,20 @@ aggregate rolls back its events, because they are rows in the same transaction.
 The cost is at-least-once delivery. A message is marked processed only after its handlers returned,
 so a crash in between redelivers it. Handlers must be idempotent, keyed on `EventId`.
 
+Written this way the outbox is durable but still in-process: the processor hands the event back to the
+same delegate. Add a sink and the row leaves the process instead:
+
+```csharp
+options.UseOutbox(outbox =>
+{
+    outbox.RegisterEventsFromAssemblyContaining<Program>();
+    outbox.SendTo<ServiceBusSink>();
+});
+```
+
+Sinks, the published contract that is not your domain event, and the inbox that makes at-least-once
+delivery safe to consume are all on [Integration events](integration-events.md).
+
 ### Choosing
 
 | | In-process | Outbox |
@@ -382,7 +401,8 @@ so a crash in between redelivers it. Handlers must be idempotent, keyed on `Even
 | Extra moving part | No | A processor or background service |
 
 Use in-process dispatch for side effects inside the same database, where the transaction is the
-guarantee you want. Use the outbox for anything that leaves the process.
+guarantee you want. Use the outbox for anything that leaves the process, and give it a sink to leave
+through.
 
 Nothing stops you from mapping the outbox table from the start and switching later. The example
 context does exactly that, so moving from one mode to the other is a change in `Program.cs` with no
@@ -433,8 +453,10 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-The default table name is `OutboxMessages`; the method takes `tableName` and `schema` if you want
-something else. It sets a primary key on `Id`, an index on `ProcessedAt`, and the lengths below.
+The table is `ddd.OutboxMessages` by default. The method takes `tableName` and `schema` if you want
+something else, and `schema: null` puts it in the provider's default schema. SQLite has no schemas and
+ignores the argument, so the table is plain `OutboxMessages` there. The mapping sets a primary key on
+`Id`, an index on `ProcessedAt`, and the lengths below.
 
 | Column | Type | Meaning |
 |---|---|---|
@@ -514,8 +536,9 @@ var delivered = await processor.ProcessPendingAsync(batchSize: 100, cancellation
 ```
 
 `ProcessPendingAsync` loads pending messages oldest first, by `CreatedAt`, then `OccurredAt`, then
-`Id`, dispatches each one on its own, and returns how many were delivered successfully. The processor
-throws at construction if the outbox is not enabled or no dispatch delegate is configured.
+`Id`, delivers each one on its own, and returns how many were delivered successfully. The processor
+throws at construction if the outbox is not enabled, or if it has neither a sink nor a dispatch
+delegate to deliver through.
 
 Each message is saved through the same scoped context, so a handler that resolves that context and
 changes an aggregate commits its change together with the processed mark. Events raised by that
@@ -548,6 +571,10 @@ drain for that tick. The next tick picks the messages up again.
   `ProcessedAt` is written, that is the at-least-once guarantee: handlers must be idempotent, keyed
   on `EventId`, which is `OutboxMessage.Id`.
 - **Delivery is not immediate.** It happens on the next poll, not at commit.
+
+- **Two sinks share one row.** When a message goes to more than one sink and one of them refuses, the
+  message as a whole is retried and the sinks that accepted it see it again. See
+  [Integration events](integration-events.md#when-one-sink-fails-and-another-does-not).
 
 `Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` exercises the transactional write, the
 retries, `MaxAttempts`, unknown event names and the background service.
@@ -617,8 +644,13 @@ dotnet ef database update
 ```
 
 The outbox table is part of the model as soon as `AddDomainEventOutbox()` is in `OnModelCreating`, so
-the next migration you scaffold contains it. Opting in is that one call. There is no separate
-package, no separate migration history table and no separate command.
+the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
+is no separate package, no separate migration history table and no separate command. The same goes for
+`AddDomainEventInbox()` on the consuming side.
+
+If you write migrations by hand rather than scaffolding them, `migrationBuilder.CreateDomainEventOutbox()`
+and its inbox and drop counterparts write the same tables. See
+[Integration events](integration-events.md#tables-schema-and-migrations).
 
 The same applies to everything else on this page. Struct identifier columns, complex type columns,
 primitive collection columns and the `Version` column are all just columns in your model, so a
@@ -634,6 +666,7 @@ in-process dispatch to the outbox later costs no migration at all.
 - [Value objects](value-objects.md) for `[ValueObject]` and `[SingleValueObject<T>]`.
 - [Entities and aggregates](entities-and-aggregates.md) for read-only collections and `[BackingField]`.
 - [Domain events](domain-events.md) for raising, draining and stable names.
+- [Integration events](integration-events.md) for sinks, published contracts and the inbox.
 - [Diagnostics](diagnostics.md) for the build errors the generators report.
 
 The runnable version of everything here is `Examples/DDDToolkit.ExampleApi`: `Program.cs` shows both
