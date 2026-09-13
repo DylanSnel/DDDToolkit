@@ -389,27 +389,34 @@ Equality on `Entity<TId>` is also null-safe now. `GetHashCode` on an entity whos
 
 ## 10. Misapplied attributes now fail the build
 
-In 2.x, applying a DDDToolkit attribute to the wrong kind of declaration generated nothing and said
-nothing, or was rejected by the compiler with `CS0592`, which named no cause. The attributes now
-accept both classes and structs so that the generator can report its own diagnostic instead:
+2.x reported five diagnostics: DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013. Everything else
+it got wrong generated nothing and said nothing, or was rejected by the compiler with `CS0592`, which
+named no cause. The attributes now accept both classes and structs, so the generator reports its own
+diagnostic instead of the compiler refusing the attribute.
+
+Eight diagnostics are new, and these are the ones you can expect on the first build:
 
 | You wrote | 3.0 says |
 |---|---|
-| `[ValueObject]` on a class | [DDD00001](diagnostics.md#ddd00001) |
-| `[Entity<T>]` on a record | [DDD00002](diagnostics.md#ddd00002) |
 | `[EntityId<T>]` on a plain class or struct | [DDD00003](diagnostics.md#ddd00003) |
 | `[EntityId<T>]` on a non readonly record struct | [DDD00004](diagnostics.md#ddd00004), a warning |
 | Any of them on a non partial type | [DDD00005](diagnostics.md#ddd00005) |
 | Any of them on a generic type | [DDD00006](diagnostics.md#ddd00006) |
+| The generated identifier's name is already taken | [DDD00007](diagnostics.md#ddd00007) |
+| A type argument that is neither an identifier nor something one can wrap | [DDD00008](diagnostics.md#ddd00008) |
 | `[Entity<T>]` and `[AggregateRoot<T>]` on the same class | [DDD00009](diagnostics.md#ddd00009) |
+| A setter on a generated collection property | [DDD00020](diagnostics.md#ddd00020) |
 
-Expect a handful of these on the first build. They are all real: in 2.x those types were producing
-nothing, and you were living with whatever the missing code did not do. DDD00006 in particular used
-to produce a second, unrelated, non-generic type that compiled on its own, which is why the errors
-you saw talked about members that "do not exist".
+DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013 also fire in more cases than they used to, now
+that a struct or a record struct can carry the attribute at all.
 
-`[DomainEventName]`, `[DontCompare]` and `[Internal]` are unchanged. The full list with a fix for
-each is in [Diagnostics](diagnostics.md).
+They are all real: in 2.x those types were producing nothing, and you were living with whatever the
+missing code did not do. DDD00006 in particular used to produce a second, unrelated, non-generic type
+that compiled on its own, which is why the errors you saw talked about members that "do not exist".
+
+`[DontCompare]` and `[Internal]` are unchanged, and neither has ever reported anything.
+`[DomainEventName]` is new in 3.0 and optional. The full list with a fix for each is in
+[Diagnostics](diagnostics.md).
 
 ## 11. Package versions
 
