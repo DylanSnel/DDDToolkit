@@ -37,6 +37,7 @@ public static class OutboxModelBuilderExtensions
             builder.Property(m => m.Id).ValueGeneratedNever();
             builder.Property(m => m.EventName).HasMaxLength(DomainEventStorage.MaxNameLength).IsRequired();
             builder.Property(m => m.Payload).IsRequired();
+            builder.Property(m => m.Version);
             builder.Property(m => m.AggregateType).HasMaxLength(DomainEventStorage.MaxAggregateTypeLength);
             builder.Property(m => m.AggregateId).HasMaxLength(DomainEventStorage.MaxAggregateIdLength);
             builder.Property(m => m.LastError).HasMaxLength(DomainEventStorage.MaxErrorLength);

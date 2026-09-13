@@ -16,6 +16,17 @@ public sealed class OutboxMessage
     /// <summary>The System.Text.Json serialized event.</summary>
     public string Payload { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The shape <see cref="Payload"/> was written in, from <c>[IntegrationEvent(Version = n)]</c> on the
+    /// event type. 1 when the type says nothing, which is every event that never had to change shape.
+    /// <para>
+    /// The processor compares it with the version of the type registered under <see cref="EventName"/>
+    /// today. When they differ it reads the row as the older shape and upcasts, so rows written before a
+    /// deployment are still deliverable after it. See <c>IntegrationEventContractRegistry</c>.
+    /// </para>
+    /// </summary>
+    public int Version { get; set; } = 1;
+
     /// <summary>When the event occurred (from the event itself).</summary>
     public DateTimeOffset OccurredAt { get; set; }
 

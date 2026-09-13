@@ -22,12 +22,16 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <!-- The pgmq tests run against a real Postgres; they skip themselves when Docker is not there. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
   </ItemGroup>
 
   <ItemGroup>

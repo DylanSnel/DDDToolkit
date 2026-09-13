@@ -19,6 +19,7 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.6" />
     <!--
@@ -28,6 +29,12 @@
     -->
     <PackageVersion Include="HotChocolate" Version="16.6.6" />
     <PackageVersion Include="HotChocolate.Types.Analyzers" Version="16.6.6" />
+    <!--
+      The subscription transport used by the tests. At 16.6.6 there are also transports for Postgres
+      (LISTEN/NOTIFY), Redis, RabbitMQ and NATS; the toolkit's sink works through ITopicEventSender and
+      does not care which of them is registered.
+    -->
+    <PackageVersion Include="HotChocolate.Subscriptions.InMemory" Version="16.6.6" />
     <PackageVersion Include="HotChocolate.Types.Scalars" Version="16.6.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
@@ -59,7 +66,11 @@
     <!-- FluentAssertions 8+ is commercially licensed; 7.x is the last Apache-2.0 line. -->
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.11" />
-    <!-- Provider tests only: real Postgres and SQL Server in throw-away containers. -->
+    <!--
+      Real databases in throw-away containers: the provider suite runs the mapping tests on Postgres and
+      SQL Server, and the pgmq sink needs a Postgres with that extension. Both suites skip themselves
+      when Docker is absent, so a machine without it still goes green.
+    -->
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
   </ItemGroup>

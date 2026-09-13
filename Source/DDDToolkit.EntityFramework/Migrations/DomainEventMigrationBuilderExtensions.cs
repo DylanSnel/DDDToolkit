@@ -65,6 +65,9 @@ public static class DomainEventMigrationBuilderExtensions
                 Id = table.Column<Guid>(nullable: false),
                 EventName = table.Column<string>(maxLength: DomainEventStorage.MaxNameLength, nullable: false),
                 Payload = table.Column<string>(nullable: false),
+                // Rows written before this column existed are version 1, which is what a payload with no
+                // [IntegrationEvent(Version = n)] is, so the default makes an upgrade a no-op.
+                Version = table.Column<int>(nullable: false, defaultValue: 1),
                 OccurredAt = table.Column<DateTime>(nullable: false),
                 AggregateType = table.Column<string>(maxLength: DomainEventStorage.MaxAggregateTypeLength, nullable: true),
                 AggregateId = table.Column<string>(maxLength: DomainEventStorage.MaxAggregateIdLength, nullable: true),

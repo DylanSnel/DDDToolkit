@@ -23,6 +23,7 @@
     <PackageReference Include="FluentAssertions" />
     <!-- The execution engine: HotChocolate.Execution before 16, the HotChocolate package since. -->
     <PackageReference Include="HotChocolate" />
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
     <PackageReference Include="HotChocolate.Types.Scalars" />
   </ItemGroup>
 

@@ -5,6 +5,10 @@ Without it a strongly typed id becomes an object type with a `value` field, the 
 on your value objects becomes public API, and a client has to know that an `OrderId` is a wrapper. With
 it an `OrderId` is a `UUID`, the bookkeeping is gone, and every domain event shares one interface.
 
+It also carries one piece of plumbing in the other direction:
+[a sink](#pushing-integration-events-to-subscribers) that pushes published contracts to subscribed
+clients.
+
 The integration targets HotChocolate 16.6.6.
 
 ## Install
@@ -346,6 +350,118 @@ change it. If you rename the class, the value changes with it. Treat `eventType`
 building a client, not as the stable wire name; the stable name is
 [`DomainEventName.Of<T>()`](domain-events.md#stable-names).
 
+## Pushing integration events to subscribers
+
+`GraphQlSubscriptionSink` is an [integration event](integration-events.md) sink that publishes to
+HotChocolate's `ITopicEventSender`, so a message leaving the outbox reaches the clients holding a socket
+right now.
+
+**It is a different thing from the other sinks, and worth being blunt about.** The in-process module sink
+is how one module tells another that something happened. pgmq is how a module tells another deployable the
+same thing. Both are integration: durable, retried, and the receiver gets the message whether or not it was
+running at the time.
+
+A subscription is none of that:
+
+- **Not durable.** Nothing is stored. A payload with no subscriber is dropped.
+- **Only the connected.** A client that reconnects has missed what happened while it was away, and has to
+  re-read the state it cares about.
+- **No acknowledgement.** The sink returns once the topic accepted the payload. Whether a socket survived
+  long enough to deliver it is not knowable from there.
+
+So use it to keep a screen in step with the server. Never as the path by which some other part of the
+system learns that an order was placed. If a browser missing an update would be a bug in your data rather
+than a stale view, this is the wrong mechanism.
+
+### Registering it
+
+```csharp
+builder.Services
+    .AddGraphQLServer()
+    .AddDDDToolkitTypes()
+    .AddCommonGraphQlRuntimeBindings()
+    .AddInMemorySubscriptions()
+    .AddQueryType<Query>()
+    .AddSubscriptionType<Subscription>();
+
+builder.Services.AddIntegrationEventSubscriptions(map => map.Publish<OrderPlacedV2>("orderPlaced"));
+```
+
+```csharp
+options.UseOutbox(outbox =>
+{
+    outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(e.OrderId.Value, e.Total.Amount));
+    outbox.SendTo<GraphQlSubscriptionSink>();
+});
+```
+
+The subscription field reads the same topic:
+
+```csharp
+public sealed class Subscription
+{
+    [Subscribe(With = nameof(OnOrderPlacedAsync))]
+    public OrderPlacedV2 OrderPlaced([EventMessage] OrderPlacedV2 order) => order;
+
+    public ValueTask<ISourceStream<OrderPlacedV2>> OnOrderPlacedAsync(
+        [Service] ITopicEventReceiver receiver,
+        CancellationToken cancellationToken)
+        => receiver.SubscribeAsync<OrderPlacedV2>("orderPlaced", cancellationToken);
+}
+```
+
+```graphql
+subscription { orderPlaced { orderId total } }
+```
+
+Nothing is pushed until the map names it. That is the point: a subscription payload is part of your schema,
+and a schema is a deliberate list rather than whatever happened to be published.
+
+### It publishes the contract, never the domain event
+
+This is not tidiness. A subscription payload is a schema type. It is declared on the subscription field, it
+is resolved through the schema, and the schema's own authorisation decides what the client may see, field
+by field. `[Internal]` members are already gone, and an `[Authorize]` on a field still applies.
+
+Broadcast the domain event instead and you are pushing your internal record, with your identifiers and
+whatever you last added to it, to whoever is holding a socket. The contract is the list of things you
+decided to say out loud, and it is the same contract the other modules read, so there is one published
+shape rather than two.
+
+No upcasting happens on this path, and that is deliberate. An upcaster catches a reader up with a payload
+written before it was deployed. A subscription payload was produced seconds ago by this process, against
+this schema. If the map does not name the message's name **and version**, it is simply not pushed.
+
+### Scoping a topic
+
+A constant topic is a firehose that every subscriber sees. Build the topic from the message to scope it,
+usually to one aggregate:
+
+```csharp
+map.Publish<OrderPlacedV2>(message => $"order:{message.AggregateId}");
+```
+
+Returning `null` from the factory drops that one occurrence.
+
+A topic string is not authorisation. It decides who is woken; the subscription field decides who is allowed
+to subscribe and what they then see. Put the `[Authorize]` on the field.
+
+### Transports
+
+`AddInMemorySubscriptions()` is enough for a single process. At 16.6.6 HotChocolate also ships transports
+for Postgres, Redis, RabbitMQ and NATS, for when more than one server is holding sockets and the server
+that published is not the server the client is connected to. The toolkit's sink goes through
+`ITopicEventSender` and does not care which of them is registered.
+
+The Postgres one is worth knowing about if you are already on Postgres. It rides `LISTEN` and `NOTIFY`, so
+several servers share subscriptions with no extra infrastructure at all: no Redis, no broker, nothing new to
+run or pay for. Combined with the [pgmq sink](integration-events.md#when-a-module-becomes-its-own-deployable-pgmq),
+a Postgres deployment can carry both the durable path and the live path without another service.
+
+`Tests/DDDToolkit.HotChocolate.Tests/SubscriptionSinkTests.cs` runs the whole thing against the real
+in-memory transport, including a client subscribing through the schema and receiving what the outbox
+published.
+
 ## Upgrading to HotChocolate 16
 
 If you are moving your own HotChocolate code onto 16.6.6 alongside this package, these are the names
@@ -380,3 +496,6 @@ What did not change is the part the toolkit relies on most:
 It maps identifiers and single value objects onto scalars. It does not turn a multi-property
 `[ValueObject]` into anything other than the object type HotChocolate would infer, and it generates no
 queries, mutations or resolvers. The schema is still yours to write.
+
+That includes subscriptions. The sink publishes a contract to a topic; the subscription field, its
+arguments and its authorisation are yours, and so is the choice of transport.

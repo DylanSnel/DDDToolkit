@@ -46,6 +46,9 @@ public partial class Shelf
 
     public void SetFavouriteCat(CatId? cat) => FavouriteCat = cat;
 
+    /// <summary>Raises the current shape of a versioned event, so an old row and a new one can be compared.</summary>
+    public void Catalogue(string code, string system) => RaiseDomainEvent(new ShelfCataloguedV2(Id, code, system));
+
     public Book AddBook(string title, params TagId[] tags)
     {
         var book = new Book(BookId.CreateUnique(), title, tags);

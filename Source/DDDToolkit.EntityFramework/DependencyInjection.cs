@@ -1,4 +1,5 @@
 using DDDToolkit.EntityFramework.Inbox;
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
@@ -40,6 +41,7 @@ public static class DependencyInjection
         configure?.Invoke(options);
 
         services.AddSingleton(options);
+        services.TryAddSingleton(options.Contracts);
         // Scoped so the interceptor hands the scope's own provider (and thereby the DbContext being saved) to the handlers.
         services.TryAddScoped<PublishDomainEventsInterceptor>();
         services.TryAddSingleton<AggregateVersionInterceptor>();
@@ -116,6 +118,51 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddScoped<DomainEventInbox<TContext>>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <typeparamref name="THandler"/> (scoped) as a consumer of
+    /// <typeparamref name="TContract"/>, so <see cref="ModuleIntegrationEventSink{TContext}"/> hands it
+    /// every message published under that contract.
+    /// <para>
+    /// Register as many handlers per contract as you like; each one gets its own inbox row under its own
+    /// consumer name, so they succeed and fail independently. Name them with
+    /// <c>[IntegrationEventConsumer("...")]</c>, because the name is what the inbox remembers.
+    /// </para>
+    /// </summary>
+    public static IServiceCollection AddIntegrationEventHandler<TContract, THandler>(this IServiceCollection services)
+        where TContract : class
+        where THandler : class, IIntegrationEventHandler<TContract>
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddScoped<IIntegrationEventHandler<TContract>, THandler>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <paramref name="handler"/> as a consumer of <typeparamref name="TContract"/>, for an
+    /// instance you already own. Tests usually want this one.
+    /// </summary>
+    public static IServiceCollection AddIntegrationEventHandler<TContract>(this IServiceCollection services, IIntegrationEventHandler<TContract> handler)
+        where TContract : class
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(handler);
+        services.AddSingleton(handler);
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="ModuleIntegrationEventSink{TContext}"/> (scoped) together with the inbox it
+    /// needs. Name it as a sink with <c>outbox.SendToModules&lt;TContext&gt;()</c>, and map the inbox
+    /// table with <c>modelBuilder.AddDomainEventInbox()</c>.
+    /// </summary>
+    public static IServiceCollection AddModuleIntegrationEvents<TContext>(this IServiceCollection services) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.AddDomainEventInbox<TContext>();
+        services.TryAddScoped<ModuleIntegrationEventSink<TContext>>();
         return services;
     }
 

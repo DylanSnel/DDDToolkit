@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.Interfaces;
 
 namespace DDDToolkit.EntityFramework.Options;
@@ -59,6 +60,34 @@ public sealed class DDDEntityFrameworkOptions
 
     /// <summary>Clock used for outbox timestamps. Replace it in tests.</summary>
     public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
+
+    /// <summary>
+    /// Every payload shape this process can read back, keyed by published name and version, plus the
+    /// upcasters between them. Both halves use it: the outbox processor when it reads a stored row, and
+    /// the inbox when a consumer reads a delivered message.
+    /// <para>
+    /// It sits here rather than on <see cref="OutboxOptions"/> because a module that only consumes never
+    /// calls <see cref="UseOutbox"/> and still has to read other people's payloads.
+    /// </para>
+    /// </summary>
+    public IntegrationEventContractRegistry Contracts { get; } = new();
+
+    /// <summary>
+    /// Configures <see cref="Contracts"/>: which payload shapes this process can read, and how an old
+    /// one becomes the current one.
+    /// <code>
+    /// options.MapIntegrationEvents(contracts => contracts
+    ///     .RegisterFromAssemblyContaining&lt;OrderPlacedV2&gt;()
+    ///     .UpcastFrom&lt;OrderPlacedV1, OrderPlacedV2&gt;(v1 =&gt; new OrderPlacedV2(v1.OrderId, v1.Total, "EUR")));
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is null.</exception>
+    public DDDEntityFrameworkOptions MapIntegrationEvents(Action<IntegrationEventContractRegistry> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        configure(Contracts);
+        return this;
+    }
 
     /// <summary>
     /// Delivers events by invoking <paramref name="dispatcher"/> with the scoped application service

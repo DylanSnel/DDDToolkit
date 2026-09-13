@@ -1,4 +1,5 @@
 using DDDToolkit.BaseTypes;
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,7 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
 {
     private readonly TContext _context;
     private readonly TimeProvider _timeProvider;
+    private readonly IntegrationEventContractRegistry _contracts;
     private readonly ILogger _logger;
 
     /// <summary>Creates an inbox over the (scoped) <paramref name="context"/>.</summary>
@@ -51,8 +53,15 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _timeProvider = options?.TimeProvider ?? TimeProvider.System;
+        _contracts = options?.Contracts ?? new IntegrationEventContractRegistry();
         _logger = logger ?? NullLogger<DomainEventInbox<TContext>>.Instance;
     }
+
+    /// <summary>
+    /// The payload shapes this side can read, and the upcasters between them. The typed
+    /// <see cref="ExecuteOnceAsync{TContract}"/> reads through it.
+    /// </summary>
+    public IntegrationEventContractRegistry Contracts => _contracts;
 
     /// <summary>Whether <paramref name="consumer"/> has already applied <paramref name="messageId"/>.</summary>
     public Task<bool> HasProcessedAsync(Guid messageId, string consumer, CancellationToken cancellationToken = default)
@@ -80,6 +89,41 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
         ArgumentNullException.ThrowIfNull(handler);
 
         return ExecuteOnceAsync(message.MessageId, consumer, token => handler(message, token), message.Name, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads <paramref name="message"/> as <typeparamref name="TContract"/> and runs
+    /// <paramref name="handler"/> for it unless <paramref name="consumer"/> already applied it.
+    /// <para>
+    /// The payload is resolved from the message's name <em>and version</em> and then upcast, so a
+    /// message written before a deployment arrives as the shape this code was written against. That is
+    /// the point of applying upcasters on read: the sender cannot rewrite what it already sent, so the
+    /// reader has to be able to catch up. Register the shapes with
+    /// <c>options.MapIntegrationEvents(...)</c>.
+    /// </para>
+    /// <code>
+    /// await inbox.ExecuteOnceAsync&lt;OrderPlacedV2&gt;(message, "billing.invoicer", (order, received, token) =>
+    /// {
+    ///     context.Invoices.Add(new Invoice(order.OrderId, order.Total));
+    ///     return Task.CompletedTask;
+    /// });
+    /// </code>
+    /// </summary>
+    /// <returns><see langword="true"/> when the handler ran, <see langword="false"/> when the message was a repeat.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="message"/> or <paramref name="handler"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="consumer"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">Nothing is registered under the message's name and version, or the upcasters do not end at <typeparamref name="TContract"/>.</exception>
+    public Task<bool> ExecuteOnceAsync<TContract>(IntegrationEventMessage message, string consumer, Func<TContract, IntegrationEventMessage, CancellationToken, Task> handler, CancellationToken cancellationToken = default)
+        where TContract : class
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(handler);
+
+        // Read before the "already applied" check so a payload this side cannot read is an error rather
+        // than a message quietly marked as done.
+        var contract = _contracts.Read<TContract>(message);
+
+        return ExecuteOnceAsync(message.MessageId, consumer, token => handler(contract, message, token), message.Name, cancellationToken);
     }
 
     /// <summary>
