@@ -1,42 +1,50 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System.Reflection;
 
 namespace DDDToolkit.NewtonSoft.Json.Resolver;
+
+/// <summary>
+/// Contract resolver for domain types. On value objects, entities and ids it
+/// <list type="bullet">
+/// <item>skips every member marked <c>[Internal]</c> - the bookkeeping of the base types
+/// (<c>IsValid</c>, <c>IsValidated</c>, an aggregate's <c>DomainEvents</c>) is not part of the document;</item>
+/// <item>and lets the rest be written back through a non-public setter, which is how domain types keep
+/// their state private while still being deserializable.</item>
+/// </list>
+/// Struct ids are left alone: they are immutable and their converter replaces them wholesale, so promoting
+/// a setter on them would only ever write to a copy.
+/// </summary>
 public class DDDContractResolver : DefaultContractResolver
 {
-    private readonly List<Type> _dddTypes = [typeof(IValueObject), typeof(IEntity)];
+    private static readonly Type[] DomainTypes = [typeof(IValueObject), typeof(IEntity), typeof(IEntityId)];
 
+    /// <inheritdoc />
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
     {
+        ArgumentNullException.ThrowIfNull(member);
+
         var property = base.CreateProperty(member, memberSerialization);
 
-        // Check if the declaring type implements IValueObject
-        var implementsIValueObject = _dddTypes.Any(x => x.IsAssignableFrom(property.DeclaringType));
-
-        if (implementsIValueObject)
+        var declaringType = property.DeclaringType;
+        if (declaringType is null || !Array.Exists(DomainTypes, domainType => domainType.IsAssignableFrom(declaringType)))
         {
-            // Check for the InternalAttribute to ignore the property
-            var hasInternalAttribute = member.GetCustomAttributes(typeof(InternalAttribute), true).Any();
-            if (hasInternalAttribute)
-            {
-                property.Ignored = true; // Ignore properties with InternalAttribute
-            }
-            else
-            {
-                // Enable deserialization for protected/internal/private setters if they don't have the InternalAttribute
-                if (!property.Writable)
-                {
-                    var propertyInfo = member as PropertyInfo;
-                    var hasNonPublicSetter = propertyInfo?.GetSetMethod(true) != null;
-                    if (hasNonPublicSetter)
-                    {
-                        property.Writable = true;
-                    }
-                }
-            }
+            return property;
+        }
+
+        if (member.GetCustomAttributes(typeof(InternalAttribute), inherit: true).Length != 0)
+        {
+            property.Ignored = true;
+            return property;
+        }
+
+        // Enable deserialization through protected/internal/private setters. Never for value types: the
+        // setter would run against a boxed copy and the write would be lost.
+        if (!property.Writable && !declaringType.IsValueType && member is PropertyInfo propertyInfo && propertyInfo.GetSetMethod(nonPublic: true) is not null)
+        {
+            property.Writable = true;
         }
 
         return property;
