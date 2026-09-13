@@ -256,6 +256,29 @@ public class ImplicitEntityIdTests
     }
 
     [Fact]
+    public void An_internal_aggregate_gets_an_internal_id()
+    {
+        // The id takes the entity's accessibility: an id nobody outside the assembly can name is of no
+        // use to an aggregate nobody outside the assembly can name either.
+        var result = GeneratorTestHost.Create(Preamble +
+            """
+            [AggregateRoot<Guid>("ORD")]
+            internal partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """)
+            .WithEntityFramework()
+            .WithHotChocolate()
+            .WithModule("Sales")
+            .RunCoreAnd([.. GeneratorTestHost.EntityFrameworkGenerators(), .. GeneratorTestHost.HotChocolateGenerators()]);
+
+        result.ShouldCompile();
+        result.ShouldContain("Sample.OrderId.g.cs", "internal readonly partial record struct OrderId");
+        result.Emit().Type("Sample.OrderId").IsPublic.Should().BeFalse();
+    }
+
+    [Fact]
     public void Two_entities_in_one_namespace_get_two_distinct_ids()
     {
         var result = GeneratorTestHost.Create(Preamble +
