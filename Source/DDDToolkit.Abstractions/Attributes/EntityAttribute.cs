@@ -1,16 +1,25 @@
-﻿#nullable enable
-using DDDToolkit.Abstractions.Interfaces;
 using System.ComponentModel;
+using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Abstractions.Attributes;
 
-[AttributeUsage(AttributeTargets.Class)]
+/// <summary>
+/// Marks a child entity identified by a <typeparamref name="TType"/>: an object with identity that
+/// belongs to exactly one aggregate. Apply to a <c>partial class</c>.
+/// </summary>
+/// <remarks>
+/// Records and structs are accepted by the attribute so that applying it to one reports DDD00002,
+/// which explains the requirement, instead of the compiler's generic "attribute is not valid on this
+/// declaration type".
+/// </remarks>
+#pragma warning disable S2326 // Unused type parameters should be removed (read by the source generator).
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public class EntityAttribute<TType> : EntityAttribute where TType : IEntityId
+#pragma warning restore S2326
 {
-
 }
 
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 [EditorBrowsable(EditorBrowsableState.Never)]
 public abstract class EntityAttribute : Attribute
 {

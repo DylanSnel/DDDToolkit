@@ -1,0 +1,163 @@
+# Identifiers
+
+A strongly typed identifier stops you passing a customer id where an order id belongs. `[EntityId<T>]`
+generates one from a single declaration.
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+```
+
+## Struct or record
+
+Both are supported and they differ in one meaningful way.
+
+| | `readonly partial record struct` | `partial record` |
+|---|---|---|
+| Allocation | None. The id is its value. | One object per id on the heap. |
+| Base type | None. Implements `IEntityId<TValue>`. | Derives from `EntityId<TValue>`. |
+| Absent value | `default`, exposed as `Empty`/`IsEmpty` | `null` |
+| Always-valid twin | No | Yes, `Valid<Name>` |
+| Inheritance | Not possible | Possible |
+
+**Prefer the struct.** An identifier is a value, and the struct form is what `readonly record struct`
+exists for. A `Guid`-based struct id is sixteen bytes, the same as the `Guid` it wraps; the record
+form adds a reference, an object header and a dereference on every read, and allocates once per row
+you load. In a list of ten thousand ids that is one contiguous block versus ten thousand small
+objects.
+
+Reach for `partial record` only when you need inheritance or the always-valid twin. Neither is common
+for identifiers: validation belongs to value objects, and an id is either well-formed or it is not.
+
+Entity Framework maps both forms through a generated value converter, so the struct form costs
+nothing in persistence. It converts straight to the provider type without ever materialising an
+object.
+
+## What the struct form generates
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+```
+
+```csharp
+public const string IdPrefix = "ORD";
+public Guid Value { get; }
+public OrderId(Guid value);
+
+public static OrderId Empty { get; }          // default
+public bool IsEmpty { get; }
+
+public static OrderId CreateUnique();         // Guid only
+public static OrderId CreateSequential();     // Guid only, version 7, index friendly
+
+public override string ToString();            // "ORD_2f1c..."
+public static OrderId Parse(string input);    // prefix optional
+public static bool TryParse(string? input, out OrderId result);
+
+public int CompareTo(OrderId other);
+public static explicit operator Guid(OrderId id);
+public static explicit operator OrderId(Guid value);
+```
+
+The type implements `IEntityId<Guid>`, `IComparable<OrderId>` and `IParsable<OrderId>`, and carries a
+`[JsonConverter]` pointing at a generated nested converter, so `System.Text.Json` writes it as the
+bare value and reads it back. Record struct equality comes from the language.
+
+Conversions are explicit on purpose. An implicit conversion would undo the type safety you asked for
+by letting a raw `Guid` flow in wherever an `OrderId` is expected.
+
+## Prefixes
+
+The optional first argument prefixes the textual form:
+
+```csharp
+[EntityId<Guid>("ORD")]     // ToString() → "ORD_2f1c8e9a-..."
+[EntityId<Guid>]            // ToString() → "2f1c8e9a-..."
+```
+
+`Parse` and `TryParse` accept the text with or without the prefix, so an id that crossed a system
+boundary in either shape still round trips. The prefix is exposed as the `IdPrefix` constant.
+
+Prefixes are for humans reading logs, URLs and support tickets. The stored value is the underlying
+`Guid`; the prefix is not persisted.
+
+## Parsing
+
+`Parse` and `TryParse` are generated whenever the wrapped type can be parsed: `string`, or any type
+with a static `TryParse(string, IFormatProvider, out T)`. That covers the numeric types, `Guid`,
+`DateTime`, `DateOnly` and friends. Parsing uses the invariant culture, so an id written on one
+machine reads back on another.
+
+Wrap a type without such a method and the identifier still generates, just without the parsing
+members and without `IParsable<T>`.
+
+```csharp
+var id = OrderId.Parse("ORD_2f1c8e9a-...");        // throws FormatException when malformed
+if (OrderId.TryParse(candidate, out var parsed))   // false when malformed or null
+{
+}
+```
+
+Because the struct form implements `IParsable<T>`, it also works with generic code and with ASP.NET
+Core minimal API route and query binding, which binds through `IParsable<T>` and `TryParse`. MVC
+controllers bind through `TypeConverter` instead, so a route parameter typed as an identifier there
+still needs a converter of its own.
+
+## Creating identifiers
+
+```csharp
+var id = OrderId.CreateUnique();      // Guid.NewGuid()
+var id = OrderId.CreateSequential();  // Guid.CreateVersion7(), .NET 9 and later
+```
+
+Prefer `CreateSequential` for anything you store. Version 7 identifiers embed a timestamp and sort
+roughly in creation order, which keeps database indexes from fragmenting the way random identifiers
+do. Both are generated only for `Guid`; for other value types you construct the id yourself.
+
+## The empty value
+
+A struct has no null, so `default(OrderId)` exists and wraps `Guid.Empty`. The generator makes that
+explicit rather than leaving it as a trap:
+
+```csharp
+public static OrderId Empty { get; }
+public bool IsEmpty { get; }
+```
+
+Guard on `IsEmpty` where a reference id would have been null-checked. Where you genuinely want an
+optional id, use `OrderId?`; it stays off the heap.
+
+## The record form
+
+```csharp
+[EntityId<Guid>("CUST")]
+public partial record CustomerId
+{
+    public static CustomerId Create(Guid value) => new(value);
+}
+```
+
+This derives from `EntityId<Guid>`, which supplies `Value`, equality over the value, and the prefixed
+`ToString`. The generator adds the constructors, `Parse`/`TryParse`, `CreateUnique` for `Guid`, and a
+`ValidCustomerId` twin reachable through `ToValid()`.
+
+The constructors are `protected`, so a public factory like `Create` above is the usual pattern.
+
+## Column length
+
+```csharp
+[EntityId<string>(Prefix: "SKU", ColumnLength: 32)]
+public readonly partial record struct Sku;
+```
+
+`ColumnLength` flows into the generated Entity Framework configuration as `HaveMaxLength`. It has no
+effect on validation and none at all without the Entity Framework package.
+
+## Requirements
+
+The declaration must be `partial` and must be a record. A plain `class` or `struct` carrying
+`[EntityId<T>]` reports [DDD00003](diagnostics.md#ddd00003). A record struct that is not `readonly`
+reports [DDD00004](diagnostics.md#ddd00004) as a warning and still generates; making it readonly
+prevents mutation and avoids defensive copies. A sealed record reports
+[DDD00013](diagnostics.md#ddd00013), because the always-valid twin has to derive from it.

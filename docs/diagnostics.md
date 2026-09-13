@@ -1,0 +1,235 @@
+# Diagnostics
+
+A source generator that produces nothing when it is misused is the hardest kind of bug to find: the
+type looks annotated and behaves like a plain class. Every misuse below reports a diagnostic instead.
+
+| Id | Severity | Meaning |
+|---|---|---|
+| [DDD00001](#ddd00001) | Error | Value objects must be records |
+| [DDD00002](#ddd00002) | Error | Entities must be classes |
+| [DDD00003](#ddd00003) | Error | Entity ids must be records |
+| [DDD00004](#ddd00004) | Warning | Entity id structs should be readonly |
+| [DDD00005](#ddd00005) | Error | DDDToolkit types must be partial |
+| [DDD00010](#ddd00010) | Error | Value object properties must use protected setters |
+| [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
+| [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
+| [DDD00020](#ddd00020) | Error | Generated collection properties must be get-only |
+
+---
+
+## DDD00001
+
+**Value objects must be records.**
+
+```csharp
+[ValueObject]
+public partial class Address { }        // DDD00001
+```
+
+`[ValueObject]` and `[SingleValueObject<T>]` generate structural equality members and an always-valid
+twin that derives from your type. Both require a reference record.
+
+```csharp
+[ValueObject]
+public partial record Address { }
+```
+
+Nothing is generated for the type until it is a record, so expect follow-on errors about missing
+members until you fix this one.
+
+---
+
+## DDD00002
+
+**Entities must be classes.**
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial record Order { }         // DDD00002
+```
+
+Entities have identity, not value semantics, and derive from a generated base class. A record would
+give you value equality across all properties, which is wrong for an entity: an order whose status
+changed is still the same order.
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order { }
+```
+
+---
+
+## DDD00003
+
+**Entity ids must be records.**
+
+```csharp
+[EntityId<Guid>]
+public partial class OrderId { }        // DDD00003
+```
+
+Identifiers rely on record equality. Use a record struct for an allocation-free id, or a record class
+when you need inheritance or the always-valid twin:
+
+```csharp
+[EntityId<Guid>]
+public readonly partial record struct OrderId;
+
+[EntityId<Guid>]
+public partial record OrderId;
+```
+
+See [Identifiers](identifiers.md) for which to choose.
+
+---
+
+## DDD00004
+
+**Entity id structs should be readonly.**
+
+```csharp
+[EntityId<Guid>]
+public partial record struct OrderId;   // DDD00004, generation still happens
+```
+
+A warning, not an error: the identifier is generated either way. Adding `readonly` states that the id
+cannot be mutated after construction and lets the compiler skip defensive copies when the struct is
+passed around.
+
+```csharp
+[EntityId<Guid>]
+public readonly partial record struct OrderId;
+```
+
+---
+
+## DDD00005
+
+**DDDToolkit types must be partial.**
+
+```csharp
+[AggregateRoot<OrderId>]
+public class Order { }                  // DDD00005
+```
+
+The generator adds a second declaration of your type, which requires `partial`. Add the keyword:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order { }
+```
+
+---
+
+## DDD00010
+
+**Value object properties must use protected setters.**
+
+```csharp
+[ValueObject]
+public partial record Address
+{
+    public string City { get; init; }   // DDD00010
+}
+```
+
+A record with a publicly writable property can be cloned with `with` into a state that never passed
+validation:
+
+```csharp
+var invalid = address with { City = "" };
+```
+
+Making the setter `protected` keeps `with` available inside the type and its always-valid twin while
+closing it to callers:
+
+```csharp
+public string City { get; protected init; }
+```
+
+---
+
+## DDD00011
+
+**Value object properties must use init setters.**
+
+```csharp
+[ValueObject]
+public partial record Address
+{
+    public string City { get; protected set; }   // DDD00011
+}
+```
+
+A non-init setter lets any deriving type change the value after construction. Value objects are
+immutable, so the setter must be `init`:
+
+```csharp
+public string City { get; protected init; }
+```
+
+DDD00010 and DDD00011 are separate rules and a property with a plain `public set` reports both. The
+fix for both is `protected init`.
+
+---
+
+## DDD00013
+
+**Value objects cannot be sealed.**
+
+```csharp
+[SingleValueObject<string>]
+public sealed partial record EmailAddress { }   // DDD00013
+```
+
+The generator emits `ValidEmailAddress`, which derives from `EmailAddress`. A sealed record cannot be
+derived from, so the twin cannot exist. Remove `sealed`.
+
+Record structs are never affected: they are implicitly sealed but get no twin, since a struct cannot
+be derived from at all.
+
+---
+
+## DDD00020
+
+**Generated collection properties must be get-only.**
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public partial IReadOnlyList<OrderLine> Lines { get; set; }   // DDD00020
+}
+```
+
+The generator implements the property as a read-only view over a private backing field. A setter
+would let a caller replace the whole collection and bypass the aggregate's invariants, which is the
+thing the read-only view exists to prevent.
+
+```csharp
+public partial IReadOnlyList<OrderLine> Lines { get; }
+```
+
+Mutate through the generated field instead:
+
+```csharp
+public void AddLine(OrderLine line) => _lines.Add(line);
+```
+
+See [Entities and aggregates](entities-and-aggregates.md#read-only-collections).
+
+---
+
+## Nothing was generated and there is no diagnostic
+
+Check, in order:
+
+1. **The generator package is referenced.** `DDDToolkit` brings the core generators; the Entity
+   Framework, FluentValidation and HotChocolate generators come with their own packages.
+2. **The type is `partial`** and the attribute is the generic one, `[EntityId<Guid>]` rather than a
+   hand-written attribute with the same name.
+3. **The build output**, with `EmitCompilerGeneratedFiles` turned on, as described in
+   [Getting started](getting-started.md#see-the-generated-code).
+
+If a generator throws, the compiler reports it as CS8785 or CS8784 rather than as a DDD diagnostic.
+That is a bug in the toolkit; please report it with the declaration that triggered it.
