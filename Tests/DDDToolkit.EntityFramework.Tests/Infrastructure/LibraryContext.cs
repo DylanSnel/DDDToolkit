@@ -1,4 +1,5 @@
 using DDDToolkit.EntityFramework.Conventions;
+using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Tests.Converters;
 using DDDToolkit.EntityFramework.Tests.Domain;
@@ -21,9 +22,12 @@ public class LibraryContext(DbContextOptions<LibraryContext> options) : DbContex
 
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
+    public DbSet<InboxMessage> Inbox => Set<InboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.AddDomainEventOutbox();
+        modelBuilder.AddDomainEventInbox();
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
