@@ -61,6 +61,7 @@ public sealed class GeneratorTestHost
     private readonly List<(string Path, string Text)> _sources = [];
     private readonly List<PortableExecutableReference> _extraReferences = [];
     private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal);
+    private readonly List<string> _noWarn = [];
     private string _assemblyName = DefaultAssemblyName;
 
     private GeneratorTestHost()
@@ -107,6 +108,18 @@ public sealed class GeneratorTestHost
         return this;
     }
 
+    /// <summary>
+    /// Suppresses these diagnostic ids the way an MSBuild <c>&lt;NoWarn&gt;</c> does, by putting them in the
+    /// compilation's specific diagnostic options. That is the one route that reaches a source generator's
+    /// diagnostics: a <c>#pragma warning disable</c> cannot, because these diagnostics carry a rebuilt
+    /// location with no syntax tree for the compiler to match the pragma against.
+    /// </summary>
+    public GeneratorTestHost WithNoWarn(params string[] diagnosticIds)
+    {
+        _noWarn.AddRange(diagnosticIds);
+        return this;
+    }
+
     /// <summary>Sets <c>build_property.DDD_Module</c>, the MSBuild property that names the generated extension methods.</summary>
     public GeneratorTestHost WithModule(string moduleName)
     {
@@ -125,6 +138,32 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithEntityFrameworkAbstractions()
     {
         _extraReferences.Add(ReferenceSets.EntityFrameworkAbstractions);
+        return this;
+    }
+
+    /// <summary>
+    /// Compiles another snippet into an assembly of its own, generators and all, and references it. Use it
+    /// to put a DDDToolkit type behind an assembly boundary, where the generators see it through metadata
+    /// rather than through source: attributes survive that trip, declaration syntax does not.
+    /// </summary>
+    public GeneratorTestHost WithReferencedAssembly(string source, string assemblyName = "DDDToolkit.Sample.Referenced")
+    {
+        var other = Create(source, assemblyName + ".cs").WithAssemblyName(assemblyName);
+        other._extraReferences.AddRange(_extraReferences);
+
+        var outcome = other.RunCore();
+        outcome.ShouldCompile();
+
+        using var stream = new MemoryStream();
+        var emit = outcome.OutputCompilation.Emit(stream);
+        if (!emit.Success)
+        {
+            throw new InvalidOperationException(
+                $"The referenced assembly '{assemblyName}' did not emit:\n"
+                + string.Join("\n", emit.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)));
+        }
+
+        _extraReferences.Add(MetadataReference.CreateFromImage(stream.ToArray()));
         return this;
     }
 
@@ -155,11 +194,14 @@ public sealed class GeneratorTestHost
             .Select(source => CSharpSyntaxTree.ParseText(SourceText.From(source.Text, System.Text.Encoding.UTF8), parseOptions, source.Path))
             .ToImmutableArray();
 
-        var compilation = CSharpCompilation.Create(
-            _assemblyName,
-            trees,
-            References,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+        var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable);
+        if (_noWarn.Count > 0)
+        {
+            options = options.WithSpecificDiagnosticOptions(
+                _noWarn.ToImmutableDictionary(id => id, _ => ReportDiagnostic.Suppress, StringComparer.Ordinal));
+        }
+
+        var compilation = CSharpCompilation.Create(_assemblyName, trees, References, options);
 
         var driver = CreateDriver(generators, parseOptions);
         return GeneratorRunOutcome.Run(driver, compilation, parseOptions, this);

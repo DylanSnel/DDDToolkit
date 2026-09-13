@@ -18,3 +18,4 @@ DDD00010 | DDDToolkit.ValueObjects | Error | Value object properties must use pr
 DDD00011 | DDDToolkit.ValueObjects | Error | Value object properties must use init setters
 DDD00013 | DDDToolkit.ValueObjects | Error | Value objects cannot be sealed
 DDD00020 | DDDToolkit.Entities | Error | Generated collection properties must be get-only
+DDD00021 | DDDToolkit.Entities | Warning | Reference another aggregate by its id

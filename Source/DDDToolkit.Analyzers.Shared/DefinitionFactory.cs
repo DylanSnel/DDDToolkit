@@ -244,7 +244,8 @@ internal static class DefinitionFactory
         // the author with nothing but a CS8785 about a crashed generator. Refuse from both paths so
         // nothing is generated, but report from the aggregate-root path alone so the author sees the
         // complaint exactly once.
-        if (HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute))
+        var conflictingAttributes = HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute);
+        if (conflictingAttributes)
         {
             if (isAggregateRoot)
             {
@@ -252,6 +253,12 @@ internal static class DefinitionFactory
             }
 
             canGenerate = false;
+        }
+        else
+        {
+            // Skipped for a class carrying both attributes: it is reported already, nothing is generated
+            // for it, and both providers would otherwise report the boundary rule over the same members.
+            AggregateBoundary.Check(symbol, isAggregateRoot, diagnostics, cancellationToken);
         }
 
         var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
@@ -422,7 +429,7 @@ internal static class DefinitionFactory
     /// from another assembly: an id in this compilation gets it from a generator, and a generator
     /// cannot see another generator's output, so the attribute is what identifies those.
     /// </summary>
-    private static bool IsEntityId(ITypeSymbol type)
+    internal static bool IsEntityId(ITypeSymbol type)
     {
         foreach (var attribute in type.GetAttributes())
         {
@@ -646,7 +653,7 @@ internal static class DefinitionFactory
     /// attribute is stripped, because <see cref="ISymbol.Name"/> reports <c>EntityAttribute</c> where the
     /// metadata name is <c>EntityAttribute`1</c>; comparing the two directly never matches.
     /// </summary>
-    private static bool HasAttribute(ISymbol symbol, string metadataName)
+    internal static bool HasAttribute(ISymbol symbol, string metadataName)
     {
         var expectedName = metadataName.Substring(metadataName.LastIndexOf('.') + 1);
         var arity = expectedName.IndexOf('`');
