@@ -15,7 +15,9 @@ The package does four things:
 | Optimistic concurrency | `Version` incremented per save, stale writes turned into `ConcurrencyConflictException` |
 
 It does not give you a repository abstraction or a message bus. `DbContext` is already the unit of
-work, and the delegate that hands events to your publisher is one you write.
+work, and the delegate that hands events to your publisher is one you write. If your publisher is
+[Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator`
+writes that delegate for you; see [In-process dispatch](#in-process-dispatch).
 
 ## Install
 
@@ -29,23 +31,17 @@ targets .NET 10 and Entity Framework Core 10.
 ## Wiring it up
 
 Three calls. One in your service registration, one on the `DbContextOptionsBuilder`, and one or more
-in `ConfigureConventions`. The dispatch delegate below publishes through MediatR, which is only an
-example; it is your delegate and it can do anything.
+in `ConfigureConventions`. `DispatchWithMediator()` is the short way to hand domain events to
+[Mediator](https://github.com/martinothamar/Mediator); it lives in a separate package and is
+optional, because delivery is a delegate you can write yourself. See
+[Domain event delivery](#domain-event-delivery) below for both.
 
 ```csharp
 using DDDToolkit.EntityFramework;
+using DDDToolkit.Mediator;
 
-builder.Services.AddDDDToolkitEntityFramework(options =>
-{
-    options.DispatchInProcess(async (services, events, cancellationToken) =>
-    {
-        var publisher = services.GetRequiredService<IPublisher>();
-        foreach (var domainEvent in events)
-        {
-            await publisher.Publish(domainEvent, cancellationToken);
-        }
-    });
-});
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseSqlite(connectionString)
@@ -259,6 +255,68 @@ were raised.
 With `DispatchInProcess` and no outbox, handlers run inside `SaveChanges`, before the database is
 written.
 
+#### The short way: `DispatchWithMediator()`
+
+`DDDToolkit.Mediator` writes that delegate for you, against
+[Mediator](https://github.com/martinothamar/Mediator):
+
+```bash
+dotnet add package DDDToolkit.Mediator
+```
+
+```csharp
+using DDDToolkit.Mediator;
+
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+```
+
+It resolves `IPublisher` from the scope that owns the saving `DbContext` and publishes each event in
+the order it was raised, awaiting one before starting the next. That is the delegate below plus a
+check that each event is publishable at all, so it serves both delivery modes: add `UseOutbox` and the
+processor delivers through the same call.
+
+Three things are worth knowing before you reach for it.
+
+**Your events have to implement `Mediator.INotification`.** Mediator cannot publish anything else. One
+marker interface for the whole solution is the usual way to say it once:
+
+```csharp
+public interface IOrderingEvent : IDomainEvent, INotification;
+```
+
+An event that does not implement it makes the dispatch throw, naming the event type. It is not
+skipped. By the time the delegate runs the interceptor has already dequeued the event from the
+aggregate, so skipping would destroy it with no row, no log and nothing to retry.
+
+**Register Mediator as scoped when handlers touch the `DbContext`.** Mediator registers every handler
+as a singleton by default, and a singleton cannot depend on a scoped service. The lifetime is read off
+your `AddMediator` call at compile time, so it has to be written there; setting it any other way
+throws at start-up.
+
+**Keep `Mediator.SourceGenerator` in your composition root.** Mediator generates its implementation
+and `AddMediator` into whichever assembly the generator runs in, so reference the generator from the
+project that builds the container and from nowhere else. Handlers in other projects are still
+discovered, as long as those projects are referenced. `DDDToolkit.Mediator` itself references only
+`Mediator.Abstractions`, so it adds no generator to your domain projects.
+
+Mediator also reports `MSG0005` at build time for a notification that no handler handles. That is
+usually the mistake it looks like, but an event you deliberately leave unhandled needs the warning
+suppressed.
+
+#### Why Mediator and not MediatR
+
+MediatR did this job for the first two major versions of the toolkit and does it well. From version 13
+it is commercially licensed. This repository prefers dependencies its users can take for free, so the
+examples and this package target Mediator, which is MIT and source generated rather than reflection
+based. Nothing here stops you using MediatR: write the delegate below and it publishes through
+`IPublisher` exactly as it always did.
+
+#### The delegate
+
+`DispatchWithMediator()` is a convenience. The toolkit core has no mediator dependency and is not
+getting one: in-process delivery is a delegate, and you can write it against any library or none.
+
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options =>
 {
@@ -273,7 +331,7 @@ builder.Services.AddDDDToolkitEntityFramework(options =>
 });
 ```
 
-What you get:
+What you get, either way:
 
 - Anything a handler changes on the same `DbContext` rides the same save, and therefore the same
   transaction. The interceptor calls `DetectChanges` after each round so those changes are seen.
@@ -298,14 +356,7 @@ them afterwards through the same dispatch delegate.
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options =>
 {
-    options.DispatchInProcess(async (services, events, cancellationToken) =>
-    {
-        var publisher = services.GetRequiredService<IPublisher>();
-        foreach (var domainEvent in events)
-        {
-            await publisher.Publish(domainEvent, cancellationToken);
-        }
-    });
+    options.DispatchWithMediator();   // or your own DispatchInProcess(...) delegate
     options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
 });
 

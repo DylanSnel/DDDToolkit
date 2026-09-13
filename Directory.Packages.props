@@ -31,11 +31,19 @@
     <PackageVersion Include="HotChocolate.Types.Scalars" Version="16.6.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Composition roots">
+    <!--
+      Mediator generates its implementation, its handler registrations and AddMediator into the
+      assembly the generator runs in, so this belongs in the composition root only: the example host
+      and the Mediator test project. Source/DDDToolkit.Mediator references the abstractions alone.
+    -->
+    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup Label="Examples">
-    <!-- MediatR 13+ is commercially licensed; the examples stay on the last Apache-2.0 line. -->
-    <PackageVersion Include="MediatR" Version="12.5.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 

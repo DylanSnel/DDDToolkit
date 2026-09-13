@@ -17,7 +17,7 @@ public class UserController(ExampleContext context) : ControllerBase
 {
     /// <summary>
     /// Creates a product and a user with one order. Saving the user raises UserCreated and OrderPlaced,
-    /// which the interceptor dispatches through MediatR before the rows are written (see Program.cs),
+    /// which the interceptor dispatches through Mediator before the rows are written (see Program.cs),
     /// and sets User.Version to 1.
     /// </summary>
     [HttpPost(Name = "CreateUser")]

@@ -63,7 +63,8 @@ public sealed class DDDEntityFrameworkOptions
     /// <para>
     /// Without <see cref="UseOutbox"/> this runs inside <c>SaveChanges</c>, before the database write.
     /// With the outbox it is the delegate the processor delivers through. A typical implementation
-    /// resolves <c>IPublisher</c> (MediatR) and publishes each event.
+    /// resolves the publisher of a mediator library and publishes each event; the DDDToolkit.Mediator
+    /// package ships that delegate ready made as <c>options.DispatchWithMediator()</c>.
     /// </para>
     /// </summary>
     public DDDEntityFrameworkOptions DispatchInProcess(Func<IServiceProvider, IReadOnlyList<IDomainEvent>, CancellationToken, Task> dispatcher)

@@ -53,6 +53,7 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit` | Base types and the core generators. Start here. |
 | `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, optimistic concurrency. |
+| `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
@@ -63,6 +64,12 @@ dotnet add package DDDToolkit
 
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.
+
+The core has no mediator dependency and does not need one: in-process event delivery is a delegate you
+write, and `DDDToolkit.Mediator` only saves you writing it. The examples publish through Mediator
+rather than MediatR because MediatR is commercially licensed from version 13, and this repository
+prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
+[Entity Framework](docs/entity-framework.md#the-delegate) shows the delegate to write for it.
 
 ## What the generators produce
 

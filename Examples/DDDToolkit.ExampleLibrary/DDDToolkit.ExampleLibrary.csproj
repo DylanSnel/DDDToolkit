@@ -10,7 +10,8 @@
 
   <ItemGroup>
     <PackageReference Include="FluentValidation" />
-    <PackageReference Include="MediatR" />
+    <!-- Abstractions only: the Mediator source generator belongs in the composition root, not here. -->
+    <PackageReference Include="Mediator.Abstractions" />
     <PackageReference Include="HotChocolate.Types.Scalars" />
   </ItemGroup>
 

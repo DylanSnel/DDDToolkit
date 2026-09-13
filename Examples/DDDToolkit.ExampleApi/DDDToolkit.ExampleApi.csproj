@@ -18,12 +18,24 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
-    <PackageReference Include="MediatR" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <!--
+    Mediator writes its implementation, its handler registrations and AddMediator into the assembly
+    the generator runs in, so the generator goes in the composition root and nowhere else. Handlers in
+    other projects are still found, as long as those projects are referenced from here.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
   </ItemGroup>
 
   <ItemGroup>
