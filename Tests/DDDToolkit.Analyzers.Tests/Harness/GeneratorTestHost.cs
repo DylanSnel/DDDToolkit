@@ -114,7 +114,11 @@ public sealed class GeneratorTestHost
         return this;
     }
 
-    /// <summary>Sets <c>build_property.DDD_AlwaysValidValueObjects</c>.</summary>
+    /// <summary>
+    /// Sets <c>build_property.DDD_AlwaysValidValueObjects</c>. The option is read into
+    /// <c>DDDOptions</c> but no generator acts on it yet; the setter exists so a test can drive it the
+    /// day one does.
+    /// </summary>
     public GeneratorTestHost WithAlwaysValidValueObjects(bool value = true)
     {
         _globalOptions["build_property.DDD_AlwaysValidValueObjects"] = value ? "true" : "false";
