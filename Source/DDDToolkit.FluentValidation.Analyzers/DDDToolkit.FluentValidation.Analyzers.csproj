@@ -6,6 +6,9 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- The assembly ships in analyzers/dotnet/cs rather than lib/, so there is nothing for a symbol
+         package to describe. Leaving the inherited IncludeSymbols on makes pack fail with NU5017. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <Title>Domain Driven Design Toolkit - FluentValidation Analyzers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation</PackageTags>
     <Description>Source generators for DDDToolkit.FluentValidation: validators for value objects.</Description>

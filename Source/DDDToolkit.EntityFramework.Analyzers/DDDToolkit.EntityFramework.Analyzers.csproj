@@ -6,6 +6,9 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- The assembly ships in analyzers/dotnet/cs rather than lib/, so there is nothing for a symbol
+         package to describe. Leaving the inherited IncludeSymbols on makes pack fail with NU5017. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <Title>Domain Driven Design Toolkit - Entity Framework Analyzers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
     <Description>Source generators for DDDToolkit.EntityFramework: value converters and model configuration.</Description>

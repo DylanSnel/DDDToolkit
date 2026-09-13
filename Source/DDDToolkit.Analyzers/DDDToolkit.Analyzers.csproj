@@ -6,6 +6,9 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- The assembly ships in analyzers/dotnet/cs rather than lib/, so there is nothing for a symbol
+         package to describe. Leaving the inherited IncludeSymbols on makes pack fail with NU5017. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <Title>Domain Driven Design Toolkit - Analyzers</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;generators</PackageTags>
     <Description>Source generators for the DDDToolkit: entities, aggregate roots, entity ids, value objects.</Description>

@@ -33,3 +33,13 @@ jobs:
 
       - name: Test
         run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal
+
+      # Packaging breaks in ways a build cannot show. An analyzer project whose assembly ships in
+      # analyzers/dotnet/cs has no lib/ content, so an inherited IncludeSymbols made pack fail with
+      # NU5017 while the build stayed green. Packing here means the release workflow is never the
+      # first thing to try it.
+      - name: Pack
+        run: |
+          for csproj in $(find ./Source -name '*.csproj'); do
+            dotnet pack "$csproj" --configuration Release --no-build --output nupkgs -p:PackageVersion=0.0.0-ci
+          done
