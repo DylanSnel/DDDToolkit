@@ -306,6 +306,87 @@ is loaded and saved with the aggregate that owns it.
 
 Child entities may declare partial collection properties exactly like roots.
 
+## Reference other aggregates by id
+
+An aggregate owns everything inside it and nothing outside it. Another aggregate is referenced by its
+id:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public CustomerId Buyer { get; private set; }        // an id, not a Customer
+
+    public partial IReadOnlyList<OrderLine> Lines { get; }   // owned, so a reference
+}
+```
+
+Holding the `Customer` itself instead reports [DDD00021](diagnostics.md#ddd00021).
+
+### Why the id is what keeps the boundary
+
+An aggregate is two boundaries at once, and a direct reference breaks both.
+
+It is a **loading boundary**. `context.Orders.Find(id)` should load an order, its lines and nothing
+else. The moment `Order` has a `Customer` property, Entity Framework has a navigation to follow.
+Either it loads the customer with every order, or it leaves a proxy that loads one later, per order,
+in a loop nobody wrote. An `OrderId`-shaped hole in the object graph is a decision you can see: the
+code that needs the customer asks for it, by id, through the customer repository.
+
+It is a **consistency boundary**. Every root carries its own `Version`, and the point of that number
+is that one save changes one aggregate and one version says whether anyone else changed it. With a
+direct reference, `order.Buyer.Rename(...)` inside an order method makes a single `SaveChanges` write
+two roots in one transaction. Now a conflict on the customer rolls back the order, the order's
+version says nothing about the customer, and the two aggregates are one aggregate wearing two names.
+
+The id also survives things a reference does not. It serialises into an event, crosses a queue, goes
+into a URL, and still means the same customer when the two aggregates end up in different services or
+different databases. A reference only works while both objects are in the same unit of work.
+
+None of this is unique to this toolkit; it is the oldest rule in the pattern. What the toolkit adds is
+that it already knows which of your types are aggregate roots and which are ids, so it can check.
+
+### The one reference that is allowed
+
+A child entity may navigate back to the root that owns it:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public partial IReadOnlyList<OrderLine> Lines { get; }
+}
+
+[Entity<OrderLineId>]
+public partial class OrderLine
+{
+    public Order Order { get; private set; } = default!;   // allowed
+}
+```
+
+This one does not widen anything. The line is loaded with the order, saved with the order and cannot
+outlive it, and Entity Framework uses the inverse navigation when it maps the owned type.
+
+The toolkit checks the claim rather than taking it: `Order` has to hold `OrderLine` back, in a
+collection or in a single property, and the reference from the child has to be single valued. A child
+entity holding a root that does not own it reports DDD00021 like anything else.
+
+### When you disagree
+
+DDD00021 is a warning, and nothing about generation changes when it fires. A model that really is
+loaded and saved as one unit, or a legacy mapping you are not ready to unpick, can keep its reference
+by turning the rule off for the project:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);DDD00021</NoWarn>
+</PropertyGroup>
+```
+
+There is no per-member escape hatch. A `#pragma warning disable` cannot suppress a source generator's
+diagnostic, so it is the whole project or nothing. See [DDD00021](diagnostics.md#ddd00021) for why,
+and for the full list of what does and does not report.
+
 ## Requirements
 
 The declaration must be a `partial class`. A record or struct carrying `[Entity<T>]` or
@@ -317,3 +398,7 @@ The type argument is either an identifier, which is any type carrying `[EntityId
 Anything else reports [DDD00008](diagnostics.md#ddd00008). When the toolkit generates the identifier
 and something else already holds the name it would take, that reports
 [DDD00007](diagnostics.md#ddd00007).
+
+A field or property typed as another aggregate root reports
+[DDD00021](diagnostics.md#ddd00021). That one is a warning: the code compiles and everything is still
+generated.

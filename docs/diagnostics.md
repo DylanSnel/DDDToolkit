@@ -18,6 +18,11 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
 | [DDD00020](#ddd00020) | Error | Generated collection properties must be get-only |
+| [DDD00021](#ddd00021) | Warning | Reference another aggregate by its id |
+
+Most of these say the generator could not do what you asked. [DDD00021](#ddd00021) is the odd one
+out: it is a rule about the model rather than about the declaration, nothing stops being generated
+when it fires, and it is a warning you can suppress or turn off.
 
 ---
 
@@ -356,6 +361,102 @@ public void AddLine(OrderLine line) => _lines.Add(line);
 ```
 
 See [Entities and aggregates](entities-and-aggregates.md#read-only-collections).
+
+---
+
+## DDD00021
+
+**Reference another aggregate by its id.**
+
+```csharp
+[AggregateRoot<CustomerId>]
+public partial class Customer { }
+
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public Customer Buyer { get; private set; }              // DDD00021
+    public IReadOnlyList<Customer> Watchers { get; }         // DDD00021
+}
+```
+
+Hold the other aggregate's id instead:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public CustomerId Buyer { get; private set; }
+
+    public void PlaceFor(Customer customer) => Buyer = customer.Id;
+}
+```
+
+Each aggregate is a separate loading and consistency boundary. A field or property typed as another
+root pulls that root inside this one: Entity Framework builds a navigation from it, one save then
+writes two roots, and neither `Version` guards its own aggregate any more. See
+[Entities and aggregates](entities-and-aggregates.md#reference-other-aggregates-by-id) for the longer
+version.
+
+A warning, not an error. The code compiles, everything is still generated, and a team that disagrees
+can turn the rule off for a project:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);DDD00021</NoWarn>
+</PropertyGroup>
+```
+
+`#pragma warning disable DDD00021` around one property does **not** work, and neither does
+`[SuppressMessage]`. That is a limitation of source generators rather than a choice: a generator
+reports its diagnostics with a location rebuilt from a file path and holding no syntax tree, which is
+what keeps the pipeline cacheable, and the compiler has no tree to match a pragma against. `NoWarn` is
+read from the compilation options, so it reaches them. The same is true of every DDD diagnostic; this
+is the only one you are likely to want to switch off.
+
+### What reports and what does not
+
+| | Reports |
+|---|---|
+| A field or property typed as another root | Yes |
+| A collection, array or dictionary holding another root | Yes |
+| A `Customer?` property | Yes |
+| A root holding another instance of its own type, such as `Employee.Manager` | Yes |
+| A child `[Entity<T>]` of the same aggregate | No |
+| A child entity navigating back to the root that owns it | No |
+| A property typed as the other aggregate's id | No |
+| A method parameter or return type | No |
+| A `static` member | No |
+
+Two rows deserve a word.
+
+**The back-navigation.** A child entity may hold the root that owns it, which is the inverse
+navigation Entity Framework wants:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public partial IReadOnlyList<OrderLine> Lines { get; }
+}
+
+[Entity<OrderLineId>]
+public partial class OrderLine
+{
+    public Order Order { get; private set; }      // allowed
+}
+```
+
+The exemption is checked, not assumed: `Order` has to hold `OrderLine` back, through a collection or
+a single property, and the reference from the child has to be single valued. A child entity pointing
+at some other root still reports, because that reference does widen the boundary.
+
+**Methods.** `order.PlaceFor(customer)` takes the other root, reads what it needs and stores nothing,
+which is how two aggregates are meant to cooperate. Entity Framework cannot see a method either, so
+no navigation comes of it. The rule is about what an aggregate *holds*.
+
+The rule reads the declared type of a member, so a property typed as an interface that an aggregate
+root happens to implement is not recognised, and neither is `object`.
 
 ---
 
