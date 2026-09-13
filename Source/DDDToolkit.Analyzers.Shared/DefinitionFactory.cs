@@ -344,14 +344,14 @@ internal static class DefinitionFactory
         }
 
         var idName = Identifiers.IdNameFor(type.Name);
-        if (!IsNameAvailable(entity, idName, type.Accessibility, cancellationToken))
+        if (!IsNameAvailable(entity, idName, type.Accessibility, cancellationToken, out var authorsPart))
         {
             diagnostics.Add(DiagnosticInfo.Create(
                 DiagnosticDescriptors.GeneratedIdNameTaken, type.Location, type.Name, attributeName, idName));
             return new IdResolution(fullyQualified, null, false);
         }
 
-        var implicitId = CreateImplicitEntityId(type, idName, attribute, argument, compilation);
+        var implicitId = CreateImplicitEntityId(type, idName, attribute, argument, compilation, authorsPart);
         return new IdResolution(implicitId.Type.FullyQualifiedName, implicitId, true);
     }
 
@@ -365,7 +365,8 @@ internal static class DefinitionFactory
         string idName,
         AttributeData attribute,
         ITypeSymbol valueType,
-        Compilation compilation)
+        Compilation compilation,
+        INamedTypeSymbol? authorsPart)
     {
         // "global::Shop.Orders.Order" minus "Order" is the scope the id is declared in, nesting included.
         var scope = entity.FullyQualifiedName.Substring(0, entity.FullyQualifiedName.Length - entity.Name.Length);
@@ -392,7 +393,9 @@ internal static class DefinitionFactory
             Value: CreateValueTypeInfo(valueType),
             Prefix: GetArgument(attribute, "Prefix", Identifiers.DefaultIdPrefix),
             ColumnLength: GetArgument(attribute, "ColumnLength", -1),
-            GraphQLSchemaType: null,
+
+            // [GraphQLType<T>] has only one place to go: a part of the id the author wrote themselves.
+            GraphQLSchemaType: authorsPart is null ? null : GetGraphQLSchemaType(authorsPart),
             SystemTextJsonAvailable: HasType(compilation, KnownTypes.StjJsonConverterAttribute),
             IParsableAvailable: HasType(compilation, KnownTypes.IParsable),
             CanGenerate: true,
@@ -441,18 +444,28 @@ internal static class DefinitionFactory
     /// <summary>
     /// Whether the generated id can be declared next to the entity. Anything else of that name in the
     /// same namespace or containing type is a clash, except a partial record struct the author declared
-    /// to add members to the id: the generated declaration is another part of that one.
+    /// to add members to the id: the generated declaration is another part of that one, and is handed
+    /// back through <paramref name="authorsPart"/> so what the author put on it is not lost.
     /// </summary>
-    private static bool IsNameAvailable(INamedTypeSymbol entity, string idName, string accessibility, CancellationToken cancellationToken)
+    private static bool IsNameAvailable(
+        INamedTypeSymbol entity,
+        string idName,
+        string accessibility,
+        CancellationToken cancellationToken,
+        out INamedTypeSymbol? authorsPart)
     {
+        authorsPart = null;
         var scope = (INamespaceOrTypeSymbol?)entity.ContainingType ?? entity.ContainingNamespace;
 
         foreach (var member in scope.GetMembers(idName))
         {
             if (member is not INamedTypeSymbol existing || !IsPartOfTheGeneratedId(existing, accessibility, cancellationToken))
             {
+                authorsPart = null;
                 return false;
             }
+
+            authorsPart = existing;
         }
 
         return true;

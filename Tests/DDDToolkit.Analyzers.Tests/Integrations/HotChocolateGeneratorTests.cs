@@ -172,6 +172,37 @@ public class HotChocolateGeneratorTests
     }
 
     [Fact]
+    public void GraphQLType_on_the_authors_own_part_of_a_generated_id_still_counts()
+    {
+        // The generated part cannot carry the attribute, so the author's part is the only place it can
+        // go. Ignoring it there would make the override silently do nothing.
+        var result = GeneratorTestHost.Create(
+            """
+            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.HotChocolate.Attributes;
+            using System;
+
+            namespace Sample;
+
+            [GraphQLType<HotChocolate.Types.StringType>]
+            public readonly partial record struct OrderId;
+
+            [AggregateRoot<Guid>("ORD")]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """)
+            .WithHotChocolate()
+            .WithModule("Sales")
+            .RunCoreAnd(GeneratorTestHost.HotChocolateGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("BindingExtensions", "builder.BindRuntimeType<global::Sample.OrderId, global::HotChocolate.Types.StringType>();");
+        result.ShouldNotContain("BindingExtensions", "UuidType");
+    }
+
+    [Fact]
     public void GraphQLType_overrides_the_default_scalar_mapping()
     {
         var result = GeneratorTestHost.Create(

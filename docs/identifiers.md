@@ -193,7 +193,8 @@ There is no default prefix. An identifier without one prints its bare value, exa
 prefix ends up in logs, URLs and support tickets, so it is a decision to make once and keep, not
 something that should change the day the class is renamed.
 
-The identifier is `partial`, so you can still add members to it from a file of your own:
+The identifier is `partial`, so you can still add members to it from a file of your own, and
+attributes such as `[GraphQLType<T>]` with them:
 
 ```csharp
 public readonly partial record struct OrderId
@@ -201,6 +202,10 @@ public readonly partial record struct OrderId
     public string Short => Value.ToString("N")[..8];
 }
 ```
+
+Your part needs no accessibility modifier; it takes the one the generated part states. It must be a
+`partial record struct`, and it must not carry `[EntityId<T>]`, because that would declare a second
+identifier of the same name. Either of those reports [DDD00007](diagnostics.md#ddd00007).
 
 ### When not to use it
 
@@ -215,11 +220,8 @@ So: the short form for the identifier nobody talks about, and the explicit form 
 everybody does. Moving from one to the other is a two-line change in either direction, and nothing
 about the generated identifier changes with it.
 
-Two further limits. The identifier cannot carry `[GraphQLType<T>]`, because there is no declaration
-to put it on; declare the identifier explicitly if you need to override its GraphQL scalar. And the
-type argument must be a value type or a `string`. Anything else reports
-[DDD00008](diagnostics.md#ddd00008), and a name that is already taken reports
-[DDD00007](diagnostics.md#ddd00007).
+One limit either way: the type argument must be a value type or a `string`. Anything else reports
+[DDD00008](diagnostics.md#ddd00008).
 
 ## Requirements
 
