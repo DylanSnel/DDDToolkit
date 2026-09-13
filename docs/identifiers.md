@@ -10,28 +10,48 @@ public readonly partial record struct OrderId;
 
 ## Struct or record
 
-Both are supported and they differ in one meaningful way.
+Both are supported. They behave the same and they do not cost the same.
 
 | | `readonly partial record struct` | `partial record` |
 |---|---|---|
-| Allocation | None. The id is its value. | One object per id on the heap. |
+| Allocation | None. The id is its value. | One object per id on the heap, 64 bytes. |
 | Base type | None. Implements `IEntityId<TValue>`. | Derives from `EntityId<TValue>`. |
+| Equality and hashing | Written by the compiler. Free. | Through `GetEqualityComponents`. 144 bytes a comparison. |
 | Absent value | `default`, exposed as `Empty`/`IsEmpty` | `null` |
 | Always-valid twin | No | Yes, `Valid<Name>` |
 | Inheritance | Not possible | Possible |
 
 **Prefer the struct.** An identifier is a value, and the struct form is what `readonly record struct`
-exists for. A `Guid`-based struct id is sixteen bytes, the same as the `Guid` it wraps; the record
-form adds a reference, an object header and a dereference on every read, and allocates once per row
-you load. In a list of ten thousand ids that is one contiguous block versus ten thousand small
-objects.
+exists for. All of this is measured in [Performance](performance.md); the short version follows.
+
+A `Guid`-based struct id is sixteen bytes, the same as the `Guid` it wraps. The record form costs
+sixty-four: an eight-byte reference, an object header, the `Guid`, the prefix and the two validation
+fields every `ValueObject` carries and no identifier ever reads. In a list of ten thousand ids that is
+one contiguous block of 156 KB versus 625 KB spread over ten thousand small objects, and every read
+pays a dereference, which measures at about 20%.
+
+The larger difference is equality. A struct id compares with two instructions; the compiler writes
+them and a benchmark cannot separate the call from an empty method. A record id inherits equality from
+`ValueObject`, which walks `GetEqualityComponents()` through LINQ, so every comparison allocates two
+iterators and boxes the value: 144 bytes and around 30 nanoseconds. A dictionary keyed by a record id
+is 17 times slower than one keyed by a struct id, a `HashSet` 21 times, and scanning a list of ten
+thousand comparing each one is 70 times. If you index anything by identifier in memory, this is the
+reason to choose the struct, not the memory layout.
+
+Entity Framework is **not** a reason either way. Both forms map through a generated value converter to
+the same provider column, and both round trip at the same speed: the database work is orders of
+magnitude larger than the difference between them. The struct form saves one object per row, which
+disappears into what materialising a row costs anyway.
+
+One measurement runs the other way. `ToString()` on a struct id currently allocates 232 bytes against
+the record form's 104, because the generated struct formats its value through
+`Convert.ToString(object, IFormatProvider)` and then concatenates. It is faster in time and worse in
+allocation, it is a fixable detail of the generator rather than anything to do with structs, and it is
+written down here because a page that argues from performance should own the number that disagrees
+with it.
 
 Reach for `partial record` only when you need inheritance or the always-valid twin. Neither is common
 for identifiers: validation belongs to value objects, and an id is either well-formed or it is not.
-
-Entity Framework maps both forms through a generated value converter, so the struct form costs
-nothing in persistence. It converts straight to the provider type without ever materialising an
-object.
 
 ## What the struct form generates
 
@@ -143,6 +163,11 @@ This derives from `EntityId<Guid>`, which supplies `Value`, equality over the va
 `ValidCustomerId` twin reachable through `ToValid()`.
 
 The constructors are `protected`, so a public factory like `Create` above is the usual pattern.
+
+Equality comes from `ValueObject`, which compares `GetEqualityComponents()`. That is a fine default for
+a value object with several parts and an expensive one for an identifier with one: see
+[Struct or record](#struct-or-record) above and [Performance](performance.md#dictionary-and-set-lookup)
+for what it costs when the id is a dictionary key.
 
 ## Column length
 
