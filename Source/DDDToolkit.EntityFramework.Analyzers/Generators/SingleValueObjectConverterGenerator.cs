@@ -10,7 +10,11 @@ namespace DDDToolkit.EntityFramework.Analyzers.Generators;
 /// <summary>
 /// Generates an EF Core <c>ValueConverter</c> for every entity id and single value object (and their
 /// always-valid twins), plus one <c>Add{Module}Converters(this ModelConfigurationBuilder)</c> extension
-/// that registers them all as pre-convention property configuration.
+/// that registers them all as pre-convention configuration: <c>Properties&lt;T&gt;().HaveConversion(...)</c>
+/// for properties and <c>DefaultTypeMapping&lt;T&gt;().HasConversion(...)</c> for everything that is not a
+/// property (query parameters, constants and the element type of primitive collections). EF Core does
+/// not apply the property configuration to collection elements; the DDDToolkit
+/// <c>ReadOnlyCollectionConvention</c> reads the default type mapping instead.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
@@ -86,17 +90,21 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         writer.Line("/// <summary>Registers the generated EF Core value converters of this assembly.</summary>");
         using (writer.Block("public static class ConverterExtensions"))
         {
-            writer.Line("/// <summary>Call from <c>DbContext.ConfigureConventions</c>.</summary>");
+            writer.Line("/// <summary>");
+            writer.Line("/// Call from <c>DbContext.ConfigureConventions</c>. Every entity id and single value object of this assembly is");
+            writer.Line("/// registered twice: <c>Properties&lt;T&gt;()</c> converts properties of the type, <c>DefaultTypeMapping&lt;T&gt;()</c>");
+            writer.Line("/// converts the type where no property is involved (query parameters and constants, and the element type of");
+            writer.Line("/// primitive collections such as a generated <c>IReadOnlyList&lt;T&gt;</c>, which <c>AddDDDToolkitConventions()</c> maps).");
+            writer.Line("/// </summary>");
             using (writer.Block("public static global::Microsoft.EntityFrameworkCore.ModelConfigurationBuilder Add" + moduleName + "Converters(this global::Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)"))
             {
                 foreach (var target in targets.OrderBy(t => t.Type.FullyQualifiedName, System.StringComparer.Ordinal))
                 {
-                    var maxLength = target.ColumnLength > -1 ? ".HaveMaxLength(" + target.ColumnLength + ")" : string.Empty;
-                    writer.Line("modelConfigurationBuilder.Properties<" + target.Type.FullyQualifiedName + ">().HaveConversion<" + target.Type.FullyQualifiedName + "." + target.Type.Name + "Converter>()" + maxLength + ";");
+                    EmitRegistrationLines(writer, target.Type.FullyQualifiedName, target.Type.FullyQualifiedName + "." + target.Type.Name + "Converter", target.ColumnLength);
 
                     if (target.Type.HasValidTwin)
                     {
-                        writer.Line("modelConfigurationBuilder.Properties<" + target.Type.ValidTwinFullyQualifiedName + ">().HaveConversion<" + target.Type.ValidTwinFullyQualifiedName + "." + target.Type.ValidTwinName + "Converter>()" + maxLength + ";");
+                        EmitRegistrationLines(writer, target.Type.ValidTwinFullyQualifiedName, target.Type.ValidTwinFullyQualifiedName + "." + target.Type.ValidTwinName + "Converter", target.ColumnLength);
                     }
                 }
 
@@ -105,6 +113,15 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         }
 
         context.AddSource("ConverterExtensions.g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitRegistrationLines(CodeWriter writer, string type, string converter, int columnLength)
+    {
+        var propertyMaxLength = columnLength > -1 ? ".HaveMaxLength(" + columnLength + ")" : string.Empty;
+        var mappingMaxLength = columnLength > -1 ? ".HasMaxLength(" + columnLength + ")" : string.Empty;
+
+        writer.Line("modelConfigurationBuilder.Properties<" + type + ">().HaveConversion<" + converter + ">()" + propertyMaxLength + ";");
+        writer.Line("modelConfigurationBuilder.DefaultTypeMapping<" + type + ">().HasConversion<" + converter + ">()" + mappingMaxLength + ";");
     }
 
     private sealed record ConverterTarget(TypeDeclarationInfo Type, ValueTypeInfo Value, int ColumnLength);
