@@ -40,6 +40,7 @@ while the outside world sees a read-only list.
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
 | [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery |
 | [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations |
+| [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
 
 ## Packages
