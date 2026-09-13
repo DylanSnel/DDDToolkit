@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Testing</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;testing;domain;events;assertions</PackageTags>
+    <Description>An aggregate testing kit for the DDDToolkit: act on an aggregate and assert exactly which domain events it raised, in order, with their payloads. Framework agnostic, so it works with xunit, NUnit, MSTest, FluentAssertions, Shouldly or none of them.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+</Project>
