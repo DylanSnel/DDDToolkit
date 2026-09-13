@@ -154,6 +154,73 @@ public readonly partial record struct Sku;
 `ColumnLength` flows into the generated Entity Framework configuration as `HaveMaxLength`. It has no
 effect on validation and none at all without the Entity Framework package.
 
+## Letting the entity declare the id
+
+Most identifiers exist only to identify one entity, and declaring them separately says the same thing
+twice. Name the raw value on the entity instead and the toolkit generates the identifier too:
+
+```csharp
+[AggregateRoot<Guid>("ORD")]
+public partial class Order { }          // also generates OrderId
+```
+
+That is the same as writing both of these:
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[AggregateRoot<OrderId>]
+public partial class Order { }
+```
+
+The generated identifier is named after the entity with `Id` appended, so `Order` gets `OrderId` and
+`OrderLine` gets `OrderLineId`. It is a `readonly partial record struct` written by the same emitter
+as an explicit struct identifier, so it has the same members, the same interfaces, the same JSON
+converter, the same Entity Framework value converter and the same GraphQL binding. It lands in the
+same namespace as the entity, or inside the same containing type when the entity is nested.
+`[Entity<T>]` works the same way.
+
+`Prefix` and `ColumnLength` mean what they mean on `[EntityId<T>]`, and can be passed by name:
+
+```csharp
+[AggregateRoot<string>(Prefix: "SKU", ColumnLength: 32)]
+public partial class Product { }
+```
+
+There is no default prefix. An identifier without one prints its bare value, exactly as
+`[EntityId<Guid>]` without a prefix does. The toolkit does not invent one from the type name: a
+prefix ends up in logs, URLs and support tickets, so it is a decision to make once and keep, not
+something that should change the day the class is renamed.
+
+The identifier is `partial`, so you can still add members to it from a file of your own:
+
+```csharp
+public readonly partial record struct OrderId
+{
+    public string Short => Value.ToString("N")[..8];
+}
+```
+
+### When not to use it
+
+The identifier has no declaration site of its own. There is no line to put the cursor on, nothing to
+"go to definition" on except generated code, and nothing to hang XML documentation from. That is a
+fair trade for an identifier only its own aggregate ever mentions, and a bad one for an identifier
+that other aggregates, DTOs, API contracts or message schemas refer to. Those are types in their own
+right, read by people who never open the aggregate, and they deserve a declaration you can find and
+comment on.
+
+So: the short form for the identifier nobody talks about, and the explicit form for the identifier
+everybody does. Moving from one to the other is a two-line change in either direction, and nothing
+about the generated identifier changes with it.
+
+Two further limits. The identifier cannot carry `[GraphQLType<T>]`, because there is no declaration
+to put it on; declare the identifier explicitly if you need to override its GraphQL scalar. And the
+type argument must be a value type or a `string`. Anything else reports
+[DDD00008](diagnostics.md#ddd00008), and a name that is already taken reports
+[DDD00007](diagnostics.md#ddd00007).
+
 ## Requirements
 
 The declaration must be `partial` and must be a record. A plain `class` or `struct` carrying

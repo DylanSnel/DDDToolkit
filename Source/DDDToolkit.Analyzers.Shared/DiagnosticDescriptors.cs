@@ -65,6 +65,24 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The generated members name the type from places that cannot see a type parameter - an attribute argument and a registration method outside the type - so an open generic cannot be completed this way. Nothing is generated for this type until the type parameters are gone.");
 
+    public static readonly DiagnosticDescriptor GeneratedIdNameTaken = new(
+        id: "DDD00007",
+        title: "The generated identifier name is already taken",
+        messageFormat: "'{0}' is annotated with [{1}] over a raw value, so the toolkit would generate the identifier '{2}', but '{2}' already exists here; write [{1}<{2}>] if that type is the identifier, or rename one of the two",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The identifier generated from an entity declaration is named after the entity, with 'Id' appended. Another type of that name in the same namespace or containing type would be a duplicate definition. The generator can add members to an existing 'partial record struct' of that name, so an author can extend the identifier; anything else is reported here. Nothing is generated for this entity until the clash is gone.");
+
+    public static readonly DiagnosticDescriptor UnsupportedIdTypeArgument = new(
+        id: "DDD00008",
+        title: "The identifier type argument is not supported",
+        messageFormat: "'{0}' is annotated with [{1}] over '{2}', which is neither a strongly typed identifier nor a value the toolkit can generate one from; use a type marked with [EntityId<T>], or a value type or string",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The type argument names either the identifier itself (a type marked with [EntityId<T>], or any type implementing IEntityId) or the raw value a generated identifier should wrap. A reference type other than string is neither: it can be null, it is not copied by value, and an identifier has to be both. Nothing is generated for this entity until the type argument is one of the two.");
+
     public static readonly DiagnosticDescriptor UseProtectedSetters = new(
         id: "DDD00010",
         title: "Value object properties must use protected setters",

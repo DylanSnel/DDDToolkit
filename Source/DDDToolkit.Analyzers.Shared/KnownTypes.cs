@@ -10,6 +10,13 @@ internal static class KnownTypes
     public const string AttributesNamespace = "DDDToolkit.Abstractions.Attributes";
 
     public const string EntityIdAttribute = AttributesNamespace + ".EntityIdAttribute`1";
+
+    /// <summary>Simple name of the entity id attribute, for matching it on a type the generator did not start from.</summary>
+    public const string EntityIdAttributeName = "EntityIdAttribute";
+
+    /// <summary>The marker interface every strongly typed id implements (metadata name of the non-generic one).</summary>
+    public const string EntityIdInterface = "DDDToolkit.Abstractions.Interfaces.IEntityId";
+
     public const string SingleValueObjectAttribute = AttributesNamespace + ".SingleValueObjectAttribute`1";
     public const string ValueObjectAttribute = AttributesNamespace + ".ValueObjectAttribute";
     public const string EntityAttribute = AttributesNamespace + ".EntityAttribute`1";

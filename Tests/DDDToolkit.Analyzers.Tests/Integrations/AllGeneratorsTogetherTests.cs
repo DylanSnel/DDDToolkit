@@ -71,6 +71,14 @@ public class AllGeneratorsTogetherTests
             }
         }
 
+        [AggregateRoot<Guid>("INV")]
+        public partial class Invoice
+        {
+            public Invoice(InvoiceId id, OrderId order) : base(id) => Order = order;
+
+            public OrderId Order { get; private set; }
+        }
+
         [Entity<OrderId>]
         public partial class Order
         {
@@ -132,6 +140,9 @@ public class AllGeneratorsTogetherTests
         var hintNames = Run().GeneratedSources.Select(source => source.HintName).ToList();
 
         hintNames.Should().Contain("Shop.ProductId.g.cs");
+        hintNames.Should().Contain("Shop.InvoiceId.g.cs", "the id generated from [AggregateRoot<Guid>] is emitted like any other");
+        hintNames.Should().Contain("Shop.InvoiceId.Converter.g.cs");
+        hintNames.Should().Contain("Shop.InvoiceId.HotChocolate.g.cs");
         hintNames.Should().Contain("Shop.User.g.cs");
         hintNames.Should().Contain("Shop.EmailAddress.g.cs");
         hintNames.Should().Contain("Shop.PersonName.g.cs");

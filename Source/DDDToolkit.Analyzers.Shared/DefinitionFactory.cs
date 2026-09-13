@@ -17,6 +17,15 @@ internal static class DefinitionFactory
     private static readonly SymbolDisplayFormat FullyQualifiedWithNullability =
         SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
+    private static readonly HashSet<SyntaxKind> AccessibilityModifiers = new()
+    {
+        SyntaxKind.PublicKeyword,
+        SyntaxKind.InternalKeyword,
+        SyntaxKind.ProtectedKeyword,
+        SyntaxKind.PrivateKeyword,
+        SyntaxKind.FileKeyword,
+    };
+
     private static readonly Dictionary<string, CollectionBacking> CollectionInterfaces = new(StringComparer.Ordinal)
     {
         ["System.Collections.Generic.IReadOnlyList<T>"] = CollectionBacking.List,
@@ -230,7 +239,8 @@ internal static class DefinitionFactory
             canGenerate = false;
         }
 
-        var idType = GetTypeArgument(attribute, compilation).ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
+        canGenerate &= id.Ok;
 
         var collections = new List<CollectionPropertyInfo>();
         foreach (var property in symbol.GetMembers().OfType<IPropertySymbol>())
@@ -281,12 +291,204 @@ internal static class DefinitionFactory
         return new EntityDefinition(
             Type: type,
             IsAggregateRoot: isAggregateRoot,
-            IdType: idType,
+            IdType: id.IdType,
+            ImplicitId: canGenerate ? id.ImplicitId : null,
             Collections: collections.ToEquatableArray(),
             EfBackingFieldAttributeAvailable: HasType(compilation, KnownTypes.EfBackingFieldAttribute),
             ReadOnlySetAvailable: HasType(compilation, KnownTypes.ReadOnlySet),
             CanGenerate: canGenerate,
             Diagnostics: diagnostics.ToEquatableArray());
+    }
+
+    // ------------------------------------------------------------------ the id of an entity
+
+    /// <summary>
+    /// What <c>[Entity&lt;T&gt;]</c> and <c>[AggregateRoot&lt;T&gt;]</c> name with their type argument: either an
+    /// id that already exists, or the raw value an id should wrap, in which case the id is derived here
+    /// and generated alongside the entity.
+    /// </summary>
+    /// <param name="IdType">Fully qualified name of the id, generated or not. What the base class is closed over.</param>
+    /// <param name="ImplicitId">The id to generate, or null when the type argument already was one.</param>
+    /// <param name="Ok">False when the type argument cannot be used at all; a diagnostic was added.</param>
+    private readonly record struct IdResolution(string IdType, EntityIdDefinition? ImplicitId, bool Ok);
+
+    private static IdResolution ResolveId(
+        INamedTypeSymbol entity,
+        TypeDeclarationInfo type,
+        AttributeData attribute,
+        string attributeName,
+        Compilation compilation,
+        List<DiagnosticInfo> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var argument = GetTypeArgumentOrNull(attribute);
+        if (argument is null)
+        {
+            // The attribute names nothing the compiler could bind, which it reports itself. Saying so
+            // twice helps nobody, so stop here without a diagnostic of our own.
+            return new IdResolution("global::System.Object", null, false);
+        }
+
+        var fullyQualified = argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        if (IsEntityId(argument))
+        {
+            return new IdResolution(fullyQualified, null, true);
+        }
+
+        if (!CanBeWrappedInAnId(argument))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.UnsupportedIdTypeArgument, type.Location, type.Name, attributeName, argument.ToDisplayString()));
+            return new IdResolution(fullyQualified, null, false);
+        }
+
+        var idName = Identifiers.IdNameFor(type.Name);
+        if (!IsNameAvailable(entity, idName, type.Accessibility, cancellationToken))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.GeneratedIdNameTaken, type.Location, type.Name, attributeName, idName));
+            return new IdResolution(fullyQualified, null, false);
+        }
+
+        var implicitId = CreateImplicitEntityId(type, idName, attribute, argument, compilation);
+        return new IdResolution(implicitId.Type.FullyQualifiedName, implicitId, true);
+    }
+
+    /// <summary>
+    /// The id derived from an entity declaration: a readonly record struct named after the entity, with
+    /// the same shape an explicitly declared struct id has. The emitter is the same one, so the two
+    /// forms cannot drift apart.
+    /// </summary>
+    private static EntityIdDefinition CreateImplicitEntityId(
+        TypeDeclarationInfo entity,
+        string idName,
+        AttributeData attribute,
+        ITypeSymbol valueType,
+        Compilation compilation)
+    {
+        // "global::Shop.Orders.Order" minus "Order" is the scope the id is declared in, nesting included.
+        var scope = entity.FullyQualifiedName.Substring(0, entity.FullyQualifiedName.Length - entity.Name.Length);
+
+        var type = new TypeDeclarationInfo(
+            Name: idName,
+            Namespace: entity.Namespace,
+            FullyQualifiedName: scope + idName,
+            Accessibility: entity.Accessibility,
+            Kind: DeclarationKind.RecordStruct,
+            IsPartial: true,
+            IsSealed: false,
+            IsReadOnly: true,
+            IsAbstract: false,
+            IsGeneric: false,
+            ContainingTypeHeaders: entity.ContainingTypeHeaders,
+            Location: entity.Location)
+        {
+            IsImplicit = true,
+        };
+
+        return new EntityIdDefinition(
+            Type: type,
+            Value: CreateValueTypeInfo(valueType),
+            Prefix: GetArgument(attribute, "Prefix", Identifiers.DefaultIdPrefix),
+            ColumnLength: GetArgument(attribute, "ColumnLength", -1),
+            GraphQLSchemaType: null,
+            SystemTextJsonAvailable: HasType(compilation, KnownTypes.StjJsonConverterAttribute),
+            IParsableAvailable: HasType(compilation, KnownTypes.IParsable),
+            CanGenerate: true,
+            Diagnostics: EquatableArray<DiagnosticInfo>.Empty);
+    }
+
+    /// <summary>
+    /// Whether the type already is a strongly typed id. The interface is only there for ids that come
+    /// from another assembly: an id in this compilation gets it from a generator, and a generator
+    /// cannot see another generator's output, so the attribute is what identifies those.
+    /// </summary>
+    private static bool IsEntityId(ITypeSymbol type)
+    {
+        foreach (var attribute in type.GetAttributes())
+        {
+            if (attribute.AttributeClass is { } attributeClass
+                && attributeClass.Name == KnownTypes.EntityIdAttributeName
+                && attributeClass.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace)
+            {
+                return true;
+            }
+        }
+
+        return type.AllInterfaces.Any(@interface => @interface.ToDisplayString() == KnownTypes.EntityIdInterface);
+    }
+
+    /// <summary>
+    /// Whether an id can be generated over this value. A string or a value type is copied by value and
+    /// cannot be null, which is what the generated <c>Value</c>, <c>IsEmpty</c> and equality assume. A
+    /// nullable value type is excluded on purpose: an optional id is <c>OrderId?</c>, not an id over
+    /// <c>Guid?</c>.
+    /// </summary>
+    private static bool CanBeWrappedInAnId(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String)
+        {
+            return true;
+        }
+
+        return type.IsValueType
+            && type is not ITypeParameterSymbol
+            && type.TypeKind != TypeKind.Pointer
+            && type.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T;
+    }
+
+    /// <summary>
+    /// Whether the generated id can be declared next to the entity. Anything else of that name in the
+    /// same namespace or containing type is a clash, except a partial record struct the author declared
+    /// to add members to the id: the generated declaration is another part of that one.
+    /// </summary>
+    private static bool IsNameAvailable(INamedTypeSymbol entity, string idName, string accessibility, CancellationToken cancellationToken)
+    {
+        var scope = (INamespaceOrTypeSymbol?)entity.ContainingType ?? entity.ContainingNamespace;
+
+        foreach (var member in scope.GetMembers(idName))
+        {
+            if (member is not INamedTypeSymbol existing || !IsPartOfTheGeneratedId(existing, accessibility, cancellationToken))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPartOfTheGeneratedId(INamedTypeSymbol existing, string accessibility, CancellationToken cancellationToken)
+    {
+        // An id of its own carries [EntityId<T>], and two definitions of one id would collide.
+        if (!existing.IsRecord || !existing.IsValueType || existing.TypeParameters.Length > 0 || IsEntityId(existing))
+        {
+            return false;
+        }
+
+        if (existing.DeclaringSyntaxReferences.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var reference in existing.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax syntax
+                || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+            {
+                return false;
+            }
+
+            // A part without an accessibility modifier takes it from the generated one; a part that
+            // states a different accessibility does not compile (CS0262).
+            var stated = syntax.Modifiers.Any(modifier => AccessibilityModifiers.Contains(modifier.Kind()));
+            if (stated && SyntaxFacts.GetText(existing.DeclaredAccessibility) != accessibility)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // ------------------------------------------------------------------ shared helpers
@@ -360,14 +562,13 @@ internal static class DefinitionFactory
 
     /// <summary>The single type argument of a generic attribute such as [EntityId&lt;Guid&gt;]; object when the attribute is malformed.</summary>
     private static ITypeSymbol GetTypeArgument(AttributeData attribute, Compilation compilation)
-    {
-        if (attribute.AttributeClass is { TypeArguments.Length: > 0 } attributeClass && attributeClass.TypeArguments[0] is not IErrorTypeSymbol)
-        {
-            return attributeClass.TypeArguments[0];
-        }
+        => GetTypeArgumentOrNull(attribute) ?? compilation.GetSpecialType(SpecialType.System_Object);
 
-        return compilation.GetSpecialType(SpecialType.System_Object);
-    }
+    /// <summary>The single type argument of a generic attribute, or null when the compiler could not bind one.</summary>
+    private static ITypeSymbol? GetTypeArgumentOrNull(AttributeData attribute)
+        => attribute.AttributeClass is { TypeArguments.Length: > 0 } attributeClass && attributeClass.TypeArguments[0] is not IErrorTypeSymbol
+            ? attributeClass.TypeArguments[0]
+            : null;
 
     /// <summary>Reads a constructor argument by parameter name (positional or named syntax), falling back to a named property.</summary>
     private static T GetArgument<T>(AttributeData attribute, string parameterName, T defaultValue)
