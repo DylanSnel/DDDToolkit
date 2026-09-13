@@ -59,7 +59,7 @@ public sealed class OutboxTests : IDisposable
         ((IHasDomainEvents)shelf).DomainEvents.Should().BeEmpty();
 
         using var check = _db.CreateLibraryContext();
-        var rows = await check.Outbox.OrderBy(m => m.CreatedAt).ThenBy(m => m.Id).ToListAsync();
+        var rows = await check.Outbox.OrderBy(m => m.CreatedAt).ThenBy(m => m.Id).ToListAsync(TestContext.Current.CancellationToken);
         rows.Should().HaveCount(2);
         rows.Select(r => r.Id).Should().BeEquivalentTo(events.Select(e => e.EventId));
 
@@ -121,7 +121,7 @@ public sealed class OutboxTests : IDisposable
         host.Recorder.OfType<ShelfCreated>().Select(e => e.Name).Should().Equal("First", "Second");
 
         using var check = _db.CreateLibraryContext();
-        var rows = await check.Outbox.ToListAsync();
+        var rows = await check.Outbox.ToListAsync(TestContext.Current.CancellationToken);
         rows.Should().OnlyContain(r => r.ProcessedAt == _clock.GetUtcNow() && r.Attempts == 1 && r.LastError == null);
 
         var again = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
@@ -191,11 +191,11 @@ public sealed class OutboxTests : IDisposable
         host.Recorder.Events.Should().ContainSingle().Which.Should().BeOfType<ShelfCreated>();
 
         using var check = _db.CreateLibraryContext();
-        var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded));
+        var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
         failed.ProcessedAt.Should().BeNull();
         failed.Attempts.Should().Be(1);
         failed.LastError.Should().Contain("BookAdded").And.Contain("RegisterEventsFromAssembly");
-        (await check.Outbox.SingleAsync(m => m.EventName == "shelf.created")).ProcessedAt.Should().NotBeNull();
+        (await check.Outbox.SingleAsync(m => m.EventName == "shelf.created", TestContext.Current.CancellationToken)).ProcessedAt.Should().NotBeNull();
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class OutboxTests : IDisposable
 
         using (var check = _db.CreateLibraryContext())
         {
-            var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded));
+            var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
             failed.ProcessedAt.Should().BeNull();
             failed.Attempts.Should().Be(1);
             failed.LastError.Should().Be("System.InvalidOperationException: mail server down");
@@ -231,7 +231,7 @@ public sealed class OutboxTests : IDisposable
 
         using (var check = _db.CreateLibraryContext())
         {
-            var row = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded));
+            var row = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
             row.ProcessedAt.Should().NotBeNull();
             row.Attempts.Should().Be(2);
             row.LastError.Should().BeNull();
@@ -258,7 +258,7 @@ public sealed class OutboxTests : IDisposable
         }
 
         using var check = _db.CreateLibraryContext();
-        var row = await check.Outbox.SingleAsync();
+        var row = await check.Outbox.SingleAsync(TestContext.Current.CancellationToken);
         row.Attempts.Should().Be(2, "after MaxAttempts the processor skips the message");
         row.ProcessedAt.Should().BeNull();
         row.LastError.Should().Contain("always");
@@ -316,7 +316,7 @@ public sealed class OutboxTests : IDisposable
             await context.SaveChangesAsync();
         });
         await service.StartAsync(CancellationToken.None);
-        await Task.Delay(300);
+        await Task.Delay(300, TestContext.Current.CancellationToken);
         await service.StopAsync(CancellationToken.None);
         host.Recorder.Events.Should().HaveCount(3);
     }
@@ -357,7 +357,7 @@ public sealed class OutboxTests : IDisposable
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<NoOutboxContext>();
-        await context.Database.EnsureCreatedAsync();
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         context.Shelves.Add(NewShelf());
 
         var act = () => context.SaveChangesAsync();

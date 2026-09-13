@@ -78,10 +78,10 @@ public sealed class ExampleContextTests : IDisposable
 
         using (var context = CreateContext(interceptors))
         {
-            await context.Database.EnsureCreatedAsync();
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             context.Products.AddRange(productA, productB);
             context.Users.Add(user);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         user.Version.Should().Be(1);
@@ -90,7 +90,7 @@ public sealed class ExampleContextTests : IDisposable
 
         using (var context = CreateContext(interceptors))
         {
-            var loaded = await context.Users.SingleAsync(u => u.Id == user.Id);
+            var loaded = await context.Users.SingleAsync(u => u.Id == user.Id, TestContext.Current.CancellationToken);
 
             loaded.Name.Should().Be(new PersonName("John", "Doe"));
             loaded.Email.Should().Be(EmailAddress.Create("johndoe@example.com"));
@@ -101,16 +101,16 @@ public sealed class ExampleContextTests : IDisposable
             loaded.Orders.Should().NotBeAssignableTo<List<Order>>();
 
             loaded.Orders.Single(o => o.Id == secondOrder.Id).AddProduct(productA.Id);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             loaded.Version.Should().Be(2, "a change inside an owned order versions the user");
         }
 
         using (var context = CreateContext())
         {
-            var loaded = await context.Users.SingleAsync(u => u.Id == user.Id);
+            var loaded = await context.Users.SingleAsync(u => u.Id == user.Id, TestContext.Current.CancellationToken);
             loaded.Orders.Single(o => o.Id == secondOrder.Id).Products.Should().Equal(productB.Id, productA.Id);
             loaded.Version.Should().Be(2);
-            (await context.Products.CountAsync()).Should().Be(2);
+            (await context.Products.CountAsync(TestContext.Current.CancellationToken)).Should().Be(2);
         }
     }
 }

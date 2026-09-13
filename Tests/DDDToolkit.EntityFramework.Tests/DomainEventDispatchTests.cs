@@ -203,7 +203,7 @@ public sealed class DomainEventDispatchTests : IDisposable
             var context = scope.ServiceProvider.GetRequiredService<LibraryContext>();
             context.Database.EnsureCreated();
             context.Shelves.Add(NewShelf());
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
         received.Should().ContainSingle().Which.Should().BeOfType<ShelfCreated>();
