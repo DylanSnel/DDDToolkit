@@ -52,7 +52,7 @@ public partial class Order { }
 | [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
-| [Results](docs/results.md) | Handling failure without exceptions, and when to throw anyway |
+| [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
 | [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
 
