@@ -56,6 +56,15 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The generator adds a second declaration of the type. Nothing is generated for this type until it is partial.");
 
+    public static readonly DiagnosticDescriptor TypeCannotBeGeneric = new(
+        id: "DDD00006",
+        title: "DDDToolkit types cannot be generic",
+        messageFormat: "'{0}' is annotated with [{1}]; it must not have type parameters, nor be nested in a type that has them",
+        category: Usage,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generated members name the type from places that cannot see a type parameter - an attribute argument and a registration method outside the type - so an open generic cannot be completed this way. Nothing is generated for this type until the type parameters are gone.");
+
     public static readonly DiagnosticDescriptor UseProtectedSetters = new(
         id: "DDD00010",
         title: "Value object properties must use protected setters",

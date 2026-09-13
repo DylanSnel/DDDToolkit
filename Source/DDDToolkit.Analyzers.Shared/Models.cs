@@ -24,6 +24,11 @@ internal sealed record TypeDeclarationInfo(
     bool IsSealed,
     bool IsReadOnly,
     bool IsAbstract,
+    /// <summary>
+    /// True when the type, or any type it is nested in, has type parameters. Either way the generated
+    /// members cannot name it from an attribute argument or from a registration method outside it.
+    /// </summary>
+    bool IsGeneric,
     EquatableArray<string> ContainingTypeHeaders,
     LocationInfo? Location)
 {

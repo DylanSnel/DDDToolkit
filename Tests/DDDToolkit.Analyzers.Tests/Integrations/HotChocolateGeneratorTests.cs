@@ -211,7 +211,10 @@ public class HotChocolateGeneratorTests
     }
 
     /// <summary>A root provider that converts nothing, so only what the generated provider knows can succeed.</summary>
-    private static bool NoRoot(Type source, Type target, out ChangeType? converter)
+    private static bool NoRoot(
+        Type source,
+        Type target,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ChangeType? converter)
     {
         converter = null;
         return false;

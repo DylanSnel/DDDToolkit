@@ -56,6 +56,12 @@ internal static class DefinitionFactory
             canGenerate = false;
         }
 
+        if (type.IsGeneric)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, "EntityId"));
+            canGenerate = false;
+        }
+
         if (type.Kind == DeclarationKind.RecordStruct && !type.IsReadOnly)
         {
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.EntityIdStructShouldBeReadonly, type.Location, type.Name));
@@ -183,6 +189,12 @@ internal static class DefinitionFactory
             canGenerate = false;
         }
 
+        if (type.IsGeneric)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, attributeName));
+            canGenerate = false;
+        }
+
         return canGenerate;
     }
 
@@ -209,6 +221,12 @@ internal static class DefinitionFactory
         if (!type.IsPartial)
         {
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeShouldBePartial, type.Location, type.Name, attributeName));
+            canGenerate = false;
+        }
+
+        if (type.IsGeneric)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, attributeName));
             canGenerate = false;
         }
 
@@ -286,8 +304,11 @@ internal static class DefinitionFactory
         };
 
         var containing = new List<string>();
+        var isGeneric = symbol.TypeParameters.Length > 0;
         for (var outer = symbol.ContainingType; outer is not null; outer = outer.ContainingType)
         {
+            isGeneric |= outer.TypeParameters.Length > 0;
+
             var keyword = outer switch
             {
                 { IsRecord: true, IsValueType: true } => "record struct",
@@ -312,6 +333,7 @@ internal static class DefinitionFactory
             IsSealed: symbol.IsSealed && kind is not (DeclarationKind.RecordStruct or DeclarationKind.Struct),
             IsReadOnly: symbol.IsReadOnly,
             IsAbstract: symbol.IsAbstract,
+            IsGeneric: isGeneric,
             ContainingTypeHeaders: containing.ToEquatableArray(),
             Location: LocationInfo.From(syntax.Identifier));
     }
