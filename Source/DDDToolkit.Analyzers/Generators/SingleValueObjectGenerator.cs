@@ -33,7 +33,8 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
-            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".SingleValueObject<" + value.FullyQualifiedName + ">"))
+            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".SingleValueObject<" + value.FullyQualifiedName + ">, "
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
                 Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: false);
                 writer.Line();
@@ -53,6 +54,7 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
+                writer.Line("/// <summary>The always-valid twin. Throws when the value is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line("public " + validName + " ToValid() => new(this);");
             }
 

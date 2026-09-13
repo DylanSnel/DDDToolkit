@@ -38,5 +38,6 @@ internal static class KnownTypes
     // Fully qualified names used in generated code.
     public const string BaseTypesNamespace = "global::DDDToolkit.BaseTypes";
     public const string InterfacesNamespace = "global::DDDToolkit.Abstractions.Interfaces";
+    public const string ValidationNamespace = "global::DDDToolkit.Validation";
     public const string InternalAttributeUsage = "[global::DDDToolkit.Abstractions.Attributes.Internal]";
 }
