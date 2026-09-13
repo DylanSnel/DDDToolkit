@@ -32,6 +32,13 @@ internal sealed record TypeDeclarationInfo(
     EquatableArray<string> ContainingTypeHeaders,
     LocationInfo? Location)
 {
+    /// <summary>
+    /// True when the author wrote no declaration of this type at all and the generator emits the only
+    /// one, as it does for the id derived from <c>[AggregateRoot&lt;Guid&gt;]</c>. Such a declaration has to
+    /// carry its own accessibility, because there is no other part to take it from.
+    /// </summary>
+    public bool IsImplicit { get; init; }
+
     public bool IsRecord => Kind is DeclarationKind.RecordClass or DeclarationKind.RecordStruct;
 
     public bool IsStruct => Kind is DeclarationKind.RecordStruct or DeclarationKind.Struct;
@@ -55,8 +62,15 @@ internal sealed record TypeDeclarationInfo(
         _ => "class",
     };
 
-    /// <summary>Header for the generated partial part, e.g. "readonly partial record struct CatId".</summary>
-    public string PartialHeader => (IsReadOnly && IsStruct ? "readonly " : string.Empty) + "partial " + Keyword + " " + Name;
+    /// <summary>
+    /// Header for the generated partial part, e.g. "readonly partial record struct CatId". An implicit
+    /// type leads with its accessibility ("public readonly partial record struct OrderId"), which the
+    /// author may repeat but need not: a part without an accessibility modifier takes it from this one.
+    /// </summary>
+    public string PartialHeader
+        => (IsImplicit ? Accessibility + " " : string.Empty)
+           + (IsReadOnly && IsStruct ? "readonly " : string.Empty)
+           + "partial " + Keyword + " " + Name;
 
     /// <summary>
     /// File name of the generated part. Built from the fully qualified name (not just namespace plus
@@ -160,6 +174,12 @@ internal sealed record EntityDefinition(
     TypeDeclarationInfo Type,
     bool IsAggregateRoot,
     string IdType,
+    /// <summary>
+    /// The id this declaration asks the toolkit to generate, when the attribute names a raw value
+    /// (<c>[AggregateRoot&lt;Guid&gt;]</c>) rather than an existing id. Null for the explicit form, where
+    /// the type argument already is the id. <see cref="IdType"/> always names whichever it is.
+    /// </summary>
+    EntityIdDefinition? ImplicitId,
     EquatableArray<CollectionPropertyInfo> Collections,
     bool EfBackingFieldAttributeAvailable,
     bool ReadOnlySetAvailable,

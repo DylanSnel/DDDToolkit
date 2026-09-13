@@ -36,6 +36,24 @@ public partial class Order
 The generator supplies the base class and a protected parameterless constructor for Entity Framework
 and serializers. Your own constructor calls `base(id)`.
 
+### Declaring the identifier with it
+
+`OrderId` above is a type you declared with `[EntityId<Guid>]`. When the identifier is only ever used
+to identify this one aggregate, you can skip that declaration and name the raw value instead:
+
+```csharp
+[AggregateRoot<Guid>("ORD")]
+public partial class Order { }          // also generates OrderId
+```
+
+The toolkit then generates `OrderId` as well, as a `readonly partial record struct` with everything an
+explicitly declared identifier gets. The name is the entity's name with `Id` appended, and the first
+argument is the optional prefix. `[Entity<T>]` does the same for a child entity.
+
+Keep the separate `[EntityId<Guid>]` declaration for an identifier that other aggregates, DTOs or API
+contracts refer to; a type other people read deserves a declaration they can find. See
+[Identifiers](identifiers.md#letting-the-entity-declare-the-id).
+
 Equality comes from the base type and compares identifiers, so two instances of the same order loaded
 in different contexts are equal. `==`, `!=`, `Equals` and `GetHashCode` are all consistent and
 null-safe.
@@ -180,5 +198,10 @@ Child entities may declare partial collection properties exactly like roots.
 
 The declaration must be a `partial class`. A record or struct carrying `[Entity<T>]` or
 `[AggregateRoot<T>]` reports [DDD00002](diagnostics.md#ddd00002); a non-partial class reports
-[DDD00005](diagnostics.md#ddd00005). The identifier type argument must be a type implementing
-`IEntityId`, which every `[EntityId<T>]` declaration does.
+[DDD00005](diagnostics.md#ddd00005).
+
+The type argument is either an identifier, which is any type carrying `[EntityId<T>]` or implementing
+`IEntityId`, or the raw value an identifier should wrap, which must be a value type or a `string`.
+Anything else reports [DDD00008](diagnostics.md#ddd00008). When the toolkit generates the identifier
+and something else already holds the name it would take, that reports
+[DDD00007](diagnostics.md#ddd00007).

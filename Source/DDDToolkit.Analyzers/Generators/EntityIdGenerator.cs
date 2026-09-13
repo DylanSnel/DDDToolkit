@@ -13,6 +13,11 @@ namespace DDDToolkit.Analyzers.Generators;
 /// <item><c>readonly partial record struct</c>: a self-contained, allocation-free id implementing
 /// <c>IEntityId&lt;TValue&gt;</c>, with parsing, comparison, conversions and a System.Text.Json converter.</item>
 /// </list>
+/// <para>
+/// It also generates the ids <c>[AggregateRoot&lt;Guid&gt;]</c> and <c>[Entity&lt;Guid&gt;]</c> ask for, which the
+/// shared provider yields alongside the declared ones. Those take the struct form and go through the
+/// same emitter, so an implicit id has exactly the surface an explicit one has.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class EntityIdGenerator : IIncrementalGenerator

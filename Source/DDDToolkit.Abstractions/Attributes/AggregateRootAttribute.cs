@@ -1,20 +1,31 @@
 using System.ComponentModel;
-using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Abstractions.Attributes;
 
 /// <summary>
-/// Marks an aggregate root identified by a <typeparamref name="TType"/>: the consistency boundary of a
-/// cluster of entities and value objects. Apply to a <c>partial class</c>.
+/// Marks an aggregate root: the consistency boundary of a cluster of entities and value objects.
+/// Apply to a <c>partial class</c>.
+/// <para>
+/// <typeparamref name="TType"/> is either an existing strongly typed id (a type marked with
+/// <c>[EntityId&lt;T&gt;]</c>) or the raw value an id should wrap, such as <c>Guid</c>. In the second case
+/// the toolkit also generates the id itself, named after this type: <c>[AggregateRoot&lt;Guid&gt;("ORD")]</c>
+/// on <c>Order</c> generates <c>OrderId</c>.
+/// </para>
 /// </summary>
+/// <param name="Prefix">Optional prefix for a generated id, written by <c>ToString()</c> as <c>PREFIX_value</c>. Ignored when <typeparamref name="TType"/> is already an id.</param>
+/// <param name="ColumnLength">Optional maximum column length applied by the generated EF Core configuration of a generated id. Ignored when <typeparamref name="TType"/> is already an id.</param>
 /// <remarks>
 /// Records and structs are accepted by the attribute so that applying it to one reports DDD00002,
 /// which explains the requirement, instead of the compiler's generic "attribute is not valid on this
 /// declaration type".
 /// </remarks>
 #pragma warning disable S2326 // Unused type parameters should be removed (read by the source generator).
+#pragma warning disable CS9113 // Parameter is unread (read by the source generator).
+#pragma warning disable IDE1006 // Naming Styles
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
-public class AggregateRootAttribute<TType> : AggregateRootAttribute where TType : IEntityId
+public class AggregateRootAttribute<TType>(string Prefix = "", int ColumnLength = -1) : AggregateRootAttribute
+#pragma warning restore IDE1006
+#pragma warning restore CS9113
 #pragma warning restore S2326
 {
 }

@@ -170,6 +170,23 @@ public class FluentValidationGeneratorTests
     }
 
     [Fact]
+    public void An_id_generated_from_the_aggregate_gets_no_validator_either()
+    {
+        // It is a struct id like any other, which this generator passes over.
+        var result = Run(
+            """
+            [AggregateRoot<Guid>("ORD")]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """);
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("FluentValidation", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void An_entity_gets_no_validator()
     {
         var result = Run(

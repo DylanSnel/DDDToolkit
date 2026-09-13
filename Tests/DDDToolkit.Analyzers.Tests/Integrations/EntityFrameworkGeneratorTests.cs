@@ -40,6 +40,35 @@ public class EntityFrameworkGeneratorTests
     }
 
     [Fact]
+    public void An_id_generated_from_the_aggregate_gets_the_same_converter_and_registration()
+    {
+        // The id has no [EntityId] attribute of its own - it does not exist until a generator writes
+        // it - so this only works because every generator reads ids from one shared provider.
+        var result = Run(
+            """
+            [AggregateRoot<Guid>("ORD")]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """);
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "Sample.OrderId.Converter.g.cs",
+            "public sealed class OrderIdConverter : global::Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<global::Sample.OrderId, global::System.Guid>");
+        result.ShouldContain("ConverterExtensions", "Properties<global::Sample.OrderId>().HaveConversion<global::Sample.OrderId.OrderIdConverter>();");
+        result.ShouldContain("ConverterExtensions", "DefaultTypeMapping<global::Sample.OrderId>().HasConversion<global::Sample.OrderId.OrderIdConverter>();");
+
+        var emitted = result.Emit();
+        var converter = (Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter)emitted.New("Sample.OrderId+OrderIdConverter");
+        var guid = Guid.NewGuid();
+
+        converter.ConvertToProvider(emitted.New("Sample.OrderId", guid)).Should().Be(guid);
+        converter.ConvertFromProvider(guid).Should().Be(emitted.New("Sample.OrderId", guid));
+    }
+
+    [Fact]
     public void A_record_id_gets_a_converter_for_itself_and_for_its_always_valid_twin()
     {
         var result = Run(

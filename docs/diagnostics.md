@@ -11,6 +11,8 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00004](#ddd00004) | Warning | Entity id structs should be readonly |
 | [DDD00005](#ddd00005) | Error | DDDToolkit types must be partial |
 | [DDD00006](#ddd00006) | Error | DDDToolkit types cannot be generic |
+| [DDD00007](#ddd00007) | Error | The generated identifier name is already taken |
+| [DDD00008](#ddd00008) | Error | The identifier type argument is not supported |
 | [DDD00010](#ddd00010) | Error | Value object properties must use protected setters |
 | [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
@@ -153,6 +155,85 @@ Give the type a concrete identity instead:
 [EntityId<Guid>]
 public readonly partial record struct OrderReference;
 ```
+
+---
+
+## DDD00007
+
+**The generated identifier name is already taken.**
+
+```csharp
+public sealed class OrderId { }         // something else, in the same namespace
+
+[AggregateRoot<Guid>("ORD")]
+public partial class Order { }          // DDD00007
+```
+
+`[AggregateRoot<Guid>]` and `[Entity<Guid>]` name a raw value, so the toolkit generates the
+identifier as well, called `OrderId`. Another type of that name in the same namespace or containing
+type would be a duplicate definition. Without this diagnostic the compiler would report CS0101
+against generated code you never wrote.
+
+Either point the attribute at the identifier you already have:
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[AggregateRoot<OrderId>]
+public partial class Order { }
+```
+
+Or rename whichever of the two types should not be called `OrderId`.
+
+The one exception is a `partial record struct` of that name with no `[EntityId<T>]` on it. That is
+taken as your own half of the generated identifier and reports nothing, which is how you add members
+to it:
+
+```csharp
+public readonly partial record struct OrderId
+{
+    public string Short => Value.ToString("N")[..8];
+}
+```
+
+Such a part must be `partial`, must be a `record struct`, and must not state an accessibility
+different from the entity's. A part that states `internal` where the generated part says `public`
+would be CS0262, so it reports DDD00007 instead.
+
+Nothing is generated for the entity until the clash is gone, so expect follow-on errors about its
+missing base class.
+
+---
+
+## DDD00008
+
+**The identifier type argument is not supported.**
+
+```csharp
+public sealed class Money { }
+
+[AggregateRoot<Money>]
+public partial class Order { }          // DDD00008
+```
+
+The type argument of `[Entity<T>]` and `[AggregateRoot<T>]` is one of two things: an identifier you
+already have, meaning any type carrying `[EntityId<T>]` or implementing `IEntityId`, or the raw value
+an identifier should wrap. A reference type that is not a `string` is neither. It can be null and it
+is not copied by value, and an identifier has to be both.
+
+```csharp
+[AggregateRoot<Guid>("ORD")]            // a value the toolkit can wrap
+public partial class Order { }
+
+[AggregateRoot<OrderId>]                // an identifier you declared yourself
+public partial class Order { }
+```
+
+`Guid`, `int`, `long`, `string`, `DateOnly` and your own structs all work. `Guid?` does not: an
+optional identifier is `OrderId?`, not an identifier over a nullable value.
+
+Nothing is generated for the entity until the type argument is one of the two.
 
 ---
 

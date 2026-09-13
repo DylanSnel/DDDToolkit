@@ -19,6 +19,11 @@ namespace DDDToolkit.Analyzers.Tests.Incremental;
 /// </summary>
 public class IncrementalCachingTests
 {
+    /// <summary>
+    /// One of everything, including an aggregate whose id is generated from its own declaration: that
+    /// id reaches the generators through a provider that collects the whole compilation, which is the
+    /// shape most likely to lose its caching.
+    /// </summary>
     private const string Source =
         """
         using DDDToolkit.Abstractions.Attributes;
@@ -57,6 +62,12 @@ public class IncrementalCachingTests
             public Basket(UserId id) : base(id) { }
 
             public partial IReadOnlyList<Line> Lines { get; }
+        }
+
+        [AggregateRoot<Guid>("INV")]
+        public partial class Invoice
+        {
+            public Invoice(InvoiceId id) : base(id) { }
         }
         """;
 

@@ -6,9 +6,9 @@ namespace DDDToolkit.Analyzers.Common;
 /// MSBuild properties exposed to the generators through <c>CompilerVisibleProperty</c> items
 /// (see build/DDDToolkit.props in the DDDToolkit package).
 /// </summary>
-internal sealed record DDDOptions(string ModuleName, bool AlwaysValidValueObjects)
+internal sealed record DDDOptions(string ModuleName)
 {
-    public static readonly DDDOptions Default = new(string.Empty, false);
+    public static readonly DDDOptions Default = new(string.Empty);
 }
 
 internal static class DDDOptionsProvider
@@ -17,11 +17,8 @@ internal static class DDDOptionsProvider
         => context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>
         {
             provider.GlobalOptions.TryGetValue("build_property.DDD_Module", out var moduleName);
-            provider.GlobalOptions.TryGetValue("build_property.DDD_AlwaysValidValueObjects", out var alwaysValid);
 
-            return new DDDOptions(
-                ModuleName: moduleName?.Trim() ?? string.Empty,
-                AlwaysValidValueObjects: bool.TryParse(alwaysValid, out var parsed) && parsed);
+            return new DDDOptions(ModuleName: moduleName?.Trim() ?? string.Empty);
         });
 
     /// <summary>The module name from MSBuild, or a name derived from the assembly name.</summary>

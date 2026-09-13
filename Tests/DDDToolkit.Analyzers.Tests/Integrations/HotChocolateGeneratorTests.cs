@@ -43,6 +43,32 @@ public class HotChocolateGeneratorTests
     }
 
     [Fact]
+    public void An_id_generated_from_the_aggregate_is_bound_and_converted_like_any_other()
+    {
+        // The GraphQL generator never sees an [EntityId] attribute for this id; it reads the id from
+        // the same provider the core generator emits it from.
+        var result = Run(
+            """
+            [AggregateRoot<Guid>("ORD")]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """);
+
+        result.ShouldCompile();
+        result.ShouldContain("BindingExtensions", "builder.BindRuntimeType<global::Sample.OrderId, global::HotChocolate.Types.UuidType>();");
+        result.ShouldContain("BindingExtensions", "builder.AddTypeConverter<global::Sample.OrderId.ChangeTypeProvider>();");
+
+        var emitted = result.Emit();
+        var provider = (IChangeTypeProvider)emitted.New("Sample.OrderId+ChangeTypeProvider");
+        var guid = Guid.NewGuid();
+
+        provider.TryCreateConverter(emitted.Type("Sample.OrderId"), typeof(Guid), NoRoot, out var toValue).Should().BeTrue();
+        toValue!(emitted.New("Sample.OrderId", guid)).Should().Be(guid);
+    }
+
+    [Fact]
     public void A_change_type_provider_refuses_conversions_it_knows_nothing_about()
     {
         var emitted = Run(
@@ -143,6 +169,37 @@ public class HotChocolateGeneratorTests
         method.IsStatic.Should().BeTrue();
         method.IsPublic.Should().BeTrue();
         method.GetParameters().Single().ParameterType.Name.Should().Be("IRequestExecutorBuilder");
+    }
+
+    [Fact]
+    public void GraphQLType_on_the_authors_own_part_of_a_generated_id_still_counts()
+    {
+        // The generated part cannot carry the attribute, so the author's part is the only place it can
+        // go. Ignoring it there would make the override silently do nothing.
+        var result = GeneratorTestHost.Create(
+            """
+            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.HotChocolate.Attributes;
+            using System;
+
+            namespace Sample;
+
+            [GraphQLType<HotChocolate.Types.StringType>]
+            public readonly partial record struct OrderId;
+
+            [AggregateRoot<Guid>("ORD")]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+            }
+            """)
+            .WithHotChocolate()
+            .WithModule("Sales")
+            .RunCoreAnd(GeneratorTestHost.HotChocolateGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("BindingExtensions", "builder.BindRuntimeType<global::Sample.OrderId, global::HotChocolate.Types.StringType>();");
+        result.ShouldNotContain("BindingExtensions", "UuidType");
     }
 
     [Fact]
