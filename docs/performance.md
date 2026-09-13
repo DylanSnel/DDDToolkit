@@ -35,7 +35,7 @@ BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.9445/25H2)
 12th Gen Intel Core i9-12900K 3.20GHz, 1 CPU, 24 logical and 16 physical cores
 .NET SDK 10.0.301
 .NET 10.0.9 (10.0.9, 10.0.926.27113), X64 RyuJIT x86-64-v3
-Server GC off, concurrent GC on
+GC=Concurrent Workstation
 ```
 
 The Entity Framework benchmarks run against SQLite in memory. That is the fastest database a benchmark
