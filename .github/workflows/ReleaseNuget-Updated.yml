@@ -8,27 +8,31 @@ jobs:
   publish-nuget:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v2
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
 
-    - name: Extract Release Version
-      id: get_version
-      run: echo ::set-output name=VERSION::${GITHUB_REF#refs/tags/v}
-    - name: Clean
-      run: dotnet clean
-    - name: Restore dependencies
-      run: dotnet restore
+      - name: Extract release version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-    - name: Build and Pack Projects
-      run: |
-        for csproj in $(find ./Source -name '*.csproj'); do
-          dotnet build --configuration Release --no-restore $csproj
-          dotnet pack $csproj --configuration Release --output nupkgs /p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
-        done
+      - name: Restore dependencies
+        run: dotnet restore DDDToolkit.slnx
 
-    - name: Publish to NuGet
-      run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+      - name: Build
+        run: dotnet build DDDToolkit.slnx --no-restore --configuration Release -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+
+      - name: Test
+        run: dotnet test DDDToolkit.slnx --no-build --configuration Release
+
+      - name: Pack
+        run: |
+          for csproj in $(find ./Source -name '*.csproj'); do
+            dotnet pack "$csproj" --configuration Release --no-build --output nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+          done
+
+      - name: Publish to NuGet
+        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate

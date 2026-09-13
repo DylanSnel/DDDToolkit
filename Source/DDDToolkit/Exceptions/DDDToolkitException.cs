@@ -1,7 +1,12 @@
-﻿namespace DDDToolkit.Exceptions;
+namespace DDDToolkit.Exceptions;
+
 public abstract class DDDToolkitException : Exception
 {
-    public DDDToolkitException(string message) : base(message)
+    protected DDDToolkitException(string message) : base(message)
+    {
+    }
+
+    protected DDDToolkitException(string message, Exception? innerException) : base(message, innerException)
     {
     }
 }

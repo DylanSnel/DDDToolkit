@@ -1,32 +1,24 @@
-//using DDDToolkit.EntityFramework;
 using DDDToolkit.ExampleApi.Context;
 using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<Program>());
 
-//builder.Services.UseDomainEvents(
-//    async (sp, domainEvent) =>
-//        {
-//            var mediator = sp.GetRequiredService<IMediator>();
-//            await mediator.Publish(domainEvent);
-//        }
-//    );
-
-var connectionString = builder.Configuration.GetConnectionString("ExampleContext");
-builder.Services.AddDbContext<ExampleContext>();
+var connectionString = builder.Configuration.GetConnectionString("ExampleContext")
+    ?? $"Data Source={Path.Combine(AppContext.BaseDirectory, "example.db")}";
+builder.Services.AddDbContext<ExampleContext>(options => options.UseSqlite(connectionString));
 
 var app = builder.Build();
 
-app.Services.CreateScope().ServiceProvider.GetRequiredService<ExampleContext>().Database.Migrate();
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.GetRequiredService<ExampleContext>().Database.EnsureCreated();
+}
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -34,9 +26,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

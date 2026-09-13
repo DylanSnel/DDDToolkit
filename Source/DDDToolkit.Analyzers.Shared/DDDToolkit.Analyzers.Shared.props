@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    Source shared by every DDDToolkit generator assembly. The generators must not depend on any
+    other assembly at run time (the compiler only loads the analyzer DLLs themselves), so the
+    common infrastructure is compiled into each generator instead of referenced.
+  -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,0 @@
-<Project>
-  <ItemGroup>
-    <CompilerVisibleProperty Include="DDD_Module" />
-  </ItemGroup>
-</Project>

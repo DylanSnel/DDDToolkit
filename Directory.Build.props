@@ -4,34 +4,38 @@
     <Copyright>Dylan Snel</Copyright>
     <PackageProjectUrl>https://github.com/DylanSnel/DDDToolkit</PackageProjectUrl>
     <RepositoryUrl>https://github.com/DylanSnel/DDDToolkit</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
     <PackageLanguage>en-US</PackageLanguage>
-
-    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
-    <Version>2.0.2.20</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Version>3.0.0</Version>
+
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Source Link ships with the .NET 8+ SDK; no package reference needed. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\..\DDDToolkit-Icon.png">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-    <None Include="..\..\README.md">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-  </ItemGroup>
-  
-  <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <None Include="$(MSBuildThisFileDirectory)DDDToolkit-Icon.png" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 
-  <!--<ItemGroup>
-    <None Include="..\..\LICENSE.md" Pack="true" PackagePath="$(PackageLicenseFile)"/>
-  </ItemGroup>-->
+  <!--
+    MSBuild properties the DDDToolkit generators read. NuGet consumers get these through
+    build/DDDToolkit.props inside the DDDToolkit package; projects in this repository reference
+    the generators directly, so expose them here.
+  -->
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DDD_Module" />
+    <CompilerVisibleProperty Include="DDD_AlwaysValidValueObjects" />
+  </ItemGroup>
 </Project>

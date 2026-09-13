@@ -1,21 +1,7 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Abstractions.Attributes;
 
 namespace DDDToolkit.ExampleApi.Domain.ProductAggregate.ValueObjects;
 
+/// <summary>Struct id with a prefix: ToString() gives "PRDCT_&lt;guid&gt;", Parse accepts it with or without the prefix.</summary>
 [EntityId<Guid>("PRDCT")]
-public partial record ProductId
-{
-}
-
-//[Owned]
-
-//[PrimaryKey(nameof(ProductId))]
-//public record ProductIdReference : ProductId
-//{
-//    public ProductIdReference(Guid value) : base(value)
-//    {
-//    }
-
-
-//}
-
+public readonly partial record struct ProductId;

@@ -1,34 +1,25 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <Title>Domain Driven Design Toolkit</Title>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
-    <Description>A package with source generators that makes it easier to work with domain driven design in  .NET</Description>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <Description>Base types and source generators that make domain driven design in .NET less repetitive: entities, aggregate roots, strongly typed ids, value objects and domain events.</Description>
   </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
-
     <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
-    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" PrivateAssets="contentfiles;build" SetTargetFramework="TargetFramework=netstandard2.0" />
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+    <!-- Referenced so the NuGet package depends on the generator package; the assembly is not used at run time. -->
+    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" PrivateAssets="contentfiles;build" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
 </Project>

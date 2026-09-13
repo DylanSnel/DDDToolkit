@@ -1,32 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <Title>Domain Driven Design Toolkit - FluentValidation Analyzers </Title>
-    <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation;</PackageTags>
-    <Description>A package extending the DDDToolkit with Entity Framework configuration</Description>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Title>Domain Driven Design Toolkit - FluentValidation</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;fluent;validation;fluentvalidation</PackageTags>
+    <Description>FluentValidation integration for the DDDToolkit: generated validators for value objects.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentValidation" Version="11.9.2" />
+    <PackageReference Include="FluentValidation" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" />
+    <ProjectReference Include="..\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" PrivateAssets="contentfiles;build" />
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
 </Project>
-    
