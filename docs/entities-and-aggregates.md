@@ -173,6 +173,118 @@ catch (ConcurrencyConflictException conflict)
 The version is what makes an aggregate a unit of consistency. Without it two concurrent saves are
 last-write-wins, silently.
 
+## Auditing and soft delete
+
+The toolkit has no `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IAuditable`, `IsDeleted` or
+`ISoftDeletable`, and it is not going to grow them. `Version` is the only bookkeeping field an
+aggregate root gets, and it is there because optimistic concurrency is a correctness property of the
+consistency boundary, not a reporting feature.
+
+This is a deliberate position, not an omission. "Who last touched this row" is a question about your
+rows and your users, and the answer belongs to your persistence layer. Putting it on the domain type
+means every aggregate in the system carries four properties its behaviour never reads, your
+constructors take a user, and your unit tests need a logged-in principal to build an order. A base
+class in your own solution can do it in twenty lines and can say what your organisation actually
+means by "modified", which no library can guess.
+
+So decide which of these you are actually asking for.
+
+**It is domain data.** "Who approved this order", "when was it cancelled" are facts the business
+talks about and rules depend on. Model them as ordinary properties, set by the method that does the
+thing:
+
+```csharp
+public void Approve(EmployeeId approver, DateTimeOffset at)
+{
+    Approver = approver;
+    ApprovedAt = at;
+    RaiseDomainEvent(new OrderApproved(Id, approver, at));
+}
+```
+
+That is not auditing. It is the domain, and it is testable without a database.
+
+**It is row bookkeeping.** Nothing in the domain reads it; you want it for support and forensics.
+Keep it out of the domain type entirely and use Entity Framework shadow properties, so the columns
+exist and the C# class does not:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    foreach (var entityType in modelBuilder.Model.GetEntityTypes()
+                 .Where(type => typeof(IAggregateRoot).IsAssignableFrom(type.ClrType)))
+    {
+        modelBuilder.Entity(entityType.ClrType).Property<DateTimeOffset>("CreatedAt");
+        modelBuilder.Entity(entityType.ClrType).Property<string?>("CreatedBy");
+        modelBuilder.Entity(entityType.ClrType).Property<DateTimeOffset?>("UpdatedAt");
+        modelBuilder.Entity(entityType.ClrType).Property<string?>("UpdatedBy");
+    }
+}
+```
+
+Fill them from an interceptor of your own, registered beside the toolkit's:
+
+```csharp
+public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : SaveChangesInterceptor
+{
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    {
+        foreach (var entry in eventData.Context!.ChangeTracker.Entries())
+        {
+            if (entry.Metadata.FindProperty("CreatedAt") is null)
+            {
+                continue;   // not an audited type
+            }
+
+            if (entry.State == EntityState.Added)
+            {
+                entry.Property("CreatedAt").CurrentValue = clock.GetUtcNow();
+                entry.Property("CreatedBy").CurrentValue = user.Name;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Property("UpdatedAt").CurrentValue = clock.GetUtcNow();
+                entry.Property("UpdatedBy").CurrentValue = user.Name;
+            }
+        }
+
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+}
+```
+
+```csharp
+db.UseDDDToolkit(serviceProvider)
+  .AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
+```
+
+Read a shadow property back with `context.Entry(order).Property<DateTimeOffset>("CreatedAt")`, or
+query it with `EF.Property<DateTimeOffset>(order, "CreatedAt")`. If you would rather have real
+properties, put them on a base class of your own between your aggregates and `AggregateRoot<TId>`;
+the generators do not care what your aggregate inherits from as long as it ends up at
+`AggregateRoot<TId>`.
+
+**It is a history of what happened.** Then you already have it. The domain events an aggregate
+raises are a record of every meaningful change, written by the aggregate that knows what the change
+meant. Turn on the [outbox](entity-framework.md#the-outbox) and keep the rows instead of deleting
+them, or write your own handler that appends them to an event table. An audit trail assembled from
+`UpdatedBy` columns tells you a row changed; a trail of `OrderCancelled` tells you what happened, and
+why.
+
+**Soft delete** is the same answer. Entity Framework does it with a flag and a global query filter,
+and neither needs the toolkit:
+
+```csharp
+modelBuilder.Entity<Order>().HasQueryFilter(order => !EF.Property<bool>(order, "IsDeleted"));
+```
+
+Two things to know before you reach for it. A filtered row still occupies its unique indexes, so a
+"deleted" customer still owns their email address. And query filters do not apply to raw SQL or to
+anything outside Entity Framework, so the flag is a convention your reporting jobs have to know
+about. Often the honest model is a domain state, `OrderStatus.Cancelled`, which the rest of the
+domain can reason about, rather than a row that pretends not to exist.
+
 ## Child entities
 
 ```csharp

@@ -47,10 +47,14 @@ public partial class Order { }
 | [Identifiers](docs/identifiers.md) | `[EntityId<T>]`, struct versus record ids, parsing, prefixes |
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
-| [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery |
+| [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery, deterministic time in tests |
+| [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks and the inbox |
 | [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
+| [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
+| [Results](docs/results.md) | Handling failure without exceptions, and when to throw anyway |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
+| [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
 
 ## Packages
 
@@ -99,6 +103,9 @@ and `[ComplexType]` annotations, and a single `Add<Module>Converters` call for y
 Version 3.0 is a breaking release. Identifiers may be structs, domain events moved from `Entity` to
 `AggregateRoot`, `IDomainEvent` carries an id and a timestamp, and misapplied attributes now report a
 diagnostic instead of silently generating nothing.
+
+Coming from 2.0.22, read [Migrating to 3.0](docs/migrating-to-3.md): it lists every break with the
+code you have and the code you need. The [changelog](CHANGELOG.md) has the rest.
 
 ## License
 
