@@ -1,3 +1,6 @@
+using System;
+using System.Text;
+
 namespace DDDToolkit.Analyzers.Common;
 
 internal enum DeclarationKind
@@ -50,8 +53,27 @@ internal sealed record TypeDeclarationInfo(
     /// <summary>Header for the generated partial part, e.g. "readonly partial record struct CatId".</summary>
     public string PartialHeader => (IsReadOnly && IsStruct ? "readonly " : string.Empty) + "partial " + Keyword + " " + Name;
 
+    /// <summary>
+    /// File name of the generated part. Built from the fully qualified name (not just namespace plus
+    /// name) so a nested type cannot collide with a top-level type of the same name in the same
+    /// namespace: two AddSource calls with one hint name throw inside the generator, which then
+    /// contributes nothing at all — for either type. Characters a file name cannot hold (the angle
+    /// brackets of a generic type) become underscores.
+    /// </summary>
     public string HintName(string suffix = "")
-        => (Namespace.Length == 0 ? Name : Namespace + "." + Name) + suffix + ".g.cs";
+    {
+        var qualified = FullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
+            ? FullyQualifiedName.Substring("global::".Length)
+            : FullyQualifiedName;
+
+        var builder = new StringBuilder(qualified.Length + suffix.Length + 5);
+        foreach (var character in qualified)
+        {
+            builder.Append(char.IsLetterOrDigit(character) || character == '.' || character == '_' ? character : '_');
+        }
+
+        return builder.Append(suffix).Append(".g.cs").ToString();
+    }
 }
 
 /// <summary>The wrapped value type of a single value object or entity id.</summary>

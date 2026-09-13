@@ -85,9 +85,18 @@ public sealed class GeneratorRunOutcome
 
     // ------------------------------------------------------------------ assertions
 
-    /// <summary>Asserts the generated code compiles: no generator errors and no compiler errors.</summary>
+    /// <summary>
+    /// The exceptions the generators threw, if any. A generator that throws is reported by Roslyn as a
+    /// warning and then contributes <em>nothing</em>, so without this a crash looks like "no output".
+    /// </summary>
+    public IReadOnlyList<Exception> GeneratorExceptions
+        => [.. Driver.GetRunResult().Results.Select(result => result.Exception).OfType<Exception>()];
+
+    /// <summary>Asserts the generated code compiles: no generator crash, no generator errors, no compiler errors.</summary>
     public GeneratorRunOutcome ShouldCompile()
     {
+        ShouldNotCrash();
+
         var generatorErrors = GeneratorDiagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error).ToList();
         var compilerErrors = CompilationErrors.ToList();
         if (generatorErrors.Count > 0 || compilerErrors.Count > 0)
@@ -96,6 +105,18 @@ public sealed class GeneratorRunOutcome
                 "Expected the snippet and the generated code to compile, but:\n"
                 + string.Join("\n", generatorErrors.Concat(compilerErrors).Select(Describe))
                 + "\n\nGenerated sources: " + HintNames + "\n\n" + AllSources);
+        }
+
+        return this;
+    }
+
+    /// <summary>Asserts no generator threw.</summary>
+    public GeneratorRunOutcome ShouldNotCrash()
+    {
+        if (GeneratorExceptions.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "A generator threw, so it contributed nothing:\n" + string.Join("\n", GeneratorExceptions));
         }
 
         return this;
@@ -191,28 +212,32 @@ public sealed class GeneratorRunOutcome
     }
 
     /// <summary>Asserts the generated source for <paramref name="hintNameFragment"/> contains this text.</summary>
-    public GeneratorRunOutcome ShouldContain(string hintNameFragment, string expected)
+    public GeneratorRunOutcome ShouldContain(string hintNameFragment, string expected, string? because = null)
     {
         var source = Source(hintNameFragment);
         if (!source.Contains(expected, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"'{hintNameFragment}' does not contain:\n{expected}\n\nActual:\n{source}");
+            throw new InvalidOperationException(
+                $"'{hintNameFragment}' does not contain:\n{expected}\n{Because(because)}\nActual:\n{source}");
         }
 
         return this;
     }
 
     /// <summary>Asserts the generated source for <paramref name="hintNameFragment"/> does not contain this text.</summary>
-    public GeneratorRunOutcome ShouldNotContain(string hintNameFragment, string unexpected)
+    public GeneratorRunOutcome ShouldNotContain(string hintNameFragment, string unexpected, string? because = null)
     {
         var source = Source(hintNameFragment);
         if (source.Contains(unexpected, StringComparison.Ordinal))
         {
-            throw new InvalidOperationException($"'{hintNameFragment}' unexpectedly contains:\n{unexpected}\n\nActual:\n{source}");
+            throw new InvalidOperationException(
+                $"'{hintNameFragment}' unexpectedly contains:\n{unexpected}\n{Because(because)}\nActual:\n{source}");
         }
 
         return this;
     }
+
+    private static string Because(string? because) => because is null ? string.Empty : "(" + because + ")\n";
 
     // ------------------------------------------------------------------ running it
 
