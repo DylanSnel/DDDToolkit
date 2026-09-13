@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
@@ -100,6 +101,17 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(services);
         services.TryAddScoped<OutboxProcessor<TContext>>();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="DomainEventInbox{TContext}"/> (scoped), the receiving side's
+    /// exactly-once helper. Map its table with <c>modelBuilder.AddDomainEventInbox()</c>.
+    /// </summary>
+    public static IServiceCollection AddDomainEventInbox<TContext>(this IServiceCollection services) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        services.TryAddScoped<DomainEventInbox<TContext>>();
         return services;
     }
 

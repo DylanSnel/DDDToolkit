@@ -25,16 +25,19 @@ namespace DDDToolkit.EntityFramework.Options;
 ///     <description>
 ///     Events are serialized into an outbox table by the same <c>SaveChanges</c> that writes the
 ///     aggregate, so they commit atomically with it. A separate <c>OutboxProcessor&lt;TContext&gt;</c>
-///     (or <c>OutboxBackgroundService&lt;TContext&gt;</c>) delivers them later through the
-///     <see cref="DispatchInProcess"/> delegate. This is at-least-once delivery: a message is marked
-///     processed only after its handlers succeeded, so a crash in between redelivers it. Handlers
-///     must be idempotent, keyed by <see cref="IDomainEvent.EventId"/>.
+///     (or <c>OutboxBackgroundService&lt;TContext&gt;</c>) delivers them later, either through the
+///     <see cref="DispatchInProcess"/> delegate or, when <c>outbox.SendTo&lt;TSink&gt;()</c> names one
+///     or more sinks, out of the process as an <c>IntegrationEventMessage</c>. This is at-least-once
+///     delivery: a message is marked processed only after everything it was handed to succeeded, so a
+///     crash in between redelivers it. Consumers must be idempotent, keyed by
+///     <see cref="IDomainEvent.EventId"/>.
 ///     </description>
 ///   </item>
 /// </list>
 /// When the outbox is enabled nothing is dispatched at save time; the dispatch delegate is used by
-/// the processor only. When neither mode is configured and an aggregate has pending events,
-/// <c>SaveChanges</c> throws instead of silently dropping them.
+/// the processor only, and only while no sink is configured or
+/// <see cref="OutboxOptions.AlsoDispatchInProcess"/> asks for both. When neither mode is configured
+/// and an aggregate has pending events, <c>SaveChanges</c> throws instead of silently dropping them.
 /// </summary>
 public sealed class DDDEntityFrameworkOptions
 {
@@ -78,7 +81,8 @@ public sealed class DDDEntityFrameworkOptions
     /// Stores events in the outbox table of the saving <c>DbContext</c> instead of dispatching them at
     /// save time. The context's model must include the table: call
     /// <c>modelBuilder.AddDomainEventOutbox()</c> in <c>OnModelCreating</c>. Register the event types the
-    /// processor may encounter with <see cref="OutboxOptions.RegisterEventsFromAssembly"/>.
+    /// processor may encounter with <see cref="OutboxOptions.RegisterEventsFromAssembly"/>, and say
+    /// where the messages go with <see cref="OutboxOptions.SendTo{TSink}()"/>.
     /// </summary>
     public DDDEntityFrameworkOptions UseOutbox(Action<OutboxOptions>? configure = null)
     {

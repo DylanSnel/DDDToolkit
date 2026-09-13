@@ -1,4 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
+using DDDToolkit.EntityFramework.Inbox;
+using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Tests.Converters;
 using DDDToolkit.EntityFramework.Tests.Domain;
 using DDDToolkit.ExampleApi.Converters;
@@ -16,6 +18,23 @@ public class UnmappableSetContext(DbContextOptions<UnmappableSetContext> options
     {
         configurationBuilder.AddDDDToolkitConventions();
         configurationBuilder.AddEfTestsConverters();
+    }
+}
+
+/// <summary>
+/// The messaging tables moved off their defaults: the outbox into another schema under another name,
+/// the inbox into the provider's default schema.
+/// </summary>
+public class RenamedStorageContext(DbContextOptions<RenamedStorageContext> options) : DbContext(options)
+{
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+
+    public DbSet<InboxMessage> Inbox => Set<InboxMessage>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.AddDomainEventOutbox("EventsOut", schema: "messaging");
+        modelBuilder.AddDomainEventInbox("EventsIn", schema: null);
     }
 }
 
