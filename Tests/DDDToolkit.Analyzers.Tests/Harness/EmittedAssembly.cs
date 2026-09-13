@@ -105,12 +105,14 @@ public sealed class EmittedAssembly(Assembly assembly)
         return (success, arguments[1]);
     }
 
-    /// <summary>Invokes the generated explicit conversion in either direction.</summary>
+    /// <summary>
+    /// Invokes the generated conversion operator in either direction. A conversion between an id and
+    /// its underlying value is declared on the id, whichever side of the conversion that is.
+    /// </summary>
     public object? Convert(Type from, Type to, object? value)
     {
-        var declaring = to.IsGenericParameter ? from : to;
-        var method = FindConversion(declaring, from, to) ?? FindConversion(from, from, to) ?? FindConversion(to, from, to)
-            ?? throw new InvalidOperationException($"No explicit conversion from '{from.Name}' to '{to.Name}'.");
+        var method = FindConversion(from, from, to) ?? FindConversion(to, from, to)
+            ?? throw new InvalidOperationException($"No conversion operator from '{from.Name}' to '{to.Name}'.");
         return method.Invoke(null, [value]);
     }
 
