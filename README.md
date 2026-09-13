@@ -39,6 +39,7 @@ while the outside world sees a read-only list.
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
 | [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery |
+| [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
 
 ## Packages
