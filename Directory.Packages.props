@@ -20,10 +20,15 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="14.0.0-rc.1" />
-    <PackageVersion Include="HotChocolate.Execution" Version="14.0.0-rc.1" />
-    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="14.0.0-rc.1" />
-    <PackageVersion Include="HotChocolate.Types.Scalars" Version="14.0.0-rc.1" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.6" />
+    <!--
+      HotChocolate 16 folded the execution engine and query validation into the HotChocolate
+      package. HotChocolate.Execution was not released for 16 (its last version is the 16.0.0
+      preview 16.0.0-p.10.45), so this line replaces it.
+    -->
+    <PackageVersion Include="HotChocolate" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Types.Scalars" Version="16.6.6" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
