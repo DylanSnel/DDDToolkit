@@ -1,8 +1,17 @@
 name: Build and Test
 
+# A pull request from this repository would otherwise be built twice, once for the push to the branch
+# and once for the pull request itself. Branch pushes are therefore limited to main; every other branch
+# is covered by its pull request.
 on:
   push:
+    branches: [main]
   pull_request:
+
+# A new commit makes the run for the previous one pointless, so cancel it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
