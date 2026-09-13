@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <DDD_Module>TestingKitTests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
+  </ItemGroup>
+
+  <!--
+    The domain under test is declared with the toolkit's own attributes, so these tests prove the kit
+    works against a generated aggregate rather than against a hand-written stand-in.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

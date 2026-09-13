@@ -18,6 +18,7 @@
     <Project Path="Source/DDDToolkit.HotChocolate.Analyzers/DDDToolkit.HotChocolate.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Mediator/DDDToolkit.Mediator.csproj" />
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
+    <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
   </Folder>
   <Folder Name="/Examples/">
     <Project Path="Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj" />
@@ -29,5 +30,6 @@
     <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
   </Folder>
 </Solution>
