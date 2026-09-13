@@ -13,6 +13,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00006](#ddd00006) | Error | DDDToolkit types cannot be generic |
 | [DDD00007](#ddd00007) | Error | The generated identifier name is already taken |
 | [DDD00008](#ddd00008) | Error | The identifier type argument is not supported |
+| [DDD00009](#ddd00009) | Error | A type is either an entity or an aggregate root |
 | [DDD00010](#ddd00010) | Error | Value object properties must use protected setters |
 | [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
@@ -234,6 +235,28 @@ public partial class Order { }
 optional identifier is `OrderId?`, not an identifier over a nullable value.
 
 Nothing is generated for the entity until the type argument is one of the two.
+
+---
+
+## DDD00009
+
+**A type is either an entity or an aggregate root.**
+
+```csharp
+[Entity<ThingId>]
+[AggregateRoot<ThingId>]
+public partial class Widget { }         // DDD00009
+```
+
+An aggregate root is a consistency boundary. A child entity lives inside one. A type cannot be both,
+and the two attributes generate different base types for the same declaration.
+
+Keep whichever describes the type. Use `[AggregateRoot<T>]` for something you load, save and reference
+from elsewhere, and `[Entity<T>]` for something that only exists inside one aggregate. See
+[Entities and aggregates](entities-and-aggregates.md).
+
+Before this diagnostic existed, both attributes on one class made the generator throw and contribute
+nothing at all, leaving only a `CS8785` about a crashed generator and no hint about the cause.
 
 ---
 

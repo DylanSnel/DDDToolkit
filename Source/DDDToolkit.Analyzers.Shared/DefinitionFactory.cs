@@ -239,6 +239,21 @@ internal static class DefinitionFactory
             canGenerate = false;
         }
 
+        // Both attributes on one class means two providers produce a definition for it, and both output
+        // steps then add a source with the same hint name, which throws inside the generator and leaves
+        // the author with nothing but a CS8785 about a crashed generator. Refuse from both paths so
+        // nothing is generated, but report from the aggregate-root path alone so the author sees the
+        // complaint exactly once.
+        if (HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute))
+        {
+            if (isAggregateRoot)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.ConflictingEntityAttributes, type.Location, type.Name));
+            }
+
+            canGenerate = false;
+        }
+
         var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
         canGenerate &= id.Ok;
 
@@ -626,9 +641,20 @@ internal static class DefinitionFactory
         return null;
     }
 
+    /// <summary>
+    /// Whether the symbol carries the attribute with this metadata name. The arity suffix of a generic
+    /// attribute is stripped, because <see cref="ISymbol.Name"/> reports <c>EntityAttribute</c> where the
+    /// metadata name is <c>EntityAttribute`1</c>; comparing the two directly never matches.
+    /// </summary>
     private static bool HasAttribute(ISymbol symbol, string metadataName)
     {
         var expectedName = metadataName.Substring(metadataName.LastIndexOf('.') + 1);
+        var arity = expectedName.IndexOf('`');
+        if (arity >= 0)
+        {
+            expectedName = expectedName.Substring(0, arity);
+        }
+
         var expectedNamespace = metadataName.Substring(0, metadataName.LastIndexOf('.'));
 
         return symbol.GetAttributes().Any(attribute =>

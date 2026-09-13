@@ -83,6 +83,15 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The type argument names either the identifier itself (a type marked with [EntityId<T>], or any type implementing IEntityId) or the raw value a generated identifier should wrap. A reference type other than string is neither: it can be null, it is not copied by value, and an identifier has to be both. Nothing is generated for this entity until the type argument is one of the two.");
 
+    public static readonly DiagnosticDescriptor ConflictingEntityAttributes = new(
+        id: "DDD00009",
+        title: "A type is either an entity or an aggregate root",
+        messageFormat: "'{0}' carries both [Entity] and [AggregateRoot]; keep the one that describes it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "An aggregate root is the consistency boundary; a child entity lives inside one. A type cannot be both, and the two attributes generate different base types for the same declaration. Nothing is generated for this type until one of them is removed.");
+
     public static readonly DiagnosticDescriptor UseProtectedSetters = new(
         id: "DDD00010",
         title: "Value object properties must use protected setters",

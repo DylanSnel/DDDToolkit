@@ -5,10 +5,7 @@ intent with an attribute; the generator writes the base type, the equality membe
 plumbing, the persistence mapping and the API conversions.
 
 ```csharp
-[EntityId<Guid>("ORD")]
-public readonly partial record struct OrderId;
-
-[AggregateRoot<OrderId>]
+[AggregateRoot<Guid>("ORD")]
 public partial class Order
 {
     public Order(OrderId id, CustomerId customer) : base(id)
@@ -25,10 +22,22 @@ public partial class Order
 }
 ```
 
-That is the whole declaration. `OrderId` becomes an allocation-free identifier with parsing,
-comparison and JSON support. `Order` gets its base class, an optimistic concurrency version, a domain
-event list only it can write to, and a `_lines` backing field that Entity Framework maps directly
-while the outside world sees a read-only list.
+That is the whole declaration. `OrderId` did not have to be written at all: naming the raw value
+generates it as an allocation-free identifier with parsing, comparison and JSON support. `Order` gets
+its base class, an optimistic concurrency version, a domain event list only it can write to, and a
+`_lines` backing field that Entity Framework maps directly while the outside world sees a read-only
+list.
+
+Declare the identifier yourself when other aggregates, DTOs or API contracts refer to it, which gives
+it a file of its own to navigate to:
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[AggregateRoot<OrderId>]
+public partial class Order { }
+```
 
 ## Documentation
 

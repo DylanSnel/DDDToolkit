@@ -13,6 +13,7 @@ DDD00005 | DDDToolkit.Usage | Error | DDDToolkit types must be partial
 DDD00006 | DDDToolkit.Usage | Error | DDDToolkit types cannot be generic
 DDD00007 | DDDToolkit.Entities | Error | The generated identifier name is already taken
 DDD00008 | DDDToolkit.Entities | Error | The identifier type argument is not supported
+DDD00009 | DDDToolkit.Entities | Error | A type is either an entity or an aggregate root
 DDD00010 | DDDToolkit.ValueObjects | Error | Value object properties must use protected setters
 DDD00011 | DDDToolkit.ValueObjects | Error | Value object properties must use init setters
 DDD00013 | DDDToolkit.ValueObjects | Error | Value objects cannot be sealed
