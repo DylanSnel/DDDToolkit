@@ -24,6 +24,15 @@ internal static class KnownTypes
     public const string InternalAttribute = AttributesNamespace + ".InternalAttribute";
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
 
+    /// <summary>Assembly attribute that declares the assembly a module.</summary>
+    public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
+
+    /// <summary>Type attribute that puts a type in its module's published contract.</summary>
+    public const string ModuleContractAttribute = AttributesNamespace + ".ModuleContractAttribute";
+
+    /// <summary>Type attribute that names a published message. A published message is part of the contract too.</summary>
+    public const string IntegrationEventAttribute = AttributesNamespace + ".IntegrationEventAttribute";
+
     public const string GraphQLTypeAttribute = "DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute`1";
 
     /// <summary>Entity Framework's attribute that names the backing field of a property (assembly Microsoft.EntityFrameworkCore.Abstractions).</summary>

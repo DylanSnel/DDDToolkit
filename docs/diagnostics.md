@@ -19,10 +19,14 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
 | [DDD00020](#ddd00020) | Error | Generated collection properties must be get-only |
 | [DDD00021](#ddd00021) | Warning | Reference another aggregate by its id |
+| [DDD00022](#ddd00022) | Warning | Use only what another module publishes |
+| [DDD00023](#ddd00023) | Warning | Do not hold another module's entity |
 
-Most of these say the generator could not do what you asked. [DDD00021](#ddd00021) is the odd one
-out: it is a rule about the model rather than about the declaration, nothing stops being generated
-when it fires, and it is a warning you can suppress or turn off.
+Most of these say the generator could not do what you asked. The last three are a different kind:
+they are rules about the model rather than about the declaration, nothing stops being generated when
+one fires, and each is a warning you can suppress or turn off. [DDD00021](#ddd00021) is about the
+boundary between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the
+boundary between two [modules](modules.md) and say nothing at all until a project declares itself one.
 
 ---
 
@@ -457,6 +461,125 @@ no navigation comes of it. The rule is about what an aggregate *holds*.
 
 The rule reads the declared type of a member, so a property typed as an interface that an aggregate
 root happens to implement is not recognised, and neither is `object`.
+
+---
+
+## DDD00022
+
+**Use only what another module publishes.**
+
+```csharp
+// Crm.csproj: [assembly: Module("Crm")]
+namespace Crm;
+
+[AggregateRoot<CustomerId>]
+public partial class Customer { }
+
+// Sales.csproj: [assembly: Module("Sales")]
+namespace Sales;
+
+public sealed class OrderReport
+{
+    public string Describe(Customer customer) => customer.Name;   // DDD00022
+}
+```
+
+Either publish the type, in the module that owns it:
+
+```csharp
+namespace Crm;
+
+[ModuleContract]
+public sealed record CustomerSummary(CustomerId Id, string Name);
+```
+
+or go through something already published, which for an aggregate is usually its id and its
+integration events:
+
+```csharp
+namespace Sales;
+
+public sealed class OrderReport
+{
+    public string Describe(CustomerSummary customer) => customer.Name;
+}
+```
+
+A module is an assembly carrying `[assembly: Module("Name")]`. Its published contract is every type
+marked `[ModuleContract]`, every type marked `[IntegrationEvent]`, and anything nested inside one of
+those. Everything else the assembly declares is the owning team's business, `public` or not.
+
+The rule is silent unless both assemblies declare a module, so it reports nothing in a codebase that
+has not opted in, and never against the framework, a NuGet package or a shared kernel. Two assemblies
+that declare the same module name are one module and no boundary runs between them.
+
+It reports where you *name* another module's unpublished type: a parameter, a field, a base type, a
+generic argument, an attribute, a `typeof`, a `new`, a static call, a `using` alias. It cannot see a
+type you never name (`var`), an extension method called on an instance, an inherited member, or
+anything resolved by reflection. [Modules](modules.md#what-the-analyzer-cannot-catch) has the full
+list, which is worth reading before you trust the rule.
+
+A warning, for the same reason as DDD00021: it states a design decision, and a team adopting modules
+wants the list before it has to fix it. This one comes from an analyzer rather than from a generator,
+so `#pragma warning disable DDD00022`, `[SuppressMessage]` and `NoWarn` all work, and
+`<WarningsAsErrors>$(WarningsAsErrors);DDD00022</WarningsAsErrors>` turns it into a build break once
+the list is empty.
+
+---
+
+## DDD00023
+
+**Do not hold another module's entity.**
+
+```csharp
+// Sales
+[AggregateRoot<Guid>("ORD")]
+public partial class Order
+{
+    public Customer Buyer { get; private set; }   // DDD00023, Customer belongs to Crm
+}
+```
+
+Hold the other module's published id, and react to what it publishes:
+
+```csharp
+[AggregateRoot<Guid>("ORD")]
+public partial class Order
+{
+    public CustomerId Buyer { get; private set; }
+
+    public void PlaceFor(CustomerId customer) => Buyer = customer;
+}
+```
+
+A property typed as another module's entity is a navigation. Entity Framework maps it, a query in one
+module loads rows owned by the other, and one `SaveChanges` writes into both inside one transaction.
+The two modules can then no longer be tested, migrated or separated on their own, and nothing in the
+code looks wrong.
+
+Publishing the entity does not help and does not silence this rule. `[ModuleContract]` says you may
+name a type; it cannot say you may make that type part of your own transaction.
+
+### What reports and what does not
+
+| | Reports |
+|---|---|
+| A field or property typed as another module's `[Entity<T>]` or `[AggregateRoot<T>]` | Yes |
+| A collection, array or dictionary holding one | Yes |
+| One that the other module publishes with `[ModuleContract]` | Yes |
+| A property typed as the other module's id | No |
+| An entity of the same module | No |
+| An entity of an assembly that declares no module | No |
+| A method parameter or return type | No |
+| A `static` member | No |
+| The generated backing field of a collection property | No, the property is reported instead |
+
+Like DDD00022 this is a warning and comes from an analyzer, so pragmas, `[SuppressMessage]`, `NoWarn`
+and `WarningsAsErrors` all work on it.
+
+Holding another module's *aggregate root* reports [DDD00021](#ddd00021) as well: one says hold the id,
+the other says do not reach across the boundary, and both are answered by the same edit. See
+[Modules](modules.md) for the longer version.
 
 ---
 

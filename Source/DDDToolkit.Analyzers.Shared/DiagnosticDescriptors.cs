@@ -11,6 +11,7 @@ internal static class DiagnosticDescriptors
     private const string Entities = "DDDToolkit.Entities";
     private const string EntityIds = "DDDToolkit.EntityIds";
     private const string Usage = "DDDToolkit.Usage";
+    private const string Modules = "DDDToolkit.Modules";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -136,4 +137,22 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "An aggregate root is the boundary of one load and one transaction. A field or property typed as another root pulls that root inside this one: Entity Framework builds a navigation from it, a single save then writes two roots, and neither concurrency version guards its own aggregate any more. Holding the other root's id keeps the boundary intact and makes loading the other aggregate a decision you write down. The one reference this rule allows is a child entity navigating back to the root that owns it, which is the inverse navigation Entity Framework needs.");
+
+    public static readonly DiagnosticDescriptor TypeIsNotPublishedByItsModule = new(
+        id: "DDD00022",
+        title: "Use only what another module publishes",
+        messageFormat: "'{0}' belongs to module '{1}' and is not part of its published contract, so module '{2}' cannot name it; mark it [ModuleContract] in '{1}' if it really is published, or go through something that is",
+        category: Modules,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A module is worth having only if the code outside it is held to its front door. The published contract of a module is every type it marks with [ModuleContract], plus every type it marks with [IntegrationEvent]; everything else is an implementation detail that the owning team is free to change. This rule reports where one module names another module's implementation detail. It is silent unless both assemblies declare [assembly: Module], so a framework assembly, a NuGet package or a shared kernel is never in the way.");
+
+    public static readonly DiagnosticDescriptor DoNotHoldAnotherModulesEntity = new(
+        id: "DDD00023",
+        title: "Do not hold another module's entity",
+        messageFormat: "'{0}.{1}' holds '{2}', an entity of module '{3}'; hold its identifier, or react to what module '{3}' publishes, so the two modules stay separately loadable and deployable",
+        category: Modules,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "This is the boundary a modular monolith is built to keep. A field or property typed as another module's entity or aggregate root is a navigation: Entity Framework loads across the boundary, one save writes into two modules, and the modules can no longer be tested, versioned or split apart on their own. Publishing the entity does not fix it, which is why this rule fires whether or not the type is part of the other module's contract. Hold the other module's published identifier when you need to point at it, and let an integration event tell you when it changes.");
 }

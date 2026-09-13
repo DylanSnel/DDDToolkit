@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
+using DDDToolkit.Analyzers.Analyzers;
 using CoreEntityGenerator = DDDToolkit.Analyzers.Generators.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.Generators.EntityIdGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.Generators.SingleValueObjectGenerator;
@@ -62,6 +63,7 @@ public sealed class GeneratorTestHost
     private readonly List<PortableExecutableReference> _extraReferences = [];
     private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal);
     private readonly List<string> _noWarn = [];
+    private readonly List<DiagnosticAnalyzer> _analyzers = [];
     private string _assemblyName = DefaultAssemblyName;
 
     private GeneratorTestHost()
@@ -95,6 +97,9 @@ public sealed class GeneratorTestHost
     /// <summary>The generator in DDDToolkit.HotChocolate.Analyzers.</summary>
     public static IIncrementalGenerator[] HotChocolateGenerators() => [new HcSingleValueObjectConverterGenerator()];
 
+    /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer()];
+
     public GeneratorTestHost WithSource(string source, string path = "Source.cs")
     {
         _sources.Add((path, source));
@@ -119,6 +124,20 @@ public sealed class GeneratorTestHost
         _noWarn.AddRange(diagnosticIds);
         return this;
     }
+
+    /// <summary>
+    /// Runs these diagnostic analyzers over the compilation <em>after</em> generation, the way the
+    /// compiler does, so an analyzer sees the generated partial parts and generated identifiers as well
+    /// as the snippet. Their diagnostics join the generators' in every assertion on the outcome.
+    /// </summary>
+    public GeneratorTestHost WithAnalyzers(params DiagnosticAnalyzer[] analyzers)
+    {
+        _analyzers.AddRange(analyzers);
+        return this;
+    }
+
+    /// <summary>The analyzers <see cref="WithAnalyzers"/> added, run by the outcome after generation.</summary>
+    internal IReadOnlyList<DiagnosticAnalyzer> Analyzers => _analyzers;
 
     /// <summary>Sets <c>build_property.DDD_Module</c>, the MSBuild property that names the generated extension methods.</summary>
     public GeneratorTestHost WithModule(string moduleName)
