@@ -38,6 +38,54 @@ internal static class Emit
     }
 
     /// <summary>The generated record-equality members used by the value object family (mirrors the historical output).</summary>
+    /// <summary>
+    /// Equality for a type whose only equality component is <c>Value</c>: entity ids and single value
+    /// objects. Compares the value directly instead of walking <c>GetEqualityComponents()</c>.
+    /// <para>
+    /// The result is identical, because both implementations yield exactly one component, but the walk
+    /// is an <c>IEnumerable&lt;object&gt;</c> iterator plus LINQ, so every comparison allocated two
+    /// iterators and boxed the value. Measured at 144 bytes and roughly 30ns a comparison, which made a
+    /// dictionary keyed by a record id 17 times slower than one keyed by a struct id. See
+    /// docs/performance.md.
+    /// </para>
+    /// </summary>
+    /// <param name="valueIsValueType">
+    /// Whether <c>Value</c> is a value type. A non-nullable value type cannot be tested against null
+    /// (CS0037), and a reference-typed value can be null on a default instance, where the walk this
+    /// replaces produced a hash of zero. The two cases therefore need different hash code bodies.
+    /// </param>
+    public static void SingleValueEqualityMembers(CodeWriter writer, string typeName, string valueType, bool valueIsValueType)
+    {
+        var comparer = "global::System.Collections.Generic.EqualityComparer<" + valueType + ">.Default";
+
+        using (writer.Block("public virtual bool Equals(" + typeName + "? other)"))
+        {
+            writer.Line("if (other is null)");
+            writer.Line("{");
+            writer.Line("    return false;");
+            writer.Line("}");
+            writer.Line();
+            writer.Line("if (ReferenceEquals(this, other))");
+            writer.Line("{");
+            writer.Line("    return true;");
+            writer.Line("}");
+            writer.Line();
+            writer.Line("return " + comparer + ".Equals(Value, other.Value);");
+        }
+
+        writer.Line();
+
+        if (valueIsValueType)
+        {
+            writer.Line("public override int GetHashCode() => " + comparer + ".GetHashCode(Value);");
+        }
+        else
+        {
+            // The walk this replaces mapped a null component to zero; keep that rather than throwing.
+            writer.Line("public override int GetHashCode() => Value is null ? 0 : " + comparer + ".GetHashCode(Value);");
+        }
+    }
+
     public static void RecordEqualityMembers(CodeWriter writer, string typeName, bool hashCodeFromComponents)
     {
         using (writer.Block("public virtual bool Equals(" + typeName + "? other)"))

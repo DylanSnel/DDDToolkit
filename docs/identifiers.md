@@ -16,7 +16,7 @@ Both are supported. They behave the same and they do not cost the same.
 |---|---|---|
 | Allocation | None. The id is its value. | One object per id on the heap, 64 bytes. |
 | Base type | None. Implements `IEntityId<TValue>`. | Derives from `EntityId<TValue>`. |
-| Equality and hashing | Written by the compiler. Free. | Through `GetEqualityComponents`. 144 bytes a comparison. |
+| Equality and hashing | Written by the compiler. Free. | Compares `Value` directly. Free, plus a dereference. |
 | Absent value | `default`, exposed as `Empty`/`IsEmpty` | `null` |
 | Always-valid twin | No | Yes, `Valid<Name>` |
 | Inheritance | Not possible | Possible |
@@ -30,25 +30,23 @@ fields every `ValueObject` carries and no identifier ever reads. In a list of te
 one contiguous block of 156 KB versus 625 KB spread over ten thousand small objects, and every read
 pays a dereference, which measures at about 20%.
 
-The larger difference is equality. A struct id compares with two instructions; the compiler writes
-them and a benchmark cannot separate the call from an empty method. A record id inherits equality from
-`ValueObject`, which walks `GetEqualityComponents()` through LINQ, so every comparison allocates two
-iterators and boxes the value: 144 bytes and around 30 nanoseconds. A dictionary keyed by a record id
-is 17 times slower than one keyed by a struct id, a `HashSet` 21 times, and scanning a list of ten
-thousand comparing each one is 70 times. If you index anything by identifier in memory, this is the
-reason to choose the struct, not the memory layout.
+Equality used to be the larger difference and no longer is. A record id inherited equality from
+`ValueObject`, which walks `GetEqualityComponents()` through LINQ, so every comparison allocated two
+iterators and boxed the value. A dictionary keyed by a record id was 17 times slower than one keyed by
+a struct id. The generators now compare `Value` directly for identifiers and single value objects,
+which is the same answer without the machinery, and the gap is 1.5 times with nothing allocated. That
+defect was found by writing the benchmarks for this page, which is the argument for having them.
 
 Entity Framework is **not** a reason either way. Both forms map through a generated value converter to
 the same provider column, and both round trip at the same speed: the database work is orders of
 magnitude larger than the difference between them. The struct form saves one object per row, which
 disappears into what materialising a row costs anyway.
 
-One measurement runs the other way. `ToString()` on a struct id currently allocates 232 bytes against
-the record form's 104, because the generated struct formats its value through
-`Convert.ToString(object, IFormatProvider)` and then concatenates. It is faster in time and worse in
-allocation, it is a fixable detail of the generator rather than anything to do with structs, and it is
-written down here because a page that argues from performance should own the number that disagrees
-with it.
+`ToString()` was the other thing the benchmarks caught. The struct form allocated 232 bytes against
+the record form's 104, because the generated code formatted its value through
+`Convert.ToString(object, IFormatProvider)`, which boxes, and then concatenated. It now formats through
+an interpolated string pinned to the invariant culture, which boxes nothing and builds one string, and
+both forms allocate 104 bytes.
 
 Reach for `partial record` only when you need inheritance or the always-valid twin. Neither is common
 for identifiers: validation belongs to value objects, and an id is either well-formed or it is not.

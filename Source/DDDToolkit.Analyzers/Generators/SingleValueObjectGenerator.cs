@@ -36,7 +36,7 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".SingleValueObject<" + value.FullyQualifiedName + ">, "
                 + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
-                Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: false);
+                Emit.SingleValueEqualityMembers(writer, name, value.FullyQualifiedName, value.IsValueType);
                 writer.Line();
 
                 using (writer.Block("protected " + name + "(" + value.FullyQualifiedName + " value) : base(value)"))
@@ -76,7 +76,7 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
-                Emit.RecordEqualityMembers(writer, validName, hashCodeFromComponents: false);
+                Emit.SingleValueEqualityMembers(writer, validName, value.FullyQualifiedName, value.IsValueType);
             }
         }
 

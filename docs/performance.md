@@ -74,26 +74,26 @@ comparison runs.
 
 | | Mean | Ratio | Allocated |
 |---|---|---|---|
-| Struct id, compare each | 3.41 μs | 1.00 | none |
-| Record id, compare each | 237.36 μs | **69.6** | 1,440,000 B |
-| Struct id, read `.Value` | 7.34 μs | 2.15 | none |
-| Record id, read `.Value` | 8.80 μs | 2.58 | none |
+| Struct id, compare each | 3.37 μs | 1.00 | none |
+| Record id, compare each | 8.46 μs | 2.51 | none |
+| Struct id, read `.Value` | 7.23 μs | 2.15 | none |
+| Record id, read `.Value` | 8.63 μs | 2.57 | none |
 
-This is the biggest gap on the page, and it is not about memory layout at all.
+Reading the value through a reference costs about 20%, which is the dereference the page predicts.
+Comparing costs 2.5 times, which is the same dereference paid twice plus the call.
 
-Reading the value through a reference costs 20%, which is the dereference the documentation predicts.
-Comparing is 70 times slower, and that is the toolkit's own doing. A struct identifier gets its
-equality from the language: two 8-byte comparisons, inlined. A record identifier inherits equality from
-`ValueObject`, which compares `GetEqualityComponents()` sequences:
+**This measurement used to read 69.6, with 1,440,000 bytes allocated.** A record identifier inherited
+equality from `ValueObject`, which compares `GetEqualityComponents()` sequences:
 
 ```csharp
 return Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());
 ```
 
-That is two iterator objects, two boxed `Guid`s and a LINQ call for every comparison: 144 bytes and
-roughly 30 ns each time. It is a reasonable default for a value object with several components. For an
-identifier that wraps one `Guid`, it is a lot of machinery to answer a question two instructions could
-answer.
+Two iterator objects, two boxed `Guid`s and a LINQ call, for every comparison. That is a reasonable
+default for a value object with several components and absurd for an identifier wrapping one `Guid`,
+and nobody had measured it. The generators now emit a direct comparison of `Value` for entity ids and
+single value objects, which yields the same answer because both types have exactly one component. The
+numbers above are from after that change.
 
 ## Dictionary and set lookup
 
@@ -101,17 +101,15 @@ answer.
 
 | | Mean | Ratio | Allocated |
 |---|---|---|---|
-| `Dictionary` keyed by struct id | 3.54 μs | 1.00 | none |
-| `Dictionary` keyed by record id | 61.82 μs | **17.5** | 272,000 B |
-| `HashSet` of struct ids | 3.82 μs | 1.08 | none |
-| `HashSet` of record ids | 74.67 μs | **21.1** | 272,000 B |
+| `Dictionary` keyed by struct id | 3.53 μs | 1.00 | none |
+| `Dictionary` keyed by record id | 5.35 μs | 1.52 | none |
+| `HashSet` of struct ids | 3.55 μs | 1.01 | none |
+| `HashSet` of record ids | 4.92 μs | 1.40 | none |
 
-Same cause. Every probe pays for a hash and at least one equality check, and both of those go through
-`GetEqualityComponents` on the record form. 272 bytes per lookup, allocated by something whose whole
-job is to be a fast index.
-
-If you keep in-memory indexes keyed by identifier, this is the number that matters most, and it is a
-much stronger argument for the struct form than the memory layout one.
+Every probe pays for a hash and at least one equality check, so this tracked the defect above
+exactly: it used to read 17.5 and 21.1, with 272,000 bytes allocated by something whose whole job is
+to be a fast index. With the direct comparison in place the record form costs about half as much
+again as the struct form, which is the dereference and the call, and allocates nothing.
 
 ## Equality and hashing on their own
 
@@ -119,14 +117,18 @@ One comparison and one hash, undiluted.
 
 | | Mean | Allocated |
 |---|---|---|
-| Struct id `==` | not measurable | none |
-| Record id `==` | 30.47 ns | 144 B |
-| Struct id `GetHashCode` | 0.21 ns | none |
-| Record id `GetHashCode` | 23.81 ns | 128 B |
+| Struct id `==` | 0.20 ns | none |
+| Record id `==` | 0.23 ns | none |
+| Struct id `GetHashCode` | not measurable | none |
+| Record id `GetHashCode` | 0.19 ns | none |
 
-BenchmarkDotNet reports struct equality as *"the method duration is indistinguishable from the empty
-method duration"*, so there is no honest number to quote: it is two integer comparisons and the
-measurement cannot separate them from nothing at all.
+Both forms are now effectively free, and the numbers here are at the edge of what the harness can
+resolve: BenchmarkDotNet reports the struct hash as *"the method duration is indistinguishable from
+the empty method duration"*, so there is no honest figure to quote for it.
+
+Before the generators emitted a direct comparison, the record form measured 30.47 ns and 144 bytes for
+an equality check and 23.81 ns and 128 bytes for a hash. Those two lines were the whole of the
+17x-to-70x gap in the two sections above.
 
 ## Text
 
@@ -134,7 +136,7 @@ measurement cannot separate them from nothing at all.
 
 | | Mean | Allocated |
 |---|---|---|
-| Struct id `ToString()` | 16.33 ns | **232 B** |
+| Struct id `ToString()` | 15.52 ns | 104 B |
 | Record id `ToString()` | 19.18 ns | **104 B** |
 | Struct id `Parse` | 23.62 ns | 96 B |
 | Record id `Parse` | 28.11 ns | 152 B |
@@ -151,15 +153,22 @@ public override string ToString()
 private string ValueToString() => Convert.ToString(Value, CultureInfo.InvariantCulture) ?? string.Empty;
 ```
 
-`Convert.ToString(object, IFormatProvider)` boxes the `Guid` and builds the 36-character string, and
-the concatenation then builds a second 40-character string: three allocations. The record form goes
-through the base type's interpolated string, `$"{_prefix}_{Value}"`, which formats the `Guid` straight
-into one buffer: one allocation.
+`Convert.ToString(object, IFormatProvider)` boxed the `Guid` and built the 36-character string, and the
+concatenation then built a second 40-character string: three allocations against the record form's one,
+which went through an interpolated string. A struct identifier written into a log line on every request
+paid 232 bytes for it.
 
-So the struct form is still faster in time, and still allocation-free everywhere else, but on this one
-operation the record form is the tidier of the two. A struct identifier written into a log line on
-every request pays 232 bytes for it. That is small, and it is also avoidable, and nobody had measured
-it before this page existed. It is filed as a generator issue rather than fixed here.
+The generator now writes the interpolated form too, pinned to the invariant culture:
+
+```csharp
+public override string ToString()
+    => IdPrefix.Length == 0
+        ? string.Create(CultureInfo.InvariantCulture, $"{Value}")
+        : string.Create(CultureInfo.InvariantCulture, $"{IdPrefix}_{Value}");
+```
+
+Nothing is boxed, one string comes out, and both forms now allocate 104 bytes. The table above is from
+after that change.
 
 ## The Entity Framework round trip
 
@@ -216,11 +225,13 @@ always for the reasons the page gives:
 | The struct is 16 bytes and the record adds a reference and a header | True, and understated: 64 bytes against 16, because the record also carries validation state. |
 | A list of ten thousand is one block instead of ten thousand objects | True. Reading through the reference costs about 20%. |
 | The struct costs nothing in persistence | True. So does the record: this is not a reason to choose either. |
-| (unstated) Equality and hashing | The strongest reason by far, and the page does not mention it: 17x to 70x, plus allocation on every comparison. |
-| (unstated) `ToString` | The one place the record form wins today, because of a fixable inefficiency in the generated struct. |
+| (unstated) Equality and hashing | Was the strongest reason by far, at 17x to 70x with allocation on every comparison. Writing this page found the cause and it is fixed; the gap is now 1.4x to 2.5x with nothing allocated. |
+| (unstated) `ToString` | Was the one place the record form won, because of a fixable inefficiency in the generated struct. Also fixed; both allocate 104 bytes. |
 
-The short version: choose the struct form for collections, dictionaries and equality, not for the
-database.
+The short version: choose the struct form to avoid an object per identifier and a dereference on every
+read, not for the database, and no longer because equality is catastrophic. Two of the five rows in
+this table describe defects that existed only because nobody had measured, which is the case for
+keeping the benchmarks in the repository rather than running them once.
 
 ## Provider coverage
 

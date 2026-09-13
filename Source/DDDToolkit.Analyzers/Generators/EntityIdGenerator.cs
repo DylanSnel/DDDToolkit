@@ -76,7 +76,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
-                Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: false);
+                Emit.SingleValueEqualityMembers(writer, name, value.FullyQualifiedName, value.IsValueType);
 
                 if (value.IsGuid)
                 {
@@ -113,7 +113,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
-                Emit.RecordEqualityMembers(writer, validName, hashCodeFromComponents: false);
+                Emit.SingleValueEqualityMembers(writer, validName, value.FullyQualifiedName, value.IsValueType);
             }
         }
 
@@ -175,10 +175,7 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 }
 
                 writer.Line();
-                writer.Line("public override string ToString()");
-                writer.Line("    => IdPrefix.Length == 0 ? ValueToString() : IdPrefix + \"_\" + ValueToString();");
-                writer.Line();
-                writer.Line("private string ValueToString() => global::System.Convert.ToString(Value, global::System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;");
+                EmitToString(writer, value);
                 writer.Line();
                 writer.Line("public int CompareTo(" + name + " other) => global::System.Collections.Generic.Comparer<" + value.FullyQualifiedName + ">.Default.Compare(Value, other.Value);");
                 writer.Line();
@@ -221,6 +218,33 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
         => canParse
             ? "/// <summary>Prefix written by ToString() and accepted (optionally) by Parse/TryParse.</summary>"
             : "/// <summary>Prefix written by ToString().</summary>";
+
+    /// <summary>
+    /// Writes ToString(). A string-valued id concatenates; anything else goes through an interpolated
+    /// string pinned to the invariant culture.
+    /// <para>
+    /// The obvious <c>Convert.ToString(Value, CultureInfo.InvariantCulture)</c> boxes the value and then
+    /// concatenates, which measured at 232 bytes an id against the record form's 104. An interpolated
+    /// string handler formats a Guid or a number straight into the buffer, so nothing is boxed and one
+    /// string comes out. See docs/performance.md.
+    /// </para>
+    /// </summary>
+    private static void EmitToString(CodeWriter writer, ValueTypeInfo value)
+    {
+        writer.Line("public override string ToString()");
+
+        if (value.IsString)
+        {
+            // A null value is possible on a default struct, and the empty-prefix form has to stay
+            // byte-for-byte what it was: "SKU_" for a default id, not "SKU_" plus a null.
+            writer.Line("    => IdPrefix.Length == 0 ? (Value ?? string.Empty) : IdPrefix + \"_\" + (Value ?? string.Empty);");
+            return;
+        }
+
+        writer.Line("    => IdPrefix.Length == 0");
+        writer.Line("        ? string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $\"{Value}\")");
+        writer.Line("        : string.Create(global::System.Globalization.CultureInfo.InvariantCulture, $\"{IdPrefix}_{Value}\");");
+    }
 
     private static void EmitGuidFactories(CodeWriter writer, string name)
     {
