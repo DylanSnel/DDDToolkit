@@ -10,6 +10,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00003](#ddd00003) | Error | Entity ids must be records |
 | [DDD00004](#ddd00004) | Warning | Entity id structs should be readonly |
 | [DDD00005](#ddd00005) | Error | DDDToolkit types must be partial |
+| [DDD00006](#ddd00006) | Error | DDDToolkit types cannot be generic |
 | [DDD00010](#ddd00010) | Error | Value object properties must use protected setters |
 | [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
@@ -117,6 +118,40 @@ The generator adds a second declaration of your type, which requires `partial`. 
 ```csharp
 [AggregateRoot<OrderId>]
 public partial class Order { }
+```
+
+---
+
+## DDD00006
+
+**DDDToolkit types cannot be generic.**
+
+```csharp
+[EntityId<Guid>]
+public readonly partial record struct Reference<T>;      // DDD00006
+
+public partial class Repository<T>
+{
+    [AggregateRoot<OrderId>]
+    public partial class Entry { }                        // DDD00006, through its container
+}
+```
+
+A type nested in a non-generic container is fine and generates normally.
+
+The generated members have to name your type from places that cannot see a type parameter. A struct
+identifier carries `[JsonConverter(typeof(Reference<T>.SystemTextJsonConverter))]`, and an attribute
+argument may not name an open generic. The `Add<Module>Converters` and
+`Add<Module>GraphQlRuntimeBindings` registrations live outside the type and cannot name it at all.
+
+The rule covers a type nested inside a generic type for the same reason: the type parameter is still
+in scope, so the same references are still unspeakable.
+
+Give the type a concrete identity instead:
+
+```csharp
+[EntityId<Guid>]
+public readonly partial record struct OrderReference;
 ```
 
 ---
