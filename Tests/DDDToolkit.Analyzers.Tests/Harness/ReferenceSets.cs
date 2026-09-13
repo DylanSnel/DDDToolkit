@@ -44,9 +44,9 @@ public static class ReferenceSets
         EntityFrameworkAbstractions,
         FromOutputDirectory("Microsoft.EntityFrameworkCore.dll"),
         FromOutputDirectory("Microsoft.EntityFrameworkCore.Relational.dll"),
-        FromOutputDirectory("Microsoft.Extensions.DependencyInjection.Abstractions.dll"),
-        FromOutputDirectory("Microsoft.Extensions.Logging.Abstractions.dll"),
-        FromOutputDirectory("Microsoft.Extensions.Caching.Memory.dll"),
+        DependencyInjectionAbstractions,
+        FromType(typeof(Microsoft.Extensions.Logging.ILogger)),
+        FromType(typeof(Microsoft.Extensions.Caching.Memory.MemoryCache)),
     ]);
 
     private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyFluentValidation = new(() =>
@@ -67,9 +67,24 @@ public static class ReferenceSets
         FromOutputDirectory("HotChocolate.Language.SyntaxTree.dll"),
         FromOutputDirectory("HotChocolate.Language.Utf8.dll"),
         FromOutputDirectory("HotChocolate.Features.dll"),
-        FromOutputDirectory("Microsoft.Extensions.DependencyInjection.Abstractions.dll"),
-        MetadataReference.CreateFromFile(typeof(global::DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute<>).Assembly.Location),
+        DependencyInjectionAbstractions,
+        FromType(typeof(global::DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute<>)),
     ]);
+
+    /// <summary>
+    /// Resolved from the type rather than from a file name: this assembly ships in the
+    /// Microsoft.AspNetCore.App shared framework, which the test project references transitively through
+    /// HotChocolate, so whether a copy lands in the output directory depends on how the pinned package
+    /// version compares to the runtime installed on the machine. It is copied on a developer machine
+    /// running an older runtime and absent on a build agent running a current one.
+    /// <para>
+    /// Deliberately a property with no initializer. A static initializer here would run when the class is
+    /// first touched and, on failure, fail every test in the project rather than only the ones that asked
+    /// for this set.
+    /// </para>
+    /// </summary>
+    private static PortableExecutableReference DependencyInjectionAbstractions
+        => FromType(typeof(Microsoft.Extensions.DependencyInjection.IServiceCollection));
 
     /// <summary>.NET 10 reference assemblies plus DDDToolkit and DDDToolkit.Abstractions.</summary>
     public static ImmutableArray<PortableExecutableReference> Core => LazyCore.Value;
@@ -86,17 +101,64 @@ public static class ReferenceSets
     /// <summary>Everything the generated HotChocolate change-type providers and bindings need.</summary>
     public static ImmutableArray<PortableExecutableReference> HotChocolate => LazyHotChocolate.Value;
 
+    /// <summary>
+    /// Resolves the assembly declaring <paramref name="type"/>. Preferred over a file name whenever a type
+    /// is reachable at compile time: the compiler checks it, and it is immune to the assembly being
+    /// provided by the shared framework instead of being copied to the output directory.
+    /// </summary>
+    private static PortableExecutableReference FromType(Type type)
+        => MetadataReference.CreateFromFile(type.Assembly.Location);
+
+    /// <summary>
+    /// Resolves one assembly to a metadata reference, preferring the copy next to the test assembly and
+    /// falling back to the loaded one. Used for assemblies with no type worth naming here.
+    /// <para>
+    /// The fallback is not belt and braces. Whether an assembly is copied to the output directory depends
+    /// on what the installed shared framework already provides, which differs between machines and between
+    /// runtime versions: <c>Microsoft.Extensions.DependencyInjection.Abstractions</c> is copied on a
+    /// Windows developer machine and resolved from the framework on the Linux build agent, where the file
+    /// is simply absent. Resolving through the loaded assembly works in both cases and gives the reference
+    /// the test process itself is running against.
+    /// </para>
+    /// </summary>
     private static PortableExecutableReference FromOutputDirectory(string fileName)
     {
         var path = Path.Combine(AppContext.BaseDirectory, fileName);
-        if (!File.Exists(path))
+        if (File.Exists(path))
         {
-            throw new FileNotFoundException(
-                $"'{fileName}' is not in the test output directory. The test project must reference the project that brings it in. "
-                    + "If the package was upgraded, check whether the assembly was renamed or merged into another one.",
-                path);
+            return MetadataReference.CreateFromFile(path);
         }
 
-        return MetadataReference.CreateFromFile(path);
+        var simpleName = Path.GetFileNameWithoutExtension(fileName);
+
+        var loaded = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(assembly =>
+                !assembly.IsDynamic
+                && assembly.Location.Length > 0
+                && string.Equals(assembly.GetName().Name, simpleName, StringComparison.OrdinalIgnoreCase));
+
+        if (loaded is not null)
+        {
+            return MetadataReference.CreateFromFile(loaded.Location);
+        }
+
+        try
+        {
+            var byName = System.Reflection.Assembly.Load(simpleName);
+            if (byName.Location.Length > 0)
+            {
+                return MetadataReference.CreateFromFile(byName.Location);
+            }
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or BadImageFormatException)
+        {
+            // Fall through to the descriptive error below.
+        }
+
+        throw new FileNotFoundException(
+            $"'{fileName}' is neither in the test output directory nor loadable by name. The test project must reference "
+                + "the project that brings it in. If the package was upgraded, check whether the assembly was renamed or "
+                + "merged into another one.",
+            path);
     }
 }
