@@ -19,3 +19,5 @@ DDD00011 | DDDToolkit.ValueObjects | Error | Value object properties must use in
 DDD00013 | DDDToolkit.ValueObjects | Error | Value objects cannot be sealed
 DDD00020 | DDDToolkit.Entities | Error | Generated collection properties must be get-only
 DDD00021 | DDDToolkit.Entities | Warning | Reference another aggregate by its id
+DDD00022 | DDDToolkit.Modules | Warning | Use only what another module publishes
+DDD00023 | DDDToolkit.Modules | Warning | Do not hold another module's entity

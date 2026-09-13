@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
 
@@ -28,8 +29,27 @@ public sealed class GeneratorRunOutcome
         InputCompilation = inputCompilation;
         OutputCompilation = outputCompilation;
         GeneratorDiagnostics = generatorDiagnostics;
+        AnalyzerDiagnostics = RunAnalyzers(host, outputCompilation);
         CompilationDiagnostics = outputCompilation.GetDiagnostics();
         GeneratedSources = [.. driver.GetRunResult().Results.SelectMany(result => result.GeneratedSources)];
+    }
+
+    /// <summary>
+    /// Runs the analyzers the host was given over the post-generation compilation, which is where the
+    /// compiler runs them too. An analyzer that throws comes back as AD0001 rather than as silence.
+    /// </summary>
+    private static ImmutableArray<Diagnostic> RunAnalyzers(GeneratorTestHost host, Compilation compilation)
+    {
+        if (host.Analyzers.Count == 0)
+        {
+            return [];
+        }
+
+        return compilation
+            .WithAnalyzers([.. host.Analyzers], new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty))
+            .GetAnalyzerDiagnosticsAsync()
+            .GetAwaiter()
+            .GetResult();
     }
 
     internal static GeneratorRunOutcome Run(GeneratorDriver driver, Compilation compilation, CSharpParseOptions parseOptions, GeneratorTestHost host)
@@ -49,6 +69,18 @@ public sealed class GeneratorRunOutcome
 
     /// <summary>Diagnostics the generators reported (DDD000xx live here, not in <see cref="CompilationDiagnostics"/>).</summary>
     public ImmutableArray<Diagnostic> GeneratorDiagnostics { get; }
+
+    /// <summary>
+    /// Diagnostics the analyzers passed to <see cref="GeneratorTestHost.WithAnalyzers"/> reported, which
+    /// is empty unless a test asked for one.
+    /// </summary>
+    public ImmutableArray<Diagnostic> AnalyzerDiagnostics { get; }
+
+    /// <summary>
+    /// Everything the toolkit reported about this snippet, from generators and analyzers alike. The
+    /// assertions below work over this, so a test does not have to know which of the two found a problem.
+    /// </summary>
+    public ImmutableArray<Diagnostic> ReportedDiagnostics => [.. GeneratorDiagnostics, .. AnalyzerDiagnostics];
 
     /// <summary>Diagnostics the compiler reported over the user's code plus the generated code.</summary>
     public ImmutableArray<Diagnostic> CompilationDiagnostics { get; }
@@ -110,13 +142,22 @@ public sealed class GeneratorRunOutcome
         return this;
     }
 
-    /// <summary>Asserts no generator threw.</summary>
+    /// <summary>Asserts no generator and no analyzer threw.</summary>
     public GeneratorRunOutcome ShouldNotCrash()
     {
         if (GeneratorExceptions.Count > 0)
         {
             throw new InvalidOperationException(
                 "A generator threw, so it contributed nothing:\n" + string.Join("\n", GeneratorExceptions));
+        }
+
+        // Roslyn swallows an analyzer exception and reports AD0001 instead, which otherwise looks exactly
+        // like an analyzer that found nothing.
+        var failures = AnalyzerDiagnostics.Where(diagnostic => diagnostic.Id == "AD0001").ToList();
+        if (failures.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "An analyzer threw, so it reported nothing:\n" + string.Join("\n", failures.Select(failure => failure.GetMessage())));
         }
 
         return this;
@@ -128,11 +169,11 @@ public sealed class GeneratorRunOutcome
     /// </summary>
     public Diagnostic ShouldHaveDiagnostic(string id, string at)
     {
-        var candidates = GeneratorDiagnostics.Where(diagnostic => diagnostic.Id == id).ToList();
+        var candidates = ReportedDiagnostics.Where(diagnostic => diagnostic.Id == id).ToList();
         if (candidates.Count == 0)
         {
             throw new InvalidOperationException(
-                $"Expected diagnostic {id}, got: {DescribeAll(GeneratorDiagnostics)}");
+                $"Expected diagnostic {id}, got: {DescribeAll(ReportedDiagnostics)}");
         }
 
         var matching = candidates.Where(diagnostic => TextAt(diagnostic) == at).ToList();
@@ -146,10 +187,13 @@ public sealed class GeneratorRunOutcome
         return matching[0];
     }
 
+    /// <summary>How many diagnostics with this id were reported. Use it where reporting twice would be the bug.</summary>
+    public int Count(string id) => ReportedDiagnostics.Count(diagnostic => diagnostic.Id == id);
+
     /// <summary>Asserts no diagnostic with this id was reported.</summary>
     public GeneratorRunOutcome ShouldNotHaveDiagnostic(string id)
     {
-        var unexpected = GeneratorDiagnostics.Where(diagnostic => diagnostic.Id == id).ToList();
+        var unexpected = ReportedDiagnostics.Where(diagnostic => diagnostic.Id == id).ToList();
         if (unexpected.Count > 0)
         {
             throw new InvalidOperationException($"Did not expect {id}, but got: {DescribeAll([.. unexpected])}");
@@ -161,12 +205,12 @@ public sealed class GeneratorRunOutcome
     /// <summary>Asserts exactly these diagnostic ids were reported (order-insensitive).</summary>
     public GeneratorRunOutcome ShouldHaveExactlyDiagnostics(params string[] ids)
     {
-        var actual = GeneratorDiagnostics.Select(diagnostic => diagnostic.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
+        var actual = ReportedDiagnostics.Select(diagnostic => diagnostic.Id).OrderBy(id => id, StringComparer.Ordinal).ToList();
         var expected = ids.OrderBy(id => id, StringComparer.Ordinal).ToList();
         if (!actual.SequenceEqual(expected, StringComparer.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Expected exactly [{string.Join(", ", expected)}], got: {DescribeAll(GeneratorDiagnostics)}");
+                $"Expected exactly [{string.Join(", ", expected)}], got: {DescribeAll(ReportedDiagnostics)}");
         }
 
         return this;
@@ -291,10 +335,16 @@ public sealed class GeneratorRunOutcome
     /// <summary>
     /// The source text a diagnostic points at. Diagnostics from these generators carry a rebuilt
     /// <see cref="Location"/> without a syntax tree (that is deliberate — holding a tree would break
-    /// incremental caching), so the text is looked up through the file path instead.
+    /// incremental caching), so the text is looked up through the file path instead. An analyzer's
+    /// diagnostic does carry its tree, and is read straight from it.
     /// </summary>
     public string TextAt(Diagnostic diagnostic)
     {
+        if (diagnostic.Location.SourceTree is { } sourceTree)
+        {
+            return sourceTree.GetText().ToString(diagnostic.Location.SourceSpan);
+        }
+
         var lineSpan = diagnostic.Location.GetLineSpan();
         var tree = InputCompilation.SyntaxTrees.FirstOrDefault(candidate => candidate.FilePath == lineSpan.Path);
         if (tree is null)
