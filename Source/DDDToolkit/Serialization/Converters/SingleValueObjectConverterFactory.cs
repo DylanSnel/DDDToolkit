@@ -15,8 +15,15 @@ public class SingleValueObjectConverterFactory : JsonConverterFactory
 
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
     {
+        // Walk up the hierarchy: entity ids derive from EntityId<T> which derives from SingleValueObject<T>,
+        // and always-valid twins derive from their value object.
         var baseType = typeToConvert.BaseType;
-        if (baseType == null || !baseType.IsGenericType || baseType.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
+        while (baseType is not null && !(baseType.IsGenericType && baseType.GetGenericTypeDefinition() == typeof(SingleValueObject<>)))
+        {
+            baseType = baseType.BaseType;
+        }
+
+        if (baseType == null)
         {
             throw new InvalidOperationException($"The type {typeToConvert.Name} is not supported by this converter.");
         }
@@ -35,7 +42,8 @@ public class SingleValueObjectConverter<TSingleValueObject, TValue> : JsonConver
     public override TSingleValueObject? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         TValue value = JsonSerializer.Deserialize<TValue>(ref reader, options)!;
-        var constructorInfo = typeToConvert.GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null, [typeof(TValue)], null);
+        // Generated value objects have a protected (value) constructor; their always-valid twins a public one.
+        var constructorInfo = typeToConvert.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, [typeof(TValue)], null);
         if (constructorInfo == null)
         {
             throw new JsonException($"Could not find a constructor for '{typeToConvert.Name}'.");

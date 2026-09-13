@@ -54,8 +54,9 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     }
 
     /// <summary>
-    /// Loads up to <paramref name="batchSize"/> pending messages, oldest first, and dispatches them.
-    /// Returns the number of messages delivered successfully.
+    /// Loads up to <paramref name="batchSize"/> pending messages, oldest first (by write time, then by
+    /// the event's <c>OccurredAt</c>), and dispatches them. Returns the number of messages delivered
+    /// successfully. Order is best-effort: retries and concurrent processors can reorder delivery.
     /// </summary>
     public async Task<int> ProcessPendingAsync(int batchSize = 100, CancellationToken cancellationToken = default)
     {
@@ -67,7 +68,9 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
         var messages = await _context.Set<OutboxMessage>()
             .Where(message => message.ProcessedAt == null && message.Attempts < maxAttempts)
+            // Write time, then occurrence time (events written by one save share CreatedAt), then id.
             .OrderBy(message => message.CreatedAt)
+            .ThenBy(message => message.OccurredAt)
             .ThenBy(message => message.Id)
             .Take(batchSize)
             .ToListAsync(cancellationToken)

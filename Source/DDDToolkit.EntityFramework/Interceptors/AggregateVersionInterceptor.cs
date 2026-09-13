@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -60,6 +61,44 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
     /// <inheritdoc />
     public override ValueTask<InterceptionResult> ThrowingConcurrencyExceptionAsync(ConcurrencyExceptionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
         => throw Translate(eventData);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The update pipeline wraps whatever <see cref="ThrowingConcurrencyException"/> throws in a
+    /// <see cref="DbUpdateException"/>. Throwing from here replaces the outgoing exception, so callers
+    /// can <c>catch (ConcurrencyConflictException)</c> directly.
+    /// </remarks>
+    public override void SaveChangesFailed(DbContextErrorEventData eventData)
+    {
+        if (Unwrap(eventData.Exception) is { } conflict)
+        {
+            ExceptionDispatchInfo.Throw(conflict);
+        }
+    }
+
+    /// <inheritdoc />
+    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    {
+        SaveChangesFailed(eventData);
+        return Task.CompletedTask;
+    }
+
+    private static ConcurrencyConflictException? Unwrap(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            switch (current)
+            {
+                case ConcurrencyConflictException conflict:
+                    return conflict;
+                case DbUpdateConcurrencyException concurrency when concurrency.InnerException is not ConcurrencyConflictException:
+                    // A provider raised the conflict without passing through ThrowingConcurrencyException.
+                    return Translate(concurrency.Entries, concurrency);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Increments the version of every aggregate root that this save touches, once per root.</summary>
     public static void BumpVersions(DbContext context)
@@ -186,11 +225,14 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
     }
 
     private static ConcurrencyConflictException Translate(ConcurrencyExceptionEventData eventData)
+        => Translate(eventData.Entries, eventData.Exception);
+
+    private static ConcurrencyConflictException Translate(IReadOnlyList<EntityEntry> entries, Exception inner)
     {
-        var entry = eventData.Entries.FirstOrDefault(static e => e.Entity is IAggregateRoot) ?? eventData.Entries.FirstOrDefault();
+        var entry = entries.FirstOrDefault(static e => e.Entity is IAggregateRoot) ?? entries.FirstOrDefault();
         if (entry is null)
         {
-            return new ConcurrencyConflictException(aggregateType: null, aggregateId: null, eventData.Exception);
+            return new ConcurrencyConflictException(aggregateType: null, aggregateId: null, inner);
         }
 
         var key = entry.Metadata.FindPrimaryKey();
@@ -200,6 +242,6 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
                 ? entry.Property(key.Properties[0].Name).CurrentValue
                 : string.Join("|", key.Properties.Select(property => entry.Property(property.Name).CurrentValue?.ToString()));
 
-        return new ConcurrencyConflictException(entry.Metadata.ClrType, id, eventData.Exception);
+        return new ConcurrencyConflictException(entry.Metadata.ClrType, id, inner);
     }
 }
