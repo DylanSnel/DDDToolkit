@@ -90,11 +90,11 @@ public sealed class ConcurrencyTests : IDisposable
         var contextA = scopeA.ServiceProvider.GetRequiredService<LibraryContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<LibraryContext>();
 
-        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id);
-        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id);
+        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
+        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
 
         shelfA.Rename("A wins");
-        await contextA.SaveChangesAsync();
+        await contextA.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         shelfB.Rename("B loses");
         var act = () => contextB.SaveChangesAsync();
@@ -110,9 +110,9 @@ public sealed class ConcurrencyTests : IDisposable
     }
 
     [Fact]
-    public void Sync_SaveChanges_also_translates_the_conflict()
+    public async Task Sync_SaveChanges_also_translates_the_conflict()
     {
-        var id = SeedShelfAsync().GetAwaiter().GetResult();
+        var id = await SeedShelfAsync();
 
         using var scopeA = _host.CreateScope();
         using var scopeB = _host.CreateScope();
@@ -120,6 +120,7 @@ public sealed class ConcurrencyTests : IDisposable
         var contextB = scopeB.ServiceProvider.GetRequiredService<LibraryContext>();
         var shelfB = contextB.Shelves.Single(s => s.Id == id);
 
+        // Only the seeding above is awaited: the two SaveChanges() calls below are the synchronous path under test.
         shelfA.Rename("A");
         scopeA.ServiceProvider.GetRequiredService<LibraryContext>().SaveChanges();
         shelfB.Rename("B");
@@ -138,11 +139,11 @@ public sealed class ConcurrencyTests : IDisposable
         using var scopeB = _host.CreateScope();
         var contextA = scopeA.ServiceProvider.GetRequiredService<LibraryContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<LibraryContext>();
-        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id);
-        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id);
+        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
+        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
 
         shelfA.Books[0].Retitle("Dune (child-only change)");
-        await contextA.SaveChangesAsync();
+        await contextA.SaveChangesAsync(TestContext.Current.CancellationToken);
         shelfA.Version.Should().Be(2, "a child change is a change of the aggregate");
 
         shelfB.Rename("stale root");
@@ -159,11 +160,11 @@ public sealed class ConcurrencyTests : IDisposable
         using var scopeB = _host.CreateScope();
         var contextA = scopeA.ServiceProvider.GetRequiredService<LibraryContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<LibraryContext>();
-        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id);
-        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id);
+        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
+        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
 
         shelfA.Books[0].Tag(new TagId(42)); // primitive collection on an owned child
-        await contextA.SaveChangesAsync();
+        await contextA.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         shelfB.Books[1].Retitle("other child");
         var act = () => contextB.SaveChangesAsync();
@@ -239,11 +240,11 @@ public sealed class ConcurrencyTests : IDisposable
         using var scopeB = _host.CreateScope();
         var contextA = scopeA.ServiceProvider.GetRequiredService<LibraryContext>();
         var contextB = scopeB.ServiceProvider.GetRequiredService<LibraryContext>();
-        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id);
-        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id);
+        var shelfA = await contextA.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
+        var shelfB = await contextB.Shelves.SingleAsync(s => s.Id == id, TestContext.Current.CancellationToken);
 
         shelfA.Rename("changed first");
-        await contextA.SaveChangesAsync();
+        await contextA.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         contextB.Shelves.Remove(shelfB);
         var act = () => contextB.SaveChangesAsync();
