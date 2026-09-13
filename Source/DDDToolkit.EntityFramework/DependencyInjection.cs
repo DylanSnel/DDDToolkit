@@ -43,6 +43,7 @@ public static class DependencyInjection
         // Scoped so the interceptor hands the scope's own provider (and thereby the DbContext being saved) to the handlers.
         services.TryAddScoped<PublishDomainEventsInterceptor>();
         services.TryAddSingleton<AggregateVersionInterceptor>();
+        services.TryAddSingleton<InvariantInterceptor>();
 
         if (options.Outbox is { } outbox)
         {
@@ -73,9 +74,11 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Adds every DDDToolkit interceptor to the context: domain event delivery
-    /// (<see cref="PublishDomainEventsInterceptor"/>) followed by optimistic concurrency
-    /// (<see cref="AggregateVersionInterceptor"/>). Pass the provider handed to the
+    /// Adds every DDDToolkit interceptor to the context, in the order they run: domain event
+    /// delivery (<see cref="PublishDomainEventsInterceptor"/>), then the aggregates' own invariants
+    /// (<see cref="InvariantInterceptor"/>), which therefore sees whatever the handlers changed,
+    /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes last so
+    /// a rejected save leaves no version bumped. Pass the provider handed to the
     /// <c>AddDbContext</c> callback so handlers resolve from the same scope as the context.
     /// </summary>
     public static DbContextOptionsBuilder UseDDDToolkit(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
@@ -85,6 +88,7 @@ public static class DependencyInjection
 
         optionsBuilder.AddInterceptors(
             serviceProvider.GetRequiredService<PublishDomainEventsInterceptor>(),
+            serviceProvider.GetRequiredService<InvariantInterceptor>(),
             serviceProvider.GetRequiredService<AggregateVersionInterceptor>());
 
         return optionsBuilder;
