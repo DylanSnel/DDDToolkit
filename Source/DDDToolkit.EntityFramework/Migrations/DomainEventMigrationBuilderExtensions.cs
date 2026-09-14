@@ -38,6 +38,12 @@ namespace DDDToolkit.EntityFramework.Migrations;
 /// matters in practice: <c>EnsureSchema</c> means nothing to it, and its identifiers carry no schema,
 /// so these methods leave the schema off entirely when they see the SQLite provider.
 /// </para>
+/// <para>
+/// The timestamp columns follow the same rule the model does. <c>MigrationBuilder.ActiveProvider</c>
+/// names the provider, so <see cref="DomainEventTimestamps.ProviderDefault"/> means the same thing
+/// here as it does in <c>AddDomainEventOutbox</c>. Pass whatever you passed there; if you passed
+/// nothing, pass nothing.
+/// </para>
 /// </summary>
 public static class DomainEventMigrationBuilderExtensions
 {
@@ -45,16 +51,22 @@ public static class DomainEventMigrationBuilderExtensions
     /// Creates the outbox table, with its primary key and the index on <c>ProcessedAt</c> the processor
     /// queries by. Creates the schema first when the provider has schemas.
     /// </summary>
+    /// <param name="migrationBuilder">The migration being written.</param>
+    /// <param name="tableName">The table to create.</param>
+    /// <param name="schema">The schema to create it in, or <see langword="null"/> for the provider's default.</param>
+    /// <param name="timestamps">What the timestamp columns become; pass what you passed to <c>AddDomainEventOutbox</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="tableName"/> is empty or white space.</exception>
     public static OperationBuilder<CreateTableOperation> CreateDomainEventOutbox(
         this MigrationBuilder migrationBuilder,
         string tableName = DomainEventStorage.DefaultOutboxTableName,
-        string? schema = DomainEventStorage.DefaultSchema)
+        string? schema = DomainEventStorage.DefaultSchema,
+        DomainEventTimestamps timestamps = DomainEventTimestamps.ProviderDefault)
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
 
+        var utcDateTime = DomainEventTimestampMapping.StoresUtcDateTime(migrationBuilder.ActiveProvider, timestamps);
         schema = EnsureSchema(migrationBuilder, schema);
 
         var table = migrationBuilder.CreateTable(
@@ -68,11 +80,11 @@ public static class DomainEventMigrationBuilderExtensions
                 // Rows written before this column existed are version 1, which is what a payload with no
                 // [IntegrationEvent(Version = n)] is, so the default makes an upgrade a no-op.
                 Version = table.Column<int>(nullable: false, defaultValue: 1),
-                OccurredAt = table.Column<DateTime>(nullable: false),
+                OccurredAt = table.TimestampColumn(utcDateTime),
                 AggregateType = table.Column<string>(maxLength: DomainEventStorage.MaxAggregateTypeLength, nullable: true),
                 AggregateId = table.Column<string>(maxLength: DomainEventStorage.MaxAggregateIdLength, nullable: true),
-                CreatedAt = table.Column<DateTime>(nullable: false),
-                ProcessedAt = table.Column<DateTime>(nullable: true),
+                CreatedAt = table.TimestampColumn(utcDateTime),
+                ProcessedAt = table.TimestampColumn(utcDateTime, nullable: true),
                 Attempts = table.Column<int>(nullable: false),
                 LastError = table.Column<string>(maxLength: DomainEventStorage.MaxErrorLength, nullable: true),
             },
@@ -105,16 +117,22 @@ public static class DomainEventMigrationBuilderExtensions
     /// Creates the inbox table, keyed on (<c>MessageId</c>, <c>Consumer</c>). Creates the schema first
     /// when the provider has schemas.
     /// </summary>
+    /// <param name="migrationBuilder">The migration being written.</param>
+    /// <param name="tableName">The table to create.</param>
+    /// <param name="schema">The schema to create it in, or <see langword="null"/> for the provider's default.</param>
+    /// <param name="timestamps">What the <c>ProcessedAt</c> column becomes; pass what you passed to <c>AddDomainEventInbox</c>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="tableName"/> is empty or white space.</exception>
     public static OperationBuilder<CreateTableOperation> CreateDomainEventInbox(
         this MigrationBuilder migrationBuilder,
         string tableName = DomainEventStorage.DefaultInboxTableName,
-        string? schema = DomainEventStorage.DefaultSchema)
+        string? schema = DomainEventStorage.DefaultSchema,
+        DomainEventTimestamps timestamps = DomainEventTimestamps.ProviderDefault)
     {
         ArgumentNullException.ThrowIfNull(migrationBuilder);
         ArgumentException.ThrowIfNullOrWhiteSpace(tableName);
 
+        var utcDateTime = DomainEventTimestampMapping.StoresUtcDateTime(migrationBuilder.ActiveProvider, timestamps);
         schema = EnsureSchema(migrationBuilder, schema);
 
         var table = migrationBuilder.CreateTable(
@@ -125,7 +143,7 @@ public static class DomainEventMigrationBuilderExtensions
                 MessageId = table.Column<Guid>(nullable: false),
                 Consumer = table.Column<string>(maxLength: DomainEventStorage.MaxConsumerLength, nullable: false),
                 MessageName = table.Column<string>(maxLength: DomainEventStorage.MaxNameLength, nullable: true),
-                ProcessedAt = table.Column<DateTime>(nullable: false),
+                ProcessedAt = table.TimestampColumn(utcDateTime),
             },
             constraints: table => table.PrimaryKey($"PK_{tableName}", x => new { x.MessageId, x.Consumer }));
 
@@ -172,5 +190,5 @@ public static class DomainEventMigrationBuilderExtensions
     }
 
     private static bool SupportsSchemas(MigrationBuilder migrationBuilder)
-        => !string.Equals(migrationBuilder.ActiveProvider, DomainEventStorage.SqliteProvider, StringComparison.Ordinal);
+        => !DomainEventTimestampMapping.IsSqlite(migrationBuilder.ActiveProvider);
 }

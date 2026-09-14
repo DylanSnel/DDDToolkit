@@ -1,3 +1,4 @@
+using System.Globalization;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
@@ -33,14 +34,26 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
     /// <summary>What <c>information_schema</c> calls the column behind the primitive collection of ids.</summary>
     protected abstract string TagsColumnType { get; }
 
-    /// <summary>What <c>information_schema</c> calls the outbox's <c>CreatedAt</c> column.</summary>
-    protected abstract string OutboxTimestampColumnType { get; }
+    /// <summary>
+    /// What the outbox and inbox timestamps become here with
+    /// <see cref="DomainEventTimestamps.ProviderDefault"/>, which is the provider's own instant type.
+    /// </summary>
+    protected abstract string ProviderTimestampColumnType { get; }
 
     /// <summary>
-    /// What that column would have been without the UTC <c>DateTime</c> conversion, which is what the
-    /// provider maps a bare <see cref="DateTimeOffset"/> to.
+    /// What they become with <see cref="DomainEventTimestamps.UtcDateTime"/>, the shape every provider
+    /// used to get. On PostgreSQL this is the same answer as
+    /// <see cref="ProviderTimestampColumnType"/>; on SQL Server it is not, and that difference is the
+    /// whole reason the choice exists.
     /// </summary>
-    protected abstract string NativeOffsetColumnType { get; }
+    protected abstract string UtcDateTimeColumnType { get; }
+
+    /// <summary>
+    /// A <c>WHERE</c> clause, in this provider's own SQL, that counts the rows of <c>Book</c> whose
+    /// <c>Tags</c> collection contains the tag 7. There is no portable spelling of this, which is the
+    /// finding it exists to record.
+    /// </summary>
+    protected abstract string TagsContainSevenSql { get; }
 
     private static Shelf NewShelf(ShelfId id, CatId? favourite = null)
         => new(id, "Fiction", UserId.CreateUnique(), CatId.CreateUnique(), favourite);
@@ -331,37 +344,148 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
     }
 
     [Fact]
-    public async Task Outbox_timestamps_are_stored_as_the_converted_UTC_DateTime_not_the_providers_offset_type()
+    public async Task Outbox_and_inbox_timestamps_are_stored_in_this_providers_own_instant_type()
     {
         SkipIfUnavailable();
 
-        // This is the SQLite workaround, visible. SQLite cannot order by DateTimeOffset, so the outbox
-        // converts to a UTC DateTime for everybody; on a provider with a native offset type that is a
-        // column shape its users did not ask for. Recorded here so the cost is a test, not a memory.
+        // The default is no longer SQLite's shape imposed on everybody. Every provider that can order
+        // its own offset type gets it; SQLite, which cannot, still gets the UTC DateTime.
         foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt) })
         {
             (await Database.ColumnTypeAsync(DomainEventStorage.DefaultOutboxTableName, column, Cancellation))
-                .Should().Be(OutboxTimestampColumnType, "the converter turns every outbox timestamp into a UTC DateTime");
+                .Should().Be(ProviderTimestampColumnType);
         }
 
         (await Database.ColumnTypeAsync(DomainEventStorage.DefaultInboxTableName, nameof(InboxMessage.ProcessedAt), Cancellation))
-            .Should().Be(OutboxTimestampColumnType);
+            .Should().Be(ProviderTimestampColumnType);
     }
 
     [Fact]
-    public void What_the_UTC_conversion_costs_this_provider_is_the_difference_between_these_two_types()
+    public void The_provider_default_is_the_type_this_provider_maps_a_DateTimeOffset_to()
     {
         SkipIfUnavailable();
 
         using var context = Database.CreateContext();
 
-        // What this provider would have stored a DateTimeOffset in, asked of the provider itself, next to
-        // what the outbox actually asks for. Where they are the same the SQLite workaround is free here;
-        // where they differ it is a column shape this provider's users did not choose.
+        // Asked of the provider itself rather than hard-coded twice: the outbox column has to be the
+        // same type the provider would have picked on its own, or "provider default" is a lie.
         var native = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(DateTimeOffset))!.StoreType;
         var stored = context.Model.FindEntityType(typeof(OutboxMessage))!.FindProperty(nameof(OutboxMessage.CreatedAt))!.GetColumnType();
 
-        native.Should().Be(NativeOffsetColumnType);
-        stored.Should().Be(OutboxTimestampColumnType);
+        stored.Should().Be(native);
+        stored.Should().Be(ProviderTimestampColumnType);
+    }
+
+    [Fact]
+    public async Task UtcDateTime_still_writes_the_columns_an_existing_database_already_has()
+    {
+        SkipIfUnavailable();
+
+        // The promise to somebody who already has a 3.0 database: pass DomainEventTimestamps.UtcDateTime
+        // and nothing about the columns moves. Tested as DDL in the same server, because that promise is
+        // about DDL.
+        await using (var legacy = Database.CreateTimestampShapeContext())
+        {
+            await Database.ExecuteScriptAsync(legacy.Database.GenerateCreateScript(), Cancellation);
+        }
+
+        foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt) })
+        {
+            (await Database.ColumnTypeAsync(TimestampShapeContext.OutboxTable, column, Cancellation))
+                .Should().Be(UtcDateTimeColumnType);
+        }
+
+        (await Database.ColumnTypeAsync(TimestampShapeContext.InboxTable, nameof(InboxMessage.ProcessedAt), Cancellation))
+            .Should().Be(UtcDateTimeColumnType);
+    }
+
+    [Fact]
+    public async Task Both_timestamp_shapes_round_trip_the_same_instant()
+    {
+        SkipIfUnavailable();
+
+        // Whichever column it lands in, the value that comes back is the same instant with an offset of
+        // zero. That is what makes the choice a storage decision rather than a semantic one, and it is
+        // what lets the documentation say an upgrade does not change what a row means.
+        var written = new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
+        var local = written.ToOffset(TimeSpan.FromHours(2));
+
+        await using (var legacy = Database.CreateTimestampShapeContext())
+        {
+            await Database.ExecuteScriptAsync(legacy.Database.GenerateCreateScript(), Cancellation);
+
+            legacy.Set<OutboxMessage>().Add(new OutboxMessage { Id = Guid.CreateVersion7(), EventName = "E", Payload = "{}", OccurredAt = local, CreatedAt = local });
+            await legacy.SaveChangesAsync(Cancellation);
+        }
+
+        await using (var context = Database.CreateContext())
+        {
+            context.Outbox.Add(new OutboxMessage { Id = Guid.CreateVersion7(), EventName = "E", Payload = "{}", OccurredAt = local, CreatedAt = local });
+            await context.SaveChangesAsync(Cancellation);
+        }
+
+        await using (var context = Database.CreateContext())
+        {
+            var row = await context.Outbox.SingleAsync(Cancellation);
+            row.CreatedAt.Should().Be(written);
+            row.CreatedAt.Offset.Should().Be(TimeSpan.Zero, "an offset the writer happened to be in is not a fact worth storing");
+        }
+
+        await using (var legacy = Database.CreateTimestampShapeContext())
+        {
+            var row = await legacy.Set<OutboxMessage>().SingleAsync(Cancellation);
+            row.CreatedAt.Should().Be(written);
+            row.CreatedAt.Offset.Should().Be(TimeSpan.Zero);
+        }
+    }
+
+    [Fact]
+    public async Task A_primitive_collection_is_queryable_through_LINQ_on_both_providers()
+    {
+        SkipIfUnavailable();
+
+        // The portable half of the answer. The column is an integer[] on PostgreSQL and a JSON string on
+        // SQL Server, but Contains and Count translate on both, so LINQ over the collection ports.
+        await using (var context = Database.CreateContext())
+        {
+            var shelf = NewShelf(ShelfId.CreateUnique());
+            shelf.AddBook("Dune", new TagId(7), new TagId(8));
+            shelf.AddBook("Emma", new TagId(9));
+            context.Shelves.Add(shelf);
+            await context.SaveChangesAsync(Cancellation);
+        }
+
+        await using (var context = Database.CreateContext())
+        {
+            var titles = await context.Shelves
+                .SelectMany(s => s.Books)
+                .Where(b => b.Tags.Contains(new TagId(7)))
+                .Select(b => b.Title)
+                .ToListAsync(Cancellation);
+
+            titles.Should().Equal("Dune");
+
+            (await context.Shelves.SelectMany(s => s.Books).CountAsync(b => b.Tags.Count == 2, Cancellation)).Should().Be(1);
+        }
+    }
+
+    [Fact]
+    public async Task The_same_question_in_SQL_needs_a_different_query_per_provider()
+    {
+        SkipIfUnavailable();
+
+        // The other half, and the honest one. The SQL that reaches inside the column is written by the
+        // subclass because there is no spelling that runs on both. Anything below LINQ, a report, a
+        // migration, a DBA's ad hoc query, does not port.
+        await using (var context = Database.CreateContext())
+        {
+            var shelf = NewShelf(ShelfId.CreateUnique());
+            shelf.AddBook("Dune", new TagId(7), new TagId(8));
+            shelf.AddBook("Emma", new TagId(9));
+            context.Shelves.Add(shelf);
+            await context.SaveChangesAsync(Cancellation);
+        }
+
+        Convert.ToInt32(await Database.ScalarAsync(TagsContainSevenSql, Cancellation), CultureInfo.InvariantCulture).Should().Be(1);
     }
 }

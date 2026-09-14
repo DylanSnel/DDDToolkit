@@ -26,8 +26,8 @@ public class LibraryContext(DbContextOptions<LibraryContext> options) : DbContex
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddDomainEventOutbox();
-        modelBuilder.AddDomainEventInbox();
+        modelBuilder.AddDomainEventOutbox(Database);
+        modelBuilder.AddDomainEventInbox(Database);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

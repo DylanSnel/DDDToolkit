@@ -7,13 +7,13 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 /// <summary>SQL Server in a container, through Microsoft.EntityFrameworkCore.SqlServer.</summary>
 public sealed class SqlServerFixture : ProviderFixture
 {
-    /// <summary>The image the numbers and findings in the documentation came from.</summary>
-    public const string Image = "mcr.microsoft.com/mssql/server:2022-latest";
-
     private MsSqlContainer? _container;
 
     /// <inheritdoc />
     public override string ProviderName => "SQL Server";
+
+    /// <inheritdoc />
+    public override string Image => ContainerImages.SqlServer;
 
     /// <inheritdoc />
     protected override async Task<string> StartContainerAsync()

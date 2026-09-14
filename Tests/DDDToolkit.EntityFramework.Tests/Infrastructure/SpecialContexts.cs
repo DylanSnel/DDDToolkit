@@ -33,8 +33,8 @@ public class RenamedStorageContext(DbContextOptions<RenamedStorageContext> optio
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddDomainEventOutbox("EventsOut", schema: "messaging");
-        modelBuilder.AddDomainEventInbox("EventsIn", schema: null);
+        modelBuilder.AddDomainEventOutbox(Database, "EventsOut", schema: "messaging");
+        modelBuilder.AddDomainEventInbox(Database, "EventsIn", schema: null);
     }
 }
 
