@@ -57,3 +57,11 @@ jobs:
           for csproj in $(find ./Source -name '*.csproj'); do
             dotnet pack "$csproj" --configuration Release --no-build --output nupkgs -p:PackageVersion=0.0.0-ci
           done
+
+      # A consumer gets the generators from analyzers/dotnet/cs and DDD_Module from
+      # build/DDDToolkit.props. Neither path is used inside this repository, where everything is a
+      # ProjectReference and DDD_Module comes from Directory.Build.props, so the packaging contract is
+      # untested by everything above. This builds Examples/DDDToolkit.NugetApi against the packages
+      # that were just packed, which is the only thing here that exercises it.
+      - name: Verify package consumption
+        run: ./build/verify-package-consumption.sh 0.0.0-ci

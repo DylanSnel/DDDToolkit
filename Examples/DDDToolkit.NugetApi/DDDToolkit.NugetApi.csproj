@@ -1,46 +1,42 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Deliberately outside DDDToolkit.slnx. This project consumes the toolkit as PACKAGES, so it cannot
+    build until they have been packed. build/verify-package-consumption.sh does that and then builds
+    this, and the Build and Test workflow runs it on every pull request.
+
+    Central package management is off here on purpose: a consumer of the published packages does not
+    get this repository's Directory.Packages.props, and pinning the versions in the file that declares
+    the references is what a real consumer's project looks like.
+  -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <DDD_Module>Api</DDD_Module>
-    <UserSecretsId>28d9d84f-d504-42b2-830a-58ecfd24c4e7</UserSecretsId>
-    <InvariantGlobalization>false</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!-- The version the verification script packed. Override with -p:DDDToolkitPackageVersion=. -->
+    <DDDToolkitPackageVersion Condition="'$(DDDToolkitPackageVersion)' == ''">0.0.0-ci</DDDToolkitPackageVersion>
+
+    <!--
+      The property under test. A consumer sets it in the project file or in their own
+      Directory.Build.props, and it only reaches the generator through build/DDDToolkit.props inside
+      the DDDToolkit package. Check.cs names the method it is supposed to produce, so a build failure
+      here means that path is broken.
+    -->
     <DDD_Module>NugetTest</DDD_Module>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DDDToolkit" Version="2.0.13" />
-
-    <PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.13" />
-
-    <PackageReference Include="DDDToolkit.FluentValidation" Version="2.0.13" />
-
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0-preview.3" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.7.3" />
-  </ItemGroup>
-
-
-  <ItemGroup>
-    <PackageReference Include="MediatR" Version="12.4.0" />
-  </ItemGroup>
-
-
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <!--
+      Only these three. The four analyzer packages are NOT referenced: each has to arrive as a
+      dependency of the package above it, which is the other half of what this project verifies.
+    -->
+    <PackageReference Include="DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="DDDToolkit.EntityFramework" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="DDDToolkit.FluentValidation" Version="$(DDDToolkitPackageVersion)" />
   </ItemGroup>
 
 </Project>
-  

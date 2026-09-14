@@ -1,42 +1,59 @@
 # DDDToolkit.NugetApi
 
-This project checks the toolkit **as a consumer sees it**: from the published NuGet packages, not from
-project references. Everything else in this repository builds the generators from source, which is
-faster to work with and hides a whole class of problem. A generator that never made it into the
-`analyzers/dotnet/cs` folder of a package, a missing props file, a dependency that was not declared,
-a target framework mismatch: none of those show up until somebody installs the package. This is the
-project that installs it.
+The only thing in this repository that consumes the toolkit the way you do: as packages.
 
-## Why it is pinned to 2.0.13
+## Why it exists
 
-Because that is the newest version on nuget.org. It cannot be moved to 3.0 before 3.0 ships, and
-pointing it at 3.0 packages that do not exist yet would only break the build.
+Everything else here references the toolkit with `ProjectReference`. That is a different path through
+MSBuild from the one a real consumer takes, and the differences are exactly where this has broken
+before:
 
-It is `net8.0` and references MediatR 12 for the same reason: those are what 2.0.13 was built against.
-Nothing here should be modernised while the pin stands. The code is a snapshot of what 2.x users have,
-and its value is that it still compiles against what they downloaded.
+| | Inside this repository | A consumer |
+|---|---|---|
+| Generators arrive as | `ProjectReference` with `OutputItemType="Analyzer"` | `analyzers/dotnet/cs` inside the package |
+| `DDD_Module` arrives from | `Directory.Build.props` | `build/DDDToolkit.props` inside the `DDDToolkit` package |
+| Integration generators arrive | listed one by one in every project | transitively, as a dependency of the package above |
 
-## Why it is outside the solution
+A green solution build and eleven packages that pack prove the packages are well formed. They prove
+nothing about whether they work once installed. This project is that proof.
 
-It is not in `DDDToolkit.slnx`, so `dotnet build DDDToolkit.slnx` never touches it. That is deliberate.
-A solution build would restore the published packages alongside the projects that generate the same
-types, which is confusing at best, and the generators in a 2.x package are not the ones under
-`Source/`. Build it on its own when you want to verify a release:
+## What it checks
+
+`Domain.cs` declares one of each thing a generator reacts to. `Check.cs` then names every member those
+generators are supposed to produce. Nothing calls it; the compiler is the assertion, so a generator
+that did not arrive, or arrived and produced something differently named, fails the build with a
+message that says which member is missing.
+
+Two checks matter more than the rest:
+
+- **`AddNugetTestConverters`.** The name comes from `<DDD_Module>NugetTest</DDD_Module>`, which only
+  reaches the generator through `build/DDDToolkit.props`. If that file stops shipping or stops
+  applying, the generator falls back to the assembly name and this stops compiling.
+- **The three analyzer packages are not referenced.** Only `DDDToolkit`,
+  `DDDToolkit.EntityFramework` and `DDDToolkit.FluentValidation` are. Each generator has to arrive as
+  a dependency of the package above it, and the verification script fails if one produced nothing.
+
+## Running it
 
 ```bash
-dotnet build Examples/DDDToolkit.NugetApi/DDDToolkit.NugetApi.csproj
+build/verify-package-consumption.sh
 ```
 
-## What has to happen after 3.0 ships
+The script packs nothing itself. Pack first, at the version you want to verify:
 
-Someone has to decide, and nobody has. The options, in the order they are worth considering:
+```bash
+for p in $(find ./Source -name '*.csproj'); do
+  dotnet pack "$p" -c Release -o nupkgs -p:PackageVersion=0.0.0-ci
+done
+```
 
-- **Repoint it at 3.0 and rewrite it.** Retarget `net10.0`, move to the 3.0 packages, drop MediatR for
-  Mediator, and bring the code in line with the 3.0 API. That restores the thing this project is for,
-  and it costs a rewrite because 3.0 is a breaking release.
-- **Replace it with a smoke test in CI.** Pack the projects, install the packages into a throw-away
-  project, build it, assert the generated types exist. That catches the same failures and does not
-  need a hand-maintained application.
-- **Delete it.** Its 2.x snapshot is in the history, and 2.x is no longer the version anyone installs.
+The Build and Test workflow does both on every pull request, so this runs before a release rather than
+after one.
 
-Until that decision is made, leave the code alone.
+## Why it is not in DDDToolkit.slnx
+
+It cannot build until the packages exist, and a solution build has no way to pack first. Adding it
+would make `dotnet build DDDToolkit.slnx` fail on a clean checkout.
+
+`NuGet.config` clears the package sources before adding the local feed. Without that, a restore could
+quietly satisfy `DDDToolkit` from nuget.org and verify the published 2.0.22 instead of your build.
