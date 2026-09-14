@@ -25,14 +25,22 @@
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
   </Folder>
   <Folder Name="/Examples/">
+    <File Path="Examples/README.md" />
     <Project Path="Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj" />
     <Project Path="Examples/DDDToolkit.ExampleApi/DDDToolkit.ExampleApi.csproj" />
+  </Folder>
+  <Folder Name="/Examples/ModularMonolith/">
+    <Project Path="Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering.Contracts/DDDToolkit.Examples.Ordering.Contracts.csproj" />
+    <Project Path="Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering/DDDToolkit.Examples.Ordering.csproj" />
+    <Project Path="Examples/ModularMonolith/Shipping/DDDToolkit.Examples.Shipping/DDDToolkit.Examples.Shipping.csproj" />
+    <Project Path="Examples/ModularMonolith/DDDToolkit.Examples.Host/DDDToolkit.Examples.Host.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Examples.Tests/DDDToolkit.Examples.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
