@@ -47,7 +47,7 @@ public partial class Order { }
 | [Identifiers](docs/identifiers.md) | `[EntityId<T>]`, struct versus record ids, parsing, prefixes |
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
-| [Invariants](docs/invariants.md) | The generated `CheckInvariants()` seam, and the interceptor that runs it at every save |
+| [Invariants](docs/invariants.md) | The two stages, named `IInvariant<T>` rules and the `CheckInvariants()` seam, and the interceptor that runs them at every save |
 | [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery, deterministic time in tests |
 | [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks, versioning and the inbox |
 | [Modules](docs/modules.md) | `[assembly: Module]`, `[ModuleContract]`, and the boundary the analyzer checks |
@@ -102,7 +102,7 @@ prefers dependencies its users can take for free. MediatR still works perfectly 
 | `[EntityId<T>]` on a `partial record` | A reference type identifier: `Value`, equality over it, `Parse`/`TryParse`, `CreateUnique`/`CreateSequential` for `Guid`, and a `Valid` twin. It has `null` rather than `Empty`, and no conversion operators |
 | `[SingleValueObject<T>]` on a `partial record` | A wrapper with value equality, a `Valid` twin and validation |
 | `[ValueObject]` on a `partial record` | Structural equality across the properties you did not exclude, plus a `Valid` twin |
-| `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, and an implementation for every get-only partial collection property |
+| `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, `GetInvariantViolations()` and `EnsureInvariants()` over it, over any nested `IInvariant<T>` rules and over every child entity it holds, an `EnsureOwnInvariants()` / `GetOwnInvariantViolations()` pair that stops at this object, and an implementation for every get-only partial collection property |
 
 Add `DDDToolkit.EntityFramework` and the same declarations also produce value converters, `[Owned]`
 and `[ComplexType]` annotations, and a single `Add<Module>Converters` call for your `DbContext`. Add
@@ -112,10 +112,15 @@ and `[ComplexType]` annotations, and a single `Add<Module>Converters` call for y
 
 Three things the toolkit does that are not a generated member.
 
-**[Invariants](docs/invariants.md).** Every entity and aggregate root gets a
-`partial void CheckInvariants()` seam. Implement it and an interceptor runs it before every
-`SaveChanges` that writes that aggregate, so a broken rule stops the save. Leave it out and the
-compiler erases it, so an aggregate with no invariants pays nothing.
+**[Invariants](docs/invariants.md).** State a rule in the generated `partial void CheckInvariants()`
+seam, or as a nested `IInvariant<T>` when it deserves a name, a code and a test of its own. There are
+two moments to ask. `GetInvariantViolations()` answers with a list and never throws, for the
+application that wants to handle "not consistent yet"; `EnsureInvariants()` throws, and an interceptor
+runs the same check before every `SaveChanges` that writes the entity, child entities included, so a
+broken rule stops the save. Asking the aggregate root asks the whole aggregate, its children too, each
+violation naming the entity that reported it, so a handler can act on an aggregate and ask what that
+broke without a `DbContext` taking part. State nothing and the compiler erases the seam, so an
+aggregate with no invariants pays nothing.
 
 **[Integration events](docs/integration-events.md).** The outbox writes one row per event in the same
 transaction as the aggregate. A sink delivers it afterwards: to another module in this process, to a

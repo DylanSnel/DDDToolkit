@@ -11,6 +11,7 @@ ModularMonolith/
   Ordering/
     DDDToolkit.Examples.Ordering.Contracts   the published surface: OrderId and OrderPlacedV1
     DDDToolkit.Examples.Ordering             the aggregate, the value object, the domain event, the context
+      Invariants/                            a file per named rule, each another part of the entity
   Shipping/
     DDDToolkit.Examples.Shipping             consumes Ordering's contract and nothing else
   DDDToolkit.Examples.Host                   the composition root and four HTTP endpoints
@@ -37,8 +38,12 @@ Ordering owns.
 dotnet run --project Examples/ModularMonolith/DDDToolkit.Examples.Host
 ```
 
-Then work through `DDDToolkit.Examples.Host.http` from the top. It refuses a bad address, places an
-order, and shows the shipment Shipping booked from it.
+Then work through `DDDToolkit.Examples.Host.http` from the top. It refuses a bad address, refuses an
+order whose line names no SKU, places a good one, shows the shipment Shipping booked from it, and then
+refuses two amendments: one that breaks a rule of the line, and one that breaks a rule of the order.
+Every refusal is a 422 carrying the code of the rule that broke, which is what a rule with a name of
+its own buys you, and each of them is one question asked of the order: the root is the consistency
+boundary, so it answers for its lines as well. No `DbContext` is involved in the asking.
 
 Two warnings on start-up are expected and harmless: SQLite has no schemas, so the `ddd` schema the
 outbox and the inbox ask for is dropped. On SQL Server or Postgres you get the schema.
@@ -51,8 +56,12 @@ outbox and the inbox ask for is dropped. On SQL Server or Postgres you get the s
 | Published contracts | `Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs` |
 | An explicitly declared identifier, and why | the same file |
 | Generated identifiers, and why | `Ordering/.../OrderLine.cs`, `Shipping/.../Shipment.cs` |
-| A real invariant | `Ordering/.../Order.cs` |
-| Generated read-only collections | the same file |
+| A named `IInvariant<T>`, and what earned it a name | `Ordering/.../Invariants/MustHaveLines.cs` |
+| A rule that stayed a `CheckInvariants()` seam, and why | `Ordering/.../Order.cs` |
+| A child entity's own invariant, reported by its root | `Ordering/.../Invariants/MustNameASku.cs` |
+| Asking an aggregate what is broken, before any save | `Host/Endpoints.cs`, the `Broken` helper |
+| Branching on a violation's code, and naming the child it came from | the same helper |
+| Generated read-only collections | `Ordering/.../Order.cs` |
 | A value object, and `TryToValid` at a boundary | `Ordering/.../Address.cs`, `Host/Endpoints.cs` |
 | Domain events, stable names, Mediator dispatch | `Ordering/.../OrderPlaced.cs`, `OrderPlacedLog.cs` |
 | The outbox, the published contract, the module sink | `Host/Program.cs` |
@@ -77,5 +86,8 @@ HotChocolate attributes are demonstrated. Read `ModularMonolith/` first.
 
 ## `DDDToolkit.NugetApi`
 
-Deliberately outside the solution, pinned to the published 2.x packages. See the
+Deliberately outside the solution, and the only project here that consumes the toolkit as packages
+rather than as project references. It names every generated member it expects, including all four
+members of the invariant check, a nested rule on the root and one on a child, so a generator that did
+not arrive fails the build. See the
 [README](DDDToolkit.NugetApi/README.md) in that folder.

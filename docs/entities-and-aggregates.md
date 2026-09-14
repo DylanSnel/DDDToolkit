@@ -10,7 +10,7 @@ them. The toolkit distinguishes the two, and the distinction carries real behavi
 | Identity and equality | Yes | Yes |
 | Domain events | No | Yes |
 | Concurrency version | No | Yes |
-| `CheckInvariants()` seam | Yes, but nothing calls it for you | Yes, called before every save |
+| Invariants | Yes, run by a save that changes it | Yes, run by a save that changes it or anything it owns |
 | Entity Framework | Mapped as an owned type | Mapped as its own entity type |
 
 Use `[AggregateRoot<TId>]` for the object you load, save and reference from elsewhere. Use
@@ -65,7 +65,9 @@ Exposing a `List<T>` from an aggregate lets any caller add to it and bypass your
 `_items.AsReadOnly()` from a hand-written field is correct but tedious, and Entity Framework then
 needs to be told about the field. The toolkit does both for you.
 
-Declare the property you want, get-only and `partial`:
+Declare the property you want, get-only and `partial`. What the generator adds is spliced in here so
+you can read both halves at once, marked off and simplified; it really lives in its own file and is
+fully qualified.
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -73,24 +75,35 @@ public partial class Order
 {
     public partial IReadOnlyList<OrderLine> Lines { get; }
 
+    // ---- generated ----------------------------------------------------------
+    private readonly List<OrderLine> _lines = new();
+    private IReadOnlyList<OrderLine>? __linesView;
+
+    [BackingField(nameof(_lines))]
+    public partial IReadOnlyList<OrderLine> Lines => __linesView ??= _lines.AsReadOnly();
+    // -------------------------------------------------------------------------
+
     public void AddLine(OrderLine line) => _lines.Add(line);
 
     public void RemoveLine(OrderLineId id) => _lines.RemoveAll(l => l.Id == id);
 }
 ```
 
-The generator writes:
-
-```csharp
-private readonly List<OrderLine> _lines = new();
-
-[BackingField(nameof(_lines))]
-public partial IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
-```
+`Lines` appears twice because it is one property, not two: C# 13 partial properties split into a
+declaring half, which you write, and an implementing half, which the generator writes. `_lines` is
+usable from your half the moment you declare the property, which is why `AddLine` above compiles
+without you having written the field.
 
 Callers see a read-only view that cannot be cast back to `List<T>`; the aggregate mutates through
 `_lines`. Entity Framework reads and writes the field directly thanks to `[BackingField]`, so it
 never tries to write through the read-only property.
+
+The view is held rather than rebuilt. `AsReadOnly()` is `new ReadOnlyCollection<T>(this)` with no
+cache of its own, so an expression bodied property would build one wrapper per read and throw it
+away: 24 bytes every time somebody looks. Holding it is safe because the list field is `readonly`, so
+the collection the view wraps can never be swapped out from under it, and the view is a window on the
+list rather than a copy, so it shows everything the aggregate does afterwards. See
+[Performance](performance.md#reading-a-read-only-collection).
 
 ### Supported property types
 
@@ -193,14 +206,31 @@ public partial class Order
 }
 ```
 
-`UseDDDToolkit` registers an interceptor that calls `EnsureInvariants()` on every aggregate root a
-`SaveChanges` adds or modifies, so a broken rule stops the save and nothing is written.
-`EnsureInvariants()` is public, so a test can call it with no database in sight. An aggregate that
-implements no seam costs nothing: the compiler erases an unimplemented `partial void` and every call
-to it.
+A rule that deserves a name, a code a caller can branch on, or a test of its own is better written as
+a nested `IInvariant<Order>` instead. The entity runs both.
 
-See [Invariants](invariants.md) for the interceptor order, for reporting several violations at once,
-and for why an invariant across two aggregates is a design question rather than a missing feature.
+`UseDDDToolkit` registers an interceptor that checks every entity a `SaveChanges` adds or modifies,
+child entities included, and the root of every changed child, so a broken rule stops the save and
+nothing is written. An aggregate that states nothing costs nothing: the compiler erases an
+unimplemented `partial void` and every call to it.
+
+The same question can be asked without a database, and asking the root asks the whole aggregate:
+
+```csharp
+order.AddLine(sku, quantity);
+
+var broken = order.GetInvariantViolations();   // the order's rules, and every line's
+order.EnsureInvariants();                      // the same, and throws instead of answering
+```
+
+That is the boundary made real. The root is the consistency boundary, so answering for it means
+answering for what is inside it, and each violation names the entity that reported it. A command
+handler can act on an aggregate, ask what that broke, and refuse, with no `DbContext` anywhere near
+the question.
+
+See [Invariants](invariants.md) for the two stages, what one question covers and when the self-only
+pair is the one you want, for when to reach for each shape of rule, for the interceptor order, and for
+why an invariant across two aggregates is a design question rather than a missing feature.
 
 ## Auditing and soft delete
 
@@ -424,7 +454,7 @@ worth. Here is how this one scores against them.
 
 | Rule | What the toolkit does |
 |---|---|
-| 1. Model true invariants in consistency boundaries | Gives you the boundary, the token, and a seam that runs your invariants at every commit. You write the rules. |
+| 1. Model true invariants in consistency boundaries | Gives you the boundary, the token, and two places to state a rule, both run at every commit. You write the rules. |
 | 2. Design small aggregates | Nothing. Arguably it makes large ones easier to build. |
 | 3. Reference other aggregates by identity | Generates the identity and warns when you do not use it. |
 | 4. Use eventual consistency outside the boundary | Domain events, the outbox and the inbox. |
@@ -438,9 +468,10 @@ a second writer with a stale version is refused rather than merged. Child entiti
 load and save with the root and cannot be written behind its back. Private setters and a generated
 protected constructor mean the only way into the state is through a method you wrote.
 
-On top of that, every entity and aggregate root gets a generated `partial void CheckInvariants()`
-seam, and `UseDDDToolkit` registers an interceptor that calls it before every `SaveChanges` that
-writes that aggregate. A broken rule stops the save:
+On top of that, every entity and aggregate root gets somewhere to state its rules, either a generated
+`partial void CheckInvariants()` seam or a nested `IInvariant<T>` per rule, and `UseDDDToolkit`
+registers an interceptor that runs them before every `SaveChanges` that writes the entity. A broken
+rule stops the save:
 
 ```csharp
 partial void CheckInvariants()
@@ -452,10 +483,15 @@ partial void CheckInvariants()
 }
 ```
 
-That is the whole of what a library can promise here: the place to write the rule, and the guarantee
-that it runs at the commit rather than wherever somebody remembered. [Invariants](invariants.md) has
-the seam, the interceptor order, and the limitation that matters, which is that an invariant spanning
-two aggregates cannot be checked this way and should not be.
+Asking the root asks the whole aggregate: its own rules and then every child entity it holds, which is
+Vernon's first rule stated in code rather than in prose. A boundary that answered only for the object
+at its centre would not be one.
+
+That is the whole of what a library can promise here: the place to write the rule, the guarantee that
+it runs at the commit rather than wherever somebody remembered, and one call that covers everything
+inside the boundary. [Invariants](invariants.md) has both shapes of rule, the second stage that asks
+instead of throwing, what one question covers, the interceptor order, and the limitation that matters,
+which is that an invariant spanning two aggregates cannot be checked this way and should not be.
 
 A guard clause in the method that makes the change is still right, and the two are not in
 competition. The guard refuses the command with a message the caller can act on; the seam is the net

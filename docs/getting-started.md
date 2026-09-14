@@ -106,24 +106,46 @@ the generator writes the field and the body. Declaring a setter is an error
 
 ## State an invariant
 
-An invariant is a rule about a whole aggregate that must hold every time anyone can look at it. Write
-it in the generated seam:
+An invariant is a rule about a whole aggregate that must hold every time anyone can look at it. A
+one-liner goes in the generated seam:
 
 ```csharp
 partial void CheckInvariants()
 {
-    if (Lines.Count == 0)
+    if (Lines.Select(line => line.Sku).Distinct().Count() != Lines.Count)
     {
-        throw InvariantViolation("An order must have at least one line.");
+        throw InvariantViolation("An order may not name the same SKU on two lines.");
     }
 }
 ```
 
 *[`Ordering/Order.cs`](../Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering/Order.cs)*
 
-An interceptor calls it before every save that touches the aggregate, so it is a guarantee rather than
-a check somebody remembered to call. An aggregate that states no invariants pays nothing: the compiler
-erases an unimplemented `partial void` and every call to it. See [Invariants](invariants.md).
+A rule that deserves a name, or a code a caller can branch on, becomes a type of its own, nested
+inside the entity it is about so that it can read private state and so the generator can find it:
+
+```csharp
+public partial class Order
+{
+    public sealed class MustHaveLines : IInvariant<Order>
+    {
+        public string Code => "ORDER_HAS_NO_LINES";
+
+        public string? Check(Order order)
+            => order.Lines.Count == 0 ? "An order must have at least one line." : null;
+    }
+}
+```
+
+*[`Ordering/Invariants/MustHaveLines.cs`](../Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering/Invariants/MustHaveLines.cs)*
+
+An interceptor runs both before every save that writes the entity, child entities included, so they
+are a guarantee rather than a check somebody remembered to call. `GetInvariantViolations()` asks the
+same question without throwing, for the moment before the save where "not consistent yet" is an
+answer you want to handle, and asking the root answers for the whole aggregate: its own rules and
+every line's, each violation naming the entity that reported it. An entity that states nothing pays
+nothing: the compiler erases an unimplemented `partial void` and every call to it. See
+[Invariants](invariants.md).
 
 ## Declare a value object
 

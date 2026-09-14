@@ -22,7 +22,7 @@ in [section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
 | Aggregate roots gain a `Version` column | [8](#8-aggregate-roots-gain-a-version-column) |
 | Hand-written identifiers need `IEquatable<T>` | [9](#9-hand-written-identifiers-need-iequatable) |
 | Misapplied attributes now fail the build | [10](#10-misapplied-attributes-now-fail-the-build) |
-| `EnsureInvariants` and `CheckInvariants` are now generated member names | [11](#11-entities-gain-an-invariant-seam) |
+| `CheckInvariants`, `EnsureInvariants`, `GetInvariantViolations` and their `Own` pair are now generated member names | [11](#11-entities-gain-an-invariant-seam) |
 | A save now runs your aggregates' invariants | [11](#11-entities-gain-an-invariant-seam) |
 | HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
 | MediatR is no longer referenced | [13](#13-mediatr-is-replaced-by-mediator-in-the-examples) |
@@ -440,24 +440,33 @@ that compiled on its own, which is why the errors you saw talked about members t
 
 ## 11. Entities gain an invariant seam
 
-Every `[Entity<T>]` and `[AggregateRoot<T>]` now gets two generated members:
+Every `[Entity<T>]` and `[AggregateRoot<T>]` now gets five generated members:
 
 ```csharp
 partial void CheckInvariants();
 public override void EnsureInvariants();
+public override IReadOnlyList<InvariantViolation> GetInvariantViolations();
+public override void EnsureOwnInvariants();
+public override IReadOnlyList<InvariantViolation> GetOwnInvariantViolations();
 ```
+
+The first pair of the four answers for the whole aggregate, this object's child entities included; the
+`Own` pair answers for this object alone and exists for a caller that is already walking the graph,
+which in practice means the save. See [Invariants](invariants.md#what-one-question-covers).
 
 Two things follow, one mechanical and one behavioural.
 
-**The names are taken.** A 2.x class that already declares a member called `CheckInvariants` or
-`EnsureInvariants` collides with the generated one. Rename yours; the compiler points at the line.
-This is rare, but it is the only way this feature can stop a build.
+**The names are taken.** A 2.x class that already declares a member called `CheckInvariants`,
+`EnsureInvariants`, `GetInvariantViolations`, `EnsureOwnInvariants` or `GetOwnInvariantViolations`
+collides with the generated one. Rename yours; the compiler points at the line. This is rare, but it
+is the only way this feature can stop a build.
 
-**A save now runs them.** `UseDDDToolkit` registers an `InvariantInterceptor` that calls
-`EnsureInvariants()` on every aggregate root a `SaveChanges` adds or modifies. Until you implement
-the seam that call does nothing at all: the compiler erases an unimplemented `partial void` and every
-call to it, so an unchanged 2.x aggregate behaves exactly as before and costs nothing. You only
-notice the interceptor once you write a rule.
+**A save now runs them.** `UseDDDToolkit` registers an `InvariantInterceptor` that checks every entity
+a `SaveChanges` adds or modifies, child entities included, and the aggregate root of every changed
+child. Until you state a rule those calls do nothing at all:
+the compiler erases an unimplemented `partial void` and every call to it, so an unchanged 2.x
+aggregate behaves exactly as before and costs nothing. You only notice the interceptor once you write
+a rule.
 
 There is nothing to switch on and nothing to migrate. When you are ready to use it:
 
@@ -662,8 +671,9 @@ you had a workaround for that, remove it.
 7. Fix whatever diagnostics the generators report. Read the message; each one names the type.
    DDD00021 is a warning about aggregate references and can wait behind a `NoWarn` if the list is
    long.
-8. Rename any member of your own called `CheckInvariants` or `EnsureInvariants`; both names are now
-   generated onto every entity.
+8. Rename any member of your own called `CheckInvariants`, `EnsureInvariants`,
+   `GetInvariantViolations`, `EnsureOwnInvariants` or `GetOwnInvariantViolations`; all five names are
+   now generated onto every entity.
 9. Replace `UseDomainEvents(...)` and `AddDomainEventInterceptor(...)` with
    `AddDDDToolkitEntityFramework(...)` and `UseDDDToolkit(...)`.
 10. Add `AddDDDToolkitConventions()` to `ConfigureConventions`.

@@ -8,8 +8,18 @@ namespace DDDToolkit.Examples.Ordering;
 /// </summary>
 /// <remarks>
 /// The generator supplies the <c>AggregateRoot&lt;OrderId&gt;</c> base class, a constructor for Entity
-/// Framework, the <c>_lines</c> list behind <see cref="Lines"/>, and the <c>CheckInvariants</c> seam
-/// implemented at the bottom of this file.
+/// Framework, the <c>_lines</c> list behind <see cref="Lines"/>, and both stages of the invariant
+/// check: <c>GetInvariantViolations()</c>, which answers with a list, and <c>EnsureInvariants()</c>,
+/// which throws. Both run the rules in <c>Invariants/</c>, then the <c>CheckInvariants</c> seam at the
+/// bottom of this file, and then ask every line.
+/// <para>
+/// That last part is what makes this class a boundary rather than a class with rules. A handler
+/// holding an order asks it one question and is answered for the whole aggregate, each violation
+/// naming the entity that reported it, so <c>OrderLine</c>'s own rule reaches the caller without this
+/// file mentioning it. <c>Host/Endpoints.cs</c> is that handler. The self-only pair,
+/// <c>GetOwnInvariantViolations()</c> and <c>EnsureOwnInvariants()</c>, is for a caller already
+/// walking the graph, which here is the save.
+/// </para>
 /// </remarks>
 [AggregateRoot<OrderId>]
 public partial class Order
@@ -44,20 +54,28 @@ public partial class Order
         => _lines.Add(new OrderLine(OrderLineId.CreateSequential(), sku, quantity));
 
     /// <summary>
-    /// What must be true of a whole order every time anyone can look at one. The interceptor runs this
-    /// before every save that touches the order, so it is a guarantee rather than a check somebody
-    /// remembered to call.
+    /// The one rule of this aggregate that is still a seam rather than a type of its own, because it
+    /// is one line and nobody outside the order needs to name it. Compare
+    /// <c>Invariants/MustHaveLines.cs</c>, which is the same length and earned a file anyway: the
+    /// endpoint answers differently for that one, and answering differently means branching on a
+    /// code.
     /// </summary>
     /// <remarks>
-    /// Nothing in this example can break it, because the endpoint refuses a request with no lines
-    /// before an order is ever constructed. That is the point: the rule outlives the endpoint. The
-    /// method somebody adds next year to remove a line meets it without having to know it exists.
+    /// It reaches across the lines, which is why it is the root's rule and not
+    /// <see cref="OrderLine"/>'s. No line can see its siblings, and no line knows which of a pair is
+    /// the one at fault. A line's own rules are a line's own business, and nothing here loops over the
+    /// lines to run them: the generated walk asks each line, and the save asks each changed one.
+    /// <para>
+    /// Everything the seam reports is a violation whose <c>Code</c> is
+    /// <c>InvariantViolation.SeamCode</c>, so a caller can find the rules that would read better with
+    /// a name of their own by looking for that code.
+    /// </para>
     /// </remarks>
     partial void CheckInvariants()
     {
-        if (Lines.Count == 0)
+        if (_lines.Select(line => line.Sku).Distinct().Count() != _lines.Count)
         {
-            throw InvariantViolation("An order must have at least one line.");
+            throw InvariantViolation("An order may not name the same SKU on two lines.");
         }
     }
 }

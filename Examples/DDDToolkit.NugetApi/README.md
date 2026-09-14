@@ -19,10 +19,11 @@ nothing about whether they work once installed. This project is that proof.
 
 ## What it checks
 
-`Domain.cs` declares one of each thing a generator reacts to. `Check.cs` then names every member those
-generators are supposed to produce. Nothing calls it; the compiler is the assertion, so a generator
-that did not arrive, or arrived and produced something differently named, fails the build with a
-message that says which member is missing.
+`Domain.cs` declares one of each thing a generator reacts to, including an aggregate root that owns a
+child entity, so the code a root is given for answering on behalf of its children has to compile here
+as well. `Check.cs` then names every member those generators are supposed to produce. Nothing calls
+it; the compiler is the assertion, so a generator that did not arrive, or arrived and produced
+something differently named, fails the build with a message that says which member is missing.
 
 Two checks matter more than the rest:
 

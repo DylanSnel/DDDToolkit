@@ -125,8 +125,25 @@ public partial record EmailAddress
     {
         public Validator() => RuleFor(x => x.Value).EmailAddress();
     }
+
+    // ---- generated ----------------------------------------------------------
+    [NotMapped]
+    public ReadOnlyCollection<ValidationFailure> Errors => _errors.AsReadOnly();
+
+    protected override bool Validate()                                 // runs the Validator
+    protected override void Validate(ValidationErrorBuilder errors)    // copies failures into ValidationError
+
+    /// <summary>Add rules in a partial declaration of this class.</summary>
+    partial class Validator : AbstractValidator<EmailAddress>;
+    // -------------------------------------------------------------------------
 }
 ```
+
+The two halves of `Validator` are the point: the generator states the base class, you state the rules.
+Note which failure shape is which. `Errors` is FluentValidation's own `ValidationFailure`, handy when
+you already work in that library; the second `Validate` overload copies the same failures into the
+toolkit's `ValidationError`, which is what `ValidationErrors` and `TryToValid()` hand back and what
+lets a caller read failures without referencing FluentValidation at all.
 
 ```csharp
 var email = EmailAddress.Create("nope");
@@ -134,7 +151,6 @@ email.IsValid;                     // false
 email.Errors[0].PropertyName;      // "Value"
 ```
 
-The generated `Validator` derives from `AbstractValidator<EmailAddress>`; your half only adds rules.
 Struct identifiers get no validator, since they are well-formed by construction.
 
 A value object validates itself, which is not the same as taking part in the validator you write for a

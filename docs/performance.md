@@ -95,6 +95,28 @@ and nobody had measured it. The generators now emit a direct comparison of `Valu
 single value objects, which yields the same answer because both types have exactly one component. The
 numbers above are from after that change.
 
+## Reading a read-only collection
+
+`order.Lines` hands out a read-only view over the generated backing field. `List<T>.AsReadOnly()` is
+`new ReadOnlyCollection<T>(this)` and caches nothing, so a property written as `=> _lines.AsReadOnly()`
+builds a wrapper on every read. The generator holds the view in a second field instead.
+
+Sixteen reads of one property:
+
+| | Time | Allocated |
+|---|---|---|
+| A wrapper per read | 68.2 ns | 384 B |
+| The wrapper held in a field | 10.5 ns | 0 B |
+| The bare list, no protection | 5.2 ns | 0 B |
+
+384 bytes is exactly 16 wrappers of 24. The element count does not change any of it: at 4 elements and
+at 256 the numbers are the same, because the wrapper wraps rather than copies.
+
+The third row is not an option, only the floor. Returning `_lines` allocates nothing and satisfies
+`IReadOnlyList<T>`, but a caller can cast it back to `List<T>` and mutate the aggregate around every
+invariant it has. The 5 nanoseconds between the second row and the third are what that protection
+costs once it is no longer rebuilt per read.
+
 ## Dictionary and set lookup
 
 1,000 hits against a container holding 10,000 entries.

@@ -79,21 +79,73 @@ one of those now either works or reports a diagnostic that names the type and th
   `datetime2` to `datetimeoffset`, which needs a migration; without one, reading the outbox throws.
   The stored instant does not change, and PostgreSQL and SQLite are unaffected.
 
+**Read-only collections**
+
+- The generated view is held in a field rather than rebuilt on every read. `AsReadOnly()` allocates a
+  new wrapper per call, so reading `order.Lines` cost 24 bytes every time; sixteen reads went from
+  68 ns and 384 bytes to 10 ns and none. Safe because the backing field is `readonly`, so the
+  collection the view wraps cannot be replaced, and the view is a window rather than a copy.
+- Behaviour change worth knowing: `ReferenceEquals(order.Lines, order.Lines)` is now `true` where it
+  used to be `false`. Code that leans on reference equality of a view is rare and was already wrong,
+  but the difference is real.
+
 **Invariants**
 
-- A generated `partial void CheckInvariants()` seam on every `[Entity<T>]` and `[AggregateRoot<T>]`,
-  with a generated `EnsureInvariants()` override that runs it. The seam is a `partial void` so the
-  compiler erases it, and every call to it, when a type states no invariants.
+- Two stages rather than one. `GetInvariantViolations()` asks what is broken and never throws;
+  `EnsureInvariants()` throws `InvariantViolationException`, and is the shape the save insists on,
+  because at the save "not yet consistent" is no longer an answer. Both are on `IHasInvariants`, both
+  are generated from the same routine so they can never disagree about what counts as broken, and both
+  run the rules and then the seam.
+- Both of them answer for the whole aggregate. Asking an aggregate root runs its own rules and its
+  seam, and then asks every child entity it holds, each of which answers for its own children the same
+  way. That is the consistency boundary written down: a handler acts on an aggregate in memory, asks
+  one question, and is told about a broken line without knowing the line has rules. No `DbContext` is
+  involved, because none is needed. Only child entity collections are walked and never a single
+  reference to another entity: a child pointing back at its parent would recurse, and the visited set
+  that would stop it costs an allocation on the consistent path, which is the path that runs every
+  time.
+- `EnsureOwnInvariants()` and `GetOwnInvariantViolations()`, the same two stages asked about one
+  object alone. For a caller that is already walking the graph and would otherwise hear about a child
+  twice, once from the child and once from its root. `InvariantInterceptor` is that caller. An entity
+  written by hand rather than generated should state its rules in these two, because the walking pair
+  on `Entity<TId>` delegates to them.
+- A generated `partial void CheckInvariants()` seam on every `[Entity<T>]` and `[AggregateRoot<T>]`.
+  The seam is a `partial void` so the compiler erases it, and every call to it, when a type states no
+  invariants. What it throws is caught by the check stage and reported as violations carrying
+  `InvariantViolation.SeamCode`, so one call reports both kinds of rule.
+- `IInvariant<TEntity>`, one rule as a type of its own: a `Code` to branch on and a `Check` returning
+  `null` when the rule holds. Write these as nested types of the entity they are about, one per file
+  under an `Invariants` folder. Nesting is what lets a rule read the entity's private state, and what
+  lets the generator find rules without scanning the compilation. The generator builds one instance
+  of each per entity type and reuses it, so a rule must be stateless.
+- `InvariantViolation`, a `Code`, a `Message`, and the `EntityType` and `EntityId` of whatever
+  reported it, so a violation found while walking an aggregate says which child is the problem rather
+  than only that something is. `ToString()` reads
+  `OrderLine LINE_0199 LINE_HAS_NO_SKU: A line must name the thing it is ordering.` Not a
+  `ValidationError` and not a `Result<T>`: you are handed the failures and you put them in whatever
+  result type your application already uses.
 - `InvariantViolationException`, carrying `AggregateType`, `AggregateId` and `Violations`, and the
   `protected InvariantViolation(...)` helpers on `Entity<TId>` that build one already naming the
-  aggregate. There is an overload for several broken rules found in one check.
-- `IHasInvariants`, so the persistence layer can ask a tracked object to prove it is consistent
-  without knowing its id type.
-- `InvariantInterceptor`, registered by `UseDDDToolkit`. It runs `EnsureInvariants()` on every
-  aggregate root a `SaveChanges` adds or modifies, after event dispatch so it sees what handlers
-  changed and before versioning so a rejected save leaves no version bumped. It skips deletions and
-  aggregates the save does not touch. `InvariantInterceptor.CheckInvariants(context)` runs the same
-  pass on demand.
+  aggregate. There is an overload for several broken rules found in one check. With named rules in
+  play, `EnsureInvariants()` throws once with every broken rule's message and keeps whatever the seam
+  threw as the inner exception. The exception names the boundary that was asked, so a child's message
+  is prefixed with that child's own type and id and the root's own are not.
+- `IHasInvariants`, with all four members, so the persistence layer can ask a tracked object to prove
+  it is consistent without knowing its id type.
+- `InvariantInterceptor`, registered by `UseDDDToolkit`. It runs `EnsureOwnInvariants()` on every
+  entity a `SaveChanges` adds or modifies, **child entities included**, and on the aggregate root of
+  each changed child. It runs after event dispatch so it sees what handlers changed, and before
+  versioning so a rejected save leaves no version bumped. It skips deletions and aggregates the save
+  does not touch. Who gets asked is read from the change tracker and never from a navigation property,
+  so the pass cannot trigger a lazy load and cannot fail on a graph whose children were never loaded,
+  and asking each of them about itself alone is what keeps a changed child from being counted twice.
+  A root rule that spans its children is therefore still the root's own work. The domain walk asks
+  more than this does, so an aggregate that answers clean is never contradicted by the save.
+- `InvariantInterceptor.CheckInvariants(context)` runs the save-time pass on demand, and
+  `InvariantInterceptor.GetInvariantViolations(context)` runs the asking stage over a whole unit of
+  work, returning every violation in order, roots before the children they own, and writing nothing.
+- Four diagnostics for the one failure this feature can have, which is a rule that is written,
+  tested, and never run: DDD00024 to DDD00027. See [Invariants](docs/invariants.md).
 
 **Validation**
 
@@ -175,10 +227,10 @@ one of those now either works or reports a diagnostic that names the type and th
 
 - `ValueObjectRules.MustBeValid()` in `DDDToolkit.FluentValidation`, for folding a value object's own
   rules into a validator you write yourself.
-- Eleven new diagnostics: DDD00003 to DDD00009, DDD00020 and DDD00021 from the generators, and
-  DDD00022 and DDD00023 from the new module analyzer. They join DDD00001, DDD00002, DDD00010,
-  DDD00011 and DDD00013 from 2.x. DDD00004 and DDD00021 to DDD00023 are warnings; the rest are
-  errors.
+- Fifteen new diagnostics: DDD00003 to DDD00009, DDD00020, DDD00021 and DDD00025 to DDD00027 from the
+  generators, and DDD00022 to DDD00024 from the two new analyzers. They join DDD00001, DDD00002,
+  DDD00010, DDD00011 and DDD00013 from 2.x. DDD00004 and DDD00021 to DDD00026 are warnings; the rest
+  are errors.
 - `Benchmarks/DDDToolkit.Benchmarks`, a BenchmarkDotNet suite measuring the struct identifier against
   the record one: construction, iteration, dictionary and set lookup, equality, hashing, text, and an
   Entity Framework round trip. Writing it found the two performance defects listed under *Fixed*.

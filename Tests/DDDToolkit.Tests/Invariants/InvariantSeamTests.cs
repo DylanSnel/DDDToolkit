@@ -61,7 +61,7 @@ public class InvariantSeamTests
     }
 
     [Fact]
-    public void A_child_entity_has_a_seam_of_its_own_that_the_root_decides_to_run()
+    public void A_child_entity_has_a_seam_of_its_own_and_the_root_runs_it()
     {
         var line = new TabLine(new TabLineId(7), "Water", -1m);
 
@@ -71,8 +71,9 @@ public class InvariantSeamTests
         var tab = new Tab(TabId.CreateUnique(), limit: 100m);
         tab.Order(new TabLineId(7), "Water", 0m).Reprice(-1m);
 
+        // Nothing in Tab mentions its lines. Asking the boundary asks what is inside it.
         tab.Invoking(t => t.EnsureInvariants()).Should().Throw<InvariantViolationException>()
-            .Which.AggregateType.Should().Be<TabLine>("the root chose to delegate to its child");
+            .Which.AggregateType.Should().Be<Tab>("the tab was the one asked, and it answers for the whole of itself");
     }
 
     [Fact]

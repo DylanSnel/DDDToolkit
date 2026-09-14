@@ -33,6 +33,12 @@ internal static class KnownTypes
     /// <summary>Type attribute that names a published message. A published message is part of the contract too.</summary>
     public const string IntegrationEventAttribute = AttributesNamespace + ".IntegrationEventAttribute";
 
+    /// <summary>Namespace of the invariant interface, matched by name like everything else here.</summary>
+    public const string InvariantsNamespace = "DDDToolkit.Invariants";
+
+    /// <summary>Simple name of the interface one rule implements. It is generic, so the arity is checked separately.</summary>
+    public const string InvariantInterfaceName = "IInvariant";
+
     public const string GraphQLTypeAttribute = "DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute`1";
 
     /// <summary>Entity Framework's attribute that names the backing field of a property (assembly Microsoft.EntityFrameworkCore.Abstractions).</summary>
@@ -48,5 +54,8 @@ internal static class KnownTypes
     public const string BaseTypesNamespace = "global::DDDToolkit.BaseTypes";
     public const string InterfacesNamespace = "global::DDDToolkit.Abstractions.Interfaces";
     public const string ValidationNamespace = "global::DDDToolkit.Validation";
+    public const string InvariantInterface = "global::DDDToolkit.Invariants.IInvariant";
+    public const string InvariantViolation = "global::DDDToolkit.Invariants.InvariantViolation";
+    public const string InvariantViolationException = "global::DDDToolkit.Exceptions.InvariantViolationException";
     public const string InternalAttributeUsage = "[global::DDDToolkit.Abstractions.Attributes.Internal]";
 }

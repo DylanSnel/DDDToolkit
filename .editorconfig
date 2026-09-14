@@ -368,3 +368,11 @@ csharp_style_prefer_top_level_statements = true:silent
 # dotnet_diagnostic.DDD00021.severity = warning # reference another aggregate by its id
 # dotnet_diagnostic.DDD00022.severity = warning # use only what another module publishes
 # dotnet_diagnostic.DDD00023.severity = warning # do not hold another module's entity
+
+# Invariants, where the failure worth catching is a rule that is written, tested and never run. The
+# last is an error because the generator drops a rule it cannot construct, and a dropped rule is the
+# exact silence the other three exist to prevent.
+# dotnet_diagnostic.DDD00024.severity = warning # an invariant must be nested in the entity it is about
+# dotnet_diagnostic.DDD00025.severity = warning # an invariant is nested in a type it is not about
+# dotnet_diagnostic.DDD00026.severity = warning # two invariants of one entity share a code
+# dotnet_diagnostic.DDD00027.severity = error   # an invariant needs a parameterless constructor

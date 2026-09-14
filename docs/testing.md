@@ -300,22 +300,37 @@ assertion library takes it from there. Two libraries fighting over one assertion
 none.
 
 **It does not assert on invariants.** There is no `.Violates<T>()`, because there does not need to
-be: `EnsureInvariants()` is public on every aggregate and throws, so your own assertion library
-already covers it.
+be: both stages are public on every entity, so your own assertion library already covers them.
 
 ```csharp
 var order = new Order(OrderId.CreateUnique(), customerId);
 order.Place();
 
 Assert.Throws<InvariantViolationException>(() => order.EnsureInvariants());
+
+// Or without an exception, asserting on the rule rather than on the message:
+order.GetInvariantViolations().Should().ContainSingle(v => v.Code == Order.MustHaveLines.ViolationCode);
 ```
 
-See [Invariants](invariants.md#by-hand).
+Asking the root asks the whole aggregate, so a test for a child's rule needs no loop and no second
+subject. The violation names the child that reported it, which is what the assertion should be about:
+
+```csharp
+order.AddLine(sku: "", quantity: 1);
+
+order.GetInvariantViolations().Should().ContainSingle(v =>
+    v.Code == OrderLine.MustNameASku.ViolationCode && v.EntityId!.Equals(order.Lines[0].Id));
+```
+
+A rule written as a nested `IInvariant<T>` is also an ordinary type, so it can be tested on its own
+with no aggregate mutation and nothing to catch: `new Order.MustHaveLines().Check(order)` returns
+`null` when the rule holds. See [Invariants](invariants.md#by-hand).
 
 ## See also
 
 - [Domain events](domain-events.md) for raising, draining and stable names.
-- [Invariants](invariants.md) for the `CheckInvariants()` seam and for checking it without a database.
+- [Invariants](invariants.md) for the two stages, the two shapes of rule, and checking both without a
+  database.
 - [Entities and aggregates](entities-and-aggregates.md) for what an aggregate root is and why only
   the root raises events.
 - [Entity Framework](entity-framework.md) for delivering the events you asserted on here.

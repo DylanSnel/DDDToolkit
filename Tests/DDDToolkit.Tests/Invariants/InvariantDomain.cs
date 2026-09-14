@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Invariants;
 
 namespace DDDToolkit.Tests.Invariants;
 
@@ -9,6 +10,10 @@ public readonly partial record struct TabId;
 /// <summary>The id of one drink on a tab.</summary>
 [EntityId<int>("TABLINE")]
 public readonly partial record struct TabLineId;
+
+/// <summary>The id of one garnish on a drink. A grandchild of the tab.</summary>
+[EntityId<int>("GARNISH")]
+public readonly partial record struct GarnishId;
 
 /// <summary>
 /// An aggregate that states no invariants at all: it never implements the generated
@@ -68,24 +73,22 @@ public partial class Tab
     public void Pay() => IsPaid = true;
 
     // The seam. Written exactly as an author writes it: a partial method with a body, in their own
-    // part of the class, with no accessibility modifier.
+    // part of the class, with no accessibility modifier. Nothing here walks the lines: asking a tab
+    // whether it is consistent asks its lines too, and doing it again by hand would report a line
+    // twice.
     partial void CheckInvariants()
     {
         if (Total > Limit)
         {
             throw InvariantViolation($"A tab may not exceed its limit of {Limit}, and this one totals {Total}.");
         }
-
-        foreach (var line in Lines)
-        {
-            line.EnsureInvariants();
-        }
     }
 }
 
 /// <summary>
-/// A child entity with a seam of its own. Nothing calls it automatically: <see cref="Tab"/> calls it
-/// from its own check, because only the root knows which of its children a rule is about.
+/// A child entity with a seam of its own, stating a rule the tab could not state for it. Asking the
+/// tab runs this as well, because the tab is the consistency boundary and a boundary answers for what
+/// is inside it.
 /// </summary>
 [Entity<TabLineId>]
 public partial class TabLine
@@ -103,8 +106,19 @@ public partial class TabLine
     /// <summary>What it costs.</summary>
     public decimal Price { get; private set; }
 
+    /// <summary>What was put in it. The tab's grandchildren.</summary>
+    public partial IReadOnlyList<Garnish> Garnishes { get; }
+
     /// <summary>Corrects the price, which is how a test breaks the root's rule from a child.</summary>
     public void Reprice(decimal price) => Price = price;
+
+    /// <summary>Drops something in the drink.</summary>
+    public Garnish Decorate(GarnishId id, string what)
+    {
+        var garnish = new Garnish(id, what);
+        _garnishes.Add(garnish);
+        return garnish;
+    }
 
     partial void CheckInvariants()
     {
@@ -112,6 +126,31 @@ public partial class TabLine
         {
             throw InvariantViolation("A drink cannot cost less than nothing.");
         }
+    }
+}
+
+/// <summary>
+/// What is in the drink: a child of a child, and the reason the walk needs no idea how deep it goes.
+/// A line answers for its garnishes exactly as the tab answers for its lines.
+/// </summary>
+[Entity<GarnishId>]
+public partial class Garnish
+{
+    /// <summary>Puts something in a drink.</summary>
+    public Garnish(GarnishId id, string what) : base(id) => What = what;
+
+    /// <summary>What it is.</summary>
+    public string What { get; private set; } = string.Empty;
+
+    /// <summary>A rule of its own, stated as a rule rather than a seam so both kinds are covered.</summary>
+    public sealed class MustBeSomething : IInvariant<Garnish>
+    {
+        /// <inheritdoc />
+        public string Code => "garnish.named";
+
+        /// <inheritdoc />
+        public string? Check(Garnish entity)
+            => string.IsNullOrWhiteSpace(entity.What) ? "A garnish has to be something." : null;
     }
 }
 

@@ -6,6 +6,19 @@ Content-Type: application/json
 
 { "street": "", "city": "Utrecht", "postalCode": "nope", "lines": [] }
 
+### A good address, a line with no SKU. 422 before an order exists in the database at all: the handler
+### builds the aggregate, asks it what that broke, and refuses. The order answered for its line, and
+### nothing was added to a context, queried or saved to find that out.
+POST {{host}}/orders
+Content-Type: application/json
+
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "   ", "quantity": 1 }]
+}
+
 ### A good one. Note the ORD_ prefix on the id that comes back.
 # @name placed
 POST {{host}}/orders
@@ -22,6 +35,22 @@ Content-Type: application/json
 GET {{host}}/shipments
 
 ### Amending the order bumps Version. Two of these at once gives one caller a 409.
+POST {{host}}/orders/{{placed.response.body.id}}/lines
+Content-Type: application/json
+
+{ "sku": "MUG", "quantity": 1 }
+
+### The same on an order that is already in the database: 422, and the code is the child entity's own.
+### The handler asked the order, the order asked its lines, and the body names the line that is at
+### fault, because the violation carries its id. The save would have stopped it either way.
+POST {{host}}/orders/{{placed.response.body.id}}/lines
+Content-Type: application/json
+
+{ "sku": "   ", "quantity": 1 }
+
+### The same SKU twice: 422 again, but the code is CheckInvariants, because that rule stayed a seam.
+### Only the order can see both lines, which is why the rule is the root's rather than the line's, and
+### it is the same one call that found the line's rule above. The boundary answers for both.
 POST {{host}}/orders/{{placed.response.body.id}}/lines
 Content-Type: application/json
 
