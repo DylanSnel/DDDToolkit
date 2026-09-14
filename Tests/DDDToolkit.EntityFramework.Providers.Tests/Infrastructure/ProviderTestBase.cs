@@ -1,3 +1,5 @@
+using DDDToolkit.EntityFramework.Tests.Infrastructure;
+
 namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 
 /// <summary>

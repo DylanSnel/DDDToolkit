@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
+namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// Whether a missing container is allowed to skip these tests, or has to fail them.
@@ -13,8 +13,14 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 /// </para>
 /// <para>
 /// The switch is the environment variable <c>DDDTOOLKIT_REQUIRE_CONTAINERS</c>. Set it to <c>1</c>,
-/// <c>true</c> or <c>yes</c> and every skip in this project becomes a failure that names what could
-/// not be started. The CI workflow sets it; nothing else does.
+/// <c>true</c> or <c>yes</c> and every container-backed test becomes a failure rather than a skip when
+/// its container is missing, naming what could not be started. The workflows set it; nothing else
+/// does.
+/// </para>
+/// <para>
+/// This file is compiled into <c>DDDToolkit.EntityFramework.Providers.Tests</c> as well, because the
+/// pgmq tests here and the provider tests there have the same hole and there should be one answer to
+/// it and one spelling of the variable.
 /// </para>
 /// </summary>
 public static class RequiredContainers

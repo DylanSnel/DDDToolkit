@@ -1,4 +1,5 @@
 using DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
+using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 
 namespace DDDToolkit.EntityFramework.Providers.Tests.Providers;
