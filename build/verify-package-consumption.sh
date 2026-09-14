@@ -48,15 +48,30 @@ trap 'rm -rf "$work"' EXIT
 cp -r "$consumer" "$work/consumer"
 rm -rf "$work/consumer/obj" "$work/consumer/bin"
 
-# The NuGet.config in the project points at ../../nupkgs relative to itself, which no longer resolves
-# once the project has been copied, so point the copy at the real feed. Written with python rather than
-# sed because the replacement is a Windows path under Git Bash and sed would eat its backslashes.
-FEED_NATIVE="$feed_native" python -c "
-import os, io
-path = os.sys.argv[1]
-text = io.open(path, encoding='utf-8').read()
-io.open(path, 'w', encoding='utf-8', newline='\n').write(text.replace('\"../../nupkgs\"', '\"' + os.environ['FEED_NATIVE'] + '\"'))
-" "$work/consumer/NuGet.config"
+# The feed in the project's NuGet.config is relative to the project, which stops resolving once the
+# project has been copied, so the copy gets a config pointing at the real feed. Written out whole
+# rather than edited in place: under Git Bash the feed is a Windows path, and every in-place tool here
+# treats backslashes in a replacement as escapes. A heredoc does not, and it needs nothing installed.
+#
+# Overwriting means the copy no longer proves the shipped config clears the package sources, so assert
+# that separately. Without clear, a restore could satisfy DDDToolkit from nuget.org and verify the
+# published package instead of this build.
+if ! grep -q '<clear />' "$consumer/NuGet.config"; then
+  echo "FAILED: $consumer/NuGet.config no longer clears the package sources, so a restore could" >&2
+  echo "        satisfy DDDToolkit from nuget.org and verify the published package, not this build." >&2
+  exit 1
+fi
+
+cat > "$work/consumer/NuGet.config" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="local" value="$feed_native" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>
+EOF
 
 echo "==> Restoring from $feed_native"
 dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
