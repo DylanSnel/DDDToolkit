@@ -24,6 +24,12 @@ public sealed class SqlServerMappingTests(SqlServerFixture fixture) : ProviderMa
     protected override string UtcDateTimeColumnType => "datetime2";
 
     /// <summary>
+    /// No. <c>datetime2</c> comes back as a <c>DateTime</c> and the model wants a
+    /// <c>DateTimeOffset</c>, so the first read throws. Loud is the right answer here.
+    /// </summary>
+    protected override bool UnmigratedDatabaseStillReads => false;
+
+    /// <summary>
     /// <c>Tags</c> is a JSON string, so reaching inside it needs <c>OPENJSON</c>. Nothing in this line
     /// runs on PostgreSQL.
     /// </summary>

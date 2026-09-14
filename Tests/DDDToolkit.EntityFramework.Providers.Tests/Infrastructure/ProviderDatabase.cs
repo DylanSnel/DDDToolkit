@@ -46,6 +46,14 @@ public sealed class ProviderDatabase(Action<DbContextOptionsBuilder> configure) 
         return new TimestampShapeContext(builder.Options);
     }
 
+    /// <summary>The default mapping over the table <see cref="TimestampShapeContext"/> writes.</summary>
+    public UpgradedTimestampContext CreateUpgradedTimestampContext()
+    {
+        var builder = new DbContextOptionsBuilder<UpgradedTimestampContext>();
+        Configure(builder);
+        return new UpgradedTimestampContext(builder.Options);
+    }
+
     /// <summary>
     /// Runs a script on the database's own connection, one batch at a time.
     /// <para>

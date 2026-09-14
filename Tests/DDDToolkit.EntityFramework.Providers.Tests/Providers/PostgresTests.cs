@@ -24,6 +24,12 @@ public sealed class PostgresMappingTests(PostgresFixture fixture) : ProviderMapp
     protected override string UtcDateTimeColumnType => "timestamp with time zone";
 
     /// <summary>
+    /// Yes: the default mapping and <c>UtcDateTime</c> are one column here, so there is nothing to
+    /// migrate and nothing to notice.
+    /// </summary>
+    protected override bool UnmigratedDatabaseStillReads => true;
+
+    /// <summary>
     /// <c>Tags</c> is a real <c>integer[]</c>, so the array operators answer directly. Nothing in this
     /// line runs on SQL Server.
     /// </summary>

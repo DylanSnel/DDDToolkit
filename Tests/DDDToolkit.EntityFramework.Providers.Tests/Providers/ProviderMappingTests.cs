@@ -49,6 +49,13 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
     protected abstract string UtcDateTimeColumnType { get; }
 
     /// <summary>
+    /// Whether a database written with <see cref="DomainEventTimestamps.UtcDateTime"/> can still be
+    /// read by the default mapping. True where the two shapes are the same column, which is
+    /// PostgreSQL; false where the column really moved, which is SQL Server.
+    /// </summary>
+    protected abstract bool UnmigratedDatabaseStillReads { get; }
+
+    /// <summary>
     /// A <c>WHERE</c> clause, in this provider's own SQL, that counts the rows of <c>Book</c> whose
     /// <c>Tags</c> collection contains the tag 7. There is no portable spelling of this, which is the
     /// finding it exists to record.
@@ -436,6 +443,54 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
             var row = await legacy.Set<OutboxMessage>().SingleAsync(Cancellation);
             row.CreatedAt.Should().Be(written);
             row.CreatedAt.Offset.Should().Be(TimeSpan.Zero);
+        }
+    }
+
+    [Fact]
+    public async Task Upgrading_the_code_without_running_the_migration_breaks_loudly_where_the_column_moved()
+    {
+        SkipIfUnavailable();
+
+        // The state somebody arrives in by upgrading the package and not scaffolding a migration: the
+        // model asks for the provider's own instant type, the table still has the old UTC DateTime
+        // column. What happens then is the single most useful thing this file can tell a reader, and it
+        // is not the same on both providers, so it is asserted rather than assumed.
+        var written = new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero);
+
+        await using (var legacy = Database.CreateTimestampShapeContext())
+        {
+            await Database.ExecuteScriptAsync(legacy.Database.GenerateCreateScript(), Cancellation);
+        }
+
+        // The write goes through either way. The server converts the parameter into the column it has.
+        await using (var upgraded = Database.CreateUpgradedTimestampContext())
+        {
+            upgraded.Set<OutboxMessage>().Add(new OutboxMessage { Id = Guid.CreateVersion7(), EventName = "E", Payload = "{}", OccurredAt = written, CreatedAt = written });
+            await upgraded.SaveChangesAsync(Cancellation);
+        }
+
+        // And it landed as the right instant, which the mapping that matches the table can confirm.
+        await using (var legacy = Database.CreateTimestampShapeContext())
+        {
+            (await legacy.Set<OutboxMessage>().SingleAsync(Cancellation)).CreatedAt.Should().Be(written);
+        }
+
+        // The read is where the two providers part company.
+        await using (var upgraded = Database.CreateUpgradedTimestampContext())
+        {
+            var read = async () => await upgraded.Set<OutboxMessage>().SingleAsync(Cancellation);
+
+            if (UnmigratedDatabaseStillReads)
+            {
+                (await read()).CreatedAt.Should().Be(written);
+                return;
+            }
+
+            // Not a slow query, not a wrong answer: an InvalidCastException on the first row read,
+            // because the driver hands back the column's own CLR type and the model wanted the other
+            // one. That is the good outcome. An unmigrated database announces itself the first time
+            // the outbox is polled, rather than quietly disagreeing with the model for months.
+            await read.Should().ThrowAsync<InvalidCastException>();
         }
     }
 

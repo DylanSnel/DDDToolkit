@@ -273,7 +273,7 @@ builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSecond
 ```
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventOutbox();
+protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventOutbox(Database);
 ```
 
 Outbox handlers must be idempotent, keyed on `EventId`. See

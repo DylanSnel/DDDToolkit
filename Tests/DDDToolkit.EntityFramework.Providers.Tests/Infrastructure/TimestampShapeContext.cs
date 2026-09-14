@@ -35,3 +35,20 @@ public class TimestampShapeContext(DbContextOptions<TimestampShapeContext> optio
         modelBuilder.AddDomainEventInbox(Database, InboxTable, schema: null, DomainEventTimestamps.UtcDateTime);
     }
 }
+
+/// <summary>
+/// The default mapping pointed at the table <see cref="TimestampShapeContext"/> created. That is
+/// somebody who upgraded the package and did not run the migration: on SQL Server the model now says
+/// <c>datetimeoffset</c> and the table still says <c>datetime2</c>.
+/// <para>
+/// The documentation claims that this keeps working and stays correct, because the conversion happens
+/// in the server and every value is already UTC. A claim like that belongs in a test against a real
+/// server rather than in a paragraph.
+/// </para>
+/// </summary>
+public class UpgradedTimestampContext(DbContextOptions<UpgradedTimestampContext> options) : DbContext(options)
+{
+    /// <inheritdoc />
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        => modelBuilder.AddDomainEventOutbox(Database, TimestampShapeContext.OutboxTable, schema: null);
+}

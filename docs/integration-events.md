@@ -132,8 +132,8 @@ The inbox table, in the consuming context:
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.AddDomainEventOutbox();
-    modelBuilder.AddDomainEventInbox();
+    modelBuilder.AddDomainEventOutbox(Database);
+    modelBuilder.AddDomainEventInbox(Database);
 }
 ```
 
@@ -586,7 +586,7 @@ somewhere else.
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.AddDomainEventInbox();
+    modelBuilder.AddDomainEventInbox(Database);
 }
 ```
 
@@ -668,10 +668,10 @@ The outbox and the inbox both live in a `ddd` schema by default, away from your 
 easier to grant, purge and ignore when it is not mixed in with the business.
 
 ```csharp
-modelBuilder.AddDomainEventOutbox();                          // ddd.OutboxMessages
-modelBuilder.AddDomainEventInbox();                           // ddd.InboxMessages
-modelBuilder.AddDomainEventInbox("Consumed", schema: "msg");  // msg.Consumed
-modelBuilder.AddDomainEventInbox(schema: null);               // the provider's default schema
+modelBuilder.AddDomainEventOutbox(Database);                            // ddd.OutboxMessages
+modelBuilder.AddDomainEventInbox(Database);                             // ddd.InboxMessages
+modelBuilder.AddDomainEventInbox(Database, "Consumed", schema: "msg");  // msg.Consumed
+modelBuilder.AddDomainEventInbox(Database, schema: null);               // the provider's default schema
 ```
 
 SQLite has no schemas. Its provider drops the schema when it writes an identifier, so the tables are plain

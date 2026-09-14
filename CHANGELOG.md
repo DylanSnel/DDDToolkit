@@ -60,7 +60,7 @@ one of those now either works or reports a diagnostic that names the type and th
   members.
 - `AddDDDToolkitEntityFramework(options => ...)` and `UseDDDToolkit(serviceProvider)`, replacing the
   2.x pair of registration calls.
-- A transactional outbox: `OutboxMessage`, `modelBuilder.AddDomainEventOutbox()`,
+- A transactional outbox: `OutboxMessage`, `modelBuilder.AddDomainEventOutbox(Database)`,
   `DomainEventTypeRegistry`, `OutboxProcessor<TContext>` and `OutboxBackgroundService<TContext>`.
   Events are written in the same transaction as the aggregate and delivered at least once
   afterwards.
@@ -69,6 +69,15 @@ one of those now either works or reports a diagnostic that names the type and th
   `ConcurrencyConflictException`.
 - `options.MaxDispatchRounds`, which caps the in-process dispatch loop and throws naming the events
   still pending, and `options.TimeProvider` for outbox timestamps.
+- `DomainEventTimestamps`, which decides what the outbox and inbox timestamp columns become.
+  `AddDomainEventOutbox` and `AddDomainEventInbox` take the context's `Database` and default to the
+  provider's own instant type: `datetimeoffset` on SQL Server, `timestamp with time zone` on
+  PostgreSQL, and a UTC `DateTime` on SQLite, which cannot order by a `DateTimeOffset`. Pass
+  `DomainEventTimestamps.UtcDateTime` for the UTC `DateTime` column on every provider.
+  <br>**If you have a database from an earlier 3.0 build on SQL Server, read
+  [Timestamps](docs/entity-framework.md#timestamps) before upgrading.** The column moves from
+  `datetime2` to `datetimeoffset`, which needs a migration; without one, reading the outbox throws.
+  The stored instant does not change, and PostgreSQL and SQLite are unaffected.
 
 **New package**
 
