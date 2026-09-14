@@ -10,6 +10,7 @@ them. The toolkit distinguishes the two, and the distinction carries real behavi
 | Identity and equality | Yes | Yes |
 | Domain events | No | Yes |
 | Concurrency version | No | Yes |
+| `CheckInvariants()` seam | Yes, but nothing calls it for you | Yes, called before every save |
 | Entity Framework | Mapped as an owned type | Mapped as its own entity type |
 
 Use `[AggregateRoot<TId>]` for the object you load, save and reference from elsewhere. Use
@@ -172,6 +173,34 @@ catch (ConcurrencyConflictException conflict)
 
 The version is what makes an aggregate a unit of consistency. Without it two concurrent saves are
 last-write-wins, silently.
+
+## Invariants
+
+The version says nobody else changed the aggregate. It says nothing about whether the aggregate is
+*consistent*. That is what the generated `CheckInvariants()` seam is for:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    partial void CheckInvariants()
+    {
+        if (Status != OrderStatus.Draft && Lines.Count == 0)
+        {
+            throw InvariantViolation("A placed order must have at least one line.");
+        }
+    }
+}
+```
+
+`UseDDDToolkit` registers an interceptor that calls `EnsureInvariants()` on every aggregate root a
+`SaveChanges` adds or modifies, so a broken rule stops the save and nothing is written.
+`EnsureInvariants()` is public, so a test can call it with no database in sight. An aggregate that
+implements no seam costs nothing: the compiler erases an unimplemented `partial void` and every call
+to it.
+
+See [Invariants](invariants.md) for the interceptor order, for reporting several violations at once,
+and for why an invariant across two aggregates is a design question rather than a missing feature.
 
 ## Auditing and soft delete
 
@@ -395,23 +424,42 @@ worth. Here is how this one scores against them.
 
 | Rule | What the toolkit does |
 |---|---|
-| 1. Model true invariants in consistency boundaries | Gives you the boundary and the token. You write the invariants. |
+| 1. Model true invariants in consistency boundaries | Gives you the boundary, the token, and a seam that runs your invariants at every commit. You write the rules. |
 | 2. Design small aggregates | Nothing. Arguably it makes large ones easier to build. |
 | 3. Reference other aggregates by identity | Generates the identity and warns when you do not use it. |
 | 4. Use eventual consistency outside the boundary | Domain events, the outbox and the inbox. |
 
 ### Rule 1: model true invariants in consistency boundaries
 
-Half supported, and the half that is supported is the half a library can do.
+Supported, as far as a library can go. The rules are still yours to write; where they run is not.
 
 `[AggregateRoot<TId>]` draws the boundary and `Version` makes it real: one save is one aggregate, and
 a second writer with a stale version is refused rather than merged. Child entities are owned, so they
 load and save with the root and cannot be written behind its back. Private setters and a generated
 protected constructor mean the only way into the state is through a method you wrote.
 
-What the toolkit does not have is a way to *declare* an invariant on an aggregate. There is no
-`[Invariant]`, no rule collection, no check that runs before `SaveChanges`. An aggregate's rules are
-guard clauses in its own methods:
+On top of that, every entity and aggregate root gets a generated `partial void CheckInvariants()`
+seam, and `UseDDDToolkit` registers an interceptor that calls it before every `SaveChanges` that
+writes that aggregate. A broken rule stops the save:
+
+```csharp
+partial void CheckInvariants()
+{
+    if (Status != OrderStatus.Draft && Lines.Count == 0)
+    {
+        throw InvariantViolation("A placed order must have at least one line.");
+    }
+}
+```
+
+That is the whole of what a library can promise here: the place to write the rule, and the guarantee
+that it runs at the commit rather than wherever somebody remembered. [Invariants](invariants.md) has
+the seam, the interceptor order, and the limitation that matters, which is that an invariant spanning
+two aggregates cannot be checked this way and should not be.
+
+A guard clause in the method that makes the change is still right, and the two are not in
+competition. The guard refuses the command with a message the caller can act on; the seam is the net
+under every path into the state, including the ones you add next year:
 
 ```csharp
 public void Ship(TrackingCode code)
@@ -426,9 +474,10 @@ public void Ship(TrackingCode code)
 }
 ```
 
-Value objects are the exception: `[ValueObject]` and `[SingleValueObject<T>]` do carry rules, through
-`Validate` and the always-valid twin. See [Value objects](value-objects.md). That is validation of one
-value, not an invariant across a cluster, and the two are worth keeping apart in your head.
+Value objects are a different thing again: `[ValueObject]` and `[SingleValueObject<T>]` carry rules
+through `Validate` and the always-valid twin. See [Value objects](value-objects.md). That is
+validation of one value, not an invariant across a cluster, and the two are worth keeping apart in
+your head. [Invariants](invariants.md#why-here-and-not-in-a-validator) lays the two side by side.
 
 The word "true" in the rule is doing the work anyway, and no tool can check it. A true invariant is a
 rule that must hold at the end of every single transaction. A rule that may be a minute late is not

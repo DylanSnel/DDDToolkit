@@ -47,12 +47,15 @@ public partial class Order { }
 | [Identifiers](docs/identifiers.md) | `[EntityId<T>]`, struct versus record ids, parsing, prefixes |
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
 | [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
+| [Invariants](docs/invariants.md) | The generated `CheckInvariants()` seam, and the interceptor that runs it at every save |
 | [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery, deterministic time in tests |
-| [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks and the inbox |
+| [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks, versioning and the inbox |
+| [Modules](docs/modules.md) | `[assembly: Module]`, `[ModuleContract]`, and the boundary the analyzer checks |
 | [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |
+| [Performance](docs/performance.md) | The benchmarks behind the struct-versus-record advice, including where they disagree with it |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
 | [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
 
@@ -65,15 +68,22 @@ own generator, so referencing it is all the configuration there is.
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
 | `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. |
-| `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, optimistic concurrency. |
+| `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
+| `DDDToolkit.EntityFramework.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
-| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers. |
+| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, plus a subscription sink. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
+| `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
 dotnet add package DDDToolkit
 ```
+
+There are four more packages you never reference directly: `DDDToolkit.Analyzers` and the
+`.EntityFramework`, `.FluentValidation` and `.HotChocolate` analyzer packages beside it. Each one
+carries the generators for its integration and arrives as a dependency of the package above, so
+adding `DDDToolkit.HotChocolate` is all it takes to get the GraphQL generator.
 
 Requires .NET 10. The generators themselves target `netstandard2.0` and carry no runtime
 dependencies, so they load in any recent SDK.
@@ -89,20 +99,39 @@ prefers dependencies its users can take for free. MediatR still works perfectly 
 | You write | You get |
 |---|---|
 | `[EntityId<T>]` on a `readonly partial record struct` | `Value`, a constructor, `Empty`/`IsEmpty`, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions, a JSON converter, and `CreateUnique`/`CreateSequential` for `Guid` |
-| `[EntityId<T>]` on a `partial record` | The same identifier surface on a reference type, plus a `Valid` twin |
+| `[EntityId<T>]` on a `partial record` | A reference type identifier: `Value`, equality over it, `Parse`/`TryParse`, `CreateUnique`/`CreateSequential` for `Guid`, and a `Valid` twin. It has `null` rather than `Empty`, and no conversion operators |
 | `[SingleValueObject<T>]` on a `partial record` | A wrapper with value equality, a `Valid` twin and validation |
 | `[ValueObject]` on a `partial record` | Structural equality across the properties you did not exclude, plus a `Valid` twin |
-| `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, and an implementation for every get-only partial collection property |
+| `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, and an implementation for every get-only partial collection property |
 
 Add `DDDToolkit.EntityFramework` and the same declarations also produce value converters, `[Owned]`
 and `[ComplexType]` annotations, and a single `Add<Module>Converters` call for your `DbContext`. Add
 `DDDToolkit.HotChocolate` and they produce GraphQL type bindings. You never write that code.
 
+## Beyond the declarations
+
+Three things the toolkit does that are not a generated member.
+
+**[Invariants](docs/invariants.md).** Every entity and aggregate root gets a
+`partial void CheckInvariants()` seam. Implement it and an interceptor runs it before every
+`SaveChanges` that writes that aggregate, so a broken rule stops the save. Leave it out and the
+compiler erases it, so an aggregate with no invariants pays nothing.
+
+**[Integration events](docs/integration-events.md).** The outbox writes one row per event in the same
+transaction as the aggregate. A sink delivers it afterwards: to another module in this process, to a
+pgmq queue, to a GraphQL subscription, or to one you wrote. Versioning and upcasting keep last year's
+payload readable, and an inbox keyed by message id and consumer makes the receiving side idempotent.
+
+**[Modules](docs/modules.md).** Mark an assembly `[assembly: Module("Ordering")]` and name what it
+publishes with `[ModuleContract]`. An analyzer then reports where another module reaches past the
+contract. It says nothing at all until both sides opt in.
+
 ## Status
 
 Version 3.0 is a breaking release. Identifiers may be structs, domain events moved from `Entity` to
-`AggregateRoot`, `IDomainEvent` carries an id and a timestamp, and misapplied attributes now report a
-diagnostic instead of silently generating nothing.
+`AggregateRoot`, `IDomainEvent` carries an id and a timestamp, aggregates gained an invariant seam and
+a concurrency version, and misapplied attributes now report a diagnostic instead of silently
+generating nothing.
 
 Coming from 2.0.22, read [Migrating to 3.0](docs/migrating-to-3.md): it lists every break with the
 code you have and the code you need. The [changelog](CHANGELOG.md) has the rest.

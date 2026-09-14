@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
@@ -70,19 +70,117 @@ one of those now either works or reports a diagnostic that names the type and th
 - `options.MaxDispatchRounds`, which caps the in-process dispatch loop and throws naming the events
   still pending, and `options.TimeProvider` for outbox timestamps.
 
-**New package**
+**Invariants**
+
+- A generated `partial void CheckInvariants()` seam on every `[Entity<T>]` and `[AggregateRoot<T>]`,
+  with a generated `EnsureInvariants()` override that runs it. The seam is a `partial void` so the
+  compiler erases it, and every call to it, when a type states no invariants.
+- `InvariantViolationException`, carrying `AggregateType`, `AggregateId` and `Violations`, and the
+  `protected InvariantViolation(...)` helpers on `Entity<TId>` that build one already naming the
+  aggregate. There is an overload for several broken rules found in one check.
+- `IHasInvariants`, so the persistence layer can ask a tracked object to prove it is consistent
+  without knowing its id type.
+- `InvariantInterceptor`, registered by `UseDDDToolkit`. It runs `EnsureInvariants()` on every
+  aggregate root a `SaveChanges` adds or modifies, after event dispatch so it sees what handlers
+  changed and before versioning so a rejected save leaves no version bumped. It skips deletions and
+  aggregates the save does not touch. `InvariantInterceptor.CheckInvariants(context)` runs the same
+  pass on demand.
+
+**Validation**
+
+- A failure model that is not only exceptions: `ValidationError` with `Message`, `PropertyName`,
+  `Code` and `AttemptedValue`, and `ValidationErrorBuilder` for the
+  `protected override void Validate(ValidationErrorBuilder)` overload.
+- `TryToValid`, `TryValidate` and `ValidationErrors`, so a value object can report every failure
+  without throwing. They are extension methods on the generated `IValidatable<TValid>` interface, so
+  nothing new lands on your types and nothing new reaches an Entity Framework model or a GraphQL
+  schema.
+- `Prefixed()` and `ToErrorDictionary()` for collecting failures across a request and answering with
+  `Results.ValidationProblem`, and `ToValidationErrors()` in `DDDToolkit.FluentValidation`.
+- `InvalidValueObjectException` now carries `Errors` and `ObjectType`, so the throwing path says why.
+
+**Modules**
+
+- `[assembly: Module("Name")]` declares an assembly to be a module, and `[ModuleContract]` publishes
+  a type from it. A type marked `[IntegrationEvent]`, and anything nested inside a published type,
+  is published too.
+- `ModuleBoundaryAnalyzer`, reporting DDD00022 where one module names another module's unpublished
+  type and DDD00023 where it holds another module's entity as stored state. Both are warnings, both
+  are silent unless both assemblies declare a module, and both come from a real analyzer, so
+  `#pragma warning disable`, `[SuppressMessage]`, `NoWarn` and `WarningsAsErrors` all work on them.
+
+**Integration events**
+
+- `IIntegrationEventSink` and the `IntegrationEventMessage` envelope, which lives in the core package
+  and carries `MessageId`, `Name`, `Version`, `Payload`, `ContentType`, `OccurredAt`,
+  `AggregateType`, `AggregateId` and `Body`. `outbox.SendTo<TSink>()` and `outbox.SendTo(sink)`
+  attach one; every sink is attempted, and a failure fails the message without stopping the sinks
+  behind it.
+- `outbox.PublishAs<TEvent, TContract>(...)` maps a domain event to the contract that leaves the
+  process, and `outbox.DoNotPublish<TEvent>()` keeps one in. Returning `null` from the mapping drops
+  that occurrence. With nothing mapped the domain event is published as it stands, reusing the JSON
+  already in the row.
+- `ModuleIntegrationEventSink` and `outbox.SendToModules<TContext>()`, for the common case of another
+  module in the same process. Handlers implement `IIntegrationEventHandler<TContract>`, are typed on
+  the contract rather than on the domain event, and each gets its own inbox row, so a retry re-runs
+  only the handlers that failed. `[IntegrationEventConsumer("name")]` pins the inbox key.
+- An inbox: `InboxMessage`, `modelBuilder.AddDomainEventInbox()` and
+  `DomainEventInbox<TContext>.ExecuteOnceAsync`, which writes the handler's changes and the row that
+  says "applied" in one `SaveChanges` inside one transaction. The key is the message and the
+  consumer, so adding a consumer later does not replay its backlog through the others.
+- Versioning and upcasting. `[IntegrationEvent(name, Version = n)]` pins the published name and the
+  schema version, the outbox stores the version in the row, and
+  `contracts.UpcastFrom<TOld, TNew>(...)` converts an older payload on both read paths. Registration
+  refuses a `[DomainEventName]` and an `[IntegrationEvent]` name that disagree.
+- `outbox.DeliverInTransaction`, which wraps one message's delivery and its "processed" mark in a
+  single transaction, and `outbox.AlsoDispatchInProcess`, which runs the in-process delegate before
+  the sinks.
+
+**New packages**
 
 - `DDDToolkit.Mediator`, which adds `options.DispatchWithMediator()` over
   [martinothamar/Mediator](https://github.com/martinothamar/Mediator). An event that does not
   implement `INotification` makes the dispatch throw naming the event type rather than being
   silently skipped.
+- `DDDToolkit.Testing`, an aggregate testing kit. `AggregateScenario.Given(...).When(...)` returns
+  only the events that call raised, and `Raised`, `RaisedNo`, `RaisedNothing`, `RaisedExactly`,
+  `RaisedExactlyThese`, `SingleEvent` and `EventsOf` assert on them. `WhenThrows` also asserts that
+  nothing was raised on the way out. Payload comparison ignores `EventId` and `OccurredAt`, because
+  record equality never matches two events that mean the same thing. It references `DDDToolkit` and
+  nothing else, so it brings no test framework and no assertion library.
+- `DDDToolkit.EntityFramework.Postgres`, a [pgmq](https://github.com/pgmq/pgmq) sink. `pgmq.send` is
+  an ordinary insert, so `PgmqSink<TContext>` enqueues inside the transaction that writes the
+  aggregate. `PgmqQueue` exposes send, read, archive and delete directly, queues are created on
+  first use unless you turn that off, and a missing extension reports `PgmqNotInstalledException`
+  naming the database instead of failing somewhere inside the driver.
+
+**GraphQL**
+
+- `GraphQlSubscriptionSink` and `AddIntegrationEventSubscriptions(map => ...)`, an integration event
+  sink that publishes a contract to HotChocolate's `ITopicEventSender`. Nothing is pushed until the
+  map names the message's name and version. It publishes the contract rather than the domain event,
+  because a subscription payload is a schema type that the schema's own authorisation applies to, and
+  it does no upcasting, because the payload was produced seconds ago by this process.
 
 **Everything else**
 
 - `ValueObjectRules.MustBeValid()` in `DDDToolkit.FluentValidation`, for folding a value object's own
   rules into a validator you write yourself.
-- Eight new diagnostics: DDD00003 to DDD00009 and DDD00020, joining DDD00001, DDD00002, DDD00010,
-  DDD00011 and DDD00013 from 2.x.
+- Eleven new diagnostics: DDD00003 to DDD00009, DDD00020 and DDD00021 from the generators, and
+  DDD00022 and DDD00023 from the new module analyzer. They join DDD00001, DDD00002, DDD00010,
+  DDD00011 and DDD00013 from 2.x. DDD00004 and DDD00021 to DDD00023 are warnings; the rest are
+  errors.
+- `Benchmarks/DDDToolkit.Benchmarks`, a BenchmarkDotNet suite measuring the struct identifier against
+  the record one: construction, iteration, dictionary and set lookup, equality, hashing, text, and an
+  Entity Framework round trip. Writing it found the two performance defects listed under *Fixed*.
+  [Performance](docs/performance.md) is the write-up, including the two places where the measurement
+  disagrees with the advice.
+- `Tests/DDDToolkit.EntityFramework.Providers.Tests`, which runs the mapping, concurrency, outbox and
+  inbox suites against real PostgreSQL 17 and SQL Server 2022 in
+  [Testcontainers](https://dotnet.testcontainers.org). Without Docker every test in it skips with a
+  message naming the reason. It pins down three things SQLite never could: the `ddd` schema is real,
+  a struct id and a record id produce the same column, and the outbox's UTC `DateTime` timestamps
+  land in `datetime2` on SQL Server where a `DateTimeOffset` would have been `datetimeoffset`.
 - Documentation: a page per feature under [docs/](docs/), this changelog, and a
   [migration guide](docs/migrating-to-3.md).
 - Central package management, an `.slnx` solution, and a CI job that packs every package on every
@@ -169,15 +267,32 @@ one of those now either works or reports a diagnostic that names the type and th
 - All four analyzer packages failed `dotnet pack` with `NU5017`, and the release workflow would have
   stopped at the first one. The analyzer projects opt out of symbol packages, and the pull request
   workflow now packs every package so a build is not the last thing that checks.
+- Equality on a reference-type identifier and on a single value object walked
+  `GetEqualityComponents()` through `Enumerable.SequenceEqual`, which allocated two iterators and
+  boxed the value on every comparison. A dictionary keyed by a record identifier was 17 times slower
+  than one keyed by a struct identifier, and hashing allocated 128 bytes per probe. The generators
+  now emit a direct comparison of `Value`, which is the same answer for a type with exactly one
+  component; the gap is 1.4 to 2.5 times with nothing allocated. Multi-property `[ValueObject]`
+  records still compare components, which is correct for them.
+- A struct identifier's generated `ToString()` formatted through
+  `Convert.ToString(object, IFormatProvider)`, which boxed the value, and then concatenated, for 232
+  bytes and three allocations against the record form's 104 and one. It now uses an interpolated
+  string pinned to the invariant culture. Both forms allocate 104 bytes.
+- Both defects existed only because nobody had measured. They were found by writing the benchmarks.
 
 ### Removed
 
 - `IRaw`, `IAllowInvalid` and `IValueObject<T>` from `DDDToolkit.Abstractions.Interfaces`. None of
   them had an implementer, a reference or a mention anywhere in the repository, in 3.0 or in 2.0.22.
-- `Raw<TValueObject>`, `IValidatable` and `NodeIdSerializer`. All three files were entirely
-  commented out.
-- `ModuleAttribute`. It was already marked `[Obsolete("Currently unused")]` and hidden from
-  IntelliSense.
+- `Raw<TValueObject>`, the old `IValidatable` and `NodeIdSerializer`. All three files were entirely
+  commented out. The name `IValidatable` came back later in this release as
+  `IValidatable<TValid>`, which is a different interface with a real job: it is what `TryToValid`
+  hangs off. Nothing that compiled against the 2.x name compiles against the new one, because the
+  old one was commented out and therefore never existed to compile against.
+- `ModuleAttribute` as it stood, which was marked `[Obsolete("Currently unused")]` and hidden from
+  IntelliSense. The name also came back later in this release, as the assembly attribute that
+  declares a [module](docs/modules.md) boundary. It targets an assembly rather than a type, so a 2.x
+  usage would not have compiled against it anyway.
 - `AddFluentValidation()`. It was an empty method with no call sites; the FluentValidation
   integration is compile-time and needs no registration. `ValueObjectRules.MustBeValid()` covers
   what was actually missing.

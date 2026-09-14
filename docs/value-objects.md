@@ -227,9 +227,10 @@ Both work the same for `[ValueObject]`, `[SingleValueObject<T>]` and `[EntityId<
 Struct identifiers have neither, and neither do they need it: they are well formed by construction and
 have no twin to convert to.
 
-They are extension methods on the generated `IValidatable<TValid>` interface, not generated members.
-Nothing new lands on your types, so nothing new turns up in an Entity Framework model or a GraphQL
-schema.
+They are extension methods, not generated members: `TryToValid` on the generated
+`IValidatable<TValid>` interface, so the twin type is inferred at the call site, and `TryValidate` on
+`ValueObject`, since it converts nothing and needs no twin. Nothing new lands on your types, so
+nothing new turns up in an Entity Framework model or a GraphQL schema.
 
 ### What a failure looks like
 

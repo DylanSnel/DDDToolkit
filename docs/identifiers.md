@@ -156,16 +156,20 @@ public partial record CustomerId
 }
 ```
 
-This derives from `EntityId<Guid>`, which supplies `Value`, equality over the value, and the prefixed
-`ToString`. The generator adds the constructors, `Parse`/`TryParse`, `CreateUnique` for `Guid`, and a
-`ValidCustomerId` twin reachable through `ToValid()`.
+This derives from `EntityId<Guid>`, which supplies `Value` and the prefixed `ToString`. The generator
+adds the constructors, equality over `Value`, `Parse`/`TryParse`, `CreateUnique` and
+`CreateSequential` for `Guid`, and a `ValidCustomerId` twin reachable through `ToValid()`.
 
 The constructors are `protected`, so a public factory like `Create` above is the usual pattern.
 
-Equality comes from `ValueObject`, which compares `GetEqualityComponents()`. That is a fine default for
-a value object with several parts and an expensive one for an identifier with one: see
-[Struct or record](#struct-or-record) above and [Performance](performance.md#dictionary-and-set-lookup)
-for what it costs when the id is a dictionary key.
+What you do not get, compared with the struct form, is `Empty`/`IsEmpty`, the explicit conversion
+operators and `IComparable<T>`. A reference type has `null` for the absent value and no need for a
+conversion that a cast already expresses.
+
+Equality is generated as a direct comparison of `Value`, not inherited from `ValueObject`, so it
+allocates nothing and boxes nothing. It is still a call through a reference, which costs about half as
+much again as the struct form; see [Struct or record](#struct-or-record) above and
+[Performance](performance.md#dictionary-and-set-lookup) for the measurement.
 
 ## Column length
 

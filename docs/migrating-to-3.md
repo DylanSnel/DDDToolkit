@@ -22,12 +22,15 @@ in [section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
 | Aggregate roots gain a `Version` column | [8](#8-aggregate-roots-gain-a-version-column) |
 | Hand-written identifiers need `IEquatable<T>` | [9](#9-hand-written-identifiers-need-iequatable) |
 | Misapplied attributes now fail the build | [10](#10-misapplied-attributes-now-fail-the-build) |
-| HotChocolate 16, Entity Framework 10, FluentValidation 12 | [11](#11-package-versions) |
-| MediatR is no longer referenced | [12](#12-mediatr-is-replaced-by-mediator-in-the-examples) |
+| `EnsureInvariants` and `CheckInvariants` are now generated member names | [11](#11-entities-gain-an-invariant-seam) |
+| A save now runs your aggregates' invariants | [11](#11-entities-gain-an-invariant-seam) |
+| HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
+| MediatR is no longer referenced | [13](#13-mediatr-is-replaced-by-mediator-in-the-examples) |
 
-Then there are two changes you do not have to make, but should: [struct
-identifiers](#13-optional-make-your-identifiers-structs) and [generated
-collections](#14-optional-let-the-generator-write-your-collections).
+Then there are three changes you do not have to make, but should: [struct
+identifiers](#14-optional-make-your-identifiers-structs), [generated
+collections](#15-optional-let-the-generator-write-your-collections) and
+[module boundaries](#16-optional-declare-your-modules).
 
 ## 1. Retarget to .NET 10
 
@@ -394,7 +397,7 @@ it got wrong generated nothing and said nothing, or was rejected by the compiler
 named no cause. The attributes now accept both classes and structs, so the generator reports its own
 diagnostic instead of the compiler refusing the attribute.
 
-Eight diagnostics are new, and these are the ones you can expect on the first build:
+Nine diagnostics are new to a first build, and these are the ones you can expect:
 
 | You wrote | 3.0 says |
 |---|---|
@@ -406,9 +409,26 @@ Eight diagnostics are new, and these are the ones you can expect on the first bu
 | A type argument that is neither an identifier nor something one can wrap | [DDD00008](diagnostics.md#ddd00008) |
 | `[Entity<T>]` and `[AggregateRoot<T>]` on the same class | [DDD00009](diagnostics.md#ddd00009) |
 | A setter on a generated collection property | [DDD00020](diagnostics.md#ddd00020) |
+| A field or property typed as another aggregate root | [DDD00021](diagnostics.md#ddd00021), a warning |
 
 DDD00001, DDD00002, DDD00010, DDD00011 and DDD00013 also fire in more cases than they used to, now
 that a struct or a record struct can carry the attribute at all.
+
+DDD00021 is the one most likely to be noisy on a 2.x model, because 2.x said nothing about an
+`Order.Customer` navigation and this release says it widens the aggregate boundary. It is a warning,
+everything is still generated, and [Reference other aggregates by
+id](entities-and-aggregates.md#reference-other-aggregates-by-id) has the argument. If you are not
+ready to have it now, turn it off for the project and come back to it:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);DDD00021</NoWarn>
+</PropertyGroup>
+```
+
+Two more exist and neither can fire on an upgraded 2.x solution: [DDD00022](diagnostics.md#ddd00022)
+and [DDD00023](diagnostics.md#ddd00023) are silent until two assemblies declare themselves
+[modules](modules.md). See [section 16](#16-optional-declare-your-modules).
 
 They are all real: in 2.x those types were producing nothing, and you were living with whatever the
 missing code did not do. DDD00006 in particular used to produce a second, unrelated, non-generic type
@@ -418,7 +438,49 @@ that compiled on its own, which is why the errors you saw talked about members t
 `[DomainEventName]` is new in 3.0 and optional. The full list with a fix for each is in
 [Diagnostics](diagnostics.md).
 
-## 11. Package versions
+## 11. Entities gain an invariant seam
+
+Every `[Entity<T>]` and `[AggregateRoot<T>]` now gets two generated members:
+
+```csharp
+partial void CheckInvariants();
+public override void EnsureInvariants();
+```
+
+Two things follow, one mechanical and one behavioural.
+
+**The names are taken.** A 2.x class that already declares a member called `CheckInvariants` or
+`EnsureInvariants` collides with the generated one. Rename yours; the compiler points at the line.
+This is rare, but it is the only way this feature can stop a build.
+
+**A save now runs them.** `UseDDDToolkit` registers an `InvariantInterceptor` that calls
+`EnsureInvariants()` on every aggregate root a `SaveChanges` adds or modifies. Until you implement
+the seam that call does nothing at all: the compiler erases an unimplemented `partial void` and every
+call to it, so an unchanged 2.x aggregate behaves exactly as before and costs nothing. You only
+notice the interceptor once you write a rule.
+
+There is nothing to switch on and nothing to migrate. When you are ready to use it:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    partial void CheckInvariants()
+    {
+        if (Status != OrderStatus.Draft && Lines.Count == 0)
+        {
+            throw InvariantViolation("A placed order must have at least one line.");
+        }
+    }
+}
+```
+
+A rule that the data in your database already breaks will start failing saves of those rows. The
+interceptor only checks aggregates the save touches, so nothing breaks on load, but it is worth
+running the rule over production data as a query before you deploy it. See
+[Invariants](invariants.md).
+
+## 12. Package versions
 
 | Package | 2.0.22 | 3.0.0 |
 |---|---|---|
@@ -441,7 +503,7 @@ contained FluentValidation's `ValidationFailure` or the always-valid twins, they
 the bug being fixed, but check your persisted queries before you deploy. See
 [GraphQL](graphql.md).
 
-## 12. MediatR is replaced by Mediator in the examples
+## 13. MediatR is replaced by Mediator in the examples
 
 MediatR is commercially licensed from version 13, which is why the repository stayed on a 12.x version. The
 examples now publish through [Mediator](https://github.com/martinothamar/Mediator), which is MIT and
@@ -474,7 +536,7 @@ An event that does not implement Mediator's `INotification` makes `DispatchWithM
 naming the event type. It is not skipped: the interceptor has already dequeued the event by then, so
 skipping would destroy it with no row, no log and nothing to retry.
 
-## 13. Optional: make your identifiers structs
+## 14. Optional: make your identifiers structs
 
 `[EntityId<T>]` now accepts a `readonly partial record struct`, and that is the recommended shape.
 The identifier costs no allocation and gets a fuller surface than the record form:
@@ -511,7 +573,7 @@ public partial class Order { }       // also generates OrderId
 Keep the explicit declaration for an identifier that other aggregates, DTOs or API contracts refer
 to. See [Identifiers](identifiers.md).
 
-## 14. Optional: let the generator write your collections
+## 15. Optional: let the generator write your collections
 
 A get-only `partial` collection property gets a backing field, a read-only view and Entity Framework's
 `[BackingField]`:
@@ -537,6 +599,34 @@ public partial IReadOnlyList<Order> Orders { get; }                // only the a
 A setter is an error ([DDD00020](diagnostics.md#ddd00020)). See
 [Entities and aggregates](entities-and-aggregates.md#read-only-collections).
 
+## 16. Optional: declare your modules
+
+This one has no 2.x equivalent at all, so there is nothing to migrate and nothing that breaks until
+you ask for it. If your solution is a modular monolith, it is the most valuable thing in this release
+that the compiler will not hand you.
+
+Mark an assembly as a module and say what it publishes:
+
+```csharp
+[assembly: Module("Ordering")]
+```
+
+```csharp
+[ModuleContract]
+[EntityId<Guid>("CUS")]
+public readonly partial record struct CustomerId;
+```
+
+An analyzer then reports where one module names another module's unpublished type
+([DDD00022](diagnostics.md#ddd00022)) or holds another module's entity as stored state
+([DDD00023](diagnostics.md#ddd00023)). Both are warnings and both are silent unless *both* assemblies
+carry `[assembly: Module]`, so adding the attribute to one project changes nothing, and adding it to
+a second gives you a list rather than a build break.
+
+Do not confuse it with `DDD_Module`, which is unchanged and unrelated: that MSBuild property names
+the generated `Add{Module}Converters` method and describes no boundary to anybody. Adopt one project
+at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
+
 ## What did not change
 
 - `[ValueObject]` and `[SingleValueObject<T>]` keep their shape, their `Valid` twin, `ToValid()` and
@@ -547,7 +637,12 @@ A setter is an error ([DDD00020](diagnostics.md#ddd00020)). See
 - `Entity<TId>.Id` still has a `protected set`, so a 2.x constructor that wrote `Id = id` after
   `base()` still compiles. `base(id)` is the better form.
 - Validation still runs through `protected bool Validate()`, or a generated body when
-  `DDDToolkit.FluentValidation` is referenced.
+  `DDDToolkit.FluentValidation` is referenced. There is a second overload now,
+  `protected override void Validate(ValidationErrorBuilder errors)`, and a non-throwing `TryToValid`
+  beside `ToValid()`, but nothing you already wrote has to move. See
+  [Failure handling](value-objects.md#failure-handling).
+- Everything about integration events, sinks, the inbox, versioning and modules is new surface. None
+  of it is on unless you call for it, and none of it replaces anything 2.x had.
 
 One behaviour inside value objects did change, quietly and for the better. In 2.x, `record with` on a
 value object copied the cached validity verdict, so a copy reported its source's verdict even when
@@ -565,10 +660,18 @@ you had a workaround for that, remove it.
 6. Fix the `ClearDomainEvents` errors with a cast to `IHasDomainEvents`, or delete the code and use
    the interceptor.
 7. Fix whatever diagnostics the generators report. Read the message; each one names the type.
-8. Replace `UseDomainEvents(...)` and `AddDomainEventInterceptor(...)` with
+   DDD00021 is a warning about aggregate references and can wait behind a `NoWarn` if the list is
+   long.
+8. Rename any member of your own called `CheckInvariants` or `EnsureInvariants`; both names are now
+   generated onto every entity.
+9. Replace `UseDomainEvents(...)` and `AddDomainEventInterceptor(...)` with
    `AddDDDToolkitEntityFramework(...)` and `UseDDDToolkit(...)`.
-9. Add `AddDDDToolkitConventions()` to `ConfigureConventions`.
-10. Scaffold a migration for the `Version` column.
-11. Read section 6 and decide, per handler, whether it can run before the commit. Move the ones that
+10. Add `AddDDDToolkitConventions()` to `ConfigureConventions`.
+11. Scaffold a migration for the `Version` column.
+12. Read section 6 and decide, per handler, whether it can run before the commit. Move the ones that
     cannot to the outbox.
-12. Run your tests. Then, before you deploy, look at your GraphQL schema and your persisted queries.
+13. Run your tests. Then, before you deploy, look at your GraphQL schema and your persisted queries.
+
+Nothing on that list is the new surface. Invariants, integration events, sinks, the inbox and modules
+are all opt-in, and none of them is worth turning on in the same change as the upgrade. Get green
+first.

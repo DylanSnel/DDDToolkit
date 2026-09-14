@@ -28,6 +28,12 @@ one fires, and each is a warning you can suppress or turn off. [DDD00021](#ddd00
 boundary between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the
 boundary between two [modules](modules.md) and say nothing at all until a project declares itself one.
 
+That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
+not do what you asked", and DDD00020 upwards for rules about the model. The table above is the
+complete list: DDD00012 and DDD00014 to DDD00019 have never been assigned, and the gaps are room to
+grow rather than something that was removed. Ids are stable and are never reused, so a number that is
+missing here is missing from the compiler too.
+
 ---
 
 ## DDD00001

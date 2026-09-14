@@ -258,12 +258,25 @@ same kind of batch. `AsScenario()` is the same thing as `AggregateScenario.Given
 
 ## What this kit does not do
 
-**It does not control the clock.** `OccurredAt` and `EventId` are stamped inside `DomainEvent` with
-`DateTimeOffset.UtcNow` and `Guid.CreateVersion7()`, and there is no hook to replace them from
-outside the domain layer. A testing package cannot add one without changing `DomainEvent` itself, so
-this one does not pretend to. In practice it matters less than it sounds, because the assertions here
-never compare that metadata. If your test really does depend on when something happened, put the
-timestamp in the payload where the domain can see it:
+**It does not control the clock, and it does not need to.** The assertions here never compare
+`EventId` or `OccurredAt`, so nothing in this package cares what they say. The hook belongs to the
+core package rather than to this one: `DomainEventClock.Use(timeProvider)` replaces the clock both
+initialisers read, for the current asynchronous flow only, so a test can fix the timestamp of an
+event the aggregate raised for itself.
+
+```csharp
+using var scope = DomainEventClock.Use(clock);
+
+AggregateScenario.Given(Draft())
+    .When(order => order.Cancel("out of stock"))
+    .Raised<OrderCancelled>(e => e.OccurredAt == clock.GetUtcNow());
+```
+
+See [Deterministic time in tests](domain-events.md#deterministic-time-in-tests) for the scope rules
+and for fixing the whole of `EventId`.
+
+Reach for it when the time is what you are asserting on. When the time is something the domain
+reasons about, it belongs in the payload instead, where a rule can read it:
 
 ```csharp
 public sealed record OrderCancelled(OrderId OrderId, string Reason, DateTimeOffset CancelledAt) : DomainEvent;
@@ -271,8 +284,7 @@ public sealed record OrderCancelled(OrderId OrderId, string Reason, DateTimeOffs
 
 Then pass the time in from your own clock abstraction and assert on `CancelledAt` like any other
 member. `EventId` and `OccurredAt` stay what they are: the identity and the wall-clock stamp of the
-occurrence, useful for idempotency and ordering, not for assertions. Both are `init`, so a test that
-truly needs a fixed value can still supply one when it constructs an event itself.
+occurrence, useful for idempotency and ordering, not for describing the domain.
 
 **It is not an event sourcing kit.** There is no `Given(events)` that rebuilds an aggregate from a
 stream, because these aggregates are not built that way. Arrange with the constructor and with real
@@ -287,9 +299,23 @@ token, and test those against a real database.
 assertion library takes it from there. Two libraries fighting over one assertion style is worse than
 none.
 
+**It does not assert on invariants.** There is no `.Violates<T>()`, because there does not need to
+be: `EnsureInvariants()` is public on every aggregate and throws, so your own assertion library
+already covers it.
+
+```csharp
+var order = new Order(OrderId.CreateUnique(), customerId);
+order.Place();
+
+Assert.Throws<InvariantViolationException>(() => order.EnsureInvariants());
+```
+
+See [Invariants](invariants.md#by-hand).
+
 ## See also
 
 - [Domain events](domain-events.md) for raising, draining and stable names.
+- [Invariants](invariants.md) for the `CheckInvariants()` seam and for checking it without a database.
 - [Entities and aggregates](entities-and-aggregates.md) for what an aggregate root is and why only
   the root raises events.
 - [Entity Framework](entity-framework.md) for delivering the events you asserted on here.
