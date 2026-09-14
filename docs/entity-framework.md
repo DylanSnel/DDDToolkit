@@ -483,13 +483,21 @@ ignores the argument, so the table is plain `OutboxMessages` there. The mapping 
 `CreatedAt` comes from `options.TimeProvider`, which defaults to `TimeProvider.System` and can be
 replaced in tests.
 
+Payloads are written with System.Text.Json through `outbox.JsonOptions`, which by default are
+case-insensitive on read and carry the toolkit's `SingleValueObjectConverterFactory`, so identifiers
+and single value objects are stored as their raw values rather than as objects. The same options read
+the payload back, so change them with care once messages exist.
+
 ### Timestamps
 
 `OccurredAt`, `CreatedAt` and `ProcessedAt` are `DateTimeOffset` in the model. What they become in the
 database depends on the provider, and you can say otherwise:
 
 ```csharp
-modelBuilder.AddDomainEventOutbox(Database);                                        // the provider's own type
+// The provider's own instant type.
+modelBuilder.AddDomainEventOutbox(Database);
+
+// A UTC DateTime column, on every provider.
 modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
 ```
 
@@ -525,7 +533,8 @@ Read this before upgrading one.
 migration to write.
 
 **On SQL Server the column type changes**, from `datetime2` to `datetimeoffset`. Scaffolding a
-migration after upgrading produces an `ALTER COLUMN` for each of the four timestamps. The stored
+migration after upgrading produces an `ALTER COLUMN` for each timestamp column of the outbox and
+the inbox. The stored
 instant is preserved: SQL Server reads an existing `datetime2` as the same time at `+00:00`, which is
 correct because every value the outbox ever wrote was already UTC. So the meaning of a row does not
 change, but the table does, and you have to run the migration.
@@ -553,11 +562,6 @@ Rows written before you notice are fine. The value that reached the column was a
 instant, so running the migration afterwards needs no data repair.
 
 **On SQLite, nothing happens**, because SQLite never had a choice.
-
-Payloads are written with System.Text.Json through `outbox.JsonOptions`, which by default are
-case-insensitive on read and carry the toolkit's `SingleValueObjectConverterFactory`, so identifiers
-and single value objects are stored as their raw values rather than as objects. The same options read
-the payload back, so change them with care once messages exist.
 
 ### Registering event types
 

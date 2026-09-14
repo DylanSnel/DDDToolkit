@@ -22,8 +22,9 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Providers;
 /// provider stops being forgiving".
 /// <para>
 /// The tests that read <c>information_schema</c> are the other half. They pin down what a column
-/// actually became, which is where the two providers differ and where a SQLite-shaped decision shows
-/// up as a cost somebody else pays.
+/// actually became. That is where the providers stop agreeing, and each place they differ is either a
+/// deliberate choice, in which case the test says which, or a portability limit somebody deserves to
+/// hear about before production rather than during it.
 /// </para>
 /// </summary>
 public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTestBase(fixture)
