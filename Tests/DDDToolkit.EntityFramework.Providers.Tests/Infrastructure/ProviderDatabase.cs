@@ -35,6 +35,81 @@ public sealed class ProviderDatabase(Action<DbContextOptionsBuilder> configure) 
         await context.Database.EnsureCreatedAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// A context that maps only the outbox and the inbox, under names of their own, so a test can put
+    /// a second timestamp shape in the same database and compare the two tables side by side.
+    /// </summary>
+    public TimestampShapeContext CreateTimestampShapeContext()
+    {
+        var builder = new DbContextOptionsBuilder<TimestampShapeContext>();
+        Configure(builder);
+        return new TimestampShapeContext(builder.Options);
+    }
+
+    /// <summary>The default mapping over the table <see cref="TimestampShapeContext"/> writes.</summary>
+    public UpgradedTimestampContext CreateUpgradedTimestampContext()
+    {
+        var builder = new DbContextOptionsBuilder<UpgradedTimestampContext>();
+        Configure(builder);
+        return new UpgradedTimestampContext(builder.Options);
+    }
+
+    /// <summary>
+    /// Runs a script on the database's own connection, one batch at a time.
+    /// <para>
+    /// <c>GenerateCreateScript</c> on SQL Server separates its statements with <c>GO</c>, which is not
+    /// SQL at all: it is a word the command line tools understand and the server does not. So the
+    /// script is split on it here, which is what those tools do too. Every other provider emits one
+    /// batch and the split finds nothing.
+    /// </para>
+    /// </summary>
+    public async Task ExecuteScriptAsync(string script, CancellationToken cancellationToken)
+    {
+        await using var context = CreateContext();
+        var connection = context.Database.GetDbConnection();
+        await connection.OpenAsync(cancellationToken);
+
+        foreach (var batch in SplitBatches(script))
+        {
+            await using DbCommand command = connection.CreateCommand();
+            command.CommandText = batch;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>The script's batches: the parts between the lines that say only <c>GO</c>.</summary>
+    private static List<string> SplitBatches(string script)
+    {
+        List<string> batches = [];
+        List<string> current = [];
+
+        foreach (var line in script.Split('\n'))
+        {
+            if (line.Trim().Equals("GO", StringComparison.OrdinalIgnoreCase))
+            {
+                Take();
+            }
+            else
+            {
+                current.Add(line);
+            }
+        }
+
+        Take();
+        return batches;
+
+        void Take()
+        {
+            var batch = string.Join('\n', current).Trim();
+            current.Clear();
+
+            if (batch.Length > 0)
+            {
+                batches.Add(batch);
+            }
+        }
+    }
+
     /// <summary>Runs a scalar query on the database's own connection, for assertions about the schema.</summary>
     public async Task<object?> ScalarAsync(string sql, CancellationToken cancellationToken)
     {

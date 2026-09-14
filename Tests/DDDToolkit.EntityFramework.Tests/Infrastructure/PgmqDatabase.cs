@@ -102,7 +102,7 @@ public class PgmqContext(DbContextOptions<PgmqContext> options) : DbContext(opti
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddDomainEventOutbox();
-        modelBuilder.AddDomainEventInbox();
+        modelBuilder.AddDomainEventOutbox(Database);
+        modelBuilder.AddDomainEventInbox(Database);
     }
 }

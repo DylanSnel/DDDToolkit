@@ -20,6 +20,8 @@ namespace DDDToolkit.EntityFramework.Tests;
 public sealed class MessagingSchemaTests : IDisposable
 {
     private const string SqlServer = "Microsoft.EntityFrameworkCore.SqlServer";
+    private const string Sqlite = "Microsoft.EntityFrameworkCore.Sqlite";
+    private const string Postgres = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
     private readonly SqliteDatabase _db = new();
 
@@ -110,7 +112,7 @@ public sealed class MessagingSchemaTests : IDisposable
     [Fact]
     public void The_migration_helpers_leave_the_schema_off_where_the_provider_has_none()
     {
-        var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
+        var builder = new MigrationBuilder(Sqlite);
 
         builder.CreateDomainEventOutbox();
         builder.CreateDomainEventInbox();
@@ -159,6 +161,59 @@ public sealed class MessagingSchemaTests : IDisposable
     }
 
     [Fact]
+    public void The_migration_helpers_write_the_timestamp_column_the_provider_would_have_got()
+    {
+        // MigrationBuilder knows its provider, so a hand-written migration lands on the same column the
+        // model does. If these two ever disagree, the model says datetimeoffset over a table that says
+        // datetime2 and nothing complains until a query does.
+        var sqlServer = new MigrationBuilder(SqlServer);
+        sqlServer.CreateDomainEventOutbox();
+        sqlServer.CreateDomainEventInbox();
+
+        TimestampColumns(sqlServer).Should().OnlyContain(column => column.ClrType == typeof(DateTimeOffset));
+
+        var sqlite = new MigrationBuilder(Sqlite);
+        sqlite.CreateDomainEventOutbox();
+        sqlite.CreateDomainEventInbox();
+
+        TimestampColumns(sqlite).Should().OnlyContain(column => column.ClrType == typeof(DateTime),
+            "SQLite cannot order by a DateTimeOffset, so it keeps the UTC DateTime whatever anyone asks for");
+    }
+
+    [Fact]
+    public void UtcDateTime_writes_the_same_migration_on_every_provider()
+    {
+        // The promise to a database that already exists: ask for the old shape and the helper writes the
+        // old shape, whichever provider is running.
+        foreach (var provider in new[] { SqlServer, Postgres, Sqlite })
+        {
+            var builder = new MigrationBuilder(provider);
+            builder.CreateDomainEventOutbox(timestamps: DomainEventTimestamps.UtcDateTime);
+            builder.CreateDomainEventInbox(timestamps: DomainEventTimestamps.UtcDateTime);
+
+            TimestampColumns(builder).Should().OnlyContain(column => column.ClrType == typeof(DateTime), provider);
+        }
+    }
+
+    [Fact]
+    public void Only_ProcessedAt_is_a_nullable_timestamp()
+    {
+        var builder = new MigrationBuilder(SqlServer);
+        builder.CreateDomainEventOutbox();
+        builder.CreateDomainEventInbox();
+
+        // The outbox's ProcessedAt is what "pending" means, so it has to stay nullable through the change
+        // of column type. The inbox's is written when the row is, so it does not.
+        var outbox = builder.Operations.OfType<CreateTableOperation>().Single(o => o.Name == "OutboxMessages");
+        outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.ProcessedAt)).IsNullable.Should().BeTrue();
+        outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.CreatedAt)).IsNullable.Should().BeFalse();
+        outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.OccurredAt)).IsNullable.Should().BeFalse();
+
+        var inbox = builder.Operations.OfType<CreateTableOperation>().Single(o => o.Name == "InboxMessages");
+        inbox.Columns.Single(c => c.Name == nameof(InboxMessage.ProcessedAt)).IsNullable.Should().BeFalse();
+    }
+
+    [Fact]
     public void The_migration_helpers_reject_an_empty_table_name()
     {
         var builder = new MigrationBuilder(SqlServer);
@@ -169,6 +224,13 @@ public sealed class MessagingSchemaTests : IDisposable
         outbox.Should().Throw<ArgumentException>();
         inbox.Should().Throw<ArgumentException>();
     }
+
+    /// <summary>Every timestamp column the builder wrote, across both tables.</summary>
+    private static IEnumerable<AddColumnOperation> TimestampColumns(MigrationBuilder builder)
+        => builder.Operations
+            .OfType<CreateTableOperation>()
+            .SelectMany(table => table.Columns)
+            .Where(column => column.Name is nameof(OutboxMessage.OccurredAt) or nameof(OutboxMessage.CreatedAt) or nameof(OutboxMessage.ProcessedAt));
 
     private static void AssertMatchesModel(CreateTableOperation operation, IEntityType entityType)
     {

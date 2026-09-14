@@ -17,6 +17,13 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    env:
+      # A container-backed test that skips itself is honest on a laptop and a lie on a runner, where
+      # Docker is always there: the run reports green having proven nothing. This makes every such
+      # skip a failure that names what could not be started. The pgmq suite is what it catches here;
+      # PostgreSQL and SQL Server have their own workflow.
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
     steps:
       - uses: actions/checkout@v5
 
@@ -31,8 +38,15 @@ jobs:
       - name: Build
         run: dotnet build DDDToolkit.slnx --no-restore --configuration Release
 
+      # Everything except the provider suite, which the Provider Tests workflow runs beside this one.
+      # Excluding it here is what keeps this job about two minutes: a SQL Server image is roughly
+      # 700 MB to pull and the better part of a minute to become ready, and paying that on every push
+      # to find out whether a generator still compiles is the wrong trade.
+      #
+      # The filter reads as "not these two traits". A test with no Provider trait at all satisfies
+      # both clauses, which is how every other project in the solution still runs.
       - name: Test
-        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal
+        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal --filter "Provider!=Postgres&Provider!=SqlServer"
 
       # Packaging breaks in ways a build cannot show. An analyzer project whose assembly ships in
       # analyzers/dotnet/cs has no lib/ content, so an inherited IncludeSymbols made pack fail with

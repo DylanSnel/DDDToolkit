@@ -54,4 +54,14 @@
              LinkBase="Domain" />
   </ItemGroup>
 
+  <!--
+    The same reason, applied to a different file. The pgmq tests in the SQLite suite and the provider
+    tests here both skip themselves when Docker is missing, and both need CI to refuse that. One
+    compiled copy means one spelling of DDDTOOLKIT_REQUIRE_CONTAINERS and one definition of what it
+    does, so a workflow cannot set it and have half the suite ignore it.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
 </Project>

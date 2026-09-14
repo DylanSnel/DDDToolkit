@@ -1,0 +1,106 @@
+name: Provider Tests
+
+# The portability suite: the same aggregates, the same outbox and the same conventions against a real
+# PostgreSQL and a real SQL Server in containers. It is separate from Build and Test on purpose.
+#
+# Build and Test is the fast check, about two minutes, and it is the one a person watches after
+# pushing. Pulling a 700 MB SQL Server image and waiting for it to accept connections would roughly
+# triple that for every push, including the ones that only touch a generator. As its own workflow it
+# starts at the same moment and finishes when it finishes, so neither check waits for the other.
+#
+# It runs on every pull request rather than nightly. A nightly run tells you which day broke
+# PostgreSQL, not which commit, and by then the person who wrote it has moved on.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provider-tests:
+    # One job per provider, so PostgreSQL answers in about a minute instead of waiting behind SQL
+    # Server's pull, and so a red check names the provider that is red before anyone opens it.
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Both answers are wanted. A failure on one provider must not cancel the other, or the second
+      # failure only appears after the first is fixed.
+      fail-fast: false
+      matrix:
+        include:
+          - name: PostgreSQL
+            slug: postgres
+            filter: Provider=Postgres
+          - name: SQL Server
+            slug: sqlserver
+            filter: Provider=SqlServer
+
+    env:
+      # Without this the suite skips itself when Docker is missing, which is right on a laptop and a
+      # lie here: a skipped run reports green having started no database at all. Set, every skip
+      # becomes a failure that says what could not be started. See RequiredContainers.
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj
+
+      - name: Build
+        run: dotnet build Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj --no-restore --configuration Release
+
+      # ubuntu-latest ships with Docker running, which is the whole reason these tests can be real
+      # here. If that ever stops being true this step says so in one line, rather than leaving the
+      # reader to work it out from a Testcontainers stack trace.
+      - name: Check Docker is available
+        run: docker version
+
+      # The filter is what keeps this job to one container. xunit creates a collection fixture only
+      # when something in that collection is going to run, so asking for one provider's trait starts
+      # one database.
+      - name: Test
+        run: >
+          dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj
+          --no-build --configuration Release --verbosity normal
+          --filter "${{ matrix.filter }}"
+          --logger "trx;LogFileName=provider-tests.trx"
+          --results-directory TestResults
+
+      # Belt and braces. DDDTOOLKIT_REQUIRE_CONTAINERS already turns a missing container into a
+      # failure, but it cannot speak for a filter that matched nothing: a renamed trait would leave
+      # this job green having run zero tests. Counting them closes that.
+      - name: Prove tests actually ran
+        if: always()
+        run: |
+          trx=$(find TestResults -name 'provider-tests.trx' | head -1)
+          if [ -z "$trx" ]; then
+            echo "::error::No test results were written, so ${{ matrix.name }} was never exercised."
+            exit 1
+          fi
+          total=$(grep -o 'total="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          passed=$(grep -o 'passed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          echo "${{ matrix.name }}: total=$total executed=$executed passed=$passed"
+          echo "### ${{ matrix.name }}: $passed of $total tests passed against a real server" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${executed:-0}" -lt 20 ]; then
+            echo "::error::Only ${executed:-0} tests ran for ${{ matrix.name }}. The trait filter '${{ matrix.filter }}' matched almost nothing, so this run proves nothing."
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-tests-${{ matrix.slug }}
+          path: TestResults
+          if-no-files-found: error

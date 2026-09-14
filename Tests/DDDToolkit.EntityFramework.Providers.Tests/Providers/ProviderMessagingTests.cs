@@ -16,7 +16,12 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Providers;
 /// <summary>
 /// The outbox and the inbox on a real server. Two things only a real server can answer: whether a
 /// rolled back transaction really takes the outbox row with it, and whether the processor's
-/// "oldest first" ordering survives the timestamp conversion the outbox performs.
+/// "oldest first" ordering really holds on this provider's own timestamp column.
+/// <para>
+/// The second one is why the timestamp column is allowed to differ per provider at all. Ordering is
+/// the only thing the outbox needs from that column, so it is the thing that has to be proven on each
+/// provider rather than assumed from SQLite.
+/// </para>
 /// </summary>
 public abstract class ProviderMessagingTests(ProviderFixture fixture) : ProviderTestBase(fixture)
 {
@@ -76,7 +81,7 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
             await context.SaveChangesAsync(Cancellation);
         });
 
-        // A later save: the processor's ordering is by CreatedAt, which is the converted UTC column.
+        // A later save: the processor orders by CreatedAt, which is this provider's own instant column.
         _clock.Advance(TimeSpan.FromMinutes(5));
 
         await host.InScopeAsync(async context =>
@@ -104,10 +109,56 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
             row.Attempts.Should().Be(1);
         });
 
-        // The timestamps survive the round trip through the converted column as UTC instants.
+        // The timestamps survive the round trip through the timestamp column as UTC instants.
         rows[0].CreatedAt.Should().Be(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
         rows[1].CreatedAt.Should().Be(new DateTimeOffset(2026, 9, 13, 12, 5, 0, TimeSpan.Zero));
         rows[0].CreatedAt.Offset.Should().Be(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public async Task The_processor_reads_oldest_first_however_the_rows_were_inserted()
+    {
+        SkipIfUnavailable();
+
+        // The previous test writes in the order it wants them back, so a column that did not sort at all
+        // would still pass it. This one inserts newest first, crosses a year boundary and a day boundary,
+        // and mixes the offset the caller wrote in. Only a column that really orders as an instant, and
+        // a write path that really normalizes to UTC, answers this correctly.
+        using var host = CreateOutboxHost();
+
+        var start = new DateTimeOffset(2025, 12, 31, 23, 30, 0, TimeSpan.Zero);
+        var written = new[]
+        {
+            ("fourth", start.AddHours(3).ToOffset(TimeSpan.FromHours(5))),
+            ("second", start.AddMinutes(20)),
+            ("third", start.AddHours(1).ToOffset(TimeSpan.FromHours(-8))),
+            ("first", start),
+        };
+
+        foreach (var (name, at) in written)
+        {
+            _clock.Set(at);
+
+            await host.InScopeAsync(async context =>
+            {
+                context.Shelves.Add(NewShelf(name));
+                await context.SaveChangesAsync(Cancellation);
+            });
+        }
+
+        var processed = await host.InScopeAsync((_, services) => services
+            .GetRequiredService<OutboxProcessor<ProviderContext>>()
+            .ProcessPendingAsync(cancellationToken: Cancellation));
+
+        processed.Should().Be(4);
+        _dispatched.OfType<ShelfCreated>().Select(e => e.Name).Should().Equal("first", "second", "third", "fourth");
+
+        await using var check = Database.CreateContext();
+        var rows = await check.Outbox.OrderBy(m => m.CreatedAt).ToListAsync(Cancellation);
+
+        rows.Select(r => r.CreatedAt).Should().BeInAscendingOrder().And.AllSatisfy(at => at.Offset.Should().Be(TimeSpan.Zero));
+        rows[0].CreatedAt.Should().Be(start, "the row written last is the oldest instant, whatever offset it arrived in");
+        rows[3].CreatedAt.Should().Be(start.AddHours(3), "and it crossed into the next year on the way");
     }
 
     [Fact]

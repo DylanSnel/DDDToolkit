@@ -218,6 +218,11 @@ the type mapping the generated registration installed.
 The convention only considers public get-only properties. A `protected partial IReadOnlyList<T>` is
 not mapped as a primitive collection.
 
+"A JSON column" is true on SQL Server and SQLite and not on PostgreSQL, which stores the same
+collection as a native array. LINQ queries port across that difference and hand-written SQL does not.
+See [Primitive collections do not port below LINQ](#primitive-collections-do-not-port-below-linq)
+before you write a report against one of these columns.
+
 ### What is not mappable
 
 Entity Framework Core 10 accepts only arrays and `IList<T>` implementations as primitive collections.
@@ -449,9 +454,13 @@ Map it in `OnModelCreating`:
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.AddDomainEventOutbox();
+    modelBuilder.AddDomainEventOutbox(Database);
 }
 ```
+
+`Database` is the context's own property. The method reads one thing from it, the provider name, which
+is what lets the timestamp columns be the right shape for the database you are actually on. See
+[Timestamps](#timestamps) below.
 
 The table is `ddd.OutboxMessages` by default. The method takes `tableName` and `schema` if you want
 something else, and `schema: null` puts it in the provider's default schema. SQLite has no schemas and
@@ -471,8 +480,6 @@ ignores the argument, so the table is plain `OutboxMessages` there. The mapping 
 | `Attempts` | `int` | How often delivery was attempted |
 | `LastError` | `string?`, 4000 | Type and message of the last failure |
 
-`OccurredAt`, `CreatedAt` and `ProcessedAt` are stored as UTC `DateTime` columns rather than a
-provider-specific offset type, so every provider, SQLite included, can index and order them.
 `CreatedAt` comes from `options.TimeProvider`, which defaults to `TimeProvider.System` and can be
 replaced in tests.
 
@@ -480,6 +487,81 @@ Payloads are written with System.Text.Json through `outbox.JsonOptions`, which b
 case-insensitive on read and carry the toolkit's `SingleValueObjectConverterFactory`, so identifiers
 and single value objects are stored as their raw values rather than as objects. The same options read
 the payload back, so change them with care once messages exist.
+
+### Timestamps
+
+`OccurredAt`, `CreatedAt` and `ProcessedAt` are `DateTimeOffset` in the model. What they become in the
+database depends on the provider, and you can say otherwise:
+
+```csharp
+// The provider's own instant type.
+modelBuilder.AddDomainEventOutbox(Database);
+
+// A UTC DateTime column, on every provider.
+modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
+```
+
+| Provider | `ProviderDefault` | `UtcDateTime` |
+|---|---|---|
+| PostgreSQL | `timestamp with time zone` | `timestamp with time zone` |
+| SQL Server | `datetimeoffset` | `datetime2` |
+| SQLite | UTC `DateTime` as text | UTC `DateTime` as text |
+
+The one thing the outbox needs from these columns is that they sort as instants, because the processor
+reads pending messages oldest first. SQLite stores a `DateTimeOffset` as text and refuses to order by
+one, so on SQLite the toolkit converts to a UTC `DateTime` whatever you ask for. Every other provider
+has an instant type that orders correctly, and now gets it.
+
+Whichever column it lands in, the value is normalized to UTC on the way in. Write a `DateTimeOffset`
+that carries `+02:00` and the row holds the same instant with an offset of zero, and reads back that
+way. That makes the two shapes interchangeable in meaning, and it is also what keeps Npgsql happy:
+PostgreSQL refuses a `DateTimeOffset` whose offset is not zero.
+
+`AddDomainEventInbox` takes the same argument for its own `ProcessedAt`. Pass both the same thing.
+
+If you write migrations by hand, `CreateDomainEventOutbox` and `CreateDomainEventInbox` take
+`timestamps` too and default to the same `ProviderDefault`. They read `MigrationBuilder.ActiveProvider`,
+so the hand-written table and the scaffolded one agree.
+
+#### If you already have a database
+
+This changed in 3.0 during development, so it can affect a database created by an earlier 3.0 build.
+Read this before upgrading one.
+
+**On PostgreSQL, nothing happens.** Npgsql maps both a UTC `DateTime` and a `DateTimeOffset` to
+`timestamptz`. The column is the same column and the bytes in it are the same bytes. There is no
+migration to write.
+
+**On SQL Server the column type changes**, from `datetime2` to `datetimeoffset`. Scaffolding a
+migration after upgrading produces an `ALTER COLUMN` for each timestamp column of the outbox and
+the inbox. The stored
+instant is preserved: SQL Server reads an existing `datetime2` as the same time at `+00:00`, which is
+correct because every value the outbox ever wrote was already UTC. So the meaning of a row does not
+change, but the table does, and you have to run the migration.
+
+If you would rather not, keep the old shape explicitly:
+
+```csharp
+modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
+modelBuilder.AddDomainEventInbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
+```
+
+That produces exactly the columns you have, on every provider, and no migration at all.
+
+If you upgrade the code on SQL Server and do neither of those things, **reading the outbox throws**.
+The insert still works, because SQL Server converts the parameter into the column it has, and the
+instant it stores is correct. The read does not: `datetime2` comes back from the driver as a
+`DateTime`, the model wants a `DateTimeOffset`, and you get an `InvalidCastException` on the first row.
+
+That is the good outcome, and it is why this is safe to ship. An unmigrated database says so the first
+time the processor polls, rather than quietly disagreeing with the model. Both halves are asserted
+against a real SQL Server in
+`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
+
+Rows written before you notice are fine. The value that reached the column was already the right
+instant, so running the migration afterwards needs no data repair.
+
+**On SQLite, nothing happens**, because SQLite never had a choice.
 
 ### Registering event types
 
@@ -579,6 +661,101 @@ drain for that tick. The next tick picks the messages up again.
 `Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` exercises the transactional write, the
 retries, `MaxAttempts`, unknown event names and the background service.
 
+## Providers
+
+Everything on this page is tested on SQLite, PostgreSQL and SQL Server. SQLite is where the fast suite
+runs; the other two run in containers, in their own CI workflow, against the same aggregates and the
+same context. Most of the mapping is identical on all three. This section is the part that is not, so
+that none of it is a surprise in production.
+
+### What differs, and what to do about it
+
+| | SQLite | PostgreSQL | SQL Server |
+|---|---|---|---|
+| `Guid` identifier | `TEXT` | `uuid` | `uniqueidentifier` |
+| Outbox timestamps | UTC `DateTime` | `timestamptz` | `datetimeoffset` |
+| Primitive collection | JSON `TEXT` | `integer[]` | JSON `nvarchar` |
+| Schemas | ignored | yes | yes |
+
+Timestamps are covered above. Schemas are ignored by SQLite, which drops the schema when it writes an
+identifier, so `ddd.OutboxMessages` is plain `OutboxMessages` there and nothing else changes. The
+primitive collection is the one that needs a paragraph.
+
+### Primitive collections do not port below LINQ
+
+A generated `IReadOnlyList<TagId>` is mapped as an Entity Framework primitive collection. What that
+becomes in the database is the provider's decision, not the toolkit's, and the providers decide
+differently:
+
+- **PostgreSQL** stores it as a real `integer[]`. Npgsql maps .NET collections of a primitive onto
+  PostgreSQL's own array types, which is the better mapping and the reason it does it.
+- **SQL Server and SQLite** store it as a JSON document in a string column, `[1,2]`.
+
+**This is inherent to Entity Framework Core, not something the toolkit chose or can sensibly undo.**
+The mapping is supplied by each provider's type mapping source. The toolkit's convention only finds
+the get-only property, sets its element type and copies the element converter across; the store type
+is chosen after that, by the provider, exactly as it would be for a hand-written
+`modelBuilder.PrimitiveCollection(...)`. Forcing every provider onto the same store type would mean
+overriding Npgsql's native array mapping with a worse one for the sake of a portability nobody asked
+for, and would break every PostgreSQL index and query already written against the array.
+
+So the practical rule is:
+
+**LINQ ports.** `Contains`, `Count` and the rest translate on both providers, to `= ANY(...)` on
+PostgreSQL and to `OPENJSON` on SQL Server. If your query goes through `IQueryable`, you can move
+providers and it keeps working.
+
+```csharp
+// Translates on both.
+var tagged = await context.Shelves
+    .SelectMany(shelf => shelf.Books)
+    .Where(book => book.Tags.Contains(new TagId(7)))
+    .ToListAsync();
+```
+
+**SQL does not port.** Anything that reaches inside the column in hand-written SQL is provider
+specific, and there is no spelling that runs on both:
+
+```sql
+-- PostgreSQL
+SELECT COUNT(*) FROM "Book" WHERE 7 = ANY("Tags");
+
+-- SQL Server
+SELECT COUNT(*) FROM "Book" WHERE EXISTS (SELECT 1 FROM OPENJSON("Tags") WHERE CAST([value] AS int) = 7);
+```
+
+That matters for reports, ad hoc queries, data migrations and anything a DBA writes. Indexing differs
+too: a PostgreSQL array takes a GIN index, a JSON string column does not.
+
+If you need a query like that to port, the answer is not to fight the mapping. Model the collection as
+a child entity with its own table, which is one row per tag and identical on every provider. You lose
+the single-column read and gain a join. That is a design decision, so make it because you need the
+portability, not by accident.
+
+Both halves are asserted against real servers in
+`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
+
+### Running the provider tests yourself
+
+```bash
+dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=Postgres"
+dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=SqlServer"
+```
+
+They need Docker. Without it they skip themselves, naming what could not be started, because a machine
+without Docker is a normal machine and should not go red.
+
+That skip is a problem in CI, where a green run would then say PostgreSQL and SQL Server pass without
+either having started. Setting `DDDTOOLKIT_REQUIRE_CONTAINERS=1` turns every such skip into a failure
+that says what was missing. Both workflows set it, and the provider workflow also counts the tests that
+ran, so a filter that matched nothing cannot pass either.
+
+The images are pinned exactly, in
+`Tests/DDDToolkit.EntityFramework.Providers.Tests/Infrastructure/ContainerImages.cs`, with the reason
+for each next to it. No floating tag, so a red build is always something we changed. PostgreSQL matches
+the major of the pgmq image the Postgres package is tested against; SQL Server is the older release
+still in mainstream support, which is the weaker of the two and therefore the one worth testing.
+
 ## Optimistic concurrency
 
 Every aggregate root carries `long Version`. It is 0 on a new instance, becomes 1 when the aggregate
@@ -643,10 +820,10 @@ dotnet ef migrations add AddOutbox
 dotnet ef database update
 ```
 
-The outbox table is part of the model as soon as `AddDomainEventOutbox()` is in `OnModelCreating`, so
+The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
 the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
 is no separate package, no separate migration history table and no separate command. The same goes for
-`AddDomainEventInbox()` on the consuming side.
+`AddDomainEventInbox(Database)` on the consuming side.
 
 If you write migrations by hand rather than scaffolding them, `migrationBuilder.CreateDomainEventOutbox()`
 and its inbox and drop counterparts write the same tables. See

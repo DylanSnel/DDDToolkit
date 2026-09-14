@@ -18,7 +18,7 @@ public sealed class BasketContext(DbContextOptions<BasketContext> options) : DbC
 
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventOutbox();
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventOutbox(Database);
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

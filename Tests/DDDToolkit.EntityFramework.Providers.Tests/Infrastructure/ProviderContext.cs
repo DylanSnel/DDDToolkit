@@ -31,8 +31,8 @@ public class ProviderContext(DbContextOptions<ProviderContext> options) : DbCont
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.AddDomainEventOutbox();
-        modelBuilder.AddDomainEventInbox();
+        modelBuilder.AddDomainEventOutbox(Database);
+        modelBuilder.AddDomainEventInbox(Database);
     }
 
     /// <inheritdoc />

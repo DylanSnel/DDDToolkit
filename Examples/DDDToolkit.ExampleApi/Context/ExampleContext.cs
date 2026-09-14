@@ -33,7 +33,7 @@ public class ExampleContext : DbContext
 
         // The outbox table is always part of the model, so switching Program.cs to the outbox variant
         // needs no schema change. Harmless when events are dispatched in process.
-        modelBuilder.AddDomainEventOutbox();
+        modelBuilder.AddDomainEventOutbox(Database);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

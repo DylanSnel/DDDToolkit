@@ -1,3 +1,5 @@
+using DDDToolkit.EntityFramework.Tests.Infrastructure;
+
 namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 
 /// <summary>
@@ -40,6 +42,11 @@ public abstract class ProviderTestBase(ProviderFixture fixture) : IAsyncLifetime
         }
     }
 
-    /// <summary>Skips the test, naming the real reason, when the container did not start.</summary>
-    protected void SkipIfUnavailable() => Assert.SkipWhen(!Fixture.IsAvailable, Fixture.SkipReason ?? string.Empty);
+    /// <summary>
+    /// Skips the test, naming the real reason, when the container did not start. Unless
+    /// <see cref="RequiredContainers"/> says containers are required here, in which case the same
+    /// situation fails the test instead, because a skip in CI is a green run that proved nothing.
+    /// </summary>
+    protected void SkipIfUnavailable()
+        => RequiredContainers.EnforceOrSkip(Fixture.IsAvailable, RequiredContainers.Required, Fixture.ProviderName, Fixture.SkipReason);
 }

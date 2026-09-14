@@ -7,13 +7,13 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 /// <summary>PostgreSQL in a container, through Npgsql.EntityFrameworkCore.PostgreSQL.</summary>
 public sealed class PostgresFixture : ProviderFixture
 {
-    /// <summary>The image the numbers and findings in the documentation came from.</summary>
-    public const string Image = "postgres:17";
-
     private PostgreSqlContainer? _container;
 
     /// <inheritdoc />
     public override string ProviderName => "PostgreSQL";
+
+    /// <inheritdoc />
+    public override string Image => ContainerImages.Postgres;
 
     /// <inheritdoc />
     protected override async Task<string> StartContainerAsync()

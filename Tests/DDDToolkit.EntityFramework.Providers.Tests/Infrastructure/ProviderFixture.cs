@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
@@ -10,6 +11,11 @@ namespace DDDToolkit.EntityFramework.Providers.Tests.Infrastructure;
 /// <see cref="SkipReason"/> and every test in the collection skips with that text, so a reader can
 /// tell "Docker is not running here" apart from "the convention is broken on Postgres".
 /// </para>
+/// <para>
+/// It is allowed to fail on a laptop, that is. In CI it is not: see <see cref="RequiredContainers"/>,
+/// which turns the same skip into a failure so a run that never started a database cannot report
+/// green.
+/// </para>
 /// </summary>
 public abstract class ProviderFixture : IAsyncLifetime
 {
@@ -17,6 +23,9 @@ public abstract class ProviderFixture : IAsyncLifetime
 
     /// <summary>The provider as a person would name it, used in skip messages.</summary>
     public abstract string ProviderName { get; }
+
+    /// <summary>The exact image tag this fixture starts, so a test can report what it ran against.</summary>
+    public abstract string Image { get; }
 
     /// <summary>Why the tests are skipping, or <see langword="null"/> when the server is up.</summary>
     public string? SkipReason { get; private set; }
@@ -34,7 +43,7 @@ public abstract class ProviderFixture : IAsyncLifetime
         catch (Exception exception)
         {
             SkipReason =
-                $"{ProviderName} was not reachable, so this test did not run. Testcontainers could not start the container: " +
+                $"{ProviderName} was not reachable, so this test did not run. Testcontainers could not start {Image}: " +
                 $"{exception.GetType().Name}: {exception.Message} " +
                 $"Start Docker Desktop (or set DOCKER_HOST) and run the suite again to exercise {ProviderName} for real.";
         }

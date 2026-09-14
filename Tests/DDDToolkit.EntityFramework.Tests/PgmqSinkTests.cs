@@ -14,7 +14,8 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// broker does not: the enqueue obeys the transaction it was called in.
 /// <para>
 /// Every test skips itself when Docker is not available, because there is no honest way to fake a
-/// transactional queue.
+/// transactional queue. Except in CI, where <see cref="RequiredContainers"/> turns that skip into a
+/// failure: a run that never started Postgres must not report that pgmq works.
 /// </para>
 /// </summary>
 public sealed class PgmqSinkTests : IAsyncLifetime
@@ -33,15 +34,19 @@ public sealed class PgmqSinkTests : IAsyncLifetime
         }
     }
 
-    /// <summary>The running database, or a skip when there was no Docker to start one.</summary>
+    /// <summary>
+    /// The running database. When there was no Docker to start one this skips, or fails where
+    /// <see cref="RequiredContainers"/> says a container was not optional.
+    /// </summary>
     private PgmqDatabase Database
     {
         get
         {
-            if (_database is null)
-            {
-                Assert.Skip($"No Docker here, so '{PgmqDatabase.Image}' could not be started. The pgmq behaviour is not covered on this machine.");
-            }
+            RequiredContainers.EnforceOrSkip(
+                available: _database is not null,
+                RequiredContainers.Required,
+                "pgmq on PostgreSQL",
+                $"No Docker here, so '{PgmqDatabase.Image}' could not be started. The pgmq behaviour is not covered on this machine.");
 
             return _database!;
         }
