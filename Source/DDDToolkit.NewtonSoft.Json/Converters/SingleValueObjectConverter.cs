@@ -1,63 +1,85 @@
-﻿using DDDToolkit.BaseTypes;
+using DDDToolkit.Serialization;
 using Newtonsoft.Json;
-using System.Reflection;
 
 namespace DDDToolkit.NewtonSoft.Json.Converters;
 
 /// <summary>
-/// 
+/// Reads and writes every type that wraps a single value - single value objects, reference type ids
+/// (<c>[EntityId&lt;T&gt;] partial record</c>) and struct ids
+/// (<c>[EntityId&lt;T&gt;] readonly partial record struct</c>) - as the value it wraps, so
+/// <c>{ "id": "3fa85f64-..." }</c> rather than <c>{ "id": { "value": "3fa85f64-..." } }</c>.
+/// <para>
+/// Nullable struct ids (<c>CatId?</c>) are handled here as well, because Newtonsoft.Json asks the
+/// converter for the <see cref="Nullable{T}"/> type itself. A JSON <c>null</c> becomes <see langword="null"/>
+/// for reference types and for nullable struct ids, and is an error for a struct id that is not nullable -
+/// silently substituting the default id would invent an identity that was never written.
+/// </para>
+/// <para>
+/// Dictionary keys are the one place this does not reach: Newtonsoft.Json turns a key into text through the
+/// key type's <c>TypeConverter</c> rather than through a <see cref="JsonConverter"/>, so an id used as a
+/// dictionary key is written with <c>ToString()</c> (prefix included) and cannot be read back without a
+/// <c>TypeConverter</c> of its own. The System.Text.Json integration handles keys in both directions.
+/// </para>
 /// </summary>
 public class SingleValueObjectConverter : JsonConverter
 {
-    public override bool CanConvert(Type objectType)
+    /// <inheritdoc />
+    public override bool CanConvert(Type objectType) => Describe(objectType) is not null;
+
+    /// <inheritdoc />
+    public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
     {
-        return typeof(ISingleValueObject).IsAssignableFrom(objectType);
+        ArgumentNullException.ThrowIfNull(reader);
+        ArgumentNullException.ThrowIfNull(objectType);
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        var description = Describe(objectType)
+            ?? throw new JsonSerializationException($"'{objectType.Name}' does not wrap a single value.");
+
+        // A struct id is only allowed to be absent when it was declared as TheId?.
+        var nullAllowed = !description.IsValueType || Nullable.GetUnderlyingType(objectType) is not null;
+
+        if (reader.TokenType is JsonToken.Null or JsonToken.Undefined)
+        {
+            return nullAllowed ? null : throw NullNotAllowed(description);
+        }
+
+        var value = serializer.Deserialize(reader, description.ValueType);
+        if (value is null)
+        {
+            return nullAllowed ? null : throw NullNotAllowed(description);
+        }
+
+        if (!description.CanCreate)
+        {
+            throw new JsonSerializationException($"No suitable constructor found for type {description.Type.Name}.");
+        }
+
+        return description.Create(value);
     }
 
-    public override object ReadJson(JsonReader reader, Type objectType, object? existingValue, JsonSerializer serializer)
-    {
-        // Determine the type of T in SingleValueObject<T>
-        var baseType = objectType;
-        while (baseType != null && !baseType.IsGenericType || baseType!.GetGenericTypeDefinition() != typeof(SingleValueObject<>))
-        {
-            baseType = baseType.BaseType;
-        }
-        if (baseType == null)
-        {
-            throw new JsonSerializationException($"Type {objectType.Name} does not inherit from SingleValueObject<T>.");
-        }
-
-        var valueType = baseType.GetGenericArguments()[0];
-        var value = serializer.Deserialize(reader, valueType);
-
-        if (value == null)
-        {
-            return null!;
-        }
-
-        // Find the protected constructor
-        var constructor = objectType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-                          .FirstOrDefault(c => c.GetParameters().Length == 1 && c.GetParameters()[0].ParameterType == valueType);
-
-        if (constructor == null)
-        {
-            throw new JsonSerializationException($"No suitable constructor found for type {objectType.Name}.");
-        }
-
-        // Invoke the protected constructor
-        var instance = constructor.Invoke(BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { value }, null);
-        return instance;
-    }
+    /// <inheritdoc />
     public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
     {
-        if (value == null)
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(serializer);
+
+        if (value is null)
         {
             writer.WriteNull();
             return;
         }
 
-        var propValue = value.GetType().GetProperty("Value")?.GetValue(value);
-        serializer.Serialize(writer, propValue);
+        // value is never a Nullable<> here: boxing a nullable struct yields the struct itself.
+        var description = SingleValueDescription.For(value.GetType())
+            ?? throw new JsonSerializationException($"'{value.GetType().Name}' does not wrap a single value.");
+
+        serializer.Serialize(writer, description.GetValue(value));
     }
 
+    private static SingleValueDescription? Describe(Type? objectType)
+        => objectType is null ? null : SingleValueDescription.For(Nullable.GetUnderlyingType(objectType) ?? objectType);
+
+    private static JsonSerializationException NullNotAllowed(SingleValueDescription description)
+        => new($"Cannot convert null to '{description.Type.Name}'. Declare the member as '{description.Type.Name}?' to allow it.");
 }

@@ -1,39 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <Title>Domain Driven Design Toolkit - Entity Framework </Title>
+    <Title>Domain Driven Design Toolkit - Entity Framework</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;ef;efcore</PackageTags>
-    <Description>A package extending the DDDToolkit with Entity Framework configuration</Description>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Description>Entity Framework Core integration for the DDDToolkit: value converters, conventions, domain event dispatch and optimistic concurrency.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
-  <!--<ItemGroup>
-    <None Include="..\DDDToolkit\DDDToolkit.props">
-      <Pack>True</Pack>
-      <PackagePath>\build\DDDToolkit.EntityFramework.Props</PackagePath>
-    </None>
-    --><!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />--><!--
-  </ItemGroup>-->
-
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" />
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" PrivateAssets="contentfiles;build" />
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
 </Project>

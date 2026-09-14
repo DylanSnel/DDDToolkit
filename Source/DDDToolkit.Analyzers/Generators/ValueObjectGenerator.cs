@@ -1,177 +1,107 @@
-﻿using DDDToolkit.Abstractions.Attributes;
-using DDDToolkit.Analyzers.Common;
-using DDDToolkit.Analyzers.Models;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-using SourceGeneratorsToolkit;
-using SourceGeneratorsToolkit.Providers;
-using SourceGeneratorsToolkit.Providers.Contexts;
-using SourceGeneratorsToolkit.SyntaxExtensions;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using DDDToolkit.Analyzers.Common;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 
 namespace DDDToolkit.Analyzers.Generators;
 
-[Generator]
-public class ValueObjectGenerator : IIncrementalGenerator
+/// <summary>
+/// Generates the base type, structural equality and the always-valid twin for <c>[ValueObject]</c> records.
+/// Equality covers every property except those marked <c>[Internal]</c> or <c>[DontCompare]</c>.
+/// </summary>
+[Generator(LanguageNames.CSharp)]
+public sealed class ValueObjectGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        //#if DEBUG
-        //        if (!System.Diagnostics.Debugger.IsAttached)
-        //        {
-
-        //            System.Diagnostics.Debugger.Launch();
-        //        }
-        //#endif
-
-        var dddOptions = context.DDDOptionsProvider();
-        var valueObjects = context.FindAttributesProvider<ValueObjectAttribute, RecordDeclarationSyntax>();
-        var combined = valueObjects.Combine(dddOptions);
-        context.RegisterSourceOutput(combined, CreateValueObject);
+        context.RegisterSourceOutput(context.ValueObjects(), static (productionContext, definition) => Execute(productionContext, definition));
     }
 
-    private static void CreateValueObject(SourceProductionContext context, (ResultTypeAttributeSyntaxContext data, DDDOptions options) arguments)
+    private static void Execute(SourceProductionContext context, ValueObjectDefinition definition)
     {
-        var (data, options) = arguments;
-        var recordDeclaration = data.TargetNode as RecordDeclarationSyntax;
-        if (recordDeclaration is null)
+        definition.Diagnostics.ReportAll(context);
+        if (!definition.CanGenerate)
         {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectShouldBeRecord, data.TargetNode.GetLocation(), data.TargetSymbol.Name));
             return;
         }
 
-        if (recordDeclaration.IsSealed())
+        var type = definition.Type;
+        var name = type.Name;
+        var validName = type.ValidTwinName;
+
+        var visibleProperties = definition.Properties.Where(p => !p.IsInternal).ToList();
+        var comparisonProperties = visibleProperties.Where(p => !p.IsDontCompare).ToList();
+        var copiedProperties = visibleProperties.Where(p => p.HasSetter).ToList();
+
+        var writer = new CodeWriter().Header();
+
+        using (writer.TypeScope(type))
         {
-            context.ReportDiagnostic(Diagnostic.Create(Diagnostics.ValueObjectsCantBeSealed, recordDeclaration.GetLocation(), data.TargetSymbol.Name));
-            return;
-        }
-
-        var valueObjectInfo = new ValueObjectInfo(recordDeclaration, options);
-
-        foreach (var property in valueObjectInfo.ConverterConstructorProperties)
-        {
-            if (!property.HasInitSetter())
+            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".ValueObject, "
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
-                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseInitSetters, property.GetLocation(), property.Identifier.ValueText));
+                EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
+                writer.Line();
+                Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: true);
+                writer.Line();
+
+                if (definition.SystemTextJsonAvailable)
+                {
+                    writer.Line("[global::System.Text.Json.Serialization.JsonConstructor]");
+                }
+
+                using (writer.Block("protected " + name + "()"))
+                {
+                }
+
+                writer.Line();
+                writer.Line("/// <summary>The always-valid twin. Throws when the value is invalid; call TryToValid() to be handed the failures instead.</summary>");
+                writer.Line(KnownTypes.InternalAttributeUsage);
+                writer.Line("public " + validName + " ToValid() => new(this);");
             }
-            if (!property.HasProtectedSetter())
+
+            writer.Line();
+
+            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
             {
-                context.ReportDiagnostic(Diagnostic.Create(Diagnostics.UseProtectedSetters, property.GetLocation(), property.Identifier.ValueText));
-            }
-        }
-
-        var sourceCode = $$$"""
-                            // <auto-generated/>
-                            using DDDToolkit.BaseTypes;
-                            using System.Text.Json.Serialization;
-                            using DDDToolkit.Abstractions.Interfaces;
-                            using DDDToolkit.Abstractions.Attributes;
-
-                            #nullable enable
-                            #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-
-                            namespace {{{valueObjectInfo.Namespace}}};
-    
-                            partial record {{{valueObjectInfo.Name}}} : ValueObject
-                            {
-                                [Internal]
-                                protected override IEnumerable<object?> GetEqualityComponents()
-                                {
-                                    {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
-                                }
-                            
-                                public virtual bool Equals({{{valueObjectInfo.Name}}}? other)
-                                {
-                                    if (other is null)
-                                    {
-                                        return false;
-                                    }
-                                    return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
-                                }
-
-                                public override int GetHashCode()
-                                    => GetEqualityComponents()
-                                        .Select(x => x?.GetHashCode() ?? 0)
-                                        .Aggregate((x, y) => x ^ y);
-
-                                [JsonConstructor]
-                                protected {{{valueObjectInfo.Name}}}()
-                                {
-
-                                }
-                            
-                            [Internal]
-                            public Valid{{{valueObjectInfo.Name}}} ToValid() => new(this);
-                                
-                            }
-                            {{{AddAlwaysValid(valueObjectInfo)}}}
-                            #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider declaring as nullable.
-    
-                            """;
-
-        sourceCode = CodeFormatter.FormatSourceCode(sourceCode);
-        // Add the generated source to the compilation
-        context.AddSource($"{valueObjectInfo.Namespace}.{valueObjectInfo.Name}.g.cs", SourceText.From(sourceCode, Encoding.UTF8));
-    }
-
-    private static string AddAlwaysValid(ValueObjectInfo valueObjectInfo)
-    {
-        var propertiesInitialization = valueObjectInfo.ConverterConstructorProperties.Select(x =>
-            $"this.{x.Identifier.ValueText} = value.{x.Identifier.ValueText};");
-
-        return $$$"""
-                   
-
-                    {{{valueObjectInfo.AccessModifier}}} partial record Valid{{{valueObjectInfo.Name}}}  : {{{valueObjectInfo.Name}}}, IAlwaysValid
+                using (writer.Block(type.Accessibility + " " + validName + "(" + name + " value)"))
+                {
+                    writer.Line("value.EnsureValidated();");
+                    foreach (var property in copiedProperties)
                     {
-
-
-                        {{{valueObjectInfo.AccessModifier}}} Valid{{{valueObjectInfo.Name}}}({{{valueObjectInfo.Name}}} value)
-                        {
-                            value.EnsureValidated();
-                            {{{string.Join("\n", propertiesInitialization)}}}
-                            _isValid = true;
-                        }
-                       
-                        [Internal]
-                        protected override IEnumerable<object?> GetEqualityComponents()
-                        {
-                            {{{string.Join("\n", valueObjectInfo.EqualityComponents)}}}
-                        }
-
-                        public virtual bool Equals(Valid{{{valueObjectInfo.Name}}}? other)
-                        {
-                            if (other is null)
-                            {
-                                return false;
-                            }
-                            return GetEqualityComponents().SequenceEqual(other.GetEqualityComponents());
-                        }
-
-                        public override int GetHashCode()
-                                => base.GetHashCode();
+                        writer.Line("this." + property.Name + " = value." + property.Name + ";");
                     }
-            """;
+
+                    writer.Line("_isValid = true;");
+                }
+
+                writer.Line();
+                EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
+                writer.Line();
+                Emit.RecordEqualityMembers(writer, validName, hashCodeFromComponents: false);
+            }
+        }
+
+        context.AddSource(type.HintName(), SourceText.From(writer.ToString(), Encoding.UTF8));
     }
 
-    internal class ValueObjectInfo(RecordDeclarationSyntax recordDeclaration, DDDOptions options)
+    private static void EmitEqualityComponents(CodeWriter writer, System.Collections.Generic.IEnumerable<string> propertyNames)
     {
-        public RecordDeclarationSyntax RecordDeclaration { get; } = recordDeclaration;
-        public DDDOptions Options { get; } = options;
+        writer.Line(KnownTypes.InternalAttributeUsage);
+        using (writer.Block("protected override global::System.Collections.Generic.IEnumerable<object?> GetEqualityComponents()"))
+        {
+            var any = false;
+            foreach (var propertyName in propertyNames)
+            {
+                any = true;
+                writer.Line("yield return " + propertyName + ";");
+            }
 
-        public string Name => RecordDeclaration.GetName();
-        public string Namespace => RecordDeclaration.GetNamespace();
-        public string AccessModifier => RecordDeclaration.GetAccessModifier();
-        public IEnumerable<PropertyDeclarationSyntax> InterfaceProperties => RecordDeclaration.GetProperties()
-            .Where(prop => !prop.HasAttribute<InternalAttribute>());
-        public IEnumerable<PropertyDeclarationSyntax> ComparisonProperties => InterfaceProperties
-            .Where(prop => !prop.HasAttribute<DontCompareAttribute>());
-        public IEnumerable<PropertyDeclarationSyntax> ConverterConstructorProperties => InterfaceProperties.Where(x => x.HasSetter() || x.HasInitSetter());
-        public IEnumerable<string> EqualityComponents => ComparisonProperties
-            .Select(prop => $"yield return {prop.Identifier.ValueText};");
+            if (!any)
+            {
+                writer.Line("yield break;");
+            }
+        }
     }
-
 }

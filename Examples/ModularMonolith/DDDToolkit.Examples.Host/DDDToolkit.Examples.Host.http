@@ -1,0 +1,31 @@
+@host = http://localhost:5080
+
+### A malformed address is refused, field by field, without anything throwing.
+POST {{host}}/orders
+Content-Type: application/json
+
+{ "street": "", "city": "Utrecht", "postalCode": "nope", "lines": [] }
+
+### A good one. Note the ORD_ prefix on the id that comes back.
+# @name placed
+POST {{host}}/orders
+Content-Type: application/json
+
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "COFFEE-1KG", "quantity": 2 }]
+}
+
+### A second later, Shipping has booked against it. It never saw an Order.
+GET {{host}}/shipments
+
+### Amending the order bumps Version. Two of these at once gives one caller a 409.
+POST {{host}}/orders/{{placed.response.body.id}}/lines
+Content-Type: application/json
+
+{ "sku": "MUG", "quantity": 1 }
+
+### The id parses with or without its prefix.
+GET {{host}}/orders/{{placed.response.body.id}}

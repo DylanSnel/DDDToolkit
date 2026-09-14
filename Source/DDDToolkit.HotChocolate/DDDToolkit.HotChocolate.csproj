@@ -1,43 +1,22 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
-    <Title>Domain Driven Design Toolkit - HotChocolate GraphQL </Title>
+    <Title>Domain Driven Design Toolkit - HotChocolate GraphQL</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;hot;chocolate;hotchocolate;graphql</PackageTags>
-    <Description>A package extending the DDDToolkit with HotChocolate graphQl configuration</Description>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Description>HotChocolate GraphQL integration for the DDDToolkit: runtime type bindings and converters for strongly typed ids and value objects.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="HotChocolate.AspNetCore" Version="14.0.0-rc.1" />
-    <PackageReference Include="HotChocolate.Types.Analyzers" Version="14.0.0-rc.1" />
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="HotChocolate.Types.Analyzers" />
   </ItemGroup>
-
-  <!--<ItemGroup>
-    <None Include="..\DDDToolkit\DDDToolkit.props">
-      <Pack>True</Pack>
-      <PackagePath>\build\DDDToolkit.EntityFramework.Props</PackagePath>
-    </None>
-    -->
-  <!--<None Update="\DDDToolkit.props" Pack="true" PackagePath="build" />-->
-  <!--
-  </ItemGroup>-->
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
-    <ProjectReference Include="..\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" />
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" PrivateAssets="contentfiles;build" />
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
   </ItemGroup>
 
 </Project>

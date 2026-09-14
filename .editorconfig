@@ -321,3 +321,50 @@ csharp_style_prefer_method_group_conversion = true:silent
 csharp_style_prefer_null_check_over_type_check = true:suggestion
 csharp_style_prefer_local_over_anonymous_function = true:suggestion
 csharp_style_prefer_top_level_statements = true:silent
+
+##############################################################################
+# DDDToolkit diagnostics
+#
+# The severities below are the defaults the analyzers ship with, written out so you can see what
+# there is to steer without going and looking. Uncomment a line to change one.
+#
+# This is the third of the three places the toolkit is configured, and the split is by reach:
+#
+#   MSBuild property        code generation for the project that sets it, for example DDD_Module.
+#                           Set it in the project file or in Directory.Build.props.
+#   [assembly: Module]      facts another project must be able to read from the compiled assembly.
+#   .editorconfig           diagnostic severity, per folder, applied by Roslyn itself.
+#
+# Nothing here is a DDDToolkit invention: dotnet_diagnostic is how every Roslyn analyzer is
+# configured, so a team that already has rules for their own analyzers has a place to put these.
+##############################################################################
+
+[*.cs]
+
+# The generator could not do what you asked. Errors, because nothing is generated when one fires and
+# the code that follows would not compile anyway.
+# dotnet_diagnostic.DDD00001.severity = error   # value objects must be records
+# dotnet_diagnostic.DDD00002.severity = error   # entities must be classes
+# dotnet_diagnostic.DDD00003.severity = error   # entity ids must be records
+# dotnet_diagnostic.DDD00005.severity = error   # DDDToolkit types must be partial
+# dotnet_diagnostic.DDD00006.severity = error   # DDDToolkit types cannot be generic
+# dotnet_diagnostic.DDD00007.severity = error   # the generated identifier name is already taken
+# dotnet_diagnostic.DDD00008.severity = error   # the identifier type argument is not supported
+# dotnet_diagnostic.DDD00009.severity = error   # a type is either an entity or an aggregate root
+# dotnet_diagnostic.DDD00010.severity = error   # value object properties need protected setters
+# dotnet_diagnostic.DDD00011.severity = error   # value object properties need init setters
+# dotnet_diagnostic.DDD00013.severity = error   # value objects cannot be sealed
+# dotnet_diagnostic.DDD00020.severity = error   # generated collection properties must be get-only
+
+# Advice rather than a refusal: the identifier is generated either way.
+# dotnet_diagnostic.DDD00004.severity = warning # entity id structs should be readonly
+
+# Rules about the model, not the declaration. Warnings by default so adopting the toolkit does not
+# break an existing codebase on upgrade. A team that means these rules should raise them to error,
+# which is the point of them being here:
+#
+#   dotnet_diagnostic.DDD00021.severity = error
+#
+# dotnet_diagnostic.DDD00021.severity = warning # reference another aggregate by its id
+# dotnet_diagnostic.DDD00022.severity = warning # use only what another module publishes
+# dotnet_diagnostic.DDD00023.severity = warning # do not hold another module's entity

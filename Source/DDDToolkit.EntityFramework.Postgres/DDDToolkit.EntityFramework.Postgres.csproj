@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Postgres</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;postgres;postgresql;pgmq;queue;outbox;supabase</PackageTags>
+    <Description>Postgres integration for the DDDToolkit: a pgmq queue sink for the transactional outbox, so an integration event is enqueued by the same transaction that writes the aggregate.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

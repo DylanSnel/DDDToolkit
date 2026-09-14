@@ -1,0 +1,4 @@
+# Shell scripts run on the Linux CI runner. A script committed with CRLF fails there before its first
+# line executes, with "bash\r: No such file or directory", so keep them LF regardless of the
+# contributor's core.autocrlf.
+*.sh text eol=lf

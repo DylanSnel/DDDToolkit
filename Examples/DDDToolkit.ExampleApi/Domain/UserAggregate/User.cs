@@ -1,19 +1,20 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+using System.ComponentModel.DataAnnotations;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
+using DDDToolkit.ExampleApi.Domain.UserAggregate.Events;
 using DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 using DDDToolkit.ExampleLibrary.Common.ValueObjects;
-using System.ComponentModel.DataAnnotations;
 
 namespace DDDToolkit.ExampleApi.Domain.UserAggregate;
 
-[AggregateRoot<UserId>()]
+[AggregateRoot<UserId>]
 public partial class User
 {
-
     public User(UserId id, PersonName name, EmailAddress? email) : base(id)
     {
         Name = name;
         Email = email;
+        RaiseDomainEvent(new UserCreated(id));
     }
 
     public PersonName Name { get; private set; }
@@ -23,12 +24,13 @@ public partial class User
     [MaxLength(300)]
     public string PasswordHash { get; private set; } = string.Empty;
 
-    public List<Order> Orders { get; private set; } = new();
+    /// <summary>Orders placed by this user. Read-only outside the aggregate; backed by the generated <c>_orders</c> list.</summary>
+    public partial IReadOnlyList<Order> Orders { get; }
 
     public void AddOrder(Order order)
     {
-        Orders.Add(order);
+        ArgumentNullException.ThrowIfNull(order);
+        _orders.Add(order);
+        RaiseDomainEvent(new OrderPlaced(Id, order.Id));
     }
-
-
 }

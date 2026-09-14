@@ -1,0 +1,48 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/Benchmarks/">
+    <Project Path="Benchmarks/DDDToolkit.Benchmarks/DDDToolkit.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/Source/">
+    <Project Path="Source/DDDToolkit.Abstractions/DDDToolkit.Abstractions.csproj" />
+    <Project Path="Source/DDDToolkit/DDDToolkit.csproj" />
+    <Project Path="Source/DDDToolkit.Analyzers/DDDToolkit.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj" />
+    <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.EntityFramework.Postgres/DDDToolkit.EntityFramework.Postgres.csproj" />
+    <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
+    <Project Path="Source/DDDToolkit.FluentValidation.Analyzers/DDDToolkit.FluentValidation.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.HotChocolate/DDDToolkit.HotChocolate.csproj" />
+    <Project Path="Source/DDDToolkit.HotChocolate.Analyzers/DDDToolkit.HotChocolate.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.Mediator/DDDToolkit.Mediator.csproj" />
+    <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
+    <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
+  </Folder>
+  <Folder Name="/Examples/">
+    <File Path="Examples/README.md" />
+    <Project Path="Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj" />
+    <Project Path="Examples/DDDToolkit.ExampleApi/DDDToolkit.ExampleApi.csproj" />
+  </Folder>
+  <Folder Name="/Examples/ModularMonolith/">
+    <Project Path="Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering.Contracts/DDDToolkit.Examples.Ordering.Contracts.csproj" />
+    <Project Path="Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering/DDDToolkit.Examples.Ordering.csproj" />
+    <Project Path="Examples/ModularMonolith/Shipping/DDDToolkit.Examples.Shipping/DDDToolkit.Examples.Shipping.csproj" />
+    <Project Path="Examples/ModularMonolith/DDDToolkit.Examples.Host/DDDToolkit.Examples.Host.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.EntityFramework.Providers.Tests/DDDToolkit.EntityFramework.Providers.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.EntityFramework.Tests/DDDToolkit.EntityFramework.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Examples.Tests/DDDToolkit.Examples.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
+  </Folder>
+</Solution>

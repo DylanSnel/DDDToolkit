@@ -1,42 +1,34 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Name used for the generated Add<Module>Converters / Add<Module>GraphQlRuntimeBindings methods. -->
     <DDD_Module>Common</DDD_Module>
   </PropertyGroup>
+
   <ItemGroup>
-    <CompilerVisibleProperty Include="DDD_Module" />
-    <!--Not neccesary when u get from nuget-->
+    <PackageReference Include="FluentValidation" />
+    <!-- Abstractions only: the Mediator source generator belongs in the composition root, not here. -->
+    <PackageReference Include="Mediator.Abstractions" />
+    <PackageReference Include="HotChocolate.Types.Scalars" />
   </ItemGroup>
 
-
-
   <ItemGroup>
-    <PackageReference Include="FluentValidation" Version="11.9.2" />
-    <PackageReference Include="MediatR" Version="12.4.0" />
-    <PackageReference Include="HotChocolate.Types.Scalars" Version="14.0.0-rc.0" />
-
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit\DDDToolkit.csproj" />
-    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
-
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
-    <!--<PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181906"/>-->
-    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj" />
-    <!--<PackageReference Include="SourceGeneratorsToolkit" Version="1.2024.2.181906"/>-->
-    <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. NuGet consumers get these transitively through the packages above. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
+
 </Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Mediator</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;mediator;domain;events;dispatch</PackageTags>
+    <Description>Mediator (martinothamar) integration for the DDDToolkit: one call that dispatches domain events raised during SaveChanges through Mediator's IPublisher.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <DDD_Module>ProviderTests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.MsSql" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
+    <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    The domain under test is the SQLite suite's domain, compiled into this assembly rather than
+    copied into it. The point of these tests is that the same aggregates map the same way on another
+    provider, and that only holds if there is literally one set of aggregates. A change to a type in
+    Tests/DDDToolkit.EntityFramework.Tests/Domain therefore breaks this project's build too, which is
+    the intent.
+
+    TagCloud is left out: it exists to prove that an unmappable IReadOnlySet<string> fails with
+    guidance, which is a model-building assertion with no provider in it.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Domain\**\*.cs"
+             Exclude="..\DDDToolkit.EntityFramework.Tests\Domain\TagCloud.cs"
+             LinkBase="Domain" />
+  </ItemGroup>
+
+  <!--
+    The same reason, applied to a different file. The pgmq tests in the SQLite suite and the provider
+    tests here both skip themselves when Docker is missing, and both need CI to refuse that. One
+    compiled copy means one spelling of DDDTOOLKIT_REQUIRE_CONTAINERS and one definition of what it
+    does, so a workflow cannot set it and have half the suite ignore it.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

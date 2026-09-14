@@ -1,0 +1,77 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Roslyn (generators target the oldest compiler that understands C# 13 partial properties)">
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Runtime">
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
+    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.6" />
+    <!--
+      HotChocolate 16 folded the execution engine and query validation into the HotChocolate
+      package. HotChocolate.Execution was not released for 16 (its last version is the 16.0.0
+      preview 16.0.0-p.10.45), so this line replaces it.
+    -->
+    <PackageVersion Include="HotChocolate" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="16.6.6" />
+    <!--
+      The subscription transport used by the tests. At 16.6.6 there are also transports for Postgres
+      (LISTEN/NOTIFY), Redis, RabbitMQ and NATS; the toolkit's sink works through ITopicEventSender and
+      does not care which of them is registered.
+    -->
+    <PackageVersion Include="HotChocolate.Subscriptions.InMemory" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Types.Scalars" Version="16.6.6" />
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Composition roots">
+    <!--
+      Mediator generates its implementation, its handler registrations and AddMediator into the
+      assembly the generator runs in, so this belongs in the composition root only: the example host
+      and the Mediator test project. Source/DDDToolkit.Mediator references the abstractions alone.
+    -->
+    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup Label="Examples">
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup Label="Benchmarks">
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <!-- FluentAssertions 8+ is commercially licensed; 7.x is the last Apache-2.0 line. -->
+    <PackageVersion Include="FluentAssertions" Version="7.2.2" />
+    <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.11" />
+    <!--
+      Real databases in throw-away containers: the provider suite runs the mapping tests on Postgres and
+      SQL Server, and the pgmq sink needs a Postgres with that extension. Both suites skip themselves
+      when Docker is absent, so a machine without it still goes green.
+    -->
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+  </ItemGroup>
+</Project>

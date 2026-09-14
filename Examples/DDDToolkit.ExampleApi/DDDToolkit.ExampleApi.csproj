@@ -1,41 +1,47 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <Nullable>enable</Nullable>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
-    <InvariantGlobalization>true</InvariantGlobalization>
-    <DDD_Module>Api</DDD_Module>
+    <IsPackable>false</IsPackable>
     <UserSecretsId>28d9d84f-d504-42b2-830a-58ecfd24c4e7</UserSecretsId>
-    <InvariantGlobalization>false</InvariantGlobalization>
-    <!--<EmitCompilerGeneratedFiles>True</EmitCompilerGeneratedFiles>-->
+    <DDD_Module>Api</DDD_Module>
+    <!-- Uncomment to inspect generated code under ./Generated -->
+    <!--<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>-->
     <!--<CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)\Generated</CompilerGeneratedFilesOutputPath>-->
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.7.3" />
-    <PackageReference Include="Testcontainers.MsSql" Version="3.10.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+  </ItemGroup>
+
+  <!--
+    Mediator writes its implementation, its handler registrations and AddMediator into the assembly
+    the generator runs in, so the generator goes in the composition root and nowhere else. Handlers in
+    other projects are still found, as long as those projects are referenced from here.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <ProjectReference Include="..\..\Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj" />
-    
-    <ProjectReference Include="..\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
-    </PackageReference>
+    <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

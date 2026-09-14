@@ -1,23 +1,25 @@
-﻿using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.ExampleApi.Domain.ProductAggregate.ValueObjects;
 using DDDToolkit.ExampleApi.Domain.UserAggregate.ValueObjects;
 
 namespace DDDToolkit.ExampleApi.Domain.UserAggregate.Entities;
 
-[Entity<OrderId>()]
+/// <summary>
+/// A child entity of the User aggregate. [Entity] makes it an EF Core owned type; the partial
+/// collection property gets a generated <c>_products</c> backing field that EF maps directly.
+/// </summary>
+[Entity<OrderId>]
 public partial class Order
 {
-
-    public Order(OrderId id, List<ProductId> products) : base()
+    public Order(OrderId id, IEnumerable<ProductId> products) : base(id)
     {
-        Id = id;
-        _products = products;
+        _products.AddRange(products);
     }
 
-    private readonly List<ProductId> _products = [];
+    /// <summary>The products in this order. Read-only outside the entity; backed by the generated <c>_products</c> list.</summary>
+    public partial IReadOnlyList<ProductId> Products { get; }
 
-    public IReadOnlyList<ProductId> Products => _products.AsReadOnly();
-    public DateTime PlacedAt { get; set; } = DateTime.Now;
+    public DateTime PlacedAt { get; private set; } = DateTime.UtcNow;
 
-    public User User { get; set; } = default!;
+    public void AddProduct(ProductId productId) => _products.Add(productId);
 }
