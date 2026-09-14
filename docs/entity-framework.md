@@ -846,6 +846,7 @@ in-process dispatch to the outbox later costs no migration at all.
 - [Integration events](integration-events.md) for sinks, published contracts and the inbox.
 - [Diagnostics](diagnostics.md) for the build errors the generators report.
 
-The runnable version of everything here is `Examples/DDDToolkit.ExampleApi`: `Program.cs` shows both
-delivery modes, `Context/ExampleContext.cs` shows the three calls, and
-`Controllers/UserController.cs` shows the conflict catch block.
+The runnable version of everything here is `Examples/ModularMonolith`: the host's `Program.cs` shows
+the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/OrderingContext.cs` shows the
+conventions and the generated converters, and the host's `Endpoints.cs` shows the conflict catch
+block.
