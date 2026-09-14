@@ -7,6 +7,14 @@ on:
 jobs:
   publish-nuget:
     runs-on: ubuntu-latest
+
+    env:
+      # Build and Test and Provider Tests both set this, and the release path needs it most. Without
+      # it a container-backed test skips itself when Docker is missing and the run reports green
+      # having proven nothing -- and here that green is what publishes to nuget.org. Set, every such
+      # skip is a failure that names what could not be started. See RequiredContainers.
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
     steps:
       - uses: actions/checkout@v5
 
@@ -15,16 +23,38 @@ jobs:
         with:
           global-json-file: global.json
 
+      # The package version comes from the tag, and everything published is permanent: nuget.org lets
+      # you unlist a version but never reuse the number. A tag that yields the wrong version has to
+      # fail here rather than after the push.
       - name: Extract release version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+
+          # Matched rather than stripped. ${tag#v} removes the v when it is there and silently leaves
+          # the string alone when it is not, so a tag of the wrong shape would become a wrong version
+          # instead of an error. Build metadata (+sha) is rejected too: NuGet ignores it when
+          # comparing, so v3.0.0+a and v3.0.0+b are one package, and the second push would quietly
+          # become a no-op under --skip-duplicate.
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$tag' is not a release tag. Expected vMAJOR.MINOR.PATCH with an optional prerelease suffix, for example v3.0.0 or v3.0.0-rc.1."
+            exit 1
+          fi
+
+          version="${tag#v}"
+          echo "VERSION=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing $version from tag $tag"
 
       - name: Restore dependencies
         run: dotnet restore DDDToolkit.slnx
 
       - name: Build
-        run: dotnet build DDDToolkit.slnx --no-restore --configuration Release -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
+        run: dotnet build DDDToolkit.slnx --no-restore --configuration Release -p:Version=${{ steps.get_version.outputs.VERSION }} -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
 
+      # Unfiltered on purpose, unlike Build and Test. That job excludes the provider suite to stay at
+      # about two minutes, because it runs on every push. This runs once per release, so the extra
+      # few minutes to pull PostgreSQL and SQL Server buys the one thing worth having here: nothing
+      # reaches nuget.org that has not been run against a real server.
       - name: Test
         run: dotnet test DDDToolkit.slnx --no-build --configuration Release
 
@@ -33,6 +63,13 @@ jobs:
           for csproj in $(find ./Source -name '*.csproj'); do
             dotnet pack "$csproj" --configuration Release --no-build --output nupkgs -p:PackageVersion=${{ steps.get_version.outputs.VERSION }}
           done
+
+      # The last thing before the push, and the reason it is here rather than only in Build and Test:
+      # that job verifies consumption at 0.0.0-ci, which proves the packaging contract but not these
+      # packages at this version. A broken package found here costs a re-run. Found after the push it
+      # costs a version number, permanently.
+      - name: Verify package consumption
+        run: ./build/verify-package-consumption.sh ${{ steps.get_version.outputs.VERSION }}
 
       - name: Publish to NuGet
         run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
