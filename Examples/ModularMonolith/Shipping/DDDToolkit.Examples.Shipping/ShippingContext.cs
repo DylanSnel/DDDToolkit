@@ -22,7 +22,9 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
 {
     public DbSet<Shipment> Shipments => Set<Shipment>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventInbox();
+    // Database tells the toolkit which provider this is, so the timestamp column gets the
+    // provider's own instant type rather than SQLite's lowest common denominator.
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventInbox(Database);
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

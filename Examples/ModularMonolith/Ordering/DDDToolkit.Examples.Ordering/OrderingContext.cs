@@ -25,7 +25,9 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     {
         // This module produces integration events, so it needs the outbox table: SaveChanges writes one
         // row per domain event in the same transaction as the order.
-        modelBuilder.AddDomainEventOutbox();
+        // Database tells the toolkit which provider this is, so the timestamp columns get the
+        // provider's own instant type rather than SQLite's lowest common denominator.
+        modelBuilder.AddDomainEventOutbox(Database);
     }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
