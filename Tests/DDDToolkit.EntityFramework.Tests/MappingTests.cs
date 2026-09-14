@@ -1,3 +1,4 @@
+using System.Reflection;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.Tests.Domain;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
@@ -283,6 +284,52 @@ public sealed class MappingTests : IDisposable
         shelf.FindProperty(nameof(IHasDomainEvents.DomainEvents)).Should().BeNull();
         shelf.FindNavigation(nameof(IHasDomainEvents.DomainEvents)).Should().BeNull();
         shelf.GetProperties().Select(p => p.Name).Should().BeEquivalentTo("Id", "Cat", "FavouriteCat", "Name", "Owner", "Version");
+    }
+
+    [Fact]
+    public void The_cached_read_only_view_field_is_invisible_to_Entity_Framework()
+    {
+        using var context = _db.CreateLibraryContext();
+        var shelf = context.Model.FindEntityType(typeof(Shelf))!;
+
+        // The generator holds each read-only view in a second field so a read does not build a new
+        // wrapper every time. EF finds fields through the property they back, and nothing is named
+        // after this one, so it should be as invisible as any other private state. Asserting it is
+        // what makes that a guarantee rather than an observation: a field EF decided to map would
+        // become a column, and a column becomes a migration.
+        var cacheFields = typeof(Shelf)
+            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
+            .Where(f => f.Name.EndsWith("View", StringComparison.Ordinal))
+            .Select(f => f.Name)
+            .ToArray();
+
+        cacheFields.Should().BeEquivalentTo(new[] { "__booksView", "__notesView" }, "the views are cached, not rebuilt per read");
+
+        foreach (var name in cacheFields)
+        {
+            shelf.FindProperty(name).Should().BeNull();
+            shelf.FindNavigation(name).Should().BeNull();
+        }
+
+        shelf.GetNavigations().Select(n => n.Name).Should().Contain(nameof(Shelf.Books));
+        shelf.FindNavigation(nameof(Shelf.Books))!.GetFieldName().Should().Be("_books", "the list is the state, the view is not");
+    }
+
+    [Fact]
+    public void A_cached_view_still_sees_what_the_aggregate_does_to_its_list()
+    {
+        var id = ShelfId.CreateUnique();
+        var shelf = new Shelf(id, "Fiction", UserId.CreateUnique(), CatId.CreateUnique(), null);
+
+        // Read first, so the view exists before the collection changes. A cache that copied instead of
+        // wrapping would answer with the empty list it saw.
+        var before = shelf.Books;
+        before.Should().BeEmpty();
+
+        shelf.AddBook("Dune");
+
+        before.Should().ContainSingle("the view wraps the list rather than copying it");
+        shelf.Books.Should().BeSameAs(before, "and the same view is handed out again");
     }
 
     [Fact]

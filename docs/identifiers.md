@@ -53,30 +53,41 @@ for identifiers: validation belongs to value objects, and an id is either well-f
 
 ## What the struct form generates
 
+The generated half is spliced in below the declaration, marked off and simplified; the real file is
+fully qualified and lives in `obj/`. The interfaces and the JSON attribute live in that half, which is
+why the declaration you write stays one line.
+
 ```csharp
 [EntityId<Guid>("ORD")]
 public readonly partial record struct OrderId;
+
+// ---- generated --------------------------------------------------------------
+[JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
+readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>
+{
+    public const string IdPrefix = "ORD";
+    public Guid Value { get; }
+    public OrderId(Guid value);
+
+    public static OrderId Empty { get; }          // default
+    public bool IsEmpty { get; }
+
+    public static OrderId CreateUnique();         // Guid only
+    public static OrderId CreateSequential();     // Guid only, version 7, index friendly
+
+    public override string ToString();            // "ORD_2f1c..."
+    public static OrderId Parse(string input);    // prefix optional
+    public static bool TryParse(string? input, out OrderId result);
+
+    public int CompareTo(OrderId other);
+    public static explicit operator Guid(OrderId id);
+    public static explicit operator OrderId(Guid value);
+}
+// -----------------------------------------------------------------------------
 ```
 
-```csharp
-public const string IdPrefix = "ORD";
-public Guid Value { get; }
-public OrderId(Guid value);
-
-public static OrderId Empty { get; }          // default
-public bool IsEmpty { get; }
-
-public static OrderId CreateUnique();         // Guid only
-public static OrderId CreateSequential();     // Guid only, version 7, index friendly
-
-public override string ToString();            // "ORD_2f1c..."
-public static OrderId Parse(string input);    // prefix optional
-public static bool TryParse(string? input, out OrderId result);
-
-public int CompareTo(OrderId other);
-public static explicit operator Guid(OrderId id);
-public static explicit operator OrderId(Guid value);
-```
+Your half carries the accessibility and the attribute; the generated half carries the members. That is
+why `public` appears once, on the declaration you write.
 
 The type implements `IEntityId<Guid>`, `IComparable<OrderId>` and `IParsable<OrderId>`, and carries a
 `[JsonConverter]` pointing at a generated nested converter, so `System.Text.Json` writes it as the

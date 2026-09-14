@@ -12,6 +12,7 @@ internal static class DiagnosticDescriptors
     private const string EntityIds = "DDDToolkit.EntityIds";
     private const string Usage = "DDDToolkit.Usage";
     private const string Modules = "DDDToolkit.Modules";
+    private const string Invariants = "DDDToolkit.Invariants";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -155,4 +156,40 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "This is the boundary a modular monolith is built to keep. A field or property typed as another module's entity or aggregate root is a navigation: Entity Framework loads across the boundary, one save writes into two modules, and the modules can no longer be tested, versioned or split apart on their own. Publishing the entity does not fix it, which is why this rule fires whether or not the type is part of the other module's contract. Hold the other module's published identifier when you need to point at it, and let an integration event tell you when it changes.");
+
+    public static readonly DiagnosticDescriptor InvariantMustBeNestedInItsSubject = new(
+        id: "DDD00024",
+        title: "An invariant must be nested inside the entity it is about",
+        messageFormat: "'{0}' implements IInvariant<{1}> but is not nested inside an entity, so nothing will ever run it; declare it inside '{1}'",
+        category: Invariants,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The toolkit discovers rules by looking at the nested types of the entity it is generating, which is what lets a rule read the entity's private state and what keeps discovery free of a scan over the whole compilation. A rule declared anywhere else compiles, reads well, is covered by its own unit tests and never runs: it is the one failure this library is built to make impossible to ship unnoticed. Move the type inside the entity it is about, in a part of your own under an Invariants folder if you want a file per rule.");
+
+    public static readonly DiagnosticDescriptor InvariantIsAboutAnotherType = new(
+        id: "DDD00025",
+        title: "An invariant is nested inside a type it is not about",
+        messageFormat: "'{0}' is nested inside '{1}' but implements IInvariant<{2}>, so '{1}' will never run it; nest it inside '{2}', or state the rule as IInvariant<{1}>",
+        category: Invariants,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "An entity runs the nested rules that are about itself. A rule about another type is as invisible as one declared outside an entity altogether, and looks even more convincing because it is in the right kind of place. Usually the type argument was copied from a neighbouring rule.");
+
+    public static readonly DiagnosticDescriptor InvariantCodeMustBeUnique = new(
+        id: "DDD00026",
+        title: "Two invariants of one entity share a code",
+        messageFormat: "'{0}' returns the code '{1}', which '{2}' already returns; a caller that branches on the code cannot tell the two rules apart",
+        category: Invariants,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The code exists so that a caller can act on a broken rule without matching on its message. Two rules of one entity answering to one code takes that away again, and the collection of violations then holds two entries a caller has no way to distinguish. Only codes this analyzer can read as a constant are compared: a code computed at run time is not guessed at.");
+
+    public static readonly DiagnosticDescriptor InvariantNeedsAParameterlessConstructor = new(
+        id: "DDD00027",
+        title: "An invariant needs an accessible parameterless constructor",
+        messageFormat: "'{0}' has no parameterless constructor that '{1}' can reach, so the generated code cannot create it; give it one, and keep the rule stateless",
+        category: Invariants,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator creates one instance of every rule per entity type and reuses it for every check, which is why a rule must be stateless and constructible without arguments. Nothing is generated for a rule that is not, so this is an error rather than a warning: a rule the generator silently dropped would be exactly the kind of silence the rest of these diagnostics exist to prevent.");
 }

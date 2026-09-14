@@ -1,4 +1,5 @@
 using DDDToolkit.Interfaces;
+using DDDToolkit.Invariants;
 // TryToValid is an extension method, so this using is required even though the type it extends is
 // generated into this project's own namespace.
 using DDDToolkit.Validation;
@@ -45,10 +46,49 @@ internal static class Check
     {
         var order = new Order(OrderId.CreateUnique(), CustomerId.CreateUnique());
         order.AddLine(new Sku("ABC"));
+        order.AddNote("packed by hand");
         _ = order.Lines.Count;
+        _ = order.Notes.Count;
         _ = order.Version;
         _ = ((IHasDomainEvents)order).DomainEvents;
         order.EnsureInvariants();
+    }
+
+    /// <summary>
+    /// DDDToolkit.Analyzers: all four members of the invariant surface, and the types they are built
+    /// from. Each is a generated override, so it disappears with the generator;
+    /// <c>InvariantViolation</c> and <c>IInvariant&lt;T&gt;</c> ship in the DDDToolkit package itself,
+    /// so they disappear with a mispacked one.
+    /// </summary>
+    public static string Invariants()
+    {
+        var order = new Order(OrderId.CreateUnique(), CustomerId.CreateUnique());
+
+        // The check stage over the whole aggregate: generated, non-throwing, and typed on the toolkit's
+        // own violation record. Named twice, because persistence reaches it through the interface and
+        // you reach it directly.
+        IReadOnlyList<InvariantViolation> violations = order.GetInvariantViolations();
+        _ = ((IHasInvariants)order).GetInvariantViolations();
+        _ = InvariantViolation.SeamCode;
+
+        // The self-only half of each stage, which is what a caller already walking the graph asks, and
+        // what DDDToolkit.EntityFramework's interceptor calls. A package that shipped the walking pair
+        // alone would leave every save asking nothing, and fails here instead.
+        _ = order.GetOwnInvariantViolations();
+        _ = ((IHasInvariants)order).GetOwnInvariantViolations();
+        order.EnsureOwnInvariants();
+
+        // The nested rules are ordinary types, so naming them here proves they compiled. Whether the
+        // generator found them is what the lines above answer: a rule nobody collected reports nothing.
+        // MustSaySomething belongs to the child, and only the walk over Order.Notes can report it.
+        _ = new Order.MustHaveLines().Check(order);
+        _ = new OrderNote.MustSaySomething().Check(new OrderNote(OrderNoteId.CreateUnique(), "note"));
+
+        // EntityType and EntityId are how a caller tells which child reported a violation, so they are
+        // as much a part of the shipped surface as the members that hand them over.
+        return violations.Count == 0
+            ? Order.MustHaveLines.ViolationCode + OrderNote.MustSaySomething.ViolationCode
+            : violations[0].Code + violations[0].Message + violations[0].EntityType?.Name + violations[0].EntityId;
     }
 
     /// <summary>

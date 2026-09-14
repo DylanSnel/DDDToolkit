@@ -8,8 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.EntityFramework.Tests.Invariants;
 
 /// <summary>
-/// The guarantee that the seam is called: every aggregate root a save writes is asked to prove it is
-/// consistent, and a root that is not stops the transaction.
+/// The guarantee that the seam is called: every entity a save writes is asked to prove it is
+/// consistent, child entities as well as their roots, and anything that is not stops the
+/// transaction. What the save never does is read a navigation to find those children, and each of
+/// them answers for itself alone, so nothing is reported twice by the root that holds it.
 /// </summary>
 public sealed class InvariantInterceptorTests : IDisposable
 {
@@ -197,6 +199,230 @@ public sealed class InvariantInterceptorTests : IDisposable
         var act = () => context.SaveChangesAsync();
         await act.Should().ThrowAsync<InvariantViolationException>();
         loadedBroken.Checks.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_child_answers_for_its_own_rule_when_nothing_but_the_child_changed()
+    {
+        var id = TabId.CreateUnique();
+
+        await InScopeAsync(async context =>
+        {
+            var tab = new Tab(id, limit: 5000);
+            tab.Order("House red", 800);
+            context.Tabs.Add(tab);
+            await context.SaveChangesAsync();
+        });
+
+        using var scope = _provider.CreateScope();
+        var checkedContext = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var loaded = await checkedContext.Tabs.SingleAsync(t => t.Id == id, TestContext.Current.CancellationToken);
+        var line = loaded.Lines[0];
+
+        // The tab stays far inside its limit, so the only rule that breaks is the line's own.
+        line.Reprice(0);
+
+        var act = () => checkedContext.SaveChangesAsync();
+
+        var exception = (await act.Should().ThrowAsync<InvariantViolationException>()).Which;
+        exception.AggregateType.Should().Be<TabLine>("the line answers for itself, not through its tab");
+        exception.AggregateId.Should().Be(line.Id);
+        line.Checks.Should().Be(1);
+        loaded.Checks.Should().Be(1, "the root is asked as well, because a rule of its own may span its lines");
+
+        await InScopeAsync(async context =>
+            (await context.Tabs.SingleAsync(t => t.Id == id)).Lines[0].Price.Should().Be(800, "the rejected save wrote nothing"));
+    }
+
+    [Fact]
+    public async Task A_child_added_to_a_tab_that_was_already_saved_answers_too()
+    {
+        var id = TabId.CreateUnique();
+
+        await InScopeAsync(async context =>
+        {
+            var tab = new Tab(id, limit: 5000);
+            tab.Order("House red", 800);
+            context.Tabs.Add(tab);
+            await context.SaveChangesAsync();
+        });
+
+        using var scope = _provider.CreateScope();
+        var checkedContext = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var loaded = await checkedContext.Tabs.SingleAsync(t => t.Id == id, TestContext.Current.CancellationToken);
+        var comped = loaded.Order("Tap water", 0);
+
+        var act = () => checkedContext.SaveChangesAsync();
+
+        (await act.Should().ThrowAsync<InvariantViolationException>()).Which.AggregateId.Should().Be(comped.Id);
+        comped.Checks.Should().Be(1);
+        _db.CountRows("TabLine").Should().Be(1, "the free drink was never written");
+    }
+
+    [Fact]
+    public async Task A_child_on_its_way_out_is_not_asked()
+    {
+        var id = TabId.CreateUnique();
+        TabLineId comped;
+
+        // Seed a line that breaks its own rule, through a context with no interceptors.
+        await using (var seeding = Unchecked())
+        {
+            var tab = new Tab(id, limit: 5000);
+            tab.Order("Negroni", 1200);
+            comped = tab.Order("Tap water", 0).Id;
+            seeding.Tabs.Add(tab);
+            await seeding.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var loaded = await context.Tabs.SingleAsync(t => t.Id == id, TestContext.Current.CancellationToken);
+        var line = loaded.Lines.Single(l => l.Id == comped);
+
+        loaded.Remove(comped).Should().BeTrue();
+
+        // Deleting it is how you get rid of a broken line, so this save may not refuse it.
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        line.Checks.Should().Be(0, "a line on its way out has no state left to be consistent about");
+        _db.CountRows("TabLine").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task An_unloaded_navigation_is_never_touched()
+    {
+        var id = CellarId.CreateUnique();
+
+        // Seed, through a context with no interceptors, a cellar whose bottles break the child's rule.
+        await using (var seeding = Unchecked())
+        {
+            var cellar = new Cellar(id, "Cave Nord");
+            cellar.Stock("Barolo", -3);
+            seeding.Cellars.Add(cellar);
+            await seeding.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var loaded = await context.Cellars.SingleAsync(c => c.Id == id, TestContext.Current.CancellationToken);
+        var bottles = context.Entry(loaded).Collection(nameof(Cellar.Bottles));
+        bottles.IsLoaded.Should().BeFalse("the cellar was queried without them");
+
+        loaded.Rename("Cave Sud");
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        loaded.Reads.Should().Be(0, "the save worked from change tracker entries and never read the navigation");
+        bottles.IsLoaded.Should().BeFalse("so nothing lazily loaded the bottles either");
+
+        // The bottles that were left alone really are broken, so the save above passed on merit, and
+        // reading the navigation really does move the counter that stayed at zero.
+        await InScopeAsync(async other =>
+        {
+            var reloaded = await other.Cellars.Include(c => c.Bottles).SingleAsync(c => c.Id == id);
+            var readsBefore = reloaded.Reads;
+
+            var check = () => reloaded.Bottles[0].EnsureInvariants();
+
+            check.Should().Throw<InvariantViolationException>();
+            reloaded.Reads.Should().Be(readsBefore + 1);
+        });
+    }
+
+    [Fact]
+    public async Task The_whole_unit_of_work_can_be_asked_what_is_broken_without_throwing()
+    {
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var cellar = new Cellar(CellarId.CreateUnique(), "Cave Nord");
+        var barolo = cellar.Stock("Barolo", 6);
+        context.Cellars.Add(cellar);
+
+        InvariantInterceptor.GetInvariantViolations(context).Should().BeEmpty("nothing is broken yet");
+
+        cellar.Rename(string.Empty);
+        barolo.Take(10);
+
+        var violations = InvariantInterceptor.GetInvariantViolations(context);
+
+        violations.Select(violation => violation.Code).Should().Equal(
+            Cellar.MustHaveAName,
+            Bottle.MustNotGoNegative);
+        violations[1].Message.Should().Contain("Barolo");
+        _db.CountRows("Cellars").Should().Be(0, "asking is not saving");
+
+        // The same context still refuses to save, which is the stage where broken is not an answer.
+        var act = () => context.SaveChangesAsync();
+        await act.Should().ThrowAsync<InvariantViolationException>();
+    }
+
+    [Fact]
+    public async Task A_broken_child_is_reported_once_and_not_a_second_time_through_its_root()
+    {
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var cellar = new Cellar(CellarId.CreateUnique(), string.Empty);
+        cellar.Stock("Barolo", -3);
+        context.Cellars.Add(cellar);
+
+        // What the domain answers about this aggregate: its own broken name and its broken bottle.
+        // The save has both the cellar and the bottle on its list, so a save that asked either of them
+        // this question would hear about the bottle twice.
+        cellar.GetInvariantViolations().Should().HaveCount(2, "the walk answers for the whole aggregate");
+
+        var violations = InvariantInterceptor.GetInvariantViolations(context);
+
+        violations.Select(violation => violation.Code).Should().Equal(
+            Cellar.MustHaveAName,
+            Bottle.MustNotGoNegative);
+        violations.Should().ContainSingle(violation => violation.Code == Bottle.MustNotGoNegative,
+            "the bottle answers for itself, and no cellar repeats it");
+
+        var act = () => context.SaveChangesAsync();
+
+        var exception = (await act.Should().ThrowAsync<InvariantViolationException>()).Which;
+        exception.AggregateType.Should().Be<Cellar>("the cellar is asked before the bottle it holds");
+        exception.Violations.Should().ContainSingle("it answers for its own name only, never for the bottle");
+        exception.Message.Should().NotContain("Barolo");
+    }
+
+    [Fact]
+    public async Task A_save_that_only_a_child_breaks_throws_naming_the_child()
+    {
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var cellar = new Cellar(CellarId.CreateUnique(), "Cave Nord");
+        var barolo = cellar.Stock("Barolo", -3);
+        context.Cellars.Add(cellar);
+
+        var act = () => context.SaveChangesAsync();
+
+        // Had the save walked, the cellar would have answered first and in its own name for a rule
+        // that belongs to the bottle.
+        var exception = (await act.Should().ThrowAsync<InvariantViolationException>()).Which;
+        exception.AggregateType.Should().Be<Bottle>();
+        exception.AggregateId.Should().Be(barolo.Id);
+        exception.Violations.Should().ContainSingle();
+
+        InvariantInterceptor.GetInvariantViolations(context).Should()
+            .ContainSingle("one broken bottle is one violation, however many objects hold it");
+    }
+
+    [Fact]
+    public void Asking_what_is_broken_answers_where_the_save_would_throw()
+    {
+        using var scope = _provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<TabContext>();
+        var tab = new Tab(TabId.CreateUnique(), limit: 100);
+        tab.Order("Armagnac", 20000);
+        context.Tabs.Add(tab);
+
+        var ask = () => InvariantInterceptor.GetInvariantViolations(context);
+        var insist = () => InvariantInterceptor.CheckInvariants(context);
+
+        ask.Should().NotThrow("the check stage answers with a list even where the aggregate's seam throws");
+        ask().Should().Contain(violation => violation.Message.Contains("may not exceed its limit"));
+        insist.Should().Throw<InvariantViolationException>("while the save stage insists");
     }
 
     [Fact]

@@ -245,6 +245,7 @@ internal static class DefinitionFactory
         // nothing is generated, but report from the aggregate-root path alone so the author sees the
         // complaint exactly once.
         var conflictingAttributes = HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute);
+        var invariants = EquatableArray<string>.Empty;
         if (conflictingAttributes)
         {
             if (isAggregateRoot)
@@ -256,9 +257,14 @@ internal static class DefinitionFactory
         }
         else
         {
-            // Skipped for a class carrying both attributes: it is reported already, nothing is generated
-            // for it, and both providers would otherwise report the boundary rule over the same members.
+            // Both skipped for a class carrying both attributes: it is reported already, nothing is
+            // generated for it, and both providers would otherwise report over the same members twice.
             AggregateBoundary.Check(symbol, isAggregateRoot, diagnostics, cancellationToken);
+
+            // A rule the generator cannot create is reported and left out, the way an unusable collection
+            // property is: the entity itself is still generated, because its base class is what makes the
+            // rest of the author's file compile at all.
+            invariants = Invariants.Collect(symbol, compilation, diagnostics, cancellationToken);
         }
 
         var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
@@ -295,6 +301,7 @@ internal static class DefinitionFactory
                 Name: property.Name,
                 FieldName: fieldName,
                 ElementType: collectionType.TypeArguments[0].ToDisplayString(FullyQualifiedWithNullability),
+                ElementIsEntity: IsChildEntity(collectionType.TypeArguments[0]),
                 InterfaceType: collectionType.ToDisplayString(FullyQualifiedWithNullability),
                 Backing: backing,
                 Modifiers: modifiers,
@@ -316,11 +323,29 @@ internal static class DefinitionFactory
             IdType: id.IdType,
             ImplicitId: canGenerate ? id.ImplicitId : null,
             Collections: collections.ToEquatableArray(),
+            Invariants: invariants,
             EfBackingFieldAttributeAvailable: HasType(compilation, KnownTypes.EfBackingFieldAttribute),
             ReadOnlySetAvailable: HasType(compilation, KnownTypes.ReadOnlySet),
             CanGenerate: canGenerate,
             Diagnostics: diagnostics.ToEquatableArray());
     }
+
+    /// <summary>
+    /// Whether the elements of a collection are child entities, which is what decides whether an
+    /// aggregate walks that collection when it answers for what it holds. The attribute is the only
+    /// signal available: the base class that would prove it comes from this same generator, and a
+    /// generator cannot see another's output. It survives the trip through metadata, so a child entity
+    /// from a referenced assembly is recognised too.
+    /// <para>
+    /// A class is required because that is the only shape the entity generator produces a base class
+    /// for, and a non-generic one because a generic entity is refused outright. Either way the element
+    /// would have no <c>GetInvariantViolations</c> to call, and a walk emitted over it would turn one
+    /// diagnostic on the author's own declaration into a compile error in generated code.
+    /// </para>
+    /// </summary>
+    private static bool IsChildEntity(ITypeSymbol element)
+        => element is INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false }
+           && (HasAttribute(element, KnownTypes.EntityAttribute) || HasAttribute(element, KnownTypes.AggregateRootAttribute));
 
     // ------------------------------------------------------------------ the id of an entity
 

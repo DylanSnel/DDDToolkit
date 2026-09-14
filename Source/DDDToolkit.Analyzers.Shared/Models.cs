@@ -130,6 +130,12 @@ internal sealed record CollectionPropertyInfo(
     string Name,
     string FieldName,
     string ElementType,
+    /// <summary>
+    /// True when the element carries <c>[Entity]</c> or <c>[AggregateRoot]</c>, which is what makes this
+    /// collection one of the entity's children rather than a bag of values. Only these are walked when an
+    /// aggregate answers for what it holds.
+    /// </summary>
+    bool ElementIsEntity,
     string InterfaceType,
     CollectionBacking Backing,
     string Modifiers,
@@ -181,6 +187,12 @@ internal sealed record EntityDefinition(
     /// </summary>
     EntityIdDefinition? ImplicitId,
     EquatableArray<CollectionPropertyInfo> Collections,
+    /// <summary>
+    /// Fully qualified names of the nested <c>IInvariant&lt;T&gt;</c> rules this type states, in the order
+    /// they are declared. Empty when it states none, which is the shape that keeps the generated
+    /// <c>EnsureInvariants</c> a method the JIT can drop.
+    /// </summary>
+    EquatableArray<string> Invariants,
     bool EfBackingFieldAttributeAvailable,
     bool ReadOnlySetAvailable,
     bool CanGenerate,

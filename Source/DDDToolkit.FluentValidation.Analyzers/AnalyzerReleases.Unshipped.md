@@ -21,3 +21,7 @@ DDD00020 | DDDToolkit.Entities | Error | Generated collection properties must be
 DDD00021 | DDDToolkit.Entities | Warning | Reference another aggregate by its id
 DDD00022 | DDDToolkit.Modules | Warning | Use only what another module publishes
 DDD00023 | DDDToolkit.Modules | Warning | Do not hold another module's entity
+DDD00024 | DDDToolkit.Invariants | Warning | An invariant must be nested inside the entity it is about
+DDD00025 | DDDToolkit.Invariants | Warning | An invariant is nested inside a type it is not about
+DDD00026 | DDDToolkit.Invariants | Warning | Two invariants of one entity share a code
+DDD00027 | DDDToolkit.Invariants | Error | An invariant needs an accessible parameterless constructor
