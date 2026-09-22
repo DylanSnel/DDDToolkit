@@ -9,7 +9,9 @@ It also carries one piece of plumbing in the other direction:
 [a sink](#pushing-integration-events-to-subscribers) that pushes published contracts to subscribed
 clients.
 
-The integration targets HotChocolate 16.6.6.
+The integration works with HotChocolate 16.0.0 and later. The package asks for no more than that, and
+every pull request runs the tests against both 16.0.0 and the newest release (16.6.6 at the time of
+writing).
 
 ## Install
 

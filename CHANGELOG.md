@@ -8,6 +8,31 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 [commit log](https://github.com/DylanSnel/DDDToolkit/commits/main) and the
 [git tags](https://github.com/DylanSnel/DDDToolkit/tags).
 
+## [Unreleased]
+
+### Changed
+
+- The packages ask for the oldest dependency versions they work with instead of the newest.
+  3.0.0 declared the patch this repository was built with, so installing it moved a consumer's
+  Entity Framework Core to at least 10.0.12, HotChocolate to 16.6.6 and FluentValidation to 12.1.1.
+  The minimums are now:
+
+  | Dependency | 3.0.0 required | Now requires |
+  |---|---|---|
+  | Microsoft.EntityFrameworkCore, .Relational | 10.0.12 | 10.0.0 |
+  | Microsoft.Extensions.*.Abstractions | 10.0.12 | 10.0.0 |
+  | Npgsql | 10.0.3 | 10.0.0 |
+  | HotChocolate.AspNetCore, HotChocolate.Types.Analyzers | 16.6.6 | 16.0.0 |
+  | FluentValidation | 12.1.1 | 12.0.0 |
+  | Newtonsoft.Json | 13.0.4 | 13.0.1 |
+  | Mediator.Abstractions | 3.0.2 | 3.0.1 |
+
+  These are minimums, not pins: any newer version still resolves, exactly as before. Only the lower
+  bound moved, so no consumer has to change anything.
+- The Build and Test workflow gained a job that builds and tests the whole solution against those
+  minimums, next to the existing job on the newest versions. `Directory.Packages.props` explains the
+  two sets; `-p:DDDDependencyVersions=Floor` reproduces the job locally.
+
 ## [3.0.0]
 
 A breaking release. Upgrading from 2.0.22 needs code changes in every project that raises a domain

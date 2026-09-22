@@ -1,44 +1,103 @@
 <Project>
+  <!--
+    Two sets of versions for the same packages.
+
+    Floor: what a published package declares as its dependency. NuGet writes Version="X" into the
+    nuspec as ">= X", so this is the oldest version a consumer is allowed to have, not the version
+    they get. Keeping it at the oldest release that works means installing DDDToolkit never drags a
+    consumer's Entity Framework, HotChocolate or FluentValidation forward to whatever patch this
+    repository happened to be on. Raise a floor only when the code needs something newer, and say why
+    next to it.
+
+    Latest: what the tests, examples and benchmarks build and run against, so day-to-day development
+    and the main test run use current releases. Transitive pinning is on in this mode, so a test project
+    also gets the latest version of a dependency that only arrives through a Source project.
+
+    Projects under Source/ use Floor, everything else Latest. Build with -p:DDDDependencyVersions=Floor
+    to run the whole solution, tests included, against the floors; the Build and Test workflow does
+    that in a job of its own, which is what keeps the floors honest.
+  -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+    <_DDDShippedProject>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)').StartsWith('Source'))</_DDDShippedProject>
+    <DDDDependencyVersions Condition="'$(DDDDependencyVersions)' == '' and '$(_DDDShippedProject)' == 'True'">Floor</DDDDependencyVersions>
+    <DDDDependencyVersions Condition="'$(DDDDependencyVersions)' == ''">Latest</DDDDependencyVersions>
+    <CentralPackageTransitivePinningEnabled Condition="'$(DDDDependencyVersions)' == 'Latest'">true</CentralPackageTransitivePinningEnabled>
+    <CentralPackageTransitivePinningEnabled Condition="'$(DDDDependencyVersions)' != 'Latest'">false</CentralPackageTransitivePinningEnabled>
+    <!--
+      In a floor run the tests and examples restore deliberately old test tooling (Sqlite, EF Design),
+      whose advisories say nothing about what ships. The Source projects keep auditing, so an advisory
+      against one of the floors themselves still shows.
+    -->
+    <NuGetAudit Condition="'$(DDDDependencyVersions)' == 'Floor' and '$(_DDDShippedProject)' != 'True'">false</NuGetAudit>
   </PropertyGroup>
 
-  <ItemGroup Label="Roslyn (generators target the oldest compiler that understands C# 13 partial properties)">
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+  <PropertyGroup Label="Floors" Condition="'$(DDDDependencyVersions)' == 'Floor'">
+    <MicrosoftExtensionsVersion>10.0.0</MicrosoftExtensionsVersion>
+    <EntityFrameworkCoreVersion>10.0.0</EntityFrameworkCoreVersion>
+    <NpgsqlVersion>10.0.0</NpgsqlVersion>
+    <HotChocolateVersion>16.0.0</HotChocolateVersion>
+    <FluentValidationVersion>12.0.0</FluentValidationVersion>
+    <!-- 13.0.1 is the first release without the stack-overflow advisory GHSA-5crp-9r3c-p9vr. -->
+    <NewtonsoftJsonVersion>13.0.1</NewtonsoftJsonVersion>
+    <!-- 3.0.0 was never published. -->
+    <MediatorVersion>3.0.1</MediatorVersion>
+    <!-- The generators are compiled against the oldest Roslyn that understands C# 13 partial properties. -->
+    <RoslynVersion>4.12.0</RoslynVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Latest" Condition="'$(DDDDependencyVersions)' == 'Latest'">
+    <MicrosoftExtensionsVersion>10.0.12</MicrosoftExtensionsVersion>
+    <EntityFrameworkCoreVersion>10.0.12</EntityFrameworkCoreVersion>
+    <NpgsqlVersion>10.0.3</NpgsqlVersion>
+    <HotChocolateVersion>16.6.6</HotChocolateVersion>
+    <FluentValidationVersion>12.1.1</FluentValidationVersion>
+    <NewtonsoftJsonVersion>13.0.4</NewtonsoftJsonVersion>
+    <MediatorVersion>3.0.2</MediatorVersion>
+    <!--
+      Tests and examples compile and run the generators on Roslyn 5. Not the newest: with transitive
+      pinning on, this must be exactly the version Microsoft.EntityFrameworkCore.Design pins through
+      Microsoft.CodeAnalysis.CSharp.Workspaces (5.0.0 for EF 10.0.12), or restore reports a conflict.
+      Move it together with EntityFrameworkCoreVersion.
+    -->
+    <RoslynVersion>5.0.0</RoslynVersion>
+  </PropertyGroup>
+
+  <ItemGroup Label="Roslyn">
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="3.11.0" />
   </ItemGroup>
 
   <ItemGroup Label="Runtime">
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" />
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
-    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.6" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EntityFrameworkCoreVersion)" />
+    <PackageVersion Include="Npgsql" Version="$(NpgsqlVersion)" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(NpgsqlVersion)" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="$(HotChocolateVersion)" />
     <!--
       HotChocolate 16 folded the execution engine and query validation into the HotChocolate
       package. HotChocolate.Execution was not released for 16 (its last version is the 16.0.0
       preview 16.0.0-p.10.45), so this line replaces it.
     -->
-    <PackageVersion Include="HotChocolate" Version="16.6.6" />
-    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="$(HotChocolateVersion)" />
     <!--
       The subscription transport used by the tests. At 16.6.6 there are also transports for Postgres
       (LISTEN/NOTIFY), Redis, RabbitMQ and NATS; the toolkit's sink works through ITopicEventSender and
       does not care which of them is registered.
     -->
-    <PackageVersion Include="HotChocolate.Subscriptions.InMemory" Version="16.6.6" />
-    <PackageVersion Include="HotChocolate.Types.Scalars" Version="16.6.6" />
-    <PackageVersion Include="FluentValidation" Version="12.1.1" />
-    <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+    <PackageVersion Include="HotChocolate.Subscriptions.InMemory" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Types.Scalars" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="FluentValidation" Version="$(FluentValidationVersion)" />
+    <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
+    <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Composition roots">
@@ -47,7 +106,7 @@
       assembly the generator runs in, so this belongs in the composition root only: the example host
       and the Mediator test project. Source/DDDToolkit.Mediator references the abstractions alone.
     -->
-    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
+    <PackageVersion Include="Mediator.SourceGenerator" Version="$(MediatorVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Examples">

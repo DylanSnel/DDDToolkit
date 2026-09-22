@@ -65,3 +65,30 @@ jobs:
       # that were just packed, which is the only thing here that exercises it.
       - name: Verify package consumption
         run: ./build/verify-package-consumption.sh 0.0.0-ci
+
+  # The published packages declare the oldest dependency versions they work with (see
+  # Directory.Packages.props), and the job above only ever builds against the newest. This one builds
+  # and tests the whole solution against those floors, so a floor that no longer works fails here
+  # instead of in a consumer's build. The provider suites stay in their own workflow.
+  build-and-test-floors:
+    runs-on: ubuntu-latest
+
+    env:
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies at their floors
+        run: dotnet restore DDDToolkit.slnx -p:DDDDependencyVersions=Floor
+
+      - name: Build
+        run: dotnet build DDDToolkit.slnx --no-restore --configuration Release -p:DDDDependencyVersions=Floor
+
+      - name: Test
+        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal -p:DDDDependencyVersions=Floor --filter "Provider!=Postgres&Provider!=SqlServer"
