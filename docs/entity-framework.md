@@ -85,7 +85,7 @@ very instance that is saving.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
-`AddDDDToolkitConventions` adds the three toolkit conventions to the model. It is the same for every
+`AddDDDToolkitConventions` adds the four toolkit conventions to the model. It is the same for every
 context, so it takes no arguments.
 
 `Add{Module}Converters` is generated, one per assembly that declares identifiers or single value
@@ -148,6 +148,7 @@ The conventions, added by `AddDDDToolkitConventions`, are:
 | `InternalMemberConvention` | Ignores every member carrying `[Internal]`, on entity types and complex types alike |
 | `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, applying the element converter |
 | `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
+| `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below; see [Composite keys](composite-keys.md) |
 
 `InternalMemberConvention` is why `DomainEvents` never reaches your tables. It is marked `[Internal]`
 by the generator, so the convention ignores it exactly as `[NotMapped]` would.
@@ -193,6 +194,14 @@ it reads and writes the field and never tries to write through the read-only vie
 
 Removing an element removes the row. Callers still cannot cast `Lines` back to `List<OrderLine>` and
 mutate it.
+
+### Composite keys
+
+A property marked `[KeyPart]` joins the primary key ahead of `Id`, and the foreign key of every owned
+child carries it too, so `Order` keyed `(RegionId, Id)` owns `OrderLine` rows keyed
+`(RegionId, OrderId, Id)`. The child needs a property of the same name; without one the model refuses
+to build. [Composite keys](composite-keys.md) has the rules, the order of several parts, and how to
+override it.
 
 ### Read-only collections of primitives
 

@@ -52,6 +52,7 @@ public partial class Order { }
 | [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks, versioning and the inbox |
 | [Modules](docs/modules.md) | `[assembly: Module]`, `[ModuleContract]`, and the boundary the analyzer checks |
 | [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations |
+| [Composite keys](docs/composite-keys.md) | `[KeyPart]`: keying a table on more than the id, and carrying that into every owned table |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |

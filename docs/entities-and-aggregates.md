@@ -320,9 +320,11 @@ db.UseDDDToolkit(serviceProvider)
 
 Read a shadow property back with `context.Entry(order).Property<DateTimeOffset>("CreatedAt")`, or
 query it with `EF.Property<DateTimeOffset>(order, "CreatedAt")`. If you would rather have real
-properties, put them on a base class of your own between your aggregates and `AggregateRoot<TId>`;
-the generators do not care what your aggregate inherits from as long as it ends up at
-`AggregateRoot<TId>`.
+properties, declare them on each aggregate and give them an interface of your own, such as
+`IAudited`, so the interceptor has one type to look for. A base class of your own does not work: the
+generator writes the base class of every `[AggregateRoot<T>]` and `[Entity<T>]` itself, so a class
+that also names a base fails to compile with CS0263 ("partial declarations must not specify
+different base classes").
 
 **It is a history of what happened.** Then you already have it. The domain events an aggregate
 raises are a record of every meaningful change, written by the aggregate that knows what the change

@@ -192,4 +192,31 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The generator creates one instance of every rule per entity type and reuses it for every check, which is why a rule must be stateless and constructible without arguments. Nothing is generated for a rule that is not, so this is an error rather than a warning: a rule the generator silently dropped would be exactly the kind of silence the rest of these diagnostics exist to prevent.");
+
+    public static readonly DiagnosticDescriptor KeyPartOutsideAnEntity = new(
+        id: "DDD00028",
+        title: "A key part belongs on an entity or aggregate root",
+        messageFormat: "'{0}.{1}' is marked [KeyPart], but '{0}' is neither an [AggregateRoot] nor an [Entity]; only those have a primary key for it to join",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[KeyPart] puts a property into the primary key ahead of the identifier. A value object, a plain class or an integration event has no identifier and no key, so the attribute would do nothing there, and an attribute that silently does nothing is the kind of mistake this toolkit reports instead of ignoring.");
+
+    public static readonly DiagnosticDescriptor KeyPartHasPublicSetter = new(
+        id: "DDD00029",
+        title: "A key part should not have a public setter",
+        messageFormat: "Key part '{0}.{1}' has a public setter; a key part that can be reassigned after the row is written is a bug waiting to happen, so make the setter private or remove it",
+        category: Entities,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A key part is part of the primary key, and a primary key does not change once the row exists: Entity Framework refuses to save a modified key value, and every owned child's foreign key carries the same value. Set it once, through the constructor, and expose it get-only or with a private setter.");
+
+    public static readonly DiagnosticDescriptor KeyPartsSpreadOverFiles = new(
+        id: "DDD00030",
+        title: "Declare all key parts of a type in one file",
+        messageFormat: "'{0}' declares key parts in more than one file ({1}); the key follows declaration order, which is only defined within one file, so move them into one part of the class",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "With more than one [KeyPart], they join the primary key in the order they are declared. Across the files of a partial class there is no declaration order, only the order the compiler happens to read the files in, and a key whose column order depends on that could change with a rename. Nothing is generated for the type until its key parts are declared together.");
 }

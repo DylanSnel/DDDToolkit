@@ -210,6 +210,8 @@ internal sealed record EntityDefinition(
     /// <c>EnsureInvariants</c> a method the JIT can drop.
     /// </summary>
     EquatableArray<string> Invariants,
+    /// <summary>The names of the <c>[KeyPart]</c> properties, in declaration order. Empty for most types.</summary>
+    EquatableArray<string> KeyParts,
     bool EfBackingFieldAttributeAvailable,
     bool ReadOnlySetAvailable,
     bool CanGenerate,

@@ -317,6 +317,10 @@ internal static class DefinitionFactory
             collections.Add(info);
         }
 
+        // A class carrying both attributes generates nothing and is reported once already; checking
+        // its key parts from both providers would report every key-part warning twice.
+        var keyParts = conflictingAttributes ? [] : CollectKeyParts(symbol, type, diagnostics, ref canGenerate, cancellationToken);
+
         return new EntityDefinition(
             Type: type,
             IsAggregateRoot: isAggregateRoot,
@@ -324,6 +328,7 @@ internal static class DefinitionFactory
             ImplicitId: canGenerate ? id.ImplicitId : null,
             Collections: collections.ToEquatableArray(),
             Invariants: invariants,
+            KeyParts: keyParts.ToEquatableArray(),
             EfBackingFieldAttributeAvailable: HasType(compilation, KnownTypes.EfBackingFieldAttribute),
             ReadOnlySetAvailable: HasType(compilation, KnownTypes.ReadOnlySet),
             CanGenerate: canGenerate,
@@ -346,6 +351,86 @@ internal static class DefinitionFactory
     private static bool IsChildEntity(ITypeSymbol element)
         => element is INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false }
            && (HasAttribute(element, KnownTypes.EntityAttribute) || HasAttribute(element, KnownTypes.AggregateRootAttribute));
+    // ------------------------------------------------------------------ key parts
+
+    /// <summary>
+    /// The <c>[KeyPart]</c> properties declared on this type, in declaration order. That order becomes
+    /// the column order of the primary key, so it is taken from the source rather than from
+    /// <see cref="INamespaceOrTypeSymbol.GetMembers()"/>, and it is only defined within one file:
+    /// key parts spread over several parts of a partial class report DDD00030 and stop generation.
+    /// A key part with a public setter reports DDD00029 and is kept.
+    /// </summary>
+    private static List<string> CollectKeyParts(
+        INamedTypeSymbol symbol,
+        TypeDeclarationInfo type,
+        List<DiagnosticInfo> diagnostics,
+        ref bool canGenerate,
+        CancellationToken cancellationToken)
+    {
+        var declared = new List<(IPropertySymbol Property, Location Location)>();
+        foreach (var property in symbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (property.IsStatic || property.IsIndexer || !HasAttribute(property, KnownTypes.KeyPartAttribute))
+            {
+                continue;
+            }
+
+            var location = property.Locations.FirstOrDefault(static l => l.IsInSource);
+            if (location is null)
+            {
+                continue;
+            }
+
+            declared.Add((property, location));
+
+            if (property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false })
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.KeyPartHasPublicSetter, LocationInfo.From(location), type.Name, property.Name));
+            }
+        }
+
+        if (declared.Count == 0)
+        {
+            return [];
+        }
+
+        var files = declared.Select(static d => d.Location.SourceTree!.FilePath).Distinct(StringComparer.Ordinal).ToList();
+        if (files.Count > 1)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.KeyPartsSpreadOverFiles,
+                type.Location,
+                type.Name,
+                string.Join(", ", files.Select(static f => System.IO.Path.GetFileName(f)))));
+            canGenerate = false;
+            return [];
+        }
+
+        return declared
+            .OrderBy(static d => d.Location.SourceSpan.Start)
+            .Select(static d => d.Property.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// DDD00028 for a <c>[KeyPart]</c> property whose type is neither an entity nor an aggregate root;
+    /// null when it is on one, where <see cref="CreateEntity"/> reads it instead.
+    /// </summary>
+    public static DiagnosticInfo? CheckKeyPartPlacement(GeneratorAttributeSyntaxContext context)
+    {
+        var property = context.TargetSymbol;
+        var containingType = property.ContainingType;
+        if (containingType is null
+            || HasAttribute(containingType, KnownTypes.EntityAttribute)
+            || HasAttribute(containingType, KnownTypes.AggregateRootAttribute))
+        {
+            return null;
+        }
+
+        return DiagnosticInfo.Create(DiagnosticDescriptors.KeyPartOutsideAnEntity, LocationInfo.From(property), containingType.Name, property.Name);
+    }
 
     // ------------------------------------------------------------------ the id of an entity
 

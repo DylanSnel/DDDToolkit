@@ -23,6 +23,7 @@ internal static class KnownTypes
     public const string AggregateRootAttribute = AttributesNamespace + ".AggregateRootAttribute`1";
     public const string InternalAttribute = AttributesNamespace + ".InternalAttribute";
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
+    public const string KeyPartAttribute = AttributesNamespace + ".KeyPartAttribute";
 
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
@@ -53,6 +54,7 @@ internal static class KnownTypes
     // Fully qualified names used in generated code.
     public const string BaseTypesNamespace = "global::DDDToolkit.BaseTypes";
     public const string InterfacesNamespace = "global::DDDToolkit.Abstractions.Interfaces";
+    public const string HasKeyPartsInterface = "global::DDDToolkit.Interfaces.IHasKeyParts";
     public const string ValidationNamespace = "global::DDDToolkit.Validation";
     public const string InvariantInterface = "global::DDDToolkit.Invariants.IInvariant";
     public const string InvariantViolation = "global::DDDToolkit.Invariants.InvariantViolation";

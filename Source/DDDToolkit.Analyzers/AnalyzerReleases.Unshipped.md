@@ -25,3 +25,6 @@ DDD00024 | DDDToolkit.Invariants | Warning | An invariant must be nested inside 
 DDD00025 | DDDToolkit.Invariants | Warning | An invariant is nested inside a type it is not about
 DDD00026 | DDDToolkit.Invariants | Warning | Two invariants of one entity share a code
 DDD00027 | DDDToolkit.Invariants | Error | An invariant needs an accessible parameterless constructor
+DDD00028 | DDDToolkit.Entities | Error | A key part belongs on an entity or aggregate root
+DDD00029 | DDDToolkit.Entities | Warning | A key part should not have a public setter
+DDD00030 | DDDToolkit.Entities | Error | Declare all key parts of a type in one file

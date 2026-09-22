@@ -10,6 +10,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Added
+
+- `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
+  ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
+  into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
+  `(RegionId, RootId, Id)` whose foreign key is `(RegionId, RootId)`. Several key parts follow
+  declaration order. The property stays an ordinary domain property that the toolkit never assigns or
+  interprets, and it plays no part in equality. Explicit configuration in `OnModelCreating` wins. See
+  [Composite keys](docs/composite-keys.md).
+- `DDDToolkit.Interfaces.IHasKeyParts`, generated on every type with key parts to hand their
+  declaration order to the convention. You do not implement it yourself.
+- DDD00028 (error): `[KeyPart]` on a type that is neither an entity nor an aggregate root.
+- DDD00029 (warning): a key part with a public setter.
+- DDD00030 (error): key parts of one type spread over several files of a partial class, where there is
+  no declaration order to follow.
+- Building the model now fails, with an exception naming the owner, the child and the property, when
+  an owned type has no property for one of its owner's key parts.
+
+A model without `[KeyPart]` is mapped exactly as before; the tests compare it with and without the
+convention.
+
 ### Fixed
 
 - A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path
@@ -21,6 +42,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `Type.EntityFramework.1f3a9c2e.g.cs`, and the generators moved out of the `.Generators`
   namespace. The path from the report went from 293 to 239 characters. Only file names changed; if
   you check `EmitCompilerGeneratedFiles` output into source control, expect it to be renamed.
+- [Entities and aggregates](docs/entities-and-aggregates.md) said a base class of your own between an
+  aggregate and `AggregateRoot<TId>` works. It does not: the generator writes the base class itself,
+  and a class that also names one fails with CS0263. The page now says so and suggests an interface
+  instead, and a test pins the behaviour down.
 
 ### Changed
 

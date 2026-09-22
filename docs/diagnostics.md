@@ -25,6 +25,9 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00025](#ddd00025) | Warning | An invariant is nested inside a type it is not about |
 | [DDD00026](#ddd00026) | Warning | Two invariants of one entity share a code |
 | [DDD00027](#ddd00027) | Error | An invariant needs an accessible parameterless constructor |
+| [DDD00028](#ddd00028) | Error | A key part belongs on an entity or aggregate root |
+| [DDD00029](#ddd00029) | Warning | A key part should not have a public setter |
+| [DDD00030](#ddd00030) | Error | Declare all key parts of a type in one file |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -32,7 +35,9 @@ reads well and does not do what it looks like it does. [DDD00021](#ddd00021) is 
 between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the boundary
 between two [modules](modules.md) and say nothing at all until a project declares itself one;
 [DDD00024](#ddd00024) to [DDD00027](#ddd00027) are about [invariants](invariants.md), where the
-failure worth catching is a rule that is written, tested, and never run.
+failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
+[DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
+the one key-part mistake that can only be caught when the Entity Framework model is built.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -781,6 +786,119 @@ generated code, which is written inside that same entity; a `private` constructo
 | An `abstract` base or an open generic rule | No, neither is a rule |
 
 See [Invariants](invariants.md#why-a-rule-is-a-nested-type).
+
+---
+
+## DDD00028
+
+**A key part belongs on an entity or aggregate root.**
+
+```csharp
+[ValueObject]
+public partial record Address
+{
+    [KeyPart]
+    public RegionId Region { get; protected init; }   // DDD00028
+}
+```
+
+`[KeyPart]` puts a property into a primary key ahead of the identifier. Only an `[AggregateRoot<T>]`
+or an `[Entity<T>]` has an identifier and a key, so anywhere else the attribute would do nothing,
+silently. Remove it, or move the property to the entity that is keyed on it. See
+[Composite keys](composite-keys.md).
+
+---
+
+## DDD00029
+
+**A key part should not have a public setter.**
+
+```csharp
+[AggregateRoot<ProjectId>]
+public partial class Project
+{
+    [KeyPart]
+    public RegionId RegionId { get; set; }   // DDD00029
+}
+```
+
+Set it once, in the constructor, and make it get-only:
+
+```csharp
+[KeyPart]
+public RegionId RegionId { get; }
+```
+
+A key part is part of the primary key, and a primary key does not change once the row exists: Entity
+Framework refuses to save a modified key value, and every owned child's foreign key carries the same
+value. `{ get; }`, `private set`, `protected set` and `init` are all fine; only a public, non-init
+setter reports. A warning: everything is still generated.
+
+---
+
+## DDD00030
+
+**Declare all key parts of a type in one file.**
+
+```csharp
+// Project.cs
+[AggregateRoot<ProjectId>]
+public partial class Project
+{
+    [KeyPart] public RegionId RegionId { get; }
+}
+
+// Project.Period.cs
+public partial class Project
+{
+    [KeyPart] public int Period { get; }       // DDD00030, reported on Project
+}
+```
+
+Move them into one part of the class, in the order you want the key:
+
+```csharp
+public partial class Project
+{
+    [KeyPart] public RegionId RegionId { get; }
+    [KeyPart] public int Period { get; }
+}
+```
+
+Key parts join the primary key in declaration order. Within one file that order is plain; between
+the files of a partial class there is none, only the order the compiler happens to read the files in,
+and a key whose column order could change with a file rename is not a key you want. Nothing is
+generated for the type until the key parts are together.
+
+---
+
+## Building the model fails: the owned type must carry the key part
+
+Not a compiler diagnostic, because it depends on how the Entity Framework model is put together, but
+it is reported as early as that allows: when the context builds its model, before the first query.
+
+```
+'Project' is keyed on 'RegionId', so the foreign key of its owned 'Milestone' (through
+'Project.Milestones') must carry it too, but 'Milestone' has no such property. ...
+```
+
+`Project` has `[KeyPart] RegionId`, so every table it owns carries `RegionId` in its foreign key, and
+`Milestone` has nowhere to keep it. Give the child the property and set it from the parent:
+
+```csharp
+[Entity<MilestoneId>]
+public partial class Milestone
+{
+    public Milestone(RegionId regionId, MilestoneId id) : base(id) => RegionId = regionId;
+
+    [KeyPart]
+    public RegionId RegionId { get; }
+}
+```
+
+The property must have the same name and the same type as the owner's. If the child really should not
+carry it, configure that ownership's foreign key yourself with `OwnsMany(...).WithOwner().HasForeignKey(...)`;
+the convention leaves explicit configuration alone.
 
 ---
 

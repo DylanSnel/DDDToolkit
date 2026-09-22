@@ -182,4 +182,26 @@ public class EntityDiagnosticTests
         result.ShouldNotContain(Hint.Of("Sample.Basket"), "Lines");
         result.ShouldCompile();
     }
+
+    [Fact]
+    public void An_aggregate_that_names_a_base_class_of_its_own_does_not_compile()
+    {
+        // Pins down what docs/entities-and-aggregates.md tells authors: the generator writes the base
+        // class itself and does not look for one the author declared, so the two parts disagree.
+        // If the generator ever learns to respect an author's base, this test and that paragraph go.
+        var result = GeneratorTestHost.Create(Preamble +
+            """
+            public abstract class AuditedRoot : DDDToolkit.BaseTypes.AggregateRoot<ThingId>
+            {
+                protected AuditedRoot() { }
+            }
+
+            [AggregateRoot<ThingId>]
+            public partial class Basket : AuditedRoot
+            {
+            }
+            """).RunCore();
+
+        result.CompilationErrors.Select(static error => error.Id).Should().Contain("CS0263");
+    }
 }

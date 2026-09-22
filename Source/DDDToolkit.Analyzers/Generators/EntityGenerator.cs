@@ -23,6 +23,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(context.Entities(), static (productionContext, definition) => Execute(productionContext, definition));
         context.RegisterSourceOutput(context.AggregateRoots(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.MisplacedKeyParts(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
     }
 
     private static void Execute(SourceProductionContext context, EntityDefinition definition)
@@ -35,11 +36,12 @@ public sealed class EntityGenerator : IIncrementalGenerator
 
         var type = definition.Type;
         var baseType = definition.IsAggregateRoot ? "AggregateRoot" : "Entity";
+        var interfaces = definition.KeyParts.Count > 0 ? ", " + KnownTypes.HasKeyPartsInterface : string.Empty;
         var writer = new CodeWriter().Header();
 
         using (writer.TypeScope(type))
         {
-            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + "." + baseType + "<" + definition.IdType + ">"))
+            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + "." + baseType + "<" + definition.IdType + ">" + interfaces))
             {
                 writer.Line("/// <summary>Parameterless constructor for persistence frameworks and serializers.</summary>");
                 using (writer.Block("protected " + type.Name + "()"))
@@ -47,6 +49,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
                 }
 
                 WriteInvariantSeam(writer, definition);
+                WriteKeyParts(writer, definition);
 
                 foreach (var collection in definition.Collections)
                 {
@@ -611,6 +614,30 @@ public sealed class EntityGenerator : IIncrementalGenerator
     /// <summary>What both stages hand back: the violations, in the order they were found.</summary>
     private static string ViolationList
         => "global::System.Collections.Generic.IReadOnlyList<" + KnownTypes.InvariantViolation + ">";
+
+    /// <summary>
+    /// Names the <c>[KeyPart]</c> properties in declaration order, for the Entity Framework convention
+    /// that builds the composite key. Reflection does not promise declaration order, so the order is
+    /// written down here, where the generator still has the source. A type without key parts gets
+    /// nothing, not even the interface, so its generated code is exactly what it was before.
+    /// </summary>
+    private static void WriteKeyParts(CodeWriter writer, EntityDefinition definition)
+    {
+        if (definition.KeyParts.Count == 0)
+        {
+            return;
+        }
+
+        var names = new StringBuilder();
+        foreach (var name in definition.KeyParts)
+        {
+            names.Append(names.Length == 0 ? string.Empty : ", ").Append("nameof(").Append(name).Append(')');
+        }
+
+        writer.Line();
+        writer.Line("/// <summary>The <c>[KeyPart]</c> properties of this type, in the order they join the primary key ahead of <c>Id</c>.</summary>");
+        writer.Line("static global::System.Collections.Generic.IReadOnlyList<string> " + KnownTypes.HasKeyPartsInterface + ".KeyParts => new string[] { " + names + " };");
+    }
 
     private static string View(CollectionPropertyInfo collection, bool readOnlySetAvailable) => collection.Backing switch
     {

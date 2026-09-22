@@ -64,6 +64,19 @@ internal static class Providers
             predicate: static (node, _) => node is TypeDeclarationSyntax,
             transform: static (syntaxContext, cancellationToken) => DefinitionFactory.CreateEntity(syntaxContext, isAggregateRoot: true, cancellationToken));
 
+    /// <summary>
+    /// DDD00028 for every <c>[KeyPart]</c> property on a type that is neither an entity nor an
+    /// aggregate root. Key parts on those types are read by <see cref="Entities"/> and
+    /// <see cref="AggregateRoots"/> and never appear here.
+    /// </summary>
+    public static IncrementalValuesProvider<DiagnosticInfo> MisplacedKeyParts(this IncrementalGeneratorInitializationContext context)
+        => context.SyntaxProvider.ForAttributeWithMetadataName(
+                KnownTypes.KeyPartAttribute,
+                predicate: static (node, _) => node is PropertyDeclarationSyntax,
+                transform: static (syntaxContext, _) => DefinitionFactory.CheckKeyPartPlacement(syntaxContext))
+            .Where(static diagnostic => diagnostic is not null)
+            .Select(static (diagnostic, _) => diagnostic!);
+
     /// <summary>The compilation's assembly name, as a cacheable value.</summary>
     public static IncrementalValueProvider<string?> AssemblyName(this IncrementalGeneratorInitializationContext context)
         => context.CompilationProvider.Select(static (compilation, _) => compilation.AssemblyName);
