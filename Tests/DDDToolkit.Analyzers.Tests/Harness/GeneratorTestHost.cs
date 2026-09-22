@@ -4,15 +4,15 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using DDDToolkit.Analyzers.Analyzers;
-using CoreEntityGenerator = DDDToolkit.Analyzers.Generators.EntityGenerator;
-using CoreEntityIdGenerator = DDDToolkit.Analyzers.Generators.EntityIdGenerator;
-using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.Generators.SingleValueObjectGenerator;
-using CoreValueObjectGenerator = DDDToolkit.Analyzers.Generators.ValueObjectGenerator;
-using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.Generators.EntityGenerator;
-using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyzers.Generators.SingleValueObjectConverterGenerator;
-using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.Generators.ValueObjectGenerator;
-using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.Generators.ValueObjectGenerator;
-using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.Generators.SingleValueObjectConverterGenerator;
+using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
+using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
+using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
+using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
+using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
+using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyzers.SingleValueObjectConverterGenerator;
+using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectGenerator;
+using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
+using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
 

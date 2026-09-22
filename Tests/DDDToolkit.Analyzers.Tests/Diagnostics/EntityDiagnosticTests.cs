@@ -135,9 +135,9 @@ public class EntityDiagnosticTests
 
         // The aggregate itself is still generated (the base class is what makes the rest of the file
         // compile) but the property is deliberately left unimplemented.
-        result.ShouldHaveGenerated("Sample.Basket.g.cs");
-        result.ShouldNotContain("Sample.Basket.g.cs", "Lines");
-        result.ShouldNotContain("Sample.Basket.g.cs", "_lines");
+        result.ShouldHaveGenerated(Hint.Of("Sample.Basket"));
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "Lines");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "_lines");
 
         // And the compiler then refuses the unimplemented partial property, so the mistake cannot ship.
         result.CompilationErrors.Should().NotBeEmpty("an unimplemented partial property is a compiler error");
@@ -179,7 +179,7 @@ public class EntityDiagnosticTests
             """).RunCore();
 
         result.GeneratorDiagnostics.Should().BeEmpty();
-        result.ShouldNotContain("Sample.Basket.g.cs", "Lines");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "Lines");
         result.ShouldCompile();
     }
 }

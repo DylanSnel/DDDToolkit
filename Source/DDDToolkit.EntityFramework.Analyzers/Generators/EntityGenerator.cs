@@ -3,7 +3,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.EntityFramework.Analyzers.Generators;
+namespace DDDToolkit.EntityFramework.Analyzers;
 
 /// <summary>
 /// Marks every <c>[Entity]</c> (child entity, not aggregate root) as an EF Core owned type. A child

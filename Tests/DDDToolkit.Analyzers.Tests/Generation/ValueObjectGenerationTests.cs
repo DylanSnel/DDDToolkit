@@ -91,7 +91,7 @@ public class ValueObjectGenerationTests
     {
         var result = Names();
 
-        result.ShouldNotContain("Sample.PersonName.g.cs", "TimesRendered");
+        result.ShouldNotContain(Hint.Of("Sample.PersonName"), "TimesRendered");
 
         var emitted = result.Emit();
         var name = emitted.New("Sample.PersonName", "Ada", null, "Lovelace");
@@ -161,7 +161,7 @@ public class ValueObjectGenerationTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Nothing.g.cs", "yield break;");
+        result.ShouldContain(Hint.Of("Sample.Nothing"), "yield break;");
 
         var emitted = result.Emit();
         var left = emitted.New("Sample.Nothing");
@@ -174,7 +174,7 @@ public class ValueObjectGenerationTests
     {
         var result = Names();
 
-        result.ShouldContain("Sample.PersonName.g.cs", "[global::System.Text.Json.Serialization.JsonConstructor]");
+        result.ShouldContain(Hint.Of("Sample.PersonName"), "[global::System.Text.Json.Serialization.JsonConstructor]");
 
         var constructor = result.Emit().Type("Sample.PersonName")
             .GetConstructor(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, Type.EmptyTypes);
@@ -199,7 +199,7 @@ public class ValueObjectGenerationTests
     public void A_single_value_object_derives_from_SingleValueObject()
     {
         var result = EmailAddress();
-        result.ShouldContain("Sample.EmailAddress.g.cs", "partial record EmailAddress : global::DDDToolkit.BaseTypes.SingleValueObject<string>");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress"), "partial record EmailAddress : global::DDDToolkit.BaseTypes.SingleValueObject<string>");
 
         var emitted = result.Emit();
         emitted.Type("Sample.EmailAddress").BaseType.Should().Be(typeof(SingleValueObject<string>));

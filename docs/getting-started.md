@@ -415,6 +415,13 @@ Nothing here is magic, and reading the output is the fastest way to understand i
 
 Build, then look in `Generated/`. Add that folder to `.gitignore`.
 
+Each file is named after the type it belongs to, the generator that wrote it and a short hash that
+keeps two types of the same name apart, such as `Order.2c9e41f0.g.cs` for the entity itself and
+`Order.EntityFramework.5b17d3aa.g.cs` for its Entity Framework part (the hash depends on the
+namespace). The namespace itself is left out of the name on purpose. It is already in the folder,
+and Visual Studio has to fit `Generated\{generator assembly}\{generator}\{file}` under your
+project folder into 260 characters.
+
 ## When something does not generate
 
 Every misuse reports an error with an identifier starting `DDD`. If a type you annotated produced no

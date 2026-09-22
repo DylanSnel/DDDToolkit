@@ -5,7 +5,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.EntityFramework.Analyzers.Generators;
+namespace DDDToolkit.EntityFramework.Analyzers;
 
 /// <summary>
 /// Generates an EF Core <c>ValueConverter</c> for every entity id and single value object (and their

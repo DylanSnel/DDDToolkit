@@ -184,7 +184,7 @@ public class IncrementalCachingTests
         second.ShouldCompile();
         second.OutputStepReasons().Select(step => step.Reason)
             .Should().Contain(IncrementalStepRunReason.New, "a new DDDToolkit type is new work");
-        second.GeneratedSources.Select(source => source.HintName).Should().Contain("Sample.BrandNewId.g.cs");
+        second.GeneratedSources.Select(source => source.HintName).Should().Contain(Hint.Of("Sample.BrandNewId"));
     }
 
     [Fact]
@@ -201,10 +201,10 @@ public class IncrementalCachingTests
         });
 
         second.ShouldCompile();
-        second.ShouldContain("Sample.ProductId.g.cs", "IdPrefix = \"PRODUCT\"");
+        second.ShouldContain(Hint.Of("Sample.ProductId"), "IdPrefix = \"PRODUCT\"");
 
         // Every other generated file is byte-for-byte what it was.
-        foreach (var source in second.GeneratedSources.Where(source => source.HintName != "Sample.ProductId.g.cs"))
+        foreach (var source in second.GeneratedSources.Where(source => source.HintName != Hint.Of("Sample.ProductId")))
         {
             source.SourceText.ToString().Should().Be(
                 first.GeneratedSources.Single(other => other.HintName == source.HintName).SourceText.ToString(),

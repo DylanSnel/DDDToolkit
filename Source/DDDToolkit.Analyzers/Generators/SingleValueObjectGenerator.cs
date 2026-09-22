@@ -3,7 +3,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.Analyzers.Generators;
+namespace DDDToolkit.Analyzers;
 
 /// <summary>
 /// Generates the base type, constructors and equality members for <c>[SingleValueObject&lt;TValue&gt;]</c>

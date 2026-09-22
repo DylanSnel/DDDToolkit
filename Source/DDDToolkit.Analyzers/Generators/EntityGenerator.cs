@@ -4,7 +4,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.Analyzers.Generators;
+namespace DDDToolkit.Analyzers;
 
 /// <summary>
 /// Generates the base class for <c>[Entity&lt;TId&gt;]</c> and <c>[AggregateRoot&lt;TId&gt;]</c> classes and

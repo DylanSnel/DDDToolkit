@@ -362,9 +362,9 @@ public class EntityChildInvariantTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Order.g.cs", "foreach (var child in _lines)");
-        result.ShouldNotContain("Sample.Order.g.cs", "foreach (var child in _notes)", "a value object states no invariants");
-        result.ShouldNotContain("Sample.Order.g.cs", "foreach (var child in _labels)", "and neither does a string");
+        result.ShouldContain(Hint.Of("Sample.Order"), "foreach (var child in _lines)");
+        result.ShouldNotContain(Hint.Of("Sample.Order"), "foreach (var child in _notes)", "a value object states no invariants");
+        result.ShouldNotContain(Hint.Of("Sample.Order"), "foreach (var child in _labels)", "and neither does a string");
     }
 
     [Fact]
@@ -373,8 +373,8 @@ public class EntityChildInvariantTests
         // Lines is a ReadOnlyCollection built on every read, and this runs on every check.
         var result = GeneratorTestHost.Create(Preamble + OrderAndLine).RunCore();
 
-        result.ShouldContain("Sample.Order.g.cs", "foreach (var child in _lines)");
-        result.ShouldNotContain("Sample.Order.g.cs", "foreach (var child in Lines)");
+        result.ShouldContain(Hint.Of("Sample.Order"), "foreach (var child in _lines)");
+        result.ShouldNotContain(Hint.Of("Sample.Order"), "foreach (var child in Lines)");
     }
 
     [Fact]
@@ -403,9 +403,9 @@ public class EntityChildInvariantTests
 
         // The line has neither a rule nor a seam, so its GetInvariantViolations hands back the shared
         // empty array and the root allocates nothing on top of it.
-        result.ShouldContain("Sample.Line.g.cs", "return global::System.Array.Empty<global::DDDToolkit.Invariants.InvariantViolation>();");
-        result.ShouldNotContain("Sample.Line.g.cs", "__invariants");
-        result.ShouldNotContain("Sample.Line.g.cs", "CollectChildInvariantViolations", "a line holds no children either");
+        result.ShouldContain(Hint.Of("Sample.Line"), "return global::System.Array.Empty<global::DDDToolkit.Invariants.InvariantViolation>();");
+        result.ShouldNotContain(Hint.Of("Sample.Line"), "__invariants");
+        result.ShouldNotContain(Hint.Of("Sample.Line"), "CollectChildInvariantViolations", "a line holds no children either");
 
         var emitted = result.Emit();
         var order = emitted.New("Sample.Order", emitted.New("Sample.OrderId", 1));
@@ -420,7 +420,7 @@ public class EntityChildInvariantTests
     public void A_consistent_aggregate_allocates_nothing()
     {
         var result = GeneratorTestHost.Create(Preamble + OrderAndLine).RunCore();
-        var source = result.Source("Sample.Order.g.cs");
+        var source = result.Source(Hint.Of("Sample.Order"));
 
         // The list is created where the first failure is added, in the walk as in the rules, and the
         // empty answer is the shared array rather than an empty list.
@@ -479,6 +479,6 @@ public class EntityChildInvariantTests
             .RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Order.g.cs", "foreach (var child in _lines)");
+        result.ShouldContain(Hint.Of("Sample.Order"), "foreach (var child in _lines)");
     }
 }

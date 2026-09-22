@@ -32,8 +32,8 @@ public class ImplicitEntityIdTests
 
         result.ShouldCompile();
         result.GeneratorDiagnostics.Should().BeEmpty();
-        result.ShouldHaveGenerated("Sample.OrderId.g.cs");
-        result.ShouldContain("Sample.OrderId.g.cs", "public readonly partial record struct OrderId",
+        result.ShouldHaveGenerated(Hint.Of("Sample.OrderId"));
+        result.ShouldContain(Hint.Of("Sample.OrderId"), "public readonly partial record struct OrderId",
             because: "nobody else declares the type, so the generated part carries the accessibility and 'readonly' itself");
     }
 
@@ -71,7 +71,7 @@ public class ImplicitEntityIdTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldHaveGenerated("Sample.OrderLineId.g.cs");
+        result.ShouldHaveGenerated(Hint.Of("Sample.OrderLineId"));
 
         var emitted = result.Emit();
         var id = emitted.New("Sample.OrderLineId", 7);
@@ -132,12 +132,12 @@ public class ImplicitEntityIdTests
     {
         // The same emitter writes both, so the only difference is the header: the implicit part has
         // nobody to take its accessibility from.
-        var implicitForm = Aggregate().Source("Sample.OrderId.g.cs");
+        var implicitForm = Aggregate().Source(Hint.Of("Sample.OrderId"));
         var explicitForm = GeneratorTestHost.Create(Preamble +
             """
             [EntityId<Guid>("ORD")]
             public readonly partial record struct OrderId;
-            """).RunCore().Source("Sample.OrderId.g.cs");
+            """).RunCore().Source(Hint.Of("Sample.OrderId"));
 
         implicitForm.Should().Be(explicitForm.Replace(
             "readonly partial record struct OrderId",
@@ -195,7 +195,7 @@ public class ImplicitEntityIdTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.SeatId.g.cs", "TryParse");
+        result.ShouldNotContain(Hint.Of("Sample.SeatId"), "TryParse");
 
         var emitted = result.Emit();
         emitted.HasMember("Sample.SeatId", "Parse").Should().BeFalse();
@@ -248,7 +248,7 @@ public class ImplicitEntityIdTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldHaveGenerated("Sample.Catalog.ProductId.g.cs");
+        result.ShouldHaveGenerated(Hint.Of("Sample.Catalog.ProductId"));
 
         var emitted = result.Emit();
         emitted.Type("Sample.Catalog+ProductId").Should().NotBeNull();
@@ -274,7 +274,7 @@ public class ImplicitEntityIdTests
             .RunCoreAnd([.. GeneratorTestHost.EntityFrameworkGenerators(), .. GeneratorTestHost.HotChocolateGenerators()]);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.OrderId.g.cs", "internal readonly partial record struct OrderId");
+        result.ShouldContain(Hint.Of("Sample.OrderId"), "internal readonly partial record struct OrderId");
         result.Emit().Type("Sample.OrderId").IsPublic.Should().BeFalse();
     }
 
@@ -321,7 +321,7 @@ public class ImplicitEntityIdTests
 
         result.ShouldCompile();
         result.GeneratorDiagnostics.Should().BeEmpty();
-        result.GeneratedSources.Select(source => source.HintName).Should().BeEquivalentTo(["Sample.OrderId.g.cs", "Sample.Order.g.cs"]);
+        result.GeneratedSources.Select(source => source.HintName).Should().BeEquivalentTo([Hint.Of("Sample.OrderId"), Hint.Of("Sample.Order")]);
 
         var emitted = result.Emit();
         emitted.HasType("Sample.OrderIdId").Should().BeFalse("the type argument already was the id");

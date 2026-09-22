@@ -62,7 +62,7 @@ public class InvariantDiagnosticTests
 
         var diagnostic = result.ShouldHaveDiagnostic("DDD00024", at: "MustNotBeEmpty");
         diagnostic.GetMessage().Should().Contain("Basket", "the message names where the rule belongs");
-        result.ShouldNotContain("Sample.Basket.g.cs", "MustNotBeEmpty", "a rule outside the entity is not discovered");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "MustNotBeEmpty", "a rule outside the entity is not discovered");
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class InvariantDiagnosticTests
 
         result.ShouldNotHaveDiagnostic("DDD00024");
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeEmpty(),", "the rule itself is still found");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeEmpty(),", "the rule itself is still found");
     }
 
     // ------------------------------------------------------------------ DDD00025
@@ -164,8 +164,8 @@ public class InvariantDiagnosticTests
         diagnostic.GetMessage().Should().Contain("Basket").And.Contain("Line");
 
         result.ShouldNotHaveDiagnostic("DDD00024");
-        result.ShouldNotContain("Sample.Basket.g.cs", "MustCostSomething", "the basket would never have run it");
-        result.ShouldNotContain("Sample.Line.g.cs", "MustCostSomething", "and the line cannot see it either");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "MustCostSomething", "the basket would never have run it");
+        result.ShouldNotContain(Hint.Of("Sample.Line"), "MustCostSomething", "and the line cannot see it either");
     }
 
     [Fact]
@@ -354,8 +354,8 @@ public class InvariantDiagnosticTests
 
         // Left out rather than emitted as code that cannot compile: the entity itself is still
         // generated, so the author sees this one error instead of a page of them.
-        result.ShouldNotContain("Sample.Basket.g.cs", "__invariants");
-        result.ShouldHaveGenerated("Sample.Basket.g.cs");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "__invariants");
+        result.ShouldHaveGenerated(Hint.Of("Sample.Basket"));
         result.CompilationErrors.Should().BeEmpty();
     }
 
@@ -405,8 +405,8 @@ public class InvariantDiagnosticTests
 
         result.ShouldNotHaveDiagnostic("DDD00027");
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeEmpty(),");
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeHuge(),");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeEmpty(),");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeHuge(),");
     }
 
     // ------------------------------------------------------------------ nothing fires on code without rules

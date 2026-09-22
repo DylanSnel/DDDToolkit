@@ -88,7 +88,7 @@ public class ValueObjectPropertyDiagnosticTests
         var result = WithProperty("[Internal] public decimal Scratch { get; set; }");
 
         result.GeneratorDiagnostics.Should().BeEmpty();
-        result.ShouldNotContain("Sample.Money.g.cs", "Scratch");
+        result.ShouldNotContain(Hint.Of("Sample.Money"), "Scratch");
         result.ShouldCompile();
     }
 
@@ -122,8 +122,8 @@ public class ValueObjectPropertyDiagnosticTests
         // errors, so the generator emits its half and lets the diagnostic speak.
         var result = WithProperty("public decimal Amount { get; set; }");
 
-        result.ShouldHaveGenerated("Sample.Money.g.cs");
-        result.ShouldContain("Sample.Money.g.cs", "yield return Amount;");
+        result.ShouldHaveGenerated(Hint.Of("Sample.Money"));
+        result.ShouldContain(Hint.Of("Sample.Money"), "yield return Amount;");
         result.CompilationErrors.Should().BeEmpty("the generated code itself is valid; only the DDD diagnostics fail the build");
     }
 }

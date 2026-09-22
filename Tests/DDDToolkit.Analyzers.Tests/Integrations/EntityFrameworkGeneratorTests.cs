@@ -27,7 +27,7 @@ public class EntityFrameworkGeneratorTests
 
         result.ShouldCompile();
         result.ShouldContain(
-            "Sample.ProductId.Converter.g.cs",
+            Hint.Of("Sample.ProductId", ".Converter"),
             "public sealed class ProductIdConverter : global::Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<global::Sample.ProductId, global::System.Guid>");
 
         // It really is a usable converter: construct it and run both directions.
@@ -55,7 +55,7 @@ public class EntityFrameworkGeneratorTests
 
         result.ShouldCompile();
         result.ShouldContain(
-            "Sample.OrderId.Converter.g.cs",
+            Hint.Of("Sample.OrderId", ".Converter"),
             "public sealed class OrderIdConverter : global::Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<global::Sample.OrderId, global::System.Guid>");
         result.ShouldContain("ConverterExtensions", "Properties<global::Sample.OrderId>().HaveConversion<global::Sample.OrderId.OrderIdConverter>();");
         result.ShouldContain("ConverterExtensions", "DefaultTypeMapping<global::Sample.OrderId>().HasConversion<global::Sample.OrderId.OrderIdConverter>();");
@@ -78,8 +78,8 @@ public class EntityFrameworkGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.UserId.Converter.g.cs", "public sealed class UserIdConverter :");
-        result.ShouldContain("Sample.UserId.Converter.g.cs", "public sealed class ValidUserIdConverter :");
+        result.ShouldContain(Hint.Of("Sample.UserId", ".Converter"), "public sealed class UserIdConverter :");
+        result.ShouldContain(Hint.Of("Sample.UserId", ".Converter"), "public sealed class ValidUserIdConverter :");
 
         var emitted = result.Emit();
         var converter = (Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter)emitted.New("Sample.ValidUserId+ValidUserIdConverter");
@@ -102,8 +102,8 @@ public class EntityFrameworkGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.EmailAddress.Converter.g.cs", "public sealed class EmailAddressConverter :");
-        result.ShouldContain("Sample.EmailAddress.Converter.g.cs", "public sealed class ValidEmailAddressConverter :");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".Converter"), "public sealed class EmailAddressConverter :");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".Converter"), "public sealed class ValidEmailAddressConverter :");
 
         var emitted = result.Emit();
         var converter = (Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter)emitted.New("Sample.EmailAddress+EmailAddressConverter");
@@ -214,7 +214,7 @@ public class EntityFrameworkGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Order.EntityFramework.g.cs", "[global::Microsoft.EntityFrameworkCore.Owned]");
+        result.ShouldContain(Hint.Of("Sample.Order", ".EntityFramework"), "[global::Microsoft.EntityFrameworkCore.Owned]");
 
         result.Emit().Type("Sample.Order")
             .GetCustomAttributes(typeof(Microsoft.EntityFrameworkCore.OwnedAttribute), inherit: false)
@@ -238,7 +238,7 @@ public class EntityFrameworkGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.GeneratedSources.Should().NotContain(source => source.HintName == "Sample.Basket.EntityFramework.g.cs");
+        result.GeneratedSources.Should().NotContain(source => source.HintName == Hint.Of("Sample.Basket", ".EntityFramework"));
         result.Emit().Type("Sample.Basket")
             .GetCustomAttributes(typeof(Microsoft.EntityFrameworkCore.OwnedAttribute), inherit: false)
             .Should().BeEmpty();
@@ -257,8 +257,8 @@ public class EntityFrameworkGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Money.EntityFramework.g.cs", "[global::System.ComponentModel.DataAnnotations.Schema.ComplexType]");
-        result.ShouldContain("Sample.Money.EntityFramework.g.cs", "partial record ValidMoney");
+        result.ShouldContain(Hint.Of("Sample.Money", ".EntityFramework"), "[global::System.ComponentModel.DataAnnotations.Schema.ComplexType]");
+        result.ShouldContain(Hint.Of("Sample.Money", ".EntityFramework"), "partial record ValidMoney");
 
         var emitted = result.Emit();
         emitted.Type("Sample.Money").GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.Schema.ComplexTypeAttribute), false).Should().HaveCount(1);

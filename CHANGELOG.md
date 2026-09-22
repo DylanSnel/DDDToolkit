@@ -10,6 +10,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Fixed
+
+- A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path
+  limit". Visual Studio places every generated file at
+  `{project}\Generated\{generator assembly}\{generator type}\{hint name}`, and the toolkit spelled
+  the namespace out in both of the last two: `DDDToolkit.EntityFramework.Analyzers.Generators.EntityGenerator\`
+  and `Company.Module.Domain.Aggregates.Feature.Type.EntityFramework.g.cs`. A generated file is now
+  named after the type alone plus a short hash of its full name, such as
+  `Type.EntityFramework.1f3a9c2e.g.cs`, and the generators moved out of the `.Generators`
+  namespace. The path from the report went from 293 to 239 characters. Only file names changed; if
+  you check `EmitCompilerGeneratedFiles` output into source control, expect it to be renamed.
+
 ### Changed
 
 - The packages ask for the oldest dependency versions they work with instead of the newest.

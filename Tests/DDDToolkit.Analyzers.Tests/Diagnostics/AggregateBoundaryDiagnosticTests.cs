@@ -492,8 +492,8 @@ public class AggregateBoundaryDiagnosticTests
 
         result.ShouldHaveDiagnostic("DDD00021", at: "Buyer").Severity.Should().Be(DiagnosticSeverity.Warning);
         result.ShouldCompile();
-        result.ShouldHaveGenerated("Sample.Order.g.cs");
-        result.ShouldHaveGenerated("Sample.OrderId.g.cs");
+        result.ShouldHaveGenerated(Hint.Of("Sample.Order"));
+        result.ShouldHaveGenerated(Hint.Of("Sample.OrderId"));
     }
 
     [Fact]

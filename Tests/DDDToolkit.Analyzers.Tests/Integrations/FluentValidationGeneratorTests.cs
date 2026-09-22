@@ -35,9 +35,9 @@ public class FluentValidationGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.EmailAddress.FluentValidation.g.cs", "partial class Validator : global::FluentValidation.AbstractValidator<global::Sample.EmailAddress>");
-        result.ShouldContain("Sample.EmailAddress.FluentValidation.g.cs", "protected override bool Validate()");
-        result.ShouldContain("Sample.EmailAddress.FluentValidation.g.cs", "public global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure> Errors");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".FluentValidation"), "partial class Validator : global::FluentValidation.AbstractValidator<global::Sample.EmailAddress>");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".FluentValidation"), "protected override bool Validate()");
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".FluentValidation"), "public global::System.Collections.ObjectModel.ReadOnlyCollection<global::FluentValidation.Results.ValidationFailure> Errors");
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class FluentValidationGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldHaveGenerated("Sample.UserId.FluentValidation.g.cs");
+        result.ShouldHaveGenerated(Hint.Of("Sample.UserId", ".FluentValidation"));
 
         var emitted = result.Emit();
         emitted.Property(emitted.CallStatic("Sample.UserId", "Create", Guid.NewGuid())!, "IsValid").Should().Be(true);

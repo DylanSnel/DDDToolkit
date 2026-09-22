@@ -89,9 +89,9 @@ public class EntityInvariantTests
 
         result.ShouldCompile();
         result.ShouldContain(
-            "Sample.Basket.g.cs",
+            Hint.Of("Sample.Basket"),
             "private static readonly global::DDDToolkit.Invariants.IInvariant<global::Sample.Basket>[] __invariants =");
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeEmpty(),");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeEmpty(),");
     }
 
     [Fact]
@@ -147,8 +147,8 @@ public class EntityInvariantTests
         var result = Basket(MustNotBeEmpty + "\n" + MustNotBeHuge).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeEmpty(),");
-        result.ShouldContain("Sample.Basket.g.cs", "new global::Sample.Basket.MustNotBeHuge(),");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeEmpty(),");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::Sample.Basket.MustNotBeHuge(),");
 
         Fill(result, 5).GetInvariantViolations().Should().BeEmpty();
         Fill(result, 0).GetInvariantViolations().Should().ContainSingle()
@@ -290,17 +290,17 @@ public class EntityInvariantTests
         var result = Basket("").RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.Basket.g.cs", "__invariants", "an empty array is still an array to allocate");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "__invariants", "an empty array is still an array to allocate");
         result.ShouldNotContain(
-            "Sample.Basket.g.cs",
+            Hint.Of("Sample.Basket"),
             "ThrowInvariantViolations",
             "with nothing to collect there is nothing to throw, and both Ensure methods stay the bare call the compiler can erase");
         result.ShouldNotContain(
-            "Sample.Basket.g.cs",
+            Hint.Of("Sample.Basket"),
             "CollectChildInvariantViolations",
             "this basket holds no child entities, so there is no walk to write");
-        result.ShouldContain("Sample.Basket.g.cs", "public override void EnsureInvariants()");
-        result.ShouldContain("Sample.Basket.g.cs", "public override void EnsureOwnInvariants()");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "public override void EnsureInvariants()");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "public override void EnsureOwnInvariants()");
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public class EntityInvariantTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Line.g.cs", "new global::Sample.Line.MustCostSomething(),");
+        result.ShouldContain(Hint.Of("Sample.Line"), "new global::Sample.Line.MustCostSomething(),");
 
         var emitted = result.Emit();
         var id = emitted.CallStatic("Sample.ThingId", "CreateUnique")!;
@@ -421,10 +421,10 @@ public class EntityInvariantTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Order.g.cs", "new global::Sample.Order.MustHaveLines(),");
-        result.ShouldNotContain("Sample.Order.g.cs", "MustCostSomething");
-        result.ShouldContain("Sample.Line.g.cs", "new global::Sample.Line.MustCostSomething(),");
-        result.ShouldNotContain("Sample.Line.g.cs", "MustHaveLines");
+        result.ShouldContain(Hint.Of("Sample.Order"), "new global::Sample.Order.MustHaveLines(),");
+        result.ShouldNotContain(Hint.Of("Sample.Order"), "MustCostSomething");
+        result.ShouldContain(Hint.Of("Sample.Line"), "new global::Sample.Line.MustCostSomething(),");
+        result.ShouldNotContain(Hint.Of("Sample.Line"), "MustHaveLines");
     }
 
     // ------------------------------------------------------------------ the shape of the generated code
@@ -434,8 +434,8 @@ public class EntityInvariantTests
     {
         var result = Basket(MustNotBeEmpty).RunCore();
 
-        result.ShouldContain("Sample.Basket.g.cs", "CollectInvariantViolations(ref violations, out _);");
-        result.ShouldContain("Sample.Basket.g.cs", "CollectInvariantViolations(ref violations, out var seamFailure);");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "CollectInvariantViolations(ref violations, out _);");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "CollectInvariantViolations(ref violations, out var seamFailure);");
     }
 
     [Fact]
@@ -445,8 +445,8 @@ public class EntityInvariantTests
         // and one method having the answer is what stops them drifting apart.
         var result = Basket(MustNotBeEmpty).RunCore();
 
-        result.ShouldContain("Sample.Basket.g.cs", "GetInvariantViolations() => GetOwnInvariantViolations();");
-        result.ShouldContain("Sample.Basket.g.cs", "public override void EnsureInvariants() => EnsureOwnInvariants();");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "GetInvariantViolations() => GetOwnInvariantViolations();");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "public override void EnsureInvariants() => EnsureOwnInvariants();");
     }
 
     [Fact]
@@ -457,8 +457,8 @@ public class EntityInvariantTests
         var result = Basket(MustNotBeEmpty).RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.Basket.g.cs", "using ");
-        result.ShouldNotContain("Sample.Basket.g.cs", "System.Linq.Enumerable");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "using ");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "System.Linq.Enumerable");
     }
 
     [Fact]
@@ -467,7 +467,7 @@ public class EntityInvariantTests
         // Not observable through the public API, so it is read off the generated source: the list is
         // created where the first failure is added, and nowhere else.
         var result = Basket(MustNotBeEmpty).RunCore();
-        var source = result.Source("Sample.Basket.g.cs");
+        var source = result.Source(Hint.Of("Sample.Basket"));
 
         source.Should().Contain("? violations = null;");
         source.Should().Contain("violations ??= new global::System.Collections.Generic.List<global::DDDToolkit.Invariants.InvariantViolation>();");

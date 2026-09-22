@@ -44,8 +44,8 @@ public class EntityCollectionTests
         var root = Basket("").RunCore();
         var entity = Basket("", attribute: "Entity<ThingId>").RunCore();
 
-        root.ShouldContain("Sample.Basket.g.cs", "partial class Basket : global::DDDToolkit.BaseTypes.AggregateRoot<global::Sample.ThingId>");
-        entity.ShouldContain("Sample.Basket.g.cs", "partial class Basket : global::DDDToolkit.BaseTypes.Entity<global::Sample.ThingId>");
+        root.ShouldContain(Hint.Of("Sample.Basket"), "partial class Basket : global::DDDToolkit.BaseTypes.AggregateRoot<global::Sample.ThingId>");
+        entity.ShouldContain(Hint.Of("Sample.Basket"), "partial class Basket : global::DDDToolkit.BaseTypes.Entity<global::Sample.ThingId>");
 
         var rootType = root.Emit().Type("Sample.Basket");
         typeof(IAggregateRoot).IsAssignableFrom(rootType).Should().BeTrue();
@@ -58,7 +58,7 @@ public class EntityCollectionTests
         var result = Basket("").RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "protected Basket()");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "protected Basket()");
 
         var constructor = result.Emit().Type("Sample.Basket")
             .GetConstructor(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, System.Type.EmptyTypes);
@@ -78,8 +78,8 @@ public class EntityCollectionTests
         var result = Basket($"    public partial {declared} Lines {{ get; }}").RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", $"private readonly global::System.Collections.Generic.{backing}<int> _lines = new();");
-        result.ShouldContain("Sample.Basket.g.cs", "_lines.AsReadOnly();");
+        result.ShouldContain(Hint.Of("Sample.Basket"), $"private readonly global::System.Collections.Generic.{backing}<int> _lines = new();");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_lines.AsReadOnly();");
     }
 
     [Fact]
@@ -88,8 +88,8 @@ public class EntityCollectionTests
         var result = Basket("    public partial IReadOnlySet<int> Tags { get; }").RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "private readonly global::System.Collections.Generic.HashSet<int> _tags = new();");
-        result.ShouldContain("Sample.Basket.g.cs", "new global::System.Collections.ObjectModel.ReadOnlySet<int>(_tags)");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "private readonly global::System.Collections.Generic.HashSet<int> _tags = new();");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "new global::System.Collections.ObjectModel.ReadOnlySet<int>(_tags)");
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public class EntityCollectionTests
                 public partial IReadOnlyList<int> ABC { get; }
             """).RunCore();
 
-        result.ShouldContain("Sample.Basket.g.cs", "_lines");
-        result.ShouldContain("Sample.Basket.g.cs", "_aBC", "only the first character is lowered, the rest of the name is the author's");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_lines");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_aBC", "only the first character is lowered, the rest of the name is the author's");
         result.ShouldCompile();
     }
 
@@ -184,7 +184,7 @@ public class EntityCollectionTests
         var result = Basket($"    {accessibility} partial IReadOnlyList<int> Lines {{ get; }}").RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", accessibility + " partial global::System.Collections.Generic.IReadOnlyList<int> Lines =>");
+        result.ShouldContain(Hint.Of("Sample.Basket"), accessibility + " partial global::System.Collections.Generic.IReadOnlyList<int> Lines =>");
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class EntityCollectionTests
         var result = Basket("    public virtual partial IReadOnlyList<int> Lines { get; }").RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "public virtual partial global::System.Collections.Generic.IReadOnlyList<int> Lines =>");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "public virtual partial global::System.Collections.Generic.IReadOnlyList<int> Lines =>");
 
         var property = result.Emit().Type("Sample.Basket").GetProperty("Lines")!;
         property.GetMethod!.IsVirtual.Should().BeTrue();
@@ -210,7 +210,7 @@ public class EntityCollectionTests
             .RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "[global::Microsoft.EntityFrameworkCore.BackingField(nameof(_lines))]");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "[global::Microsoft.EntityFrameworkCore.BackingField(nameof(_lines))]");
     }
 
     [Fact]
@@ -220,8 +220,8 @@ public class EntityCollectionTests
         var result = Basket("    public partial IReadOnlyList<int> Lines { get; }").RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.Basket.g.cs", "BackingField");
-        result.ShouldNotContain("Sample.Basket.g.cs", "EntityFrameworkCore");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "BackingField");
+        result.ShouldNotContain(Hint.Of("Sample.Basket"), "EntityFrameworkCore");
     }
 
     // ------------------------------------------------------------------ awkward placements
@@ -281,7 +281,7 @@ public class EntityCollectionTests
         result.ShouldCompile();
         result.GeneratedSources.Select(source => source.HintName).Should().OnlyHaveUniqueItems();
         result.GeneratedSources.Select(source => source.HintName)
-            .Should().Contain(["Sample.Basket.g.cs", "Sample.Outer.Basket.g.cs"]);
+            .Should().Contain([Hint.Of("Sample.Basket"), Hint.Of("Sample.Outer.Basket")]);
 
         var emitted = result.Emit();
         emitted.HasType("Sample.Basket").Should().BeTrue();
@@ -311,8 +311,8 @@ public class EntityCollectionTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.GeneratedSources.Select(source => source.HintName).Should().Contain("Rootless.g.cs");
-        result.ShouldNotContain("Rootless.g.cs", "namespace ");
+        result.GeneratedSources.Select(source => source.HintName).Should().Contain(Hint.Of("Rootless"));
+        result.ShouldNotContain(Hint.Of("Rootless"), "namespace ");
 
         var emitted = result.Emit();
         var rootless = emitted.New("Rootless", emitted.CallStatic("RootlessId", "CreateUnique")!);
@@ -333,9 +333,9 @@ public class EntityCollectionTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.Basket.g.cs", "_lines");
-        result.ShouldContain("Sample.Basket.g.cs", "_tags");
-        result.ShouldContain("Sample.Basket.g.cs", "_history");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_lines");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_tags");
+        result.ShouldContain(Hint.Of("Sample.Basket"), "_history");
     }
 
     [Fact]

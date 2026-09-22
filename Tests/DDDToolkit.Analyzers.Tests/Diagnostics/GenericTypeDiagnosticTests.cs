@@ -130,7 +130,7 @@ public class GenericTypeDiagnosticTests
 
         result.ShouldNotHaveDiagnostic("DDD00006");
         result.ShouldCompile();
-        result.ShouldContain("Sample.Outer.InnerId.g.cs", "partial class Outer");
+        result.ShouldContain(Hint.Of("Sample.Outer.InnerId"), "partial class Outer");
     }
 
     [Fact]

@@ -4,7 +4,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.Analyzers.Generators;
+namespace DDDToolkit.Analyzers;
 
 /// <summary>
 /// Generates strongly typed ids from <c>[EntityId&lt;TValue&gt;]</c>.

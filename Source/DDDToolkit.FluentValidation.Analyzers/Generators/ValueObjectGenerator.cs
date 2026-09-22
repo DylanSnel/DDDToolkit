@@ -3,7 +3,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.FluentValidation.Analyzers.Generators;
+namespace DDDToolkit.FluentValidation.Analyzers;
 
 /// <summary>
 /// Gives every value object, single value object and (reference) entity id a nested partial

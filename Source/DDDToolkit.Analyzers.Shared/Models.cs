@@ -73,11 +73,22 @@ internal sealed record TypeDeclarationInfo(
            + "partial " + Keyword + " " + Name;
 
     /// <summary>
-    /// File name of the generated part. Built from the fully qualified name (not just namespace plus
-    /// name) so a nested type cannot collide with a top-level type of the same name in the same
-    /// namespace: two AddSource calls with one hint name throw inside the generator, which then
-    /// contributes nothing at all — for either type. Characters a file name cannot hold (the angle
-    /// brackets of a generic type) become underscores.
+    /// File name of the generated part: the type's own name, the suffix, and eight hex digits of a
+    /// hash of the fully qualified name, as in <c>Order.EntityFramework.1f3a9c2e.g.cs</c>.
+    /// <para>
+    /// The name has to be unique per generator: two AddSource calls with one hint name throw inside
+    /// the generator, which then contributes nothing at all, for either type. The fully qualified name
+    /// is unique, but it is also long, and Visual Studio puts every generated document at
+    /// <c>{project}\Generated\{generator assembly}\{generator type}\{hint name}</c>, a path it has to
+    /// be able to expand. With the namespace spelled out a second time in the file name, a module a few
+    /// folders deep went past the 260 character limit and the project failed to load. The hash keeps
+    /// the name unique (a nested type, the same name in two namespaces) at a fixed, small cost.
+    /// </para>
+    /// <para>
+    /// The hash is FNV-1a over the UTF-16 code units of the name, not <see cref="string.GetHashCode()"/>,
+    /// which differs between processes: a hint name has to be the same on every build and machine.
+    /// Characters a file name cannot hold become underscores.
+    /// </para>
     /// </summary>
     public string HintName(string suffix = "")
     {
@@ -85,13 +96,19 @@ internal sealed record TypeDeclarationInfo(
             ? FullyQualifiedName.Substring("global::".Length)
             : FullyQualifiedName;
 
-        var builder = new StringBuilder(qualified.Length + suffix.Length + 5);
+        var hash = 2166136261u;
         foreach (var character in qualified)
         {
-            builder.Append(char.IsLetterOrDigit(character) || character == '.' || character == '_' ? character : '_');
+            hash = unchecked((hash ^ character) * 16777619u);
         }
 
-        return builder.Append(suffix).Append(".g.cs").ToString();
+        var builder = new StringBuilder(Name.Length + suffix.Length + 20);
+        foreach (var character in Name)
+        {
+            builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '_');
+        }
+
+        return builder.Append(suffix).Append('.').Append(hash.ToString("x8")).Append(".g.cs").ToString();
     }
 }
 

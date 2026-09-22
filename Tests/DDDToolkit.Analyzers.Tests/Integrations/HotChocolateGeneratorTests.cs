@@ -28,7 +28,7 @@ public class HotChocolateGeneratorTests
             """);
 
         result.ShouldCompile();
-        result.ShouldContain("Sample.ProductId.HotChocolate.g.cs", "public sealed class ChangeTypeProvider : global::HotChocolate.Utilities.IChangeTypeProvider");
+        result.ShouldContain(Hint.Of("Sample.ProductId", ".HotChocolate"), "public sealed class ChangeTypeProvider : global::HotChocolate.Utilities.IChangeTypeProvider");
 
         var emitted = result.Emit();
         var provider = (IChangeTypeProvider)emitted.New("Sample.ProductId+ChangeTypeProvider");

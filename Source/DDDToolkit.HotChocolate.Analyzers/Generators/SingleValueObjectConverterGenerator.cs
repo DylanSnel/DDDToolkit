@@ -7,7 +7,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.HotChocolate.Analyzers.Generators;
+namespace DDDToolkit.HotChocolate.Analyzers;
 
 /// <summary>
 /// Generates a HotChocolate <c>IChangeTypeProvider</c> for every entity id and single value object so

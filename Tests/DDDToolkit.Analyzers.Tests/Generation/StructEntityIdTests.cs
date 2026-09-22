@@ -301,8 +301,8 @@ public class StructEntityIdTests
             public readonly partial record struct Sku;
             """).RunCore();
 
-        result.ShouldNotContain("Sample.Sku.g.cs", "CreateUnique");
-        result.ShouldNotContain("Sample.Sku.g.cs", "CreateSequential");
+        result.ShouldNotContain(Hint.Of("Sample.Sku"), "CreateUnique");
+        result.ShouldNotContain(Hint.Of("Sample.Sku"), "CreateSequential");
     }
 
     [Theory]
@@ -337,10 +337,10 @@ public class StructEntityIdTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.TicketId.g.cs", "static TicketId Parse(");
-        result.ShouldNotContain("Sample.TicketId.g.cs", "TryParse");
-        result.ShouldNotContain("Sample.TicketId.g.cs", "IParsable");
-        result.ShouldContain("Sample.TicketId.g.cs", "/// <summary>Prefix written by ToString().</summary>");
+        result.ShouldNotContain(Hint.Of("Sample.TicketId"), "static TicketId Parse(");
+        result.ShouldNotContain(Hint.Of("Sample.TicketId"), "TryParse");
+        result.ShouldNotContain(Hint.Of("Sample.TicketId"), "IParsable");
+        result.ShouldContain(Hint.Of("Sample.TicketId"), "/// <summary>Prefix written by ToString().</summary>");
 
         var emitted = result.Emit();
         var idType = emitted.Type("Sample.TicketId");

@@ -26,7 +26,7 @@ public class ClassEntityIdTests
     public void A_record_id_derives_from_EntityId()
     {
         var result = PersonId();
-        result.ShouldContain("Sample.PersonId.g.cs", "partial record PersonId : global::DDDToolkit.BaseTypes.EntityId<global::System.Guid>");
+        result.ShouldContain(Hint.Of("Sample.PersonId"), "partial record PersonId : global::DDDToolkit.BaseTypes.EntityId<global::System.Guid>");
 
         var emitted = result.Emit();
         var idType = emitted.Type("Sample.PersonId");
@@ -162,7 +162,7 @@ public class ClassEntityIdTests
             """).RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotContain("Sample.TicketId.g.cs", "static TicketId Parse(");
+        result.ShouldNotContain(Hint.Of("Sample.TicketId"), "static TicketId Parse(");
 
         var emitted = result.Emit();
         emitted.HasType("Sample.ValidTicketId").Should().BeTrue();

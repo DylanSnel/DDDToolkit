@@ -54,8 +54,8 @@ public class ImplicitEntityIdDiagnosticTests
         diagnostic.GetMessage().Should().Contain("[AggregateRoot<OrderId>]");
 
         // The explicit id is untouched; only the aggregate is refused.
-        result.ShouldHaveGenerated("Sample.OrderId.g.cs");
-        result.GeneratedSources.Should().NotContain(source => source.HintName == "Sample.Order.g.cs");
+        result.ShouldHaveGenerated(Hint.Of("Sample.OrderId"));
+        result.GeneratedSources.Should().NotContain(source => source.HintName == Hint.Of("Sample.Order"));
     }
 
     [Fact]

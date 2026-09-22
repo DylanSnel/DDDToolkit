@@ -110,8 +110,8 @@ public class EntityIdDiagnosticTests
         diagnostic.GetMessage().Should().Contain("readonly");
 
         // DDD00004 is advice, not a refusal: the id is generated and works.
-        result.ShouldHaveGenerated("Sample.OrderId.g.cs");
-        result.ShouldContain("Sample.OrderId.g.cs", "public static OrderId CreateUnique()");
+        result.ShouldHaveGenerated(Hint.Of("Sample.OrderId"));
+        result.ShouldContain(Hint.Of("Sample.OrderId"), "public static OrderId CreateUnique()");
         result.ShouldCompile();
 
         var emitted = result.Emit();

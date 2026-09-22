@@ -139,18 +139,18 @@ public class AllGeneratorsTogetherTests
     {
         var hintNames = Run().GeneratedSources.Select(source => source.HintName).ToList();
 
-        hintNames.Should().Contain("Shop.ProductId.g.cs");
-        hintNames.Should().Contain("Shop.InvoiceId.g.cs", "the id generated from [AggregateRoot<Guid>] is emitted like any other");
-        hintNames.Should().Contain("Shop.InvoiceId.Converter.g.cs");
-        hintNames.Should().Contain("Shop.InvoiceId.HotChocolate.g.cs");
-        hintNames.Should().Contain("Shop.User.g.cs");
-        hintNames.Should().Contain("Shop.EmailAddress.g.cs");
-        hintNames.Should().Contain("Shop.PersonName.g.cs");
-        hintNames.Should().Contain("Shop.ProductId.Converter.g.cs");
-        hintNames.Should().Contain("Shop.Order.EntityFramework.g.cs");
-        hintNames.Should().Contain("Shop.PersonName.EntityFramework.g.cs");
-        hintNames.Should().Contain("Shop.EmailAddress.FluentValidation.g.cs");
-        hintNames.Should().Contain("Shop.ProductId.HotChocolate.g.cs");
+        hintNames.Should().Contain(Hint.Of("Shop.ProductId"));
+        hintNames.Should().Contain(Hint.Of("Shop.InvoiceId"), "the id generated from [AggregateRoot<Guid>] is emitted like any other");
+        hintNames.Should().Contain(Hint.Of("Shop.InvoiceId", ".Converter"));
+        hintNames.Should().Contain(Hint.Of("Shop.InvoiceId", ".HotChocolate"));
+        hintNames.Should().Contain(Hint.Of("Shop.User"));
+        hintNames.Should().Contain(Hint.Of("Shop.EmailAddress"));
+        hintNames.Should().Contain(Hint.Of("Shop.PersonName"));
+        hintNames.Should().Contain(Hint.Of("Shop.ProductId", ".Converter"));
+        hintNames.Should().Contain(Hint.Of("Shop.Order", ".EntityFramework"));
+        hintNames.Should().Contain(Hint.Of("Shop.PersonName", ".EntityFramework"));
+        hintNames.Should().Contain(Hint.Of("Shop.EmailAddress", ".FluentValidation"));
+        hintNames.Should().Contain(Hint.Of("Shop.ProductId", ".HotChocolate"));
         hintNames.Should().Contain("ConverterExtensions.g.cs");
         hintNames.Should().Contain("BindingExtensions.g.cs");
     }

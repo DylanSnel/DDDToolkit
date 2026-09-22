@@ -3,7 +3,7 @@ using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 
-namespace DDDToolkit.EntityFramework.Analyzers.Generators;
+namespace DDDToolkit.EntityFramework.Analyzers;
 
 /// <summary>
 /// Marks every <c>[ValueObject]</c> record and its always-valid twin as an EF Core complex type, so its
