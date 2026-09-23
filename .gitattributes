@@ -2,3 +2,7 @@
 # line executes, with "bash\r: No such file or directory", so keep them LF regardless of the
 # contributor's core.autocrlf.
 *.sh text eol=lf
+
+# Exported Supabase migrations are compared byte for byte (after line endings) with what the export
+# generates, and the export writes LF on every platform. Keep them LF in the repository as well.
+**/supabase/migrations/*.sql text eol=lf

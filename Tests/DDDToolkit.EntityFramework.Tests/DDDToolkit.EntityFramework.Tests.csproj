@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
   <ItemGroup>

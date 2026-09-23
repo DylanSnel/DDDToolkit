@@ -12,9 +12,14 @@ ModularMonolith/
     DDDToolkit.Examples.Ordering.Contracts   the published surface: OrderId and OrderPlacedV1
     DDDToolkit.Examples.Ordering             the aggregate, the value object, the domain event, the context
       Invariants/                            a file per named rule, each another part of the entity
+      Migrations/                            Ordering's Entity Framework migrations, for Postgres
   Shipping/
     DDDToolkit.Examples.Shipping             consumes Ordering's contract and nothing else
-  DDDToolkit.Examples.Host                   the composition root and four HTTP endpoints
+      Migrations/                            Shipping's Entity Framework migrations, for Postgres
+  DDDToolkit.Examples.Host                   the composition root, four HTTP endpoints, export-supabase
+  supabase/
+    config.toml                              a local Supabase project, from supabase init
+    migrations/                              both modules' migrations, exported for the Supabase CLI
 ```
 
 What happens when you place an order:
@@ -45,8 +50,35 @@ Every refusal is a 422 carrying the code of the rule that broke, which is what a
 its own buys you, and each of them is one question asked of the order: the root is the consistency
 boundary, so it answers for its lines as well. No `DbContext` is involved in the asking.
 
-Two warnings on start-up are expected and harmless: SQLite has no schemas, so the `ddd` schema the
-outbox and the inbox ask for is dropped. On SQL Server or Postgres you get the schema.
+This runs on SQLite, one file per module next to the built binary, created from the model on start-up.
+SQLite has no schemas, so the `ordering`, `shipping` and `ddd` schemas are dropped there. The host
+turns off the warning that would say so on every start.
+
+### On Supabase
+
+The same host runs on Postgres when it is given `ConnectionStrings:Supabase`. The modules then share
+one database, as they would on one Supabase project, each in its own schema with its own migration
+history. The migrations are Supabase's to apply: the host only checks that none is pending and refuses
+to start otherwise.
+
+```bash
+cd Examples/ModularMonolith
+supabase start          # a local Supabase in Docker; applies supabase/migrations
+dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
+```
+
+The `supabase` launch profile points at the local database on port 54322. After changing a model,
+scaffold the migration in the module that owns it and export it:
+
+```bash
+dotnet ef migrations add AddGiftWrap --project Ordering/DDDToolkit.Examples.Ordering --startup-project DDDToolkit.Examples.Host --output-dir Migrations
+dotnet run --project DDDToolkit.Examples.Host -- export-supabase
+supabase migration up   # or: supabase db reset, to start over
+```
+
+`Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` fails when the second step was forgotten.
+See [Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the export writes
+and why.
 
 ### What each feature is shown by
 
@@ -68,6 +100,8 @@ outbox and the inbox ask for is dropped. On SQL Server or Postgres you get the s
 | The inbox and an idempotent consumer | `Shipping/.../BookShipment.cs`, `ShippingContext.cs` |
 | Conventions, generated converters, outbox, inbox | `Ordering/.../OrderingContext.cs`, `Shipping/.../ShippingContext.cs` |
 | Optimistic concurrency as a 409 | `Host/Endpoints.cs` |
+| A schema and a migration history per module in one database | `OrderingContext.cs`, `ShippingContext.cs` |
+| Entity Framework migrations applied by Supabase | `supabase/migrations`, `Host/Program.cs` (`export-supabase`), `Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
 
 What it does not show: GraphQL, Newtonsoft, FluentValidation validators, pgmq, and upcasting an older

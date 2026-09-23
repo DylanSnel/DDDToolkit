@@ -3,6 +3,8 @@ using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Shipping.Converters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Shipping;
 
@@ -20,16 +22,45 @@ namespace DDDToolkit.Examples.Shipping;
 /// </remarks>
 public sealed class ShippingContext(DbContextOptions<ShippingContext> options) : DbContext(options)
 {
+    /// <summary>
+    /// The schema Shipping's tables and migration history live in, next to Ordering's when the two share
+    /// one Postgres database.
+    /// </summary>
+    public const string Schema = "shipping";
+
     public DbSet<Shipment> Shipments => Set<Shipment>();
 
-    // Database tells the toolkit which provider this is, so the timestamp column gets the
-    // provider's own instant type rather than SQLite's lowest common denominator.
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventInbox(Database);
+    /// <summary>Postgres, with the migration history in <see cref="Schema"/>.</summary>
+    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
+        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema(Schema);
+
+        // Database tells the toolkit which provider this is, so the timestamp column gets the
+        // provider's own instant type rather than SQLite's lowest common denominator.
+        modelBuilder.AddDomainEventInbox(Database);
+    }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
         configurationBuilder.AddOrderingContractsConverters();
         configurationBuilder.AddShippingConverters();
+    }
+}
+
+/// <summary>
+/// How <c>dotnet ef migrations add</c> and the Supabase export build a <see cref="ShippingContext"/>:
+/// on Postgres, and pointing nowhere, because neither of them opens a connection.
+/// </summary>
+public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<ShippingContext>
+{
+    public ShippingContext CreateDbContext(string[] args)
+    {
+        var options = new DbContextOptionsBuilder<ShippingContext>();
+        ShippingContext.UsePostgres(options, "Host=unused");
+        return new ShippingContext(options.Options);
     }
 }
