@@ -13,6 +13,11 @@
     <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
   </PropertyGroup>
 
+  <!-- The module maps its own HTTP endpoints, so that every host running it serves the same API. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <!--
     The one reference that matters: Ordering's CONTRACTS, never Ordering itself. Add
     DDDToolkit.Examples.Ordering here and Shipping could hold an Order, query one, and save into

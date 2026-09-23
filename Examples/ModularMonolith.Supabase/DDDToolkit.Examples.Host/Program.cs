@@ -1,8 +1,15 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Examples.Host;
+using DDDToolkit.Examples.Catalog;
+using DDDToolkit.Examples.Catalog.Api;
+using DDDToolkit.Examples.Inventory;
+using DDDToolkit.Examples.Inventory.Api;
 using DDDToolkit.Examples.Ordering;
+using DDDToolkit.Examples.Ordering.Api;
+using DDDToolkit.Examples.Payments;
+using DDDToolkit.Examples.Payments.Api;
 using DDDToolkit.Examples.Shipping;
+using DDDToolkit.Examples.Shipping.Api;
 using DDDToolkit.Mediator;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes
@@ -19,13 +26,18 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 // Mediator. Everything else about storage and messaging is each module's own business.
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
-// Two ways to run. With no connection string, each module gets a SQLite file of its own: two databases
+// Two ways to run. With no connection string, each module gets a SQLite file of its own: five databases
 // rather than one is the cheapest way to be sure no query and no transaction ever crosses the boundary.
-// With ConnectionStrings:Supabase (the "supabase" launch profile), both modules share one Postgres
+// With ConnectionStrings:Supabase (the "supabase" launch profile), the modules share one Postgres
 // database, as they would on one Supabase project, each in a schema of its own.
 var supabase = builder.Configuration.GetConnectionString("Supabase");
 
+// The whole shop in one process. No module names another here or anywhere: each one says what it
+// publishes and what it listens to, and the module sink carries the messages between them.
+builder.Services.AddCatalogModule(supabase);
 builder.Services.AddOrderingModule(supabase);
+builder.Services.AddInventoryModule(supabase);
+builder.Services.AddPaymentsModule(supabase);
 builder.Services.AddShippingModule(supabase);
 
 var app = builder.Build();
@@ -35,7 +47,12 @@ var app = builder.Build();
 // On SQLite no module registers any, and the modules create their files themselves.
 await app.Services.EnsureSupabaseMigrationsAppliedAsync();
 
+// Each module brings its own endpoints, so a host that runs a different selection of modules serves
+// exactly their part of the API.
+app.MapCatalogEndpoints();
 app.MapOrderingEndpoints();
+app.MapInventoryEndpoints();
+app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
 
 await app.RunAsync();

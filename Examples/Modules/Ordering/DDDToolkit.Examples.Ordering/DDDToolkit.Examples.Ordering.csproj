@@ -6,17 +6,28 @@
     <IsPackable>false</IsPackable>
     <!-- Names the generated AddOrderingConverters method. See docs/getting-started.md. -->
     <DDD_Module>Ordering</DDD_Module>
+    <!-- Ordering now reads three other modules' contracts, so it holds the same line Shipping does. -->
+    <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
   </PropertyGroup>
+
+  <!-- The module maps its own HTTP endpoints, so that every host running it serves the same API. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Domain events are published through Mediator, so they implement its INotification. Abstractions
          only: the Mediator generator belongs in the composition root, which is the host. -->
     <PackageReference Include="Mediator.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.Examples.Ordering.Contracts\DDDToolkit.Examples.Ordering.Contracts.csproj" />
+    <!-- The contracts Ordering reacts to: prices, reservations, payments. Contracts only, never a module. -->
+    <ProjectReference Include="..\..\Catalog\DDDToolkit.Examples.Catalog.Contracts\DDDToolkit.Examples.Catalog.Contracts.csproj" />
+    <ProjectReference Include="..\..\Inventory\DDDToolkit.Examples.Inventory.Contracts\DDDToolkit.Examples.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\..\Payments\DDDToolkit.Examples.Payments.Contracts\DDDToolkit.Examples.Payments.Contracts.csproj" />
+    <ProjectReference Include="..\..\SharedKernel\DDDToolkit.Examples.SharedKernel\DDDToolkit.Examples.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
   </ItemGroup>

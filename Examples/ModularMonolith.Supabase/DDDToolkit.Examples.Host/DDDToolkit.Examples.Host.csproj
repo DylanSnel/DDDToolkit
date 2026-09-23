@@ -41,7 +41,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog\DDDToolkit.Examples.Catalog.csproj" />
     <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory\DDDToolkit.Examples.Inventory.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
     <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
     <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->

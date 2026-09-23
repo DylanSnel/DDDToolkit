@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <DDD_Module>InventoryContracts</DDD_Module>
+  </PropertyGroup>
+
+  <!--
+    A contract may name another module's published types. These events are about orders, so they carry
+    Ordering's OrderId, and that makes Ordering's contracts, and nothing else of Ordering, a reference.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Ordering\DDDToolkit.Examples.Ordering.Contracts\DDDToolkit.Examples.Ordering.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,10 +1,28 @@
 @host = http://localhost:5080
 
+### What the shop sells. Catalog listed these on first start, and Ordering learned their prices from the
+### ProductListedV1 messages a second later: it never asks Catalog anything at checkout.
+GET {{host}}/products
+
+### What is on the shelf. Two mugs only, on purpose.
+GET {{host}}/stock
+
 ### A malformed address is refused, field by field, without anything throwing.
 POST {{host}}/orders
 Content-Type: application/json
 
 { "street": "", "city": "Utrecht", "postalCode": "nope", "lines": [] }
+
+### A SKU nobody sells: 400 from the domain service that prices the lines, before an order exists.
+POST {{host}}/orders
+Content-Type: application/json
+
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "TEAPOT", "quantity": 1 }]
+}
 
 ### A good address, a line with no SKU. 422 before an order exists in the database at all: the handler
 ### builds the aggregate, asks it what that broke, and refuses. The order answered for its line, and
@@ -19,7 +37,21 @@ Content-Type: application/json
   "lines": [{ "sku": "   ", "quantity": 1 }]
 }
 
-### A good one. Note the ORD_ prefix on the id that comes back.
+### The same SKU twice: 422 again, but the code is CheckInvariants, because that rule stayed a seam.
+### Only the order can see both lines, which is why the rule is the root's rather than the line's, and
+### it is the same one call that found the line's rule above. The boundary answers for both.
+POST {{host}}/orders
+Content-Type: application/json
+
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "MUG", "quantity": 1 }, { "sku": "MUG", "quantity": 1 }]
+}
+
+### A good one. Note the ORD_ prefix on the id that comes back, and the status: Placed. Inventory and
+### Payments have not answered yet.
 # @name placed
 POST {{host}}/orders
 Content-Type: application/json
@@ -31,30 +63,59 @@ Content-Type: application/json
   "lines": [{ "sku": "COFFEE-1KG", "quantity": 2 }]
 }
 
-### A second later, Shipping has booked against it. It never saw an Order.
+### A second or two later: stock reserved, payment taken, Confirmed. The id parses with or without its
+### prefix.
+GET {{host}}/orders/{{placed.response.body.id}}
+
+### Shipping booked a van on the confirmation. It never saw an Order.
 GET {{host}}/shipments
 
-### Amending the order bumps Version. Two of these at once gives one caller a 409.
-POST {{host}}/orders/{{placed.response.body.id}}/lines
+### Cancelling a confirmed order: 422, ORDER_ALREADY_CONFIRMED. Cancel did what it was told, the order
+### was asked whether the result may exist, and a named rule said no. Nothing was saved.
+POST {{host}}/orders/{{placed.response.body.id}}/cancel
 Content-Type: application/json
 
-{ "sku": "MUG", "quantity": 1 }
+{ "reason": "Changed my mind." }
 
-### The same on an order that is already in the database: 422, and the code is the child entity's own.
-### The handler asked the order, the order asked its lines, and the body names the line that is at
-### fault, because the violation carries its id. The save would have stopped it either way.
-POST {{host}}/orders/{{placed.response.body.id}}/lines
+### More than the payment provider accepts. Inventory reserves the grinder, Payments is refused, Ordering
+### cancels, and Inventory puts the grinder back: the compensating half of the process.
+# @name declined
+POST {{host}}/orders
 Content-Type: application/json
 
-{ "sku": "   ", "quantity": 1 }
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "GRINDER", "quantity": 1 }]
+}
 
-### The same SKU twice: 422 again, but the code is CheckInvariants, because that rule stayed a seam.
-### Only the order can see both lines, which is why the rule is the root's rather than the line's, and
-### it is the same one call that found the line's rule above. The boundary answers for both.
-POST {{host}}/orders/{{placed.response.body.id}}/lines
+### Cancelled, with the provider's refusal in Payments' words.
+GET {{host}}/orders/{{declined.response.body.id}}
+
+### Three mugs of two: Inventory refuses, and nothing is set aside, not even the two it had.
+# @name refused
+POST {{host}}/orders
 Content-Type: application/json
 
-{ "sku": "MUG", "quantity": 1 }
+{
+  "street": "Oudegracht 1",
+  "city": "Utrecht",
+  "postalCode": "3511 AA",
+  "lines": [{ "sku": "MUG", "quantity": 3 }]
+}
 
-### The id parses with or without its prefix.
-GET {{host}}/orders/{{placed.response.body.id}}
+GET {{host}}/orders/{{refused.response.body.id}}
+
+### Every payment and why: one captured, one declined, one voided because its order was cancelled first.
+GET {{host}}/payments
+
+### The grinder is available again, the coffee is reserved.
+GET {{host}}/stock
+
+### Repricing bumps the product's Version. Two of these at once gives one caller a 409. Ordering hears
+### about the new price a second later; orders already placed keep the price they were placed at.
+PUT {{host}}/products/MUG/price
+Content-Type: application/json
+
+{ "price": 9.50 }

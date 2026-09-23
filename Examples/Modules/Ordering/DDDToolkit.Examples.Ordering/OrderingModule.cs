@@ -1,6 +1,9 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Catalog.Contracts;
+using DDDToolkit.Examples.Inventory.Contracts;
 using DDDToolkit.Examples.Ordering.Contracts;
+using DDDToolkit.Examples.Payments.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,14 +68,37 @@ public static class OrderingModule
                 placed.OrderId,
                 placed.ShipTo.City,
                 placed.ShipTo.PostalCode,
-                placed.LineCount));
+                [.. placed.Lines.Select(line => new OrderedLineV1(line.Sku, line.Quantity))],
+                placed.Total.Amount,
+                placed.Total.Currency));
+            outbox.PublishAs<OrderConfirmed, OrderConfirmedV1>(confirmed =>
+                new OrderConfirmedV1(confirmed.OrderId, confirmed.ShipTo.City, confirmed.ShipTo.PostalCode));
+            outbox.PublishAs<OrderCancelled, OrderCancelledV1>(cancelled =>
+                new OrderCancelledV1(cancelled.OrderId, cancelled.Reason));
 
             outbox.SendToModules();
 
             // Sinks normally replace the in-process delegate. This asks for both: the local handler
-            // (OrderPlacedLog) sees the domain event, the other modules see the contract.
+            // (OrderLog) sees the domain events, the other modules see the contract.
             outbox.AlsoDispatchInProcess = true;
         }));
+
+        // What Ordering reads from the others. The inbox needs the contract types to turn a delivered
+        // message back into the record a handler asked for.
+        services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts
+            .RegisterFromAssemblyContaining<ProductListedV1>()
+            .RegisterFromAssemblyContaining<StockReservedV1>()
+            .RegisterFromAssemblyContaining<PaymentSucceededV1>()));
+
+        // Every policy in Application/IntegrationEvents/, each under Ordering's own inbox. Catalog, Inventory and Payments do
+        // not know Ordering listens; they publish, and this is where Ordering signs up.
+        services.AddModuleIntegrationEvents<OrderingContext>(module => module
+            .Handle<ProductListedV1, RecordListedPrice>()
+            .Handle<ProductPriceChangedV1, RecordChangedPrice>()
+            .Handle<StockReservedV1, RecordStockReservation>()
+            .Handle<StockReservationFailedV1, CancelWithoutStock>()
+            .Handle<PaymentSucceededV1, RecordPayment>()
+            .Handle<PaymentFailedV1, CancelWithoutPayment>());
 
         // Delivery happens on this poll, not at commit. Ordering's transaction has already committed by
         // then, which is exactly why a failing consumer cannot refuse an order.

@@ -1080,6 +1080,6 @@ locally and `Check` in CI, and `supabase/migrations` holds the committed files. 
 - [Diagnostics](diagnostics.md) for the build errors the generators report.
 
 The runnable version of everything here is `Examples/ModularMonolith.Supabase`: the host's `Program.cs` shows
-the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/OrderingContext.cs` shows the
+the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs` shows the
 conventions and the generated converters, and the host's `Endpoints.cs` shows the conflict catch
 block. Its `supabase/` folder and the `Migrations` folders in both modules show the Supabase export.

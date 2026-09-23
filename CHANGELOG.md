@@ -43,6 +43,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - The examples' modules moved to `Examples/Modules`, apart from any host, and the modular monolith's
   host and its `supabase/` project to `Examples/ModularMonolith.Supabase`. More hosts over the same
   modules follow.
+- The example is now a shop in five modules: Catalog, Ordering, Inventory, Payments and Shipping.
+  An order is confirmed once Inventory has reserved the stock and Payments has taken the money, and
+  cancelled, with the other modules undoing their part, when either says no. It shows domain services
+  (`OrderPricer`, `StockAllocator`), an anti-corruption layer in front of a payment provider, a read
+  model of another module's prices, a shared kernel (`Money`), policies that tolerate messages arriving
+  out of order, and every module with an outbox and an inbox in its own schema of one Supabase
+  database. Each module is laid out as `Domain/Aggregates/<Aggregate>/{Entities,Events,Invariants}`,
+  `Domain/ValueObjects`, `Domain/Services`, `Application`, `Infrastructure` and `Api`, and maps its
+  own endpoints. `Order.AddLine` is gone: an order being paid for cannot change its lines; it can be
+  cancelled instead.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed

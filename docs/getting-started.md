@@ -1,9 +1,10 @@
 # Getting started
 
 Every piece of code on this page is taken from a project that builds and runs:
-[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase). It is two modules, `Ordering` and
-`Shipping`, in one host, and it is small enough to read in a sitting. Paths in this page point at the
-real file, so you can go and look at the rest of it.
+[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase). It is a small shop in five
+modules, `Catalog`, `Ordering`, `Inventory`, `Payments` and `Shipping`, run in one host. This page
+follows `Ordering` and the one module that reacts to it last, `Shipping`; the others use the same
+pieces. Paths in this page point at the real file, so you can go and look at the rest of it.
 
 ## Install
 
@@ -63,7 +64,7 @@ generates the identifier with it:
 public partial class OrderLine    // also generates OrderLineId
 ```
 
-*[`Ordering/OrderLine.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderLine.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs)*
 
 Use the short form for the identifier nobody outside the aggregate mentions, and the explicit form for
 the identifier everybody does. `OrderId` is written out because Shipping stores one, the HTTP API
@@ -80,20 +81,35 @@ public partial class Order
     {
         ShipTo = shipTo;
         _lines.AddRange(lines);
+        Status = OrderStatus.Placed;
+        Total = _lines.Aggregate(Money.Zero(), (total, line) => total.Plus(line.Subtotal));
 
-        RaiseDomainEvent(new OrderPlaced(id, shipTo, _lines.Count));
+        RaiseDomainEvent(new OrderPlaced(id, shipTo, /* the lines */, Total));
     }
 
     public Address ShipTo { get; private set; }
 
     public partial IReadOnlyList<OrderLine> Lines { get; }
 
-    public void AddLine(string sku, int quantity)
-        => _lines.Add(new OrderLine(OrderLineId.CreateSequential(), sku, quantity));
+    public Money Total { get; private set; }
+
+    public OrderStatus Status { get; private set; }
+
+    public void Cancel(string reason)
+    {
+        if (Status is OrderStatus.Cancelled)
+        {
+            return;
+        }
+
+        Status = OrderStatus.Cancelled;
+        CancellationReason = reason;
+        RaiseDomainEvent(new OrderCancelled(Id, reason));
+    }
 }
 ```
 
-*[`Ordering/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Order.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
 
 The generator supplies the `AggregateRoot<OrderId>` base class, a constructor for your persistence
 framework, a private `_lines` list, the read-only `Lines` implementation, and a `Version` for
@@ -119,7 +135,7 @@ partial void CheckInvariants()
 }
 ```
 
-*[`Ordering/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Order.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
 
 A rule that deserves a name, or a code a caller can branch on, becomes a type of its own, nested
 inside the entity it is about so that it can read private state and so the generator can find it:
@@ -137,7 +153,7 @@ public partial class Order
 }
 ```
 
-*[`Ordering/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Invariants/MustHaveLines.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs)*
 
 An interceptor runs both before every save that writes the entity, child entities included, so they
 are a guarantee rather than a check somebody remembered to call. `GetInvariantViolations()` asks the
@@ -171,7 +187,7 @@ public partial record Address
 }
 ```
 
-*[`Ordering/Address.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Address.cs)*
+*[`Ordering/Domain/ValueObjects/Address.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/ValueObjects/Address.cs)*
 
 Equality is generated across the properties. Setters must be `protected init`, which stops callers
 using `with` to produce an invalid copy ([DDD00010](diagnostics.md#ddd00010),
@@ -204,7 +220,7 @@ app.MapPost("/orders", async (PlaceOrder body, OrderingContext orders, Cancellat
 });
 ```
 
-*[`Host/Endpoints.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Endpoints.cs)*
+*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)*
 
 The caller gets a 400 it can read field by field, with `shipTo.Street` and `shipTo.PostalCode` naming
 the fields they filled in. Nothing was thrown. See
@@ -231,7 +247,7 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 }
 ```
 
-*[`Ordering/OrderingContext.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingContext.cs)*
+*[`Ordering/Infrastructure/Persistence/OrderingContext.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs)*
 
 `AddDDDToolkitConventions` is the same in every context. `Add{Module}Converters` is generated once per
 assembly that declares identifiers or single value objects, so call one per assembly: this context maps
@@ -269,9 +285,12 @@ catch (ConcurrencyConflictException conflict)
 }
 ```
 
-*[`Host/Endpoints.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Endpoints.cs)*
+*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)*
 
 There is no safe generic answer for that catch block, which is why the toolkit does not retry for you.
+In the example the conflict is a real one: a customer cancelling an order at the same moment Payments
+reports the money taken. Whoever saves second is refused, and an integration event handler that is
+refused is simply retried by the outbox.
 
 ## Draw the module boundary
 
@@ -306,7 +325,11 @@ speeds:
 
 ```csharp
 [IntegrationEvent("ordering.order-placed", Version = 1)]
-public sealed record OrderPlacedV1(OrderId OrderId, string City, string PostalCode, int LineCount);
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 ```
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
@@ -318,8 +341,9 @@ modules. It does not say which modules those are:
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
 {
     outbox.RegisterEventsFromAssemblyContaining<Order>();
-    outbox.PublishAs<OrderPlaced, OrderPlacedV1>(placed => new OrderPlacedV1(
-        placed.OrderId, placed.ShipTo.City, placed.ShipTo.PostalCode, placed.LineCount));
+    outbox.PublishAs<OrderPlaced, OrderPlacedV1>(placed => new OrderPlacedV1(/* ... */));
+    outbox.PublishAs<OrderConfirmed, OrderConfirmedV1>(confirmed =>
+        new OrderConfirmedV1(confirmed.OrderId, confirmed.ShipTo.City, confirmed.ShipTo.PostalCode));
     outbox.SendToModules();
     outbox.AlsoDispatchInProcess = true;
 }));
@@ -333,13 +357,20 @@ services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.F
 the row afterwards, converts it, and hands it to the other modules. Ordering has already committed by
 then, which is why a failing consumer cannot refuse an order.
 
+In the example, Inventory and Payments pick up `OrderPlacedV1`, answer with contracts of their own, and
+Ordering confirms the order once both have said yes, or cancels it when either says no. That is the
+same mechanism in the other direction; `Shipping` waits for `OrderConfirmedV1`.
+
 The host only switches the modules on, and sets the one thing that is the host's: how domain events that
 stay inside a module are published.
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
+builder.Services.AddCatalogModule(supabase);
 builder.Services.AddOrderingModule(supabase);
+builder.Services.AddInventoryModule(supabase);
+builder.Services.AddPaymentsModule(supabase);
 builder.Services.AddShippingModule(supabase);
 ```
 
@@ -349,9 +380,9 @@ builder.Services.AddShippingModule(supabase);
 
 ```csharp
 [IntegrationEventConsumer("shipping.booker")]
-public sealed class BookShipment(ShippingContext context) : IIntegrationEventHandler<OrderPlacedV1>
+public sealed class BookShipment(ShippingContext context) : IIntegrationEventHandler<OrderConfirmedV1>
 {
-    public Task HandleAsync(OrderPlacedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    public Task HandleAsync(OrderConfirmedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
         context.Shipments.Add(new Shipment(
             ShipmentId.CreateSequential(), contract.OrderId, $"{contract.PostalCode}, {contract.City}", message.OccurredAt));
@@ -361,7 +392,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 }
 ```
 
-*[`Shipping/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/BookShipment.cs)*
+*[`Shipping/Application/IntegrationEvents/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/IntegrationEvents/BookShipment.cs)*
 
 Three things there are the point. It is typed on the contract, never on Ordering's domain event, which
 is what keeps Shipping free of a reference to Ordering's domain. It does not call `SaveChanges`: the
@@ -374,9 +405,9 @@ inbox:
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options =>
-    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>()));
+    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderConfirmedV1>()));
 
-services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderPlacedV1, BookShipment>());
+services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderConfirmedV1, BookShipment>());
 ```
 
 *[`Shipping/ShippingModule.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/ShippingModule.cs)*
@@ -384,10 +415,16 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<Ord
 and maps the inbox table in its context:
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventInbox();
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+    => modelBuilder.AddDomainEventInbox(Database, schema: Schema);
 ```
 
-*[`Shipping/ShippingContext.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/ShippingContext.cs)*
+*[`Shipping/Infrastructure/Persistence/ShippingContext.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Infrastructure/Persistence/ShippingContext.cs)*
+
+`schema: Schema` puts the table in the module's own schema instead of the toolkit's default `ddd`. It
+matters as soon as modules share a database, as they do on one Supabase project: every module that
+consumes needs an inbox and every module that publishes an outbox, and in one shared `ddd` schema they
+would all be the same two tables.
 
 See [Integration events](integration-events.md).
 
@@ -396,11 +433,16 @@ See [Integration events](integration-events.md).
 `DDDToolkit.Testing` acts on an aggregate and asserts on what it raised, with no database anywhere:
 
 ```csharp
-AggregateScenario.Given(Place())
-    .WhenThrows<ArgumentOutOfRangeException>(order => order.AddLine("MUG", 0));
+var scenario = AggregateScenario.Given(Place());
+scenario.IgnorePendingEvents();
+
+scenario.When(order => order.Cancel("No stock.")).RaisedExactly<OrderCancelled>();
+scenario.When(order => order.Cancel("Changed my mind.")).RaisedNothing();
 ```
 
-`WhenThrows` asserts both halves: the exception came out, and nothing was raised on the way out.
+Each `When` is judged on what it raised itself, so the second line says what matters about a second
+cancellation: nothing happens. `WhenThrows` is the same for a call that must fail, and asserts both
+halves: the exception came out, and nothing was raised on the way out.
 
 The aggregate is what calls `new OrderPlaced(...)`, so a test cannot pass an initialiser for the
 timestamp. `DomainEventClock` replaces the clock the event reads, for the current asynchronous flow

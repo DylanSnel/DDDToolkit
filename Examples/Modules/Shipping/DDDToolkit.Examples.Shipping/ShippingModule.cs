@@ -57,7 +57,7 @@ public static class ShippingModule
 
         // Shipping signs up as a consumer, with its own inbox. Ordering never names Shipping: it only says
         // SendToModules(), and every module registered here is offered every message.
-        services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderPlacedV1, BookShipment>());
+        services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderConfirmedV1, BookShipment>());
 
         return services;
     }

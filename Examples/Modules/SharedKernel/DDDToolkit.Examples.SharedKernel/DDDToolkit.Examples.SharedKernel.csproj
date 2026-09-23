@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!--
+      Names the generated converter method, if this assembly ever declares a type that needs one. Money is
+      a multi-property value object, which Entity Framework stores inline as a complex type, so today it
+      does not.
+    -->
+    <DDD_Module>SharedKernel</DDD_Module>
+  </PropertyGroup>
+
+  <!--
+    No [assembly: Module] anywhere in this project, and that is the whole design. The boundary analyzer
+    only polices assemblies that claimed to be a module, so every module may use what is declared here
+    without either side publishing anything. Keep it that way by keeping it small: a type belongs here
+    only when every module means exactly the same thing by it, and changing it is a change to all of
+    them at once.
+
+    DDDToolkit.EntityFramework and its generator are here for the same reason Ordering's contracts have
+    them: the modules store Money, and the generator is what marks a value object [ComplexType] so
+    Entity Framework stores it inline. It has to run in the assembly that declares the type.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>
