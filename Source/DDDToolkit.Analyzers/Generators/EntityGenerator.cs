@@ -244,12 +244,12 @@ public sealed class EntityGenerator : IIncrementalGenerator
             {
                 using (writer.Block("foreach (var invariant in __invariants)"))
                 {
-                    writer.Line("// A null message means the rule holds, which is why it is a string and not an object.");
-                    writer.Line("var message = invariant.Check(this);");
-                    using (writer.Block("if (message is not null)"))
+                    writer.Line("// Null means the rule holds, and a rule that holds allocates nothing.");
+                    writer.Line("var failure = invariant.Check(this);");
+                    using (writer.Block("if (failure is not null)"))
                     {
                         writer.Line("violations ??= new " + list + "();");
-                        writer.Line("violations.Add(new " + violation + "(invariant.Code, message" + reporter + ");");
+                        writer.Line("violations.Add(new " + violation + "(invariant.Code, failure.Message" + reporter + " { Arguments = failure.Arguments });");
                     }
                 }
 
@@ -376,30 +376,19 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// Throws the single exception both stages raise, naming this " + what + ", its id and every");
         writer.Line("/// rule found broken.");
         writer.Line("/// </summary>");
-        writer.Line("/// <param name=\"violations\">Everything that was found, this " + what + "'s own first.</param>");
-        writer.Line("/// <param name=\"own\">");
-        writer.Line("/// How many of them are this " + what + "'s own. A violation past that point was reported by a");
-        writer.Line("/// child, and is phrased with the child's own type and id, because the exception itself names");
-        writer.Line("/// only the boundary that was asked. The ones before it need no such prefix: the exception");
-        writer.Line("/// already says whose they are.");
+        writer.Line("/// <param name=\"violations\">");
+        writer.Line("/// Everything that was found, this " + what + "'s own first. Each names the entity that reported");
+        writer.Line("/// it, which is how the exception tells a child's violation from this " + what + "'s own.");
         writer.Line("/// </param>");
         writer.Line("/// <param name=\"seamFailure\">What the seam threw, kept as the inner exception so no stack trace is lost.</param>");
         writer.Line("private void ThrowInvariantViolations(");
         writer.Line("    " + list + " violations,");
-        writer.Line("    int own,");
         using (writer.Block("    " + KnownTypes.InvariantViolationException + "? seamFailure)"))
         {
-            writer.Line("// Built by hand rather than with LINQ: nothing is imported into a generated file, and an");
-            writer.Line("// array of the messages is what the exception already knows how to phrase.");
-            writer.Line("var messages = new string[violations.Count];");
-            using (writer.Block("for (var index = 0; index < violations.Count; index++)"))
-            {
-                writer.Line("messages[index] = index < own ? violations[index].Message : violations[index].ToString();");
-            }
-
-            writer.Line();
+            writer.Line("// The violations go in whole, codes and arguments included, so a handler can translate the");
+            writer.Line("// throwing path as well as the asking one. The exception phrases the ones it does not own.");
             writer.Line("throw new " + KnownTypes.InvariantViolationException
-                + "(typeof(" + definition.Type.FullyQualifiedName + "), Id, messages, seamFailure);");
+                + "(typeof(" + definition.Type.FullyQualifiedName + "), Id, violations, seamFailure);");
         }
     }
 
@@ -485,7 +474,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
             }
 
             writer.Line();
-            writer.Line("ThrowInvariantViolations(violations, violations.Count, seamFailure);");
+            writer.Line("ThrowInvariantViolations(violations, seamFailure);");
         }
     }
 
@@ -590,11 +579,6 @@ public sealed class EntityGenerator : IIncrementalGenerator
             writer.Line("global::System.Collections.Generic.List<" + violation + ">? violations = null;");
             writer.Line("CollectInvariantViolations(ref violations, out var seamFailure);");
             writer.Line();
-            writer.Line("// Where this " + what + "'s own violations end and its children's begin, so that the one");
-            writer.Line("// exception can name the child a violation came from without repeating this " + what + " for");
-            writer.Line("// the ones that are its own.");
-            writer.Line("var own = violations is null ? 0 : violations.Count;");
-            writer.Line();
             writer.Line("CollectChildInvariantViolations(ref violations);");
             writer.Line();
             using (writer.Block("if (violations is null)"))
@@ -603,7 +587,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
             }
 
             writer.Line();
-            writer.Line("ThrowInvariantViolations(violations, own, seamFailure);");
+            writer.Line("ThrowInvariantViolations(violations, seamFailure);");
         }
     }
 

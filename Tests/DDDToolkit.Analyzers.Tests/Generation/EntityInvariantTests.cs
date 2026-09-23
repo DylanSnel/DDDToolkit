@@ -57,7 +57,7 @@ public class EntityInvariantTests
             {
                 public string Code => "basket.empty";
 
-                public string? Check(Basket entity) => entity._count > 0 ? null : "A basket must hold something.";
+                public InvariantFailure? Check(Basket entity) => entity._count > 0 ? null : "A basket must hold something.";
             }
         """;
 
@@ -67,7 +67,7 @@ public class EntityInvariantTests
             {
                 public string Code => "basket.huge";
 
-                public string? Check(Basket entity) => entity._count <= 10 ? null : "A basket may hold at most ten things.";
+                public InvariantFailure? Check(Basket entity) => entity._count <= 10 ? null : "A basket may hold at most ten things.";
             }
         """;
 
@@ -168,14 +168,14 @@ public class EntityInvariantTests
                 {
                     public string Code => "basket.positive";
 
-                    public string? Check(Basket entity) => entity._count > 0 ? null : "A basket cannot hold less than nothing.";
+                    public InvariantFailure? Check(Basket entity) => entity._count > 0 ? null : "A basket cannot hold less than nothing.";
                 }
 
                 public sealed class MustBeStarted : IInvariant<Basket>
                 {
                     public string Code => "basket.started";
 
-                    public string? Check(Basket entity) => entity._count != 0 ? null : "A basket must be started before it is saved.";
+                    public InvariantFailure? Check(Basket entity) => entity._count != 0 ? null : "A basket must be started before it is saved.";
                 }
             """).RunCore();
 
@@ -353,7 +353,7 @@ public class EntityInvariantTests
                 {
                     public string Code => "line.price";
 
-                    public string? Check(Line entity) => entity._price >= 0m ? null : "A line cannot cost less than nothing.";
+                    public InvariantFailure? Check(Line entity) => entity._price >= 0m ? null : "A line cannot cost less than nothing.";
                 }
             }
             """).RunCore();
@@ -380,7 +380,7 @@ public class EntityInvariantTests
                 {
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => entity._count > 0 ? null : "A basket must hold something.";
+                    public InvariantFailure? Check(Basket entity) => entity._count > 0 ? null : "A basket must hold something.";
                 }
             """).RunCore();
 
@@ -402,7 +402,7 @@ public class EntityInvariantTests
                 {
                     public string Code => "order.lines";
 
-                    public string? Check(Order entity) => "An order must have at least one line.";
+                    public InvariantFailure? Check(Order entity) => "An order must have at least one line.";
                 }
             }
 
@@ -415,7 +415,7 @@ public class EntityInvariantTests
                 {
                     public string Code => "line.price";
 
-                    public string? Check(Line entity) => "A line cannot cost less than nothing.";
+                    public InvariantFailure? Check(Line entity) => "A line cannot cost less than nothing.";
                 }
             }
             """).RunCore();

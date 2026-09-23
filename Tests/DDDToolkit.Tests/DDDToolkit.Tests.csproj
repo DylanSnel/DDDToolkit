@@ -21,6 +21,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Localization" />
   </ItemGroup>
 
   <ItemGroup>
@@ -28,6 +30,7 @@
     <ProjectReference Include="..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.NewtonSoft.Json\DDDToolkit.NewtonSoft.Json.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
   </ItemGroup>
 
   <!-- Generators run on this project too, so tests can declare their own aggregates, ids and value objects. -->

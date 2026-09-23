@@ -57,7 +57,6 @@
     <!--
       Tests and examples compile and run the generators on Roslyn 5. Not the newest: with transitive
       pinning on, this must be exactly the version Microsoft.EntityFrameworkCore.Design pins through
-      Microsoft.CodeAnalysis.CSharp.Workspaces (5.0.0 for EF 10.0.12), or restore reports a conflict.
       Move it together with EntityFrameworkCoreVersion.
     -->
     <RoslynVersion>5.0.0</RoslynVersion>
@@ -72,6 +71,10 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Localization.Abstractions" Version="$(MicrosoftExtensionsVersion)" />
+    <!-- The resx-backed IStringLocalizerFactory. Tests and examples only: the toolkit asks for the abstraction. -->
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="$(MicrosoftExtensionsVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Abstractions" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="$(EntityFrameworkCoreVersion)" />

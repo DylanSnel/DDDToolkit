@@ -45,6 +45,35 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 A model without `[KeyPart]` is mapped exactly as before; the tests compare it with and without the
 convention.
 
+- `DDDToolkit.Localization`, a new package that phrases failures in the reader's language. An
+  `IFailureLocalizer`, registered with `AddDDDToolkitLocalization()`, looks a failure up by its code in
+  your resx (or any `IStringLocalizer`) for the current UI culture and fills named placeholders such as
+  `{MaxLength}` from its arguments; an invariant violation is looked up as `{EntityType}.{Code}` before
+  the bare code. A failure nobody translated keeps its own message. `Localized(localizer)` and
+  `ToErrorDictionary(localizer)` do a whole list. The toolkit's own two messages ship in English and
+  Dutch. Calls to `AddDDDToolkitLocalization()` add up, so each module can register its own resx.
+  `IFailureLocalizer` and the list extensions live in the core, so integrations need not reference the
+  package. See [Localization](docs/localization.md).
+- `ValidationError.Arguments` and `InvariantViolation.Arguments`: the values a message was built from,
+  by name, so it can be phrased again. `With(name, value)` adds one; `ValidationErrorBuilder.Add` takes
+  them too. Both records compare arguments by content.
+- FluentValidation's placeholder values (`MaxLength`, `ComparisonValue`, ...) arrive in `Arguments`,
+  from the generated validators and from `ToValidationError()` alike. `MustBeValid()` and the
+  `Unspecified` failure name the value object in a `ValueObject` argument.
+- `FailureTranslations` in `DDDToolkit.Localization`: checks that every failure is translated in every
+  language you support, and throws a report listing what is missing, what falls back to another
+  language, and where a neutral override hides the toolkit's own translation. It finds every
+  `IInvariant` in the assemblies you name; other codes are named explicitly. See
+  [Localization](docs/localization.md#checking-that-everything-is-translated).
+- `AddDDDToolkitErrors()` in `DDDToolkit.HotChocolate`: an error filter that turns
+  `InvalidValueObjectException` and `InvariantViolationException` into one GraphQL error per failure,
+  with `code`, `field` or `entity`/`entityId`, and `arguments` in the extensions, phrased by the
+  `IFailureLocalizer` when one is registered. The rejected value is never sent back. See
+  [GraphQL](docs/graphql.md#failures-as-graphql-errors).
+- `InvariantViolationException.InvariantViolations`: the violations whole, with code, entity and
+  arguments, one for one with `Violations`, so the throwing path can be translated as well as the
+  asking one. A new constructor takes them.
+
 ### Fixed
 
 - A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path
@@ -63,6 +92,10 @@ convention.
 
 ### Changed
 
+- **Breaking:** `IInvariant<T>.Check` returns `InvariantFailure?` instead of `string?`, so a rule can
+  hand on the values its message names. A string converts to `InvariantFailure` and `null` still means
+  the rule holds, so only the signature changes: replace `string? Check(` with
+  `InvariantFailure? Check(`. The happy path still allocates nothing.
 - The packages ask for the oldest dependency versions they work with instead of the newest.
   3.0.0 declared the patch this repository was built with, so installing it moved a consumer's
   Entity Framework Core to at least 10.0.12, HotChocolate to 16.6.6 and FluentValidation to 12.1.1.

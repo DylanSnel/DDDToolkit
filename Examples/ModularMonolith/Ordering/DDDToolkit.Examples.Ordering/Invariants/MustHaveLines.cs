@@ -26,7 +26,7 @@ public partial class Order
         public string Code => ViolationCode;
 
         /// <inheritdoc />
-        public string? Check(Order order)
+        public InvariantFailure? Check(Order order)
             => order._lines.Count == 0 ? "An order must have at least one line." : null;
     }
 }

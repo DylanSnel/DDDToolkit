@@ -21,6 +21,7 @@
     <Project Path="Source/DDDToolkit.FluentValidation.Analyzers/DDDToolkit.FluentValidation.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.HotChocolate/DDDToolkit.HotChocolate.csproj" />
     <Project Path="Source/DDDToolkit.HotChocolate.Analyzers/DDDToolkit.HotChocolate.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.Localization/DDDToolkit.Localization.csproj" />
     <Project Path="Source/DDDToolkit.Mediator/DDDToolkit.Mediator.csproj" />
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />

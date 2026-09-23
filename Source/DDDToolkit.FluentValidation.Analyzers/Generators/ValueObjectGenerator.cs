@@ -73,11 +73,26 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 {
                     using (writer.Block("foreach (var failure in _errors)"))
                     {
+                        writer.Line("// The placeholder values go along as arguments, so the message can be phrased again in");
+                        writer.Line("// another language. The same copy ValidationErrorConversions.ToValidationError makes,");
+                        writer.Line("// written out because a generated file references nothing it does not have to.");
+                        writer.Line("global::System.Collections.Generic.Dictionary<string, object?>? arguments = null;");
+                        using (writer.Block("if (failure.FormattedMessagePlaceholderValues is { } placeholders)"))
+                        {
+                            writer.Line("arguments = new global::System.Collections.Generic.Dictionary<string, object?>(placeholders.Count);");
+                            using (writer.Block("foreach (var placeholder in placeholders)"))
+                            {
+                                writer.Line("arguments[placeholder.Key] = placeholder.Value;");
+                            }
+                        }
+
+                        writer.Line();
                         writer.Line("errors.Add(new " + KnownTypes.ValidationNamespace + ".ValidationError(");
                         writer.Line("    failure.ErrorMessage,");
                         writer.Line("    failure.PropertyName,");
                         writer.Line("    failure.ErrorCode,");
-                        writer.Line("    failure.AttemptedValue));");
+                        writer.Line("    failure.AttemptedValue,");
+                        writer.Line("    arguments));");
                     }
                 }
 

@@ -56,7 +56,7 @@ public class InvariantDiagnosticTests
             {
                 public string Code => "basket.empty";
 
-                public string? Check(Basket entity) => null;
+                public InvariantFailure? Check(Basket entity) => null;
             }
             """);
 
@@ -79,7 +79,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             }
             """);
@@ -96,7 +96,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -116,7 +116,7 @@ public class InvariantDiagnosticTests
                     {
                         public override string Code => "basket.empty";
 
-                        public override string? Check(Basket entity) => null;
+                        public override InvariantFailure? Check(Basket entity) => null;
                     }
                 """) +
             """
@@ -126,7 +126,7 @@ public class InvariantDiagnosticTests
             {
                 public abstract string Code { get; }
 
-                public abstract string? Check(Basket entity);
+                public abstract InvariantFailure? Check(Basket entity);
             }
             """);
 
@@ -147,7 +147,7 @@ public class InvariantDiagnosticTests
                     {
                         public string Code => "line.price";
 
-                        public string? Check(Line entity) => null;
+                        public InvariantFailure? Check(Line entity) => null;
                     }
                 """) +
             """
@@ -177,7 +177,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -196,14 +196,14 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.broken";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
 
                 public sealed class MustNotBeHuge : IInvariant<Basket>
                 {
                     public string Code => "basket.broken";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -228,14 +228,14 @@ public class InvariantDiagnosticTests
                 {
                     {{code}}
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
 
                 public sealed class MustNotBeHuge : IInvariant<Basket>
                 {
                     public string Code => "basket.broken";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -251,14 +251,14 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
 
                 public sealed class MustNotBeHuge : IInvariant<Basket>
                 {
                     public string Code => "basket.huge";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -277,7 +277,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => Build();
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
 
                     private static string Build() => "basket.broken";
                 }
@@ -286,7 +286,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "basket.broken";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -304,7 +304,7 @@ public class InvariantDiagnosticTests
                     {
                         public string Code => "empty";
 
-                        public string? Check(Basket entity) => null;
+                        public InvariantFailure? Check(Basket entity) => null;
                     }
                 """) +
             """
@@ -319,7 +319,7 @@ public class InvariantDiagnosticTests
                 {
                     public string Code => "empty";
 
-                    public string? Check(Line entity) => null;
+                    public InvariantFailure? Check(Line entity) => null;
                 }
             }
             """);
@@ -344,7 +344,7 @@ public class InvariantDiagnosticTests
 
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -372,7 +372,7 @@ public class InvariantDiagnosticTests
 
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 
@@ -392,14 +392,14 @@ public class InvariantDiagnosticTests
 
                     public string Code => "basket.empty";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
 
                 private sealed class MustNotBeHuge : IInvariant<Basket>
                 {
                     public string Code => "basket.huge";
 
-                    public string? Check(Basket entity) => null;
+                    public InvariantFailure? Check(Basket entity) => null;
                 }
             """));
 

@@ -100,7 +100,9 @@ public abstract record ValueObject : IValueObject
         {
             // Validate() refused without saying why. Say the little that is known rather than hand the
             // caller an empty list that reads like a pass.
-            errors.Add($"{GetType().Name} is not valid.", code: ValidationError.UnspecifiedCode);
+            errors.Add(
+                new ValidationError($"{GetType().Name} is not valid.", code: ValidationError.UnspecifiedCode)
+                    .With(ValidationError.ValueObjectArgument, GetType().Name));
         }
 
         _validationErrors = errors.HasErrors ? errors.ToReadOnlyList() : [];

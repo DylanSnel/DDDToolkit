@@ -76,7 +76,7 @@ public partial class Order
 
         public string Code => ViolationCode;
 
-        public string? Check(Order order) => order._lines.Count == 0 ? "An order must have at least one line." : null;
+        public InvariantFailure? Check(Order order) => order._lines.Count == 0 ? "An order must have at least one line." : null;
     }
 
     /// <summary>
@@ -116,6 +116,6 @@ public partial class OrderNote
 
         public string Code => ViolationCode;
 
-        public string? Check(OrderNote note) => string.IsNullOrWhiteSpace(note.Text) ? "A note must say something." : null;
+        public InvariantFailure? Check(OrderNote note) => string.IsNullOrWhiteSpace(note.Text) ? "A note must say something." : null;
     }
 }

@@ -464,6 +464,49 @@ a Postgres deployment can carry both the durable path and the live path without 
 in-memory transport, including a client subscribing through the schema and receiving what the outbox
 published.
 
+## Failures as GraphQL errors
+
+Without help, a resolver that throws `InvalidValueObjectException` or `InvariantViolationException`
+reaches the client as "Unexpected Execution Error", with no code and no way to tell which field or
+which rule it was. `AddDDDToolkitErrors()` fixes that:
+
+```csharp
+services
+    .AddGraphQLServer()
+    .AddDDDToolkitTypes()
+    .AddDDDToolkitErrors();
+```
+
+Each failure becomes an error of its own, with the code in `extensions.code`:
+
+```json
+{
+  "errors": [{
+    "message": "Een order mag hooguit € 1.000,00 zijn.",
+    "path": ["placeOrder"],
+    "extensions": {
+      "code": "Order.OverCreditLimit",
+      "entity": "Order",
+      "entityId": "ORD_…",
+      "arguments": { "CreditLimit": 1000 }
+    }
+  }]
+}
+```
+
+| Exception | Errors | Extensions |
+| --- | --- | --- |
+| `InvalidValueObjectException` | one per `ValidationError` | `code`, `field`, `arguments` |
+| `InvariantViolationException` | one per `InvariantViolation`, children included | `code`, `entity`, `entityId`, `arguments` |
+
+The rejected value itself is never sent back; it may be a password. Every other error passes through
+untouched.
+
+The message is phrased in the reader's language when the application registered an
+`IFailureLocalizer`, by calling `AddDDDToolkitLocalization()` from `DDDToolkit.Localization`, and is the
+domain's own sentence otherwise. The language is the request's UI culture, so put
+`app.UseRequestLocalization(...)` before `app.MapGraphQL()`. See [Localization](localization.md).
+
 ## Upgrading to HotChocolate 16
 
 If you are moving your own HotChocolate code onto 16.6.6 alongside this package, these are the names

@@ -149,7 +149,7 @@ public partial class Garnish
         public string Code => "garnish.named";
 
         /// <inheritdoc />
-        public string? Check(Garnish entity)
+        public InvariantFailure? Check(Garnish entity)
             => string.IsNullOrWhiteSpace(entity.What) ? "A garnish has to be something." : null;
     }
 }
