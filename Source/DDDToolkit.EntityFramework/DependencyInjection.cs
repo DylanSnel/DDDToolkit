@@ -32,27 +32,55 @@ public static class DependencyInjection
     /// Registers the delivery options and the DDDToolkit interceptors. Pair it with
     /// <see cref="UseDDDToolkit"/> on the <c>DbContextOptionsBuilder</c>. See
     /// <see cref="DDDEntityFrameworkOptions"/> for the two delivery modes and what they guarantee.
+    /// <para>
+    /// Call it as often as you like. The first call registers everything; every call, the first
+    /// included, configures the one <see cref="DDDEntityFrameworkOptions"/> the process has. That is how
+    /// a module registers its own outbox and the contracts it reads without the host knowing:
+    /// </para>
+    /// <code>
+    /// // host
+    /// services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+    ///
+    /// // inside AddOrderingModule
+    /// services.AddDDDToolkitEntityFramework(options => options.UseOutbox&lt;OrderingContext&gt;(outbox => ...));
+    /// </code>
     /// </summary>
     public static IServiceCollection AddDDDToolkitEntityFramework(this IServiceCollection services, Action<DDDEntityFrameworkOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        var options = new DDDEntityFrameworkOptions();
-        configure?.Invoke(options);
-
-        services.AddSingleton(options);
-        services.TryAddSingleton(options.Contracts);
-        // Scoped so the interceptor hands the scope's own provider (and thereby the DbContext being saved) to the handlers.
-        services.TryAddScoped<PublishDomainEventsInterceptor>();
-        services.TryAddSingleton<AggregateVersionInterceptor>();
-        services.TryAddSingleton<InvariantInterceptor>();
-
-        if (options.Outbox is { } outbox)
+        var options = RegisteredOptions(services);
+        if (options is null)
         {
-            services.TryAddSingleton(outbox.EventTypes);
+            options = new DDDEntityFrameworkOptions();
+
+            services.AddSingleton(options);
+            services.AddSingleton(options.Contracts);
+            // Scoped so the interceptor hands the scope's own provider (and thereby the DbContext being saved) to the handlers.
+            services.TryAddScoped<PublishDomainEventsInterceptor>();
+            services.TryAddSingleton<AggregateVersionInterceptor>();
+            services.TryAddSingleton<InvariantInterceptor>();
         }
 
+        configure?.Invoke(options);
         return services;
+    }
+
+    /// <summary>The options instance an earlier call registered, or <see langword="null"/> on the first call.</summary>
+    private static DDDEntityFrameworkOptions? RegisteredOptions(IServiceCollection services)
+    {
+        for (var i = services.Count - 1; i >= 0; i--)
+        {
+            if (services[i].ServiceType == typeof(DDDEntityFrameworkOptions) && !services[i].IsKeyedService)
+            {
+                return services[i].ImplementationInstance as DDDEntityFrameworkOptions
+                    ?? throw new InvalidOperationException(
+                        $"{nameof(DDDEntityFrameworkOptions)} is registered, but not as an instance, so {nameof(AddDDDToolkitEntityFramework)} cannot configure it further. " +
+                        $"Register it through {nameof(AddDDDToolkitEntityFramework)} only.");
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Same as <see cref="AddDDDToolkitEntityFramework"/>; kept for readers of the 2.x API.</summary>
@@ -122,47 +150,44 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Registers <typeparamref name="THandler"/> (scoped) as a consumer of
-    /// <typeparamref name="TContract"/>, so <see cref="ModuleIntegrationEventSink{TContext}"/> hands it
-    /// every message published under that contract.
+    /// Registers a consuming module: the integration events it handles, each handler guarded by the
+    /// inbox of <typeparamref name="TContext"/>. <see cref="ModuleIntegrationEventSink"/>, which a producing
+    /// module names with <c>outbox.SendToModules()</c>, offers every message to every module registered
+    /// this way.
+    /// <code>
+    /// services.AddModuleIntegrationEvents&lt;ShippingContext&gt;(module => module.Handle&lt;OrderPlacedV1, BookShipment&gt;());
+    /// </code>
     /// <para>
     /// Register as many handlers per contract as you like; each one gets its own inbox row under its own
     /// consumer name, so they succeed and fail independently. Name them with
-    /// <c>[IntegrationEventConsumer("...")]</c>, because the name is what the inbox remembers.
+    /// <c>[IntegrationEventConsumer("...")]</c>, because the name is what the inbox remembers. Calling this
+    /// again for the same context adds to the same module. Map the inbox table with
+    /// <c>modelBuilder.AddDomainEventInbox()</c>.
     /// </para>
     /// </summary>
-    public static IServiceCollection AddIntegrationEventHandler<TContract, THandler>(this IServiceCollection services)
-        where TContract : class
-        where THandler : class, IIntegrationEventHandler<TContract>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
+    public static IServiceCollection AddModuleIntegrationEvents<TContext>(this IServiceCollection services, Action<ModuleIntegrationEvents<TContext>> configure) where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
-        services.AddScoped<IIntegrationEventHandler<TContract>, THandler>();
-        return services;
-    }
+        ArgumentNullException.ThrowIfNull(configure);
 
-    /// <summary>
-    /// Registers <paramref name="handler"/> as a consumer of <typeparamref name="TContract"/>, for an
-    /// instance you already own. Tests usually want this one.
-    /// </summary>
-    public static IServiceCollection AddIntegrationEventHandler<TContract>(this IServiceCollection services, IIntegrationEventHandler<TContract> handler)
-        where TContract : class
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(handler);
-        services.AddSingleton(handler);
-        return services;
-    }
+        var registration = services
+            .Where(descriptor => descriptor.ServiceType == typeof(ModuleConsumerRegistration<TContext>))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<ModuleConsumerRegistration<TContext>>()
+            .FirstOrDefault();
 
-    /// <summary>
-    /// Registers <see cref="ModuleIntegrationEventSink{TContext}"/> (scoped) together with the inbox it
-    /// needs. Name it as a sink with <c>outbox.SendToModules&lt;TContext&gt;()</c>, and map the inbox
-    /// table with <c>modelBuilder.AddDomainEventInbox()</c>.
-    /// </summary>
-    public static IServiceCollection AddModuleIntegrationEvents<TContext>(this IServiceCollection services) where TContext : DbContext
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        services.AddDomainEventInbox<TContext>();
-        services.TryAddScoped<ModuleIntegrationEventSink<TContext>>();
+        if (registration is null)
+        {
+            registration = new ModuleConsumerRegistration<TContext>();
+
+            services.AddDomainEventInbox<TContext>();
+            services.AddSingleton(registration);
+            services.AddScoped<IModuleIntegrationEventConsumer>(provider => new ModuleIntegrationEventConsumer<TContext>(registration, provider));
+            services.TryAddScoped<ModuleIntegrationEventSink>();
+        }
+
+        configure(new ModuleIntegrationEvents<TContext>(services, registration));
         return services;
     }
 

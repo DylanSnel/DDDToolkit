@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- The assembly ships in analyzers/dotnet/cs rather than lib/, so there is nothing for a symbol
+         package to describe. Leaving the inherited IncludeSymbols on makes pack fail with NU5017. -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <Title>Domain Driven Design Toolkit - Supabase Analyzers</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase</PackageTags>
+    <Description>Source generator for DDDToolkit.EntityFramework.Supabase: finds the [SupabaseMigrations] factories a project references, so the build can export their migrations.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="..\DDDToolkit.Analyzers.Shared\DDDToolkit.Analyzers.Shared.props" />
+
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>

@@ -91,7 +91,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
                     $"Events still pending: {pending}. Raise {nameof(DDDEntityFrameworkOptions)}.{nameof(DDDEntityFrameworkOptions.MaxDispatchRounds)} if the chain is intentional.");
             }
 
-            if (_options.Outbox is { } outbox)
+            if (_options.OutboxFor(context.GetType()) is { } outbox)
             {
                 WriteToOutbox(context, batch, outbox);
                 continue;
@@ -135,7 +135,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
         if (context.Model.FindEntityType(typeof(OutboxMessage)) is null)
         {
             throw new InvalidOperationException(
-                $"UseOutbox is configured but the model of '{context.GetType().Name}' does not contain the outbox table. " +
+                $"An outbox is configured for '{context.GetType().Name}' but its model does not contain the outbox table. " +
                 $"Call modelBuilder.{nameof(OutboxModelBuilderExtensions.AddDomainEventOutbox)}() in OnModelCreating.");
         }
 

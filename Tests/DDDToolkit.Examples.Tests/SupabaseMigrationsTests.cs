@@ -1,31 +1,32 @@
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Shipping;
+using FluentAssertions;
 
 namespace DDDToolkit.Examples.Tests;
 
 /// <summary>
-/// The test a real project would have: whoever adds a migration and forgets to export it finds out here,
-/// not from <c>supabase db push</c>. Fix a failure by running
-/// <c>dotnet run --project Examples/ModularMonolith/DDDToolkit.Examples.Host -- export-supabase</c>.
+/// Whether the example's files are in sync is not a test here: the host's build checks it, and fails in
+/// CI when a migration was added without its file. What a test can pin down is where the file names
+/// come from: each module's <c>[assembly: Module]</c>, the same declaration the boundary analyzer reads.
 /// </summary>
 public sealed class SupabaseMigrationsTests
 {
-    private static readonly string Migrations = SupabaseMigrations.FindDirectory(
-        Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith"));
-
     [Fact]
-    public void Supabase_has_every_Ordering_migration()
+    public void Each_module_names_its_files_after_the_module_it_declares()
     {
-        using var context = new OrderingContextFactory().CreateDbContext([]);
-        SupabaseMigrations.EnsureInSync(context, Migrations);
+        SupabaseMigrations.ModuleNameOf(typeof(OrderingContext)).Should().Be("ordering");
+        SupabaseMigrations.ModuleNameOf(typeof(ShippingContext)).Should().Be("shipping");
     }
 
     [Fact]
-    public void Supabase_has_every_Shipping_migration()
+    public void The_committed_files_carry_those_names()
     {
-        using var context = new ShippingContextFactory().CreateDbContext([]);
-        SupabaseMigrations.EnsureInSync(context, Migrations);
+        var migrations = SupabaseMigrations.FindDirectory(Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith"));
+
+        Directory.GetFiles(migrations, "*.ddd.sql").Select(Path.GetFileName).Should().BeEquivalentTo(
+            "20260922201049_CreateOrdering.ordering.ddd.sql",
+            "20260922201056_CreateShipping.shipping.ddd.sql");
     }
 
     private static string RepositoryRoot()

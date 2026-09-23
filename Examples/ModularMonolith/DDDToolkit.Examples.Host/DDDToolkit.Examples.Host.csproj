@@ -12,8 +12,18 @@
     -->
   </PropertyGroup>
 
+  <!--
+    The Supabase export, as part of the build. Every build writes the files for any migration that has
+    none, from every [SupabaseMigrations] factory this host references, so they are ready to commit;
+    Supabase branching reads them from the repository. In CI the build only compares, and fails when
+    somebody added a migration and did not commit its file.
+  -->
+  <PropertyGroup>
+    <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+  </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <!-- For dotnet ef migrations add, run with this project as the startup project. Design time only. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
@@ -34,8 +44,17 @@
     <ProjectReference Include="..\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
     <ProjectReference Include="..\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
-    <!-- SupabaseMigrations, for the export-supabase command in Program.cs. -->
+    <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
+
+  <!--
+    What the DDDToolkit.EntityFramework.Supabase package brings a consumer by itself, the generator and
+    the build step, spelled out because this repository references the package as a project.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Import Project="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\buildTransitive\DDDToolkit.EntityFramework.Supabase.targets" />
 
 </Project>

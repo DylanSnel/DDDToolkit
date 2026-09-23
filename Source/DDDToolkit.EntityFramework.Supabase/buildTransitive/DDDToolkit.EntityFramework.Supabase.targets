@@ -1,0 +1,39 @@
+<Project>
+  <!--
+    The Supabase export as a build step, for the project that sets SupabaseMigrationsExport: the host of a
+    modular monolith, or the presentation layer of a service. In the project file:
+
+      <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+      <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+
+    Write writes every missing file after the build; Check only compares and fails the build when a file is
+    missing, changed or orphaned. Leave it unset and nothing happens. SupabaseMigrationsDirectory overrides
+    where the files go; by default the supabase/config.toml nearest above the project decides, the way the
+    Supabase CLI finds its project.
+
+    It shipped here, in buildTransitive, so the host gets it through the module that references this
+    package; the host does not have to reference the package itself.
+  -->
+  <ItemGroup>
+    <!-- The generator only writes the list of sources and the module initializer where this is set. -->
+    <CompilerVisibleProperty Include="SupabaseMigrationsExport" />
+  </ItemGroup>
+
+  <Target Name="DDDToolkitSupabaseMigrations"
+          AfterTargets="Build"
+          Condition="('$(SupabaseMigrationsExport)' == 'Write' Or '$(SupabaseMigrationsExport)' == 'Check') And '$(DesignTimeBuild)' != 'true' And '$(BuildingForLiveUnitTesting)' != 'true'">
+    <PropertyGroup>
+      <_DDDToolkitDotnet>$(DOTNET_HOST_PATH)</_DDDToolkitDotnet>
+      <_DDDToolkitDotnet Condition="'$(_DDDToolkitDotnet)' == ''">dotnet</_DDDToolkitDotnet>
+    </PropertyGroup>
+
+    <!--
+      Runs the application that was just built. The generated module initializer sees the variable before
+      Main, exports, and ends the process, so none of the application's own start-up runs: no host builder,
+      no configuration providers, no hosted services.
+    -->
+    <Exec Command="&quot;$(_DDDToolkitDotnet)&quot; &quot;$(TargetPath)&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)"
+          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory)" />
+  </Target>
+</Project>

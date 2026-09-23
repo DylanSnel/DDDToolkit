@@ -1,10 +1,7 @@
-using System.Collections.Concurrent;
-using System.Reflection;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.Interfaces;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -12,9 +9,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DDDToolkit.EntityFramework.Integration;
 
 /// <summary>
-/// The sink that delivers to the other modules in this process. It hands each published message to
-/// every <see cref="IIntegrationEventHandler{TContract}"/> registered against the <b>contract</b>, one
-/// inbox row at a time.
+/// The sink that delivers to the other modules in this process. It offers each published message to
+/// every consuming module, and each module hands it to its own
+/// <see cref="IIntegrationEventHandler{TContract}"/>s for the <b>contract</b>, one inbox row at a time.
 /// <para>
 /// In a modular monolith this is the sink that matters. Integration events exist so another module can
 /// react, and that module is in the same process, so there is no broker in the picture at all. What the
@@ -24,6 +21,12 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// share without sharing a domain.
 /// </para>
 /// <para>
+/// <b>Neither side names the other.</b> The producing module says <c>outbox.SendToModules()</c>; each
+/// consuming module registers itself with
+/// <c>services.AddModuleIntegrationEvents&lt;TContext&gt;(module =&gt; module.Handle&lt;TContract, THandler&gt;())</c>.
+/// Adding a consumer is a change to that consumer only.
+/// </para>
+/// <para>
 /// <b>Why through the outbox and not a direct call.</b> A direct call puts the consumer inside the
 /// producer's transaction: the consuming module throws and the producing module's aggregate is rolled
 /// back, which is the coupling again in a worse form. The outbox breaks it. Module A commits, the row
@@ -31,62 +34,49 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// </para>
 /// <para>
 /// <b>Why through the inbox.</b> A retry replays the message to every handler, so a handler that already
-/// succeeded would run twice. Each handler runs inside
-/// <see cref="DomainEventInbox{TContext}.ExecuteOnceAsync(IntegrationEventMessage, string, Func{IntegrationEventMessage, CancellationToken, Task}, CancellationToken)"/>
-/// under its own consumer name, so its writes and its "applied" row commit together. One handler
-/// throwing fails the message, but the handlers that succeeded keep their rows and are skipped on the
-/// retry.
+/// succeeded would run twice. Each handler runs inside its module's
+/// <see cref="DomainEventInbox{TContext}"/> under its own consumer name, so its writes and its "applied"
+/// row commit together. One handler throwing fails the message, but the handlers that succeeded keep
+/// their rows, in whichever module they live, and are skipped on the retry.
 /// </para>
 /// <code>
-/// builder.Services.AddDDDToolkitEntityFramework(options =>
+/// // the producing module
+/// services.AddDDDToolkitEntityFramework(options => options.UseOutbox&lt;OrderingContext&gt;(outbox =>
 /// {
-///     options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining&lt;OrderPlacedV2&gt;());
-///     options.UseOutbox(outbox =>
-///     {
-///         outbox.RegisterEventsFromAssemblyContaining&lt;Program&gt;();
-///         outbox.PublishAs&lt;OrderPlaced, OrderPlacedV2&gt;(e =&gt; new OrderPlacedV2(e.OrderId.Value, e.Total.Amount));
-///         outbox.SendToModules&lt;AppContext&gt;();
-///     });
-/// });
+///     outbox.RegisterEventsFromAssemblyContaining&lt;Order&gt;();
+///     outbox.PublishAs&lt;OrderPlaced, OrderPlacedV2&gt;(e =&gt; new OrderPlacedV2(e.OrderId.Value, e.Total.Amount));
+///     outbox.SendToModules();
+/// }));
+/// services.AddOutboxBackgroundService&lt;OrderingContext&gt;(TimeSpan.FromSeconds(2));
 ///
-/// builder.Services.AddIntegrationEventHandler&lt;OrderPlacedV2, RaiseInvoice&gt;();
-/// builder.Services.AddDomainEventInbox&lt;AppContext&gt;();
-/// builder.Services.AddOutboxBackgroundService&lt;AppContext&gt;(TimeSpan.FromSeconds(2));
+/// // a consuming module
+/// services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(c => c.RegisterFromAssemblyContaining&lt;OrderPlacedV2&gt;()));
+/// services.AddModuleIntegrationEvents&lt;BillingContext&gt;(module => module.Handle&lt;OrderPlacedV2, RaiseInvoice&gt;());
 /// </code>
 /// <para>
-/// The context's model needs the inbox table: call <c>modelBuilder.AddDomainEventInbox()</c>.
+/// Each consuming context's model needs the inbox table: call <c>modelBuilder.AddDomainEventInbox()</c>.
 /// </para>
 /// </summary>
-/// <typeparam name="TContext">The context whose inbox records which handler applied which message.</typeparam>
-public sealed class ModuleIntegrationEventSink<TContext> : IIntegrationEventSink where TContext : DbContext
+public sealed class ModuleIntegrationEventSink : IIntegrationEventSink
 {
-    private static readonly ConcurrentDictionary<Type, (Type HandlerType, MethodInfo Handle)> Dispatch = new();
-
     private readonly IServiceProvider _serviceProvider;
-    private readonly DomainEventInbox<TContext> _inbox;
     private readonly DDDEntityFrameworkOptions _options;
     private readonly ILogger _logger;
 
     /// <summary>Creates the sink. Resolve it from the scope the outbox processor runs in.</summary>
-    /// <param name="serviceProvider">The scope the handlers are resolved from.</param>
-    /// <param name="inbox">Records which handler applied which message.</param>
+    /// <param name="serviceProvider">The scope the consuming modules and their handlers are resolved from.</param>
     /// <param name="options">Supplies the contract registry the payload is read through.</param>
     /// <param name="logger">Optional.</param>
-    public ModuleIntegrationEventSink(
-        IServiceProvider serviceProvider,
-        DomainEventInbox<TContext> inbox,
-        DDDEntityFrameworkOptions options,
-        ILogger<ModuleIntegrationEventSink<TContext>>? logger = null)
+    public ModuleIntegrationEventSink(IServiceProvider serviceProvider, DDDEntityFrameworkOptions options, ILogger<ModuleIntegrationEventSink>? logger = null)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-        _inbox = inbox ?? throw new ArgumentNullException(nameof(inbox));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger ?? NullLogger<ModuleIntegrationEventSink<TContext>>.Instance;
+        _logger = logger ?? NullLogger<ModuleIntegrationEventSink>.Instance;
     }
 
     /// <summary>
-    /// Delivers <paramref name="message"/> to every handler registered against its contract. Returns
-    /// when they all applied it or had already applied it; throws naming the ones that did not.
+    /// Offers <paramref name="message"/> to every consuming module. Returns when all their handlers for
+    /// its contract applied it or had already applied it; throws naming the ones that did not.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
     /// <exception cref="IntegrationEventDeliveryException">One or more handlers threw.</exception>
@@ -100,47 +90,24 @@ public sealed class ModuleIntegrationEventSink<TContext> : IIntegrationEventSink
             return;
         }
 
-        var (handlerType, handle) = Dispatch.GetOrAdd(contract.GetType(), static type =>
+        var modules = _serviceProvider.GetServices<IModuleIntegrationEventConsumer>().ToList();
+        if (modules.Count == 0)
         {
-            var handlerType = typeof(IIntegrationEventHandler<>).MakeGenericType(type);
-            return (handlerType, handlerType.GetMethod(nameof(IIntegrationEventHandler<object>.HandleAsync))!);
-        });
-
-        var handlers = _serviceProvider.GetServices(handlerType).OfType<object>().ToList();
-        if (handlers.Count == 0)
-        {
-            _logger.LogDebug("No module handles '{Name}' version {Version}; message {MessageId} is delivered by default.", message.Name, message.Version, message.MessageId);
+            _logger.LogDebug("No module consumes integration events; message {MessageId} ('{Name}') is delivered by default.", message.MessageId, message.Name);
             return;
         }
 
         List<string>? failedConsumers = null;
         List<Exception>? failures = null;
 
-        foreach (var handler in handlers)
+        // Every module is offered the message even when an earlier one failed: one module's bug must not
+        // hold up the others. They all see it again on the retry, and their inboxes skip what they applied.
+        foreach (var module in modules)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var consumer = IntegrationEventConsumer.NameOf(handler.GetType());
-
-            try
+            foreach (var (consumer, failure) in await module.DeliverAsync(contract, message, cancellationToken).ConfigureAwait(false))
             {
-                // Each handler owns its inbox row, so a failure here does not undo the handlers that ran
-                // before it and does not make them run again on the retry.
-                var applied = await _inbox.ExecuteOnceAsync(
-                    message,
-                    consumer,
-                    (received, token) => (Task)handle.Invoke(handler, [contract, received, token])!,
-                    cancellationToken).ConfigureAwait(false);
-
-                if (!applied)
-                {
-                    _logger.LogDebug("Consumer {Consumer} had already applied message {MessageId}.", consumer, message.MessageId);
-                }
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
-            {
-                _logger.LogError(exception, "Consumer {Consumer} failed on message {MessageId} ({Name}).", consumer, message.MessageId, message.Name);
-                (failedConsumers ??= []).Add(consumer);
-                (failures ??= []).Add(exception);
+                (failedConsumers ??= []).Add($"{module.Module}/{consumer}");
+                (failures ??= []).Add(failure);
             }
         }
 

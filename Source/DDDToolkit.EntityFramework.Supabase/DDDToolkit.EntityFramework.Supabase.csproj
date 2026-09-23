@@ -5,17 +5,29 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Title>Domain Driven Design Toolkit - Supabase</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase;postgres;postgresql</PackageTags>
-    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files, so supabase db push, db reset and branching apply them, and checks in a test that none was forgotten.</Description>
+    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files as part of the build, so supabase db push, db reset and branching apply them, and fails a CI build when one was not exported.</Description>
   </PropertyGroup>
 
   <!--
-    Entity Framework's relational layer and nothing else. The export reads the migrations assembly and
-    asks the migrator for SQL, both of which are relational services; it checks the provider by name
-    rather than referencing Npgsql, so the application brings whichever Npgsql provider it already uses.
-    It needs none of the toolkit's other packages either: any context with migrations can be exported.
+    Entity Framework's relational layer, and the DI abstractions for registering the contexts the
+    start-up check covers. The export reads the migrations assembly and asks the migrator for SQL, both
+    of which are relational services; it checks the provider by name rather than referencing Npgsql, so
+    the application brings whichever Npgsql provider it already uses. It needs none of the toolkit's
+    other packages either: any context with migrations can be exported.
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <!-- The generator that finds [SupabaseMigrations] factories, shipped the way the other integrations ship theirs. -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" PrivateAssets="contentfiles;build" />
+  </ItemGroup>
+
+  <!-- The build step, in buildTransitive so a host gets it through the module that references this package. -->
+  <ItemGroup>
+    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive" />
   </ItemGroup>
 
 </Project>

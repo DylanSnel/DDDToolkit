@@ -2,6 +2,7 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Ordering.Converters;
+using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -63,7 +64,12 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 /// How <c>dotnet ef migrations add</c> and the Supabase export build an <see cref="OrderingContext"/>:
 /// on Postgres, and pointing nowhere, because neither of them opens a connection. Without it the tools
 /// would build the host, and the host picks SQLite unless it is given a Supabase connection string.
+/// <para>
+/// <c>[SupabaseMigrations]</c> is what puts Ordering's migrations in <c>supabase/migrations</c>: the host
+/// turns the export on, and its build finds this factory without anybody listing it.
+/// </para>
 /// </summary>
+[SupabaseMigrations]
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)

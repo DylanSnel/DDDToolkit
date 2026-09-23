@@ -72,7 +72,7 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate. |
-| `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations exported as Supabase migration files, so `supabase db push` applies them, and a test that fails when one was not exported. |
+| `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
@@ -84,8 +84,9 @@ own generator, so referencing it is all the configuration there is.
 dotnet add package DDDToolkit
 ```
 
-There are four more packages you never reference directly: `DDDToolkit.Analyzers` and the
-`.EntityFramework`, `.FluentValidation` and `.HotChocolate` analyzer packages beside it. Each one
+There are five more packages you never reference directly: `DDDToolkit.Analyzers` and the
+`.EntityFramework`, `.EntityFramework.Supabase`, `.FluentValidation` and `.HotChocolate` analyzer
+packages beside it. Each one
 carries the generators for its integration and arrives as a dependency of the package above, so
 adding `DDDToolkit.HotChocolate` is all it takes to get the GraphQL generator.
 

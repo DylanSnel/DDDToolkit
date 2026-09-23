@@ -13,6 +13,7 @@ using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyze
 using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectGenerator;
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
+using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
 
@@ -97,6 +98,9 @@ public sealed class GeneratorTestHost
     /// <summary>The generator in DDDToolkit.HotChocolate.Analyzers.</summary>
     public static IIncrementalGenerator[] HotChocolateGenerators() => [new HcSingleValueObjectConverterGenerator()];
 
+    /// <summary>The generator in DDDToolkit.EntityFramework.Supabase.Analyzers.</summary>
+    public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator()];
+
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer()];
 
@@ -143,6 +147,20 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithModule(string moduleName)
     {
         _globalOptions["build_property.DDD_Module"] = moduleName;
+        return this;
+    }
+
+    /// <summary>Sets any MSBuild property the way <c>CompilerVisibleProperty</c> exposes it: <c>build_property.{name}</c>.</summary>
+    public GeneratorTestHost WithBuildProperty(string name, string value)
+    {
+        _globalOptions["build_property." + name] = value;
+        return this;
+    }
+
+    /// <summary>Adds EF Core and DDDToolkit.EntityFramework.Supabase, for a <c>[SupabaseMigrations]</c> factory.</summary>
+    public GeneratorTestHost WithSupabase()
+    {
+        _extraReferences.AddRange(ReferenceSets.Supabase);
         return this;
     }
 

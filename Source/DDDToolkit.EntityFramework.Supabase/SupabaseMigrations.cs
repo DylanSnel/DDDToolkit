@@ -20,7 +20,12 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// SupabaseMigrations.EnsureInSync(context, "supabase/migrations");
 /// </code>
 /// <para>
-/// One migration becomes one file, named after the migration id. Entity Framework ids start with a
+/// Usually the build calls this for you: mark the design-time factory <see cref="SupabaseMigrationsAttribute"/>
+/// and set <c>SupabaseMigrationsExport</c> in the project that references the modules. Call it yourself
+/// from a test or a tool of your own.
+/// </para>
+/// <para>
+/// One migration becomes one file, named after the migration id and the module. Entity Framework ids start with a
 /// <c>yyyyMMddHHmmss</c> timestamp, which is exactly the version Supabase reads from a file name, so
 /// both histories sort the same way and a migration written with <c>supabase migration new</c> slots in
 /// between them by date.
@@ -72,6 +77,50 @@ public static class SupabaseMigrations
     private static readonly Regex MigrationFilePattern = new(@"^([0-9]+)_(.*)\.sql$", RegexOptions.CultureInvariant);
 
     /// <summary>
+    /// The module name a context's files carry, as in <c>20260922120000_AddOrders.ordering.ddd.sql</c>:
+    /// the name its assembly declares with <c>[assembly: Module("Ordering")]</c>, or else the context's
+    /// name without a trailing <c>Context</c>; in lower case, with anything but letters and digits turned
+    /// into a dash.
+    /// <para>
+    /// Code the build generates passes the name it read at compile time, so this is only consulted when a
+    /// source or a context is exported by hand. It reads the attribute by name, which keeps this package
+    /// free of a reference to <c>DDDToolkit.Abstractions</c>.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="contextType"/> is null.</exception>
+    public static string ModuleNameOf(Type contextType)
+    {
+        ArgumentNullException.ThrowIfNull(contextType);
+
+        var declared = contextType.Assembly.GetCustomAttributesData()
+            .Where(attribute => attribute.AttributeType.FullName == "DDDToolkit.Abstractions.Attributes.ModuleAttribute")
+            .Select(attribute => attribute.ConstructorArguments is [{ Value: string name }] ? name : null)
+            .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name));
+
+        var name = declared
+            ?? (contextType.Name.EndsWith("Context", StringComparison.Ordinal) && contextType.Name.Length > "Context".Length
+                ? contextType.Name[..^"Context".Length]
+                : contextType.Name);
+
+        return NormalizeModuleName(name);
+    }
+
+    /// <summary>A module name as it appears in a file name: lower case, letters, digits and dashes.</summary>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is null.</exception>
+    public static string NormalizeModuleName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        var normalized = new StringBuilder(name.Length);
+        foreach (var character in name.Trim().ToLowerInvariant())
+        {
+            normalized.Append(char.IsAsciiLetterOrDigit(character) ? character : '-');
+        }
+
+        return normalized.ToString().Trim('-') is { Length: > 0 } result ? result : "module";
+    }
+
+    /// <summary>
     /// The <c>supabase/migrations</c> directory of the Supabase project that contains
     /// <paramref name="start"/>: the nearest directory, from <paramref name="start"/> upwards, with a
     /// <c>supabase/config.toml</c> in it. That is how the Supabase CLI finds its project too, so the
@@ -107,6 +156,11 @@ public static class SupabaseMigrations
     public static IReadOnlyList<SupabaseMigrationFile> Generate(DbContext context, SupabaseMigrationOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(context);
+        return Generate(context, ModuleNameOf(context.GetType()), options);
+    }
+
+    private static List<SupabaseMigrationFile> Generate(DbContext context, string module, SupabaseMigrationOptions? options)
+    {
         options ??= new SupabaseMigrationOptions();
 
         var provider = context.Database.ProviderName;
@@ -138,7 +192,7 @@ public static class SupabaseMigrations
             var script = migrator.GenerateScript(previous, id, MigrationsSqlGenerationOptions.NoTransactions);
             var migration = migrations.CreateMigration(type, provider);
 
-            files.Add(new SupabaseMigrationFile(id, Compose(id, context.GetType().Name, script, RowLevelSecurity(migration, options, sql))));
+            files.Add(new SupabaseMigrationFile(id, module, Compose(id, context.GetType().Name, script, RowLevelSecurity(migration, options, sql))));
             previous = id;
         }
 
@@ -154,7 +208,7 @@ public static class SupabaseMigrations
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
     public static SupabaseMigrationReport Compare(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, directory, options, write: false);
+        => Run(context, null, directory, options, write: false);
 
     /// <summary>
     /// Writes a file for every migration that has none, and reports on the rest. It never overwrites or
@@ -168,7 +222,7 @@ public static class SupabaseMigrations
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
     public static SupabaseMigrationReport Export(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, directory, options, write: true);
+        => Run(context, null, directory, options, write: true);
 
     /// <summary>
     /// Throws unless every migration has its file, as generated, and no exported file has outlived its
@@ -183,16 +237,79 @@ public static class SupabaseMigrations
         var report = Compare(context, directory, options);
         if (!report.IsInSync)
         {
-            throw new SupabaseMigrationsOutOfSyncException(report);
+            throw new SupabaseMigrationsOutOfSyncException([report]);
         }
     }
 
-    private static SupabaseMigrationReport Run(DbContext context, string directory, SupabaseMigrationOptions? options, bool write)
+    /// <summary>
+    /// <see cref="Export(DbContext, string, SupabaseMigrationOptions?)"/> for every source, in order, into
+    /// one directory. Needs no host: each context comes from its source's design-time factory, so this
+    /// can run from a test, a small console app or the top of <c>Program.cs</c> without loading the
+    /// application's configuration.
+    /// </summary>
+    /// <param name="sources">The contexts to export, typically one per module.</param>
+    /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
+    /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
+    /// <returns>One report per source, in the order given.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    public static IReadOnlyList<SupabaseMigrationReport> Export(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+        => RunAll(sources, directory, options, write: true);
+
+    /// <summary>
+    /// <see cref="Compare(DbContext, string, SupabaseMigrationOptions?)"/> for every source, in order,
+    /// against one directory. Writes nothing and needs no host.
+    /// </summary>
+    /// <param name="sources">The contexts to compare, typically one per module.</param>
+    /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
+    /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
+    /// <returns>One report per source, in the order given.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    public static IReadOnlyList<SupabaseMigrationReport> Compare(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+        => RunAll(sources, directory, options, write: false);
+
+    /// <summary>
+    /// Throws unless every source's migrations have their files, as generated, and no source has an
+    /// exported file that outlived its migration. One test for the whole application:
+    /// <code>
+    /// [Fact]
+    /// public void Supabase_has_every_migration()
+    ///     => SupabaseMigrations.EnsureInSync([
+    ///         SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextFactory&gt;(),
+    ///         SupabaseMigrationSource.For&lt;ShippingContext, ShippingContextFactory&gt;()]);
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="SupabaseMigrationsOutOfSyncException">The directory does not match the migrations; the message covers every source.</exception>
+    public static void EnsureInSync(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+    {
+        var reports = Compare(sources, directory, options);
+        if (reports.Any(report => !report.IsInSync))
+        {
+            throw new SupabaseMigrationsOutOfSyncException(reports);
+        }
+    }
+
+    private static List<SupabaseMigrationReport> RunAll(IEnumerable<SupabaseMigrationSource> sources, string? directory, SupabaseMigrationOptions? options, bool write)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        directory ??= FindDirectory();
+
+        var reports = new List<SupabaseMigrationReport>();
+        foreach (var source in sources)
+        {
+            using var context = source.CreateDesignTimeContext();
+            reports.Add(Run(context, source.Module, directory, options, write));
+        }
+
+        return reports;
+    }
+
+    private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
 
-        var files = Generate(context, options);
+        var files = Generate(context, module ?? ModuleNameOf(context.GetType()), options);
         var existing = ExistingFiles(directory);
         var entries = new List<SupabaseMigrationEntry>(files.Count);
 
@@ -297,7 +414,7 @@ public static class SupabaseMigrations
         var file = new StringBuilder()
             .Append("-- Exported by DDDToolkit from the Entity Framework migration ").Append(id)
             .Append(" of ").Append(context).Append('.').Append('\n')
-            .Append("-- Regenerate it with SupabaseMigrations.Export rather than editing it.").Append('\n')
+            .Append("-- Written from that migration; change the migration, not this file.").Append('\n')
             .Append('\n')
             .Append(Normalize(script).Trim('\n')).Append('\n');
 

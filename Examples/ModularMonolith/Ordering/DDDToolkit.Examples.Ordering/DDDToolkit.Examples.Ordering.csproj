@@ -25,6 +25,10 @@
     <!-- The module's migrations are Postgres migrations, exported for Supabase. See Migrations/ and the
          design-time factory next to the context. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- The module registers its own context, so the providers it can run on are its references,
+         not the host's: SQLite for the example run without setup, Postgres for Supabase. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -6,33 +6,36 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// The Supabase migrations directory does not match the Entity Framework migrations: a migration has no
 /// file, a file no longer says what its migration generates, or a file outlived its migration.
 /// <para>
-/// It is what <see cref="SupabaseMigrations.EnsureInSync"/> throws, so a test can fail a build that
-/// added a migration and forgot to export it, rather than letting <c>supabase db push</c> discover it.
+/// It is what <c>SupabaseMigrations.EnsureInSync</c> throws, so a test can fail a build that added a
+/// migration and forgot to export it, rather than letting <c>supabase db push</c> discover it.
 /// </para>
 /// </summary>
 public sealed class SupabaseMigrationsOutOfSyncException : InvalidOperationException
 {
-    /// <summary>Lists what is wrong and what to do about each.</summary>
-    /// <param name="report">The comparison that found the problems.</param>
-    public SupabaseMigrationsOutOfSyncException(SupabaseMigrationReport report)
-        : base(Describe(report ?? throw new ArgumentNullException(nameof(report))))
-        => Report = report;
+    /// <summary>Lists what is wrong and what to do about each, for every context compared.</summary>
+    /// <param name="reports">The comparisons, one per context; the ones in sync add nothing to the message.</param>
+    public SupabaseMigrationsOutOfSyncException(IReadOnlyList<SupabaseMigrationReport> reports)
+        : base(Describe(reports ?? throw new ArgumentNullException(nameof(reports))))
+        => Reports = reports;
 
-    /// <summary>The comparison, with every entry, not just the problems.</summary>
-    public SupabaseMigrationReport Report { get; }
+    /// <summary>The comparisons, one per context, with every entry, not just the problems.</summary>
+    public IReadOnlyList<SupabaseMigrationReport> Reports { get; }
 
-    private static string Describe(SupabaseMigrationReport report)
+    /// <summary>Every entry that needs someone to look at it, across all contexts.</summary>
+    public IEnumerable<SupabaseMigrationEntry> Problems => Reports.SelectMany(report => report.Problems);
+
+    private static string Describe(IReadOnlyList<SupabaseMigrationReport> reports)
     {
         var message = new StringBuilder()
-            .Append("The Supabase migrations in '").Append(report.Directory)
+            .Append("The Supabase migrations in '").Append(reports.Count > 0 ? reports[0].Directory : "")
             .Append("' do not match the Entity Framework migrations:");
 
-        foreach (var entry in report.Problems)
+        foreach (var entry in reports.SelectMany(report => report.Problems))
         {
             message.AppendLine().Append("  ").Append(entry.MigrationId).Append(": ").Append(entry.Status switch
             {
                 SupabaseMigrationStatus.Missing =>
-                    $"has no file. Run SupabaseMigrations.Export to write {Path.GetFileName(entry.Path)}.",
+                    $"has no file. A build with SupabaseMigrationsExport=Write, or SupabaseMigrations.Export, writes {Path.GetFileName(entry.Path)}.",
                 SupabaseMigrationStatus.Changed =>
                     $"{Path.GetFileName(entry.Path)} is not what the migration generates. If it was never applied anywhere, " +
                     "delete it and export again. If it was, put the change in a new migration instead: Supabase will not run a version twice.",

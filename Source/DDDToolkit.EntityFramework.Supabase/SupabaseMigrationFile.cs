@@ -5,8 +5,9 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// whose name starts with the version the CLI records in <c>supabase_migrations.schema_migrations</c>.
 /// </summary>
 /// <param name="MigrationId">The Entity Framework migration id, for instance <c>20260922120000_AddOrders</c>.</param>
+/// <param name="Module">The module the migration belongs to, as it appears in the file name.</param>
 /// <param name="Sql">The file's contents, with <c>\n</c> line endings on every platform.</param>
-public sealed record SupabaseMigrationFile(string MigrationId, string Sql)
+public sealed record SupabaseMigrationFile(string MigrationId, string Module, string Sql)
 {
     /// <summary>
     /// The version Supabase records: the timestamp that starts the migration id. Entity Framework and
@@ -14,8 +15,13 @@ public sealed record SupabaseMigrationFile(string MigrationId, string Sql)
     /// </summary>
     public string Version => MigrationId[..MigrationId.IndexOf('_', StringComparison.Ordinal)];
 
-    /// <summary>The file name: the migration id with <c>.sql</c> after it.</summary>
-    public string FileName => MigrationId + ".sql";
+    /// <summary>
+    /// The file name: the migration id, the module and <c>.ddd.sql</c>, as in
+    /// <c>20260922120000_AddOrders.ordering.ddd.sql</c>. The Supabase CLI reads everything between the
+    /// first underscore and <c>.sql</c> as the name, so the suffix is harmless to it, and it tells a file
+    /// this toolkit wrote from one written by hand, and which module it belongs to, at a glance.
+    /// </summary>
+    public string FileName => $"{MigrationId}.{Module}.ddd.sql";
 }
 
 /// <summary>Where one migration stands against the files in a Supabase migrations directory.</summary>

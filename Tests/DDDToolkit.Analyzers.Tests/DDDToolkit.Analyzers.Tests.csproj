@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers.CodeFixes\DDDToolkit.Analyzers.CodeFixes.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
   </ItemGroup>
 
   <!-- Runtime assemblies the generated code compiles against inside the tests. -->
@@ -40,6 +41,7 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation\DDDToolkit.FluentValidation.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
 </Project>

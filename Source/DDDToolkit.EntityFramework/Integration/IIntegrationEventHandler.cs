@@ -4,8 +4,8 @@ namespace DDDToolkit.EntityFramework.Integration;
 
 /// <summary>
 /// A consumer of a published contract, in this process. Implement it in the module that reacts, once
-/// per contract it cares about, and register it with
-/// <c>services.AddIntegrationEventHandler&lt;TContract, THandler&gt;()</c>.
+/// per contract it cares about, and register it with that module's context:
+/// <c>services.AddModuleIntegrationEvents&lt;TContext&gt;(module =&gt; module.Handle&lt;TContract, THandler&gt;())</c>.
 /// <para>
 /// The type argument is the <b>contract</b>, never the producing module's domain event. That is the
 /// whole point of the seam: a handler typed on <c>OrderPlaced</c> forces this module to reference the
@@ -24,8 +24,8 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// }
 /// </code>
 /// <para>
-/// Do not call <c>SaveChanges</c> for a marker of your own. <see cref="ModuleIntegrationEventSink{TContext}"/>
-/// runs the handler inside the inbox, so your writes and the row that says "this consumer applied this
+/// Do not call <c>SaveChanges</c> for a marker of your own. <see cref="ModuleIntegrationEventSink"/>
+/// runs the handler inside its module's inbox, so your writes and the row that says "this consumer applied this
 /// message" are written by one save inside one transaction.
 /// </para>
 /// <para>

@@ -2,6 +2,7 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Shipping.Converters;
+using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -55,6 +56,7 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
 /// How <c>dotnet ef migrations add</c> and the Supabase export build a <see cref="ShippingContext"/>:
 /// on Postgres, and pointing nowhere, because neither of them opens a connection.
 /// </summary>
+[SupabaseMigrations]
 public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<ShippingContext>
 {
     public ShippingContext CreateDbContext(string[] args)

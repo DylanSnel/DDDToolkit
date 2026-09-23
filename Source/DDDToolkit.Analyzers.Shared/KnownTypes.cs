@@ -46,6 +46,16 @@ internal static class KnownTypes
     public const string EfBackingFieldAttribute = "Microsoft.EntityFrameworkCore.BackingFieldAttribute";
     public const string EfBackingFieldAttributeUsage = "global::Microsoft.EntityFrameworkCore.BackingField";
 
+    /// <summary>The marker on a design-time factory whose migrations the build exports for Supabase.</summary>
+    public const string SupabaseNamespace = "DDDToolkit.EntityFramework.Supabase";
+    public const string SupabaseMigrationsAttributeName = "SupabaseMigrationsAttribute";
+
+    /// <summary>The package a module references when it has a marked factory; only those assemblies are searched.</summary>
+    public const string SupabaseAssemblyName = "DDDToolkit.EntityFramework.Supabase";
+
+    /// <summary>Entity Framework's design-time factory (assembly Microsoft.EntityFrameworkCore).</summary>
+    public const string DesignTimeDbContextFactory = "Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory`1";
+
     public const string StjJsonConverterAttribute = "System.Text.Json.Serialization.JsonConverterAttribute";
 
     /// <summary>HotChocolate's own opt-out, for members its convention-based binding would publish.</summary>

@@ -56,10 +56,11 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     private readonly TContext _context;
     private readonly IServiceProvider _serviceProvider;
     private readonly DDDEntityFrameworkOptions _options;
+    private readonly OutboxOptions _outbox;
     private readonly ILogger _logger;
 
     /// <summary>Creates a processor for the (scoped) <paramref name="context"/>.</summary>
-    /// <exception cref="InvalidOperationException">The outbox is not enabled, or it has neither a sink nor a dispatch delegate to deliver through.</exception>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TContext"/> has no outbox, or it has neither a sink nor a dispatch delegate to deliver through.</exception>
     public OutboxProcessor(TContext context, IServiceProvider serviceProvider, DDDEntityFrameworkOptions options, ILogger<OutboxProcessor<TContext>>? logger = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
@@ -67,10 +68,16 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger ?? NullLogger<OutboxProcessor<TContext>>.Instance;
 
-        if (_options.Outbox is not { } outbox)
+        // The context's own outbox when it has one, the shared one otherwise: the same answer the
+        // interceptor gave when it wrote the rows.
+        if (_options.OutboxFor(typeof(TContext)) is not { } outbox)
         {
-            throw new InvalidOperationException($"The outbox is not enabled. Call {nameof(DDDEntityFrameworkOptions.UseOutbox)}(...) in AddDDDToolkitEntityFramework.");
+            throw new InvalidOperationException(
+                $"{typeof(TContext).Name} has no outbox. Call {nameof(DDDEntityFrameworkOptions.UseOutbox)}<{typeof(TContext).Name}>(...) " +
+                $"or the shared {nameof(DDDEntityFrameworkOptions.UseOutbox)}(...) in AddDDDToolkitEntityFramework.");
         }
+
+        _outbox = outbox;
 
         if (DispatchesInProcess(outbox) && _options.Dispatcher is null)
         {
@@ -90,7 +97,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
 
-        var outbox = _options.Outbox!;
+        var outbox = _outbox;
         var maxAttempts = outbox.MaxAttempts;
 
         var messages = await _context.Set<OutboxMessage>()

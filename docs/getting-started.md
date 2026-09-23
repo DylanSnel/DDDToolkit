@@ -311,34 +311,39 @@ public sealed record OrderPlacedV1(OrderId OrderId, string City, string PostalCo
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
 
-Say how the one becomes the other, and where it goes:
+Ordering says, in its own registration, how the one becomes the other and that it goes to the other
+modules. It does not say which modules those are:
 
 ```csharp
-builder.Services.AddDDDToolkitEntityFramework(options =>
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
 {
-    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>());
-    options.DispatchWithMediator();
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+    outbox.PublishAs<OrderPlaced, OrderPlacedV1>(placed => new OrderPlacedV1(
+        placed.OrderId, placed.ShipTo.City, placed.ShipTo.PostalCode, placed.LineCount));
+    outbox.SendToModules();
+    outbox.AlsoDispatchInProcess = true;
+}));
 
-    options.UseOutbox(outbox =>
-    {
-        outbox.RegisterEventsFromAssemblyContaining<Order>();
-        outbox.PublishAs<OrderPlaced, OrderPlacedV1>(placed => new OrderPlacedV1(
-            placed.OrderId, placed.ShipTo.City, placed.ShipTo.PostalCode, placed.LineCount));
-        outbox.SendToModules<ShippingContext>();
-        outbox.AlsoDispatchInProcess = true;
-    });
-});
-
-builder.Services.AddModuleIntegrationEvents<ShippingContext>();
-builder.Services.AddIntegrationEventHandler<OrderPlacedV1, BookShipment>();
-builder.Services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
+services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 ```
 
-*[`Host/Program.cs`](../Examples/ModularMonolith/DDDToolkit.Examples.Host/Program.cs)*
+*[`Ordering/OrderingModule.cs`](../Examples/ModularMonolith/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs)*
 
 `SaveChanges` now writes the order and one outbox row in one transaction. The background service reads
 the row afterwards, converts it, and hands it to the other modules. Ordering has already committed by
 then, which is why a failing consumer cannot refuse an order.
+
+The host only switches the modules on, and sets the one thing that is the host's: how domain events that
+stay inside a module are published.
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+builder.Services.AddOrderingModule(supabase);
+builder.Services.AddShippingModule(supabase);
+```
+
+*[`Host/Program.cs`](../Examples/ModularMonolith/DDDToolkit.Examples.Host/Program.cs)*
 
 ## Consume it once
 
@@ -364,7 +369,19 @@ sink runs it inside the inbox, so the shipment and the row that says this consum
 are written by one save in one transaction. And the consumer name is what the inbox keys on, so
 delivery twice does the work once.
 
-Map the table in the consuming context:
+Shipping signs itself up as a consumer, with the contracts it reads and the handlers that run under its
+inbox:
+
+```csharp
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>()));
+
+services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderPlacedV1, BookShipment>());
+```
+
+*[`Shipping/ShippingModule.cs`](../Examples/ModularMonolith/Shipping/DDDToolkit.Examples.Shipping/ShippingModule.cs)*
+
+and maps the inbox table in its context:
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.AddDomainEventInbox();
