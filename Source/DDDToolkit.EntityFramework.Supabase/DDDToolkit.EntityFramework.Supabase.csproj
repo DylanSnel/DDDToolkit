@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supabase</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase;postgres;postgresql</PackageTags>
+    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files, so supabase db push, db reset and branching apply them, and checks in a test that none was forgotten.</Description>
+  </PropertyGroup>
+
+  <!--
+    Entity Framework's relational layer and nothing else. The export reads the migrations assembly and
+    asks the migrator for SQL, both of which are relational services; it checks the provider by name
+    rather than referencing Npgsql, so the application brings whichever Npgsql provider it already uses.
+    It needs none of the toolkit's other packages either: any context with migrations can be exported.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+</Project>

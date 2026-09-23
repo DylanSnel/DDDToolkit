@@ -3,6 +3,8 @@ using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Ordering.Converters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Ordering;
 
@@ -19,10 +21,26 @@ namespace DDDToolkit.Examples.Ordering;
 /// </remarks>
 public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
 {
+    /// <summary>
+    /// The schema Ordering's tables and migration history live in. On Postgres the two modules can share
+    /// one database, as they do on one Supabase project, and still own their tables: each has its own
+    /// schema and its own history table, so neither module's migrations can see the other's.
+    /// </summary>
+    public const string Schema = "ordering";
+
     public DbSet<Order> Orders => Set<Order>();
+
+    /// <summary>
+    /// Postgres, with the migration history in <see cref="Schema"/>. The host and the design-time factory
+    /// both call this, so the application and <c>dotnet ef</c> agree on where the history is.
+    /// </summary>
+    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
+        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema(Schema);
+
         // This module produces integration events, so it needs the outbox table: SaveChanges writes one
         // row per domain event in the same transaction as the order.
         // Database tells the toolkit which provider this is, so the timestamp columns get the
@@ -38,5 +56,20 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
         // One generated call per assembly that declares identifiers or single value objects.
         configurationBuilder.AddOrderingContractsConverters();
         configurationBuilder.AddOrderingConverters();
+    }
+}
+
+/// <summary>
+/// How <c>dotnet ef migrations add</c> and the Supabase export build an <see cref="OrderingContext"/>:
+/// on Postgres, and pointing nowhere, because neither of them opens a connection. Without it the tools
+/// would build the host, and the host picks SQLite unless it is given a Supabase connection string.
+/// </summary>
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+    {
+        var options = new DbContextOptionsBuilder<OrderingContext>();
+        OrderingContext.UsePostgres(options, "Host=unused");
+        return new OrderingContext(options.Options);
     }
 }

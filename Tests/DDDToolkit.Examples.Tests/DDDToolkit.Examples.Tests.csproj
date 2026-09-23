@@ -31,6 +31,8 @@
     <ProjectReference Include="..\..\Examples\ModularMonolith\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
     <ProjectReference Include="..\..\Examples\ModularMonolith\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
+    <!-- SupabaseMigrations, to hold the example's supabase/migrations to its Entity Framework migrations. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
 </Project>

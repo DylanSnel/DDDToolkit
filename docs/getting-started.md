@@ -437,4 +437,4 @@ dotnet run --project Examples/ModularMonolith/DDDToolkit.Examples.Host
 Then work through
 [`DDDToolkit.Examples.Host.http`](../Examples/ModularMonolith/DDDToolkit.Examples.Host/DDDToolkit.Examples.Host.http)
 from the top. [`Examples/README.md`](../Examples/README.md) is the map of the folder and says which
-file shows what.
+file shows what, and how to run the same host on a local Supabase instead of SQLite.

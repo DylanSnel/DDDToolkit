@@ -845,6 +845,146 @@ primitive collection columns and the `Version` column are all just columns in yo
 If you map the outbox table before you need it, as the example context does, switching from
 in-process dispatch to the outbox later costs no migration at all.
 
+### Supabase
+
+The Supabase CLI does not run Entity Framework migrations. It runs the SQL files in
+`supabase/migrations`, and so do `supabase db reset` and Supabase branching.
+`DDDToolkit.EntityFramework.Supabase` turns each Entity Framework migration into one of those files,
+so you keep writing migrations with `dotnet ef migrations add` and Supabase applies them.
+
+```bash
+dotnet add package DDDToolkit.EntityFramework.Supabase
+```
+
+It depends on Entity Framework's relational layer alone: not on Npgsql, which your application already
+brings, and not on the rest of the toolkit, so it works for any context that has migrations.
+
+```csharp
+using DDDToolkit.EntityFramework.Supabase;
+
+// Writes a file for every migration that does not have one yet.
+SupabaseMigrations.Export(context, SupabaseMigrations.FindDirectory());
+```
+
+The context has to be on Npgsql, but nothing connects, so a connection string that points nowhere is
+enough. That is exactly what the design-time factory `dotnet ef` already uses gives you, so reuse it:
+
+```csharp
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+    {
+        var options = new DbContextOptionsBuilder<OrderingContext>();
+        OrderingContext.UsePostgres(options, "Host=unused");
+        return new OrderingContext(options.Options);
+    }
+}
+```
+
+`FindDirectory()` finds the Supabase project the way the CLI does: it looks from the current directory
+upwards for `supabase/config.toml` and returns the `supabase/migrations` next to it. That matters
+because `dotnet run` starts in the project's directory, not in the one you typed the command in. Pass
+the start directory, or the migrations directory itself, when you know better.
+
+Two places to call it. A command in the host, which you run after every `dotnet ef migrations add`:
+
+```csharp
+if (args is ["export-supabase", ..])
+{
+    using var context = new OrderingContextFactory().CreateDbContext(args);
+    return SupabaseMigrations.Export(context, SupabaseMigrations.FindDirectory()).IsInSync ? 0 : 1;
+}
+```
+
+And a test, which fails the build when someone adds a migration and forgets the export:
+
+```csharp
+[Fact]
+public void Supabase_has_every_migration()
+{
+    using var context = new OrderingContextFactory().CreateDbContext([]);
+    SupabaseMigrations.EnsureInSync(context, SupabaseMigrations.FindDirectory(RepositoryRoot));
+}
+```
+
+Each file is named after its migration: `20260922120000_AddOrders` becomes
+`20260922120000_AddOrders.sql`. Entity Framework ids and Supabase versions are both `yyyyMMddHHmmss`
+timestamps, so the two histories sort the same way, and a file written with `supabase migration new`
+takes its place between them by date.
+
+The file is what `dotnet ef migrations script` writes for that one step, with three differences:
+
+- **No `START TRANSACTION` and `COMMIT`.** The CLI already runs a file, and the row it records in
+  `supabase_migrations.schema_migrations`, in one transaction. It runs statements that cannot be in a
+  transaction, such as `CREATE INDEX CONCURRENTLY`, on their own.
+- **Row level security on new tables in `public`.** Supabase serves `public` through its Data API and
+  grants the `anon` and `authenticated` roles access to it. Without row level security, a table
+  Entity Framework creates there can be read and written by anyone who has the publishable key. With
+  it on and no policy, those roles see nothing. Your application still works, because it connects as
+  the table's owner, and row level security does not apply to the owner. Change
+  `SupabaseMigrationOptions.RowLevelSecuritySchemas` to cover other schemas, or clear it to turn this
+  off. Putting your tables in a schema the Data API does not expose, with
+  `modelBuilder.HasDefaultSchema("app")`, is even simpler. The toolkit's own `ddd` schema is not
+  exposed.
+- **A header comment naming the migration and its context.** That comment is how a file whose
+  migration was removed gets recognised.
+
+The `__EFMigrationsHistory` insert stays in. After Supabase applies a file, `GetPendingMigrations()`
+and `dotnet ef migrations list` agree that the migration is applied. Let one of the two apply
+migrations, not both. Supabase does not read Entity Framework's history, so if the application calls
+`Database.Migrate()` first, the CLI applies that migration a second time and fails.
+
+`Export` never overwrites or deletes a file. Supabase applies each version once, so rewriting a file
+that was already applied changes nothing on that database, and a database that has not applied it yet
+ends up with a different schema. Instead, the report (and `EnsureInSync`) lists:
+
+| Status | Meaning |
+|---|---|
+| `Missing` / `Created` | The migration had no file; `Export` writes it. |
+| `Changed` | The file is not what the migration generates now. Delete and export again only if it was never applied anywhere; otherwise make the change in a new migration. |
+| `VersionTaken` | Another file already has this timestamp. |
+| `Orphaned` | An exported file whose migration is gone, usually after `dotnet ef migrations remove`. |
+
+The comparison ignores line endings, and it ignores the Entity Framework version in the history
+insert, so a checkout with `\r\n` or an Entity Framework update does not show every file as changed.
+Files you wrote yourself, such as policies, triggers and storage buckets, are left alone.
+
+If a database already has these migrations from `dotnet ef database update`, tell Supabase once:
+`supabase migration repair --status applied <version>` for each exported version.
+
+#### Several modules, one Supabase project
+
+A Supabase project is one database, so a modular monolith's modules share it. Give each module a
+schema of its own and a migration history table in that schema, and export them all into the same
+`supabase/migrations`:
+
+```csharp
+public const string Schema = "ordering";
+
+public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
+    => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
+
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.HasDefaultSchema(Schema);
+    modelBuilder.AddDomainEventOutbox(Database);
+}
+```
+
+Each module's migrations only ever see its own history table, so neither can report the other's as
+pending. Supabase has one history, which interleaves the modules by timestamp. That is fine, because no
+module's migration touches another module's schema. A context only reports its own exported files as
+orphaned, and if two modules scaffold migrations in the same second, the second one is reported as
+`VersionTaken` rather than written.
+
+Module schemas are not in the Data API's `schemas` list in `supabase/config.toml`, so the Data API does
+not serve them and nothing needs row level security.
+
+`Examples/ModularMonolith` does all of this: both modules' migrations are in their `Migrations`
+folders, `supabase/migrations` holds the export, the host's `export-supabase` command writes it, and
+`Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` checks it. See
+[its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
+
 ## Where to look next
 
 - [Getting started](getting-started.md) for the module name and your first aggregate.
@@ -858,4 +998,4 @@ in-process dispatch to the outbox later costs no migration at all.
 The runnable version of everything here is `Examples/ModularMonolith`: the host's `Program.cs` shows
 the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/OrderingContext.cs` shows the
 conventions and the generated converters, and the host's `Endpoints.cs` shows the conflict catch
-block.
+block. Its `supabase/` folder and the `Migrations` folders in both modules show the Supabase export.

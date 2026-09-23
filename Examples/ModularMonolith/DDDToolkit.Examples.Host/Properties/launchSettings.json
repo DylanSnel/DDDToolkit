@@ -7,6 +7,15 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
+    },
+    "supabase": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5080",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ConnectionStrings__Supabase": "Host=127.0.0.1;Port=54322;Database=postgres;Username=postgres;Password=postgres"
+      }
     }
   }
 }

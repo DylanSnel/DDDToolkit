@@ -159,8 +159,10 @@ That one fact is the whole reason this package exists: the enqueue obeys the tra
 No broker can do that, which is why every broker needs an outbox in front of it. On Postgres you get the
 outbox guarantee from the queue itself.
 
-Supabase Queues is this extension with a UI on top, so a Supabase project already has it. Nothing here
-knows about Supabase; the sink talks to Postgres through Npgsql and SQL.
+Supabase Queues is this extension with a UI on top, so a Supabase project already has it. The sink
+knows nothing about Supabase; it talks to Postgres through Npgsql and SQL. To have the Supabase CLI
+apply your migrations, see `DDDToolkit.EntityFramework.Supabase` in
+[Entity Framework → Supabase](entity-framework.md#supabase).
 
 ```bash
 dotnet add package DDDToolkit.Messaging.Postgres

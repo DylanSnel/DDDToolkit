@@ -12,6 +12,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.EntityFramework.Supabase`, a new package that depends on nothing but Entity
+  Framework's relational layer. Its `SupabaseMigrations` exports Entity Framework migrations as
+  files in `supabase/migrations`, one per migration and named after it. `supabase db push`,
+  `db reset` and branching then apply the same changes `dotnet ef database update` would. The files
+  have no transaction statements of their own, keep the `__EFMigrationsHistory` insert and turn on
+  row level security for new tables in `public`. `Export` writes only missing files and never
+  rewrites one. `EnsureInSync` fails a test when a migration was not exported, when an exported file
+  was changed, or when a file's migration was removed. Several contexts can export into one
+  directory, and `FindDirectory()` finds `supabase/migrations` the way the CLI finds its project. See
+  [Entity Framework → Supabase](docs/entity-framework.md#supabase).
+- `Examples/ModularMonolith` runs on a local Supabase as well as on SQLite. Each module has its own
+  schema, migration history and Entity Framework migrations, exported into one `supabase/` project by
+  the host's `export-supabase` command. On Postgres the host refuses to start while a migration is
+  pending, rather than applying it itself.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
