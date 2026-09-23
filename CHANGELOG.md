@@ -30,6 +30,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `HotChocolate.Fusion.Aspire` before the gateway starts. The query the monoliths answer,
   `order { lines { product { name } } payment { status } shipment { destination } }`, and `node(id:)` now
   pass against all three samples. Every sample has a gateway of its own.
+- A Supabase Live workflow runs the Supabase monolith against a real Supabase project: the exported
+  `supabase/migrations` go on with `supabase db push`, then the checkout scenarios run against the
+  project. With `SUPABASE_BRANCHING=true` every run gets a preview branch of its own, which needs a Pro
+  organisation; otherwise it resets the example's schemas on a project kept for these tests.
 - `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
   inbox. `outbox.SendToWolverine()` publishes each message through Wolverine as an
   `IntegrationEventEnvelope`, the envelope's headers and payload in one object and routable on its

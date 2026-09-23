@@ -366,6 +366,21 @@ Paths are under `Modules/`.
 
 | Building block | Where |
 |---|---|
+The Supabase monolith also runs against a real Supabase project, in the Supabase Live workflow. It puts
+the exported `supabase/migrations` on with `supabase db push`, as a deploy would, and plays the same
+scenarios against the project, where the monolith checks on start-up that every migration was applied.
+The project exists for these tests alone: each run first drops the module schemas and forgets their
+migrations. With the repository variable `SUPABASE_BRANCHING` set to `true`, each run gets a preview
+branch of its own instead and deletes it afterwards; branching needs a Supabase Pro organisation. The
+workflow connects through Supabase's pooler, because the database's own host has no IPv4 address and
+GitHub's runners have no IPv6.
+
+Locally, point the AppHost at a project the same way the workflow does:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=5432;Database=postgres;Username=postgres.<ref>;Password=<password>;SSL Mode=Require" --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+```
+
 | Aggregate root, child entity, generated read-only collection | `Ordering/.../Domain/Aggregates/Orders/Order.cs`, `Entities/OrderLine.cs` |
 | An explicitly declared identifier, and generated ones | `Ordering/...Contracts/OrderingContracts.cs`; every other `[AggregateRoot<Guid>("…")]` |
 | Value object, always-valid twin, `TryToValid` at a boundary | `Ordering/.../Domain/ValueObjects/Address.cs`, `Api/OrderingEndpoints.cs` |
