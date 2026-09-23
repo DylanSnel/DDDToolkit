@@ -49,6 +49,8 @@
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
+    <!-- The shop's GraphQL schema: every module's part, and the fields that cross between them. -->
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.GraphQL\DDDToolkit.Examples.GraphQL.csproj" />
     <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>

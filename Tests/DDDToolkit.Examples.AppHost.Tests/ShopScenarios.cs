@@ -92,7 +92,104 @@ public abstract class ShopScenarios<TAppHost>(ShopFixture<TAppHost> shop) where 
         (await response.Content.ReadAsStringAsync(Cancellation)).Should().Contain("LINE_HAS_NO_SKU");
     }
 
+    // ------------------------------------------------------------------ GraphQL
+
+    [Fact]
+    public async Task One_GraphQL_query_reads_the_order_across_every_module_that_had_a_hand_in_it()
+    {
+        shop.SkipUnlessStarted();
+
+        var placed = await GraphQLAsync(
+            """
+            mutation { placeOrder(input: { street: "Oudegracht 1", city: "Utrecht", postalCode: "3511 AA",
+                                           lines: [{ sku: "COFFEE-1KG", quantity: 1 }] }) { id } }
+            """,
+            retryUntilPriced: true);
+        var id = placed.GetProperty("placeOrder").GetProperty("id").GetString()!;
+
+        JsonElement order = default;
+        await EventuallyAsync(async () =>
+        {
+            order = (await GraphQLAsync(
+                $$"""
+                { order(id: "{{id}}") {
+                    status
+                    lines { quantity product { name price { amount currency } } }
+                    payment { status order }
+                    shipment { destination order } } }
+                """)).GetProperty("order");
+            return order.GetProperty("shipment").ValueKind == JsonValueKind.Object;
+        });
+
+        // Ordering answered the order, Catalog the product, Payments the payment, Shipping the van.
+        order.GetProperty("status").GetString().Should().Be("CONFIRMED");
+        order.GetProperty("lines")[0].GetProperty("product").GetProperty("name").GetString().Should().Be("Coffee beans, 1 kg");
+        order.GetProperty("payment").GetProperty("status").GetString().Should().Be("CAPTURED");
+
+        // The modules point back at the order with its own node id, and node(id:) finds it again.
+        order.GetProperty("payment").GetProperty("order").GetString().Should().Be(id);
+        order.GetProperty("shipment").GetProperty("order").GetString().Should().Be(id);
+        (await GraphQLAsync($$"""{ node(id: "{{id}}") { ... on Order { status } } }"""))
+            .GetProperty("node").GetProperty("status").GetString().Should().Be("CONFIRMED");
+    }
+
+    [Fact]
+    public async Task A_broken_rule_is_a_GraphQL_error_carrying_the_rules_code()
+    {
+        shop.SkipUnlessStarted();
+
+        var placed = await GraphQLAsync(
+            """
+            mutation { placeOrder(input: { street: "Oudegracht 1", city: "Utrecht", postalCode: "3511 AA",
+                                           lines: [{ sku: "COFFEE-1KG", quantity: 1 }] }) { id } }
+            """,
+            retryUntilPriced: true);
+        var id = placed.GetProperty("placeOrder").GetProperty("id").GetString()!;
+        await EventuallyAsync(async () =>
+            (await GraphQLAsync($$"""{ order(id: "{{id}}") { status } }""")).GetProperty("order").GetProperty("status").GetString() == "CONFIRMED");
+
+        var errors = await GraphQLErrorsAsync($$"""mutation { cancelOrder(id: "{{id}}") { status } }""");
+
+        errors.EnumerateArray().Select(error => error.GetProperty("extensions").GetProperty("code").GetString())
+            .Should().Contain("ORDER_ALREADY_CONFIRMED");
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>
+    /// Sends a GraphQL request and returns its <c>data</c>. Right after the shop starts Ordering may not
+    /// have heard Catalog's prices yet and refuses with <c>UNKNOWN_SKU</c>; with
+    /// <paramref name="retryUntilPriced"/> that is asked again until the copy has caught up.
+    /// </summary>
+    private async Task<JsonElement> GraphQLAsync(string query, bool retryUntilPriced = false)
+    {
+        var deadline = DateTime.UtcNow + Settles;
+
+        while (true)
+        {
+            var response = await PostGraphQLAsync(query);
+            if (!response.TryGetProperty("errors", out var errors))
+            {
+                return response.GetProperty("data");
+            }
+
+            if (!retryUntilPriced || !errors.ToString().Contains("UNKNOWN_SKU") || DateTime.UtcNow > deadline)
+            {
+                throw new InvalidOperationException("The GraphQL request failed: " + errors);
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), Cancellation);
+        }
+    }
+
+    private async Task<JsonElement> GraphQLErrorsAsync(string query)
+        => (await PostGraphQLAsync(query)).GetProperty("errors");
+
+    private async Task<JsonElement> PostGraphQLAsync(string query)
+    {
+        using var response = await shop.Client().PostAsJsonAsync("/graphql", new { query }, Cancellation);
+        return await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+    }
 
     /// <summary>
     /// Places an order and returns its id. Right after the shop starts, Ordering may not have heard

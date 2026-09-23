@@ -1,4 +1,6 @@
 using DDDToolkit.EntityFramework;
+using DDDToolkit.Examples.GraphQL;
+using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Examples.Catalog;
 using DDDToolkit.Examples.Catalog.Api;
 using DDDToolkit.Examples.Hosting;
@@ -32,7 +34,8 @@ var database = builder.Configuration.GetConnectionString("SqlServer") is { Lengt
     : throw new InvalidOperationException(
         "ConnectionStrings:SqlServer is not set. Run DDDToolkit.Examples.SqlServer.AppHost, which starts SQL Server and sets it.");
 
-var host = ModuleHost.InProcess(database);
+// The other modules, through the module sink, and whoever holds a GraphQL subscription to an order.
+var host = ModuleHost.InProcess(database).AlsoSendTo<GraphQlSubscriptionSink>();
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
@@ -40,13 +43,19 @@ builder.Services.AddInventoryModule(host);
 builder.Services.AddPaymentsModule(host);
 builder.Services.AddShippingModule(host);
 
+// One GraphQL schema over all five modules, at /graphql, next to the REST endpoints.
+builder.Services.AddShopGraphQL();
+
 var app = builder.Build();
+
+app.UseWebSockets();
 
 app.MapCatalogEndpoints();
 app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
+app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

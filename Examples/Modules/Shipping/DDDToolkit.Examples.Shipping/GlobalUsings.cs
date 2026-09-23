@@ -5,3 +5,4 @@ global using DDDToolkit.Examples.Shipping.Domain.Shipments;
 global using DDDToolkit.Examples.Shipping.Application.IntegrationEvents;
 global using DDDToolkit.Examples.Shipping.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Shipping.Api;
+global using DDDToolkit.Examples.Shipping.Api.GraphQL;

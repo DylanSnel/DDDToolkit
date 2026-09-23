@@ -4,3 +4,4 @@
 global using DDDToolkit.Examples.Catalog.Domain.Products;
 global using DDDToolkit.Examples.Catalog.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Catalog.Api;
+global using DDDToolkit.Examples.Catalog.Api.GraphQL;

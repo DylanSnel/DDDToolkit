@@ -30,6 +30,7 @@ Modules/
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
   Migrations.SqlServer/                      every module's SQL Server migrations, in one assembly
 Shared/
+  DDDToolkit.Examples.GraphQL                the shop's GraphQL schema over every module, and the joins between them
   DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
   DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
 ModularMonolith.Supabase/
@@ -67,6 +68,7 @@ DDDToolkit.Examples.Ordering/
   Infrastructure/
     Persistence/             the DbContext, the design-time factory, Migrations/
   Api/                       the module's HTTP endpoints
+    GraphQL/                 its GraphQL types, queries, mutations and lookups
   Module.cs                  [assembly: Module("Ordering")]
   OrderingModule.cs          AddOrderingModule: everything the host calls
 ```
@@ -94,6 +96,41 @@ own namespaces, so the `using` lines above the code name what comes from outside
 No module names another anywhere. Each says what it publishes and what it listens to, in its own
 `*Module.cs`, and reads the others' contracts projects and never their domains. Every module's project
 file turns [DDD00022 and DDD00023](../docs/modules.md) into build errors, so that stays true.
+
+### One GraphQL schema over five modules
+
+Next to the REST endpoints, both monoliths serve GraphQL at `/graphql`, and it reads as one shop:
+
+```graphql
+{
+  order(id: "T3JkZXI6…") {
+    status
+    lines { quantity product { name price { amount currency } } }   # Catalog
+    payment { status }                                                # Payments
+    shipment { destination }                                          # Shipping
+  }
+}
+```
+
+Each module publishes its own part in `Api/GraphQL`: its types as code-first descriptors (the domain
+classes carry no GraphQL attribute), its queries and mutations, and a **lookup** for what others may
+want from it: `ProductBySkuDataLoader`, `PaymentByOrderDataLoader`, `ShipmentByOrderDataLoader`. The
+fields that cross a boundary, `OrderLine.product`, `Order.payment` and `Order.shipment`, are not in any
+module. `Shared/DDDToolkit.Examples.GraphQL` adds them, on those lookups, because it composes the schema
+and is allowed to see every module the way a host is. Ordering still knows a line's SKU and nothing more.
+When the modules run as services, a Fusion gateway makes the same joins over the same lookups, and the
+query above does not change.
+
+Every entity a client can refetch is a Relay node: `node(id:)` finds orders, products, payments,
+shipments and stock items, and the ids are the toolkit's identifiers written into HotChocolate's own node
+id format (see [Relay node ids](../docs/graphql.md#relay-node-ids)). A module that points at an order it
+does not own publishes the reference as an `Order` node id, `payment { order }`, without knowing the
+`Order` type.
+
+A broken rule is a GraphQL error whose `extensions.code` is the rule's code, `ORDER_ALREADY_CONFIRMED`,
+exactly what the REST endpoint's 422 carries; an invalid address is one error per field. And
+`orderConfirmed(id:)` and `orderCancelled(id:)` push an order to a client the moment it settles: the
+outbox sends Ordering's contracts to `GraphQlSubscriptionSink` as well as to the other modules.
 
 ### Running it
 
@@ -216,6 +253,10 @@ Paths are under `Modules/`.
 | The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | `Modules/Migrations.SqlServer`, each module's `Infrastructure/Persistence/Migrations` |
 | The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
+| One GraphQL schema over modules that do not know each other | `Shared/DDDToolkit.Examples.GraphQL/ShopSchema.cs`, each module's `Api/GraphQL` |
+| Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
+| Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in `ShopSchema.cs`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
+| Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
@@ -224,7 +265,7 @@ There are no repositories. A module's `DbContext` is its repository and unit of 
 the endpoints and the policies. The toolkit has no repository abstraction to show, and a wrapper
 around a `DbContext` in a sample would only hide what the toolkit does to it.
 
-What it does not show: GraphQL, Newtonsoft, FluentValidation validators, pgmq, and upcasting an older
+What it does not show: Newtonsoft, FluentValidation validators, pgmq, and upcasting an older
 payload. Those have runnable coverage in `Tests/` and a page each in [docs](../docs).
 
 ## `DDDToolkit.ExampleApi` and `DDDToolkit.ExampleLibrary`

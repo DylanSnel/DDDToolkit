@@ -71,6 +71,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   from `supabase/migrations`, or points at a live project. `Tests/DDDToolkit.Examples.AppHost.Tests`
   plays the same checkout scenarios against every sample, containers included, in a new Sample Tests
   workflow; Build and Test and the release leave them out with `Category!=Samples`.
+- The example shop serves one GraphQL schema over its five modules, next to REST:
+  `order { lines { product { name } } payment { status } shipment { destination } }` in one query.
+  Each module publishes its part and a lookup in `Api/GraphQL`; the fields that cross modules are
+  composed in `Shared/DDDToolkit.Examples.GraphQL`, so no module references another. Every entity is a
+  Relay node with the toolkit's identifier as its id, rules come back as errors with their codes, and
+  `orderConfirmed`/`orderCancelled` subscriptions are fed by the outbox.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed

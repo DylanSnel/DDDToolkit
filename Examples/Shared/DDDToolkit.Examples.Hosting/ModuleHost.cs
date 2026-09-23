@@ -18,4 +18,18 @@ public sealed record ModuleHost(ModuleDatabase Database, Action<OutboxOptions> P
     /// the module sink.
     /// </summary>
     public static ModuleHost InProcess(ModuleDatabase database) => new(database, outbox => outbox.SendToModules());
+
+    /// <summary>
+    /// Delivers every module's messages to <typeparamref name="TSink"/> as well, after the transport
+    /// already chosen: a GraphQL subscription sink next to the module sink, for instance.
+    /// </summary>
+    public ModuleHost AlsoSendTo<TSink>() where TSink : DDDToolkit.Interfaces.IIntegrationEventSink
+        => this with
+        {
+            Publish = outbox =>
+            {
+                Publish(outbox);
+                outbox.SendTo<TSink>();
+            },
+        };
 }

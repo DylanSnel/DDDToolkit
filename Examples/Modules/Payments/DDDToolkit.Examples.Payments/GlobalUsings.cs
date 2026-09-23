@@ -7,3 +7,4 @@ global using DDDToolkit.Examples.Payments.Application.IntegrationEvents;
 global using DDDToolkit.Examples.Payments.Infrastructure.PaymentProvider;
 global using DDDToolkit.Examples.Payments.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Payments.Api;
+global using DDDToolkit.Examples.Payments.Api.GraphQL;

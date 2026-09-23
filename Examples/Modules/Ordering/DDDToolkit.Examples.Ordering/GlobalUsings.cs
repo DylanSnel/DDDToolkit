@@ -9,3 +9,4 @@ global using DDDToolkit.Examples.Ordering.Application.DomainEvents;
 global using DDDToolkit.Examples.Ordering.Application.ReadModels;
 global using DDDToolkit.Examples.Ordering.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Ordering.Api;
+global using DDDToolkit.Examples.Ordering.Api.GraphQL;

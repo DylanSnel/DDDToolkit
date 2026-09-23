@@ -60,6 +60,7 @@
     <Project Path="Examples/Modules/Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer.csproj" />
   </Folder>
   <Folder Name="/Examples/Shared/">
+    <Project Path="Examples/Shared/DDDToolkit.Examples.GraphQL/DDDToolkit.Examples.GraphQL.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.Hosting/DDDToolkit.Examples.Hosting.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.ServiceDefaults/DDDToolkit.Examples.ServiceDefaults.csproj" />
   </Folder>

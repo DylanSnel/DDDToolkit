@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The shop's GraphQL schema for a process that runs every module: each module's part, plus the fields
+    that cross from one module into another. This project may name every module, the way a host may,
+    because composing them is its whole job; no module references it. Where the modules run as separate
+    services a Fusion gateway composes the same schema instead, over the same lookups.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog\DDDToolkit.Examples.Catalog.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory\DDDToolkit.Examples.Inventory.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+  </ItemGroup>
+
+</Project>

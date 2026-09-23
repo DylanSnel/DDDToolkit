@@ -7,3 +7,4 @@ global using DDDToolkit.Examples.Inventory.Domain.Services;
 global using DDDToolkit.Examples.Inventory.Application.IntegrationEvents;
 global using DDDToolkit.Examples.Inventory.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Inventory.Api;
+global using DDDToolkit.Examples.Inventory.Api.GraphQL;

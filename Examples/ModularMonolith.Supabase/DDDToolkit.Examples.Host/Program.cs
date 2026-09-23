@@ -1,4 +1,6 @@
 using DDDToolkit.EntityFramework;
+using DDDToolkit.Examples.GraphQL;
+using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Catalog;
@@ -41,7 +43,8 @@ var database = builder.Configuration.GetConnectionString("Supabase") is { Length
 
 // The whole shop in one process, so every message goes to the other modules through the module sink.
 // No module names another here or anywhere: each one says what it publishes and what it listens to.
-var host = ModuleHost.InProcess(database);
+// The other modules, through the module sink, and whoever holds a GraphQL subscription to an order.
+var host = ModuleHost.InProcess(database).AlsoSendTo<GraphQlSubscriptionSink>();
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
@@ -49,7 +52,12 @@ builder.Services.AddInventoryModule(host);
 builder.Services.AddPaymentsModule(host);
 builder.Services.AddShippingModule(host);
 
+// One GraphQL schema over all five modules, at /graphql, next to the REST endpoints.
+builder.Services.AddShopGraphQL();
+
 var app = builder.Build();
+
+app.UseWebSockets();
 
 // On Supabase the migrations are Supabase's to apply, from supabase/migrations. The application only
 // checks, over every module that registered its migrations, and refuses to start while one is missing.
@@ -63,6 +71,7 @@ app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
+app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

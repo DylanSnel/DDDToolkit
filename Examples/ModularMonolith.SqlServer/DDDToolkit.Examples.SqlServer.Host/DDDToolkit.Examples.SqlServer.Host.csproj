@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\Modules\Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.GraphQL\DDDToolkit.Examples.GraphQL.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
   </ItemGroup>
 

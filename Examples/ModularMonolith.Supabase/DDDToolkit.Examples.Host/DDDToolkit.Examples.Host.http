@@ -119,3 +119,28 @@ PUT {{host}}/products/MUG/price
 Content-Type: application/json
 
 { "price": 9.50 }
+
+### ------------------------------------------------------------------------------------------------
+### The same shop over GraphQL, at /graphql. One schema, five modules: the order, its lines' products
+### from Catalog, its payment from Payments and its van from Shipping, in one query. Every id is a Relay
+### node id; paste one into node(id:) and the order comes back.
+
+# @name gqlPlaced
+POST {{host}}/graphql
+Content-Type: application/json
+
+{ "query": "mutation { placeOrder(input: { street: \"Oudegracht 1\", city: \"Utrecht\", postalCode: \"3511 AA\", lines: [{ sku: \"COFFEE-1KG\", quantity: 1 }] }) { id status total { amount currency } } }" }
+
+### A few seconds later, the whole story of that order.
+POST {{host}}/graphql
+Content-Type: application/json
+
+{ "query": "query($id: ID!) { order(id: $id) { status lines { quantity product { name price { amount } } } payment { status order } shipment { destination order } } }",
+  "variables": { "id": "{{gqlPlaced.response.body.data.placeOrder.id}}" } }
+
+### A broken rule is a GraphQL error with the rule's code in extensions.code: ORDER_ALREADY_CONFIRMED.
+POST {{host}}/graphql
+Content-Type: application/json
+
+{ "query": "mutation($id: ID!) { cancelOrder(id: $id) { status } }",
+  "variables": { "id": "{{gqlPlaced.response.body.data.placeOrder.id}}" } }
