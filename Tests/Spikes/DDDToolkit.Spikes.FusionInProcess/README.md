@@ -11,6 +11,7 @@ with no HTTP between them. That is the model the microservices samples already u
 dotnet run --project Tests/Spikes/DDDToolkit.Spikes.FusionInProcess -- compose
 dotnet run --project Tests/Spikes/DDDToolkit.Spikes.FusionInProcess -- endpoint
 dotnet run --project Tests/Spikes/DDDToolkit.Spikes.FusionInProcess -- endpoint-gateway-first
+dotnet run --project Tests/Spikes/DDDToolkit.Spikes.FusionInProcess -- endpoint-own-container
 ```
 
 With the published 16.6.6 packages, and the 16.7.0-p.10 preview:
@@ -23,6 +24,17 @@ With the published 16.6.6 packages, and the 16.7.0-p.10 preview:
   first. With a single source schema it answers, but from that schema directly, not through the gateway.
 - `endpoint-gateway-first` does not start: with the gateway registered first, Fusion's manager answers
   for every name, and the in-memory connector can no longer reach the source schemas.
+
+- `endpoint-own-container` works, with public API only. The application's container holds the source
+  schemas, with HotChocolate as its only executor provider. The gateway gets a container of its own, where
+  Fusion is the provider, and is handed the source schemas explicitly: `AddConfigurationProvider` with an
+  `InMemoryConfigurationProvider`, an `InMemorySourceSchemaClientFactory`, and an
+  `InMemorySourceSchemaClientConfiguration` per schema through `FusionSetupUtilities.Configure`, the same
+  public classes `AddInMemorySchema` uses. `/graphql` is mapped on a branch whose `ApplicationServices` is
+  the gateway's container. One service the gateway resolves from the request's services,
+  `ISourceSchemaClientScopeFactory`, is handed from the gateway's container to the application's.
+  `{ productById(id: 1) { id name reviewCount } }` then answers `name` from one source schema and
+  `reviewCount` from the other, over HTTP, merged by the gateway in process.
 
 Two things to know when trying this:
 
