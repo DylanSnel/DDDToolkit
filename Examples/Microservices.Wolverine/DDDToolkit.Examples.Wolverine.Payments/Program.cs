@@ -3,6 +3,8 @@ using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Payments;
 using DDDToolkit.Examples.Payments.Api;
+using DDDToolkit.Examples.Payments.Api.GraphQL;
+using DDDToolkit.HotChocolate;
 using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Wolverine;
 using Wolverine;
@@ -72,9 +74,22 @@ var host = new ModuleHost(
 
 builder.Services.AddPaymentsModule(host);
 
+// GraphQL: this service's source schema, which the gateway composes with the other two. Besides its own
+// payments it declares Order, by id alone, with the one field Payments adds to it: payment.
+builder.Services
+    .AddGraphQLServer()
+    .AddSourceSchemaDefaults()
+    .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+    .AddDDDToolkitTypes()
+    .AddDDDToolkitErrors()
+    .AddQueryType()
+    .AddPaymentsGraphQL()
+    .AddPaymentsOrderStub();
+
 var app = builder.Build();
 
 app.MapPaymentsEndpoints();
+app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

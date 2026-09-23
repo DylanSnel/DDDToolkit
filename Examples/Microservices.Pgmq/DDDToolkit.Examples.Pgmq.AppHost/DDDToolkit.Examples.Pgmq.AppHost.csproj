@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.Fusion.Aspire" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
   </ItemGroup>
 
@@ -19,7 +20,7 @@
     <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Storefront\DDDToolkit.Examples.Pgmq.Storefront.csproj" />
     <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Payments\DDDToolkit.Examples.Pgmq.Payments.csproj" />
     <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Fulfilment\DDDToolkit.Examples.Pgmq.Fulfilment.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Gateway\DDDToolkit.Examples.Gateway.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Gateway\DDDToolkit.Examples.Pgmq.Gateway.csproj" />
   </ItemGroup>
 
 </Project>

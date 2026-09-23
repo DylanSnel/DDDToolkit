@@ -22,12 +22,6 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
     /// <summary>The resource that serves the shop's HTTP API: the monolith, or the storefront service.</summary>
     protected abstract string ShopResource { get; }
 
-    /// <summary>
-    /// Whether the shop answers GraphQL at <c>/graphql</c>. The monoliths do; the services do once a Fusion
-    /// gateway composes their schemas.
-    /// </summary>
-    public virtual bool ServesGraphQL => true;
-
     /// <summary>The resources that have to be healthy before a scenario may run.</summary>
     protected virtual IEnumerable<string> ResourcesToWaitFor => [ShopResource];
 

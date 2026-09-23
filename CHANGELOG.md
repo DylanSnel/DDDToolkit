@@ -19,6 +19,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   MassTransit 8, the last version under the Apache 2.0 licence.
 - `Examples/Microservices.MassTransit` runs the same three services over RabbitMQ with MassTransit, each on
   a SQL Server database of its own.
+- Value objects are `@shareable` in a Fusion source schema. A value object has no owner, so every service
+  that returns one answers for it alike, and composition refused a second service returning a `Money`
+  until each field said so. `AddDDDToolkitTypes()` now marks every value object type `@shareable` when the
+  schema declares itself a source schema with HotChocolate's `AddSourceSchemaDefaults()`, and leaves
+  other schemas alone. See [Value objects in a Fusion source schema](docs/graphql.md#value-objects-in-a-fusion-source-schema).
+- The microservices samples answer GraphQL through a Fusion gateway: every service serves its modules'
+  source schema, Payments and Fulfilment add `payment` and `shipment` to Ordering's `Order` through a
+  stub keyed on its node id, and the AppHost composes the gateway's schema with
+  `HotChocolate.Fusion.Aspire` before the gateway starts. The query the monoliths answer,
+  `order { lines { product { name } } payment { status } shipment { destination } }`, and `node(id:)` now
+  pass against all three samples. Every sample has a gateway of its own.
 - `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
   inbox. `outbox.SendToWolverine()` publishes each message through Wolverine as an
   `IntegrationEventEnvelope`, the envelope's headers and payload in one object and routable on its
@@ -213,9 +224,21 @@ convention.
   | Dependency | 3.0.0 required | Now requires |
   |---|---|---|
   | Microsoft.EntityFrameworkCore, .Relational | 10.0.12 | 10.0.0 |
+- `GetInvariantViolations()` and `GetOwnInvariantViolations()` were published as GraphQL fields on
+  every entity whose schema type bound its fields by convention, so any client could run an entity's
+  invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
+  `[Internal]` now, like the rest of the toolkit's bookkeeping.
   | Microsoft.Extensions.*.Abstractions | 10.0.12 | 10.0.0 |
   | Npgsql | 10.0.3 | 10.0.0 |
   | HotChocolate.AspNetCore, HotChocolate.Types.Analyzers | 16.6.6 | 16.0.0 |
+- **Breaking for schemas that relied on it:** an entity, an aggregate or a value object bound by
+  convention no longer publishes its methods as GraphQL fields, only its properties.
+  `DomainBehaviourFieldsInterceptor`, registered by `AddDDDToolkitTypes()`, removes them. Before, a
+  `Money.Times(int)` was published as `times(quantity: Int!)`, and a method on an aggregate that changed
+  state and returned a result became a field that ran inside a query. A type declared with
+  `BindFieldsExplicitly()` still publishes every method it names, and type extensions are untouched. See
+  [Domain types publish their data, not their behaviour](docs/graphql.md#domain-types-publish-their-data-not-their-behaviour).
+
   | FluentValidation | 12.1.1 | 12.0.0 |
   | Newtonsoft.Json | 13.0.4 | 13.0.1 |
   | Mediator.Abstractions | 3.0.2 | 3.0.1 |

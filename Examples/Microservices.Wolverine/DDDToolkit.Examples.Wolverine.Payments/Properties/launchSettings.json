@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "DDDToolkit.Examples.Wolverine.Payments": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65139;http://localhost:65140"
+    }
+  }
+}

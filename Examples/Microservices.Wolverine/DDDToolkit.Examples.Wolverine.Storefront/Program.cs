@@ -2,11 +2,19 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Catalog;
 using DDDToolkit.Examples.Catalog.Api;
+using DDDToolkit.Examples.Catalog.Api.GraphQL;
+using DDDToolkit.Examples.Catalog.Domain.Products;
 using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Ordering.Api;
+using DDDToolkit.Examples.Ordering.Api.GraphQL;
+using DDDToolkit.Examples.Ordering.Domain.Orders;
+using DDDToolkit.HotChocolate;
+using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Wolverine;
+using HotChocolate;
+using HotChocolate.Types;
 using Wolverine;
 using Wolverine.RabbitMQ;
 
@@ -73,15 +81,42 @@ var host = new ModuleHost(
     {
         outbox.SendToModules();
         outbox.SendToWolverine();
-    });
+    })
+    .AlsoSendTo<GraphQlSubscriptionSink>();
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
+
+// GraphQL: this service's source schema, which the gateway composes with the other two into the shop's
+// one schema. Catalog and Ordering both run here, so a line's product is joined in-process, the way the
+// monolith does it; Payments and Shipping add their fields to Order from their own services.
+builder.Services
+    .AddGraphQLServer()
+    .AddSourceSchemaDefaults()
+    .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+    .AddDDDToolkitTypes()
+    .AddDDDToolkitErrors()
+    .AddQueryType()
+    .AddMutationType()
+    .AddSubscriptionType()
+    .AddInMemorySubscriptions()
+    .AddCatalogGraphQL()
+    .AddOrderingGraphQL()
+    .AddTypeExtension<OrderLineProduct>();
 
 var app = builder.Build();
 
 app.MapCatalogEndpoints();
 app.MapOrderingEndpoints();
+app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();
+
+/// <summary>The product a line is for: Ordering's SKU, joined to Catalog's lookup, both in this service.</summary>
+[ExtendObjectType<OrderLine>]
+internal sealed class OrderLineProduct
+{
+    public Task<Product?> GetProductAsync([Parent] OrderLine line, ProductBySkuDataLoader products, CancellationToken cancellationToken)
+        => products.LoadAsync(line.Sku, cancellationToken);
+}

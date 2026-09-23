@@ -13,7 +13,10 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Registers the toolkit's schema conventions: the <see cref="IgnoreInternalFieldsInterceptor"/>,
-    /// which hides every member marked <c>[Internal]</c>, and the <c>DomainEvent</c> interface type.
+    /// which hides every member marked <c>[Internal]</c>; the <see cref="DomainBehaviourFieldsInterceptor"/>,
+    /// which lets entities, aggregates and value objects publish their properties by convention and never
+    /// their methods; the <see cref="ShareableValueObjectsInterceptor"/>, which marks value objects
+    /// <c>@shareable</c> in a Fusion source schema; and the <c>DomainEvent</c> interface type.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -38,6 +41,9 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.TryAddTypeInterceptor(typeof(IgnoreInternalFieldsInterceptor));
+        builder.TryAddTypeInterceptor(typeof(DomainBehaviourFieldsInterceptor));
+        builder.TryAddTypeInterceptor(typeof(ShareableValueObjectsInterceptor));
+
         builder.AddHotChocolateTypes();
         return builder;
     }

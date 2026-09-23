@@ -64,7 +64,6 @@
     <Project Path="Examples/Modules/SharedKernel/DDDToolkit.Examples.SharedKernel/DDDToolkit.Examples.SharedKernel.csproj" />
   </Folder>
   <Folder Name="/Examples/Shared/">
-    <Project Path="Examples/Shared/DDDToolkit.Examples.Gateway/DDDToolkit.Examples.Gateway.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.GraphQL/DDDToolkit.Examples.GraphQL.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.Hosting/DDDToolkit.Examples.Hosting.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.ServiceDefaults/DDDToolkit.Examples.ServiceDefaults.csproj" />
@@ -82,18 +81,21 @@
     <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Storefront/DDDToolkit.Examples.Pgmq.Storefront.csproj" />
     <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Payments/DDDToolkit.Examples.Pgmq.Payments.csproj" />
     <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Fulfilment/DDDToolkit.Examples.Pgmq.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Gateway/DDDToolkit.Examples.Pgmq.Gateway.csproj" />
   </Folder>
   <Folder Name="/Examples/Microservices.Wolverine/">
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost/DDDToolkit.Examples.Wolverine.AppHost.csproj" />
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Storefront/DDDToolkit.Examples.Wolverine.Storefront.csproj" />
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Payments/DDDToolkit.Examples.Wolverine.Payments.csproj" />
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Fulfilment/DDDToolkit.Examples.Wolverine.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Gateway/DDDToolkit.Examples.Wolverine.Gateway.csproj" />
   </Folder>
   <Folder Name="/Examples/Microservices.MassTransit/">
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.AppHost/DDDToolkit.Examples.MassTransit.AppHost.csproj" />
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Storefront/DDDToolkit.Examples.MassTransit.Storefront.csproj" />
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Payments/DDDToolkit.Examples.MassTransit.Payments.csproj" />
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Fulfilment/DDDToolkit.Examples.MassTransit.Fulfilment.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Gateway/DDDToolkit.Examples.MassTransit.Gateway.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />

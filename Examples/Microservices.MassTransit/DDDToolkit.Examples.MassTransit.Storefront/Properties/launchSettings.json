@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "DDDToolkit.Examples.MassTransit.Storefront": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65119;http://localhost:65120"
+    }
+  }
+}

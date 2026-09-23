@@ -33,8 +33,6 @@ public sealed class PgmqServices : ShopFixture<Projects.DDDToolkit_Examples_Pgmq
     protected override string ShopResource => "gateway";
 
     protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
-
-    public override bool ServesGraphQL => false;
 }
 
 /// <summary>
@@ -51,8 +49,6 @@ public sealed class WolverineServices : ShopFixture<Projects.DDDToolkit_Examples
     protected override string ShopResource => "gateway";
 
     protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
-
-    public override bool ServesGraphQL => false;
 }
 
 /// <summary>
@@ -69,8 +65,6 @@ public sealed class MassTransitServices : ShopFixture<Projects.DDDToolkit_Exampl
     protected override string ShopResource => "gateway";
 
     protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
-
-    public override bool ServesGraphQL => false;
 }
 
 /// <summary>

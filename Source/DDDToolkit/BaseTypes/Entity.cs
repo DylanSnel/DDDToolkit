@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Interfaces;
@@ -68,6 +69,7 @@ public abstract class Entity<TIdObject> : IEntity<TIdObject>, IEquatable<Entity<
     /// calls the self-only pair below because it is already walking the graph itself.
     /// </para>
     /// </summary>
+    [Internal]
     public virtual IReadOnlyList<InvariantViolation> GetInvariantViolations() => GetOwnInvariantViolations();
 
     /// <summary>
@@ -94,6 +96,7 @@ public abstract class Entity<TIdObject> : IEntity<TIdObject>, IEquatable<Entity<
     /// <see cref="GetInvariantViolations"/> to find out whether an aggregate is consistent.
     /// </para>
     /// </summary>
+    [Internal]
     public virtual IReadOnlyList<InvariantViolation> GetOwnInvariantViolations() => [];
 
     /// <summary>

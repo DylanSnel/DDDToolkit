@@ -33,7 +33,6 @@ Modules/
     DDDToolkit.Examples.Catalog.Migrations.SqlServer   its SQL Server migrations, for hosts on SQL Server
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
 Shared/
-  DDDToolkit.Examples.Gateway                the microservices' front door: YARP, routes in appsettings.json
   DDDToolkit.Examples.GraphQL                the shop's GraphQL schema over every module, and the joins between them
   DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
   DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
@@ -122,8 +121,8 @@ want from it: `ProductBySkuDataLoader`, `PaymentByOrderDataLoader`, `ShipmentByO
 fields that cross a boundary, `OrderLine.product`, `Order.payment` and `Order.shipment`, are not in any
 module. `Shared/DDDToolkit.Examples.GraphQL` adds them, on those lookups, because it composes the schema
 and is allowed to see every module the way a host is. Ordering still knows a line's SKU and nothing more.
-When the modules run as services, a Fusion gateway makes the same joins over the same lookups, and the
-query above does not change.
+When the modules run as services, a Fusion gateway makes the same joins across services, and the query
+above does not change; see [GraphQL across services](#graphql-across-services).
 
 Every entity a client can refetch is a Relay node: `node(id:)` finds orders, products, payments,
 shipments and stock items, and the ids are the toolkit's identifiers written into HotChocolate's own node
@@ -244,6 +243,45 @@ Storefront's `Program.cs`:
 
 ```csharp
 // sending: to the modules next door, and onto the queue of every service that consumes it
+Each sample has a gateway of its own, `DDDToolkit.Examples.{Sample}.Gateway`, and a client talks to
+nothing else: REST through YARP, with the route table in the gateway's `appsettings.json`, and GraphQL
+through Fusion.
+
+#### GraphQL across services
+
+Every service serves the GraphQL of the modules it runs, as a source schema, and the gateway composes the
+three into the schema the monoliths serve. A client cannot tell the difference: the scenario tests send
+the monoliths' queries to the gateway.
+
+```graphql
+{ order(id: "…") { status lines { product { name } } payment { status } shipment { destination } } }
+```
+
+Storefront answers `status` and `lines { product }`: Catalog and Ordering run there, so the join from a
+line's SKU to the product is made in-process, as in the monolith. Payments and Fulfilment each declare
+an `Order` of their own that holds nothing but the order's id, and add the one field they know about,
+`payment` or `shipment`. The gateway merges the three `Order` types on the id, asks Storefront for the
+order, then asks Payments and Fulfilment for their fields with the id it got back. Those stubs are in
+the modules, as `OrderStub.cs` in Payments' and Shipping's `Api/GraphQL`: they are the module's part of
+the order's API, and a module that runs in a monolith leaves them out, because there Ordering's `Order`
+is in the same schema.
+
+Two things make that work that are not obvious:
+
+- The stub is a Relay node. The gateway hands Payments the order's node id, and Payments can only read an
+  `OrderId` back out of it when `Order` is a node there too. The toolkit's serializer for `OrderId` writes
+  the same node id in every service.
+- `Money` is in Storefront's schema and in Payments', and composition refuses a type two services both
+  answer unless it is `@shareable`. A value object has no owner, so the toolkit marks every value object
+  `@shareable` in a source schema; see
+  [Value objects in a Fusion source schema](../docs/graphql.md#value-objects-in-a-fusion-source-schema).
+
+The AppHost composes: `AddNitroComposition()`, `WithGraphQLHttpEndpoint()` on each service and
+`WithNitroComposition(...)` on the gateway. Before the gateway starts, it reads each service's schema from
+the running service, composes them and writes `gateway.far` next to the gateway, which serves it; it
+composes again when a service restarts. Each service project has a `schema-settings.json` naming its
+source schema. No Nitro account is involved.
+
 Dictionary<string, string[]> sendTo = new()
 {
     ["ordering.order-placed"] = ["payments", "fulfilment"],
@@ -359,6 +397,7 @@ Paths are under `Modules/`.
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
 
+| The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 There are no repositories. A module's `DbContext` is its repository and unit of work, used directly by
 the endpoints and the policies. The toolkit has no repository abstraction to show, and a wrapper
 around a `DbContext` in a sample would only hide what the toolkit does to it.

@@ -1,11 +1,19 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Catalog;
 using DDDToolkit.Examples.Catalog.Api;
+using DDDToolkit.Examples.Catalog.Api.GraphQL;
+using DDDToolkit.Examples.Catalog.Domain.Products;
 using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Ordering.Api;
+using DDDToolkit.Examples.Ordering.Api.GraphQL;
+using DDDToolkit.Examples.Ordering.Domain.Orders;
+using DDDToolkit.HotChocolate;
+using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Postgres;
+using HotChocolate;
+using HotChocolate.Types;
 using Npgsql;
 
 // The shop's storefront service, over pgmq. Catalog and Ordering: what a customer browses and buys. Ordering
@@ -45,7 +53,8 @@ var host = new ModuleHost(
     {
         outbox.SendToModules();
         outbox.SendToPgmq();
-    });
+    })
+    .AlsoSendTo<GraphQlSubscriptionSink>();
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
@@ -58,10 +67,28 @@ builder.Services.AddPgmqConsumer(queues, "storefront");
 // project with Queues. This only checks, so a database without it fails at start-up, by name.
 builder.Services.AddHostedService(_ => new RequirePgmq(queues));
 
+// GraphQL: this service's source schema, which the gateway composes with the other two into the shop's
+// one schema. Catalog and Ordering both run here, so a line's product is joined in-process, the way the
+// monolith does it; Payments and Shipping add their fields to Order from their own services.
+builder.Services
+    .AddGraphQLServer()
+    .AddSourceSchemaDefaults()
+    .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+    .AddDDDToolkitTypes()
+    .AddDDDToolkitErrors()
+    .AddQueryType()
+    .AddMutationType()
+    .AddSubscriptionType()
+    .AddInMemorySubscriptions()
+    .AddCatalogGraphQL()
+    .AddOrderingGraphQL()
+    .AddTypeExtension<OrderLineProduct>();
+
 var app = builder.Build();
 
 app.MapCatalogEndpoints();
 app.MapOrderingEndpoints();
+app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();
@@ -84,4 +111,12 @@ internal sealed class RequirePgmq(NpgsqlDataSource dataSource) : IHostedLifecycl
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+/// <summary>The product a line is for: Ordering's SKU, joined to Catalog's lookup, both in this service.</summary>
+[ExtendObjectType<OrderLine>]
+internal sealed class OrderLineProduct
+{
+    public Task<Product?> GetProductAsync([Parent] OrderLine line, ProductBySkuDataLoader products, CancellationToken cancellationToken)
+        => products.LoadAsync(line.Sku, cancellationToken);
 }

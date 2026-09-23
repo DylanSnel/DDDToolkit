@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="HotChocolate.Fusion.Aspire" />
     <PackageReference Include="Aspire.Hosting.PostgreSQL" />
     <PackageReference Include="Aspire.Hosting.RabbitMQ" />
     <PackageReference Include="Aspire.Hosting.SqlServer" />
@@ -21,7 +22,7 @@
     <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Storefront\DDDToolkit.Examples.Wolverine.Storefront.csproj" />
     <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Payments\DDDToolkit.Examples.Wolverine.Payments.csproj" />
     <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Fulfilment\DDDToolkit.Examples.Wolverine.Fulfilment.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Gateway\DDDToolkit.Examples.Gateway.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Gateway\DDDToolkit.Examples.Wolverine.Gateway.csproj" />
   </ItemGroup>
 
 </Project>

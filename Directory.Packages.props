@@ -152,6 +152,13 @@
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="10.10.0" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <!--
+      The Fusion gateway of the microservices samples, and the AppHost side that composes its schema.
+      Pinned rather than $(HotChocolateVersion): only the examples use them, and Fusion's Aspire
+      integration is newer than the floor the packages are built against.
+    -->
+    <PackageVersion Include="HotChocolate.Fusion.AspNetCore" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Fusion.Aspire" Version="16.6.6" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="$(OpenTelemetryInstrumentationVersion)" />

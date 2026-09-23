@@ -1,0 +1,8 @@
+{
+  "name": "fulfilment",
+  "transports": {
+    "http": {
+      "url": "http://localhost:5000/graphql"
+    }
+  }
+}

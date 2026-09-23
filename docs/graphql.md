@@ -323,7 +323,8 @@ member stays hidden whether it is read or written. Covering interfaces matters t
 interface but dropped from an implementing object would make the schema invalid.
 
 In practice this hides `IsValid`, `IsValidated`, `EnsureValidated` and the FluentValidation
-integration's `Errors` on value objects, and `DomainEvents` on an aggregate root. It does not hide
+integration's `Errors` on value objects, `DomainEvents` on an aggregate root, and
+`GetInvariantViolations()` and `GetOwnInvariantViolations()` on every entity. It does not hide
 anything you did not mark. `Id` and `Version` stay, because they are API:
 
 ```graphql
@@ -361,6 +362,78 @@ appeared after discovery, such as a merged type extension.
 The visible effect is that the schema contains no type that exists only because a hidden field
 mentioned it. `ValidationFailure` and `Severity` are absent, and so is the `ValidPersonName` twin that
 a value object's `[Internal]` `ToValid()` would otherwise have pulled in.
+
+## Domain types publish their data, not their behaviour
+
+HotChocolate binds implicitly unless a type says otherwise: every public property and every public
+method that returns something becomes a field, and a method's parameters become its arguments. For a
+domain type that publishes its behaviour. A `Money` with `Plus(Money)` and `Times(int)` would come out as
+
+```graphql
+type Money {
+  plus(other: MoneyInput!): Money!
+  times(quantity: Int!): Money!
+  amount: Decimal!
+  currency: String!
+}
+```
+
+with a `MoneyInput` in the schema only because `plus` needs one. On an aggregate it is worse: a method
+that changes state and returns a result would become a field, and run inside an ordinary query. Neither
+GraphQL nor HotChocolate can tell a method with side effects from one without.
+
+So `AddDDDToolkitTypes()` registers `DomainBehaviourFieldsInterceptor`, which removes the fields that
+come from the methods of an entity, an aggregate or a value object, on every object type bound by
+convention:
+
+```graphql
+type Money {
+  amount: Decimal!
+  currency: String!
+}
+```
+
+Properties stay, computed ones included, so a value that belongs in the schema is best made a property.
+A type declared with `BindFieldsExplicitly()` is left alone and publishes exactly what it lists, a
+method among them if you name one. Fields added by a type extension stay as well. Methods named with
+`descriptor.Field(...)` on a type that still binds by convention are removed with the rest, because
+HotChocolate records them the same way as the ones it found itself; declare that type explicitly.
+
+Like `[Internal]`, the fields are removed during discovery, so a type that only a method's argument
+mentioned, such as `MoneyInput`, never enters the schema.
+
+## Value objects in a Fusion source schema
+
+A Fusion gateway composes one schema out of the source schemas of several services, and a field belongs
+to one of them unless it is marked `@shareable`: the gateway has to know who answers it. An entity has an
+owner, and other services add fields to it by its key. A value object has neither owner nor identity.
+`Money` in Catalog's prices and `Money` in Payments' amounts are the same type, and any service that
+holds one gives the same answer for it, which is exactly what `@shareable` says. Without it, composition
+refuses the second service that returns a `Money`:
+
+```
+The field 'Money.amount' in schema 'payments' must be shareable.
+```
+
+So in a source schema `AddDDDToolkitTypes()` marks every value object type `@shareable`:
+
+```csharp
+builder.Services
+    .AddGraphQLServer()
+    .AddSourceSchemaDefaults()       // HotChocolate: this schema is one a gateway composes
+    .AddDDDToolkitTypes();           // value objects become @shareable
+```
+
+```graphql
+type Money @shareable {
+  amount: Decimal!
+  currency: String!
+}
+```
+
+A schema without `AddSourceSchemaDefaults()` gets no directive. Entities stay unshared: a service that
+adds to another's entity declares a stub of it, keyed on its id, the way `Examples/Microservices.*` do
+for `Order`.
 
 ## The DomainEvent interface
 
@@ -589,9 +662,9 @@ What did not change is the part the toolkit relies on most:
 ## What this package does not do
 
 It maps identifiers and single value objects onto scalars, and identifiers into Relay node ids. It does
-not make any type a node: `ImplementsNode()` is yours to call. It does not turn a multi-property
-`[ValueObject]` into anything other than the object type HotChocolate would infer, and it generates no
-queries, mutations or resolvers. The schema is still yours to write.
+not make any type a node: `ImplementsNode()` is yours to call. A multi-property `[ValueObject]` stays the
+object type HotChocolate would infer, less its methods, and it generates no queries, mutations or
+resolvers. The schema is still yours to write.
 
 That includes subscriptions. The sink publishes a contract to a topic; the subscription field, its
 arguments and its authorisation are yours, and so is the choice of transport.

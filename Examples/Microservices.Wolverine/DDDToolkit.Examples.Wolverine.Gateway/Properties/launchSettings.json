@@ -1,12 +1,12 @@
 {
   "profiles": {
-    "DDDToolkit.Examples.Gateway": {
+    "DDDToolkit.Examples.Wolverine.Gateway": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:59325;http://localhost:59327"
+      "applicationUrl": "https://localhost:65113;http://localhost:65114"
     }
   }
 }
