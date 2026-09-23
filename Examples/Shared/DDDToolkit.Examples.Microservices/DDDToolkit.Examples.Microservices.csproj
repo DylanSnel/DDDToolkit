@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The shop cut into three services, once, for every microservices sample: which modules each service
+    runs, which contracts it has to be sent, and the one line that registers or maps a service. What is
+    left for each sample's own service projects is the transport, which is the one thing they differ in.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog\DDDToolkit.Examples.Catalog.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory\DDDToolkit.Examples.Inventory.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

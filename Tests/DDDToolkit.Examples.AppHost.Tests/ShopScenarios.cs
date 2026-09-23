@@ -98,6 +98,7 @@ public abstract class ShopScenarios<TAppHost>(ShopFixture<TAppHost> shop) where 
     public async Task One_GraphQL_query_reads_the_order_across_every_module_that_had_a_hand_in_it()
     {
         shop.SkipUnlessStarted();
+        Assert.SkipUnless(shop.ServesGraphQL, "This sample has no GraphQL gateway yet.");
 
         var placed = await GraphQLAsync(
             """
@@ -137,6 +138,7 @@ public abstract class ShopScenarios<TAppHost>(ShopFixture<TAppHost> shop) where 
     public async Task A_broken_rule_is_a_GraphQL_error_carrying_the_rules_code()
     {
         shop.SkipUnlessStarted();
+        Assert.SkipUnless(shop.ServesGraphQL, "This sample has no GraphQL gateway yet.");
 
         var placed = await GraphQLAsync(
             """

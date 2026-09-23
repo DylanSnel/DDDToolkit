@@ -60,6 +60,8 @@
     <Project Path="Examples/Modules/Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer.csproj" />
   </Folder>
   <Folder Name="/Examples/Shared/">
+    <Project Path="Examples/Shared/DDDToolkit.Examples.Gateway/DDDToolkit.Examples.Gateway.csproj" />
+    <Project Path="Examples/Shared/DDDToolkit.Examples.Microservices/DDDToolkit.Examples.Microservices.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.GraphQL/DDDToolkit.Examples.GraphQL.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.Hosting/DDDToolkit.Examples.Hosting.csproj" />
     <Project Path="Examples/Shared/DDDToolkit.Examples.ServiceDefaults/DDDToolkit.Examples.ServiceDefaults.csproj" />
@@ -71,6 +73,10 @@
   <Folder Name="/Examples/ModularMonolith.Supabase/">
     <Project Path="Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/DDDToolkit.Examples.Host.csproj" />
     <Project Path="Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost/DDDToolkit.Examples.Supabase.AppHost.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Microservices.Pgmq/">
+    <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHost/DDDToolkit.Examples.Pgmq.AppHost.csproj" />
+    <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Service/DDDToolkit.Examples.Pgmq.Service.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />

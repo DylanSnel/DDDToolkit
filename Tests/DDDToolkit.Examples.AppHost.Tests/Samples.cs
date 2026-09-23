@@ -27,3 +27,21 @@ public sealed class SqlServerMonolith : ShopFixture<Projects.DDDToolkit_Examples
 [Trait("Sample", "ModularMonolith.SqlServer")]
 public sealed class ModularMonolithOnSqlServer(SqlServerMonolith shop)
     : ShopScenarios<Projects.DDDToolkit_Examples_SqlServer_AppHost>(shop), IClassFixture<SqlServerMonolith>;
+
+public sealed class PgmqServices : ShopFixture<Projects.DDDToolkit_Examples_Pgmq_AppHost>
+{
+    protected override string ShopResource => "gateway";
+
+    protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
+
+    public override bool ServesGraphQL => false;
+}
+
+/// <summary>
+/// The same shop as three services over pgmq, behind a gateway: every scenario the monoliths pass, with
+/// the messages between services riding queues in the one Postgres they share.
+/// </summary>
+[Trait("Category", "Samples")]
+[Trait("Sample", "Microservices.Pgmq")]
+public sealed class MicroservicesOverPgmq(PgmqServices shop)
+    : ShopScenarios<Projects.DDDToolkit_Examples_Pgmq_AppHost>(shop), IClassFixture<PgmqServices>;

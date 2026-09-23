@@ -20,6 +20,7 @@ way to run it. Each sample is a different way, over the very same modules:
 |---|---|---|---|
 | `ModularMonolith.Supabase/` | one process | SQLite, or Postgres/Supabase | the module sink, in process |
 | `ModularMonolith.SqlServer/` | one process | SQL Server | the module sink, in process |
+| `Microservices.Pgmq/` | three services and a gateway | one Postgres, a schema per module | pgmq: a queue per service, in the same database |
 
 ```
 Modules/
@@ -209,6 +210,50 @@ and the two providers disagree on every column type. Scaffold one with:
 
 ```bash
 dotnet ef migrations add AddGiftWrap --project Examples/Modules/Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer --context OrderingContext --output-dir Ordering
+```
+
+### As services
+
+The same five modules, cut into three deployables, with a gateway in front so a client still sees one
+shop at one address:
+
+| Service | Runs | Reads a queue of messages for |
+|---|---|---|
+| `storefront` | Catalog, Ordering | stock reserved or refused, payments taken or refused |
+| `payments` | Payments | orders placed or cancelled, stock reserved |
+| `fulfilment` | Inventory, Shipping | orders placed, cancelled or confirmed |
+
+`Shared/DDDToolkit.Examples.Microservices` decides that once for every microservices sample: which
+modules a service runs (`AddShopService`), which paths it answers (`ShopServices.Routes`, what the
+gateway routes on), and which services each published contract goes to (`ShopServices.ConsumersOf`). A
+service is not a module: Storefront runs Catalog and Ordering in one process, so a price Catalog publishes
+still reaches Ordering through the module sink, next door, and only a message another service consumes
+leaves the process.
+
+What each sample adds is the transport, in one service project that its AppHost starts three times.
+
+**`Microservices.Pgmq/`** keeps the one database the monolith on Supabase has, and puts the queues in it:
+
+```csharp
+// sending: to the modules next door, and onto the queue of every other service that consumes it
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueues(message =>
+    ShopServices.RecipientsOf(message.Name, service).Select(ShopServices.NameOf)));
+var host = new ModuleHost(ModuleDatabase.Postgres(connectionString), outbox =>
+{
+    outbox.SendToModules();
+    outbox.SendToPgmq();
+});
+
+// receiving: this service's own queue, into the same modules
+builder.Services.AddPgmqConsumer(queues, ShopServices.NameOf(service));
+```
+
+No broker to run: a queue is a table, and on Supabase it is a Queue you can watch in the dashboard.
+`BookShipment` in Shipping is the same class it is in the monolith; it cannot tell that
+`OrderConfirmedV1` came through `pgmq.q_fulfilment` rather than from the module next door.
+
+```bash
+dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHost
 ```
 
 ### Testing the samples end to end
