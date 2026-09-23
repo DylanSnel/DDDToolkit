@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 
 namespace DDDToolkit.Tests.Serialization.NewtonSoft.ValueObjects;
 
+[Collection(NewtonsoftGlobalState.Name)]
 public class NewtonsoftJsonSingleValueObjectConverterTests
 {
     private readonly JsonSerializerSettings _settings;

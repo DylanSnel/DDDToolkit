@@ -11,6 +11,7 @@ namespace DDDToolkit.Tests.Serialization.NewtonSoft;
 /// What the contract resolver is for: the bookkeeping the base types carry - an aggregate's pending events,
 /// a value object's validation flags - is marked <c>[Internal]</c> and must not end up in the document.
 /// </summary>
+[Collection(NewtonsoftGlobalState.Name)]
 public class ContractResolverTests
 {
     private readonly JsonSerializerSettings _settings = new JsonSerializerSettings().AddDDDToolkitConverters();
