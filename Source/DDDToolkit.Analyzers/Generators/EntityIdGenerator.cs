@@ -99,10 +99,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
             using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
             {
-                using (writer.Block(type.Accessibility + " " + validName + "(" + name + " value)"))
+                // The record's copy constructor, not a property-by-property copy. It copies every field,
+                // protected, private and get-only ones included; a copy of the settable properties alone
+                // left the rest at their defaults, so the twin held a different value from the one validated.
+                using (writer.Block(type.Accessibility + " " + validName + "(" + name + " value) : base(value)"))
                 {
                     writer.Line("value.EnsureValidated();");
-                    writer.Line("this.Value = value.Value;");
                     writer.Line("_isValid = true;");
                 }
 

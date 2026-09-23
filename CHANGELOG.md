@@ -107,6 +107,13 @@ convention.
 
 ### Fixed
 
+- `ToValid()` could hand back a twin holding a different value from the one it had just validated.
+  The twin started from an empty object and copied the settable properties one by one, so a get-only
+  property or a private field stayed at its default without any warning, and a `protected` property
+  failed to compile with CS1540. The twin is now built from the record's copy constructor, which
+  copies every field. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and record
+  identifiers alike. An `[Internal]` property now travels with the twin as well; it still takes no
+  part in equality.
 - A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path
   limit". Visual Studio places every generated file at
   `{project}\Generated\{generator assembly}\{generator type}\{hint name}`, and the toolkit spelled

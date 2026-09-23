@@ -406,7 +406,9 @@ everywhere:
 public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
 ```
 
-The twin derives from the original, so it is accepted anywhere the original is expected. It
+The twin is made with the record's copy constructor, so it holds everything the original held:
+get-only properties, `protected` ones, private fields and `[Internal]` state alike. The twin derives
+from the original, so it is accepted anywhere the original is expected. It
 implements `IAlwaysValid`, and both JSON integrations refuse to deserialize it directly: deserializing
 straight into a twin would let invalid data enter through a type that promises the opposite.
 Deserialize the base type and call `ToValid()`.
