@@ -734,6 +734,13 @@ It cannot undo work outside the database. If your handler sends a mail and the t
 the row is gone but the mail is sent. The fix is the same shape as the outbox itself: write a row the
 transaction owns, and let something else act on that row afterwards.
 
+For the same reason it cannot stop two copies of a message from both running at the same moment. A
+broker that delivers in parallel can hand two copies to two handlers before either has saved; both find
+no inbox row and both run. One save then inserts the inbox row, and the other fails on it and rolls back
+everything it wrote, so the database ends up with one effect. Anything the losing copy did outside that
+transaction, a counter in memory or a call to another system, happened twice. Only what a handler does
+through its module's context is exactly-once.
+
 It also does not order anything. If message B arrives before message A, the inbox applies B. Handlers that
 care about order have to say so themselves, usually with a version or a sequence number in the payload.
 

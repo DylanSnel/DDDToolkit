@@ -16,10 +16,10 @@ public sealed class WolverineTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static async Task<IHost> StartAsync(ShelfCounter counter)
+    private static async Task<IHost> StartAsync(Failures? failures = null)
     {
         var builder = Host.CreateApplicationBuilder();
-        builder.Services.AddLibraryModule(counter);
+        builder.Services.AddLibraryModule(failures);
         builder.UseWolverine(wolverine =>
         {
             wolverine.PublishMessage<IntegrationEventEnvelope>().ToLocalQueue("integration-events");
@@ -41,40 +41,37 @@ public sealed class WolverineTests
     [Fact]
     public async Task A_published_message_reaches_the_module_that_consumes_its_contract()
     {
-        var counter = new ShelfCounter();
-        using var host = await StartAsync(counter);
+        using var host = await StartAsync();
 
         await SendAsync(host, Receiving.Message(displayName: "Fiction"));
 
-        await counter.WaitForAsync(1);
-        counter.Seen.Should().Equal("Fiction");
+        (await host.Services.WaitForShelvesAsync(1)).Should().Equal("Fiction");
     }
 
     [Fact]
     public async Task The_same_message_published_twice_is_applied_once()
     {
-        var counter = new ShelfCounter();
-        using var host = await StartAsync(counter);
+        using var host = await StartAsync();
         var id = Guid.CreateVersion7();
 
         await SendAsync(host, Receiving.Message(id));
         await SendAsync(host, Receiving.Message(id));
         await SendAsync(host, Receiving.Message(displayName: "Poetry"));
 
-        await counter.WaitForAsync(2);
-        await Task.Delay(300, Cancellation);
-        counter.Seen.Should().BeEquivalentTo(["Fiction", "Poetry"], "the inbox knows it applied that message id");
+        // The two copies may run at once. One wins the inbox row; the other's save fails on it, rolls back
+        // its own row with it, and is retried into "already applied".
+        await host.Services.WaitForShelvesAsync(2);
+        await Task.Delay(1000, Cancellation);
+        (await host.Services.ShelvesAsync()).Should().BeEquivalentTo(["Fiction", "Poetry"], "the inbox lets one copy of a message id through");
     }
 
     [Fact]
     public async Task A_message_whose_handler_fails_is_retried_by_Wolverine_until_it_is_applied()
     {
-        var counter = new ShelfCounter().FailFirst(2);
-        using var host = await StartAsync(counter);
+        using var host = await StartAsync(new Failures(2));
 
         await SendAsync(host, Receiving.Message());
 
-        await counter.WaitForAsync(1);
-        counter.Seen.Should().ContainSingle();
+        (await host.Services.WaitForShelvesAsync(1)).Should().ContainSingle();
     }
 }
