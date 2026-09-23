@@ -22,5 +22,7 @@ dotnet run --project Tests/Spikes/DDDToolkit.Spikes.FusionInProcess -- endpoint
   and answers "The requested schema '_Default' does not exist". With a single source schema it answers,
   but from that schema directly, not through the gateway.
 
+The latest preview, 16.7.0-p.10, behaves the same in both cases.
+
 Nothing on ChilliCream's GitHub mentions Fusion for a modular monolith or the in-memory connector; the
 connector came in with ChilliCream/graphql-platform#9461 without a description.
