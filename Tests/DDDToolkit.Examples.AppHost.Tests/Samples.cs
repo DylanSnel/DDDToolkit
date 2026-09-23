@@ -63,3 +63,20 @@ public sealed class WolverineServices : ShopFixture<Projects.DDDToolkit_Examples
 [Trait("Sample", "Microservices.Wolverine")]
 public sealed class MicroservicesOverWolverine(WolverineServices shop)
     : ShopScenarios<Projects.DDDToolkit_Examples_Wolverine_AppHost>(shop), IClassFixture<WolverineServices>;
+
+public sealed class MassTransitServices : ShopFixture<Projects.DDDToolkit_Examples_MassTransit_AppHost>
+{
+    protected override string ShopResource => "gateway";
+
+    protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
+
+    public override bool ServesGraphQL => false;
+}
+
+/// <summary>
+/// The same shop as three services over RabbitMQ with MassTransit 8, each on a SQL Server database of its own.
+/// </summary>
+[Trait("Category", "Samples")]
+[Trait("Sample", "Microservices.MassTransit")]
+public sealed class MicroservicesOverMassTransit(MassTransitServices shop)
+    : ShopScenarios<Projects.DDDToolkit_Examples_MassTransit_AppHost>(shop), IClassFixture<MassTransitServices>;

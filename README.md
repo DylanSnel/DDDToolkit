@@ -71,7 +71,9 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit` | Base types and the core generators. Start here. |
 | `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
-| `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate. |
+| `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
+| `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
+| `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
 | `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |

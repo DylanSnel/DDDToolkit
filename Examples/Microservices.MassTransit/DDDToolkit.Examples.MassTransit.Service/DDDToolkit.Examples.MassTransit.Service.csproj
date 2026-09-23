@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="MassTransit.RabbitMQ" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Microservices\DDDToolkit.Examples.Microservices.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
+    <!-- Every service runs on SQL Server in this sample. -->
+    <ProjectReference Include="..\..\Modules\Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.MassTransit\DDDToolkit.Messaging.MassTransit.csproj" />
+  </ItemGroup>
+
+</Project>

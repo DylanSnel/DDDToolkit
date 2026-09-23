@@ -12,10 +12,12 @@ deliver to, with an in-process module sink ready made. An inbox, so a consumer c
 message twice without doing the work twice. And versioning, so a payload written by last year's build is
 still readable by this year's.
 
-It does not give you a bus. There is no adapter here for RabbitMQ, Azure Service Bus, Kafka or SQS, and
+It does not give you a bus. There is no client here for RabbitMQ, Azure Service Bus, Kafka or SQS, and
 there is not going to be one. [MassTransit](https://masstransit.io/) and
 [Wolverine](https://wolverinefx.net/) are far more mature at that job than anything this repository
-would write. What it does ship is a sink for Postgres queues
+would write, so the toolkit hands its messages to them
+([Wolverine](#through-a-broker-wolverine), [MassTransit](#through-a-broker-masstransit)) and keeps only
+the outbox and the inbox on either side. What it does ship itself is a sink for Postgres queues
 ([pgmq](#when-a-module-becomes-its-own-deployable-pgmq)), because there the queue is a table and the
 guarantees change.
 
@@ -391,6 +393,56 @@ modules applied it; a buffered listener acknowledges first, and a crash in betwe
 reference `WolverineFx.RuntimeCompilation` in the process, because Wolverine compiles its handler adapters
 at start-up and since 6.x ships that compiler separately. `Examples/Microservices.Wolverine` runs the shop
 this way.
+
+## Through a broker: MassTransit
+
+`DDDToolkit.Messaging.MassTransit` does the same with MassTransit: the same `IntegrationEventEnvelope`,
+the same receiver behind it, MassTransit's own outbox and sagas left out. It is built on **MassTransit 8**,
+the last major version under the Apache 2.0 licence; 9 and later are commercial, and moving to them is
+for whoever deploys the software to decide.
+
+```csharp
+builder.Services.AddMassTransit(bus =>
+{
+    bus.AddIntegrationEventConsumer();
+
+    bus.UsingRabbitMq((context, rabbit) =>
+    {
+        rabbit.Host(rabbitUri);
+
+        // sending: every envelope to a topic exchange; the sink sets the contract's name as routing key
+        rabbit.Message<IntegrationEventEnvelope>(message => message.SetEntityName("integration-events"));
+        rabbit.Publish<IntegrationEventEnvelope>(publish => publish.ExchangeType = "topic");
+
+        // receiving: this service's queue, bound to the contracts it consumes
+        rabbit.ReceiveEndpoint("fulfilment", endpoint =>
+        {
+            endpoint.ConfigureConsumeTopology = false;
+            endpoint.Bind("integration-events", exchange =>
+            {
+                exchange.ExchangeType = "topic";
+                exchange.RoutingKey = "ordering.order-confirmed";
+            });
+            endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
+            endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
+        });
+    });
+});
+
+// the outbox of each module
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());
+```
+
+`MassTransitSink` publishes through `IPublishEndpoint`, with the outbox's message id as MassTransit's
+message id and the contract's name as routing key. `IntegrationEventEnvelopeConsumer` hands the envelope to
+`IntegrationEventReceiver`; MassTransit acknowledges it when the consumer returns, retries it as the
+endpoint says when a handler throws, and then moves it to the endpoint's error queue.
+
+One thing to know: MassTransit has an `AddMediator` of its own on `IServiceCollection`. In a file that
+imports the `MassTransit` namespace, the [Mediator](https://github.com/martinothamar/Mediator) source
+generator no longer reads the options of your `AddMediator` call, and the process stops at start-up saying
+it generated for another lifetime. Configure MassTransit in a file of its own, as
+`Examples/Microservices.MassTransit` does.
 
 ## For screens: the GraphQL subscription sink
 

@@ -18,6 +18,7 @@
     <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.Postgres/DDDToolkit.Messaging.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.Wolverine/DDDToolkit.Messaging.Wolverine.csproj" />
+    <Project Path="Source/DDDToolkit.Messaging.MassTransit/DDDToolkit.Messaging.MassTransit.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase/DDDToolkit.EntityFramework.Supabase.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase.Analyzers/DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
@@ -82,6 +83,10 @@
   <Folder Name="/Examples/Microservices.Wolverine/">
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost/DDDToolkit.Examples.Wolverine.AppHost.csproj" />
     <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Service/DDDToolkit.Examples.Wolverine.Service.csproj" />
+  </Folder>
+  <Folder Name="/Examples/Microservices.MassTransit/">
+    <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.AppHost/DDDToolkit.Examples.MassTransit.AppHost.csproj" />
+    <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Service/DDDToolkit.Examples.MassTransit.Service.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />

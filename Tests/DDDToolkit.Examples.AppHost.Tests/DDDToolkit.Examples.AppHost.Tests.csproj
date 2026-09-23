@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\Examples\ModularMonolith.SqlServer\DDDToolkit.Examples.SqlServer.AppHost\DDDToolkit.Examples.SqlServer.AppHost.csproj" />
     <ProjectReference Include="..\..\Examples\Microservices.Pgmq\DDDToolkit.Examples.Pgmq.AppHost\DDDToolkit.Examples.Pgmq.AppHost.csproj" />
     <ProjectReference Include="..\..\Examples\Microservices.Wolverine\DDDToolkit.Examples.Wolverine.AppHost\DDDToolkit.Examples.Wolverine.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\Microservices.MassTransit\DDDToolkit.Examples.MassTransit.AppHost\DDDToolkit.Examples.MassTransit.AppHost.csproj" />
   </ItemGroup>
 
 </Project>

@@ -12,6 +12,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.Messaging.MassTransit`, MassTransit 8 as the transport between one process's outbox and
+  another's inbox. `outbox.SendToMassTransit()` publishes each message as an `IntegrationEventEnvelope`,
+  with the outbox's message id and the contract's name as routing key; `bus.AddIntegrationEventConsumer()`
+  registers the consumer that hands it to the modules through `IntegrationEventReceiver`. Built on
+  MassTransit 8, the last version under the Apache 2.0 licence.
+- `Examples/Microservices.MassTransit` runs the same three services over RabbitMQ with MassTransit, each on
+  a SQL Server database of its own.
 - `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
   inbox. `outbox.SendToWolverine()` publishes each message through Wolverine as an
   `IntegrationEventEnvelope`, the envelope's headers and payload in one object and routable on its

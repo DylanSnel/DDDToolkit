@@ -22,6 +22,7 @@ way to run it. Each sample is a different way, over the very same modules:
 | `ModularMonolith.SqlServer/` | one process | SQL Server | the module sink, in process |
 | `Microservices.Pgmq/` | three services and a gateway | one Postgres, a schema per module | pgmq: a queue per service, in the same database |
 | `Microservices.Wolverine/` | three services and a gateway | a database per service: SQL Server and Postgres | RabbitMQ, through Wolverine |
+| `Microservices.MassTransit/` | three services and a gateway | a SQL Server database per service | RabbitMQ, through MassTransit 8 |
 
 ```
 Modules/
@@ -275,6 +276,29 @@ wolverine.ReceiveIntegrationEvents();
 
 ```bash
 dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost
+```
+
+**`Microservices.MassTransit/`** is the same topology with MassTransit carrying the envelopes, every
+service on a SQL Server database of its own. The service is the Wolverine one with a different transport
+block, in `RabbitMqTransport.cs`: the same topic exchange, a receive endpoint per service bound to the
+contracts it consumes, and MassTransit's retry and error queue.
+
+```csharp
+rabbit.Message<IntegrationEventEnvelope>(message => message.SetEntityName("integration-events"));
+rabbit.Publish<IntegrationEventEnvelope>(publish => publish.ExchangeType = "topic");
+rabbit.ReceiveEndpoint(name, endpoint =>
+{
+    endpoint.ConfigureConsumeTopology = false;
+    foreach (var contract in ShopServices.ContractsFor(service))
+        endpoint.Bind("integration-events", exchange => { exchange.ExchangeType = "topic"; exchange.RoutingKey = contract; });
+    endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
+});
+```
+
+MassTransit 8 is the last version under the Apache 2.0 licence; the package's README says more.
+
+```bash
+dotnet run --project Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.AppHost
 ```
 
 ### Testing the samples end to end

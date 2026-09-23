@@ -35,6 +35,7 @@
   <PropertyGroup Label="Floors" Condition="'$(DDDDependencyVersions)' == 'Floor'">
     <!-- The release the Wolverine integration was written and tested against; nothing older is known to work. -->
     <WolverineVersion>6.39.1</WolverineVersion>
+    <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.0</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.0</EntityFrameworkCoreVersion>
     <NpgsqlVersion>10.0.0</NpgsqlVersion>
@@ -50,6 +51,7 @@
 
   <PropertyGroup Label="Latest" Condition="'$(DDDDependencyVersions)' == 'Latest'">
     <WolverineVersion>6.39.1</WolverineVersion>
+    <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.12</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.12</EntityFrameworkCoreVersion>
     <NpgsqlVersion>10.0.3</NpgsqlVersion>
@@ -107,6 +109,9 @@
     <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
     <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
     <!-- Wolverine and MassTransit are transports for DDDToolkit.Messaging.Wolverine and .MassTransit. -->
+    <!-- MassTransit 8: the last major version under Apache 2.0. 9 is commercial; see the package README. -->
+    <PackageVersion Include="MassTransit" Version="$(MassTransitVersion)" />
+    <PackageVersion Include="MassTransit.RabbitMQ" Version="$(MassTransitVersion)" />
     <PackageVersion Include="WolverineFx" Version="$(WolverineVersion)" />
     <PackageVersion Include="WolverineFx.RabbitMQ" Version="$(WolverineVersion)" />
     <!-- Wolverine compiles its handler code at start-up; since 6.x that compiler is a package of its own. -->

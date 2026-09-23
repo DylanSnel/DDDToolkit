@@ -28,6 +28,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit.Messaging.Wolverine\DDDToolkit.Messaging.Wolverine.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Messaging.MassTransit\DDDToolkit.Messaging.MassTransit.csproj" />
   </ItemGroup>
 
 </Project>
