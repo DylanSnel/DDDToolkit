@@ -267,6 +267,84 @@ public class HotChocolateGeneratorTests
         result.ShouldNotHaveGeneratedFor("NotARecord");
     }
 
+    // ------------------------------------------------------------------ Relay node ids
+
+    [Theory]
+    [InlineData("[EntityId<Guid>(\"PRD\")] public readonly partial record struct ProductId;", "ProductId")]
+    [InlineData("[EntityId<Guid>] public partial record CustomerId;", "CustomerId")]
+    [InlineData("[EntityId<int>] public readonly partial record struct SeatId;", "SeatId")]
+    [InlineData("[EntityId<string>] public readonly partial record struct LoginId;", "LoginId")]
+    public void An_id_gets_a_node_id_serializer_that_reads_back_what_it_wrote(string declaration, string name)
+    {
+        var result = Run(declaration);
+
+        result.ShouldCompile();
+        result.ShouldContain(Hint.Of("Sample." + name, ".HotChocolate"), "public sealed class NodeIdValueSerializer : global::HotChocolate.Types.Relay.CompositeNodeIdValueSerializer<global::Sample." + name + ">");
+        result.ShouldContain("BindingExtensions", "builder.AddNodeIdValueSerializer<global::Sample." + name + ".NodeIdValueSerializer>();");
+
+        var emitted = result.Emit();
+        var serializer = (global::HotChocolate.Types.Relay.INodeIdValueSerializer)emitted.New("Sample." + name + "+NodeIdValueSerializer");
+        var idType = emitted.Type("Sample." + name);
+        var raw = name switch
+        {
+            "SeatId" => (object)12,
+            "LoginId" => "ada@example.com",
+            _ => Guid.NewGuid(),
+        };
+        var id = Activator.CreateInstance(idType, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, [raw], null);
+
+        serializer.IsSupported(idType).Should().BeTrue();
+
+        Span<byte> buffer = stackalloc byte[128];
+        serializer.Format(buffer, id!, out var written).Should().Be(global::HotChocolate.Types.Relay.NodeIdFormatterResult.Success);
+
+        serializer.TryParse(buffer[..written], out var read).Should().BeTrue();
+        read.Should().Be(id);
+    }
+
+    [Fact]
+    public void A_single_value_object_is_not_an_identity_and_gets_no_node_id_serializer()
+    {
+        var result = Run(
+            """
+            [SingleValueObject<string>]
+            public partial record EmailAddress;
+            """);
+
+        result.ShouldCompile();
+        result.ShouldNotContain(Hint.Of("Sample.EmailAddress", ".HotChocolate"), "NodeIdValueSerializer");
+    }
+
+    [Fact]
+    public void Asking_HotChocolates_generator_for_a_toolkit_ids_serializer_reports_DDD00032()
+    {
+        // HotChocolate's generator declares AddNodeIdValueSerializerFrom<T>() and intercepts the call; this
+        // stands in for it, because the analyzer only looks at the call.
+        var result = GeneratorTestHost.Create(Preamble +
+            """
+            [EntityId<Guid>("PRD")]
+            public readonly partial record struct ProductId;
+
+            public static class HotChocolateGenerated
+            {
+                public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddNodeIdValueSerializerFrom<T>(
+                    this HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder) => builder;
+            }
+
+            public static class Schema
+            {
+                public static void Configure(HotChocolate.Execution.Configuration.IRequestExecutorBuilder graphql)
+                    => graphql.AddNodeIdValueSerializerFrom<ProductId>();
+            }
+            """)
+            .WithHotChocolate()
+            .WithModule("Sales")
+            .WithAnalyzers(new DDDToolkit.HotChocolate.Analyzers.NodeIdSerializerFromAnalyzer())
+            .RunCoreAnd(GeneratorTestHost.HotChocolateGenerators());
+
+        result.ShouldHaveDiagnostic("DDD00032", at: "graphql.AddNodeIdValueSerializerFrom<ProductId>()");
+    }
+
     /// <summary>A root provider that converts nothing, so only what the generated provider knows can succeed.</summary>
     private static bool NoRoot(
         Type source,

@@ -192,6 +192,56 @@ input SeatReservationInput {
 }
 ```
 
+## Relay node ids
+
+HotChocolate's global object identification works with the toolkit's identifiers as they are. Make a
+type a node the way HotChocolate documents it, with the identifier itself as the id:
+
+```csharp
+builder.Services
+    .AddGraphQLServer()
+    .AddGlobalObjectIdentification()
+    .AddDDDToolkitTypes()
+    .AddOrderingContractsGraphQlRuntimeBindings()
+    .AddType<OrderType>();
+
+public sealed class OrderType : ObjectType<Order>
+{
+    protected override void Configure(IObjectTypeDescriptor<Order> descriptor)
+        => descriptor
+            .ImplementsNode()
+            .IdField(order => order.Id)                         // an OrderId
+            .ResolveNode((context, id) => /* id is an OrderId */);
+}
+```
+
+`id` prints as `ID!` and carries a node id such as `T3JkZXI6ERER…`, `node(id:)` finds the order again,
+and an argument declared `[ID<Order>] OrderId id` arrives as the `OrderId` inside the node id. Another
+type that points at an order can publish the reference as a node id of the owner's type, with
+`descriptor.Field(shipment => shipment.Order).ID("Order")`, without referencing `Order` at all.
+
+What makes that possible is one generated class per identifier. HotChocolate writes a node id through
+an `INodeIdValueSerializer` for the id's runtime type, and it has serializers for `Guid`, `string`,
+`int`, `long` and `short` but not for a type it has never seen, so an `OrderId` would fail with *No
+serializer registered*. The generator therefore adds a nested `NodeIdValueSerializer` to every
+identifier over one of those five, and `Add{Module}GraphQlRuntimeBindings()` registers it:
+
+```csharp
+builder.AddNodeIdValueSerializer<OrderId.NodeIdValueSerializer>();
+```
+
+It derives from HotChocolate's `CompositeNodeIdValueSerializer<OrderId>` and writes the wrapped value
+with HotChocolate's own helpers. The node id is therefore byte for byte the one HotChocolate writes for
+the bare `Guid`: `Order:` followed by the value. Any HotChocolate server reads it, and so does a Fusion
+gateway, which routes `node(id:)` by the type name in front and never looks at the value. A single value
+object gets no serializer, because it is not an identity.
+
+Do not use HotChocolate's own `AddNodeIdValueSerializerFrom<OrderId>()` for a toolkit identifier. Its
+generator reads the members of the type, and an identifier's `Value` is written by the toolkit's
+generator; source generators do not see each other's output, so it finds no member and emits a
+serializer that writes nothing and reads every node id back as an empty id. It compiles without a
+warning.
+
 ## The default scalar mapping
 
 When a type carries no `[GraphQLType<T>]`, the generator picks the schema type from the CLR type it
@@ -538,7 +588,8 @@ What did not change is the part the toolkit relies on most:
 
 ## What this package does not do
 
-It maps identifiers and single value objects onto scalars. It does not turn a multi-property
+It maps identifiers and single value objects onto scalars, and identifiers into Relay node ids. It does
+not make any type a node: `ImplementsNode()` is yours to call. It does not turn a multi-property
 `[ValueObject]` into anything other than the object type HotChocolate would infer, and it generates no
 queries, mutations or resolvers. The schema is still yours to write.
 

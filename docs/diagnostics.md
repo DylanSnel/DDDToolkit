@@ -29,6 +29,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00029](#ddd00029) | Warning | A key part should not have a public setter |
 | [DDD00030](#ddd00030) | Error | Declare all key parts of a type in one file |
 | [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
+| [DDD00032](#ddd00032) | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -40,7 +41,8 @@ failure worth catching is a rule that is written, tested, and never run; [DDD000
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
 the one key-part mistake that can only be caught when the Entity Framework model is built.
 [DDD00031](#ddd00031) is about the [Supabase export](entity-framework.md#supabase), where the failure
-worth catching is a module whose migrations never reach Supabase.
+worth catching is a module whose migrations never reach Supabase. [DDD00032](#ddd00032) is about
+[Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -916,6 +918,24 @@ public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<Orderin
 The message names what is missing. A factory that fails is left out of the export, which is why this is
 an error: a module whose migrations were silently skipped would be found by a failing deployment, or by
 a branch database without its tables, instead of by the build.
+
+## DDD00032
+
+**Do not ask HotChocolate's generator for a toolkit identifier's node id serializer.**
+
+```csharp
+graphql.AddNodeIdValueSerializerFrom<OrderId>();   // DDD00032
+```
+
+`AddNodeIdValueSerializerFrom<T>()` is intercepted by HotChocolate's own generator, which writes a
+serializer from the properties `T` declares in source. A toolkit identifier's `Value` is written by the
+toolkit's generator, and source generators do not see each other's output, so HotChocolate's finds no
+property and writes a serializer that stores nothing. Every order's node id becomes `Order:` and reads
+back as an empty `OrderId`. Nothing fails to compile and nothing throws.
+
+Remove the call. `Add{Module}GraphQlRuntimeBindings()` already registers a serializer for every
+identifier over a `Guid`, `string`, `int`, `long` or `short`, in HotChocolate's own format; see
+[Relay node ids](graphql.md#relay-node-ids).
 
 ---
 

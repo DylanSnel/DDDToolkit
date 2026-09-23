@@ -29,3 +29,4 @@ DDD00028 | DDDToolkit.Entities | Error | A key part belongs on an entity or aggr
 DDD00029 | DDDToolkit.Entities | Warning | A key part should not have a public setter
 DDD00030 | DDDToolkit.Entities | Error | Declare all key parts of a type in one file
 DDD00031 | DDDToolkit.Supabase | Error | A [SupabaseMigrations] factory must be one the build can create
+DDD00032 | DDDToolkit.GraphQL | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer

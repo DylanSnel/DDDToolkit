@@ -14,6 +14,7 @@ internal static class DiagnosticDescriptors
     private const string Modules = "DDDToolkit.Modules";
     private const string Invariants = "DDDToolkit.Invariants";
     private const string Supabase = "DDDToolkit.Supabase";
+    private const string GraphQL = "DDDToolkit.GraphQL";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -229,4 +230,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The build exports a marked factory's migrations by creating the factory from generated code in the project that turns the export on. That needs a public, non-abstract, non-generic class with a public parameterless constructor that implements IDesignTimeDbContextFactory<TContext>. A factory that is not one is left out, and that is an error rather than a warning: a module whose migrations silently never reached Supabase would be found by a failing deployment instead of by the build.");
+
+    public static readonly DiagnosticDescriptor NodeIdSerializerFromToolkitId = new(
+        id: "DDD00032",
+        title: "Do not ask HotChocolate's generator for a toolkit identifier's node id serializer",
+        messageFormat: "AddNodeIdValueSerializerFrom<{0}>() writes a serializer that stores nothing: '{0}' is a toolkit identifier, and the generated GraphQL runtime bindings already register a working one",
+        category: GraphQL,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "HotChocolate's generator builds the serializer from the properties the type declares in source. A toolkit identifier's Value is written by the toolkit's own generator, and source generators do not see each other's output, so HotChocolate finds no property and emits a serializer that writes an empty node id and reads every node id back as an empty identifier. It compiles and runs without a sign of trouble. The generated Add{Module}GraphQlRuntimeBindings() already registers a serializer that works for every identifier; remove this call.");
 }
