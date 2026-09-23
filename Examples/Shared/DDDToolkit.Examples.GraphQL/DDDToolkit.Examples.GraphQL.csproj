@@ -20,6 +20,8 @@
   <ItemGroup>
     <PackageReference Include="HotChocolate.AspNetCore" />
     <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
+    <PackageReference Include="HotChocolate.Fusion.AspNetCore" />
+    <PackageReference Include="HotChocolate.Fusion.Connectors.InMemory" />
   </ItemGroup>
 
   <ItemGroup>

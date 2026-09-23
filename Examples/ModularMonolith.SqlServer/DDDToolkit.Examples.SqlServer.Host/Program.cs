@@ -55,7 +55,7 @@ app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
-app.MapGraphQL();
+app.MapShopGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

@@ -33,6 +33,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `HotChocolate.Fusion.Aspire` before the gateway starts. The query the monoliths answer,
   `order { lines { product { name } } payment { status } shipment { destination } }`, and `node(id:)` now
   pass against all three samples. Every sample has a gateway of its own.
+- The monoliths compose their GraphQL with Fusion too, inside the process. Every module serves a source
+  schema of its own and declares its own part of the types others own (Ordering's `Product` by SKU,
+  Payments' and Shipping's `Order` by id), and a Fusion gateway in the monolith composes the five at
+  start-up and calls them in memory, with no HTTP. The joins `Shared/DDDToolkit.Examples.GraphQL` used to
+  make by hand are gone; a module's GraphQL is the same code as a service and in the monolith.
+  `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why the gateway has a service container of its
+  own in the application, and two traps on the way.
 - A Supabase Live workflow runs the Supabase monolith against a real Supabase project: the exported
   `supabase/migrations` go on with `supabase db push`, then the checkout scenarios run against the
   project. With `SUPABASE_BRANCHING=true` every run gets a preview branch of its own, which needs a Pro

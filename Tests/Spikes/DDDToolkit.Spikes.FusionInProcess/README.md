@@ -1,6 +1,8 @@
 # Fusion in-process spike
 
-Why the example monolith does not (yet) compose its modules with Fusion in-process.
+How the example monolith composes its modules with Fusion in-process, and why it is wired the way it is.
+`Examples/Shared/DDDToolkit.Examples.GraphQL/ShopSchema.cs` is the `endpoint-own-container` case below,
+applied to the shop.
 
 The idea: each module serves a GraphQL source schema of its own, with its own version of a shared type
 (Catalog's `Product` and Inventory's `Product`, each with a lookup by id), and
