@@ -12,6 +12,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- Relay node ids for identifiers. HotChocolate's global object identification needs an
+  `INodeIdValueSerializer` for a type it has never seen, so `ImplementsNode().IdField(order => order.Id)`
+  over an `OrderId` failed with *No serializer registered*. Every identifier over a `Guid`, `string`,
+  `int`, `long` or `short` now gets a nested `NodeIdValueSerializer`, derived from HotChocolate's
+  `CompositeNodeIdValueSerializer<T>`, and `Add{Module}GraphQlRuntimeBindings()` registers it. The node
+  id is the one HotChocolate writes for the bare value, so any HotChocolate server or Fusion gateway
+  reads it, `node(id:)` finds the entity, and `[ID<Order>] OrderId id` arrives as the `OrderId`.
+  DDD00032 warns against `AddNodeIdValueSerializerFrom<OrderId>()`, whose HotChocolate-generated
+  serializer cannot see the toolkit-generated `Value` and stores nothing. See
+  [Relay node ids](docs/graphql.md#relay-node-ids).
+
 - `DDDToolkit.EntityFramework.Supabase`, a new package that depends on nothing but Entity
   Framework's relational layer. Its `SupabaseMigrations` exports Entity Framework migrations as
   files in `supabase/migrations`, one per migration and named after it. `supabase db push`,
