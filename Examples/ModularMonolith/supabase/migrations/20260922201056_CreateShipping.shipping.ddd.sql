@@ -1,5 +1,5 @@
 -- Exported by DDDToolkit from the Entity Framework migration 20260922201056_CreateShipping of ShippingContext.
--- Regenerate it with SupabaseMigrations.Export rather than editing it.
+-- Written from that migration; change the migration, not this file.
 
 DO $EF$
 BEGIN

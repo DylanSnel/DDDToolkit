@@ -10,17 +10,11 @@ namespace DDDToolkit.Examples.Ordering;
 
 /// <summary>
 /// Everything Ordering needs from the host, registered by Ordering: its context, its outbox and the
-/// poller that empties it, and its place in the Supabase migrations. The host calls
+/// poller that empties it, and the start-up check on its Supabase migrations. The host calls
 /// <see cref="AddOrderingModule"/> and learns nothing else about how Ordering stores its orders.
 /// </summary>
 public static class OrderingModule
 {
-    /// <summary>
-    /// Ordering's migrations, for the Supabase export and the start-up check. Built from the design-time
-    /// factory <c>dotnet ef</c> uses, so exporting needs no host.
-    /// </summary>
-    public static readonly SupabaseMigrationSource SupabaseMigrations = SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>();
-
     /// <summary>
     /// Registers Ordering. With a Supabase connection string the module lives in the <c>ordering</c>
     /// schema of that database, and Supabase applies its migrations. Without one it gets a SQLite file of
@@ -53,7 +47,9 @@ public static class OrderingModule
         }
         else
         {
-            services.AddSupabaseMigrations(SupabaseMigrations);
+            // The start-up check covers this context. The export does not need this line: the build
+            // finds OrderingContextFactory by its [SupabaseMigrations] marker.
+            services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
         }
 
         // Ordering produces integration events, so it owns an outbox: what it publishes, as what, and

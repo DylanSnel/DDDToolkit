@@ -10,16 +10,11 @@ namespace DDDToolkit.Examples.Shipping;
 
 /// <summary>
 /// Everything Shipping needs from the host, registered by Shipping: its context, the contracts it reads,
-/// the integration events it handles under its own inbox, and its place in the Supabase migrations.
+/// the integration events it handles under its own inbox, and the start-up check on its Supabase
+/// migrations.
 /// </summary>
 public static class ShippingModule
 {
-    /// <summary>
-    /// Shipping's migrations, for the Supabase export and the start-up check. Built from the design-time
-    /// factory <c>dotnet ef</c> uses, so exporting needs no host.
-    /// </summary>
-    public static readonly SupabaseMigrationSource SupabaseMigrations = SupabaseMigrationSource.For<ShippingContext, ShippingContextFactory>();
-
     /// <summary>
     /// Registers Shipping. With a Supabase connection string the module lives in the <c>shipping</c>
     /// schema of that database, and Supabase applies its migrations. Without one it gets a SQLite file of
@@ -50,7 +45,9 @@ public static class ShippingModule
         }
         else
         {
-            services.AddSupabaseMigrations(SupabaseMigrations);
+            // The start-up check covers this context. The export does not need this line: the build
+            // finds ShippingContextFactory by its [SupabaseMigrations] marker.
+            services.AddSupabaseMigrations<ShippingContext, ShippingContextFactory>();
         }
 
         // The payload shapes Shipping reads. The inbox needs them to turn a delivered message into the

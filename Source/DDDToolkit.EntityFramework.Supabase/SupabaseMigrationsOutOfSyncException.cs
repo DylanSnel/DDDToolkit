@@ -35,7 +35,7 @@ public sealed class SupabaseMigrationsOutOfSyncException : InvalidOperationExcep
             message.AppendLine().Append("  ").Append(entry.MigrationId).Append(": ").Append(entry.Status switch
             {
                 SupabaseMigrationStatus.Missing =>
-                    $"has no file. Run SupabaseMigrations.Export to write {Path.GetFileName(entry.Path)}.",
+                    $"has no file. A build with SupabaseMigrationsExport=Write, or SupabaseMigrations.Export, writes {Path.GetFileName(entry.Path)}.",
                 SupabaseMigrationStatus.Changed =>
                     $"{Path.GetFileName(entry.Path)} is not what the migration generates. If it was never applied anywhere, " +
                     "delete it and export again. If it was, put the change in a new migration instead: Supabase will not run a version twice.",

@@ -9,7 +9,7 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// that Supabase has applied all of them.
 /// <code>
 /// // in each module
-/// services.AddSupabaseMigrations(OrderingModule.SupabaseMigrations);
+/// services.AddSupabaseMigrations&lt;OrderingContext, OrderingContextFactory&gt;();
 ///
 /// // in the host, after Build()
 /// await app.Services.EnsureSupabaseMigrationsAppliedAsync();

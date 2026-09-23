@@ -5,25 +5,8 @@ using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Shipping;
 using DDDToolkit.Mediator;
 
-// dotnet run -- export-supabase [directory]
-// Writes every module's Entity Framework migrations into the Supabase migrations directory, then exits.
-// Run it after every dotnet ef migrations add. It comes before the builder on purpose: the export needs
-// the modules' design-time factories and nothing else, so no configuration is loaded and nothing starts.
-// Without a directory it finds the Supabase project the way the CLI does, by looking upwards for
-// supabase/config.toml, which here is Examples/ModularMonolith.
-if (args is ["export-supabase", .. var rest])
-{
-    var reports = SupabaseMigrations.Export(
-        [OrderingModule.SupabaseMigrations, ShippingModule.SupabaseMigrations],
-        rest is [var directory] ? directory : null);
-
-    foreach (var entry in reports.SelectMany(report => report.Entries))
-    {
-        Console.WriteLine($"{entry.Status,-12} {entry.MigrationId}");
-    }
-
-    return reports.All(report => report.IsInSync) ? 0 : 1;
-}
+// There is no export command here. The project file turns the Supabase export on, and the build writes
+// supabase/migrations from every [SupabaseMigrations] factory this host references; see the csproj.
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,5 +39,3 @@ app.MapOrderingEndpoints();
 app.MapShippingEndpoints();
 
 await app.RunAsync();
-
-return 0;

@@ -101,6 +101,13 @@ public static class ReferenceSets
     /// <summary>Everything the generated HotChocolate change-type providers and bindings need.</summary>
     public static ImmutableArray<PortableExecutableReference> HotChocolate => LazyHotChocolate.Value;
 
+    /// <summary>EF Core, with its design-time factory interface, and the Supabase package the marker lives in.</summary>
+    public static ImmutableArray<PortableExecutableReference> Supabase =>
+    [
+        .. EntityFramework,
+        FromType(typeof(global::DDDToolkit.EntityFramework.Supabase.SupabaseMigrationsAttribute)),
+    ];
+
     /// <summary>
     /// Resolves the assembly declaring <paramref name="type"/>. Preferred over a file name whenever a type
     /// is reachable at compile time: the compiler checks it, and it is immune to the assembly being

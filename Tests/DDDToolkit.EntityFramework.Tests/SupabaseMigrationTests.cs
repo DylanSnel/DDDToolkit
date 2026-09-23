@@ -23,6 +23,12 @@ public sealed class SupabaseMigrationTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The name an exported file gets. The test assembly declares no [assembly: Module], so the module is
+    /// the context's name without "Context".
+    /// </summary>
+    private static string FileOf(string migrationId, string module = "supabaseshelf") => $"{migrationId}.{module}.ddd.sql";
+
     private static IReadOnlyList<SupabaseMigrationFile> Generate(SupabaseMigrationOptions? options = null)
     {
         using var context = SupabaseShelfContext.Create();
@@ -42,11 +48,27 @@ public sealed class SupabaseMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Module_names_are_lower_case_letters_digits_and_dashes()
+    {
+        SupabaseMigrations.NormalizeModuleName("Ordering").Should().Be("ordering");
+        SupabaseMigrations.NormalizeModuleName(" Order Management.Core ").Should().Be("order-management-core");
+        SupabaseMigrations.NormalizeModuleName("___").Should().Be("module");
+        SupabaseMigrations.ModuleNameOf(typeof(SupabaseShelfContext)).Should().Be("supabaseshelf", "without [assembly: Module] the context name stands in");
+    }
+
+    [Fact]
+    public void A_source_takes_the_module_it_is_given_over_the_one_it_would_derive()
+    {
+        SupabaseMigrationSource.For(() => SupabaseShelfContext.Create(), "Library Shelves").Module.Should().Be("library-shelves");
+        SupabaseMigrationSource.For(() => SupabaseShelfContext.Create()).Module.Should().Be("supabaseshelf");
+    }
+
+    [Fact]
     public void Each_migration_becomes_one_file_named_after_its_id_so_the_versions_are_the_timestamps()
     {
         var files = Generate();
 
-        files.Select(f => f.FileName).Should().Equal(CreateShelves.Id + ".sql", AddShelfCapacity.Id + ".sql");
+        files.Select(f => f.FileName).Should().Equal(FileOf(CreateShelves.Id), FileOf(AddShelfCapacity.Id));
         files.Select(f => f.Version).Should().Equal("20260901120000", "20260915093000");
     }
 
@@ -114,7 +136,7 @@ public sealed class SupabaseMigrationTests : IDisposable
 
         report.Created.Select(e => e.MigrationId).Should().Equal(CreateShelves.Id, AddShelfCapacity.Id);
         report.IsInSync.Should().BeTrue();
-        File.ReadAllText(Path.Combine(_directory, CreateShelves.Id + ".sql")).Should().Be(Generate()[0].Sql);
+        File.ReadAllText(Path.Combine(_directory, FileOf(CreateShelves.Id))).Should().Be(Generate()[0].Sql);
 
         Compare().Entries.Should().OnlyContain(e => e.Status == SupabaseMigrationStatus.Unchanged);
     }
@@ -133,7 +155,7 @@ public sealed class SupabaseMigrationTests : IDisposable
     public void Export_only_adds_the_file_that_is_missing()
     {
         Export();
-        File.Delete(Path.Combine(_directory, AddShelfCapacity.Id + ".sql"));
+        File.Delete(Path.Combine(_directory, FileOf(AddShelfCapacity.Id)));
 
         var report = Export();
 
@@ -144,7 +166,7 @@ public sealed class SupabaseMigrationTests : IDisposable
     public void A_changed_file_is_reported_and_never_overwritten()
     {
         Export();
-        var path = Path.Combine(_directory, CreateShelves.Id + ".sql");
+        var path = Path.Combine(_directory, FileOf(CreateShelves.Id));
         File.AppendAllText(path, "-- edited by hand\n");
 
         var report = Export();
@@ -157,7 +179,7 @@ public sealed class SupabaseMigrationTests : IDisposable
     public void Windows_line_endings_in_a_checked_out_file_do_not_count_as_a_change()
     {
         Export();
-        var path = Path.Combine(_directory, CreateShelves.Id + ".sql");
+        var path = Path.Combine(_directory, FileOf(CreateShelves.Id));
         File.WriteAllText(path, File.ReadAllText(path).Replace("\n", "\r\n", StringComparison.Ordinal));
 
         Compare().IsInSync.Should().BeTrue();
@@ -167,7 +189,7 @@ public sealed class SupabaseMigrationTests : IDisposable
     public void A_file_exported_by_another_entity_framework_version_is_not_a_change()
     {
         Export();
-        var path = Path.Combine(_directory, CreateShelves.Id + ".sql");
+        var path = Path.Combine(_directory, FileOf(CreateShelves.Id));
         var exported = File.ReadAllText(path);
         var older = System.Text.RegularExpressions.Regex.Replace(exported, $@"('{CreateShelves.Id}', )'[^']*'", "$1'9.0.0'");
         older.Should().NotBe(exported);
@@ -186,7 +208,7 @@ public sealed class SupabaseMigrationTests : IDisposable
         var report = Export();
 
         report.Entries[0].Should().Be(new SupabaseMigrationEntry(CreateShelves.Id, SupabaseMigrationStatus.VersionTaken, other));
-        File.Exists(Path.Combine(_directory, CreateShelves.Id + ".sql")).Should().BeFalse();
+        File.Exists(Path.Combine(_directory, FileOf(CreateShelves.Id))).Should().BeFalse();
     }
 
     [Fact]
@@ -214,20 +236,20 @@ public sealed class SupabaseMigrationTests : IDisposable
         }
 
         Compare().IsInSync.Should().BeTrue();
-        File.ReadAllText(Path.Combine(_directory, CreateLedger.Id + ".sql")).Should().Contain("of SupabaseLedgerContext.");
+        File.ReadAllText(Path.Combine(_directory, FileOf(CreateLedger.Id, "supabaseledger"))).Should().Contain("of SupabaseLedgerContext.");
     }
 
     [Fact]
     public void EnsureInSync_names_each_problem_and_what_to_do()
     {
         Export();
-        File.Delete(Path.Combine(_directory, AddShelfCapacity.Id + ".sql"));
+        File.Delete(Path.Combine(_directory, FileOf(AddShelfCapacity.Id)));
         using var context = SupabaseShelfContext.Create();
 
         var act = () => SupabaseMigrations.EnsureInSync(context, _directory);
 
         act.Should().Throw<SupabaseMigrationsOutOfSyncException>()
-            .WithMessage($"*{AddShelfCapacity.Id}: has no file. Run SupabaseMigrations.Export*")
+            .WithMessage($"*{AddShelfCapacity.Id}: has no file. A build with SupabaseMigrationsExport=Write*writes {FileOf(AddShelfCapacity.Id)}*")
             .Which.Problems.Should().ContainSingle();
     }
 
@@ -248,8 +270,8 @@ public sealed class SupabaseMigrationTests : IDisposable
     public void EnsureInSync_over_several_sources_reports_the_problems_of_all_of_them_in_one_message()
     {
         SupabaseMigrations.Export([Shelves, Ledger], _directory);
-        File.Delete(Path.Combine(_directory, AddShelfCapacity.Id + ".sql"));
-        File.Delete(Path.Combine(_directory, CreateLedger.Id + ".sql"));
+        File.Delete(Path.Combine(_directory, FileOf(AddShelfCapacity.Id)));
+        File.Delete(Path.Combine(_directory, FileOf(CreateLedger.Id, "supabaseledger")));
 
         var act = () => SupabaseMigrations.EnsureInSync([Shelves, Ledger], _directory);
 

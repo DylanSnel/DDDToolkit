@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Title>Domain Driven Design Toolkit - Supabase</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase;postgres;postgresql</PackageTags>
-    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files, so supabase db push, db reset and branching apply them, and checks in a test that none was forgotten.</Description>
+    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files as part of the build, so supabase db push, db reset and branching apply them, and fails a CI build when one was not exported.</Description>
   </PropertyGroup>
 
   <!--
@@ -18,6 +18,16 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <!-- The generator that finds [SupabaseMigrations] factories, shipped the way the other integrations ship theirs. -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" PrivateAssets="contentfiles;build" />
+  </ItemGroup>
+
+  <!-- The build step, in buildTransitive so a host gets it through the module that references this package. -->
+  <ItemGroup>
+    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive" />
   </ItemGroup>
 
 </Project>

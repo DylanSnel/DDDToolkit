@@ -18,10 +18,10 @@ ModularMonolith/
     DDDToolkit.Examples.Shipping             consumes Ordering's contract and nothing else; ShippingModule
                                              registers it as a consumer
       Migrations/                            Shipping's Entity Framework migrations, for Postgres
-  DDDToolkit.Examples.Host                   switches the modules on, four HTTP endpoints, export-supabase
+  DDDToolkit.Examples.Host                   switches the modules on, four HTTP endpoints; its build exports
   supabase/
     config.toml                              a local Supabase project, from supabase init
-    migrations/                              both modules' migrations, exported for the Supabase CLI
+    migrations/                              both modules' migrations, written by the host's build
 ```
 
 What happens when you place an order:
@@ -76,19 +76,19 @@ dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
 ```
 
 The `supabase` launch profile points at the local database on port 54322. After changing a model,
-scaffold the migration in the module that owns it and export it:
+scaffold the migration in the module that owns it, and build:
 
 ```bash
 dotnet ef migrations add AddGiftWrap --project Ordering/DDDToolkit.Examples.Ordering --startup-project DDDToolkit.Examples.Host --output-dir Migrations
-dotnet run --project DDDToolkit.Examples.Host -- export-supabase
-supabase migration up   # or: supabase db reset, to start over
+dotnet build DDDToolkit.Examples.Host   # writes 2026…_AddGiftWrap.ordering.ddd.sql
+supabase migration up                   # or: supabase db reset, to start over
 ```
 
-`export-supabase` runs before the host is built: it only needs each module's design-time factory, so it
-loads no configuration and starts nothing. `Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs`
-fails when the second step was forgotten.
-See [Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the export writes
-and why.
+There is no export step to remember. Each module's design-time factory is marked `[SupabaseMigrations]`,
+and the host's project file sets `SupabaseMigrationsExport`: `Write` locally, so every build writes the
+files a new migration needs, and `Check` in CI, so a pull request that adds a migration without its file
+fails. The files are committed, because Supabase branching reads them from the repository. See
+[Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the build writes and how.
 
 ### What each feature is shown by
 
@@ -112,7 +112,7 @@ and why.
 | Conventions, generated converters, outbox, inbox | `Ordering/.../OrderingContext.cs`, `Shipping/.../ShippingContext.cs` |
 | Optimistic concurrency as a 409 | `Host/Endpoints.cs` |
 | A schema and a migration history per module in one database | `OrderingContext.cs`, `ShippingContext.cs` |
-| Entity Framework migrations applied by Supabase | `supabase/migrations`, each `*Module.cs` (`SupabaseMigrations`), `Host/Program.cs` (`export-supabase`, the start-up check), `Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` |
+| Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each module's factory, the host's `.csproj` (the export), `Host/Program.cs` and each `*Module.cs` (the start-up check) |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
 
 What it does not show: GraphQL, Newtonsoft, FluentValidation validators, pgmq, and upcasting an older

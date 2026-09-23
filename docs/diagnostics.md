@@ -28,6 +28,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00028](#ddd00028) | Error | A key part belongs on an entity or aggregate root |
 | [DDD00029](#ddd00029) | Warning | A key part should not have a public setter |
 | [DDD00030](#ddd00030) | Error | Declare all key parts of a type in one file |
+| [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -38,6 +39,8 @@ between two [modules](modules.md) and say nothing at all until a project declare
 failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
 the one key-part mistake that can only be caught when the Entity Framework model is built.
+[DDD00031](#ddd00031) is about the [Supabase export](entity-framework.md#supabase), where the failure
+worth catching is a module whose migrations never reach Supabase.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -882,6 +885,37 @@ Key parts join the primary key in declaration order. Within one file that order 
 the files of a partial class there is none, only the order the compiler happens to read the files in,
 and a key whose column order could change with a file rename is not a key you want. Nothing is
 generated for the type until the key parts are together.
+
+---
+
+## DDD00031
+
+**A [SupabaseMigrations] factory must be one the build can create.**
+
+Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
+host, about a factory in a module it references.
+
+```csharp
+[SupabaseMigrations]
+internal sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>  // DDD00031: the host cannot see it
+```
+
+The build creates every marked factory from code generated into the host, as
+`SupabaseMigrationSource.For<TContext, TFactory>()`. That needs a public, non-abstract, non-generic
+class with a public parameterless constructor, implementing `IDesignTimeDbContextFactory<TContext>`
+for a context the host can see too:
+
+```csharp
+[SupabaseMigrations]
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args) { ... }
+}
+```
+
+The message names what is missing. A factory that fails is left out of the export, which is why this is
+an error: a module whose migrations were silently skipped would be found by a failing deployment, or by
+a branch database without its tables, instead of by the build.
 
 ---
 

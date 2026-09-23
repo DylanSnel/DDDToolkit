@@ -21,10 +21,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   rewrites one. `EnsureInSync` fails a test when a migration was not exported, when an exported file
   was changed, or when a file's migration was removed. Several contexts can export into one
   directory, and `FindDirectory()` finds `supabase/migrations` the way the CLI finds its project.
-  A module declares its context once as a `SupabaseMigrationSource`, built from its design-time
-  factory without reflection; `SupabaseMigrations.Export([...sources])` then exports every module
-  without starting the host, so no configuration is loaded, and `services.AddSupabaseMigrations(source)`
-  plus `app.Services.EnsureSupabaseMigrationsAppliedAsync()` refuse to start the application while any
+  The export is part of the build: mark a module's design-time factory `[SupabaseMigrations]`, set
+  `<SupabaseMigrationsExport>` to `Write` or `Check` in the host, and its build writes, or only checks,
+  the files of every marked factory it references. A source generator finds the factories at compile
+  time and a module initializer runs the export before `Main`, so neither a command nor the
+  application's own start-up is involved, and nothing is found by reflection. Files are named
+  `{migration}.{module}.ddd.sql` after the assembly's `[assembly: Module]`. DDD00031 reports a marked
+  factory the build cannot create. `services.AddSupabaseMigrations<TContext, TFactory>()` plus
+  `app.Services.EnsureSupabaseMigrationsAppliedAsync()` refuse to start the application while any
   module has a migration missing. See [Entity Framework → Supabase](docs/entity-framework.md#supabase).
 - Registration a module can own. `AddDDDToolkitEntityFramework` may be called any number of times and
   every call configures the same options, so each module registers its own part next to its own
@@ -34,8 +38,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - `Examples/ModularMonolith` is registered the way a modular monolith should be: `AddOrderingModule`
   and `AddShippingModule` register each module's context, outbox, consumers and migrations, and the
   host only switches them on. It also runs on a local Supabase as well as on SQLite, each module in a
-  schema of its own with its own migration history, exported into one `supabase/` project by the
-  host's `export-supabase` command, which runs before the host is built.
+  schema of its own with its own migration history, written into one `supabase/` project by the
+  host's build and checked by CI.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed

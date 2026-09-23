@@ -13,6 +13,7 @@ internal static class DiagnosticDescriptors
     private const string Usage = "DDDToolkit.Usage";
     private const string Modules = "DDDToolkit.Modules";
     private const string Invariants = "DDDToolkit.Invariants";
+    private const string Supabase = "DDDToolkit.Supabase";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -219,4 +220,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "With more than one [KeyPart], they join the primary key in the order they are declared. Across the files of a partial class there is no declaration order, only the order the compiler happens to read the files in, and a key whose column order depends on that could change with a rename. Nothing is generated for the type until its key parts are declared together.");
+
+    public static readonly DiagnosticDescriptor SupabaseMigrationsFactoryUnusable = new(
+        id: "DDD00031",
+        title: "A [SupabaseMigrations] factory must be one the build can create",
+        messageFormat: "'{0}' is marked [SupabaseMigrations] but {1}, so its migrations are not exported",
+        category: Supabase,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The build exports a marked factory's migrations by creating the factory from generated code in the project that turns the export on. That needs a public, non-abstract, non-generic class with a public parameterless constructor that implements IDesignTimeDbContextFactory<TContext>. A factory that is not one is left out, and that is an error rather than a warning: a module whose migrations silently never reached Supabase would be found by a failing deployment instead of by the build.");
 }
