@@ -97,6 +97,9 @@
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Fulfilment/DDDToolkit.Examples.MassTransit.Fulfilment.csproj" />
     <Project Path="Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.Gateway/DDDToolkit.Examples.MassTransit.Gateway.csproj" />
   </Folder>
+  <Folder Name="/Tests/Spikes/">
+    <Project Path="Tests/Spikes/DDDToolkit.Spikes.FusionInProcess/DDDToolkit.Spikes.FusionInProcess.csproj" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />

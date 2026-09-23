@@ -2,6 +2,7 @@ using DDDToolkit.Exceptions;
 using DDDToolkit.Examples.SharedKernel;
 using HotChocolate;
 using HotChocolate.Types;
+using HotChocolate.Types.Composite;
 using HotChocolate.Types.Relay;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,7 +15,11 @@ public sealed class CatalogQueries
     public async Task<IReadOnlyList<Product>> GetProductsAsync(CatalogContext catalog, CancellationToken cancellationToken)
         => await catalog.Products.OrderBy(product => product.Sku).ToListAsync(cancellationToken);
 
-    /// <summary>The lookup, as a query field. A Fusion gateway resolves <c>Product</c> through it.</summary>
+    /// <summary>
+    /// The lookup, as a query field. A Fusion gateway resolves a <c>Product</c> another module holds only
+    /// the SKU of, such as Ordering's order lines, through it.
+    /// </summary>
+    [Lookup]
     public Task<Product?> GetProductBySkuAsync(string sku, ProductBySkuDataLoader products, CancellationToken cancellationToken)
         => products.LoadAsync(sku, cancellationToken);
 }
