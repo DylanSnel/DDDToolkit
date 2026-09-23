@@ -37,7 +37,6 @@ internal static class Emit
         return new Scope(closers);
     }
 
-    /// <summary>The generated record-equality members used by the value object family (mirrors the historical output).</summary>
     /// <summary>
     /// Equality for a type whose only equality component is <c>Value</c>: entity ids and single value
     /// objects. Compares the value directly instead of walking <c>GetEqualityComponents()</c>.
@@ -65,6 +64,7 @@ internal static class Emit
             writer.Line("    return false;");
             writer.Line("}");
             writer.Line();
+            EqualityContractCheck(writer);
             writer.Line("if (ReferenceEquals(this, other))");
             writer.Line("{");
             writer.Line("    return true;");
@@ -86,6 +86,7 @@ internal static class Emit
         }
     }
 
+    /// <summary>The generated record-equality members used by the value object family (mirrors the historical output).</summary>
     public static void RecordEqualityMembers(CodeWriter writer, string typeName, bool hashCodeFromComponents)
     {
         using (writer.Block("public virtual bool Equals(" + typeName + "? other)"))
@@ -95,6 +96,7 @@ internal static class Emit
             writer.Line("    return false;");
             writer.Line("}");
             writer.Line();
+            EqualityContractCheck(writer);
             writer.Line("return global::System.Linq.Enumerable.SequenceEqual(GetEqualityComponents(), other.GetEqualityComponents());");
         }
 
@@ -111,6 +113,25 @@ internal static class Emit
         {
             writer.Line("public override int GetHashCode() => base.GetHashCode();");
         }
+    }
+
+    /// <summary>
+    /// Refuses an <c>other</c> of a different runtime type, as the compiler's own record equality does.
+    /// <para>
+    /// Without it a value and its always-valid twin were equal one way only: <c>plain.Equals(twin)</c>
+    /// compared components and said yes, while <c>twin.Equals(plain)</c> went through the
+    /// <c>Equals(Base?)</c> the compiler synthesizes in a derived record, which casts to the twin type
+    /// and said no. The compiler does not allow that override to be declared, so "equal both ways"
+    /// cannot be built; "unequal both ways" is the symmetric choice left.
+    /// </para>
+    /// </summary>
+    private static void EqualityContractCheck(CodeWriter writer)
+    {
+        writer.Line("if (EqualityContract != other.EqualityContract)");
+        writer.Line("{");
+        writer.Line("    return false;");
+        writer.Line("}");
+        writer.Line();
     }
 
     private sealed class Scope(Stack<IDisposable> closers) : IDisposable

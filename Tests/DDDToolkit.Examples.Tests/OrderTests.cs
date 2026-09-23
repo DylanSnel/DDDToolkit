@@ -40,8 +40,9 @@ public class OrderTests
         var order = new Order(id, ShipTo(), [Line("COFFEE-1KG", 2)]);
 
         // EventId and OccurredAt are never compared, which is what makes this readable at all: two
-        // events with identical payloads are never equal as records.
-        order.PendingEvents().Raised(new OrderPlaced(id, new Address("Oudegracht 1", "Utrecht", "3511 AA"), 1));
+        // events with identical payloads are never equal as records. The order holds its address as a
+        // ValidAddress, and a twin never equals a plain Address, so the expectation is a twin too.
+        order.PendingEvents().Raised(new OrderPlaced(id, new Address("Oudegracht 1", "Utrecht", "3511 AA").ToValid(), 1));
     }
 
     [Fact]

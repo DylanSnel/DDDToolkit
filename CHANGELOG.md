@@ -114,6 +114,16 @@ convention.
   copies every field. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and record
   identifiers alike. An `[Internal]` property now travels with the twin as well; it still takes no
   part in equality.
+- A value and its always-valid twin were equal one way only: `money == money.ToValid()` was `true`
+  while `money.ToValid() == money` was `false`, and `Equals` behaved the same, which breaks the
+  contract a dictionary or a `HashSet` relies on. The twin is a derived record, and the compiler
+  writes the `Equals(Money?)` that answers for it, casting to `ValidMoney`; it does not allow that
+  member to be replaced, so the twin cannot be made to accept a plain value. The generated `Equals`
+  now also compares the runtime type, as the compiler's own record equality does, so a value and its
+  twin are unequal from either side. Two plain values, or two twins, with the same components are
+  still equal, and hash codes are unchanged. This applies to `[ValueObject]`,
+  `[SingleValueObject<T>]` and record identifiers. Code that compared a plain value to a twin and
+  relied on `true` should compare twin to twin, or compare the components.
 - A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path
   limit". Visual Studio places every generated file at
   `{project}\Generated\{generator assembly}\{generator type}\{hint name}`, and the toolkit spelled

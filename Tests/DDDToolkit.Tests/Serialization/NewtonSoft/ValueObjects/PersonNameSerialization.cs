@@ -38,7 +38,7 @@ public partial class PersonNameSerialization
 
         var deserialized = JsonConvert.DeserializeObject<PersonName>(json, _settings);
         ValidPersonName newName = deserialized!.ToValid();
-        Assert.Equal(name, newName);
+        Assert.Equal(name.ToValid(), newName);
     }
 
     [Fact]
