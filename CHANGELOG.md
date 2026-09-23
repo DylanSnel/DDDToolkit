@@ -12,6 +12,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
+  inbox. `outbox.SendToWolverine()` publishes each message through Wolverine as an
+  `IntegrationEventEnvelope`, the envelope's headers and payload in one object and routable on its
+  contract name; `wolverine.ReceiveIntegrationEvents()` registers the handler that hands it to the
+  modules through `IntegrationEventReceiver`, with retries and Wolverine's error queue. Wolverine's own
+  outbox, inbox and sagas stay out of it. `IntegrationEventEnvelope` is in the core package, for any
+  broker whose client sends objects.
 - The receiving end of a transport. `IntegrationEventReceiver` hands a message that arrived from another
   process to the modules in this one, each handler inside its module's inbox, as the module sink does for
   a message from next door; `AddModuleIntegrationEvents` registers it. `IntegrationEventHeaders` is the
@@ -21,7 +28,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   visibility timeout and archives a message as poison after `MaxDeliveries`; and
   `PgmqSinkOptions.UseQueues(...)` enqueues one message on several queues in one transaction, so every
   consuming service can have a queue of its own.
-
 - Relay node ids for identifiers. HotChocolate's global object identification needs an
   `INodeIdValueSerializer` for a type it has never seen, so `ImplementsNode().IdField(order => order.Id)`
   over an `OrderId` failed with *No serializer registered*. Every identifier over a `Guid`, `string`,
@@ -32,7 +38,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   DDD00032 warns against `AddNodeIdValueSerializerFrom<OrderId>()`, whose HotChocolate-generated
   serializer cannot see the toolkit-generated `Value` and stores nothing. See
   [Relay node ids](docs/graphql.md#relay-node-ids).
-
 - `DDDToolkit.EntityFramework.Supabase`, a new package that depends on nothing but Entity
   Framework's relational layer. Its `SupabaseMigrations` exports Entity Framework migrations as
   files in `supabase/migrations`, one per migration and named after it. `supabase db push`,
@@ -87,6 +92,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   composed in `Shared/DDDToolkit.Examples.GraphQL`, so no module references another. Every entity is a
   Relay node with the toolkit's identifier as its id, rules come back as errors with their codes, and
   `orderConfirmed`/`orderCancelled` subscriptions are fed by the outbox.
+- `Examples/Microservices.Wolverine` runs the same three services over RabbitMQ with Wolverine, each on a
+  database of its own: Storefront on SQL Server, Payments and Fulfilment on Postgres.
 - `Examples/Microservices.Pgmq` runs the shop as three services (storefront, payments, fulfilment) behind
   a YARP gateway, talking through pgmq queues in the one Postgres they share. The same checkout scenarios
   pass against it as against the monoliths. `Shared/DDDToolkit.Examples.Microservices` holds what every

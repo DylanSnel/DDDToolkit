@@ -51,18 +51,29 @@ public static class ShopServices
     /// deployment's contract between services, and a message nobody routes is a message nobody receives,
     /// which is exactly what a reviewer should see change in a diff.
     /// </remarks>
-    public static IReadOnlyList<ShopService> ConsumersOf(string contract) => contract switch
-    {
-        "ordering.order-placed" => [ShopService.Payments, ShopService.Fulfilment],
-        "ordering.order-cancelled" => [ShopService.Payments, ShopService.Fulfilment],
-        "ordering.order-confirmed" => [ShopService.Fulfilment],
-        "inventory.stock-reserved" => [ShopService.Storefront, ShopService.Payments],
-        "inventory.stock-reservation-failed" => [ShopService.Storefront],
-        "payments.payment-succeeded" => [ShopService.Storefront],
-        "payments.payment-failed" => [ShopService.Storefront],
+    public static IReadOnlyList<ShopService> ConsumersOf(string contract)
+        => Routing.TryGetValue(contract, out var consumers) ? consumers : [];
 
-        // Catalog's prices are read by Ordering, which runs next to it in Storefront.
-        _ => [],
+    /// <summary>
+    /// The contracts <paramref name="service"/> has to be sent: what its queue is bound to, on a broker
+    /// that routes by key.
+    /// </summary>
+    public static IEnumerable<string> ContractsFor(ShopService service)
+        => Routing.Where(route => route.Value.Contains(service)).Select(route => route.Key);
+
+    /// <summary>Every contract that crosses from one service to another, and who it goes to.</summary>
+    /// <remarks>
+    /// Catalog's prices are not here: Ordering reads them, and it runs next to Catalog in Storefront.
+    /// </remarks>
+    private static readonly IReadOnlyDictionary<string, ShopService[]> Routing = new Dictionary<string, ShopService[]>
+    {
+        ["ordering.order-placed"] = [ShopService.Payments, ShopService.Fulfilment],
+        ["ordering.order-cancelled"] = [ShopService.Payments, ShopService.Fulfilment],
+        ["ordering.order-confirmed"] = [ShopService.Fulfilment],
+        ["inventory.stock-reserved"] = [ShopService.Storefront, ShopService.Payments],
+        ["inventory.stock-reservation-failed"] = [ShopService.Storefront],
+        ["payments.payment-succeeded"] = [ShopService.Storefront],
+        ["payments.payment-failed"] = [ShopService.Storefront],
     };
 
     /// <summary>The services <paramref name="from"/> sends <paramref name="contract"/> to.</summary>

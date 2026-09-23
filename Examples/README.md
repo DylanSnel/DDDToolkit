@@ -21,6 +21,7 @@ way to run it. Each sample is a different way, over the very same modules:
 | `ModularMonolith.Supabase/` | one process | SQLite, or Postgres/Supabase | the module sink, in process |
 | `ModularMonolith.SqlServer/` | one process | SQL Server | the module sink, in process |
 | `Microservices.Pgmq/` | three services and a gateway | one Postgres, a schema per module | pgmq: a queue per service, in the same database |
+| `Microservices.Wolverine/` | three services and a gateway | a database per service: SQL Server and Postgres | RabbitMQ, through Wolverine |
 
 ```
 Modules/
@@ -254,6 +255,26 @@ No broker to run: a queue is a table, and on Supabase it is a Queue you can watc
 
 ```bash
 dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHost
+```
+
+**`Microservices.Wolverine/`** gives every service a database of its own, and not of one kind: Storefront
+on SQL Server, Payments and Fulfilment on Postgres. What they share is RabbitMQ, and Wolverine carries the
+envelopes: a topic exchange keyed on the contract's name, and a queue per service bound to the contracts
+`ShopServices.ContractsFor` names.
+
+```csharp
+wolverine.PublishMessagesToRabbitMqExchange<IntegrationEventEnvelope>("integration-events", envelope => envelope.Name)
+    .ExchangeType(ExchangeType.Topic).SendInline();
+wolverine.ListenToRabbitQueue(name, queue =>
+    {
+        foreach (var contract in ShopServices.ContractsFor(service)) queue.BindExchange("integration-events", contract);
+    })
+    .ProcessInline();
+wolverine.ReceiveIntegrationEvents();
+```
+
+```bash
+dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost
 ```
 
 ### Testing the samples end to end

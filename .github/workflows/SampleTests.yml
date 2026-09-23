@@ -30,6 +30,7 @@ jobs:
           - ModularMonolith.Supabase
           - ModularMonolith.SqlServer
           - Microservices.Pgmq
+          - Microservices.Wolverine
 
     env:
       # Without this the scenarios skip themselves when Docker is missing, which would report green

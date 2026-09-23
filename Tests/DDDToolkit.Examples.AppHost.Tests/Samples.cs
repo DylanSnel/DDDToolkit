@@ -45,3 +45,21 @@ public sealed class PgmqServices : ShopFixture<Projects.DDDToolkit_Examples_Pgmq
 [Trait("Sample", "Microservices.Pgmq")]
 public sealed class MicroservicesOverPgmq(PgmqServices shop)
     : ShopScenarios<Projects.DDDToolkit_Examples_Pgmq_AppHost>(shop), IClassFixture<PgmqServices>;
+
+public sealed class WolverineServices : ShopFixture<Projects.DDDToolkit_Examples_Wolverine_AppHost>
+{
+    protected override string ShopResource => "gateway";
+
+    protected override IEnumerable<string> ResourcesToWaitFor => ["storefront", "payments", "fulfilment", "gateway"];
+
+    public override bool ServesGraphQL => false;
+}
+
+/// <summary>
+/// The same shop as three services over RabbitMQ with Wolverine, each on a database of its own, Storefront
+/// on SQL Server and the others on Postgres.
+/// </summary>
+[Trait("Category", "Samples")]
+[Trait("Sample", "Microservices.Wolverine")]
+public sealed class MicroservicesOverWolverine(WolverineServices shop)
+    : ShopScenarios<Projects.DDDToolkit_Examples_Wolverine_AppHost>(shop), IClassFixture<WolverineServices>;

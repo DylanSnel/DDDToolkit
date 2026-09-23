@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\Examples\ModularMonolith.Supabase\DDDToolkit.Examples.Supabase.AppHost\DDDToolkit.Examples.Supabase.AppHost.csproj" />
     <ProjectReference Include="..\..\Examples\ModularMonolith.SqlServer\DDDToolkit.Examples.SqlServer.AppHost\DDDToolkit.Examples.SqlServer.AppHost.csproj" />
     <ProjectReference Include="..\..\Examples\Microservices.Pgmq\DDDToolkit.Examples.Pgmq.AppHost\DDDToolkit.Examples.Pgmq.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\Microservices.Wolverine\DDDToolkit.Examples.Wolverine.AppHost\DDDToolkit.Examples.Wolverine.AppHost.csproj" />
   </ItemGroup>
 
 </Project>

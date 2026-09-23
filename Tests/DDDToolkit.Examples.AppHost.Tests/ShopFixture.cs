@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Aspire.Hosting;
+using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,7 @@ namespace DDDToolkit.Examples.AppHost.Tests;
 /// <typeparam name="TAppHost">The AppHost's generated <c>Projects.*</c> type.</typeparam>
 public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : class
 {
-    private static readonly TimeSpan StartTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromMinutes(Environment.GetEnvironmentVariable("DDDTOOLKIT_SAMPLE_START_MINUTES") is { } minutes ? double.Parse(minutes, System.Globalization.CultureInfo.InvariantCulture) : 5);
 
     private DistributedApplication? _app;
 
@@ -61,16 +62,60 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
 
         _app = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
+        // Every resource's log, kept while the sample starts, so a sample that never becomes healthy says
+        // why instead of timing out in silence.
+        using var watching = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var logs = _app.Services.GetRequiredService<DistributedApplicationModel>().Resources
+            .ToDictionary(resource => resource.Name, _ => new System.Collections.Concurrent.ConcurrentQueue<string>());
+        var loggers = _app.Services.GetRequiredService<ResourceLoggerService>();
+        foreach (var (resource, lines) in logs)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var batch in loggers.WatchAsync(resource).WithCancellation(watching.Token))
+                    {
+                        foreach (var line in batch)
+                        {
+                            lines.Enqueue(line.Content);
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            });
+        }
+
         using var starting = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         starting.CancelAfter(StartTimeout);
 
-        await _app.StartAsync(starting.Token);
-
-        foreach (var resource in ResourcesToWaitFor)
+        try
         {
-            await _app.ResourceNotifications.WaitForResourceHealthyAsync(resource, starting.Token);
+            await _app.StartAsync(starting.Token);
+
+            foreach (var resource in ResourcesToWaitFor)
+            {
+                await _app.ResourceNotifications.WaitForResourceHealthyAsync(resource, starting.Token);
+            }
+        }
+        catch (OperationCanceledException) when (starting.IsCancellationRequested && !TestContext.Current.CancellationToken.IsCancellationRequested)
+        {
+            var report = string.Join(Environment.NewLine + Environment.NewLine, logs.Select(log =>
+                $"--- {log.Key} ({State(log.Key)}), last lines:{Environment.NewLine}{string.Join(Environment.NewLine, log.Value.TakeLast(25))}"));
+            throw new TimeoutException($"The sample did not become healthy within {StartTimeout}.{Environment.NewLine}{report}");
+        }
+        finally
+        {
+            await watching.CancelAsync();
         }
     }
+
+    private string State(string resource)
+        => _app!.ResourceNotifications.TryGetCurrentState(resource, out var state)
+            ? $"{state.Snapshot.State?.Text ?? "no state"}, health {state.Snapshot.HealthStatus?.ToString() ?? "unknown"}"
+            : "never seen";
 
     public async ValueTask DisposeAsync()
     {

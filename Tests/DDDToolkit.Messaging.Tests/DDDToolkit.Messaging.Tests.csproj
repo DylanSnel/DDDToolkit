@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="WolverineFx.RuntimeCompilation" />
+  </ItemGroup>
+
+  <!--
+    The broker integrations over their in-memory transports: the sink publishes, the broker's own
+    machinery carries the envelope, the handler hands it to a module's inbox. No Docker, so this runs with
+    the rest of the suite; the samples run the same packages against a real RabbitMQ.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Messaging.Wolverine\DDDToolkit.Messaging.Wolverine.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Wolverine messaging</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;messaging;wolverine;rabbitmq;outbox;inbox</PackageTags>
+    <Description>Wolverine as the transport for the DDDToolkit's outbox and inbox: a sink that publishes integration events through Wolverine, and a handler that hands them to the modules of the receiving process.</Description>
+  </PropertyGroup>
+
+  <!--
+    Wolverine as a transport and nothing more. The toolkit keeps the outbox that writes a message in the
+    aggregate's transaction and the inbox that applies it once; Wolverine carries it between the two. Its
+    own outbox, inbox, sagas and mediator are not used, so there is one of each in the system rather than
+    two that disagree.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="WolverineFx" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

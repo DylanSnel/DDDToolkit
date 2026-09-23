@@ -347,6 +347,51 @@ outbox.SendToPgmq();
 There is no shared transaction on that path, so it is at-least-once like any other remote sink. Use it
 when the queue genuinely lives somewhere else.
 
+## Through a broker: Wolverine
+
+`DDDToolkit.Messaging.Wolverine` makes Wolverine the transport between the outbox of one process and the
+inbox of another. Wolverine carries the message; the toolkit keeps the outbox that writes it in the
+aggregate's transaction and the inbox that applies it once. Wolverine's own outbox, inbox and sagas are
+not used, so there is one of each rather than two that disagree.
+
+Every message travels as an `IntegrationEventEnvelope`: the same headers the pgmq sink writes
+(`IntegrationEventHeaders`), next to the payload, in one object. One type for every contract, so routing
+never needs the contracts' assemblies; route on `envelope.Name`, the contract's published name.
+
+```csharp
+builder.UseWolverine(wolverine =>
+{
+    wolverine.UseRabbitMq(rabbitUri).AutoProvision();
+
+    // sending: every envelope to a topic exchange, keyed on the contract's name
+    wolverine.PublishMessagesToRabbitMqExchange<IntegrationEventEnvelope>("integration-events", envelope => envelope.Name)
+        .ExchangeType(ExchangeType.Topic)
+        .SendInline();
+
+    // receiving: this service's queue, bound to the contracts it consumes, acknowledged after the inbox
+    wolverine.ListenToRabbitQueue("fulfilment", queue => queue.BindExchange("integration-events", "ordering.order-confirmed"))
+        .ProcessInline();
+
+    wolverine.ReceiveIntegrationEvents();                    // the envelope's handler, retries, the error queue
+    wolverine.Policies.DisableConventionalLocalRouting();    // what this process publishes goes to the broker
+});
+
+// the outbox of each module
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToWolverine());
+```
+
+`WolverineSink` publishes through `IMessageBus`, so where the envelope goes is Wolverine's routing: RabbitMQ
+here, anything else Wolverine publishes to elsewhere. `IntegrationEventEnvelopeHandler` rebuilds the
+message and hands it to `IntegrationEventReceiver`, which delivers it to the modules of the process, each
+handler inside its module's inbox. When a handler throws, Wolverine retries with a cooldown and then moves
+the envelope to its error queue; a retry cannot apply anything twice.
+
+Two things to get right. Listen inline (`ProcessInline()`), so an envelope is acknowledged after the
+modules applied it; a buffered listener acknowledges first, and a crash in between loses the message. And
+reference `WolverineFx.RuntimeCompilation` in the process, because Wolverine compiles its handler adapters
+at start-up and since 6.x ships that compiler separately. `Examples/Microservices.Wolverine` runs the shop
+this way.
+
 ## For screens: the GraphQL subscription sink
 
 `DDDToolkit.HotChocolate` has a third sink, and it is a different axis from the two above.

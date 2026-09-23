@@ -17,6 +17,7 @@
     <Project Path="Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.Postgres/DDDToolkit.Messaging.Postgres.csproj" />
+    <Project Path="Source/DDDToolkit.Messaging.Wolverine/DDDToolkit.Messaging.Wolverine.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase/DDDToolkit.EntityFramework.Supabase.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase.Analyzers/DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
@@ -78,6 +79,10 @@
     <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHost/DDDToolkit.Examples.Pgmq.AppHost.csproj" />
     <Project Path="Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Service/DDDToolkit.Examples.Pgmq.Service.csproj" />
   </Folder>
+  <Folder Name="/Examples/Microservices.Wolverine/">
+    <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost/DDDToolkit.Examples.Wolverine.AppHost.csproj" />
+    <Project Path="Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.Service/DDDToolkit.Examples.Wolverine.Service.csproj" />
+  </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/DDDToolkit.Tests/DDDToolkit.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Analyzers.Tests/DDDToolkit.Analyzers.Tests.csproj" />
@@ -87,6 +92,7 @@
     <Project Path="Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests/DDDToolkit.HotChocolate.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Messaging.Tests/DDDToolkit.Messaging.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Testing.Tests/DDDToolkit.Testing.Tests.csproj" />
   </Folder>
 </Solution>
