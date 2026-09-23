@@ -140,6 +140,11 @@ internal static class DefinitionFactory
                 continue;
             }
 
+            // A property synthesized from a positional parameter is declared by that parameter. It is
+            // always 'public init' and nothing the author writes can change that, so instead of reporting
+            // DDD00010 the generator declares it itself, as 'protected init'.
+            var isPositional = property.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is ParameterSyntax);
+
             var info = new PropertyInfo(
                 Name: property.Name,
                 TypeName: property.Type.ToDisplayString(FullyQualifiedWithNullability),
@@ -148,11 +153,15 @@ internal static class DefinitionFactory
                 HasProtectedSetter: property.SetMethod?.DeclaredAccessibility is Accessibility.Protected or Accessibility.ProtectedOrInternal or Accessibility.ProtectedAndInternal,
                 IsInternal: HasAttribute(property, KnownTypes.InternalAttribute),
                 IsDontCompare: HasAttribute(property, KnownTypes.DontCompareAttribute),
-                Location: LocationInfo.From(property));
+                Location: LocationInfo.From(property))
+            {
+                IsPositional = isPositional,
+                Attributes = isPositional ? PositionalPropertyAttributes(symbol, property) : EquatableArray<string>.Empty,
+            };
 
             properties.Add(info);
 
-            if (info.IsInternal || !info.HasSetter)
+            if (info.IsPositional || info.IsInternal || !info.HasSetter)
             {
                 continue;
             }
@@ -168,12 +177,56 @@ internal static class DefinitionFactory
             }
         }
 
+        var primaryConstructor = symbol.InstanceConstructors.FirstOrDefault(constructor =>
+            constructor.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is RecordDeclarationSyntax));
+
         return new ValueObjectDefinition(
             Type: type,
             Properties: properties.ToEquatableArray(),
             SystemTextJsonAvailable: HasType(compilation, KnownTypes.StjJsonConverterAttribute),
             CanGenerate: canGenerate,
-            Diagnostics: diagnostics.ToEquatableArray());
+            Diagnostics: diagnostics.ToEquatableArray())
+        {
+            PrimaryConstructorParameterTypes = primaryConstructor?.Parameters
+                // Without the '?' of a nullable reference type: the generator writes these as default(T).
+                .Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                .ToEquatableArray(),
+            GenerateWith = symbol.GetMembers("With").IsEmpty,
+            GraphQLIgnoreAvailable = HasType(compilation, KnownTypes.GraphQLIgnoreAttribute),
+        };
+    }
+
+    /// <summary>
+    /// The <c>property:</c> and <c>field:</c> attributes on a positional parameter, as source for the
+    /// property the generator declares in its place. Roslyn reports them on the synthesized property and
+    /// its backing field, which is exactly where they have to go again.
+    /// </summary>
+    private static EquatableArray<string> PositionalPropertyAttributes(INamedTypeSymbol type, IPropertySymbol property)
+    {
+        var field = type.GetMembers().OfType<IFieldSymbol>()
+            .FirstOrDefault(member => SymbolEqualityComparer.Default.Equals(member.AssociatedSymbol, property));
+
+        return property.GetAttributes().Select(attribute => RenderAttribute(attribute, target: null))
+            .Concat(field?.GetAttributes().Select(attribute => RenderAttribute(attribute, target: "field")) ?? Enumerable.Empty<string?>())
+            .OfType<string>()
+            .ToEquatableArray();
+    }
+
+    private static string? RenderAttribute(AttributeData attribute, string? target)
+    {
+        if (attribute.AttributeClass is not { } attributeClass || attribute.AttributeClass.TypeKind == TypeKind.Error)
+        {
+            return null;
+        }
+
+        var arguments = attribute.ConstructorArguments.Select(argument => argument.ToCSharpString())
+            .Concat(attribute.NamedArguments.Select(argument => argument.Key + " = " + argument.Value.ToCSharpString()))
+            .ToList();
+
+        return "[" + (target is null ? string.Empty : target + ": ")
+            + attributeClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            + (arguments.Count == 0 ? string.Empty : "(" + string.Join(", ", arguments) + ")")
+            + "]";
     }
 
     private static bool ValidateValueObjectShape(TypeDeclarationInfo type, string attributeName, List<DiagnosticInfo> diagnostics)

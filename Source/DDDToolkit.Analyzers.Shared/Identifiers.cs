@@ -27,6 +27,31 @@ internal static class Identifiers
     /// </summary>
     public const string DefaultIdPrefix = "";
 
+    /// <summary>
+    /// The parameter name for a property: <c>Amount</c> → <c>amount</c>, <c>IBAN</c> → <c>iban</c>,
+    /// <c>URLPath</c> → <c>urlPath</c>, and <c>Class</c> → <c>@class</c> where the result is a keyword.
+    /// </summary>
+    public static string ParameterNameFor(string propertyName)
+    {
+        var upper = 0;
+        while (upper < propertyName.Length && char.IsUpper(propertyName[upper]))
+        {
+            upper++;
+        }
+
+        var camel = upper switch
+        {
+            0 => propertyName,
+            _ when upper == propertyName.Length => propertyName.ToLowerInvariant(),
+            1 => char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1),
+            _ => propertyName.Substring(0, upper - 1).ToLowerInvariant() + propertyName.Substring(upper - 1),
+        };
+
+        return Microsoft.CodeAnalysis.CSharp.SyntaxFacts.GetKeywordKind(camel) == Microsoft.CodeAnalysis.CSharp.SyntaxKind.None
+            ? camel
+            : "@" + camel;
+    }
+
     /// <summary>Turns an assembly name into something usable as a namespace ("My-App.Core" → "My_App.Core").</summary>
     public static string NamespaceFrom(string? assemblyName)
     {

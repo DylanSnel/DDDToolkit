@@ -45,6 +45,24 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 A model without `[KeyPart]` is mapped exactly as before; the tests compare it with and without the
 convention.
 
+- `[ValueObject]` works on a positional record: `public partial record Money(decimal Amount,
+  string Currency);`. The compiler would make each parameter a `public init` property, so the
+  generator declares the properties itself as `protected init`; the constructor, `Deconstruct` and
+  equality stay, and `with` from outside the type no longer compiles. `[property: ...]` attributes on
+  a parameter are carried over to the generated property, and the CS0657 warning that they would be
+  ignored is suppressed. Before, every parameter reported DDD00010 and the generated constructor did
+  not compile. See [Positional records](docs/value-objects.md#positional-records).
+- A generated `With(...)` on every `[ValueObject]`, the toolkit's own `with`: `money.With(amount: 5)`
+  replaces what is passed and keeps the rest, `null` included. On the always-valid twin it validates
+  the copy and throws `InvalidValueObjectException` right there, and because it is virtual that holds
+  even when the twin is held as its base type, which a `with` expression cannot guarantee. The
+  parameters are the new `DDDToolkit.BaseTypes.Optional<T>`, which a value converts to implicitly.
+  `With` is `[Internal]`, and `[GraphQLIgnore]` when HotChocolate is referenced. A value object that
+  declares its own `With` gets none. See [Changing a value](docs/value-objects.md#changing-a-value-with).
+- A code fix for DDD00010 and DDD00011 that makes the setter `protected init` (`private protected
+  init` on an `internal` property). It ships in the DDDToolkit.Analyzers package as
+  `DDDToolkit.Analyzers.CodeFixes.dll`, next to the generators.
+
 ### Fixed
 
 - A project a few folders deep could fail to load in Visual Studio with "exceeds the OS max path

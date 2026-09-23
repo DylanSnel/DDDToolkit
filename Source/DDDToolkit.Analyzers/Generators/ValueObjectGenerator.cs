@@ -34,6 +34,11 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
         var comparisonProperties = visibleProperties.Where(p => !p.IsDontCompare).ToList();
         var copiedProperties = visibleProperties.Where(p => p.HasSetter).ToList();
 
+        var withProperties = definition.GenerateWith ? copiedProperties : new System.Collections.Generic.List<PropertyInfo>();
+        var withParameters = string.Join(", ", withProperties.Select(p =>
+            KnownTypes.BaseTypesNamespace + ".Optional<" + p.TypeName + "> " + Identifiers.ParameterNameFor(p.Name) + " = default"));
+        var withArguments = string.Join(", ", withProperties.Select(p => Identifiers.ParameterNameFor(p.Name)));
+
         var writer = new CodeWriter().Header();
 
         using (writer.TypeScope(type))
@@ -41,24 +46,49 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".ValueObject, "
                 + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
+                EmitPositionalProperties(writer, definition.Properties.Where(p => p.IsPositional));
+
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
                 Emit.RecordEqualityMembers(writer, name, hashCodeFromComponents: true);
                 writer.Line();
 
-                if (definition.SystemTextJsonAvailable)
+                // A positional record already has its primary constructor, and every other constructor has
+                // to chain to it. With no parameters that constructor is the parameterless one itself.
+                var primaryParameters = definition.PrimaryConstructorParameterTypes;
+                if (primaryParameters is not { Count: 0 })
                 {
-                    writer.Line("[global::System.Text.Json.Serialization.JsonConstructor]");
+                    if (definition.SystemTextJsonAvailable)
+                    {
+                        writer.Line("[global::System.Text.Json.Serialization.JsonConstructor]");
+                    }
+
+                    var chain = primaryParameters is { } parameters
+                        ? " : this(" + string.Join(", ", parameters.Select(parameterType => "default(" + parameterType + ")!")) + ")"
+                        : string.Empty;
+
+                    using (writer.Block("protected " + name + "()" + chain))
+                    {
+                    }
+
+                    writer.Line();
                 }
 
-                using (writer.Block("protected " + name + "()"))
-                {
-                }
-
-                writer.Line();
                 writer.Line("/// <summary>The always-valid twin. Throws when the value is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line(KnownTypes.InternalAttributeUsage);
                 writer.Line("public " + validName + " ToValid() => new(this);");
+
+                if (withProperties.Count > 0)
+                {
+                    writer.Line();
+                    writer.Line("/// <summary>");
+                    writer.Line("/// A copy with the given properties replaced; leave one out to keep it. The copy is judged");
+                    writer.Line("/// afresh, like any new value. On the always-valid twin an invalid copy throws right here.");
+                    writer.Line("/// </summary>");
+                    EmitWithAttributes(writer, definition);
+                    writer.Line("public virtual " + name + " With(" + withParameters + ")");
+                    writer.Line("    => this with { " + string.Join(", ", withProperties.Select(p => p.Name + " = " + Identifiers.ParameterNameFor(p.Name) + ".Or(" + p.Name + ")")) + " };");
+                }
             }
 
             writer.Line();
@@ -80,10 +110,50 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
                 Emit.RecordEqualityMembers(writer, validName, hashCodeFromComponents: false);
+
+                if (withProperties.Count > 0)
+                {
+                    // Virtual, so a twin handed around as its base type still ends up here. The base makes
+                    // the copy (a clone of this twin, its verdict cleared) and the constructor above judges
+                    // it before anyone can hold on to it.
+                    writer.Line();
+                    writer.Line("/// <summary>A copy with the given properties replaced. Throws when the copy is not valid.</summary>");
+                    EmitWithAttributes(writer, definition);
+                    writer.Line("public override " + validName + " With(" + withParameters + ")");
+                    writer.Line("    => new(base.With(" + withArguments + "));");
+                }
             }
         }
 
         context.AddSource(type.HintName(), SourceText.From(writer.ToString(), Encoding.UTF8));
+    }
+
+    private static void EmitWithAttributes(CodeWriter writer, ValueObjectDefinition definition)
+    {
+        writer.Line(KnownTypes.InternalAttributeUsage);
+        if (definition.GraphQLIgnoreAvailable)
+        {
+            writer.Line("[global::" + KnownTypes.GraphQLIgnoreAttribute + "]");
+        }
+    }
+
+    /// <summary>
+    /// Declares the properties of a positional record again, as <c>protected init</c>. A property declared
+    /// under a parameter's name takes the place of the one the compiler would synthesize, and its
+    /// initializer reads the parameter, so the primary constructor still fills it.
+    /// </summary>
+    private static void EmitPositionalProperties(CodeWriter writer, System.Collections.Generic.IEnumerable<PropertyInfo> properties)
+    {
+        foreach (var property in properties)
+        {
+            foreach (var attribute in property.Attributes)
+            {
+                writer.Line(attribute);
+            }
+
+            writer.Line("public " + property.TypeName + " " + property.Name + " { get; protected init; } = " + property.Name + ";");
+            writer.Line();
+        }
     }
 
     private static void EmitEqualityComponents(CodeWriter writer, System.Collections.Generic.IEnumerable<string> propertyNames)

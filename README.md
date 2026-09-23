@@ -103,7 +103,7 @@ prefers dependencies its users can take for free. MediatR still works perfectly 
 | `[EntityId<T>]` on a `readonly partial record struct` | `Value`, a constructor, `Empty`/`IsEmpty`, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions, a JSON converter, and `CreateUnique`/`CreateSequential` for `Guid` |
 | `[EntityId<T>]` on a `partial record` | A reference type identifier: `Value`, equality over it, `Parse`/`TryParse`, `CreateUnique`/`CreateSequential` for `Guid`, and a `Valid` twin. It has `null` rather than `Empty`, and no conversion operators |
 | `[SingleValueObject<T>]` on a `partial record` | A wrapper with value equality, a `Valid` twin and validation |
-| `[ValueObject]` on a `partial record` | Structural equality across the properties you did not exclude, plus a `Valid` twin |
+| `[ValueObject]` on a `partial record`, positional or with `{ get; protected init; }` properties | Structural equality across the properties you did not exclude, a `With(...)` for changed copies, and a `Valid` twin |
 | `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, `GetInvariantViolations()` and `EnsureInvariants()` over it, over any nested `IInvariant<T>` rules and over every child entity it holds, an `EnsureOwnInvariants()` / `GetOwnInvariantViolations()` pair that stops at this object, and an implementation for every get-only partial collection property |
 
 Add `DDDToolkit.EntityFramework` and the same declarations also produce value converters, `[Owned]`

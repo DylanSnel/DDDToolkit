@@ -13,6 +13,7 @@
     <Project Path="Source/DDDToolkit.Abstractions/DDDToolkit.Abstractions.csproj" />
     <Project Path="Source/DDDToolkit/DDDToolkit.csproj" />
     <Project Path="Source/DDDToolkit.Analyzers/DDDToolkit.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.Analyzers.CodeFixes/DDDToolkit.Analyzers.CodeFixes.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework/DDDToolkit.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Analyzers/DDDToolkit.EntityFramework.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.Postgres/DDDToolkit.Messaging.Postgres.csproj" />

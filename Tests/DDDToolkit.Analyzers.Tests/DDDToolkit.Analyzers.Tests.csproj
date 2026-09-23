@@ -21,6 +21,7 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="Basic.Reference.Assemblies.Net100" />
   </ItemGroup>
 
@@ -30,6 +31,7 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.FluentValidation.Analyzers\DDDToolkit.FluentValidation.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers.CodeFixes\DDDToolkit.Analyzers.CodeFixes.csproj" />
   </ItemGroup>
 
   <!-- Runtime assemblies the generated code compiles against inside the tests. -->
