@@ -84,7 +84,8 @@ public class ValueObjectPropertyDiagnosticTests
     public void An_internal_property_is_exempt_from_both()
     {
         // [Internal] means "auxiliary, not part of the stored/compared state", so its setter is not
-        // policed - and it is left out of the generated equality and of the twin's copy constructor.
+        // policed, and the generated code never names it: not in equality, not in With(...). The twin
+        // is built from the record's copy constructor, which copies it like any other field.
         var result = WithProperty("[Internal] public decimal Scratch { get; set; }");
 
         result.GeneratorDiagnostics.Should().BeEmpty();

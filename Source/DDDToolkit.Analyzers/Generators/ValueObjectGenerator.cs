@@ -32,9 +32,9 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
 
         var visibleProperties = definition.Properties.Where(p => !p.IsInternal).ToList();
         var comparisonProperties = visibleProperties.Where(p => !p.IsDontCompare).ToList();
-        var copiedProperties = visibleProperties.Where(p => p.HasSetter).ToList();
+        var settableProperties = visibleProperties.Where(p => p.HasSetter).ToList();
 
-        var withProperties = definition.GenerateWith ? copiedProperties : new System.Collections.Generic.List<PropertyInfo>();
+        var withProperties = definition.GenerateWith ? settableProperties : new System.Collections.Generic.List<PropertyInfo>();
         var withParameters = string.Join(", ", withProperties.Select(p =>
             KnownTypes.BaseTypesNamespace + ".Optional<" + p.TypeName + "> " + Identifiers.ParameterNameFor(p.Name) + " = default"));
         var withArguments = string.Join(", ", withProperties.Select(p => Identifiers.ParameterNameFor(p.Name)));
@@ -95,14 +95,12 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
 
             using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
             {
-                using (writer.Block(type.Accessibility + " " + validName + "(" + name + " value)"))
+                // The record's copy constructor, not a property-by-property copy. It copies every field,
+                // protected, private and get-only ones included; a copy of the settable properties alone
+                // left the rest at their defaults, so the twin held a different value from the one validated.
+                using (writer.Block(type.Accessibility + " " + validName + "(" + name + " value) : base(value)"))
                 {
                     writer.Line("value.EnsureValidated();");
-                    foreach (var property in copiedProperties)
-                    {
-                        writer.Line("this." + property.Name + " = value." + property.Name + ";");
-                    }
-
                     writer.Line("_isValid = true;");
                 }
 

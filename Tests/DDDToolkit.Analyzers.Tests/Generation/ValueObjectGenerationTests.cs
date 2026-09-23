@@ -87,7 +87,7 @@ public class ValueObjectGenerationTests
     }
 
     [Fact]
-    public void An_Internal_property_is_left_out_of_equality_and_out_of_the_twin()
+    public void An_Internal_property_is_left_out_of_equality_but_travels_with_the_twin()
     {
         var result = Names();
 
@@ -99,7 +99,9 @@ public class ValueObjectGenerationTests
 
         var valid = emitted.Call(name, "ToValid")!;
 
-        emitted.Property(valid, "TimesRendered").Should().Be(0, "an [Internal] property is auxiliary state, not part of the value");
+        // The twin is the same value, validated, and is built from the record's copy constructor, which
+        // copies every field. Auxiliary state comes along; it just takes no part in equality.
+        emitted.Property(valid, "TimesRendered").Should().Be(7);
         emitted.Property(valid, "FirstName").Should().Be("Ada");
         emitted.Property(valid, "LastName").Should().Be("Lovelace");
     }
