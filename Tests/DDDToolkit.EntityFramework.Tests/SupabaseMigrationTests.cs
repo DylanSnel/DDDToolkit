@@ -2,6 +2,7 @@ using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace DDDToolkit.EntityFramework.Tests;
@@ -227,7 +228,56 @@ public sealed class SupabaseMigrationTests : IDisposable
 
         act.Should().Throw<SupabaseMigrationsOutOfSyncException>()
             .WithMessage($"*{AddShelfCapacity.Id}: has no file. Run SupabaseMigrations.Export*")
-            .Which.Report.Problems.Should().ContainSingle();
+            .Which.Problems.Should().ContainSingle();
+    }
+
+    private static readonly SupabaseMigrationSource Shelves = SupabaseMigrationSource.For(() => SupabaseShelfContext.Create());
+    private static readonly SupabaseMigrationSource Ledger = SupabaseMigrationSource.For(() => SupabaseLedgerContext.Create());
+
+    [Fact]
+    public void Several_sources_export_into_one_directory_without_a_host()
+    {
+        var reports = SupabaseMigrations.Export([Shelves, Ledger], _directory);
+
+        reports.Should().HaveCount(2);
+        reports.SelectMany(r => r.Created).Select(e => e.MigrationId).Should().Equal(CreateShelves.Id, AddShelfCapacity.Id, CreateLedger.Id);
+        SupabaseMigrations.Compare([Shelves, Ledger], _directory).Should().OnlyContain(r => r.IsInSync);
+    }
+
+    [Fact]
+    public void EnsureInSync_over_several_sources_reports_the_problems_of_all_of_them_in_one_message()
+    {
+        SupabaseMigrations.Export([Shelves, Ledger], _directory);
+        File.Delete(Path.Combine(_directory, AddShelfCapacity.Id + ".sql"));
+        File.Delete(Path.Combine(_directory, CreateLedger.Id + ".sql"));
+
+        var act = () => SupabaseMigrations.EnsureInSync([Shelves, Ledger], _directory);
+
+        act.Should().Throw<SupabaseMigrationsOutOfSyncException>()
+            .WithMessage($"*{AddShelfCapacity.Id}: has no file*{CreateLedger.Id}: has no file*")
+            .Which.Reports.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Without_a_directory_the_sources_find_the_supabase_project_from_the_current_directory()
+    {
+        // The directory argument is left out on purpose; the current directory is a test output folder
+        // with no supabase/config.toml above it, so the lookup has to say so.
+        var act = () => SupabaseMigrations.Compare([Shelves]);
+
+        act.Should().Throw<DirectoryNotFoundException>().WithMessage("*supabase/config.toml*");
+    }
+
+    [Fact]
+    public void Registering_the_same_context_twice_registers_it_once()
+    {
+        var services = new ServiceCollection()
+            .AddSupabaseMigrations(Shelves)
+            .AddSupabaseMigrations(SupabaseMigrationSource.For(() => SupabaseShelfContext.Create()))
+            .AddSupabaseMigrations(Ledger);
+
+        services.BuildServiceProvider().GetSupabaseMigrationSources().Select(s => s.ContextType)
+            .Should().Equal(typeof(SupabaseShelfContext), typeof(SupabaseLedgerContext));
     }
 
     [Fact]
@@ -320,5 +370,21 @@ public sealed class SupabaseMigrationTests : IDisposable
 
             (await command.ExecuteScalarAsync(cancellation)).Should().Be(0L, "row level security is on and there is no policy");
         }
+
+        // The start-up check: satisfied on the migrated database, refusing on an empty one.
+        await Applications(database.ConnectionString).EnsureSupabaseMigrationsAppliedAsync(cancellation);
+
+        var empty = await database.CreateDatabaseWithoutPgmqAsync("not_migrated", cancellation);
+        var refuse = () => Applications(empty).EnsureSupabaseMigrationsAppliedAsync(cancellation);
+
+        (await refuse.Should().ThrowAsync<SupabaseMigrationsPendingException>())
+            .WithMessage($"*SupabaseShelfContext: {CreateShelves.Id}, {AddShelfCapacity.Id}*supabase db push*");
     }
+
+    /// <summary>What a host builds: the module's context in the container, and its source registered.</summary>
+    private static ServiceProvider Applications(string connectionString)
+        => new ServiceCollection()
+            .AddDbContext<SupabaseShelfContext>(options => options.UseNpgsql(connectionString))
+            .AddSupabaseMigrations(Shelves)
+            .BuildServiceProvider();
 }

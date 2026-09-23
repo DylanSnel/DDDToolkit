@@ -183,8 +183,69 @@ public static class SupabaseMigrations
         var report = Compare(context, directory, options);
         if (!report.IsInSync)
         {
-            throw new SupabaseMigrationsOutOfSyncException(report);
+            throw new SupabaseMigrationsOutOfSyncException([report]);
         }
+    }
+
+    /// <summary>
+    /// <see cref="Export(DbContext, string, SupabaseMigrationOptions?)"/> for every source, in order, into
+    /// one directory. Needs no host: each context comes from its source's design-time factory, so this
+    /// can run from a test, a small console app or the top of <c>Program.cs</c> without loading the
+    /// application's configuration.
+    /// </summary>
+    /// <param name="sources">The contexts to export, typically one per module.</param>
+    /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
+    /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
+    /// <returns>One report per source, in the order given.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    public static IReadOnlyList<SupabaseMigrationReport> Export(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+        => RunAll(sources, directory, options, write: true);
+
+    /// <summary>
+    /// <see cref="Compare(DbContext, string, SupabaseMigrationOptions?)"/> for every source, in order,
+    /// against one directory. Writes nothing and needs no host.
+    /// </summary>
+    /// <param name="sources">The contexts to compare, typically one per module.</param>
+    /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
+    /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
+    /// <returns>One report per source, in the order given.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    public static IReadOnlyList<SupabaseMigrationReport> Compare(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+        => RunAll(sources, directory, options, write: false);
+
+    /// <summary>
+    /// Throws unless every source's migrations have their files, as generated, and no source has an
+    /// exported file that outlived its migration. One test for the whole application:
+    /// <code>
+    /// [Fact]
+    /// public void Supabase_has_every_migration()
+    ///     => SupabaseMigrations.EnsureInSync([OrderingModule.SupabaseMigrations, ShippingModule.SupabaseMigrations]);
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="SupabaseMigrationsOutOfSyncException">The directory does not match the migrations; the message covers every source.</exception>
+    public static void EnsureInSync(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
+    {
+        var reports = Compare(sources, directory, options);
+        if (reports.Any(report => !report.IsInSync))
+        {
+            throw new SupabaseMigrationsOutOfSyncException(reports);
+        }
+    }
+
+    private static List<SupabaseMigrationReport> RunAll(IEnumerable<SupabaseMigrationSource> sources, string? directory, SupabaseMigrationOptions? options, bool write)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        directory ??= FindDirectory();
+
+        var reports = new List<SupabaseMigrationReport>();
+        foreach (var source in sources)
+        {
+            using var context = source.CreateDesignTimeContext();
+            reports.Add(Run(context, directory, options, write));
+        }
+
+        return reports;
     }
 
     private static SupabaseMigrationReport Run(DbContext context, string directory, SupabaseMigrationOptions? options, bool write)

@@ -20,12 +20,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   row level security for new tables in `public`. `Export` writes only missing files and never
   rewrites one. `EnsureInSync` fails a test when a migration was not exported, when an exported file
   was changed, or when a file's migration was removed. Several contexts can export into one
-  directory, and `FindDirectory()` finds `supabase/migrations` the way the CLI finds its project. See
-  [Entity Framework → Supabase](docs/entity-framework.md#supabase).
-- `Examples/ModularMonolith` runs on a local Supabase as well as on SQLite. Each module has its own
-  schema, migration history and Entity Framework migrations, exported into one `supabase/` project by
-  the host's `export-supabase` command. On Postgres the host refuses to start while a migration is
-  pending, rather than applying it itself.
+  directory, and `FindDirectory()` finds `supabase/migrations` the way the CLI finds its project.
+  A module declares its context once as a `SupabaseMigrationSource`, built from its design-time
+  factory without reflection; `SupabaseMigrations.Export([...sources])` then exports every module
+  without starting the host, so no configuration is loaded, and `services.AddSupabaseMigrations(source)`
+  plus `app.Services.EnsureSupabaseMigrationsAppliedAsync()` refuse to start the application while any
+  module has a migration missing. See [Entity Framework → Supabase](docs/entity-framework.md#supabase).
+- Registration a module can own. `AddDDDToolkitEntityFramework` may be called any number of times and
+  every call configures the same options, so each module registers its own part next to its own
+  context. `options.UseOutbox<TContext>(...)` gives one context an outbox of its own, next to the
+  shared `UseOutbox(...)`, and `options.OutboxFor(type)` says which one a context gets. See
+  [An outbox per context](docs/entity-framework.md#an-outbox-per-context).
+- `Examples/ModularMonolith` is registered the way a modular monolith should be: `AddOrderingModule`
+  and `AddShippingModule` register each module's context, outbox, consumers and migrations, and the
+  host only switches them on. It also runs on a local Supabase as well as on SQLite, each module in a
+  schema of its own with its own migration history, exported into one `supabase/` project by the
+  host's `export-supabase` command, which runs before the host is built.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
@@ -275,10 +285,13 @@ one of those now either works or reports a diagnostic that names the type and th
   process, and `outbox.DoNotPublish<TEvent>()` keeps one in. Returning `null` from the mapping drops
   that occurrence. With nothing mapped the domain event is published as it stands, reusing the JSON
   already in the row.
-- `ModuleIntegrationEventSink` and `outbox.SendToModules<TContext>()`, for the common case of another
-  module in the same process. Handlers implement `IIntegrationEventHandler<TContract>`, are typed on
-  the contract rather than on the domain event, and each gets its own inbox row, so a retry re-runs
-  only the handlers that failed. `[IntegrationEventConsumer("name")]` pins the inbox key.
+- `ModuleIntegrationEventSink` and `outbox.SendToModules()`, for the common case of another module in
+  the same process. The producing module does not name its consumers: each consuming module registers
+  itself with `services.AddModuleIntegrationEvents<TContext>(module => module.Handle<TContract, THandler>())`,
+  and its handlers run under its own inbox. Handlers implement `IIntegrationEventHandler<TContract>`,
+  are typed on the contract rather than on the domain event, and each gets its own inbox row, so a
+  retry re-runs only the handlers that failed. They are called through delegates captured at
+  registration, without reflection. `[IntegrationEventConsumer("name")]` pins the inbox key.
 - An inbox: `InboxMessage`, `modelBuilder.AddDomainEventInbox()` and
   `DomainEventInbox<TContext>.ExecuteOnceAsync`, which writes the handler's changes and the row that
   says "applied" in one `SaveChanges` inside one transaction. The key is the message and the

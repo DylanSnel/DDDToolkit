@@ -76,6 +76,15 @@ The argument configures delivery. See [Domain event delivery](#domain-event-deli
 aggregates never raise events you can call it with no argument at all, but you still need it, because
 it is what registers the interceptors.
 
+Call it as often as you like. The first call registers everything, and every call configures the one
+options object the process has. That is what lets each module of a modular monolith register its own
+part next to its own context: its outbox with `options.UseOutbox<TContext>(...)`, the contracts it reads
+with `options.MapIntegrationEvents(...)`. The host keeps what is process-wide, such as
+`DispatchWithMediator()`. The dispatch delegate can only be set once; a second call throws instead of
+quietly handing one module's events to another module's publisher. See
+[Integration events](integration-events.md#the-common-case-another-module-in-this-process) for the
+module registration end to end.
+
 ### `UseDDDToolkit`
 
 Adds both interceptors to the context, domain events first and concurrency second. Pass the
@@ -401,6 +410,26 @@ options.UseOutbox(outbox =>
 
 Sinks, the published contract that is not your domain event, and the inbox that makes at-least-once
 delivery safe to consume are all on [Integration events](integration-events.md).
+
+#### An outbox per context
+
+`UseOutbox(...)` configures one outbox shared by every context. With a context per module, give each
+producing module an outbox of its own, registered by that module:
+
+```csharp
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+    outbox.SendToModules();
+}));
+
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+A context uses its own outbox when it has one, the shared one when it has not, and none at all when
+neither exists: its events are then dispatched in process at save time, as if the outbox were not there.
+`options.OutboxFor(typeof(TContext))` says which of the three applies. A processor for a context without
+an outbox refuses to start and names the context.
 
 ### Choosing
 
@@ -859,15 +888,10 @@ dotnet add package DDDToolkit.EntityFramework.Supabase
 It depends on Entity Framework's relational layer alone: not on Npgsql, which your application already
 brings, and not on the rest of the toolkit, so it works for any context that has migrations.
 
-```csharp
-using DDDToolkit.EntityFramework.Supabase;
+#### A source per context
 
-// Writes a file for every migration that does not have one yet.
-SupabaseMigrations.Export(context, SupabaseMigrations.FindDirectory());
-```
-
-The context has to be on Npgsql, but nothing connects, so a connection string that points nowhere is
-enough. That is exactly what the design-time factory `dotnet ef` already uses gives you, so reuse it:
+The export needs a context on Npgsql, but it never connects, so a connection string that points nowhere
+is enough. That is exactly what the design-time factory `dotnet ef` already uses gives you:
 
 ```csharp
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
@@ -881,31 +905,71 @@ public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<Orderin
 }
 ```
 
-`FindDirectory()` finds the Supabase project the way the CLI does: it looks from the current directory
-upwards for `supabase/config.toml` and returns the `supabase/migrations` next to it. That matters
-because `dotnet run` starts in the project's directory, not in the one you typed the command in. Pass
-the start directory, or the migrations directory itself, when you know better.
-
-Two places to call it. A command in the host, which you run after every `dotnet ef migrations add`:
+Turn it into a source, once, next to the module's registration:
 
 ```csharp
-if (args is ["export-supabase", ..])
+public static class OrderingModule
 {
-    using var context = new OrderingContextFactory().CreateDbContext(args);
-    return SupabaseMigrations.Export(context, SupabaseMigrations.FindDirectory()).IsInSync ? 0 : 1;
+    public static readonly SupabaseMigrationSource SupabaseMigrations =
+        SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>();
 }
 ```
 
-And a test, which fails the build when someone adds a migration and forgets the export:
+A source is generic, so nothing is found or created by reflection: the factory is `new TFactory()` and
+the running application's context is resolved as `TContext`. `SupabaseMigrationSource.For(() => ...)`
+takes a delegate instead, for a context without a factory.
+
+#### Exporting, without the host
+
+```csharp
+SupabaseMigrations.Export([OrderingModule.SupabaseMigrations, ShippingModule.SupabaseMigrations]);
+```
+
+The export writes a file for every migration that has none, and reports on the rest. It builds each
+context from its source's factory and does nothing else, so it does not start your host: no
+configuration providers, no Azure App Configuration, no hosted services. That keeps it fast in an
+application whose start-up is slow, and it can run from wherever suits you:
+
+- the top of `Program.cs`, before the builder, as a command (`dotnet run -- export-supabase`);
+- a small console app of its own;
+- a test.
+
+Leave the directory out and it finds the Supabase project the way the CLI does: it looks from the
+current directory upwards for `supabase/config.toml` and uses the `supabase/migrations` next to it. That
+matters because `dotnet run` starts in the project's directory, not in the one you typed the command in.
+`SupabaseMigrations.FindDirectory(start)` does the same from a directory you choose.
+
+A test fails the build when someone adds a migration and forgets the export:
 
 ```csharp
 [Fact]
-public void Supabase_has_every_migration()
-{
-    using var context = new OrderingContextFactory().CreateDbContext([]);
-    SupabaseMigrations.EnsureInSync(context, SupabaseMigrations.FindDirectory(RepositoryRoot));
-}
+public void Supabase_has_every_migration_of_every_module()
+    => SupabaseMigrations.EnsureInSync(
+        [OrderingModule.SupabaseMigrations, ShippingModule.SupabaseMigrations],
+        SupabaseMigrations.FindDirectory(RepositoryRoot));
 ```
+
+`Export`, `Compare` and `EnsureInSync` also take a single `DbContext`, for when you have one in hand.
+
+#### Checking at start-up
+
+On Supabase the migrations are the CLI's to apply, so the application must not call
+`Database.Migrate()`. It can still refuse to run against an older schema. Each module registers its
+source, and the host checks them all once it is built:
+
+```csharp
+// in the module
+services.AddSupabaseMigrations(OrderingModule.SupabaseMigrations);
+
+// in the host
+var app = builder.Build();
+await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+```
+
+It asks each context's own migration history and throws a `SupabaseMigrationsPendingException` that
+names every context with migrations missing, and each missing migration. Registering the same context
+twice registers it once; with no sources registered it does nothing, which is what a module running on
+something other than Supabase wants.
 
 Each file is named after its migration: `20260922120000_AddOrders` becomes
 `20260922120000_AddOrders.sql`. Entity Framework ids and Supabase versions are both `yyyyMMddHHmmss`
@@ -980,9 +1044,11 @@ orphaned, and if two modules scaffold migrations in the same second, the second 
 Module schemas are not in the Data API's `schemas` list in `supabase/config.toml`, so the Data API does
 not serve them and nothing needs row level security.
 
-`Examples/ModularMonolith` does all of this: both modules' migrations are in their `Migrations`
-folders, `supabase/migrations` holds the export, the host's `export-supabase` command writes it, and
-`Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` checks it. See
+`Examples/ModularMonolith` does all of this. Each module's registration (`OrderingModule.cs`,
+`ShippingModule.cs`) declares its source and registers it; the migrations are in each module's
+`Migrations` folder and `supabase/migrations` holds the export. The host's `Program.cs` exports before it
+builds anything (`dotnet run -- export-supabase`) and checks at start-up, and
+`Tests/DDDToolkit.Examples.Tests/SupabaseMigrationsTests.cs` fails when an export was forgotten. See
 [its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
 
 ## Where to look next

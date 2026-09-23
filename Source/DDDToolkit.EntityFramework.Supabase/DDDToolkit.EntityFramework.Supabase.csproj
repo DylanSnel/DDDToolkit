@@ -9,13 +9,15 @@
   </PropertyGroup>
 
   <!--
-    Entity Framework's relational layer and nothing else. The export reads the migrations assembly and
-    asks the migrator for SQL, both of which are relational services; it checks the provider by name
-    rather than referencing Npgsql, so the application brings whichever Npgsql provider it already uses.
-    It needs none of the toolkit's other packages either: any context with migrations can be exported.
+    Entity Framework's relational layer, and the DI abstractions for registering the contexts the
+    start-up check covers. The export reads the migrations assembly and asks the migrator for SQL, both
+    of which are relational services; it checks the provider by name rather than referencing Npgsql, so
+    the application brings whichever Npgsql provider it already uses. It needs none of the toolkit's
+    other packages either: any context with migrations can be exported.
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
 </Project>

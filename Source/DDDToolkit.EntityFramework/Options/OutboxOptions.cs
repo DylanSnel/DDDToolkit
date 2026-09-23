@@ -98,16 +98,17 @@ public sealed class OutboxOptions
 
     /// <summary>
     /// Delivers published messages to the other modules in this process:
-    /// <see cref="ModuleIntegrationEventSink{TContext}"/> hands each message to every
-    /// <c>IIntegrationEventHandler&lt;TContract&gt;</c> registered against the published contract, each
-    /// one guarded by the inbox of <typeparamref name="TContext"/>.
+    /// <see cref="ModuleIntegrationEventSink"/> offers each message to every module that registered
+    /// itself with <c>services.AddModuleIntegrationEvents&lt;TContext&gt;(...)</c>, and each runs its own
+    /// handlers for the published contract under its own inbox.
     /// <para>
     /// This is the common case in a modular monolith, and it is the sink that earns the outbox: the
     /// producing module's transaction has already committed, so a consumer that fails cannot take it
-    /// down with it. See <c>docs/integration-events.md</c>.
+    /// down with it. The producing module does not name its consumers; see
+    /// <c>docs/integration-events.md</c>.
     /// </para>
     /// </summary>
-    public OutboxOptions SendToModules<TContext>() where TContext : DbContext => SendTo<ModuleIntegrationEventSink<TContext>>();
+    public OutboxOptions SendToModules() => SendTo<ModuleIntegrationEventSink>();
 
     /// <summary>
     /// Runs each message's delivery and its "processed" mark inside one database transaction, so a
@@ -121,7 +122,7 @@ public sealed class OutboxOptions
     /// transaction for no gain.
     /// </para>
     /// <para>
-    /// It also changes what <see cref="SendToModules{TContext}"/> guarantees. The inbox joins the
+    /// It also changes what <see cref="SendToModules"/> guarantees. The inbox joins the
     /// caller's transaction, so with one transaction around the whole message a failing consumer rolls
     /// back the consumers that already succeeded, and they run again on the retry. Leave this off when
     /// you want per-consumer progress.

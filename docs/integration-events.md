@@ -45,27 +45,32 @@ Integration events exist so that another module can pick something up. In a modu
 is in the same process, which makes this the most valuable sink in the package and the one to reach for
 first.
 
+Each module registers its own half, next to its own context. The producing module says what it publishes
+and that it goes to the other modules:
+
 ```csharp
-builder.Services.AddDDDToolkitEntityFramework(options =>
+// inside AddOrderingModule
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
 {
-    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV2>());
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+    outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(e.OrderId.Value, e.Total.Amount));
+    outbox.SendToModules();
+}));
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
 
-    options.UseOutbox(outbox =>
-    {
-        outbox.RegisterEventsFromAssemblyContaining<Program>();
-        outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(e.OrderId.Value, e.Total.Amount));
-        outbox.SendToModules<AppContext>();
-    });
-});
+A consuming module says which contracts it reads and which handlers run under its inbox:
 
-builder.Services.AddModuleIntegrationEvents<AppContext>();
-builder.Services.AddIntegrationEventHandler<OrderPlacedV2, RaiseInvoice>();
-builder.Services.AddOutboxBackgroundService<AppContext>(TimeSpan.FromSeconds(2));
+```csharp
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV2>()));
+services.AddModuleIntegrationEvents<BillingContext>(module => module.Handle<OrderPlacedV2, RaiseInvoice>());
 ```
 
 ```csharp
 [IntegrationEventConsumer("billing.invoicer")]
-public sealed class RaiseInvoice(AppContext context) : IIntegrationEventHandler<OrderPlacedV2>
+public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHandler<OrderPlacedV2>
 {
     public Task HandleAsync(OrderPlacedV2 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
@@ -74,6 +79,16 @@ public sealed class RaiseInvoice(AppContext context) : IIntegrationEventHandler<
     }
 }
 ```
+
+Neither module names the other. `SendToModules()` offers every message to every module registered with
+`AddModuleIntegrationEvents`, and each runs only its own handlers, under its own inbox, in its own
+context. A third module that wants `OrderPlacedV2` registers itself the same way, and nothing in Ordering or
+Billing changes. The host only calls `AddOrderingModule` and `AddBillingModule`; see
+[the example](../Examples/ModularMonolith).
+
+`AddDDDToolkitEntityFramework` can be called by every module like this because each call configures the
+same options. What is genuinely process-wide, such as `DispatchWithMediator()`, stays in the host, and
+setting the dispatch delegate twice throws rather than letting one module silently replace another's.
 
 Three things in that handler are worth reading twice.
 
@@ -137,8 +152,16 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-`AddModuleIntegrationEvents<TContext>()` registers the sink and the inbox together. Handlers should write
-through that same `TContext`, because that is the context whose transaction the inbox row is in.
+`AddModuleIntegrationEvents<TContext>(...)` registers the module, its inbox and its handlers together.
+Handlers should write through that same `TContext`, because that is the context whose transaction the
+inbox row is in. Two handlers under one consumer name in one module are refused at registration: the
+inbox could not tell them apart, and the second would never run.
+
+A failure names the module as well as the consumer, `BillingContext/billing.invoicer`, and a second
+module failing does not make the first run again: each module's inbox remembers what that module applied.
+
+Delivering needs no reflection. `Handle<TContract, THandler>()` captures a typed call to the handler when
+it is registered, and the sink uses that.
 
 ### What it does not do
 
@@ -420,10 +443,10 @@ public sealed record OrderPlacedV2(Guid OrderId, string Customer, decimal Total,
 ```
 
 ```csharp
-options.UseOutbox(outbox =>
+options.UseOutbox<OrderingContext>(outbox =>
 {
-    outbox.RegisterEventsFromAssemblyContaining<Program>();
-    outbox.SendToModules<AppContext>();
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+    outbox.SendToModules();
 
     outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(
         e.OrderId.Value,
@@ -548,9 +571,9 @@ The version also travels on the envelope, so a consumer that has not adopted upc
 | Both, plus `AlsoDispatchInProcess = true` | Delegate first with the domain event, then the sinks with the contract |
 
 ```csharp
-options.UseOutbox(outbox =>
+options.UseOutbox<OrderingContext>(outbox =>
 {
-    outbox.SendToModules<AppContext>();
+    outbox.SendToModules();
     outbox.AlsoDispatchInProcess = true;   // handlers inside this module, and the other modules
 });
 ```
@@ -577,7 +600,7 @@ does. Two sinks over the same outbox means both must tolerate a repeat. If one o
 give it its own outbox table and its own processor, or put a queue in front of it.
 
 The module sink is the exception, and only because it keeps that bookkeeping itself: it has an inbox row
-per consumer, so its handlers do make per-consumer progress across a retry.
+per consumer in each consuming module, so its handlers do make per-consumer progress across a retry.
 
 ## The inbox on the other side
 
