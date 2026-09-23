@@ -30,6 +30,13 @@ Two checks matter more than the rest:
 - **`AddNugetTestConverters`.** The name comes from `<DDD_Module>NugetTest</DDD_Module>`, which only
   reaches the generator through `build/DDDToolkit.props`. If that file stops shipping or stops
   applying, the generator falls back to the assembly name and this stops compiling.
+- **The code fixes ship.** They sit in a separate assembly beside the generators in
+  `DDDToolkit.Analyzers`, because they need a layer the compiler does not load. No build uses them, so
+  the script checks the file is in the package. The build does check that the extra assembly does not
+  make the compiler warn when it loads the folder, since this project treats warnings as errors.
+- **A positional value object.** Its properties are declared by the generator, and the CS0657 warning
+  about its `[property: DontCompare]` is silenced by a suppressor in the package. Both have to work
+  from the package, or the build fails.
 - **The three analyzer packages are not referenced.** Only `DDDToolkit`,
   `DDDToolkit.EntityFramework` and `DDDToolkit.FluentValidation` are. Each generator has to arrive as
   a dependency of the package above it, and the verification script fails if one produced nothing.

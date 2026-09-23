@@ -134,7 +134,22 @@ internal sealed record PropertyInfo(
     bool HasProtectedSetter,
     bool IsInternal,
     bool IsDontCompare,
-    LocationInfo? Location);
+    LocationInfo? Location)
+{
+    /// <summary>
+    /// True for a property the compiler synthesized from a positional record parameter. Such a property
+    /// is always <c>public init</c>, so the value object generator declares it again as
+    /// <c>protected init</c>, which stops the compiler from synthesizing it.
+    /// </summary>
+    public bool IsPositional { get; init; }
+
+    /// <summary>
+    /// The attributes a positional parameter aimed at its property or backing field, rendered as source
+    /// (<c>[global::Ns.DontCompare]</c>, <c>[field: global::Ns.X(1)]</c>). Once the generator declares the
+    /// property itself the compiler drops them from the parameter, so the declaration carries them.
+    /// </summary>
+    public EquatableArray<string> Attributes { get; init; } = EquatableArray<string>.Empty;
+}
 
 internal enum CollectionBacking
 {
@@ -191,7 +206,24 @@ internal sealed record ValueObjectDefinition(
     EquatableArray<PropertyInfo> Properties,
     bool SystemTextJsonAvailable,
     bool CanGenerate,
-    EquatableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics)
+{
+    /// <summary>
+    /// The parameter types of the primary constructor, in order, when the record is positional; null
+    /// otherwise. The generated parameterless constructor has to chain to it.
+    /// </summary>
+    public EquatableArray<string>? PrimaryConstructorParameterTypes { get; init; }
+
+    /// <summary>False when the author declared a member named <c>With</c>, which the generated one would clash with.</summary>
+    public bool GenerateWith { get; init; } = true;
+
+    /// <summary>
+    /// True when HotChocolate is referenced. Without the toolkit's conventions HotChocolate publishes every
+    /// public method as a field, and <c>With</c> takes arguments it cannot turn into input types, which
+    /// fails the whole schema; <c>[GraphQLIgnore]</c> keeps it out whether the conventions are there or not.
+    /// </summary>
+    public bool GraphQLIgnoreAvailable { get; init; }
+}
 
 internal sealed record EntityDefinition(
     TypeDeclarationInfo Type,

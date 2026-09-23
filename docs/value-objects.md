@@ -51,14 +51,232 @@ from compared properties: it documents the intent and keeps the equality compone
 
 ### Setters must be `protected init`
 
-Records support `with`, which would otherwise let any caller clone an object into an invalid state:
+Properties you declare yourself are `{ get; protected init; }`:
 
 ```csharp
-var invalid = name with { FirstName = "" };   // prevented by protected init
+public string FirstName { get; protected init; }
 ```
 
 A public or non-init setter reports [DDD00010](diagnostics.md#ddd00010) or
-[DDD00011](diagnostics.md#ddd00011). Inside the type and its always-valid twin, `with` still works.
+[DDD00011](diagnostics.md#ddd00011), and a code fix turns it into `protected init`. The reason is
+the `with` expression. It takes some explaining, because the obvious alternatives all fail in ways
+that are easy to miss; the next section goes through them.
+
+### Why `with` is closed to callers
+
+A record comes with `with`, which copies a value and changes some of its properties:
+
+```csharp
+var moved = address with { City = "Utrecht" };
+```
+
+For a value object that is exactly the operation you want. It is also a way to create a value that
+never went past anything that checks it. The toolkit closes `with` to code outside the type and
+gives you [`With(...)`](#changing-a-value-with) instead. This section explains why neither leaving
+`with` open nor adding a check to it works.
+
+#### What `with` does, step by step
+
+`money with { Amount = -1 }` compiles to three steps:
+
+1. **Clone.** The record's hidden, compiler-generated clone method is called. It is virtual, so the
+   copy has the *runtime* type of `money`, whatever the type of the variable.
+2. **Copy constructor.** The clone method runs the copy constructor, which copies every field from
+   the original.
+3. **Init accessors.** Only now are the new values assigned, one property at a time, in the order
+   they are written between the braces.
+
+Nothing of yours runs after step 3. C# has no hook for "the `with` expression is done", so no code
+can look at the finished copy before the caller gets it.
+
+#### On a plain value object this is harmless
+
+The copy constructor of `ValueObject` clears the cached verdict. A copy made by `with` has never been
+judged, and the first time something reads `IsValid` or `ValidationErrors`, or calls `ToValid()`,
+the rules run on its new contents:
+
+```csharp
+var copy = money with { Amount = -1 };   // inside the type, where it is allowed
+copy.IsValid;                            // false: judged afresh
+```
+
+A `Money` is allowed to be invalid; that is what `IsValid` is for. So `with` on the plain type does
+not lie to anyone.
+
+#### On the always-valid twin it breaks the one promise the twin makes
+
+A `ValidMoney` exists to say "this was checked" in a signature, so the code that receives it does not
+check again. `with` on a twin produces another twin, holding whatever values were put in:
+
+```csharp
+ValidMoney valid = money.ToValid();
+var copy = valid with { Amount = -1 };   // a ValidMoney and IAlwaysValid, with Amount -1
+```
+
+This does not only happen when someone writes `with` on a `ValidMoney` on purpose. Step 1 above
+copies the runtime type, so ordinary code that knows nothing about twins does it too:
+
+```csharp
+static Money Discount(Money money) => money with { Amount = money.Amount - 100 };
+
+var result = Discount(valid);   // a ValidMoney, holding -90
+```
+
+Passing a twin where a `Money` is expected is normal, because it *is* a `Money`. The code in
+`Discount` is reasonable, and yet `result is ValidMoney` is true for a value that is not valid.
+`result.IsValid` does say `false`, since the verdict was cleared, but code that trusts the type never
+asks.
+
+#### Why the copy cannot be checked at the `with`
+
+- **In the copy constructor:** too early. It runs in step 2, before the new values arrive, so it sees
+  the old, valid values.
+- **In each init accessor:** these see half-changed objects. `with { Amount = 5, Currency = "USD" }`
+  sets `Amount` while `Currency` still holds the old value, and a rule about the pair, such as "this
+  amount is allowed in this currency", would fail on a combination nobody asked for.
+- **Throwing from the twin's copy constructor, always:** that makes every `with` on a twin fail,
+  including `Discount` above when its result is perfectly valid.
+- **Checking later, when a property of the copy is first read:** possible, but the exception is then
+  thrown wherever the copy happens to be used, which can be far from the line that made it. The
+  stack trace points at the reader, not at the cause.
+- **Protecting only the twin**, by declaring its properties again as `protected init`: that stops
+  `valid with { ... }`, but not `Discount`, which goes through `Money`'s own properties.
+
+None of these is acceptable for a type whose job is to be trustworthy, so the toolkit makes the
+situation impossible instead. With `protected init`, `with` only compiles inside the value object and
+its twin:
+
+```csharp
+money with { Amount = -1 };   // outside the type: CS0272, the init accessor is inaccessible
+```
+
+The generated code of the value object and its twin still uses `with`. That code is written to
+check what it produces.
+
+### Positional records
+
+A value object without much behaviour can be a positional record:
+
+```csharp
+[ValueObject]
+public partial record Money(decimal Amount, string Currency, [property: DontCompare] string? Note);
+```
+
+The compiler turns each parameter into a property, and that property is always `public init`. C# has
+no syntax to ask for anything else. Left as it is, it would open `with` to every caller again.
+
+C# has one way around it. When a property with a parameter's name is declared anywhere in the
+record, in any of its partial parts, the compiler does not synthesize one for that parameter. The
+generator uses that: it declares each positional property itself, as `protected init`, with an
+initializer that reads the parameter. For `record Money(decimal Amount, string Currency)` the
+generated part contains:
+
+```csharp
+partial record Money : global::DDDToolkit.BaseTypes.ValueObject, /* ... */
+{
+    public decimal Amount { get; protected init; } = Amount;
+
+    public string Currency { get; protected init; } = Currency;
+
+    [global::System.Text.Json.Serialization.JsonConstructor]
+    protected Money() : this(default(decimal)!, default(string)!)
+    {
+    }
+
+    // equality, ToValid() and With(...)
+}
+```
+
+`= Amount` reads the constructor parameter, not the property, so the primary constructor still fills
+the properties. The parameterless constructor chains to the primary one, because in a positional
+record every other constructor has to.
+
+| What the positional record gives you | After generation |
+|---|---|
+| The constructor, `new Money(10m, "EUR", null)` | unchanged |
+| Deconstruction, `var (amount, currency, note) = money;` | unchanged |
+| Value equality | the toolkit's, over the properties not marked `[DontCompare]` |
+| `money with { Amount = 1 }` outside the type | does not compile (CS0272) |
+| `money.With(amount: 1)` | generated, see below |
+
+Attributes aimed at the property, such as `[property: DontCompare]`, only work while the compiler
+synthesizes the property. The generator copies them onto the property it declares, so they still
+apply. The compiler does not know that and warns that the attribute is ignored (CS0657). A
+suppressor in the toolkit removes that warning, but only when the attribute really did arrive on the
+property.
+
+A property you declare yourself takes the place of the synthesized one, as it always does in a
+record, and the generator leaves it alone. Use that when a parameter needs something the generated
+declaration does not do:
+
+```csharp
+[ValueObject]
+public partial record Money(decimal Amount, string Currency)
+{
+    public string Currency { get; protected init; } = Currency.ToUpperInvariant();
+}
+```
+
+Such a property is checked like any other declared one, so it needs `protected init` too, and a
+`[property: ...]` attribute on its parameter is lost; the CS0657 warning then stays to tell you.
+
+### Changing a value: `With`
+
+Closing `with` would make value objects awkward to work with. It would also make them awkward to
+test, where copying a valid value and changing one property is the natural way to build a case.
+Every `[ValueObject]` therefore gets a generated `With(...)`: `with`, but as a method the toolkit
+controls. Name the properties to replace and leave the rest out:
+
+```csharp
+var converted = money.With(amount: 12.50m, currency: "USD");
+var cleared = money.With(note: null);   // null is a value too; leaving note out keeps it
+```
+
+A method runs after all the new values are in place, which is the one thing the `with` expression
+cannot offer. The generated code for `Money` and its twin, with the namespaces left out:
+
+```csharp
+// on Money
+public virtual Money With(Optional<decimal> amount = default, Optional<string> currency = default)
+    => this with { Amount = amount.Or(Amount), Currency = currency.Or(Currency) };
+
+// on ValidMoney
+public override ValidMoney With(Optional<decimal> amount = default, Optional<string> currency = default)
+    => new(base.With(amount, currency));
+```
+
+On `Money`, `With` hands back a copy that is judged afresh, like any new value; ask `IsValid` or call
+`ToValid()`. On `ValidMoney`, the base method makes the copy and the twin's constructor validates it
+before anyone can hold on to it. That is the same constructor `ToValid()` uses. An invalid copy throws
+`InvalidValueObjectException` on the line that asked for it:
+
+```csharp
+ValidMoney valid = money.ToValid();
+valid.With(amount: 5);    // a ValidMoney
+valid.With(amount: -1);   // throws here
+```
+
+`With` is virtual, and that is what closes the gap `Discount` showed. Written with `With`, code that
+only knows about `Money` still ends up in the twin's override when it is handed a twin:
+
+```csharp
+static Money Discount(Money money) => money.With(amount: money.Amount - 100);
+
+Discount(valid);   // throws: the discounted twin would not be valid
+```
+
+A few details:
+
+- The parameters are `Optional<T>`, a small struct in `DDDToolkit.BaseTypes` that tells "not given"
+  apart from "given as `null`". An ordinary optional parameter cannot, and a nullable property needs
+  both. A value converts to it implicitly, so you never write the type.
+- `With` covers the properties that have a setter and are not `[Internal]`. Computed properties are
+  not parameters.
+- `With` is marked `[Internal]`, and `[GraphQLIgnore]` when HotChocolate is referenced. HotChocolate
+  otherwise publishes public methods as fields, and it cannot turn `Optional<T>` into an input type,
+  so the whole schema would fail to build.
+- If the value object declares a member named `With` itself, nothing is generated, so an existing
+  method keeps working.
 
 ## Validation
 
@@ -192,6 +410,9 @@ The twin derives from the original, so it is accepted anywhere the original is e
 implements `IAlwaysValid`, and both JSON integrations refuse to deserialize it directly: deserializing
 straight into a twin would let invalid data enter through a type that promises the opposite.
 Deserialize the base type and call `ToValid()`.
+
+For the same reason, [`With`](#changing-a-value-with) on a twin validates the copy and throws when
+it is invalid, rather than handing back a twin that does not keep its promise.
 
 This is why value objects cannot be `sealed` ([DDD00013](diagnostics.md#ddd00013)).
 
@@ -369,3 +590,7 @@ With `DDDToolkit.EntityFramework` referenced:
 The declaration must be a `partial record` that is not sealed. A class or struct carrying
 `[ValueObject]` or `[SingleValueObject<T>]` reports [DDD00001](diagnostics.md#ddd00001); a
 non-partial declaration reports [DDD00005](diagnostics.md#ddd00005).
+
+The properties of a `[ValueObject]` record you declare yourself must be `{ get; protected init; }`;
+the ones a [positional record](#positional-records) declares through its parameters are taken care
+of by the generator.

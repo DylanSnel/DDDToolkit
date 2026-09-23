@@ -40,6 +40,14 @@ public partial record Address
 }
 
 /// <summary>
+/// A positional value object. The packaged generator has to declare its properties itself, and the
+/// packaged suppressor has to silence the CS0657 the carried-over <c>[property: DontCompare]</c> would
+/// otherwise raise: this project treats warnings as errors, so either one missing fails the build.
+/// </summary>
+[ValueObject]
+public partial record Money(decimal Amount, string Currency, [property: DontCompare] string? Note);
+
+/// <summary>
 /// An aggregate root whose identifier is generated from the attribute rather than declared, with a
 /// read-only collection and both shapes of invariant. Exercises the entity generator, the implicit
 /// identifier path, the nested rule the generator has to discover, and the seam in one declaration.

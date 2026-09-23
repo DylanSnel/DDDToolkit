@@ -115,6 +115,37 @@ public class ValueObjectPropertyDiagnosticTests
     }
 
     [Fact]
+    public void A_positional_parameter_reports_nothing_because_the_generator_declares_its_property()
+    {
+        // The property the compiler would synthesize is 'public init', which DDD00010 exists to refuse.
+        // The generator declares it as 'protected init' instead, so there is nothing to report.
+        var result = GeneratorTestHost.Create(Usings +
+            """
+            [ValueObject]
+            public partial record Money(decimal Amount, string Currency);
+            """).RunCore();
+
+        result.GeneratorDiagnostics.Should().BeEmpty();
+        result.ShouldCompile();
+    }
+
+    [Fact]
+    public void A_property_declared_next_to_the_parameters_is_still_checked()
+    {
+        var result = GeneratorTestHost.Create(Usings +
+            """
+            [ValueObject]
+            public partial record Money(decimal Amount)
+            {
+                public string Currency { get; init; } = "EUR";
+            }
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00010", at: "Currency");
+        result.ShouldHaveExactlyDiagnostics("DDD00010");
+    }
+
+    [Fact]
     public void A_value_object_with_a_bad_setter_is_still_generated_because_the_error_already_fails_the_build()
     {
         // DDD00010/DDD00011 are errors, so nothing reaches a running program either way. Suppressing

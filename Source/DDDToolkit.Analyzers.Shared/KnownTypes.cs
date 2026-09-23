@@ -47,6 +47,9 @@ internal static class KnownTypes
     public const string EfBackingFieldAttributeUsage = "global::Microsoft.EntityFrameworkCore.BackingField";
 
     public const string StjJsonConverterAttribute = "System.Text.Json.Serialization.JsonConverterAttribute";
+
+    /// <summary>HotChocolate's own opt-out, for members its convention-based binding would publish.</summary>
+    public const string GraphQLIgnoreAttribute = "HotChocolate.GraphQLIgnoreAttribute";
     public const string StjJsonConstructorAttribute = "System.Text.Json.Serialization.JsonConstructorAttribute";
     public const string IParsable = "System.IParsable`1";
     public const string ReadOnlySet = "System.Collections.ObjectModel.ReadOnlySet`1";
