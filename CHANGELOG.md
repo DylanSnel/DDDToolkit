@@ -12,6 +12,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- The receiving end of a transport. `IntegrationEventReceiver` hands a message that arrived from another
+  process to the modules in this one, each handler inside its module's inbox, as the module sink does for
+  a message from next door; `AddModuleIntegrationEvents` registers it. `IntegrationEventHeaders` is the
+  envelope on the wire, the headers every transport writes and every consumer rebuilds the message from.
+  In `DDDToolkit.Messaging.Postgres`, `PgmqConsumer` (`services.AddPgmqConsumer(dataSource, queue)`)
+  reads a queue into the receiver, archives what was applied, lets a failure come back after the
+  visibility timeout and archives a message as poison after `MaxDeliveries`; and
+  `PgmqSinkOptions.UseQueues(...)` enqueues one message on several queues in one transaction, so every
+  consuming service can have a queue of its own.
+
 - Relay node ids for identifiers. HotChocolate's global object identification needs an
   `INodeIdValueSerializer` for a type it has never seen, so `ImplementsNode().IdField(order => order.Id)`
   over an `OrderId` failed with *No serializer registered*. Every identifier over a `Guid`, `string`,

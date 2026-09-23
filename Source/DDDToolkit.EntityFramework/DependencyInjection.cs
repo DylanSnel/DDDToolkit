@@ -185,6 +185,7 @@ public static class DependencyInjection
             services.AddSingleton(registration);
             services.AddScoped<IModuleIntegrationEventConsumer>(provider => new ModuleIntegrationEventConsumer<TContext>(registration, provider));
             services.TryAddScoped<ModuleIntegrationEventSink>();
+            services.TryAddSingleton<IntegrationEventReceiver>();
         }
 
         configure(new ModuleIntegrationEvents<TContext>(services, registration));

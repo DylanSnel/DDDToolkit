@@ -245,26 +245,49 @@ specific reason and can name it.
 
 ### Reading the queue
 
-pgmq is at-least-once like everything else. Reading hides a message for a visibility timeout rather than
-removing it, so a consumer that dies mid-work will see it again.
+The receiving process registers its modules exactly as a monolith does, with
+`AddModuleIntegrationEvents`, and a `PgmqConsumer` for its queue:
 
 ```csharp
-await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-
-foreach (var queued in await PgmqQueue.ReadAsync(connection, null, "ordering_events", visibilityTimeout: 30, count: 10))
-{
-    var order = JsonSerializer.Deserialize<OrderPlacedV2>(queued.Body)!;
-    // ... do the work, then:
-    await PgmqQueue.ArchiveAsync(connection, null, "ordering_events", queued.MessageId);
-}
+builder.Services.AddShippingModule(...);   // AddModuleIntegrationEvents<ShippingContext>(m => m.Handle<OrderConfirmedV1, BookShipment>())
+builder.Services.AddPgmqConsumer(dataSource, "fulfilment");
 ```
 
-`PgmqMessage.ReadCount` climbing is how you spot a message that keeps failing. `ArchiveAsync` moves it to
-the queue's archive table, where it stays readable; `DeleteAsync` removes it for good.
+The consumer reads the queue, rebuilds each envelope from its headers
+(`IntegrationEventHeaders.ToMessage`), and hands it to `IntegrationEventReceiver`, which offers it to
+every module in the process the way the module sink does: each handler inside its module's inbox. So
+`BookShipment` is the same class whether the message came from Ordering next door or through a queue,
+and a message delivered twice is applied once.
 
-Note that `PgmqMessage.MessageId` is pgmq's own counter, not the integration message id. Idempotency
-still keys on the `messageId` header, which is the domain event's `EventId`, the same one the
+pgmq is at-least-once like everything else. Reading hides a message for a visibility timeout rather than
+removing it, and the consumer archives a message only after every module applied it. When a handler
+throws, the message is left alone and becomes visible again after `VisibilityTimeout`: a retry is a wait.
+After `MaxDeliveries` reads it is archived as poison and logged as an error, so one bad message cannot
+hold up the queue; it stays readable in the archive table. A message without the toolkit's headers has
+no identity to deduplicate on, and is archived unread.
+
+`PgmqQueue.ReadAsync` and `ArchiveAsync` are there for anything the consumer does not do.
+`PgmqMessage.MessageId` is pgmq's own counter, not the integration message id; idempotency keys on the
+`messageId` header, the domain event's `EventId`, the same one the
 [inbox](#the-inbox-on-the-other-side) stores.
+
+### One queue per consumer, and fan-out
+
+pgmq is a queue, not a topic: a message read by one consumer is gone for the others. When several
+deployables consume, give each its own queue and enqueue every message on the queue of each service
+that wants it:
+
+```csharp
+builder.Services.AddPgmqSink<OrderingContext>(pgmq => pgmq.UseQueues(message => message.Name switch
+{
+    "ordering.order-placed" => ["fulfilment", "payments"],
+    "ordering.order-confirmed" => ["fulfilment"],
+    _ => [],
+}));
+```
+
+The enqueues ride one connection and one transaction, so a message reaches all of its queues or none.
+`Examples/Microservices.Pgmq` routes the whole shop this way.
 
 ### What the sink sends
 

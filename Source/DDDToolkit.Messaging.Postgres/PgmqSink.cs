@@ -152,8 +152,22 @@ internal sealed class PgmqDispatcher(PgmqSinkOptions options)
         Func<CancellationToken, ValueTask<NpgsqlConnection>> openSeparately,
         CancellationToken cancellationToken)
     {
-        var queue = options.QueueName(message);
+        // One queue, or several: a message several services consume is enqueued once per service, on the
+        // same connection and so in the same transaction. Either every queue has it or none does.
+        foreach (var queue in options.Queues(message))
+        {
+            await SendToQueueAsync(connection, transaction, queue, message, openSeparately, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
+    private async Task SendToQueueAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        string queue,
+        IntegrationEventMessage message,
+        Func<CancellationToken, ValueTask<NpgsqlConnection>> openSeparately,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(queue))
         {
             throw new InvalidOperationException($"The queue name for message {message.MessageId} ('{message.Name}') came back empty. A pgmq queue name cannot be empty.");
@@ -200,15 +214,8 @@ internal sealed class PgmqDispatcher(PgmqSinkOptions options)
             return null;
         }
 
-        return JsonSerializer.Serialize(new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["messageId"] = message.MessageId.ToString(),
-            ["name"] = message.Name,
-            ["version"] = message.Version.ToString(),
-            ["contentType"] = message.ContentType,
-            ["occurredAt"] = message.OccurredAt.ToString("O"),
-            ["aggregateType"] = message.AggregateType,
-            ["aggregateId"] = message.AggregateId,
-        });
+        // The same headers every transport writes, so PgmqConsumer, or a consumer on another broker,
+        // rebuilds the envelope from them with IntegrationEventHeaders.ToMessage.
+        return JsonSerializer.Serialize(IntegrationEventHeaders.From(message));
     }
 }
