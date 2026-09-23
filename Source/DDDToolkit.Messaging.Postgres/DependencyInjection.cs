@@ -1,11 +1,10 @@
 using DDDToolkit.EntityFramework.Options;
-using DDDToolkit.EntityFramework.Postgres.Pgmq;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Npgsql;
 
-namespace DDDToolkit.EntityFramework.Postgres;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// Registration of the pgmq sink.

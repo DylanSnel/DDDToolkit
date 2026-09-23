@@ -151,7 +151,7 @@ It does not order anything. See [the guarantees](#the-guarantees-honestly).
 
 ## When a module becomes its own deployable: pgmq
 
-`DDDToolkit.EntityFramework.Postgres` sends published messages to a
+`DDDToolkit.Messaging.Postgres` sends published messages to a
 [pgmq](https://github.com/pgmq/pgmq) queue.
 
 pgmq is a Postgres extension whose queues are ordinary tables, and `pgmq.send` is an ordinary insert.
@@ -163,7 +163,7 @@ Supabase Queues is this extension with a UI on top, so a Supabase project alread
 knows about Supabase; the sink talks to Postgres through Npgsql and SQL.
 
 ```bash
-dotnet add package DDDToolkit.EntityFramework.Postgres
+dotnet add package DDDToolkit.Messaging.Postgres
 ```
 
 ```csharp

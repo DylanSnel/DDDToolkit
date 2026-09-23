@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using DDDToolkit.BaseTypes;
 
-namespace DDDToolkit.EntityFramework.Postgres.Pgmq;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// How the pgmq sink turns a published message into a queue row: which queue, and what rides alongside

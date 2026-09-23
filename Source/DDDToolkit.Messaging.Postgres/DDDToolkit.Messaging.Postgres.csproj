@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Postgres messaging</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;messaging;postgres;postgresql;pgmq;queue;outbox;supabase</PackageTags>
+    <Description>Postgres messaging for the DDDToolkit: a pgmq queue sink for the transactional outbox, so an integration event is enqueued by the same transaction that writes the aggregate.</Description>
+  </PropertyGroup>
+
+  <!--
+    Named for what it does, messaging over Postgres queues, rather than for what it builds on. It does
+    use Entity Framework, but only to reach the connection and transaction of the context the outbox
+    writes through, which is what lets an enqueue commit together with the aggregate.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

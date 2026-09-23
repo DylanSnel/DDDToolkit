@@ -1,4 +1,4 @@
-namespace DDDToolkit.EntityFramework.Postgres.Pgmq;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// The database this was pointed at does not have the pgmq extension, so there are no queues and no

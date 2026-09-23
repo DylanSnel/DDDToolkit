@@ -1,7 +1,6 @@
 using System.Text.Json;
 using DDDToolkit.BaseTypes;
-using DDDToolkit.EntityFramework.Postgres;
-using DDDToolkit.EntityFramework.Postgres.Pgmq;
+using DDDToolkit.Messaging.Postgres;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
