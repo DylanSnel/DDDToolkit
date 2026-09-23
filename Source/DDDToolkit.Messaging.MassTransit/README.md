@@ -4,26 +4,24 @@ MassTransit as the transport between one process's outbox and another's inbox. T
 the message in the aggregate's transaction; MassTransit carries it; the toolkit's inbox applies it once.
 MassTransit's own outbox and sagas are not involved.
 
+Each contract travels as a message type of its own, the way MassTransit sends anything: it gets its own
+exchange, and a receive endpoint that consumes it is bound to that exchange by MassTransit's topology.
+
 ```csharp
 // the outbox of a module
 options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());
 
-// the receiving process
+// the receiving process, after registering its modules
 builder.Services.AddMassTransit(bus =>
 {
-    bus.AddIntegrationEventConsumer();
+    // a consumer per contract the modules handle and another service publishes
+    bus.AddIntegrationEventConsumers(builder.Services.IntegrationEventSubscriptions());
     bus.UsingRabbitMq((context, rabbit) =>
     {
         rabbit.ReceiveEndpoint("fulfilment", endpoint =>
         {
-            endpoint.ConfigureConsumeTopology = false;
-            endpoint.Bind("integration-events", exchange =>
-            {
-                exchange.ExchangeType = "topic";
-                exchange.RoutingKey = "ordering.order-confirmed";
-            });
             endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
-            endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
+            endpoint.ConfigureConsumers(context);
         });
     });
 });

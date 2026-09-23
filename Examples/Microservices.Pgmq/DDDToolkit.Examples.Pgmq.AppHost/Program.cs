@@ -11,7 +11,7 @@ builder.AddNitroComposition();
 
 // Postgres with pgmq built in, the extension Supabase ships as Queues.
 var postgres = builder.AddPostgres("postgres")
-    .WithImage("pgmq/pg17-pgmq", "v1.5.1")
+    .WithImage("pgmq/pg17-pgmq", "v1.13.0")
     .WithImageRegistry("ghcr.io")
     .WithInitFiles(Path.Combine(builder.AppHostDirectory, "database"));
 

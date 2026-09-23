@@ -5,7 +5,7 @@ using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Examples.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 
-namespace DDDToolkit.Examples.Payments.Application.IntegrationEvents;
+namespace DDDToolkit.Examples.Payments.Application.Payments;
 
 /// <summary>An order was placed: open a payment for its total, but take nothing yet.</summary>
 [IntegrationEventConsumer("payments.opener")]

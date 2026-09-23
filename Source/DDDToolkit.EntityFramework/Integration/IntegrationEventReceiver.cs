@@ -40,4 +40,22 @@ public sealed class IntegrationEventReceiver(IServiceScopeFactory scopes)
 
         await modules.SendAsync(message, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Delivers <paramref name="contract"/>, which a broker that routes by type has already deserialized,
+    /// to every module in this process that consumes it. <paramref name="headers"/> are the ones the sending
+    /// outbox wrote (<see cref="IntegrationEventHeaders"/>): the message id the inboxes key on, the published
+    /// name and version, the time and the aggregate.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="FormatException">The headers lack the message id, the name or the time.</exception>
+    /// <exception cref="IntegrationEventDeliveryException">One or more handlers threw; redeliver it later.</exception>
+    public Task ReceiveAsync<TContract>(TContract contract, IReadOnlyDictionary<string, string?> headers, CancellationToken cancellationToken = default)
+        where TContract : class
+    {
+        ArgumentNullException.ThrowIfNull(contract);
+        ArgumentNullException.ThrowIfNull(headers);
+
+        return ReceiveAsync(IntegrationEventHeaders.ToMessage(headers, payload: string.Empty) with { Body = contract }, cancellationToken);
+    }
 }

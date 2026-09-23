@@ -24,9 +24,6 @@ builder.AddServiceDefaults();
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
-builder.Services.AddRabbitMq(builder.Configuration.GetConnectionString("rabbitmq")
-    ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.MassTransit.AppHost."));
-
 var host = new ModuleHost(
     ModuleDatabase.SqlServer(builder.Configuration.GetConnectionString("fulfilment-db")
         ?? throw new InvalidOperationException("ConnectionStrings:fulfilment-db is not set. Run DDDToolkit.Examples.MassTransit.AppHost.")),
@@ -38,6 +35,10 @@ var host = new ModuleHost(
 
 builder.Services.AddInventoryModule(host);
 builder.Services.AddShippingModule(host);
+
+// After the modules: they say what this service handles, and the bus is bound to exactly that.
+builder.Services.AddRabbitMq(builder.Configuration.GetConnectionString("rabbitmq")
+    ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.MassTransit.AppHost."));
 
 // GraphQL: this service's source schema, which the gateway composes with the other two. Besides stock
 // and shipments it declares Order, by id alone, with the one field Shipping adds to it: shipment.

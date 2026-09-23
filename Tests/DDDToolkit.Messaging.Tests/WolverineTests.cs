@@ -1,4 +1,5 @@
 using DDDToolkit.BaseTypes;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Messaging.Wolverine;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,9 +9,10 @@ using Wolverine;
 namespace DDDToolkit.Messaging.Tests;
 
 /// <summary>
-/// Wolverine as the transport: <see cref="WolverineSink"/> publishes, a Wolverine local queue carries the
-/// envelope, <see cref="IntegrationEventEnvelopeHandler"/> hands it to the module's inbox. The local queue
-/// stands in for RabbitMQ; Wolverine's routing and error handling are the real ones.
+/// Wolverine as the transport: <see cref="WolverineSink"/> publishes the contract as a message type of its
+/// own, a Wolverine local queue carries it, <see cref="IntegrationEventHandler{TContract}"/> hands it to the
+/// module's inbox. The local queue stands in for RabbitMQ; Wolverine's routing, handler discovery and error
+/// handling are the real ones.
 /// </summary>
 public sealed class WolverineTests
 {
@@ -22,8 +24,8 @@ public sealed class WolverineTests
         builder.Services.AddLibraryModule(failures);
         builder.UseWolverine(wolverine =>
         {
-            wolverine.PublishMessage<IntegrationEventEnvelope>().ToLocalQueue("integration-events");
-            wolverine.ReceiveIntegrationEvents(TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50));
+            wolverine.PublishMessage<ShelfOpenedV1>().ToLocalQueue("integration-events");
+            wolverine.ReceiveIntegrationEvents(builder.Services.IntegrationEventSubscriptions(), TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50));
         });
 
         var host = builder.Build();

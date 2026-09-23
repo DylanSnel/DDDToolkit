@@ -121,7 +121,8 @@ public static class DependencyInjection
             queue,
             provider.GetRequiredService<IntegrationEventReceiver>(),
             options,
-            provider.GetService<ILogger<PgmqConsumer>>()));
+            provider.GetService<ILogger<PgmqConsumer>>(),
+            provider.GetService<IntegrationEventSubscriptions>()));
 
         return services;
     }

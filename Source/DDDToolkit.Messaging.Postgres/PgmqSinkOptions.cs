@@ -16,6 +16,26 @@ public sealed class PgmqSinkOptions
     private Func<IntegrationEventMessage, IEnumerable<string>>? _queues;
 
     /// <summary>
+    /// Sends each message with <c>pgmq.send_topic</c>, the contract's published name as the routing key, to
+    /// every queue bound to it. This is pgmq's own publish and subscribe, and the one to use between
+    /// services: the sender names no queue, and each consuming service binds its own queue to the contracts
+    /// it handles (<see cref="PgmqConsumerOptions.BindTopics"/>), as a RabbitMQ consumer binds its queue to a
+    /// topic exchange.
+    /// <para>
+    /// A message nobody is bound to reaches no queue, again as with a broker. The sends share the connection
+    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later.
+    /// </para>
+    /// </summary>
+    public PgmqSinkOptions UseTopics()
+    {
+        Topics = true;
+        return this;
+    }
+
+    /// <summary>True when messages are routed by topic (<see cref="UseTopics"/>) rather than to named queues.</summary>
+    public bool Topics { get; private set; }
+
+    /// <summary>
     /// Sends each message to every queue <paramref name="queues"/> names: fan-out, for when several
     /// deployables each read a queue of their own and more than one of them consumes the same message.
     /// <para>

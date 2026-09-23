@@ -95,7 +95,7 @@ namespace DDDToolkit.Examples.Ordering.Migrations
                     b.ToTable("OutboxMessages", "ordering");
                 });
 
-            modelBuilder.Entity("DDDToolkit.Examples.Ordering.Application.ReadModels.CatalogPrice", b =>
+            modelBuilder.Entity("DDDToolkit.Examples.Ordering.Application.CatalogPrices.CatalogPrice", b =>
                 {
                     b.Property<string>("Sku")
                         .HasColumnType("text");
@@ -103,7 +103,7 @@ namespace DDDToolkit.Examples.Ordering.Migrations
                     b.Property<DateTimeOffset>("PricedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "Price", "DDDToolkit.Examples.Ordering.Application.ReadModels.CatalogPrice.Price#Money", b1 =>
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Price", "DDDToolkit.Examples.Ordering.Application.CatalogPrices.CatalogPrice.Price#Money", b1 =>
                         {
                             b1.IsRequired();
 

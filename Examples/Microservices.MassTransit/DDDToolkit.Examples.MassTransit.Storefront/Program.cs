@@ -30,9 +30,6 @@ builder.AddServiceDefaults();
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
-builder.Services.AddRabbitMq(builder.Configuration.GetConnectionString("rabbitmq")
-    ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.MassTransit.AppHost."));
-
 var host = new ModuleHost(
     ModuleDatabase.SqlServer(builder.Configuration.GetConnectionString("storefront-db")
         ?? throw new InvalidOperationException("ConnectionStrings:storefront-db is not set. Run DDDToolkit.Examples.MassTransit.AppHost.")),
@@ -45,6 +42,10 @@ var host = new ModuleHost(
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
+
+// After the modules: they say what this service handles, and the bus is bound to exactly that.
+builder.Services.AddRabbitMq(builder.Configuration.GetConnectionString("rabbitmq")
+    ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.MassTransit.AppHost."));
 
 // GraphQL: this service's source schema, which the gateway composes with the other two into the shop's
 // one schema. Catalog and Ordering both run here, so a line's product is joined in-process, the way the

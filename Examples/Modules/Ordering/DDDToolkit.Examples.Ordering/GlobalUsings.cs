@@ -4,9 +4,8 @@
 global using DDDToolkit.Examples.Ordering.Domain.Orders;
 global using DDDToolkit.Examples.Ordering.Domain.ValueObjects;
 global using DDDToolkit.Examples.Ordering.Domain.Services;
-global using DDDToolkit.Examples.Ordering.Application.IntegrationEvents;
-global using DDDToolkit.Examples.Ordering.Application.DomainEvents;
-global using DDDToolkit.Examples.Ordering.Application.ReadModels;
+global using DDDToolkit.Examples.Ordering.Application.Orders;
+global using DDDToolkit.Examples.Ordering.Application.CatalogPrices;
 global using DDDToolkit.Examples.Ordering.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Ordering.Api;
 global using DDDToolkit.Examples.Ordering.Api.GraphQL;

@@ -199,7 +199,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
             return;
         }
 
-        if (BuildMessage(message, domainEvent, outbox) is not { } published)
+        if (await BuildMessageAsync(message, domainEvent, outbox, cancellationToken).ConfigureAwait(false) is not { } published)
         {
             _logger.LogDebug("Outbox message {MessageId} ({EventName}) is mapped as not published; no sink was called.", message.Id, message.EventName);
             return;
@@ -242,19 +242,29 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// map says this event stays inside. An event with no mapping is published as it stands, reusing
     /// the payload and the name the outbox already stored rather than serializing it a second time.
     /// </summary>
-    private static IntegrationEventMessage? BuildMessage(OutboxMessage message, IDomainEvent domainEvent, OutboxOptions outbox)
+    private async ValueTask<IntegrationEventMessage?> BuildMessageAsync(OutboxMessage message, IDomainEvent domainEvent, OutboxOptions outbox, CancellationToken cancellationToken)
     {
-        var mapped = outbox.IntegrationEvents.TryConvert(domainEvent, out var contract);
+        var mapped = outbox.IntegrationEvents.IsMapped(domainEvent.GetType());
+        var contract = await outbox.IntegrationEvents.ConvertAsync(domainEvent, _serviceProvider, cancellationToken).ConfigureAwait(false);
         if (contract is null)
         {
             return null;
         }
 
+        // Published as it stands, the row already says what it is. Published as a contract, the entry
+        // says it when it was registered with a name and version, as the generated registration does; a
+        // PublishAs lambda leaves it to the contract's attributes.
+        var (name, version) = !mapped
+            ? (message.EventName, CurrentVersionOf(domainEvent.GetType(), outbox))
+            : outbox.IntegrationEvents.TryDescribeContract(domainEvent.GetType(), out var contractName, out var contractVersion)
+                ? (contractName, contractVersion)
+                : (IntegrationEventContract.NameOf(contract), IntegrationEventContract.VersionOf(contract));
+
         return new IntegrationEventMessage
         {
             MessageId = message.Id,
-            Name = mapped ? IntegrationEventContract.NameOf(contract) : message.EventName,
-            Version = IntegrationEventContract.VersionOf(contract),
+            Name = name,
+            Version = version,
             Payload = mapped ? JsonSerializer.Serialize(contract, contract.GetType(), outbox.JsonOptions) : message.Payload,
             OccurredAt = message.OccurredAt,
             AggregateType = message.AggregateType,
@@ -264,6 +274,12 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     }
 
     private static bool DispatchesInProcess(OutboxOptions outbox) => !outbox.HasSinks || outbox.AlsoDispatchInProcess;
+
+    /// <summary>The version the event type was registered at, or what its attributes say when nobody registered it with one.</summary>
+    private static int CurrentVersionOf(Type eventType, OutboxOptions outbox)
+        => outbox.EventTypes.TryDescribe(eventType, out _, out var registered)
+            ? registered
+            : IntegrationEventContract.VersionOf(eventType);
 
     /// <summary>
     /// Reads the stored row back as the domain event it was written from.
@@ -284,7 +300,7 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
         // A column added to an existing table without a default reads as 0; that row predates versioning.
         var storedVersion = message.Version < 1 ? 1 : message.Version;
-        var currentVersion = IntegrationEventContract.VersionOf(eventType);
+        var currentVersion = CurrentVersionOf(eventType, outbox);
 
         if (storedVersion != currentVersion)
         {

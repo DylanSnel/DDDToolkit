@@ -98,7 +98,7 @@ namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer
                     b.ToTable("OutboxMessages", "ordering");
                 });
 
-            modelBuilder.Entity("DDDToolkit.Examples.Ordering.Application.ReadModels.CatalogPrice", b =>
+            modelBuilder.Entity("DDDToolkit.Examples.Ordering.Application.CatalogPrices.CatalogPrice", b =>
                 {
                     b.Property<string>("Sku")
                         .HasColumnType("nvarchar(450)");
@@ -106,7 +106,7 @@ namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer
                     b.Property<DateTimeOffset>("PricedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.ComplexProperty(typeof(Dictionary<string, object>), "Price", "DDDToolkit.Examples.Ordering.Application.ReadModels.CatalogPrice.Price#Money", b1 =>
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Price", "DDDToolkit.Examples.Ordering.Application.CatalogPrices.CatalogPrice.Price#Money", b1 =>
                         {
                             b1.IsRequired();
 

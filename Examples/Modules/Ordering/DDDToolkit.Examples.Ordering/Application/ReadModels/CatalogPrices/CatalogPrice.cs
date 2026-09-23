@@ -1,10 +1,11 @@
 using DDDToolkit.Examples.SharedKernel;
 
-namespace DDDToolkit.Examples.Ordering.Application.ReadModels;
+namespace DDDToolkit.Examples.Ordering.Application.CatalogPrices;
 
 /// <summary>
 /// What Ordering last heard a SKU costs. A read model, not an aggregate: Catalog decides prices, and this
-/// is Ordering's copy of the decision, kept current by <c>Application/IntegrationEvents/PriceList.cs</c>.
+/// is Ordering's copy of the decision, kept current by <c>IntegrationEvents/Inbound/PriceList.cs</c>
+/// next to it.
 /// </summary>
 /// <remarks>
 /// A copy rather than a question to Catalog at checkout, because a module that has to ask another one

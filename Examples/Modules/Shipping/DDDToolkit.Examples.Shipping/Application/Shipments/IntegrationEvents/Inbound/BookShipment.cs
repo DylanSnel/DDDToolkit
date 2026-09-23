@@ -2,7 +2,7 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.Examples.Ordering.Contracts;
 
-namespace DDDToolkit.Examples.Shipping.Application.IntegrationEvents;
+namespace DDDToolkit.Examples.Shipping.Application.Shipments;
 
 /// <summary>
 /// Books a shipment when Ordering says an order is confirmed: stock set aside, money taken.

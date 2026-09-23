@@ -28,18 +28,56 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
 {
     private readonly IServiceCollection _services;
     private readonly ModuleConsumerRegistration<TContext> _registration;
+    private readonly IntegrationEventSubscriptions _subscriptions;
 
-    internal ModuleIntegrationEvents(IServiceCollection services, ModuleConsumerRegistration<TContext> registration)
+    internal ModuleIntegrationEvents(IServiceCollection services, ModuleConsumerRegistration<TContext> registration, IntegrationEventSubscriptions subscriptions)
     {
         _services = services;
         _registration = registration;
+        _subscriptions = subscriptions;
+    }
+
+    /// <summary>
+    /// Hands every message published as <typeparamref name="TContract"/> to the
+    /// <typeparamref name="THandler"/> that <paramref name="create"/> builds, scoped, from the scope the
+    /// message is delivered in. It runs inside this module's inbox under <paramref name="consumer"/>.
+    /// <para>
+    /// Everything the other overload reads off attributes is passed in here: the contract's published
+    /// name, which goes into <see cref="IntegrationEventSubscriptions"/>, and the consumer name the inbox
+    /// keys on. You rarely write this call: the generated <c>module.Add{Module}IntegrationEvents()</c>
+    /// writes one per handler in the module, with the names its compiler saw.
+    /// </para>
+    /// </summary>
+    /// <param name="contract">The published name of <typeparamref name="TContract"/>.</param>
+    /// <param name="consumer">The name the inbox records this handler under.</param>
+    /// <param name="create">Builds the handler, taking its dependencies from the delivery's scope.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="contract"/> or <paramref name="consumer"/> is empty, or this module already has a handler under the same consumer name.</exception>
+    public ModuleIntegrationEvents<TContext> Handle<TContract, THandler>(string contract, string consumer, Func<IServiceProvider, THandler> create)
+        where TContract : class
+        where THandler : class, IIntegrationEventHandler<TContract>
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(contract);
+        ArgumentException.ThrowIfNullOrWhiteSpace(consumer);
+        ArgumentNullException.ThrowIfNull(create);
+
+        _services.TryAddScoped(create);
+        _registration.Add(new ModuleHandler(
+            consumer,
+            static received => received is TContract,
+            static (services, received, message, cancellationToken) =>
+                services.GetRequiredService<THandler>().HandleAsync((TContract)received, message, cancellationToken)));
+        _subscriptions.Handles<TContract>(contract);
+
+        return this;
     }
 
     /// <summary>
     /// Hands every message published as <typeparamref name="TContract"/> to <typeparamref name="THandler"/>,
     /// resolved (scoped) from the scope the outbox processor runs in. It runs inside this module's inbox
     /// under its consumer name, so name it with <c>[IntegrationEventConsumer("...")]</c>: the name is what
-    /// the inbox remembers.
+    /// the inbox remembers. The consumer name and the contract's published name are read off their
+    /// attributes at run time; the generated <c>module.Add{Module}IntegrationEvents()</c> does without.
     /// </summary>
     /// <exception cref="ArgumentException">This module already has a handler under the same consumer name.</exception>
     public ModuleIntegrationEvents<TContext> Handle<TContract, THandler>()
@@ -52,6 +90,7 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
             static contract => contract is TContract,
             static (services, contract, message, cancellationToken) =>
                 services.GetRequiredService<THandler>().HandleAsync((TContract)contract, message, cancellationToken)));
+        _subscriptions.Handles<TContract>(IntegrationEventContract.NameOf<TContract>());
 
         return this;
     }
@@ -70,6 +109,7 @@ public sealed class ModuleIntegrationEvents<TContext> where TContext : DbContext
             IntegrationEventConsumer.NameOf(handler.GetType()),
             static contract => contract is TContract,
             (_, contract, message, cancellationToken) => handler.HandleAsync((TContract)contract, message, cancellationToken)));
+        _subscriptions.Handles<TContract>(IntegrationEventContract.NameOf<TContract>());
 
         return this;
     }

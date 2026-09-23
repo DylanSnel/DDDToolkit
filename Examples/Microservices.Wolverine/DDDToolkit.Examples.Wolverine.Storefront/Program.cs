@@ -32,48 +32,6 @@ builder.AddServiceDefaults();
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
-const string Exchange = "integration-events";
-
-// What this service wants from the others, by the contracts' published names. The senders do not know it
-// exists: they publish to the exchange, and this service's queue is bound to what it consumes.
-string[] consumes =
-[
-    "inventory.stock-reserved",
-    "inventory.stock-reservation-failed",
-    "payments.payment-succeeded",
-    "payments.payment-failed",
-];
-
-builder.UseWolverine(wolverine =>
-{
-    wolverine.UseRabbitMq(new Uri(builder.Configuration.GetConnectionString("rabbitmq")
-            ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.Wolverine.AppHost.")))
-        .AutoProvision();
-
-    // Sending: every envelope to one topic exchange, keyed on the contract's name. Inline, so the outbox
-    // hears that RabbitMQ has it before it marks the row done.
-    wolverine.PublishMessagesToRabbitMqExchange<IntegrationEventEnvelope>(Exchange, envelope => envelope.Name)
-        .ExchangeType(ExchangeType.Topic)
-        .SendInline();
-
-    // Receiving: this service's queue. Inline, so an envelope is acknowledged only after the modules
-    // applied it.
-    wolverine.ListenToRabbitQueue("storefront", queue =>
-        {
-            foreach (var contract in consumes)
-            {
-                queue.BindExchange(Exchange, contract);
-            }
-        })
-        .ProcessInline();
-
-    // The envelope's handler, handing it to the modules; retried, then Wolverine's error queue.
-    wolverine.ReceiveIntegrationEvents();
-
-    // An envelope this process publishes goes to RabbitMQ, never straight to the local handler.
-    wolverine.Policies.DisableConventionalLocalRouting();
-});
-
 var host = new ModuleHost(
     ModuleDatabase.SqlServer(builder.Configuration.GetConnectionString("storefront-db")
         ?? throw new InvalidOperationException("ConnectionStrings:storefront-db is not set. Run DDDToolkit.Examples.Wolverine.AppHost.")),
@@ -86,6 +44,30 @@ var host = new ModuleHost(
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
+
+// RabbitMQ the way Wolverine uses it: conventional routing. Every contract this service publishes goes to a
+// fanout exchange of its own type, and every contract it has to be sent gets a queue of this service's,
+// bound to that type's exchange. Nothing here names another service or a contract: the modules registered
+// above say what this service handles, which is why they come first. Inline both ways, so the outbox hears
+// that RabbitMQ has a message before it marks the row done, and a message is acknowledged only after the
+// modules applied it.
+builder.UseWolverine(wolverine =>
+{
+    wolverine.UseRabbitMq(new Uri(builder.Configuration.GetConnectionString("rabbitmq")
+            ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.Wolverine.AppHost.")))
+        .AutoProvision()
+        .UseConventionalRouting(conventions => conventions
+            .QueueNameForListener(type => $"storefront.{type.Name}")
+            .ConfigureListeners((listener, _) => listener.ProcessInline())
+            .ConfigureSending((sender, _) => sender.SendInline()));
+
+    // A handler per contract this service has to be sent, handing it to the modules; retried, then
+    // Wolverine's error queue.
+    wolverine.ReceiveIntegrationEvents(builder.Services.IntegrationEventSubscriptions());
+
+    // A contract this process publishes goes to RabbitMQ, never straight to a local handler.
+    wolverine.Policies.DisableConventionalLocalRouting();
+});
 
 // GraphQL: this service's source schema, which the gateway composes with the other two into the shop's
 // one schema. Catalog and Ordering both run here, so a line's product is joined in-process, the way the

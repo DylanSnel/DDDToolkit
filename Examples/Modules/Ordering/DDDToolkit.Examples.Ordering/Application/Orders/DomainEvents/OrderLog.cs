@@ -1,7 +1,7 @@
 using Mediator;
 using Microsoft.Extensions.Logging;
 
-namespace DDDToolkit.Examples.Ordering.Application.DomainEvents;
+namespace DDDToolkit.Examples.Ordering.Application.Orders;
 
 /// <summary>
 /// A handler inside the producing module, reached through Mediator.

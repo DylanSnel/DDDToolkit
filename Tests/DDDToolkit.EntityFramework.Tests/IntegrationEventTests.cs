@@ -314,17 +314,19 @@ public sealed class IntegrationEventTests : IDisposable
     }
 
     [Fact]
-    public void The_map_publishes_unmapped_events_as_they_stand_and_rejects_a_second_entry()
+    public async Task The_map_publishes_unmapped_events_as_they_stand_and_rejects_a_second_entry()
     {
         var map = new IntegrationEventMap();
         var domainEvent = new ShelfCreated(ShelfId.CreateUnique(), "Fiction");
+        using var services = new ServiceCollection().BuildServiceProvider();
 
-        map.TryConvert(domainEvent, out var asItStands).Should().BeFalse();
-        asItStands.Should().BeSameAs(domainEvent, "no entry means the domain event itself is published");
+        map.IsMapped(typeof(ShelfCreated)).Should().BeFalse();
+        (await map.ConvertAsync(domainEvent, services, TestContext.Current.CancellationToken))
+            .Should().BeSameAs(domainEvent, "no entry means the domain event itself is published");
 
         map.PublishAs<ShelfCreated, ShelfOpenedV3>(e => new ShelfOpenedV3(e.ShelfId.ToString(), e.Name));
-        map.TryConvert(domainEvent, out var contract).Should().BeTrue();
-        contract.Should().BeOfType<ShelfOpenedV3>();
+        map.IsMapped(typeof(ShelfCreated)).Should().BeTrue();
+        (await map.ConvertAsync(domainEvent, services, TestContext.Current.CancellationToken)).Should().BeOfType<ShelfOpenedV3>();
         map.MappedEventTypes.Should().BeEquivalentTo([typeof(ShelfCreated)]);
 
         var twice = () => map.DoNotPublish<ShelfCreated>();

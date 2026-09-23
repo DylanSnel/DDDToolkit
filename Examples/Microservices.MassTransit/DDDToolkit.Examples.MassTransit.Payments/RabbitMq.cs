@@ -1,4 +1,4 @@
-using DDDToolkit.BaseTypes;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Messaging.MassTransit;
 using MassTransit;
 
@@ -11,48 +11,28 @@ namespace DDDToolkit.Examples.MassTransit.Payments;
 /// </summary>
 internal static class RabbitMq
 {
-    private const string Exchange = "integration-events";
-
     /// <summary>
-    /// What this service wants from the others, by the contracts' published names. The senders do not know
-    /// it exists: they publish to the exchange, and this service's queue is bound to what it consumes.
+    /// RabbitMQ the way MassTransit uses it. Every contract is a message type with an exchange of its own;
+    /// this service's queue is bound to the exchange of every contract it has to be sent, which MassTransit
+    /// works out from the consumers on the endpoint. Nothing here names another service or a contract: the
+    /// modules say what this service handles, so call this after registering them.
     /// </summary>
-    private static readonly string[] Consumes =
-    [
-        "ordering.order-placed",
-        "ordering.order-cancelled",
-        "inventory.stock-reserved",
-    ];
-
     public static IServiceCollection AddRabbitMq(this IServiceCollection services, string connectionString) =>
         services.AddMassTransit(bus =>
         {
-            bus.AddIntegrationEventConsumer();
+            // A consumer per contract the modules handle and another service publishes.
+            bus.AddIntegrationEventConsumers(services.IntegrationEventSubscriptions());
 
             bus.UsingRabbitMq((context, rabbit) =>
             {
                 rabbit.Host(new Uri(connectionString));
 
-                // Sending: every envelope to one topic exchange; the sink sets the contract's name as routing key.
-                rabbit.Message<IntegrationEventEnvelope>(message => message.SetEntityName(Exchange));
-                rabbit.Publish<IntegrationEventEnvelope>(publish => publish.ExchangeType = "topic");
-
                 // Receiving: this service's queue, retried a few times before MassTransit's error queue, and
                 // acknowledged when the modules have applied it.
                 rabbit.ReceiveEndpoint("payments", endpoint =>
                 {
-                    endpoint.ConfigureConsumeTopology = false;
-                    foreach (var contract in Consumes)
-                    {
-                        endpoint.Bind(Exchange, exchange =>
-                        {
-                            exchange.ExchangeType = "topic";
-                            exchange.RoutingKey = contract;
-                        });
-                    }
-
                     endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
-                    endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
+                    endpoint.ConfigureConsumers(context);
                 });
             });
         });

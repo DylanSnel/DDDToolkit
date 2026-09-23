@@ -101,6 +101,13 @@ public static class ReferenceSets
     /// <summary>Everything the generated HotChocolate change-type providers and bindings need.</summary>
     public static ImmutableArray<PortableExecutableReference> HotChocolate => LazyHotChocolate.Value;
 
+    /// <summary>EF Core plus DDDToolkit.EntityFramework: the outbox, the contract registry and the module consumers.</summary>
+    public static ImmutableArray<PortableExecutableReference> EntityFrameworkRuntime =>
+    [
+        .. EntityFramework,
+        FromType(typeof(global::DDDToolkit.EntityFramework.Options.OutboxOptions)),
+    ];
+
     /// <summary>EF Core, with its design-time factory interface, and the Supabase package the marker lives in.</summary>
     public static ImmutableArray<PortableExecutableReference> Supabase =>
     [

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DDDToolkit.BaseTypes;
+using HotChocolate.Subscriptions;
 
 namespace DDDToolkit.HotChocolate.Subscriptions;
 
@@ -21,10 +22,15 @@ namespace DDDToolkit.HotChocolate.Subscriptions;
 /// </summary>
 public sealed class GraphQlSubscriptionMap
 {
-    private readonly Dictionary<(string Name, int Version), (Type Contract, Func<IntegrationEventMessage, string?> Topic)> _entries = [];
+    private readonly Dictionary<Type, Entry> _byType = [];
+    private Dictionary<(string Name, int Version), Entry>? _byName;
 
-    /// <summary>The (name, version) pairs that reach clients.</summary>
-    public IReadOnlyCollection<(string Name, int Version)> Published => _entries.Keys;
+    /// <summary>
+    /// The (name, version) pairs that reach clients. Read off the contracts' attributes the first time it is
+    /// asked for; delivering a message the outbox built never asks, because it finds the entry by the type
+    /// of the contract it carries.
+    /// </summary>
+    public IReadOnlyCollection<(string Name, int Version)> Published => ByName().Keys;
 
     /// <summary>Pushes <typeparamref name="TContract"/> to every client subscribed to <paramref name="topic"/>.</summary>
     /// <exception cref="ArgumentException"><paramref name="topic"/> is empty, or the contract is already mapped.</exception>
@@ -45,13 +51,21 @@ public sealed class GraphQlSubscriptionMap
     {
         ArgumentNullException.ThrowIfNull(topic);
 
-        var key = (IntegrationEventContract.NameOf<TContract>(), IntegrationEventContract.VersionOf<TContract>());
+        // The send is captured with the contract as its generic argument, so pushing a message later is
+        // an ordinary generic call: HotChocolate's topics are typed, and nothing is made by reflection.
+        var entry = new Entry(
+            typeof(TContract),
+            topic,
+            static (sender, name, payload, cancellationToken) => sender.SendAsync(name, (TContract)payload, cancellationToken));
 
-        if (!_entries.TryAdd(key, (typeof(TContract), topic)))
+        if (!_byType.TryAdd(typeof(TContract), entry))
         {
-            throw new ArgumentException($"'{key.Item1}' version {key.Item2} is already published to subscribers; a contract has one topic.", nameof(topic));
+            throw new ArgumentException(
+                $"'{IntegrationEventContract.NameOf<TContract>()}' version {IntegrationEventContract.VersionOf<TContract>()} is already published to subscribers; a contract has one topic.",
+                nameof(topic));
         }
 
+        _byName = null;
         return this;
     }
 
@@ -59,9 +73,7 @@ public sealed class GraphQlSubscriptionMap
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is null.</exception>
     public bool TryGetTopic(IntegrationEventMessage message, [NotNullWhen(true)] out Type? contractType, out string? topic)
     {
-        ArgumentNullException.ThrowIfNull(message);
-
-        if (_entries.TryGetValue((message.Name, message.Version), out var entry))
+        if (TryGetEntry(message, out var entry))
         {
             contractType = entry.Contract;
             topic = entry.Topic(message);
@@ -72,4 +84,31 @@ public sealed class GraphQlSubscriptionMap
         topic = null;
         return false;
     }
+
+    /// <summary>
+    /// The entry for <paramref name="message"/>: by the type of the contract it carries, which is how every
+    /// message an outbox built arrives, and otherwise by its published name and version.
+    /// </summary>
+    internal bool TryGetEntry(IntegrationEventMessage message, [NotNullWhen(true)] out Entry? entry)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        if (message.Body is { } body && _byType.TryGetValue(body.GetType(), out entry))
+        {
+            return true;
+        }
+
+        return ByName().TryGetValue((message.Name, message.Version), out entry);
+    }
+
+    /// <summary>The same entries keyed on name and version, for a message rebuilt from text with no body.</summary>
+    private Dictionary<(string Name, int Version), Entry> ByName()
+        => _byName ??= _byType.Values.ToDictionary(
+            static entry => (IntegrationEventContract.NameOf(entry.Contract), IntegrationEventContract.VersionOf(entry.Contract)));
+
+    /// <summary>One published contract: its type, how its topic is built, and how it is pushed.</summary>
+    internal sealed record Entry(
+        Type Contract,
+        Func<IntegrationEventMessage, string?> Topic,
+        Func<ITopicEventSender, string, object, CancellationToken, ValueTask> Send);
 }

@@ -1,7 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Hosting;
-using DDDToolkit.Examples.Inventory.Contracts;
-using DDDToolkit.Examples.Ordering.Contracts;
+using DDDToolkit.Examples.Inventory.IntegrationEvents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,16 +23,12 @@ public static class InventoryModule
         services.AddDDDToolkitEntityFramework(options => options
             .UseOutbox<InventoryContext>(outbox =>
             {
-                outbox.RegisterEventsFromAssemblyContaining<StockItem>();
-                outbox.PublishAs<StockReserved, StockReservedV1>(reserved => new StockReservedV1(reserved.OrderId));
-                outbox.PublishAs<StockRefused, StockReservationFailedV1>(refused => new StockReservationFailedV1(refused.OrderId, refused.Reason));
+                outbox.AddInventoryIntegrationEvents();
                 host.Publish(outbox);
             })
-            .MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>()));
+            .MapIntegrationEvents(contracts => contracts.AddInventoryIntegrationEvents()));
 
-        services.AddModuleIntegrationEvents<InventoryContext>(module => module
-            .Handle<OrderPlacedV1, ReserveStock>()
-            .Handle<OrderCancelledV1, ReleaseStock>());
+        services.AddModuleIntegrationEvents<InventoryContext>(module => module.AddInventoryIntegrationEvents());
 
         services.AddOutboxBackgroundService<InventoryContext>(pollingInterval: TimeSpan.FromSeconds(1));
 

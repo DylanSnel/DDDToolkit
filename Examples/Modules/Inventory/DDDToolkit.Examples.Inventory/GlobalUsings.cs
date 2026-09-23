@@ -4,7 +4,7 @@
 global using DDDToolkit.Examples.Inventory.Domain.StockItems;
 global using DDDToolkit.Examples.Inventory.Domain.StockReservations;
 global using DDDToolkit.Examples.Inventory.Domain.Services;
-global using DDDToolkit.Examples.Inventory.Application.IntegrationEvents;
+global using DDDToolkit.Examples.Inventory.Application.StockReservations;
 global using DDDToolkit.Examples.Inventory.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Inventory.Api;
 global using DDDToolkit.Examples.Inventory.Api.GraphQL;

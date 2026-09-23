@@ -124,11 +124,19 @@ public sealed class ModuleIntegrationEventSink : IIntegrationEventSink
     /// knows the message's name and version, because that is the boundary doing its job: the consuming
     /// module gets its own object, read through the upcasters, exactly as it would from a queue. The
     /// body is the fallback for a contract nobody registered, which is what an unmapped domain event
-    /// published as it stands looks like.
+    /// published as it stands looks like. A message with a body and no payload came through a broker that
+    /// deserializes by type, MassTransit or Wolverine, and the body is all there is.
     /// </para>
     /// </summary>
     private object? Resolve(IntegrationEventMessage message)
     {
+        // A broker that routes by type has already read the payload into the contract, and hands over the
+        // object with no text to read again.
+        if (message.Payload.Length == 0 && message.Body is { } typed)
+        {
+            return typed;
+        }
+
         if (_options.Contracts.TryRead(message, out var contract))
         {
             return contract;

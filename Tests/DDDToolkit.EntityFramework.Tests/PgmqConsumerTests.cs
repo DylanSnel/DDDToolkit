@@ -145,6 +145,54 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         (await host.PendingAsync()).Should().Be(0);
     }
 
+    [Fact]
+    public async Task A_consumer_binds_its_queue_to_what_its_modules_handle_and_a_topic_send_finds_it()
+    {
+        var shelves = new ShelfCounter();
+        await using var host = await HostAsync("topic_q", shelves, options => options.BindTopics = true);
+
+        await host.Consumer.StartAsync(Cancellation);
+        await host.Consumer.StopAsync(Cancellation);
+
+        await using (var connection = await host.Database.OpenAsync(Cancellation))
+        {
+            (await PgmqQueue.TopicBindingsAsync(connection, null, "topic_q", Cancellation)).Should().Equal(["library.shelf-opened"]);
+        }
+
+        await new PgmqSink(NpgsqlDataSource.Create(host.Database.ConnectionString), new PgmqSinkOptions().UseTopics()).SendAsync(Message(), Cancellation);
+
+        (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1, "the sender named no queue; the binding the consumer made took the message there");
+        shelves.Seen.Should().Equal("Fiction");
+    }
+
+    [Fact]
+    public async Task Binding_drops_an_exact_name_the_consumer_no_longer_handles_and_keeps_a_wildcard_somebody_set()
+    {
+        await using var host = await HostAsync("rebind_q", new ShelfCounter(), options => options.BindTopics = true);
+        await using (var connection = await host.Database.OpenAsync(Cancellation))
+        {
+            await PgmqQueue.BindTopicAsync(connection, null, "library.shelf-closed", "rebind_q", Cancellation);
+            await PgmqQueue.BindTopicAsync(connection, null, "audit.#", "rebind_q", Cancellation);
+        }
+
+        await host.Consumer.StartAsync(Cancellation);
+        await host.Consumer.StopAsync(Cancellation);
+
+        await using var check = await host.Database.OpenAsync(Cancellation);
+        (await PgmqQueue.TopicBindingsAsync(check, null, "rebind_q", Cancellation)).Should().BeEquivalentTo(["audit.#", "library.shelf-opened"]);
+    }
+
+    [Fact]
+    public async Task A_topic_nobody_is_bound_to_reaches_no_queue()
+    {
+        var database = Database;
+        await using var connection = await database.OpenAsync(Cancellation);
+
+        var reached = await PgmqQueue.SendTopicAsync(connection, null, "nobody.listens", """{"x":1}""", cancellationToken: Cancellation);
+
+        reached.Should().Be(0, "as with a broker's exchange, a message with no binding goes nowhere");
+    }
+
     // ------------------------------------------------------------------ the process under test
 
     private async Task<ConsumerHost> HostAsync(string queue, ShelfCounter shelves, Action<PgmqConsumerOptions>? configure = null)
@@ -172,7 +220,13 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             await PgmqQueue.CreateAsync(connection, null, queue, Cancellation);
         }
 
-        var consumer = new PgmqConsumer(dataSource, queue, provider.GetRequiredService<IntegrationEventReceiver>(), options);
+        var consumer = new PgmqConsumer(
+            dataSource,
+            queue,
+            provider.GetRequiredService<IntegrationEventReceiver>(),
+            options,
+            logger: null,
+            provider.GetRequiredService<IntegrationEventSubscriptions>());
         return new ConsumerHost(database, provider, dataSource, queue, consumer);
     }
 

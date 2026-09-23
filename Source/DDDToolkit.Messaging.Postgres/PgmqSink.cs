@@ -152,6 +152,13 @@ internal sealed class PgmqDispatcher(PgmqSinkOptions options)
         Func<CancellationToken, ValueTask<NpgsqlConnection>> openSeparately,
         CancellationToken cancellationToken)
     {
+        // By topic: pgmq puts it on every queue bound to its name, in this transaction.
+        if (options.Topics)
+        {
+            await PgmqQueue.SendTopicAsync(connection, transaction, message.Name, message.Payload, Headers(message), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         // One queue, or several: a message several services consume is enqueued once per service, on the
         // same connection and so in the same transaction. Either every queue has it or none does.
         foreach (var queue in options.Queues(message))

@@ -334,16 +334,26 @@ public sealed record OrderConfirmedV1(OrderId OrderId, string City, string Posta
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
 
-Ordering says, in its own registration, how the one becomes the other and that it goes to the other
-modules. It does not say which modules those are:
+One small class per event says how the one becomes the other. It lives next to the aggregate it
+publishes for:
+
+```csharp
+public sealed class PublishOrderConfirmed : IOutboundIntegrationEvent<OrderConfirmed, OrderConfirmedV1>
+{
+    public ValueTask<OrderConfirmedV1?> CreateAsync(OrderConfirmed confirmed, CancellationToken cancellationToken)
+        => new(new OrderConfirmedV1(confirmed.OrderId, confirmed.ShipTo.City, confirmed.ShipTo.PostalCode));
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/)*
+
+Ordering's registration picks those classes up and says that what they make goes to the other modules.
+It does not say which modules those are:
 
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
 {
-    outbox.RegisterEventsFromAssemblyContaining<Order>();
-    outbox.PublishAs<OrderPlaced, OrderPlacedV1>(placed => new OrderPlacedV1(/* ... */));
-    outbox.PublishAs<OrderConfirmed, OrderConfirmedV1>(confirmed =>
-        new OrderConfirmedV1(confirmed.OrderId, confirmed.ShipTo.City, confirmed.ShipTo.PostalCode));
+    outbox.AddOrderingIntegrationEvents();   // generated when Ordering compiles
     outbox.SendToModules();
     outbox.AlsoDispatchInProcess = true;
 }));
@@ -392,7 +402,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 }
 ```
 
-*[`Shipping/Application/IntegrationEvents/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/IntegrationEvents/BookShipment.cs)*
+*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
 
 Three things there are the point. It is typed on the contract, never on Ordering's domain event, which
 is what keeps Shipping free of a reference to Ordering's domain. It does not call `SaveChanges`: the

@@ -1,6 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Hosting;
-using DDDToolkit.Examples.Ordering.Contracts;
+using DDDToolkit.Examples.Shipping.IntegrationEvents;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Examples.Shipping;
@@ -24,14 +24,16 @@ public static class ShippingModule
 
         host.Database.AddContext<ShippingContext, ShippingContextFactory>(services, ShippingContext.Schema);
 
-        // The payload shapes Shipping reads. The inbox needs them to turn a delivered message into the
-        // record BookShipment asked for, and an upcaster from an older version would go here too.
+        // The payload shapes Shipping reads, as the compiler found them on its handlers. The inbox needs
+        // them to turn a delivered message into the record BookShipment asked for; an upcaster from an
+        // older version would go here too.
         services.AddDDDToolkitEntityFramework(options =>
-            options.MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>()));
+            options.MapIntegrationEvents(contracts => contracts.AddShippingIntegrationEvents()));
 
-        // Shipping signs up as a consumer, with its own inbox. Ordering never names Shipping: it publishes,
-        // and every module registered here is offered every message, whatever carried it here.
-        services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderConfirmedV1, BookShipment>());
+        // Shipping signs up as a consumer, with its own inbox: every handler in Application/<slice>/
+        // IntegrationEvents/Inbound/, found when the module compiled. Ordering never names Shipping: it
+        // publishes, and every module registered here is offered every message, whatever carried it here.
+        services.AddModuleIntegrationEvents<ShippingContext>(module => module.AddShippingIntegrationEvents());
 
         return services;
     }

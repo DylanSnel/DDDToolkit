@@ -3,7 +3,7 @@
 // outside the module.
 global using DDDToolkit.Examples.Payments.Domain.Payments;
 global using DDDToolkit.Examples.Payments.Domain.Services;
-global using DDDToolkit.Examples.Payments.Application.IntegrationEvents;
+global using DDDToolkit.Examples.Payments.Application.Payments;
 global using DDDToolkit.Examples.Payments.Infrastructure.PaymentProvider;
 global using DDDToolkit.Examples.Payments.Infrastructure.Persistence;
 global using DDDToolkit.Examples.Payments.Api;

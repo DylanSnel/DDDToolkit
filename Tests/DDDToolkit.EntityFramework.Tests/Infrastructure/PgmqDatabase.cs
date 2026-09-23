@@ -19,9 +19,9 @@ public sealed class PgmqDatabase : IAsyncDisposable
 {
     /// <summary>
     /// The image the pgmq project publishes. Pinned, because the function signatures this package calls
-    /// are verified against pgmq 1.5.1.
+    /// are verified against pgmq 1.13.0, and topic routing needs 1.11 or later.
     /// </summary>
-    public const string Image = "ghcr.io/pgmq/pg17-pgmq:v1.5.1";
+    public const string Image = "ghcr.io/pgmq/pg17-pgmq:v1.13.0";
 
     private readonly PostgreSqlContainer _container;
 

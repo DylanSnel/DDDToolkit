@@ -36,16 +36,10 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 
 var queues = NpgsqlDataSource.Create(connectionString);
 
-// Sending. pgmq has no exchange that routes by topic: a queue is a table, and the sender writes into it. So
-// this service says which queue each of its contracts goes to, one per consuming service, and the enqueues
-// share a transaction: a message reaches all its queues or none. What is not listed stays in the process.
-Dictionary<string, string[]> sendTo = new()
-{
-    ["ordering.order-placed"] = ["payments", "fulfilment"],
-    ["ordering.order-cancelled"] = ["payments", "fulfilment"],
-    ["ordering.order-confirmed"] = ["fulfilment"],
-};
-builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueues(message => sendTo.GetValueOrDefault(message.Name, [])));
+// Sending: by topic, pgmq's own publish and subscribe. Each message goes out under its contract's
+// published name, and pgmq puts it on every queue bound to that name, all in one transaction. This service
+// names no receiver.
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseTopics());
 
 var host = new ModuleHost(
     ModuleDatabase.Postgres(connectionString),
@@ -59,9 +53,10 @@ var host = new ModuleHost(
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
 
-// Receiving. This service's own queue, read into the same modules the module sink feeds: a handler cannot
-// tell which way a message came.
-builder.Services.AddPgmqConsumer(queues, "storefront");
+// Receiving. This service's own queue, which binds itself at start-up to every contract its modules handle
+// and another service publishes, as a RabbitMQ queue binds to a topic exchange. It is read into the same
+// modules the module sink feeds: a handler cannot tell which way a message came.
+builder.Services.AddPgmqConsumer(queues, "storefront", consumer => consumer.BindTopics = true);
 
 // pgmq is an extension, installed once by whoever deploys the database: the AppHost here, Supabase on a
 // project with Queues. This only checks, so a database without it fails at start-up, by name.

@@ -13,10 +13,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 ### Added
 
 - `DDDToolkit.Messaging.MassTransit`, MassTransit 8 as the transport between one process's outbox and
-  another's inbox. `outbox.SendToMassTransit()` publishes each message as an `IntegrationEventEnvelope`,
-  with the outbox's message id and the contract's name as routing key; `bus.AddIntegrationEventConsumer()`
-  registers the consumer that hands it to the modules through `IntegrationEventReceiver`. Built on
-  MassTransit 8, the last version under the Apache 2.0 licence.
+  another's inbox, used the way MassTransit is used. `outbox.SendToMassTransit()` publishes each contract
+  as a message type of its own, with the outbox's message id as MassTransit's and the toolkit's headers
+  alongside, so MassTransit gives it the exchange of its type;
+  `bus.AddIntegrationEventConsumers(services.IntegrationEventSubscriptions())` registers an
+  `IntegrationEventConsumer<TContract>` for every contract the modules handle and the process does not
+  publish itself, and `endpoint.ConfigureConsumers(context)` binds the service's queue to exactly those.
+  Built on MassTransit 8, the last version under the Apache 2.0 licence.
 - `Examples/Microservices.MassTransit` runs the same three services over RabbitMQ with MassTransit, each on
   a SQL Server database of its own.
 - Value objects are `@shareable` in a Fusion source schema. A value object has no owner, so every service
@@ -35,21 +38,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project. With `SUPABASE_BRANCHING=true` every run gets a preview branch of its own, which needs a Pro
   organisation; otherwise it resets the example's schemas on a project kept for these tests.
 - `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
-  inbox. `outbox.SendToWolverine()` publishes each message through Wolverine as an
-  `IntegrationEventEnvelope`, the envelope's headers and payload in one object and routable on its
-  contract name; `wolverine.ReceiveIntegrationEvents()` registers the handler that hands it to the
-  modules through `IntegrationEventReceiver`, with retries and Wolverine's error queue. Wolverine's own
-  outbox, inbox and sagas stay out of it. `IntegrationEventEnvelope` is in the core package, for any
-  broker whose client sends objects.
+  inbox, used the way Wolverine is used. `outbox.SendToWolverine()` publishes each contract as a message
+  type of its own, the toolkit's headers alongside, routed by Wolverine's rules: with RabbitMQ's
+  conventional routing, an exchange per contract type and a queue per handling service.
+  `wolverine.ReceiveIntegrationEvents(services.IntegrationEventSubscriptions())` adds an
+  `IntegrationEventHandler<TContract>` to Wolverine's discovery for every contract the modules handle and
+  the process does not publish itself, with retries and Wolverine's error queue. Wolverine's own outbox,
+  inbox and sagas stay out of it.
 - The receiving end of a transport. `IntegrationEventReceiver` hands a message that arrived from another
   process to the modules in this one, each handler inside its module's inbox, as the module sink does for
   a message from next door; `AddModuleIntegrationEvents` registers it. `IntegrationEventHeaders` is the
   envelope on the wire, the headers every transport writes and every consumer rebuilds the message from.
   In `DDDToolkit.Messaging.Postgres`, `PgmqConsumer` (`services.AddPgmqConsumer(dataSource, queue)`)
   reads a queue into the receiver, archives what was applied, lets a failure come back after the
-  visibility timeout and archives a message as poison after `MaxDeliveries`; and
-  `PgmqSinkOptions.UseQueues(...)` enqueues one message on several queues in one transaction, so every
-  consuming service can have a queue of its own.
+  visibility timeout and archives a message as poison after `MaxDeliveries`. Between services it uses
+  pgmq's own topic routing (pgmq 1.11 and later): `pgmq.UseTopics()` sends under the contract's published
+  name with `pgmq.send_topic`, and `consumer.BindTopics = true` binds the service's queue at start-up to
+  every contract its modules handle and another service publishes, so no sender names a receiver.
+  `PgmqSinkOptions.UseQueues(...)` still enqueues on named queues for a pgmq without topics. The tests
+  and the sample run on pgmq 1.13.
 - Relay node ids for identifiers. HotChocolate's global object identification needs an
   `INodeIdValueSerializer` for a type it has never seen, so `ImplementsNode().IdField(order => order.Id)`
   over an `OrderId` failed with *No serializer registered*. Every identifier over a `Guid`, `string`,
@@ -186,6 +193,45 @@ convention.
 - A code fix for DDD00010 and DDD00011 that makes the setter `protected init` (`private protected
   init` on an `internal` property). It ships in the DDDToolkit.Analyzers package as
   `DDDToolkit.Analyzers.CodeFixes.dll`, next to the generators.
+- `IOutboundIntegrationEvent<TDomainEvent, TContract>`, the translation from a domain event to its
+  published contract as a class, the outbound counterpart of `IIntegrationEventHandler<TContract>`, so the
+  translations can live next to the aggregates they publish for rather than as lambdas in the module's
+  registration. It is async and is built from the outbox processor's scope, so it can read the module's
+  own context; it runs at delivery, so the docs say what it may and may not read. `IntegrationEventMap`
+  gains `PublishWith<TDomainEvent, TContract>(name, version, create)`, `ConvertAsync`, `IsMapped` and
+  `TryDescribeContract`. See [A class per published event](docs/integration-events.md#a-class-per-published-event).
+- A module's integration event registration, generated. `DDDToolkit.EntityFramework.Analyzers` writes
+  `Add{Module}IntegrationEvents()` on the outbox (every domain event under its stored name and version,
+  every outbound class with its contract's name and version), on the contract registry (every contract
+  the module's handlers read) and on `ModuleIntegrationEvents<TContext>` (every handler, under its
+  consumer name and its contract's name). Every name and version is read by the compiler and written out
+  as a literal, and every class is built with `new`, so nothing is scanned, read or activated by
+  reflection at run time; DDD00033 reports a class it cannot construct. The registries gain the explicit
+  overloads it calls: `DomainEventTypeRegistry.Register<TEvent>(name, version)` and `TryDescribe`,
+  `OutboxOptions.RegisterEvent<TEvent>(name, version)`, `IntegrationEventContractRegistry.Register<TContract>(name, version)`
+  and `ModuleIntegrationEvents.Handle<TContract, THandler>(contract, consumer, create)`, and the outbox and
+  the processor now look names and versions up in the registries before asking a type's attributes. See
+  [Registered when the module compiles](docs/integration-events.md#registered-when-the-module-compiles).
+- `IntegrationEventSubscriptions` (`services.IntegrationEventSubscriptions()`): the contracts a process
+  handles, the ones it publishes, and `FromElsewhere`, the ones other services have to send it, with
+  `VisitFromElsewhere` handing each contract type over as a generic argument. The transports read it to
+  subscribe in their own terms, and `IntegrationEventReceiver.ReceiveAsync<TContract>(contract, headers)`
+  takes a message a broker has already deserialized.
+- `outbox.SendTo<TSink>(services => ...)`, a sink built by a factory from the processor's scope rather than
+  constructed by reflection; `SendToMassTransit()` and `SendToWolverine()` use it. `GraphQlSubscriptionSink`
+  now pushes through a typed call the map captured when the contract was registered, and finds the entry
+  by the type of the contract the message carries, instead of making a generic method by reflection per
+  message; `Published` reads the contracts' attributes only when it is asked for.
+- The example shop registers its integration events through the generated methods, keeps its handlers in
+  `Application/<slice>/{DomainEvents,IntegrationEvents/{Inbound,Outbound}}`, and its microservices route
+  natively: pgmq topics, Wolverine's conventional routing, MassTransit's topology. No service names a
+  contract or another service.
+
+### Deprecated
+
+- `IntegrationEventMap.TryConvert`. It cannot run an `IOutboundIntegrationEvent`, which needs services
+  and may complete later, and throws for one. Use `ConvertAsync`. `PublishAs` and `DoNotPublish` entries
+  keep working through it.
 
 ### Fixed
 

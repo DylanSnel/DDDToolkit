@@ -65,9 +65,13 @@ DDDToolkit.Examples.Ordering/
     ValueObjects/            Address
     Services/                domain services (OrderPricer)
   Application/
-    IntegrationEvents/       policies: what this module does when another one says something
-    DomainEvents/            in-process handlers of this module's own events
-    ReadModels/              copies of other modules' data, kept current by the policies
+    Orders/                  one folder per aggregate the application layer works on
+      DomainEvents/            in-process handlers of this module's own events (OrderLog)
+      IntegrationEvents/
+        Inbound/               policies: what the order does when another module says something
+        Outbound/              what each of the order's events becomes for the others (PublishOrderPlaced)
+    ReadModels/
+      CatalogPrices/         a copy of another module's data, and the inbound policies that keep it current
   Infrastructure/
     Persistence/             the DbContext, the design-time factory, Migrations/
   Api/                       the module's HTTP endpoints
@@ -77,7 +81,9 @@ DDDToolkit.Examples.Ordering/
 ```
 
 Namespaces follow the folders and stop at the aggregate: everything under `Aggregates/Orders/` is
-`DDDToolkit.Examples.Ordering.Domain.Orders`. A named invariant is a nested part of its entity, so it has
+`DDDToolkit.Examples.Ordering.Domain.Orders`, and everything under `Application/Orders/` is
+`DDDToolkit.Examples.Ordering.Application.Orders`. The building-block folders (`Aggregates/`,
+`ReadModels/`) and the kind-and-direction folders below a slice are for the reader, not the namespace. A named invariant is a nested part of its entity, so it has
 to share the entity's namespace wherever its file lives. Each module's `GlobalUsings.cs` imports its
 own namespaces, so the `using` lines above the code name what comes from outside the module.
 
@@ -237,12 +243,6 @@ A service is not a module, though: Storefront runs Catalog and Ordering in one p
 publishes still reaches Ordering through the module sink, next door, and only a message another service
 consumes leaves the process.
 
-**`Microservices.Pgmq/`** keeps the one database the monolith on Supabase has, and puts the queues in it.
-pgmq has no exchange that routes by topic, so the sender says which queue each contract goes to; from
-Storefront's `Program.cs`:
-
-```csharp
-// sending: to the modules next door, and onto the queue of every service that consumes it
 Each sample has a gateway of its own, `DDDToolkit.Examples.{Sample}.Gateway`, and a client talks to
 nothing else: REST through YARP, with the route table in the gateway's `appsettings.json`, and GraphQL
 through Fusion.
@@ -282,17 +282,21 @@ the running service, composes them and writes `gateway.far` next to the gateway,
 composes again when a service restarts. Each service project has a `schema-settings.json` naming its
 source schema. No Nitro account is involved.
 
-Dictionary<string, string[]> sendTo = new()
-{
-    ["ordering.order-placed"] = ["payments", "fulfilment"],
-    ["ordering.order-cancelled"] = ["payments", "fulfilment"],
-    ["ordering.order-confirmed"] = ["fulfilment"],
-};
-builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueues(message => sendTo.GetValueOrDefault(message.Name, [])));
+**`Microservices.Pgmq/`** keeps the one database the monolith on Supabase has, and puts the queues in it.
+It routes with pgmq's own topics (pgmq 1.11 and later): the sender sends under the contract's published
+name, and every service binds its own queue to the contracts it has to be sent. From Storefront's
+`Program.cs`:
 
-// receiving: this service's own queue, into the same modules
-builder.Services.AddPgmqConsumer(queues, "storefront");
+```csharp
+// sending: by topic, to every queue bound to the contract's name
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseTopics());
+
+// receiving: this service's own queue, bound at start-up to what its modules handle, into the same modules
+builder.Services.AddPgmqConsumer(queues, "storefront", consumer => consumer.BindTopics = true);
 ```
+
+Nothing names another service or a contract. What Storefront is bound to follows from the handlers of
+Catalog and Ordering, less what Storefront publishes itself, which the module sink already delivers.
 
 No broker to run: a queue is a table, and on Supabase it is a Queue you can watch in the dashboard.
 `BookShipment` in Shipping is the same class it is in the monolith; it cannot tell that
@@ -303,41 +307,47 @@ dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHos
 ```
 
 **`Microservices.Wolverine/`** gives every service a database of its own, and not of one kind: Storefront
-on SQL Server, Payments and Fulfilment on Postgres. What they share is RabbitMQ, and Wolverine carries the
-envelopes: a topic exchange keyed on the contract's name, and a queue per service bound to the contracts
-it consumes. Here the receiver says what it wants, and the sender knows nothing of it; from Payments':
+on SQL Server, Payments and Fulfilment on Postgres. What they share is RabbitMQ, used the way Wolverine
+uses it: conventional routing, a fanout exchange per contract type and, per service, a queue for every
+contract it handles. The modules are registered first, so Wolverine knows what the service handles; from
+Payments':
 
 ```csharp
-string[] consumes = ["ordering.order-placed", "ordering.order-cancelled", "inventory.stock-reserved"];
+builder.Services.AddPaymentsModule(host);
 
-wolverine.PublishMessagesToRabbitMqExchange<IntegrationEventEnvelope>("integration-events", envelope => envelope.Name)
-    .ExchangeType(ExchangeType.Topic).SendInline();
-wolverine.ListenToRabbitQueue("payments", queue =>
-    {
-        foreach (var contract in consumes) queue.BindExchange("integration-events", contract);
-    })
-    .ProcessInline();
-wolverine.ReceiveIntegrationEvents();
+builder.UseWolverine(wolverine =>
+{
+    wolverine.UseRabbitMq(rabbitUri)
+        .AutoProvision()
+        .UseConventionalRouting(conventions => conventions
+            .QueueNameForListener(type => $"payments.{type.Name}")
+            .ConfigureListeners((listener, _) => listener.ProcessInline())
+            .ConfigureSending((sender, _) => sender.SendInline()));
+
+    wolverine.ReceiveIntegrationEvents(builder.Services.IntegrationEventSubscriptions());
+    wolverine.Policies.DisableConventionalLocalRouting();
+});
 ```
 
 ```bash
 dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost
 ```
 
-**`Microservices.MassTransit/`** is the same topology with MassTransit carrying the envelopes, every
-service on a SQL Server database of its own. Each service is the Wolverine one with a different transport
-block, in its `RabbitMq.cs`: the same topic exchange, a receive endpoint bound to the contracts the
-service consumes, and MassTransit's retry and error queue.
+**`Microservices.MassTransit/`** is the same topology with MassTransit, every service on a SQL Server
+database of its own, and RabbitMQ used the way MassTransit uses it: every contract a message type with an
+exchange of its own, one receive endpoint per service, bound by MassTransit to the exchanges of the
+contracts its consumers take. In each service's `RabbitMq.cs`, called after the modules:
 
 ```csharp
-rabbit.Message<IntegrationEventEnvelope>(message => message.SetEntityName("integration-events"));
-rabbit.Publish<IntegrationEventEnvelope>(publish => publish.ExchangeType = "topic");
-rabbit.ReceiveEndpoint("payments", endpoint =>
+bus.AddIntegrationEventConsumers(services.IntegrationEventSubscriptions());
+bus.UsingRabbitMq((context, rabbit) =>
 {
-    endpoint.ConfigureConsumeTopology = false;
-    foreach (var contract in Consumes)
-        endpoint.Bind("integration-events", exchange => { exchange.ExchangeType = "topic"; exchange.RoutingKey = contract; });
-    endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
+    rabbit.Host(new Uri(connectionString));
+    rabbit.ReceiveEndpoint("payments", endpoint =>
+    {
+        endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
+        endpoint.ConfigureConsumers(context);
+    });
 });
 ```
 
@@ -360,12 +370,6 @@ workflow, one job per sample:
 dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.SqlServer"
 ```
 
-### Which building block is where
-
-Paths are under `Modules/`.
-
-| Building block | Where |
-|---|---|
 The Supabase monolith also runs against a real Supabase project, in the Supabase Live workflow. It puts
 the exported `supabase/migrations` on with `supabase db push`, as a deploy would, and plays the same
 scenarios against the project, where the monolith checks on start-up that every migration was applied.
@@ -381,6 +385,12 @@ Locally, point the AppHost at a project the same way the workflow does:
 dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=5432;Database=postgres;Username=postgres.<ref>;Password=<password>;SSL Mode=Require" --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
 ```
 
+### Which building block is where
+
+Paths are under `Modules/`.
+
+| Building block | Where |
+|---|---|
 | Aggregate root, child entity, generated read-only collection | `Ordering/.../Domain/Aggregates/Orders/Order.cs`, `Entities/OrderLine.cs` |
 | An explicitly declared identifier, and generated ones | `Ordering/...Contracts/OrderingContracts.cs`; every other `[AggregateRoot<Guid>("…")]` |
 | Value object, always-valid twin, `TryToValid` at a boundary | `Ordering/.../Domain/ValueObjects/Address.cs`, `Api/OrderingEndpoints.cs` |
@@ -392,19 +402,21 @@ dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=54
 | Domain services, pure and without I/O | `Ordering/.../Domain/Services/OrderPricer.cs`, `Inventory/.../Domain/Services/StockAllocator.cs` |
 | A factory that decides the state it creates | `StockReservation.Reserved` / `.Refused`, called by `StockAllocator` |
 | An anti-corruption layer | `Payments/.../Domain/Services/IPaymentProvider.cs`, `Infrastructure/PaymentProvider/FakePaymentProvider.cs` |
-| Domain events, stable names, Mediator dispatch | `Ordering/.../Domain/Aggregates/Orders/Events/`, `Application/DomainEvents/OrderLog.cs` |
+| Domain events, stable names, Mediator dispatch | `Ordering/.../Domain/Aggregates/Orders/Events/`, `Application/Orders/DomainEvents/OrderLog.cs` |
 | Published contracts, one per module | each `*.Contracts` project |
-| The outbox per module, `PublishAs`, the module sink | each `*Module.cs` |
-| Policies, the inbox, idempotent consumers | each `Application/IntegrationEvents/` |
+| The outbox per module, the module sink | each `*Module.cs` |
+| What a domain event becomes outside the module | each `Application/<slice>/IntegrationEvents/Outbound/` |
+| Policies, the inbox, idempotent consumers | each `Application/<slice>/IntegrationEvents/Inbound/` |
 | A process across modules, with compensation, and no saga class | `Order.RecordStockReserved`, `RecordPayment`, `Cancel`, and the policies around them |
-| Messages that arrive out of order | `Payments/.../PaymentPolicies.cs` (throw and retry), `Ordering/.../ReadModels/CatalogPrice.cs` (newest wins) |
-| A read model of another module's data | `Ordering/.../Application/ReadModels/CatalogPrice.cs` |
+| Messages that arrive out of order | `Payments/.../PaymentPolicies.cs` (throw and retry), `Ordering/.../ReadModels/CatalogPrices/CatalogPrice.cs` (newest wins) |
+| A read model of another module's data | `Ordering/.../Application/ReadModels/CatalogPrices/` |
 | Optimistic concurrency as a 409 | `Api/OrderingEndpoints.cs` (cancel), `Catalog/.../Api/CatalogEndpoints.cs` (reprice) |
 | A module registering itself, a host that only switches modules on | each `*Module.cs`, each sample's `Program.cs` |
 | The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
 | The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
 | One GraphQL schema over modules that do not know each other | `Shared/DDDToolkit.Examples.GraphQL/ShopSchema.cs`, each module's `Api/GraphQL` |
+| The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
 | Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in `ShopSchema.cs`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
 | Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
@@ -412,7 +424,6 @@ dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=54
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
 
-| The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 There are no repositories. A module's `DbContext` is its repository and unit of work, used directly by
 the endpoints and the policies. The toolkit has no repository abstraction to show, and a wrapper
 around a `DbContext` in a sample would only hide what the toolkit does to it.

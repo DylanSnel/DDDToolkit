@@ -3,7 +3,7 @@ using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.Examples.Catalog.Contracts;
 using DDDToolkit.Examples.SharedKernel;
 
-namespace DDDToolkit.Examples.Ordering.Application.IntegrationEvents;
+namespace DDDToolkit.Examples.Ordering.Application.CatalogPrices;
 
 /// <summary>Adds a newly listed product to Ordering's price list.</summary>
 /// <remarks>

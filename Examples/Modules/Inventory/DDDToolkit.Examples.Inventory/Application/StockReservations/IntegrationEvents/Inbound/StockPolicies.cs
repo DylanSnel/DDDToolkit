@@ -3,7 +3,7 @@ using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.Examples.Ordering.Contracts;
 using Microsoft.EntityFrameworkCore;
 
-namespace DDDToolkit.Examples.Inventory.Application.IntegrationEvents;
+namespace DDDToolkit.Examples.Inventory.Application.StockReservations;
 
 /// <summary>An order was placed: set its stock aside, or say it cannot be.</summary>
 /// <remarks>

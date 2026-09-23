@@ -1,8 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Hosting;
-using DDDToolkit.Examples.Inventory.Contracts;
-using DDDToolkit.Examples.Ordering.Contracts;
-using DDDToolkit.Examples.Payments.Contracts;
+using DDDToolkit.Examples.Payments.IntegrationEvents;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -30,20 +28,12 @@ public static class PaymentsModule
         services.AddDDDToolkitEntityFramework(options => options
             .UseOutbox<PaymentsContext>(outbox =>
             {
-                outbox.RegisterEventsFromAssemblyContaining<Payment>();
-                outbox.PublishAs<PaymentCaptured, PaymentSucceededV1>(captured =>
-                    new PaymentSucceededV1(captured.OrderId, captured.Amount.Amount, captured.Amount.Currency));
-                outbox.PublishAs<PaymentDeclined, PaymentFailedV1>(declined => new PaymentFailedV1(declined.OrderId, declined.Reason));
+                outbox.AddPaymentsIntegrationEvents();
                 host.Publish(outbox);
             })
-            .MapIntegrationEvents(contracts => contracts
-                .RegisterFromAssemblyContaining<OrderPlacedV1>()
-                .RegisterFromAssemblyContaining<StockReservedV1>()));
+            .MapIntegrationEvents(contracts => contracts.AddPaymentsIntegrationEvents()));
 
-        services.AddModuleIntegrationEvents<PaymentsContext>(module => module
-            .Handle<OrderPlacedV1, OpenPayment>()
-            .Handle<StockReservedV1, TakePayment>()
-            .Handle<OrderCancelledV1, VoidPayment>());
+        services.AddModuleIntegrationEvents<PaymentsContext>(module => module.AddPaymentsIntegrationEvents());
 
         services.AddOutboxBackgroundService<PaymentsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 

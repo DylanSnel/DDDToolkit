@@ -5,7 +5,7 @@ global using DDDToolkit.Examples.Catalog.Domain.Products;
 global using DDDToolkit.Examples.Inventory.Domain.Services;
 global using DDDToolkit.Examples.Inventory.Domain.StockItems;
 global using DDDToolkit.Examples.Inventory.Domain.StockReservations;
-global using DDDToolkit.Examples.Ordering.Application.ReadModels;
+global using DDDToolkit.Examples.Ordering.Application.CatalogPrices;
 global using DDDToolkit.Examples.Ordering.Domain.Orders;
 global using DDDToolkit.Examples.Ordering.Domain.Services;
 global using DDDToolkit.Examples.Ordering.Domain.ValueObjects;

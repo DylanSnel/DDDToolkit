@@ -1,4 +1,5 @@
 using DDDToolkit.BaseTypes;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Messaging.MassTransit;
 using FluentAssertions;
 using MassTransit;
@@ -8,9 +9,10 @@ using Microsoft.Extensions.Hosting;
 namespace DDDToolkit.Messaging.Tests;
 
 /// <summary>
-/// MassTransit as the transport: <see cref="MassTransitSink"/> publishes, MassTransit's in-memory transport
-/// carries the envelope, <see cref="IntegrationEventEnvelopeConsumer"/> hands it to the module's inbox. The
-/// in-memory transport stands in for RabbitMQ; the consumer pipeline and the retry are MassTransit's own.
+/// MassTransit as the transport: <see cref="MassTransitSink"/> publishes the contract as a message type of
+/// its own, MassTransit's in-memory transport carries it, <see cref="IntegrationEventConsumer{TContract}"/>
+/// hands it to the module's inbox. The in-memory transport stands in for RabbitMQ; the topology, the
+/// consumer pipeline and the retry are MassTransit's own.
 /// </summary>
 public sealed class MassTransitTests
 {
@@ -22,7 +24,7 @@ public sealed class MassTransitTests
         builder.Services.AddLibraryModule(failures);
         builder.Services.AddMassTransit(bus =>
         {
-            bus.AddIntegrationEventConsumer();
+            bus.AddIntegrationEventConsumers(builder.Services.IntegrationEventSubscriptions());
             bus.AddConfigureEndpointsCallback((_, _, endpoint) => endpoint.UseMessageRetry(retry => retry.Intervals(50, 50, 50)));
             bus.UsingInMemory((context, memory) => memory.ConfigureEndpoints(context));
         });

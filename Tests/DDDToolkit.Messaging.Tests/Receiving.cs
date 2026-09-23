@@ -68,6 +68,8 @@ public static class Receiving
         Name = "library.shelf-opened",
         Version = 1,
         Payload = System.Text.Json.JsonSerializer.Serialize(new ShelfOpenedV1("SHELF_1", displayName)),
+        // What the outbox hands a sink: the contract itself, which a broker that routes by type publishes.
+        Body = new ShelfOpenedV1("SHELF_1", displayName),
         OccurredAt = new DateTimeOffset(2026, 9, 23, 12, 0, 0, TimeSpan.Zero),
         AggregateType = "Shelf",
         AggregateId = "SHELF_1",

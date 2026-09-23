@@ -5,7 +5,7 @@ using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Examples.Payments.Contracts;
 using Microsoft.EntityFrameworkCore;
 
-namespace DDDToolkit.Examples.Ordering.Application.IntegrationEvents;
+namespace DDDToolkit.Examples.Ordering.Application.Orders;
 
 // The checkout process, as Ordering hears it. Each class is one policy: "when this happens elsewhere, do
 // this to the order". None of them decides anything. They load the order and tell it what happened, and

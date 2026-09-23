@@ -63,6 +63,18 @@ public static class DependencyInjection
         }
 
         configure?.Invoke(options);
+
+        // What the outboxes send out, so a transport does not ask the broker for this process's own
+        // messages: the module sink already hands those to the modules here.
+        var subscriptions = services.IntegrationEventSubscriptions();
+        foreach (var outbox in options.ContextOutboxes.Values.Append(options.Outbox).OfType<OutboxOptions>())
+        {
+            foreach (var name in outbox.PublishedNames())
+            {
+                subscriptions.Publishes(name);
+            }
+        }
+
         return services;
     }
 
@@ -188,8 +200,34 @@ public static class DependencyInjection
             services.TryAddSingleton<IntegrationEventReceiver>();
         }
 
-        configure(new ModuleIntegrationEvents<TContext>(services, registration));
+        configure(new ModuleIntegrationEvents<TContext>(services, registration, services.IntegrationEventSubscriptions()));
         return services;
+    }
+
+    /// <summary>
+    /// The <see cref="Integration.IntegrationEventSubscriptions"/> of this service collection: the published
+    /// names of every contract its modules handle. Registered as a singleton the first time it is asked
+    /// for, and the same instance every time after, so a host can take it while configuring a transport
+    /// and read it once the modules have registered.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    public static IntegrationEventSubscriptions IntegrationEventSubscriptions(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        var subscriptions = services
+            .Where(descriptor => descriptor.ServiceType == typeof(IntegrationEventSubscriptions))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<IntegrationEventSubscriptions>()
+            .FirstOrDefault();
+
+        if (subscriptions is null)
+        {
+            subscriptions = new IntegrationEventSubscriptions();
+            services.AddSingleton(subscriptions);
+        }
+
+        return subscriptions;
     }
 
     /// <summary>

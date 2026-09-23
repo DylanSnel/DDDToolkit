@@ -1,6 +1,6 @@
 using DDDToolkit.EntityFramework;
+using DDDToolkit.Examples.Catalog.IntegrationEvents;
 using DDDToolkit.Examples.Hosting;
-using DDDToolkit.Examples.Catalog.Contracts;
 using DDDToolkit.Examples.SharedKernel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,11 +23,7 @@ public static class CatalogModule
 
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<CatalogContext>(outbox =>
         {
-            outbox.RegisterEventsFromAssemblyContaining<Product>();
-            outbox.PublishAs<ProductListed, ProductListedV1>(listed =>
-                new ProductListedV1(listed.Sku, listed.Name, listed.Price.Amount, listed.Price.Currency));
-            outbox.PublishAs<ProductPriceChanged, ProductPriceChangedV1>(changed =>
-                new ProductPriceChangedV1(changed.Sku, changed.Price.Amount, changed.Price.Currency));
+            outbox.AddCatalogIntegrationEvents();
             host.Publish(outbox);
         }));
 
