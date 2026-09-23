@@ -2,11 +2,11 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Payments.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Payments.Infrastructure.Persistence;
 
@@ -16,9 +16,6 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
     public const string Schema = "payments";
 
     public DbSet<Payment> Payments => Set<Payment>();
-
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +31,10 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
+
+        // Amounts of money: two decimals, up to a trillion. Without a precision SQL Server guesses
+        // (18,2) and warns, and Postgres stores numbers of any length.
+        configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
         configurationBuilder.AddOrderingContractsConverters();
         configurationBuilder.AddPaymentsConverters();
     }
@@ -45,7 +46,7 @@ public sealed class PaymentsContextFactory : IDesignTimeDbContextFactory<Payment
     public PaymentsContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<PaymentsContext>();
-        PaymentsContext.UsePostgres(options, "Host=unused");
+        ModuleDatabase.UsePostgres(options, "Host=unused", PaymentsContext.Schema);
         return new PaymentsContext(options.Options);
     }
 }

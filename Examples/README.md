@@ -14,8 +14,12 @@ way its business splits:
 | **Shipping** | shipments | nothing | `OrderConfirmedV1` |
 
 The modules live in `Modules/`, apart from any host, because they are the domain and a host is only one
-way to run it. `ModularMonolith.Supabase/` is the host that runs all five in one process; more hosts
-over the same modules follow.
+way to run it. Each sample is a different way, over the very same modules:
+
+| Sample | Topology | Database | Messages travel by |
+|---|---|---|---|
+| `ModularMonolith.Supabase/` | one process | SQLite, or Postgres/Supabase | the module sink, in process |
+| `ModularMonolith.SqlServer/` | one process | SQL Server | the module sink, in process |
 
 ```
 Modules/
@@ -24,12 +28,26 @@ Modules/
     DDDToolkit.Examples.Catalog.Contracts    what Catalog publishes
     DDDToolkit.Examples.Catalog              the module
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
+  Migrations.SqlServer/                      every module's SQL Server migrations, in one assembly
+Shared/
+  DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
+  DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
 ModularMonolith.Supabase/
-  DDDToolkit.Examples.Host   switches the five modules on and maps their endpoints; its build exports
+  DDDToolkit.Examples.Host                   all five modules in one process; its build exports
+  DDDToolkit.Examples.Supabase.AppHost       Aspire: Postgres seeded from supabase/migrations, or a live project
   supabase/
-    config.toml              a local Supabase project, from supabase init
-    migrations/              every module's migrations, written by the host's build
+    config.toml                              a local Supabase project, from supabase init
+    migrations/                              every module's migrations, written by the host's build
+ModularMonolith.SqlServer/
+  DDDToolkit.Examples.SqlServer.Host         the same five modules on SQL Server, migrating on start-up
+  DDDToolkit.Examples.SqlServer.AppHost      Aspire: SQL Server in Docker
 ```
+
+A host makes exactly two decisions for a module, and hands them over as a `ModuleHost`: where its
+tables live (`ModuleDatabase.Sqlite`, `.Supabase`, `.Postgres`, `.SqlServer`), and where what it
+publishes goes (`ModuleHost.InProcess` sends it to the other modules in the process). Everything else,
+its context, its outbox, what it publishes as what, the policies it follows, the module registers
+itself in its `Add{Module}Module`.
 
 Inside a module the folders say what kind of thing a file is:
 
@@ -101,13 +119,27 @@ one database, as they would on one Supabase project, each in its own schema with
 history, outbox and inbox. The migrations are Supabase's to apply: each module registers its
 migrations, and the host checks over all of them that none is pending and refuses to start otherwise.
 
+Three ways to give it one:
+
 ```bash
+# Aspire: a Postgres container seeded from supabase/migrations, the host, and the dashboard.
+dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+
+# The same against a real Supabase project or one of its branches: set the connection string on the
+# AppHost once, and it starts no container.
+dotnet user-secrets set ConnectionStrings:Supabase "Host=...;Database=postgres;..." --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+
+# The Supabase CLI's local stack, without Aspire.
 cd Examples/ModularMonolith.Supabase
 supabase start          # a local Supabase in Docker; applies supabase/migrations
 dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
 ```
 
-The `supabase` launch profile points at the local database on port 54322. After changing a model,
+The AppHost's container is plain Postgres: it runs every file in `supabase/migrations` on its first
+start, in name order, which is what Supabase does with them, so the host's start-up check finds every
+migration applied. The `supabase` launch profile points at the CLI's local database on port 54322.
+
+After changing a model,
 scaffold the migration in the module that owns it, and build:
 
 ```bash
@@ -121,6 +153,39 @@ and the host's project file sets `SupabaseMigrationsExport`: `Write` locally, so
 files a new migration needs, and `Check` in CI, so a pull request that adds a migration without its file
 fails. The files are committed, because Supabase branching reads them from the repository. See
 [Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the build writes and how.
+
+### On SQL Server
+
+```bash
+dotnet run --project Examples/ModularMonolith.SqlServer/DDDToolkit.Examples.SqlServer.AppHost
+```
+
+The same five modules, the same endpoints and the same `.http` walk-through (on port 5090 when the
+host runs outside Aspire), on SQL Server in Docker. Compare the two hosts' `Program.cs`: the one line
+that differs in substance is `ModuleDatabase.SqlServer(...)` for `ModuleDatabase.Supabase(...)`.
+
+One thing follows from that line. On Supabase somebody else applies the migrations and the application
+only checks; on SQL Server nobody else will, so each module migrates its own schema on start-up, before
+its outbox poller starts. The SQL Server migrations live in `Modules/Migrations.SqlServer`, apart from
+the Postgres ones in each module: Entity Framework keeps one model snapshot per context per assembly,
+and the two providers disagree on every column type. Scaffold one with:
+
+```bash
+dotnet ef migrations add AddGiftWrap --project Examples/Modules/Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer --context OrderingContext --output-dir Ordering
+```
+
+### Testing the samples end to end
+
+`Tests/DDDToolkit.Examples.AppHost.Tests` starts each sample's AppHost, containers and all, and plays
+the same scenarios against every one of them over HTTP: an order confirmed and shipped, a payment
+refused and the stock put back, an order there is no stock for and its payment voided, a confirmed
+order that cannot be cancelled. The answers must not depend on how the shop is hosted, and these tests
+are what says so. They need Docker, skip themselves without it, and run in CI in the Sample Tests
+workflow, one job per sample:
+
+```bash
+dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.SqlServer"
+```
 
 ### Which building block is where
 
@@ -147,7 +212,10 @@ Paths are under `Modules/`.
 | Messages that arrive out of order | `Payments/.../PaymentPolicies.cs` (throw and retry), `Ordering/.../ReadModels/CatalogPrice.cs` (newest wins) |
 | A read model of another module's data | `Ordering/.../Application/ReadModels/CatalogPrice.cs` |
 | Optimistic concurrency as a 409 | `Api/OrderingEndpoints.cs` (cancel), `Catalog/.../Api/CatalogEndpoints.cs` (reprice) |
-| A module registering itself, a host that only switches modules on | each `*Module.cs`, `ModularMonolith.Supabase/.../Program.cs` |
+| A module registering itself, a host that only switches modules on | each `*Module.cs`, each sample's `Program.cs` |
+| The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
+| Migrations per provider in separate assemblies | `Modules/Migrations.SqlServer`, each module's `Infrastructure/Persistence/Migrations` |
+| The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |

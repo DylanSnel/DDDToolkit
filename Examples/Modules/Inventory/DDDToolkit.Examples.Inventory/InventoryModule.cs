@@ -1,9 +1,8 @@
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Inventory.Contracts;
 using DDDToolkit.Examples.Ordering.Contracts;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -16,31 +15,11 @@ public static class InventoryModule
     /// Registers Inventory: its context, its outbox, the two policies it follows, and the stock the
     /// example starts with.
     /// </summary>
-    public static IServiceCollection AddInventoryModule(this IServiceCollection services, string? supabaseConnectionString)
+    public static IServiceCollection AddInventoryModule(this IServiceCollection services, ModuleHost host)
     {
-        services.AddDbContext<InventoryContext>((provider, options) =>
-        {
-            if (supabaseConnectionString is null)
-            {
-                options.UseSqlite($"Data Source={Path.Combine(AppContext.BaseDirectory, "inventory.db")}")
-                    .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
-            }
-            else
-            {
-                InventoryContext.UsePostgres(options, supabaseConnectionString);
-            }
+        ArgumentNullException.ThrowIfNull(host);
 
-            options.UseDDDToolkit(provider);
-        });
-
-        if (supabaseConnectionString is null)
-        {
-            services.AddHostedService<CreateInventoryDatabase>();
-        }
-        else
-        {
-            services.AddSupabaseMigrations<InventoryContext, InventoryContextFactory>();
-        }
+        host.Database.AddContext<InventoryContext, InventoryContextFactory>(services, InventoryContext.Schema);
 
         services.AddDDDToolkitEntityFramework(options => options
             .UseOutbox<InventoryContext>(outbox =>
@@ -48,7 +27,7 @@ public static class InventoryModule
                 outbox.RegisterEventsFromAssemblyContaining<StockItem>();
                 outbox.PublishAs<StockReserved, StockReservedV1>(reserved => new StockReservedV1(reserved.OrderId));
                 outbox.PublishAs<StockRefused, StockReservationFailedV1>(refused => new StockReservationFailedV1(refused.OrderId, refused.Reason));
-                outbox.SendToModules();
+                host.Publish(outbox);
             })
             .MapIntegrationEvents(contracts => contracts.RegisterFromAssemblyContaining<OrderPlacedV1>()));
 
@@ -61,25 +40,6 @@ public static class InventoryModule
         services.AddHostedService<StockTheShelves>();
 
         return services;
-    }
-
-    private sealed class CreateInventoryDatabase(IServiceScopeFactory scopes) : IHostedLifecycleService
-    {
-        public async Task StartingAsync(CancellationToken cancellationToken)
-        {
-            await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<InventoryContext>().Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>

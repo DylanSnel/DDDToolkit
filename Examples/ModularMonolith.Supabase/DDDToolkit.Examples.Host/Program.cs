@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Catalog;
 using DDDToolkit.Examples.Catalog.Api;
 using DDDToolkit.Examples.Inventory;
@@ -17,6 +18,10 @@ using DDDToolkit.Mediator;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Traces, metrics and logs to the Aspire dashboard when the AppHost runs this; nothing noticeable when
+// it runs on its own.
+builder.AddServiceDefaults();
+
 // Mediator is registered scoped, not with its singleton default: a handler that injects a DbContext
 // needs the scope's context, and a singleton cannot depend on a scoped service. The generator reads
 // this very call at compile time, so the lifetime has to be written here.
@@ -28,17 +33,21 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 
 // Two ways to run. With no connection string, each module gets a SQLite file of its own: five databases
 // rather than one is the cheapest way to be sure no query and no transaction ever crosses the boundary.
-// With ConnectionStrings:Supabase (the "supabase" launch profile), the modules share one Postgres
-// database, as they would on one Supabase project, each in a schema of its own.
-var supabase = builder.Configuration.GetConnectionString("Supabase");
+// With ConnectionStrings:Supabase (the "supabase" launch profile, or the AppHost), the modules share one
+// Postgres database, as they would on one Supabase project, each in a schema of its own.
+var database = builder.Configuration.GetConnectionString("Supabase") is { Length: > 0 } supabase
+    ? ModuleDatabase.Supabase(supabase)
+    : ModuleDatabase.Sqlite();
 
-// The whole shop in one process. No module names another here or anywhere: each one says what it
-// publishes and what it listens to, and the module sink carries the messages between them.
-builder.Services.AddCatalogModule(supabase);
-builder.Services.AddOrderingModule(supabase);
-builder.Services.AddInventoryModule(supabase);
-builder.Services.AddPaymentsModule(supabase);
-builder.Services.AddShippingModule(supabase);
+// The whole shop in one process, so every message goes to the other modules through the module sink.
+// No module names another here or anywhere: each one says what it publishes and what it listens to.
+var host = ModuleHost.InProcess(database);
+
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+builder.Services.AddInventoryModule(host);
+builder.Services.AddPaymentsModule(host);
+builder.Services.AddShippingModule(host);
 
 var app = builder.Build();
 
@@ -54,5 +63,6 @@ app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
+app.MapDefaultEndpoints();
 
 await app.RunAsync();

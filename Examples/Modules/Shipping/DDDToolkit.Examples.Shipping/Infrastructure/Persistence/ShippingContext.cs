@@ -3,9 +3,9 @@ using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Shipping.Converters;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Shipping.Infrastructure.Persistence;
 
@@ -30,10 +30,6 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
     public const string Schema = "shipping";
 
     public DbSet<Shipment> Shipments => Set<Shipment>();
-
-    /// <summary>Postgres, with the migration history in <see cref="Schema"/>.</summary>
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,7 +58,7 @@ public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<Shippin
     public ShippingContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<ShippingContext>();
-        ShippingContext.UsePostgres(options, "Host=unused");
+        ModuleDatabase.UsePostgres(options, "Host=unused", ShippingContext.Schema);
         return new ShippingContext(options.Options);
     }
 }

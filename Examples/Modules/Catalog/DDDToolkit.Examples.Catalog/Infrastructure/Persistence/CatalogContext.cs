@@ -1,10 +1,10 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Catalog.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Catalog.Infrastructure.Persistence;
 
@@ -15,10 +15,6 @@ public sealed class CatalogContext(DbContextOptions<CatalogContext> options) : D
     public const string Schema = "catalog";
 
     public DbSet<Product> Products => Set<Product>();
-
-    /// <summary>Postgres, with the migration history in <see cref="Schema"/>.</summary>
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +31,10 @@ public sealed class CatalogContext(DbContextOptions<CatalogContext> options) : D
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
+
+        // Amounts of money: two decimals, up to a trillion. Without a precision SQL Server guesses
+        // (18,2) and warns, and Postgres stores numbers of any length.
+        configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
         configurationBuilder.AddCatalogConverters();
     }
 }
@@ -46,7 +46,7 @@ public sealed class CatalogContextFactory : IDesignTimeDbContextFactory<CatalogC
     public CatalogContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<CatalogContext>();
-        CatalogContext.UsePostgres(options, "Host=unused");
+        ModuleDatabase.UsePostgres(options, "Host=unused", CatalogContext.Schema);
         return new CatalogContext(options.Options);
     }
 }

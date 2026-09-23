@@ -4,9 +4,9 @@ using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Ordering.Converters;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Ordering.Infrastructure.Persistence;
 
@@ -33,13 +33,6 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     public DbSet<Order> Orders => Set<Order>();
 
     public DbSet<CatalogPrice> CatalogPrices => Set<CatalogPrice>();
-
-    /// <summary>
-    /// Postgres, with the migration history in <see cref="Schema"/>. The host and the design-time factory
-    /// both call this, so the application and <c>dotnet ef</c> agree on where the history is.
-    /// </summary>
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,6 +64,10 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
         // The same three conventions in every context: read-only collections, [Internal] members, Version.
         configurationBuilder.AddDDDToolkitConventions();
 
+        // Amounts of money: two decimals, up to a trillion. Without a precision SQL Server guesses
+        // (18,2) and warns, and Postgres stores numbers of any length.
+        configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
+
         // One generated call per assembly that declares identifiers or single value objects.
         configurationBuilder.AddOrderingContractsConverters();
         configurationBuilder.AddOrderingConverters();
@@ -92,7 +89,7 @@ public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<Orderin
     public OrderingContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<OrderingContext>();
-        OrderingContext.UsePostgres(options, "Host=unused");
+        ModuleDatabase.UsePostgres(options, "Host=unused", OrderingContext.Schema);
         return new OrderingContext(options.Options);
     }
 }

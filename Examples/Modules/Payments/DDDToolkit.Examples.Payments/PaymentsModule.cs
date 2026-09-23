@@ -1,10 +1,9 @@
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Inventory.Contracts;
 using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Examples.Payments.Contracts;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -18,31 +17,11 @@ public static class PaymentsModule
     /// Registers Payments: its context, its outbox, its three policies and the payment provider. A host
     /// that registers its own <see cref="IPaymentProvider"/> first keeps it; the fake is the default.
     /// </summary>
-    public static IServiceCollection AddPaymentsModule(this IServiceCollection services, string? supabaseConnectionString)
+    public static IServiceCollection AddPaymentsModule(this IServiceCollection services, ModuleHost host)
     {
-        services.AddDbContext<PaymentsContext>((provider, options) =>
-        {
-            if (supabaseConnectionString is null)
-            {
-                options.UseSqlite($"Data Source={Path.Combine(AppContext.BaseDirectory, "payments.db")}")
-                    .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
-            }
-            else
-            {
-                PaymentsContext.UsePostgres(options, supabaseConnectionString);
-            }
+        ArgumentNullException.ThrowIfNull(host);
 
-            options.UseDDDToolkit(provider);
-        });
-
-        if (supabaseConnectionString is null)
-        {
-            services.AddHostedService<CreatePaymentsDatabase>();
-        }
-        else
-        {
-            services.AddSupabaseMigrations<PaymentsContext, PaymentsContextFactory>();
-        }
+        host.Database.AddContext<PaymentsContext, PaymentsContextFactory>(services, PaymentsContext.Schema);
 
         // A singleton, because the fake remembers what it answered per idempotency key, as a real
         // provider does on its side.
@@ -55,7 +34,7 @@ public static class PaymentsModule
                 outbox.PublishAs<PaymentCaptured, PaymentSucceededV1>(captured =>
                     new PaymentSucceededV1(captured.OrderId, captured.Amount.Amount, captured.Amount.Currency));
                 outbox.PublishAs<PaymentDeclined, PaymentFailedV1>(declined => new PaymentFailedV1(declined.OrderId, declined.Reason));
-                outbox.SendToModules();
+                host.Publish(outbox);
             })
             .MapIntegrationEvents(contracts => contracts
                 .RegisterFromAssemblyContaining<OrderPlacedV1>()
@@ -69,24 +48,5 @@ public static class PaymentsModule
         services.AddOutboxBackgroundService<PaymentsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;
-    }
-
-    private sealed class CreatePaymentsDatabase(IServiceScopeFactory scopes) : IHostedLifecycleService
-    {
-        public async Task StartingAsync(CancellationToken cancellationToken)
-        {
-            await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<PaymentsContext>().Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

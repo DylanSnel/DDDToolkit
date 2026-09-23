@@ -14,7 +14,6 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +21,8 @@
     <ProjectReference Include="..\..\Ordering\DDDToolkit.Examples.Ordering.Contracts\DDDToolkit.Examples.Ordering.Contracts.csproj" />
     <ProjectReference Include="..\..\Inventory\DDDToolkit.Examples.Inventory.Contracts\DDDToolkit.Examples.Inventory.Contracts.csproj" />
     <ProjectReference Include="..\..\SharedKernel\DDDToolkit.Examples.SharedKernel\DDDToolkit.Examples.SharedKernel.csproj" />
+    <!-- Where the module's tables live is the host's choice, made through ModuleDatabase. -->
+    <ProjectReference Include="..\..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />

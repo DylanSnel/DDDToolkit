@@ -28,17 +28,16 @@
     <ProjectReference Include="..\..\Inventory\DDDToolkit.Examples.Inventory.Contracts\DDDToolkit.Examples.Inventory.Contracts.csproj" />
     <ProjectReference Include="..\..\Payments\DDDToolkit.Examples.Payments.Contracts\DDDToolkit.Examples.Payments.Contracts.csproj" />
     <ProjectReference Include="..\..\SharedKernel\DDDToolkit.Examples.SharedKernel\DDDToolkit.Examples.SharedKernel.csproj" />
+    <!-- Where the module's tables live is the host's choice, made through ModuleDatabase. -->
+    <ProjectReference Include="..\..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The module's migrations are Postgres migrations, exported for Supabase. See Migrations/ and the
-         design-time factory next to the context. -->
+    <!-- The module's migrations are Postgres migrations, exported for Supabase. See
+         Infrastructure/Persistence/Migrations and the design-time factory next to the context. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <!-- The module registers its own context, so the providers it can run on are its references,
-         not the host's: SQLite for the example run without setup, Postgres for Supabase. -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 

@@ -118,6 +118,32 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
+  <!--
+    Aspire runs the example shop's hosts and their databases and brokers, and its testing package runs
+    them end to end. Examples and tests only; nothing under Source/ depends on any of this, so there is
+    no floor to keep.
+  -->
+  <PropertyGroup>
+    <AspireVersion>13.5.4</AspireVersion>
+    <OpenTelemetryVersion>1.19.1</OpenTelemetryVersion>
+    <OpenTelemetryInstrumentationVersion>1.19.0</OpenTelemetryInstrumentationVersion>
+  </PropertyGroup>
+
+  <!-- Aspire.Hosting.AppHost is not listed: Aspire.AppHost.Sdk references it implicitly, at its own version. -->
+  <ItemGroup Label="Aspire">
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="$(AspireVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="$(OpenTelemetryInstrumentationVersion)" />
+  </ItemGroup>
+
   <ItemGroup Label="Benchmarks">
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>

@@ -47,6 +47,8 @@
     <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
     <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
     <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>

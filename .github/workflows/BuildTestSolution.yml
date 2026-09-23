@@ -43,10 +43,13 @@ jobs:
       # 700 MB to pull and the better part of a minute to become ready, and paying that on every push
       # to find out whether a generator still compiles is the wrong trade.
       #
-      # The filter reads as "not these two traits". A test with no Provider trait at all satisfies
-      # both clauses, which is how every other project in the solution still runs.
+      # The example shop's end-to-end samples are left out too: the Sample Tests workflow starts their
+      # databases and brokers in a job of its own.
+      #
+      # The filter reads as "not these traits". A test with neither a Provider nor a Category trait
+      # satisfies every clause, which is how every other project in the solution still runs.
       - name: Test
-        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal --filter "Provider!=Postgres&Provider!=SqlServer"
+        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal --filter "Provider!=Postgres&Provider!=SqlServer&Category!=Samples"
 
       # Packaging breaks in ways a build cannot show. An analyzer project whose assembly ships in
       # analyzers/dotnet/cs has no lib/ content, so an inherited IncludeSymbols made pack fail with
@@ -91,4 +94,4 @@ jobs:
         run: dotnet build DDDToolkit.slnx --no-restore --configuration Release -p:DDDDependencyVersions=Floor
 
       - name: Test
-        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal -p:DDDDependencyVersions=Floor --filter "Provider!=Postgres&Provider!=SqlServer"
+        run: dotnet test DDDToolkit.slnx --no-build --configuration Release --verbosity normal -p:DDDDependencyVersions=Floor --filter "Provider!=Postgres&Provider!=SqlServer&Category!=Samples"

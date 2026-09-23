@@ -53,6 +53,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `Domain/ValueObjects`, `Domain/Services`, `Application`, `Infrastructure` and `Api`, and maps its
   own endpoints. `Order.AddLine` is gone: an order being paid for cannot change its lines; it can be
   cancelled instead.
+- The example shop runs under Aspire, on Supabase's Postgres and on SQL Server. A host hands each module
+  a `ModuleHost`: the database (`ModuleDatabase.Sqlite`, `.Supabase`, `.Postgres`, `.SqlServer`) and
+  where its messages go. `Examples/ModularMonolith.SqlServer` runs the same modules on SQL Server, with
+  the SQL Server migrations in an assembly of their own. The Supabase AppHost seeds a Postgres container
+  from `supabase/migrations`, or points at a live project. `Tests/DDDToolkit.Examples.AppHost.Tests`
+  plays the same checkout scenarios against every sample, containers included, in a new Sample Tests
+  workflow; Build and Test and the release leave them out with `Category!=Samples`.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Aspire.Hosting.Testing" />
+  </ItemGroup>
+
+  <!--
+    The samples, whole: each AppHost starts its databases in Docker and its hosts as processes, and the
+    tests talk to the shop over HTTP the way the .http files do. Nothing here references a module; what
+    is under test is what a customer of the shop can see.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\ModularMonolith.Supabase\DDDToolkit.Examples.Supabase.AppHost\DDDToolkit.Examples.Supabase.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\ModularMonolith.SqlServer\DDDToolkit.Examples.SqlServer.AppHost\DDDToolkit.Examples.SqlServer.AppHost.csproj" />
+  </ItemGroup>
+
+</Project>

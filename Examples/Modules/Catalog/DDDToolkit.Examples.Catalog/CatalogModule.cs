@@ -1,9 +1,8 @@
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Catalog.Contracts;
 using DDDToolkit.Examples.SharedKernel;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -13,34 +12,14 @@ namespace DDDToolkit.Examples.Catalog;
 public static class CatalogModule
 {
     /// <summary>
-    /// Registers Catalog: its context, its outbox, and the products the example starts with. With a
-    /// Supabase connection string it lives in the <c>catalog</c> schema; without one, in a SQLite file.
+    /// Registers Catalog: its context, its outbox, and the products the example starts with. It lives in
+    /// the <c>catalog</c> schema of the database the host chose, or in a <c>catalog.db</c> on SQLite.
     /// </summary>
-    public static IServiceCollection AddCatalogModule(this IServiceCollection services, string? supabaseConnectionString)
+    public static IServiceCollection AddCatalogModule(this IServiceCollection services, ModuleHost host)
     {
-        services.AddDbContext<CatalogContext>((provider, options) =>
-        {
-            if (supabaseConnectionString is null)
-            {
-                options.UseSqlite($"Data Source={Path.Combine(AppContext.BaseDirectory, "catalog.db")}")
-                    .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
-            }
-            else
-            {
-                CatalogContext.UsePostgres(options, supabaseConnectionString);
-            }
+        ArgumentNullException.ThrowIfNull(host);
 
-            options.UseDDDToolkit(provider);
-        });
-
-        if (supabaseConnectionString is null)
-        {
-            services.AddHostedService<CreateCatalogDatabase>();
-        }
-        else
-        {
-            services.AddSupabaseMigrations<CatalogContext, CatalogContextFactory>();
-        }
+        host.Database.AddContext<CatalogContext, CatalogContextFactory>(services, CatalogContext.Schema);
 
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<CatalogContext>(outbox =>
         {
@@ -49,7 +28,7 @@ public static class CatalogModule
                 new ProductListedV1(listed.Sku, listed.Name, listed.Price.Amount, listed.Price.Currency));
             outbox.PublishAs<ProductPriceChanged, ProductPriceChangedV1>(changed =>
                 new ProductPriceChangedV1(changed.Sku, changed.Price.Amount, changed.Price.Currency));
-            outbox.SendToModules();
+            host.Publish(outbox);
         }));
 
         services.AddOutboxBackgroundService<CatalogContext>(pollingInterval: TimeSpan.FromSeconds(1));
@@ -57,26 +36,6 @@ public static class CatalogModule
         services.AddHostedService<ListTheStartingRange>();
 
         return services;
-    }
-
-    /// <summary>Creates the SQLite file before anything else starts.</summary>
-    private sealed class CreateCatalogDatabase(IServiceScopeFactory scopes) : IHostedLifecycleService
-    {
-        public async Task StartingAsync(CancellationToken cancellationToken)
-        {
-            await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<CatalogContext>().Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>

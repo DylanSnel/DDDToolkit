@@ -1,62 +1,39 @@
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Examples.Catalog.Contracts;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Inventory.Contracts;
 using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Examples.Payments.Contracts;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 
 namespace DDDToolkit.Examples.Ordering;
 
 /// <summary>
 /// Everything Ordering needs from the host, registered by Ordering: its context, its outbox and the
-/// poller that empties it, and the start-up check on its Supabase migrations. The host calls
-/// <see cref="AddOrderingModule"/> and learns nothing else about how Ordering stores its orders.
+/// poller that empties it, and the policies it follows. The host calls <see cref="AddOrderingModule"/>
+/// and learns nothing else about how Ordering stores its orders.
 /// </summary>
 public static class OrderingModule
 {
     /// <summary>
-    /// Registers Ordering. With a Supabase connection string the module lives in the <c>ordering</c>
-    /// schema of that database, and Supabase applies its migrations. Without one it gets a SQLite file of
-    /// its own next to the built binary, created from the model on start-up, which is what running the
-    /// example without any setup uses.
+    /// Registers Ordering. The host says where its tables live and where what it publishes goes; see
+    /// <see cref="ModuleHost"/>. Ordering lives in the <c>ordering</c> schema of whichever database that
+    /// is, or in an <c>ordering.db</c> of its own on SQLite.
     /// </summary>
     /// <param name="services">The host's services.</param>
-    /// <param name="supabaseConnectionString">The Supabase database, or <see langword="null"/> for SQLite.</param>
-    public static IServiceCollection AddOrderingModule(this IServiceCollection services, string? supabaseConnectionString)
+    /// <param name="host">The host's two decisions: the database, and the transport.</param>
+    public static IServiceCollection AddOrderingModule(this IServiceCollection services, ModuleHost host)
     {
-        services.AddDbContext<OrderingContext>((provider, options) =>
-        {
-            if (supabaseConnectionString is null)
-            {
-                // SQLite has no schemas, so the module's schema is dropped. Saying so on every start teaches nothing.
-                options.UseSqlite($"Data Source={Path.Combine(AppContext.BaseDirectory, "ordering.db")}")
-                    .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
-            }
-            else
-            {
-                OrderingContext.UsePostgres(options, supabaseConnectionString);
-            }
+        ArgumentNullException.ThrowIfNull(host);
 
-            options.UseDDDToolkit(provider);
-        });
-
-        if (supabaseConnectionString is null)
-        {
-            services.AddHostedService<CreateOrderingDatabase>();
-        }
-        else
-        {
-            // The start-up check covers this context. The export does not need this line: the build
-            // finds OrderingContextFactory by its [SupabaseMigrations] marker.
-            services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
-        }
+        // The context, and whatever has to happen before its first query: a SQLite file created from the
+        // model, migrations applied on start-up, or the check that Supabase applied them. The Supabase
+        // export does not need this line: the build finds OrderingContextFactory by its
+        // [SupabaseMigrations] marker.
+        host.Database.AddContext<OrderingContext, OrderingContextFactory>(services, OrderingContext.Schema);
 
         // Ordering produces integration events, so it owns an outbox: what it publishes, as what, and
-        // that it goes to whichever modules want it. It does not know which modules those are.
+        // that it goes wherever the host sends it. It does not know which modules listen.
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
         {
             outbox.RegisterEventsFromAssemblyContaining<Order>();
@@ -76,7 +53,8 @@ public static class OrderingModule
             outbox.PublishAs<OrderCancelled, OrderCancelledV1>(cancelled =>
                 new OrderCancelledV1(cancelled.OrderId, cancelled.Reason));
 
-            outbox.SendToModules();
+            // In a monolith: the other modules in this process. In a service: a queue or a broker.
+            host.Publish(outbox);
 
             // Sinks normally replace the in-process delegate. This asks for both: the local handler
             // (OrderLog) sees the domain events, the other modules see the contract.
@@ -90,8 +68,10 @@ public static class OrderingModule
             .RegisterFromAssemblyContaining<StockReservedV1>()
             .RegisterFromAssemblyContaining<PaymentSucceededV1>()));
 
-        // Every policy in Application/IntegrationEvents/, each under Ordering's own inbox. Catalog, Inventory and Payments do
-        // not know Ordering listens; they publish, and this is where Ordering signs up.
+        // Every policy in Application/IntegrationEvents/, each under Ordering's own inbox. Catalog,
+        // Inventory and Payments do not know Ordering listens; they publish, and this is where Ordering
+        // signs up. Whatever carries the message here, the module sink or a broker's consumer, hands it
+        // to these handlers.
         services.AddModuleIntegrationEvents<OrderingContext>(module => module
             .Handle<ProductListedV1, RecordListedPrice>()
             .Handle<ProductPriceChangedV1, RecordChangedPrice>()
@@ -105,28 +85,5 @@ public static class OrderingModule
         services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
         return services;
-    }
-
-    /// <summary>
-    /// Creates the SQLite file before anything else starts, the outbox poller included: StartingAsync runs
-    /// for every lifecycle service before any hosted service's StartAsync.
-    /// </summary>
-    private sealed class CreateOrderingDatabase(IServiceScopeFactory scopes) : IHostedLifecycleService
-    {
-        public async Task StartingAsync(CancellationToken cancellationToken)
-        {
-            await using var scope = scopes.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<OrderingContext>().Database.EnsureCreatedAsync(cancellationToken);
-        }
-
-        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

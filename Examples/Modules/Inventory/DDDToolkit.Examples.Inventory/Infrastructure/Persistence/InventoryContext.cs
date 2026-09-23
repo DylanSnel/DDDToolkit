@@ -2,11 +2,11 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Inventory.Converters;
 using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
-using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace DDDToolkit.Examples.Inventory.Infrastructure.Persistence;
 
@@ -18,9 +18,6 @@ public sealed class InventoryContext(DbContextOptions<InventoryContext> options)
     public DbSet<StockItem> StockItems => Set<StockItem>();
 
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
-
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,7 +47,7 @@ public sealed class InventoryContextFactory : IDesignTimeDbContextFactory<Invent
     public InventoryContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<InventoryContext>();
-        InventoryContext.UsePostgres(options, "Host=unused");
+        ModuleDatabase.UsePostgres(options, "Host=unused", InventoryContext.Schema);
         return new InventoryContext(options.Options);
     }
 }
