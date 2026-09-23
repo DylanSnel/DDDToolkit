@@ -17,9 +17,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Service\DDDToolkit.Examples.MassTransit.Service.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Storefront\DDDToolkit.Examples.MassTransit.Storefront.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Payments\DDDToolkit.Examples.MassTransit.Payments.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Fulfilment\DDDToolkit.Examples.MassTransit.Fulfilment.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Gateway\DDDToolkit.Examples.Gateway.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Microservices\DDDToolkit.Examples.Microservices.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 
 </Project>

@@ -9,7 +9,7 @@
 
   <!--
     The front door of every microservices sample: one address for the whole shop. It knows which service
-    answers which path and nothing else; it holds no module and no database.
+    answers which path (appsettings.json) and nothing else; it holds no module and no database.
   -->
   <ItemGroup>
     <PackageReference Include="Yarp.ReverseProxy" />
@@ -17,7 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Examples.Microservices\DDDToolkit.Examples.Microservices.csproj" />
     <ProjectReference Include="..\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
   </ItemGroup>
 

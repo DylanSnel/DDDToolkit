@@ -29,10 +29,11 @@ Modules/
   SharedKernel/        Money: the one type every module means the same thing by. Not a module.
   Catalog/
     DDDToolkit.Examples.Catalog.Contracts    what Catalog publishes
-    DDDToolkit.Examples.Catalog              the module
+    DDDToolkit.Examples.Catalog              the module, with its Postgres migrations
+    DDDToolkit.Examples.Catalog.Migrations.SqlServer   its SQL Server migrations, for hosts on SQL Server
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
-  Migrations.SqlServer/                      every module's SQL Server migrations, in one assembly
 Shared/
+  DDDToolkit.Examples.Gateway                the microservices' front door: YARP, routes in appsettings.json
   DDDToolkit.Examples.GraphQL                the shop's GraphQL schema over every module, and the joins between them
   DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
   DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
@@ -206,12 +207,14 @@ that differs in substance is `ModuleDatabase.SqlServer(...)` for `ModuleDatabase
 
 One thing follows from that line. On Supabase somebody else applies the migrations and the application
 only checks; on SQL Server nobody else will, so each module migrates its own schema on start-up, before
-its outbox poller starts. The SQL Server migrations live in `Modules/Migrations.SqlServer`, apart from
-the Postgres ones in each module: Entity Framework keeps one model snapshot per context per assembly,
-and the two providers disagree on every column type. Scaffold one with:
+its outbox poller starts. Each module's SQL Server migrations live in a project next to it,
+`DDDToolkit.Examples.{Module}.Migrations.SqlServer`, apart from its Postgres ones: Entity Framework keeps
+one model snapshot per context per assembly, and the two providers disagree on every column type. A host
+on SQL Server references the migrations of the modules it runs, and `ModuleDatabase.SqlServer` finds them
+by name. Scaffold one with:
 
 ```bash
-dotnet ef migrations add AddGiftWrap --project Examples/Modules/Migrations.SqlServer/DDDToolkit.Examples.Migrations.SqlServer --context OrderingContext --output-dir Ordering
+dotnet ef migrations add AddGiftWrap --project Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Migrations.SqlServer --output-dir Migrations
 ```
 
 ### As services
@@ -219,35 +222,38 @@ dotnet ef migrations add AddGiftWrap --project Examples/Modules/Migrations.SqlSe
 The same five modules, cut into three deployables, with a gateway in front so a client still sees one
 shop at one address:
 
-| Service | Runs | Reads a queue of messages for |
+| Service | Runs | Consumes from the others |
 |---|---|---|
 | `storefront` | Catalog, Ordering | stock reserved or refused, payments taken or refused |
 | `payments` | Payments | orders placed or cancelled, stock reserved |
 | `fulfilment` | Inventory, Shipping | orders placed, cancelled or confirmed |
 
-`Shared/DDDToolkit.Examples.Microservices` decides that once for every microservices sample: which
-modules a service runs (`AddShopService`), which paths it answers (`ShopServices.Routes`, what the
-gateway routes on), and which services each published contract goes to (`ShopServices.ConsumersOf`). A
-service is not a module: Storefront runs Catalog and Ordering in one process, so a price Catalog publishes
-still reaches Ordering through the module sink, next door, and only a message another service consumes
-leaves the process.
+Every sample has a project per service, `DDDToolkit.Examples.{Sample}.Storefront`, `.Payments` and
+`.Fulfilment`, each with its own `Program.cs`, and each referencing only the modules it runs. Payments
+cannot call into Ordering: it does not reference it. What it knows of Ordering is `OrderPlacedV1`, from
+Ordering's contracts, the way a service in another repository would. Nothing shared knows the whole
+shop, apart from the gateway's route table in its `appsettings.json`.
 
-What each sample adds is the transport, in one service project that its AppHost starts three times.
+A service is not a module, though: Storefront runs Catalog and Ordering in one process, so a price Catalog
+publishes still reaches Ordering through the module sink, next door, and only a message another service
+consumes leaves the process.
 
-**`Microservices.Pgmq/`** keeps the one database the monolith on Supabase has, and puts the queues in it:
+**`Microservices.Pgmq/`** keeps the one database the monolith on Supabase has, and puts the queues in it.
+pgmq has no exchange that routes by topic, so the sender says which queue each contract goes to; from
+Storefront's `Program.cs`:
 
 ```csharp
-// sending: to the modules next door, and onto the queue of every other service that consumes it
-builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueues(message =>
-    ShopServices.RecipientsOf(message.Name, service).Select(ShopServices.NameOf)));
-var host = new ModuleHost(ModuleDatabase.Postgres(connectionString), outbox =>
+// sending: to the modules next door, and onto the queue of every service that consumes it
+Dictionary<string, string[]> sendTo = new()
 {
-    outbox.SendToModules();
-    outbox.SendToPgmq();
-});
+    ["ordering.order-placed"] = ["payments", "fulfilment"],
+    ["ordering.order-cancelled"] = ["payments", "fulfilment"],
+    ["ordering.order-confirmed"] = ["fulfilment"],
+};
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueues(message => sendTo.GetValueOrDefault(message.Name, [])));
 
 // receiving: this service's own queue, into the same modules
-builder.Services.AddPgmqConsumer(queues, ShopServices.NameOf(service));
+builder.Services.AddPgmqConsumer(queues, "storefront");
 ```
 
 No broker to run: a queue is a table, and on Supabase it is a Queue you can watch in the dashboard.
@@ -261,14 +267,16 @@ dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHos
 **`Microservices.Wolverine/`** gives every service a database of its own, and not of one kind: Storefront
 on SQL Server, Payments and Fulfilment on Postgres. What they share is RabbitMQ, and Wolverine carries the
 envelopes: a topic exchange keyed on the contract's name, and a queue per service bound to the contracts
-`ShopServices.ContractsFor` names.
+it consumes. Here the receiver says what it wants, and the sender knows nothing of it; from Payments':
 
 ```csharp
+string[] consumes = ["ordering.order-placed", "ordering.order-cancelled", "inventory.stock-reserved"];
+
 wolverine.PublishMessagesToRabbitMqExchange<IntegrationEventEnvelope>("integration-events", envelope => envelope.Name)
     .ExchangeType(ExchangeType.Topic).SendInline();
-wolverine.ListenToRabbitQueue(name, queue =>
+wolverine.ListenToRabbitQueue("payments", queue =>
     {
-        foreach (var contract in ShopServices.ContractsFor(service)) queue.BindExchange("integration-events", contract);
+        foreach (var contract in consumes) queue.BindExchange("integration-events", contract);
     })
     .ProcessInline();
 wolverine.ReceiveIntegrationEvents();
@@ -279,17 +287,17 @@ dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolver
 ```
 
 **`Microservices.MassTransit/`** is the same topology with MassTransit carrying the envelopes, every
-service on a SQL Server database of its own. The service is the Wolverine one with a different transport
-block, in `RabbitMqTransport.cs`: the same topic exchange, a receive endpoint per service bound to the
-contracts it consumes, and MassTransit's retry and error queue.
+service on a SQL Server database of its own. Each service is the Wolverine one with a different transport
+block, in its `RabbitMq.cs`: the same topic exchange, a receive endpoint bound to the contracts the
+service consumes, and MassTransit's retry and error queue.
 
 ```csharp
 rabbit.Message<IntegrationEventEnvelope>(message => message.SetEntityName("integration-events"));
 rabbit.Publish<IntegrationEventEnvelope>(publish => publish.ExchangeType = "topic");
-rabbit.ReceiveEndpoint(name, endpoint =>
+rabbit.ReceiveEndpoint("payments", endpoint =>
 {
     endpoint.ConfigureConsumeTopology = false;
-    foreach (var contract in ShopServices.ContractsFor(service))
+    foreach (var contract in Consumes)
         endpoint.Bind("integration-events", exchange => { exchange.ExchangeType = "topic"; exchange.RoutingKey = contract; });
     endpoint.ConfigureConsumer<IntegrationEventEnvelopeConsumer>(context);
 });
@@ -341,7 +349,7 @@ Paths are under `Modules/`.
 | Optimistic concurrency as a 409 | `Api/OrderingEndpoints.cs` (cancel), `Catalog/.../Api/CatalogEndpoints.cs` (reprice) |
 | A module registering itself, a host that only switches modules on | each `*Module.cs`, each sample's `Program.cs` |
 | The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
-| Migrations per provider in separate assemblies | `Modules/Migrations.SqlServer`, each module's `Infrastructure/Persistence/Migrations` |
+| Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
 | The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
 | One GraphQL schema over modules that do not know each other | `Shared/DDDToolkit.Examples.GraphQL/ShopSchema.cs`, each module's `Api/GraphQL` |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |

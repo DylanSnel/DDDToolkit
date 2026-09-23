@@ -1,8 +1,5 @@
-using DDDToolkit.Examples.Microservices;
-
-// The shop as three services over pgmq: one Postgres with the pgmq extension, the same service project
-// started three times, once per ShopService, and the gateway in front of them. Run this, then work through
-// the .http file against the gateway's address.
+// The shop as three services over pgmq: one Postgres with the pgmq extension, three service projects and the
+// gateway in front of them. Run this, then work through the .http file against the gateway's address.
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -15,23 +12,29 @@ var postgres = builder.AddPostgres("postgres")
 // The server's own database, where the init script installed pgmq, as on one Supabase project.
 var shop = postgres.AddDatabase("shop", databaseName: "postgres");
 
-var gateway = builder.AddProject<Projects.DDDToolkit_Examples_Gateway>("gateway", launchProfileName: null)
+var storefront = builder.AddProject<Projects.DDDToolkit_Examples_Pgmq_Storefront>("storefront", launchProfileName: null)
     .WithHttpEndpoint()
+    .WithReference(shop)
+    .WaitFor(shop)
     .WithHttpHealthCheck("/health");
 
-foreach (var service in Enum.GetValues<ShopService>())
-{
-    var name = ShopServices.NameOf(service);
+var payments = builder.AddProject<Projects.DDDToolkit_Examples_Pgmq_Payments>("payments", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(shop)
+    .WaitFor(shop)
+    .WithHttpHealthCheck("/health");
 
-    // No launch profile: three copies of one project need three ports, so Aspire hands each its own.
-    var project = builder.AddProject<Projects.DDDToolkit_Examples_Pgmq_Service>(name, launchProfileName: null)
-        .WithHttpEndpoint()
-        .WithEnvironment("Shop__Service", name)
-        .WithReference(shop)
-        .WaitFor(shop)
-        .WithHttpHealthCheck("/health");
+var fulfilment = builder.AddProject<Projects.DDDToolkit_Examples_Pgmq_Fulfilment>("fulfilment", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(shop)
+    .WaitFor(shop)
+    .WithHttpHealthCheck("/health");
 
-    gateway.WithReference(project).WaitFor(project);
-}
+builder.AddProject<Projects.DDDToolkit_Examples_Gateway>("gateway", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(storefront).WaitFor(storefront)
+    .WithReference(payments).WaitFor(payments)
+    .WithReference(fulfilment).WaitFor(fulfilment)
+    .WithHttpHealthCheck("/health");
 
 builder.Build().Run();

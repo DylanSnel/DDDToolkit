@@ -18,9 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Service\DDDToolkit.Examples.Wolverine.Service.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Storefront\DDDToolkit.Examples.Wolverine.Storefront.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Payments\DDDToolkit.Examples.Wolverine.Payments.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Wolverine.Fulfilment\DDDToolkit.Examples.Wolverine.Fulfilment.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Gateway\DDDToolkit.Examples.Gateway.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Microservices\DDDToolkit.Examples.Microservices.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 
 </Project>

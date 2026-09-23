@@ -25,7 +25,11 @@
       The SQL Server migrations. Nothing in Program.cs names a type from it: ModuleDatabase.UseSqlServer
       points each context at the assembly by name, and this reference is what puts it next to the binary.
     -->
-    <ProjectReference Include="..\..\Modules\Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer\DDDToolkit.Examples.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog.Migrations.SqlServer\DDDToolkit.Examples.Catalog.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering.Migrations.SqlServer\DDDToolkit.Examples.Ordering.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory.Migrations.SqlServer\DDDToolkit.Examples.Inventory.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments.Migrations.SqlServer\DDDToolkit.Examples.Payments.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping.Migrations.SqlServer\DDDToolkit.Examples.Shipping.Migrations.SqlServer.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.GraphQL\DDDToolkit.Examples.GraphQL.csproj" />

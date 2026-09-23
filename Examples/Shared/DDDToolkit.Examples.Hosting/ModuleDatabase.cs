@@ -19,17 +19,14 @@ namespace DDDToolkit.Examples.Hosting;
 /// <item><see cref="Supabase"/>: Postgres, where Supabase applies the migrations from
 /// <c>supabase/migrations</c> and the application only checks that none is missing.</item>
 /// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
-/// <item><see cref="SqlServer"/>: SQL Server, likewise, from the migrations in
-/// <c>DDDToolkit.Examples.Migrations.SqlServer</c>.</item>
+/// <item><see cref="SqlServer"/>: SQL Server, likewise, from the module's
+/// <c>DDDToolkit.Examples.{Module}.Migrations.SqlServer</c> assembly.</item>
 /// </list>
 /// Every module lives in a schema of its own with its own migration history, outbox and inbox, so any
 /// number of modules can share one database without seeing each other's tables.
 /// </remarks>
 public abstract record ModuleDatabase
 {
-    /// <summary>The assembly that holds every module's SQL Server migrations.</summary>
-    public const string SqlServerMigrationsAssembly = "DDDToolkit.Examples.Migrations.SqlServer";
-
     private ModuleDatabase()
     {
     }
@@ -67,11 +64,20 @@ public abstract record ModuleDatabase
     public static void UsePostgres(DbContextOptionsBuilder options, string connectionString, string schema)
         => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema));
 
-    /// <summary>SQL Server with the migration history in <paramref name="schema"/>, migrations from the SQL Server assembly.</summary>
+    /// <summary>
+    /// SQL Server with the migration history in <paramref name="schema"/>, and the migrations from the
+    /// assembly named after the context's own with <c>.Migrations.SqlServer</c> behind it: the module's
+    /// SQL Server migrations, which a host on SQL Server references next to the module.
+    /// </summary>
     public static void UseSqlServer(DbContextOptionsBuilder options, string connectionString, string schema)
-        => options.UseSqlServer(connectionString, sql => sql
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var migrations = options.Options.ContextType.Assembly.GetName().Name + ".Migrations.SqlServer";
+        options.UseSqlServer(connectionString, sql => sql
             .MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema)
-            .MigrationsAssembly(SqlServerMigrationsAssembly));
+            .MigrationsAssembly(migrations));
+    }
 
     /// <summary>
     /// Registers <typeparamref name="TContext"/> on this database, and whatever has to happen before the

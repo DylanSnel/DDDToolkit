@@ -1,5 +1,3 @@
-using DDDToolkit.Examples.Microservices;
-
 // The shop as three services over RabbitMQ, with Wolverine as the transport. Each service has a database of
 // its own, and not all of the same kind: Storefront on SQL Server, Payments and Fulfilment on Postgres. The
 // only thing the three share is the broker, and the only thing they say on it is published contracts.
@@ -11,34 +9,33 @@ var rabbitmq = builder.AddRabbitMQ("rabbitmq").WithManagementPlugin();
 var sqlServer = builder.AddSqlServer("sqlserver");
 var postgres = builder.AddPostgres("postgres");
 
-var databases = new Dictionary<ShopService, (IResourceBuilder<IResourceWithConnectionString> Database, string Provider)>
-{
-    [ShopService.Storefront] = (sqlServer.AddDatabase("storefront-db", "storefront"), "SqlServer"),
-    [ShopService.Payments] = (postgres.AddDatabase("payments-db", "payments"), "Postgres"),
-    [ShopService.Fulfilment] = (postgres.AddDatabase("fulfilment-db", "fulfilment"), "Postgres"),
-};
+var storefrontDb = sqlServer.AddDatabase("storefront-db", "storefront");
+var paymentsDb = postgres.AddDatabase("payments-db", "payments");
+var fulfilmentDb = postgres.AddDatabase("fulfilment-db", "fulfilment");
 
-var gateway = builder.AddProject<Projects.DDDToolkit_Examples_Gateway>("gateway", launchProfileName: null)
+var storefront = builder.AddProject<Projects.DDDToolkit_Examples_Wolverine_Storefront>("storefront", launchProfileName: null)
     .WithHttpEndpoint()
+    .WithReference(storefrontDb).WaitFor(storefrontDb)
+    .WithReference(rabbitmq).WaitFor(rabbitmq)
     .WithHttpHealthCheck("/health");
 
-foreach (var service in Enum.GetValues<ShopService>())
-{
-    var name = ShopServices.NameOf(service);
-    var (database, provider) = databases[service];
+var payments = builder.AddProject<Projects.DDDToolkit_Examples_Wolverine_Payments>("payments", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(paymentsDb).WaitFor(paymentsDb)
+    .WithReference(rabbitmq).WaitFor(rabbitmq)
+    .WithHttpHealthCheck("/health");
 
-    // The connection string's name says which provider it is for: ModuleDatabase.FromConnectionStrings
-    // reads ConnectionStrings:SqlServer or ConnectionStrings:Postgres.
-    var project = builder.AddProject<Projects.DDDToolkit_Examples_Wolverine_Service>(name, launchProfileName: null)
-        .WithHttpEndpoint()
-        .WithEnvironment("Shop__Service", name)
-        .WithReference(database, connectionName: provider)
-        .WithReference(rabbitmq)
-        .WaitFor(database)
-        .WaitFor(rabbitmq)
-        .WithHttpHealthCheck("/health");
+var fulfilment = builder.AddProject<Projects.DDDToolkit_Examples_Wolverine_Fulfilment>("fulfilment", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(fulfilmentDb).WaitFor(fulfilmentDb)
+    .WithReference(rabbitmq).WaitFor(rabbitmq)
+    .WithHttpHealthCheck("/health");
 
-    gateway.WithReference(project).WaitFor(project);
-}
+builder.AddProject<Projects.DDDToolkit_Examples_Gateway>("gateway", launchProfileName: null)
+    .WithHttpEndpoint()
+    .WithReference(storefront).WaitFor(storefront)
+    .WithReference(payments).WaitFor(payments)
+    .WithReference(fulfilment).WaitFor(fulfilment)
+    .WithHttpHealthCheck("/health");
 
 builder.Build().Run();

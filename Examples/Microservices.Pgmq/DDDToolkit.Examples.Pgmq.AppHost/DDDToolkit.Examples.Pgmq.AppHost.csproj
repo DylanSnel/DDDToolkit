@@ -16,9 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Service\DDDToolkit.Examples.Pgmq.Service.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Storefront\DDDToolkit.Examples.Pgmq.Storefront.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Payments\DDDToolkit.Examples.Pgmq.Payments.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.Pgmq.Fulfilment\DDDToolkit.Examples.Pgmq.Fulfilment.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Gateway\DDDToolkit.Examples.Gateway.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Microservices\DDDToolkit.Examples.Microservices.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
 
 </Project>

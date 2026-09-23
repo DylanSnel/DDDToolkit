@@ -442,7 +442,7 @@ One thing to know: MassTransit has an `AddMediator` of its own on `IServiceColle
 imports the `MassTransit` namespace, the [Mediator](https://github.com/martinothamar/Mediator) source
 generator no longer reads the options of your `AddMediator` call, and the process stops at start-up saying
 it generated for another lifetime. Configure MassTransit in a file of its own, as
-`Examples/Microservices.MassTransit` does.
+`Examples/Microservices.MassTransit` does in each service's `RabbitMq.cs`.
 
 ## For screens: the GraphQL subscription sink
 

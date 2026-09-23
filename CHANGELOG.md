@@ -103,9 +103,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   database of its own: Storefront on SQL Server, Payments and Fulfilment on Postgres.
 - `Examples/Microservices.Pgmq` runs the shop as three services (storefront, payments, fulfilment) behind
   a YARP gateway, talking through pgmq queues in the one Postgres they share. The same checkout scenarios
-  pass against it as against the monoliths. `Shared/DDDToolkit.Examples.Microservices` holds what every
-  microservices sample shares: which modules a service runs, which paths it answers and which services
-  each contract is routed to.
+  pass against it as against the monoliths. Every microservices sample has a project per service, each
+  referencing only the modules it runs and saying itself what it sends and consumes; the gateway's routes
+  are in its `appsettings.json`. Each module's SQL Server migrations are a project next to the module, so a
+  service on SQL Server loads only its own.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
