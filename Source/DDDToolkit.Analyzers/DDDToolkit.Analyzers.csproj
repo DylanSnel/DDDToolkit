@@ -21,8 +21,17 @@
 
   <Import Project="..\DDDToolkit.Analyzers.Shared\DDDToolkit.Analyzers.Shared.props" />
 
+  <!--
+    The code fixes live in an assembly of their own, because they need the Workspaces layer and the
+    compiler does not load it. Built first and packed beside the generators, so the IDE finds both.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Analyzers.CodeFixes\DDDToolkit.Analyzers.CodeFixes.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="..\DDDToolkit.Analyzers.CodeFixes\$(OutputPath)\DDDToolkit.Analyzers.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>

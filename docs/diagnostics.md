@@ -316,6 +316,19 @@ closing it to callers:
 public string City { get; protected init; }
 ```
 
+The copy does not go through validation, and on the always-valid twin that produces a
+`ValidAddress` holding an invalid value, even from code that only knows about `Address`.
+[Why `with` is closed to callers](value-objects.md#why-with-is-closed-to-callers) goes through the
+mechanics, and why checking the copy at the `with` is not possible.
+
+A code fix makes that change for you: `protected init`, or `private protected init` on an
+`internal` property. Callers that need a changed copy use the generated
+[`With(...)`](value-objects.md#changing-a-value-with) instead of `with`.
+
+A positional record does not report DDD00010. Its parameters would become `public init` properties,
+so the generator declares them itself as `protected init`; see
+[Positional records](value-objects.md#positional-records).
+
 ---
 
 ## DDD00011
@@ -338,7 +351,7 @@ public string City { get; protected init; }
 ```
 
 DDD00010 and DDD00011 are separate rules and a property with a plain `public set` reports both. The
-fix for both is `protected init`.
+fix for both is `protected init`, and the code fix described under [DDD00010](#ddd00010) applies it.
 
 ---
 

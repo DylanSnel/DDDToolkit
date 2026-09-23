@@ -78,6 +78,17 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
   --packages "$packages_native" \
   -p:DDDToolkitPackageVersion="$version"
 
+# The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
+# assembly packed next to the generators rather than a package of their own. Nothing in a build uses
+# them, so nothing below would notice them missing; only the IDE would, silently.
+analyzers_folder="$packages/dddtoolkit.analyzers/$version/analyzers/dotnet/cs"
+for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
+  if [ ! -f "$analyzers_folder/$assembly" ]; then
+    echo "FAILED: $assembly is missing from analyzers/dotnet/cs in the DDDToolkit.Analyzers package." >&2
+    exit 1
+  fi
+done
+
 echo "==> Building the consumer"
 dotnet build "$work/consumer/DDDToolkit.NugetApi.csproj" \
   --no-restore \

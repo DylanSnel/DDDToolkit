@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Code fixes for the diagnostics in DDDToolkit.Analyzers. A code fix needs the Workspaces layer, which
+    the compiler does not load, so it cannot live in the generator assembly (RS1038). It ships inside the
+    DDDToolkit.Analyzers package, next to the generators, and is not a package of its own.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

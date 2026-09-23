@@ -38,6 +38,22 @@ internal static class Check
         return email.TryToValid(out _, out _);
     }
 
+    /// <summary>
+    /// DDDToolkit.Analyzers: a positional value object and the generated <c>With(...)</c>, on the value
+    /// object and on its twin. The arguments are <c>Optional&lt;T&gt;</c>, which ships in the DDDToolkit
+    /// package, so this also fails if the runtime and the generator come from mismatched packages.
+    /// </summary>
+    public static Money PositionalValueObjects()
+    {
+        var money = new Money(10m, "EUR", Note: null);
+        var (amount, currency, _) = money;
+
+        ValidMoney valid = money.ToValid().With(amount: amount + 1, currency: currency);
+        _ = new Address("Main Street", "Amsterdam").With(city: "Utrecht");
+
+        return valid.With(note: null);
+    }
+
     /// <summary>DDDToolkit.FluentValidation.Analyzers: the generated Errors collection.</summary>
     public static int ValidationErrors() => EmailAddress.Create("nope").Errors.Count;
 
