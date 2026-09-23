@@ -9,6 +9,7 @@ namespace DDDToolkit.Tests.Serialization.NewtonSoft;
 /// Strongly typed ids through Newtonsoft.Json: an id is written as the value it wraps, comes back as the
 /// same id, and behaves the same way the System.Text.Json integration does.
 /// </summary>
+[Collection(NewtonsoftGlobalState.Name)]
 public class EntityIdSerializationTests
 {
     private readonly JsonSerializerSettings _settings = new JsonSerializerSettings().AddDDDToolkitConverters();

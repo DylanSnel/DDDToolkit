@@ -66,7 +66,7 @@ public class EntityChildInvariantTests
             {
                 public string Code => "line.quantity";
 
-                public string? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
+                public InvariantFailure? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
             }
         }
         """;
@@ -147,7 +147,7 @@ public class EntityChildInvariantTests
                 {
                     public string Code => "order.lines";
 
-                    public string? Check(Order entity) => entity._lines.Count > 0 ? null : "An order must have a line.";
+                    public InvariantFailure? Check(Order entity) => entity._lines.Count > 0 ? null : "An order must have a line.";
                 }
             }
 
@@ -162,7 +162,7 @@ public class EntityChildInvariantTests
                 {
                     public string Code => "line.quantity";
 
-                    public string? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
+                    public InvariantFailure? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
                 }
             }
             """).RunCore();
@@ -216,7 +216,7 @@ public class EntityChildInvariantTests
                 {
                     public string Code => "line.quantity";
 
-                    public string? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
+                    public InvariantFailure? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
                 }
             }
             """).RunCore();
@@ -277,7 +277,7 @@ public class EntityChildInvariantTests
                 {
                     public string Code => "serial.stamped";
 
-                    public string? Check(Serial entity) => entity._code.Length > 0 ? null : "A serial number must be stamped.";
+                    public InvariantFailure? Check(Serial entity) => entity._code.Length > 0 ? null : "A serial number must be stamped.";
                 }
             }
             """).RunCore();
@@ -472,7 +472,7 @@ public class EntityChildInvariantTests
                     {
                         public string Code => "line.quantity";
 
-                        public string? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
+                        public InvariantFailure? Check(Line entity) => entity._quantity > 0 ? null : "A line must order at least one of something.";
                     }
                 }
                 """)

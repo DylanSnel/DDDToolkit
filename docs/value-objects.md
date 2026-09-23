@@ -479,9 +479,12 @@ Failures are `ValidationError`, which is the toolkit's own shape and needs no Fl
 | `PropertyName` | The property it belongs to, or `null` for the whole value. |
 | `Code` | A stable code to branch on, so you never match on text. |
 | `AttemptedValue` | The value that was rejected, when the rule reported one. |
+| `Arguments` | The values the message was built from, by name, such as `MaxLength`. Never `null`. |
 
 With FluentValidation referenced you get one of these per `ValidationFailure`, carrying the same
-property, code and attempted value. `Errors` is still there and still holds FluentValidation's own
+property, code and attempted value, and its placeholder values as `Arguments`. `Code` and `Arguments`
+together are what lets [`DDDToolkit.Localization`](localization.md) phrase the failure in the reader's
+language. `Errors` is still there and still holds FluentValidation's own
 type, for code that wants it.
 
 Without FluentValidation, the failures are the ones your `Validate(ValidationErrorBuilder)` added. A

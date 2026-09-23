@@ -40,13 +40,15 @@ public interface IInvariant<in TEntity>
 
     /// <summary>
     /// Runs the rule. Returns <see langword="null"/> when it holds, and otherwise what is wrong in the
-    /// domain's own words, free to name the values that broke it.
+    /// domain's own words, free to name the values that broke it. A string converts to
+    /// <see cref="InvariantFailure"/>, so a rule with only a message returns the message; one that names
+    /// values adds them with <see cref="InvariantFailure.With"/> so the message can be translated.
     /// <para>
-    /// A string rather than an <see cref="InvariantViolation"/> so that holding is free: this runs for
-    /// every changed entity on every save, and the happy path allocates nothing. The caller pairs the
-    /// message with <see cref="Code"/>, so the code lives in one place.
+    /// Not an <see cref="InvariantViolation"/> so that holding is free: this runs for every changed
+    /// entity on every save, and the happy path returns <see langword="null"/> and allocates nothing. The
+    /// caller pairs the failure with <see cref="Code"/>, so the code lives in one place.
     /// </para>
     /// </summary>
     /// <param name="entity">The object to check. Never <see langword="null"/>.</param>
-    string? Check(TEntity entity);
+    InvariantFailure? Check(TEntity entity);
 }

@@ -8,7 +8,8 @@ namespace DDDToolkit.Validation;
 /// {
 ///     if (Value.Length &gt; 40)
 ///     {
-///         errors.Add("A street is at most 40 characters.", nameof(Value), "TooLong", Value);
+///         errors.Add("A street is at most 40 characters.", nameof(Value), "TooLong", Value,
+///             new Dictionary&lt;string, object?&gt; { ["MaxLength"] = 40 });
 ///     }
 /// }
 /// </code>
@@ -43,9 +44,15 @@ public sealed class ValidationErrorBuilder
     /// <param name="propertyName">The property the failure belongs to, or <see langword="null"/> for the whole value.</param>
     /// <param name="code">A stable machine-readable code, so callers can branch without matching on text.</param>
     /// <param name="attemptedValue">The value that was rejected, when it is safe to repeat back.</param>
+    /// <param name="arguments">The values the message was built from, by name, so it can be phrased again in another language.</param>
     /// <returns>The same builder, so calls chain.</returns>
-    public ValidationErrorBuilder Add(string message, string? propertyName = null, string? code = null, object? attemptedValue = null)
-        => Add(new ValidationError(message, propertyName, code, attemptedValue));
+    public ValidationErrorBuilder Add(
+        string message,
+        string? propertyName = null,
+        string? code = null,
+        object? attemptedValue = null,
+        IEnumerable<KeyValuePair<string, object?>>? arguments = null)
+        => Add(new ValidationError(message, propertyName, code, attemptedValue, arguments));
 
     /// <summary>Adds every failure in a sequence, which is how failures from a nested value object are folded in.</summary>
     /// <param name="errors">The failures to add. A <see langword="null"/> entry is skipped.</param>

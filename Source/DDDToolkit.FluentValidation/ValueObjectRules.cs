@@ -1,4 +1,5 @@
 using DDDToolkit.BaseTypes;
+using DDDToolkit.Validation;
 using FluentValidation;
 
 namespace DDDToolkit.FluentValidation;
@@ -49,8 +50,14 @@ public static class ValueObjectRules
         ArgumentNullException.ThrowIfNull(ruleBuilder);
 
         return ruleBuilder
-            .Must(static value => value is null || value.IsValid)
+            .Must(static (_, value, context) =>
+            {
+                // A placeholder rather than text baked into the message, so the type name reaches
+                // ValidationError.Arguments and a translation can put it where its grammar wants it.
+                context.MessageFormatter.AppendArgument(ValidationError.ValueObjectArgument, typeof(TValueObject).Name);
+                return value is null || value.IsValid;
+            })
             .WithErrorCode(ErrorCode)
-            .WithMessage("'{PropertyName}' is not a valid " + typeof(TValueObject).Name + ".");
+            .WithMessage("'{PropertyName}' is not a valid {" + ValidationError.ValueObjectArgument + "}.");
     }
 }

@@ -56,6 +56,7 @@ public partial class Order { }
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |
+| [Localization](docs/localization.md) | Validation errors and invariant violations in the reader's language, looked up by code |
 | [Performance](docs/performance.md) | The benchmarks behind the struct-versus-record advice, including where they disagree with it |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
 | [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
@@ -74,6 +75,7 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations exported as Supabase migration files, so `supabase db push` applies them, and a test that fails when one was not exported. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
+| `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
 | `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, plus a subscription sink. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |

@@ -1,5 +1,7 @@
+using DDDToolkit.HotChocolate.Errors;
 using DDDToolkit.HotChocolate.Interceptors;
 using DDDToolkit.HotChocolate.Subscriptions;
+using DDDToolkit.Localization;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -38,6 +40,33 @@ public static class DependencyInjection
         builder.TryAddTypeInterceptor(typeof(IgnoreInternalFieldsInterceptor));
         builder.AddHotChocolateTypes();
         return builder;
+    }
+
+    /// <summary>
+    /// Registers <see cref="FailureErrorFilter"/>, which turns <c>InvalidValueObjectException</c> and
+    /// <c>InvariantViolationException</c> into one GraphQL error per failure, each carrying its code:
+    /// <code>
+    /// services
+    ///     .AddGraphQLServer()
+    ///     .AddDDDToolkitTypes()
+    ///     .AddDDDToolkitErrors();
+    /// </code>
+    /// <para>
+    /// When the application registered an <c>IFailureLocalizer</c> (<c>AddDDDToolkitLocalization()</c> in
+    /// <c>DDDToolkit.Localization</c>), the messages are phrased in the reader's language; otherwise they
+    /// are the domain's own. See <c>docs/localization.md</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="builder">The request executor builder to configure.</param>
+    /// <returns>The same builder, so calls can be chained.</returns>
+    public static IRequestExecutorBuilder AddDDDToolkitErrors(this IRequestExecutorBuilder builder)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        // The localizer is an application service, and error filters are built from the schema's own
+        // services, so it is asked for on the root provider.
+        return builder.AddErrorFilter(services =>
+            new FailureErrorFilter(services.GetRootServiceProvider().GetService<IFailureLocalizer>()));
     }
 
     /// <summary>

@@ -627,7 +627,7 @@ public sealed class MustHaveLines : IInvariant<Order>      // DDD00024
 {
     public string Code => "ORDER_HAS_NO_LINES";
 
-    public string? Check(Order order) => order.Lines.Count == 0 ? "..." : null;
+    public InvariantFailure? Check(Order order) => order.Lines.Count == 0 ? "..." : null;
 }
 ```
 
@@ -686,7 +686,7 @@ public partial class Order
     {
         public string Code => "LINE_IS_FREE";
 
-        public string? Check(OrderLine line) => line.Price <= 0 ? "..." : null;
+        public InvariantFailure? Check(OrderLine line) => line.Price <= 0 ? "..." : null;
     }
 }
 ```
@@ -777,7 +777,7 @@ The limit in the example belongs to the entity, not to the rule, and the rule re
 `Order` it is handed:
 
 ```csharp
-public string? Check(Order order)
+public InvariantFailure? Check(Order order)
     => order.Total > order.CreditLimit ? $"An order may not exceed {order.CreditLimit}." : null;
 ```
 

@@ -15,7 +15,11 @@ namespace DDDToolkit.FluentValidation;
 /// </summary>
 public static class ValidationErrorConversions
 {
-    /// <summary>Converts one FluentValidation failure, keeping the property, code and attempted value.</summary>
+    /// <summary>
+    /// Converts one FluentValidation failure, keeping the property, code and attempted value, and carrying
+    /// its placeholder values (<c>{MaxLength}</c>, <c>{ComparisonValue}</c>, and any you appended yourself)
+    /// into <see cref="ValidationError.Arguments"/>, so a localizer can phrase it again later.
+    /// </summary>
     /// <param name="failure">The failure to convert.</param>
     /// <returns>The same failure in the toolkit's shape.</returns>
     public static ValidationError ToValidationError(this ValidationFailure failure)
@@ -26,7 +30,8 @@ public static class ValidationErrorConversions
             failure.ErrorMessage,
             failure.PropertyName,
             failure.ErrorCode,
-            failure.AttemptedValue);
+            failure.AttemptedValue,
+            failure.FormattedMessagePlaceholderValues?.Select(static pair => new KeyValuePair<string, object?>(pair.Key, pair.Value)));
     }
 
     /// <summary>Converts every failure in a sequence.</summary>

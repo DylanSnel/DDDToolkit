@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Localization</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;localization;i18n;validation;invariants</PackageTags>
+    <Description>Localization for the DDDToolkit's failures: phrases validation errors and invariant violations in the reader's language, looked up by their code through IStringLocalizer.</Description>
+    <!-- The toolkit's own messages are written in English; other languages ship as satellite assemblies. -->
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Localization.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+</Project>

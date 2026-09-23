@@ -1,3 +1,5 @@
+using DDDToolkit.Validation;
+
 namespace DDDToolkit.Invariants;
 
 /// <summary>
@@ -35,6 +37,41 @@ public sealed record InvariantViolation(string Code, string Message, Type? Entit
     /// better as a named invariant.
     /// </summary>
     public const string SeamCode = "CheckInvariants";
+
+    private readonly IReadOnlyDictionary<string, object?> _arguments = FailureArguments.None;
+
+    /// <summary>
+    /// The values <see cref="Message"/> was built from, by name, as the rule supplied them through
+    /// <see cref="InvariantFailure.With"/>. Empty when there are none; never <see langword="null"/>.
+    /// <para>
+    /// They are what lets a localizer look the violation up by <see cref="Code"/> and phrase it again in
+    /// the reader's language, rather than repeat the domain's sentence.
+    /// </para>
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> Arguments
+    {
+        get => _arguments;
+        init => _arguments = FailureArguments.Copy(value);
+    }
+
+    /// <summary>A copy of this violation with one more argument.</summary>
+    /// <param name="name">The argument's name, as a template would spell it between braces.</param>
+    /// <param name="value">Its value.</param>
+    public InvariantViolation With(string name, object? value)
+        => this with { Arguments = FailureArguments.With(_arguments, name, value) };
+
+    /// <summary>Equal when every member is, <see cref="Arguments"/> compared by content rather than by reference.</summary>
+    public bool Equals(InvariantViolation? other)
+        => other is not null
+           && Code == other.Code
+           && Message == other.Message
+           && EntityType == other.EntityType
+           && Equals(EntityId, other.EntityId)
+           && FailureArguments.AreEqual(_arguments, other._arguments);
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+        => HashCode.Combine(Code, Message, EntityType, EntityId, FailureArguments.GetHashCode(_arguments));
 
     /// <summary>Reads as "OrderLine ORD_L_1 QUANTITY: a line must cost something".</summary>
     public override string ToString()

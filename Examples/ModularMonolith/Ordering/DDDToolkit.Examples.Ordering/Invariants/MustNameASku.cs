@@ -35,7 +35,7 @@ public partial class OrderLine
         public string Code => ViolationCode;
 
         /// <inheritdoc />
-        public string? Check(OrderLine line)
+        public InvariantFailure? Check(OrderLine line)
             => string.IsNullOrWhiteSpace(line.Sku) ? "A line must name the thing it is ordering." : null;
     }
 }

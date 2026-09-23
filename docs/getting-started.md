@@ -131,7 +131,7 @@ public partial class Order
     {
         public string Code => "ORDER_HAS_NO_LINES";
 
-        public string? Check(Order order)
+        public InvariantFailure? Check(Order order)
             => order.Lines.Count == 0 ? "An order must have at least one line." : null;
     }
 }

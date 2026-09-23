@@ -12,8 +12,11 @@ namespace DDDToolkit.Tests.Serialization.NewtonSoft;
 /// <summary>
 /// The registration entry point. Everything that touches the shared
 /// <see cref="DDDNewtonsoftSettings.DefaultSettings"/> or <see cref="JsonConvert.DefaultSettings"/> lives in
-/// this one class, so the tests run one after another rather than racing each other over a static.
+/// this one class, so the tests run one after another rather than racing each other over a static. The
+/// other classes that serialize through <see cref="JsonConvert"/> share its <see cref="NewtonsoftGlobalState"/>
+/// collection, because the global default reaches their calls too.
 /// </summary>
+[Collection(NewtonsoftGlobalState.Name)]
 public class NewtonsoftRegistrationTests
 {
     [Fact]

@@ -277,7 +277,7 @@ public partial class Order
 
         public string Code => ViolationCode;
 
-        public string? Check(Order order)
+        public InvariantFailure? Check(Order order)
             => order.Status != OrderStatus.Draft && order._lines.Count == 0
                 ? "A placed order must have at least one line."
                 : null;
@@ -285,10 +285,24 @@ public partial class Order
 }
 ```
 
-`Check` returns `null` when the rule holds, and otherwise what is wrong in the domain's own words. A
-string rather than a violation object so that holding is free: this runs for every changed entity on
-every save, and the consistent path allocates nothing. The generated code pairs the message with
-`Code`, so the code is written down once.
+`Check` returns `null` when the rule holds, and otherwise what is wrong in the domain's own words. It
+returns an `InvariantFailure`, and a string converts to one, so a rule with nothing more to say returns
+its message. Not a violation object so that holding is free: this runs for every changed entity on
+every save, and the consistent path returns `null` and allocates nothing. The generated code pairs the
+failure with `Code`, so the code is written down once.
+
+A message that names values should hand them on as well, so it can be
+[phrased in another language](localization.md) without the number already baked into the sentence:
+
+```csharp
+public InvariantFailure? Check(Order order)
+    => order.Total <= order.CreditLimit
+        ? null
+        : new InvariantFailure($"An order may total at most {order.CreditLimit}.")
+            .With("CreditLimit", order.CreditLimit);
+```
+
+They arrive on the violation as `InvariantViolation.Arguments`.
 
 The generator finds these, builds one instance of each in a static array, and runs them before the
 seam. Both stages run the same array.
@@ -540,6 +554,10 @@ if (violations.Count > 0)
     return Results.UnprocessableEntity(violations.Select(v => new { v.Code, v.Message }));
 }
 ```
+
+To answer in the reader's language, pass them through `Localized(localizer)` first; see
+[Localization](localization.md). On the throwing path the same violations, codes and arguments
+included, are on `InvariantViolationException.InvariantViolations`.
 
 Violations come back roots before the children they own, so the order is deterministic and reads the
 way the aggregate is shaped. The aggregate's own walk orders them the same way: this object's rules,
