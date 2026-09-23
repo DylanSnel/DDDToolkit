@@ -1,13 +1,16 @@
 # Examples
 
-## The one to read: `ModularMonolith/`
+## The one to read: `ModularMonolith.Supabase/`
 
 A modular monolith is the architecture this toolkit is aimed at, and it is the only honest way to show
 integration events: two modules in one process, each owning its own aggregates, its own database and
 its own contract.
 
+The modules live in `Modules/`, apart from any host, because they are the domain and a host is only one
+way to run it. `ModularMonolith.Supabase/` is the host that runs them in one process.
+
 ```
-ModularMonolith/
+Modules/
   Ordering/
     DDDToolkit.Examples.Ordering.Contracts   the published surface: OrderId and OrderPlacedV1
     DDDToolkit.Examples.Ordering             the aggregate, the value object, the domain event, the context,
@@ -18,6 +21,7 @@ ModularMonolith/
     DDDToolkit.Examples.Shipping             consumes Ordering's contract and nothing else; ShippingModule
                                              registers it as a consumer
       Migrations/                            Shipping's Entity Framework migrations, for Postgres
+ModularMonolith.Supabase/
   DDDToolkit.Examples.Host                   switches the modules on, four HTTP endpoints; its build exports
   supabase/
     config.toml                              a local Supabase project, from supabase init
@@ -47,7 +51,7 @@ Ordering owns.
 ### Running it
 
 ```bash
-dotnet run --project Examples/ModularMonolith/DDDToolkit.Examples.Host
+dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host
 ```
 
 Then work through `DDDToolkit.Examples.Host.http` from the top. It refuses a bad address, refuses an
@@ -70,7 +74,7 @@ history. The migrations are Supabase's to apply: each module registers its migra
 checks over all of them that none is pending and refuses to start otherwise.
 
 ```bash
-cd Examples/ModularMonolith
+cd Examples/ModularMonolith.Supabase
 supabase start          # a local Supabase in Docker; applies supabase/migrations
 dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
 ```
@@ -79,7 +83,7 @@ The `supabase` launch profile points at the local database on port 54322. After 
 scaffold the migration in the module that owns it, and build:
 
 ```bash
-dotnet ef migrations add AddGiftWrap --project Ordering/DDDToolkit.Examples.Ordering --startup-project DDDToolkit.Examples.Host --output-dir Migrations
+dotnet ef migrations add AddGiftWrap --project ../Modules/Ordering/DDDToolkit.Examples.Ordering --startup-project DDDToolkit.Examples.Host --output-dir Migrations
 dotnet build DDDToolkit.Examples.Host   # writes 2026…_AddGiftWrap.ordering.ddd.sql
 supabase migration up                   # or: supabase db reset, to start over
 ```
@@ -91,6 +95,9 @@ fails. The files are committed, because Supabase branching reads them from the r
 [Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the build writes and how.
 
 ### What each feature is shown by
+
+Paths starting with `Ordering/` or `Shipping/` are under `Modules/`; the others are under
+`ModularMonolith.Supabase/`.
 
 | Feature | Where |
 |---|---|
@@ -127,7 +134,7 @@ fixtures: `DDDToolkit.Tests`, `DDDToolkit.EntityFramework.Tests`,
 test suite, not to this folder.
 
 They still work, and `ExampleLibrary` is the only place FluentValidation validators and the
-HotChocolate attributes are demonstrated. Read `ModularMonolith/` first.
+HotChocolate attributes are demonstrated. Read `ModularMonolith.Supabase/` first.
 
 ## `DDDToolkit.NugetApi`
 

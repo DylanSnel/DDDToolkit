@@ -84,7 +84,7 @@ Neither module names the other. `SendToModules()` offers every message to every 
 `AddModuleIntegrationEvents`, and each runs only its own handlers, under its own inbox, in its own
 context. A third module that wants `OrderPlacedV2` registers itself the same way, and nothing in Ordering or
 Billing changes. The host only calls `AddOrderingModule` and `AddBillingModule`; see
-[the example](../Examples/ModularMonolith).
+[the example](../Examples/ModularMonolith.Supabase).
 
 `AddDDDToolkitEntityFramework` can be called by every module like this because each call configures the
 same options. What is genuinely process-wide, such as `DispatchWithMediator()`, stays in the host, and

@@ -332,7 +332,7 @@ An invariant object earns its keep when one of these is true:
 
 An entity can have both, and mixing them is normal: the rules that earned a name get one, and the
 one-liner that never will stays in the seam. That is what
-[`Examples/ModularMonolith`](../Examples/ModularMonolith) does, with a named rule on the order, a
+[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase) does, with a named rule on the order, a
 named rule on the line, and one seam left where it belongs.
 
 If you want to find the rules that should be promoted, branch on `InvariantViolation.SeamCode`: every

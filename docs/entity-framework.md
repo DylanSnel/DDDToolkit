@@ -1063,7 +1063,7 @@ orphaned, and if two modules scaffold migrations in the same second, the second 
 Module schemas are not in the Data API's `schemas` list in `supabase/config.toml`, so the Data API does
 not serve them and nothing needs row level security.
 
-`Examples/ModularMonolith` does all of this. Each module's factory is marked `[SupabaseMigrations]`,
+`Examples/ModularMonolith.Supabase` does all of this. Each module's factory is marked `[SupabaseMigrations]`,
 its migrations are in its `Migrations` folder, and its registration (`OrderingModule.cs`,
 `ShippingModule.cs`) registers the start-up check. The host's project file turns the export on, `Write`
 locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
@@ -1079,7 +1079,7 @@ locally and `Check` in CI, and `supabase/migrations` holds the committed files. 
 - [Integration events](integration-events.md) for sinks, published contracts and the inbox.
 - [Diagnostics](diagnostics.md) for the build errors the generators report.
 
-The runnable version of everything here is `Examples/ModularMonolith`: the host's `Program.cs` shows
+The runnable version of everything here is `Examples/ModularMonolith.Supabase`: the host's `Program.cs` shows
 the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/OrderingContext.cs` shows the
 conventions and the generated converters, and the host's `Endpoints.cs` shows the conflict catch
 block. Its `supabase/` folder and the `Migrations` folders in both modules show the Supabase export.

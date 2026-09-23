@@ -22,7 +22,7 @@ public sealed class SupabaseMigrationsTests
     [Fact]
     public void The_committed_files_carry_those_names()
     {
-        var migrations = SupabaseMigrations.FindDirectory(Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith"));
+        var migrations = SupabaseMigrations.FindDirectory(Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith.Supabase"));
 
         Directory.GetFiles(migrations, "*.ddd.sql").Select(Path.GetFileName).Should().BeEquivalentTo(
             "20260922201049_CreateOrdering.ordering.ddd.sql",

@@ -40,6 +40,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   host only switches them on. It also runs on a local Supabase as well as on SQLite, each module in a
   schema of its own with its own migration history, written into one `supabase/` project by the
   host's build and checked by CI.
+- The examples' modules moved to `Examples/Modules`, apart from any host, and the modular monolith's
+  host and its `supabase/` project to `Examples/ModularMonolith.Supabase`. More hosts over the same
+  modules follow.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
