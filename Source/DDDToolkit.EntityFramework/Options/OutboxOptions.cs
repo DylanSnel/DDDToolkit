@@ -114,7 +114,7 @@ public sealed class OutboxOptions
     /// crash between the two cannot leave a message delivered but unmarked. Off by default.
     /// <para>
     /// It only buys anything for a sink that writes to the same database as the outbox. The pgmq sink in
-    /// <c>DDDToolkit.EntityFramework.Postgres</c> is the case it exists for: the queue is a table, so
+    /// <c>DDDToolkit.Messaging.Postgres</c> is the case it exists for: the queue is a table, so
     /// the enqueue and the mark commit together and the handoff from the outbox to the queue happens
     /// exactly once. A sink that talks to a broker, an HTTP endpoint or anything else outside the
     /// database is unaffected: that send cannot be rolled back, so turning this on only widens the

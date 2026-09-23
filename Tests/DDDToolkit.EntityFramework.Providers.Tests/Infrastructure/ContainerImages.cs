@@ -20,7 +20,7 @@ public static class ContainerImages
 {
     /// <summary>
     /// PostgreSQL. The major matches the pgmq image
-    /// <c>ghcr.io/pgmq/pg17-pgmq</c> that <c>DDDToolkit.EntityFramework.Postgres</c> is tested against
+    /// <c>ghcr.io/pgmq/pg17-pgmq</c> that <c>DDDToolkit.Messaging.Postgres</c> is tested against
     /// in <c>Tests/DDDToolkit.EntityFramework.Tests</c>, because the pgmq project publishes its
     /// extension on PostgreSQL 17. One major across the whole suite means a difference between two
     /// runs is a difference in our code, not a difference between two servers.

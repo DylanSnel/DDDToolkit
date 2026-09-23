@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
-namespace DDDToolkit.EntityFramework.Postgres.Pgmq;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// Enqueues published messages on a pgmq queue over a connection of its own, from an

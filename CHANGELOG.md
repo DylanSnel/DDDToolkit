@@ -271,7 +271,7 @@ one of those now either works or reports a diagnostic that names the type and th
   nothing was raised on the way out. Payload comparison ignores `EventId` and `OccurredAt`, because
   record equality never matches two events that mean the same thing. It references `DDDToolkit` and
   nothing else, so it brings no test framework and no assertion library.
-- `DDDToolkit.EntityFramework.Postgres`, a [pgmq](https://github.com/pgmq/pgmq) sink. `pgmq.send` is
+- `DDDToolkit.Messaging.Postgres`, a [pgmq](https://github.com/pgmq/pgmq) sink. `pgmq.send` is
   an ordinary insert, so `PgmqSink<TContext>` enqueues inside the transaction that writes the
   aggregate. `PgmqQueue` exposes send, read, archive and delete directly, queues are created on
   first use unless you turn that off, and a missing extension reports `PgmqNotInstalledException`

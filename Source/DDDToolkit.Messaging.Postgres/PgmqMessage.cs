@@ -1,4 +1,4 @@
-namespace DDDToolkit.EntityFramework.Postgres.Pgmq;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// One row read off a pgmq queue, exactly as <c>pgmq.message_record</c> describes it.

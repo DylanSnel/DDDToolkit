@@ -1,8 +1,8 @@
-﻿using System.Data;
+using System.Data;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace DDDToolkit.EntityFramework.Postgres.Pgmq;
+namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// The pgmq functions this package calls, wrapped so a caller passes a connection and gets .NET types
