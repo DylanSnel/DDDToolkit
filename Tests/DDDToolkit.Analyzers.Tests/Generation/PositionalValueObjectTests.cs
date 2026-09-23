@@ -144,6 +144,22 @@ public class PositionalValueObjectTests
     }
 
     [Fact]
+    public void It_survives_a_System_Text_Json_round_trip()
+    {
+        // The outbox stores domain events as JSON and reads them back before publishing. A protected init
+        // setter the serializer cannot reach would bring every value back as its default.
+        var emitted = Run().Emit();
+        var type = emitted.Type("Sample.Money");
+        var money = emitted.CallStatic("Sample.Use", "Make")!;
+
+        var copy = System.Text.Json.JsonSerializer.Deserialize(System.Text.Json.JsonSerializer.Serialize(money, type), type)!;
+
+        emitted.Property(copy, "Amount").Should().Be(10m);
+        emitted.Property(copy, "Currency").Should().Be("EUR");
+        emitted.Property(copy, "Note").Should().Be("first");
+    }
+
+    [Fact]
     public void The_twin_copies_every_positional_property()
     {
         var emitted = Run().Emit();

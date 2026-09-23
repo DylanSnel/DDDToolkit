@@ -46,7 +46,7 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".ValueObject, "
                 + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
             {
-                EmitPositionalProperties(writer, definition.Properties.Where(p => p.IsPositional));
+                EmitPositionalProperties(writer, definition.Properties.Where(p => p.IsPositional), definition.SystemTextJsonAvailable);
 
                 EmitEqualityComponents(writer, comparisonProperties.Select(p => p.Name));
                 writer.Line();
@@ -140,13 +140,22 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
     /// under a parameter's name takes the place of the one the compiler would synthesize, and its
     /// initializer reads the parameter, so the primary constructor still fills it.
     /// </summary>
-    private static void EmitPositionalProperties(CodeWriter writer, System.Collections.Generic.IEnumerable<PropertyInfo> properties)
+    private static void EmitPositionalProperties(CodeWriter writer, System.Collections.Generic.IEnumerable<PropertyInfo> properties, bool systemTextJsonAvailable)
     {
         foreach (var property in properties)
         {
             foreach (var attribute in property.Attributes)
             {
                 writer.Line(attribute);
+            }
+
+            // The setter is protected, so System.Text.Json would read the property and never write it:
+            // the [JsonConstructor] below builds the record from defaults and the values are dropped. A
+            // value object inside a domain event would come out of the outbox empty. [JsonInclude] lets
+            // the serializer reach the protected init, the way it has to for a declared property too.
+            if (systemTextJsonAvailable && !property.Attributes.Any(attribute => attribute.Contains("JsonInclude")))
+            {
+                writer.Line("[global::System.Text.Json.Serialization.JsonInclude]");
             }
 
             writer.Line("public " + property.TypeName + " " + property.Name + " { get; protected init; } = " + property.Name + ";");

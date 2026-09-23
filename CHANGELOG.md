@@ -110,6 +110,10 @@ convention.
 
 ### Fixed
 
+- A positional `[ValueObject]` record, such as `record Money(decimal Amount, string Currency)`, came
+  back from System.Text.Json with every property at its default. The generated properties are
+  `protected init`, which the serializer cannot reach by itself, so a value object inside a domain
+  event was published from the outbox empty. The generated properties are now `[JsonInclude]`.
 - `ToValid()` could hand back a twin holding a different value from the one it had just validated.
   The twin started from an empty object and copied the settable properties one by one, so a get-only
   property or a private field stayed at its default without any warning, and a `protected` property
