@@ -402,3 +402,8 @@ nupkgs/
 
 # Fusion gateway archives, composed by the AppHost on every start
 gateway.far
+
+# Local secrets, such as the Supabase access token in .env.supabase.local
+*.local
+.env
+.env.*
