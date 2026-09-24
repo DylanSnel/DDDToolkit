@@ -13,3 +13,8 @@ npm run build      # what the workflow builds; broken links fail it
 ```
 
 The sidebar's order is `sidebars.js`: a new page in `docs/` has to be added there.
+
+The code on the homepage is compiled, not typed. `sample/` is a small project the generators run over,
+and `npm run generate-sample` builds it and writes what they produced to `src/data/generated.json`,
+which is committed so the site build needs no .NET SDK. Run it after changing a generator or the
+sample.

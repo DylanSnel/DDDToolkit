@@ -16,6 +16,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
   failing on a broken link, and publishes it to GitHub Pages from `main`.
+- [What the generator writes](docs/generated-code.md): the generated code for one small aggregate,
+  file by file, and why it is generated rather than written. The site's homepage shows the same
+  output, compiled from `website/sample` rather than typed out.
 - `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
   serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
   them and calls them in memory: `services.AddInMemoryFusionGateway()` and `app.MapInMemoryFusionGateway()`.

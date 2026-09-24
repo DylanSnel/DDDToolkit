@@ -482,7 +482,8 @@ Nothing here is magic, and reading the output is the fastest way to understand i
 </PropertyGroup>
 ```
 
-Build, then look in `Generated/`. Add that folder to `.gitignore`.
+Build, then look in `Generated/`. Add that folder to `.gitignore`. [What the generator writes](generated-code.md)
+walks through that output for a small aggregate, file by file.
 
 Each file is named after the type it belongs to, the generator that wrote it and a short hash that
 keeps two types of the same name apart, such as `Order.2c9e41f0.g.cs` for the entity itself and
