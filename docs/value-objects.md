@@ -421,6 +421,26 @@ Deserialize the base type and call `ToValid()`.
 For the same reason, [`With`](#changing-a-value-with) on a twin validates the copy and throws when
 it is invalid, rather than handing back a twin that does not keep its promise.
 
+A twin is never equal to a plain value, even one with the same components, and that holds from
+either side:
+
+```csharp
+Money plain = new(8m, "EUR");
+ValidMoney twin = plain.ToValid();
+
+plain == twin                  // false
+twin == plain                  // false
+twin == new Money(8m, "EUR").ToValid()   // true: twin to twin compares the components
+```
+
+Equality between a twin and a plain value could not be `true` in both directions. The twin is a derived
+record, and the compiler writes the `Equals(Money?)` that answers for it, which only accepts a
+`ValidMoney`. The compiler does not allow that member to be replaced. So the generated equality also
+compares the runtime type, the way the compiler's own record equality does, and the answer is the same
+whichever side is asked. To compare a twin with a plain value, compare twin to twin (call `ToValid()`
+on the other side) or compare the components. Hash codes do not include the type, so a twin and a plain
+value with the same components hash alike; that is allowed, and harmless.
+
 This is why value objects cannot be `sealed` ([DDD00013](diagnostics.md#ddd00013)).
 
 ## Failure handling

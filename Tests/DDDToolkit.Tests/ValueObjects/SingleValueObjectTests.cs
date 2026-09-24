@@ -144,18 +144,20 @@ public class SingleValueObjectTests
     }
 
     [Fact]
-    public void TwinEqualityIsAsymmetricAgainstItsSource()
+    public void TwinEqualityIsSymmetricAgainstItsSource()
     {
-        // DECISION (pinned): the twin is a derived record, and C# record equality is asymmetric across
-        // an inheritance step — the derived type's Equals rejects a base instance, while the base's
-        // accepts anything with the same components. Compare Values, or compare twins to twins; do not
-        // mix the two kinds in a `==`.
+        // DECISION (pinned): a twin and a plain value are never equal, whichever side is asked. The twin
+        // is a derived record, and the compiler owns the Equals(EmailAddress?) that answers for the twin,
+        // so it cannot be taught to accept a plain value. The plain side refuses the twin to match.
+        // Compare Values, or compare twins to twins.
         var email = EmailAddress.Create("test@example.com");
         var valid = email.ToValid();
 
         valid.Value.Should().Be(email.Value);
-        (email == valid).Should().BeTrue("EmailAddress.Equals only looks at the components");
-        (valid == email).Should().BeFalse("ValidEmailAddress.Equals additionally requires a ValidEmailAddress");
+        (email == valid).Should().BeFalse("a plain value and a twin are different runtime types");
+        (valid == email).Should().BeFalse("equality has to agree in both directions");
+        email.Equals(valid).Should().Be(valid.Equals(email));
+        valid.Should().Be(EmailAddress.Create("test@example.com").ToValid());
     }
 
     // ---------------------------------------------------------------- locally declared single value objects
