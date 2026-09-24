@@ -4,6 +4,7 @@
 const sidebars = {
   docs: [
     'getting-started',
+    'generated-code',
     {
       type: 'category',
       label: 'Building blocks',
