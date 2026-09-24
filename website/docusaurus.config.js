@@ -10,7 +10,7 @@ const docsDir = path.join(repoRoot, 'docs');
 const config = {
   title: 'DDDToolkit',
   tagline: 'Source-generated building blocks for Domain-Driven Design in .NET',
-  favicon: 'img/logo.png',
+  favicon: 'img/logo.svg',
 
   url: 'https://dylansnel.github.io',
   baseUrl: '/DDDToolkit/',
@@ -19,6 +19,13 @@ const config = {
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
+
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap',
+      type: 'text/css',
+    },
+  ],
 
   markdown: {
     // The docs are plain Markdown, full of C# generics such as IInvariant<T>; read as MDX they would be JSX.
@@ -59,13 +66,20 @@ const config = {
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
       colorMode: {
+        defaultMode: 'dark',
         respectPrefersColorScheme: true,
+      },
+      docs: {
+        sidebar: {
+          hideable: true,
+        },
       },
       navbar: {
         title: 'DDDToolkit',
+        hideOnScroll: false,
         logo: {
           alt: 'DDDToolkit',
-          src: 'img/logo.png',
+          src: 'img/logo.svg',
         },
         items: [
           { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
@@ -97,8 +111,8 @@ const config = {
         copyright: `DDDToolkit, MIT licensed. Built with Docusaurus.`,
       },
       prism: {
-        theme: prismThemes.github,
-        darkTheme: prismThemes.dracula,
+        theme: prismThemes.oneLight,
+        darkTheme: prismThemes.oneDark,
         additionalLanguages: ['csharp', 'bash', 'json', 'graphql', 'sql', 'powershell'],
       },
     }),
