@@ -154,6 +154,38 @@ html[data-theme='dark'] .theme-code-block {
   box-shadow: 0 10px 30px -15px rgba(0, 0, 0, 0.6);
 }
 
+/* Generated code. The docs give a title, the generated file's name, to those blocks and no others, so
+   a titled block reads as the compiler's half of the example above it. */
+.theme-code-block:has(> [class*='codeBlockTitle']) {
+  border-color: color-mix(in srgb, var(--ifm-color-primary) 35%, var(--ddd-border));
+  border-left: 3px solid var(--ifm-color-primary);
+}
+
+.theme-code-block [class*='codeBlockTitle'] {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 1rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: var(--ddd-muted);
+  background: color-mix(in srgb, var(--ifm-color-primary) 7%, var(--prism-background-color));
+}
+
+.theme-code-block [class*='codeBlockTitle']::before {
+  content: 'Generated';
+  flex-shrink: 0;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--ddd-gradient);
+  color: #ffffff;
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 /* tables */
 .markdown table {
   display: table;

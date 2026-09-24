@@ -226,7 +226,7 @@ There is no export step to remember. Each module's design-time factory is marked
 and the host's project file sets `SupabaseMigrationsExport`: `Write` locally, so every build writes the
 files a new migration needs, and `Check` in CI, so a pull request that adds a migration without its file
 fails. The files are committed, because Supabase branching reads them from the repository. See
-[Entity Framework → Supabase](../docs/entity-framework.md#supabase) for what the build writes and how.
+[Entity Framework → Supabase](../docs/supabase.md) for what the build writes and how.
 
 ### On SQL Server
 
