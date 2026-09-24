@@ -12,6 +12,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
+  serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
+  them and calls them in memory: `services.AddInMemoryFusionGateway()` and `app.MapInMemoryFusionGateway()`.
+  It gives the gateway a service container of its own, because HotChocolate's `AddInMemorySchema` cannot
+  serve a gateway over HTTP next to more than one source schema, and fails the application's start with
+  the composer's error instead of hanging when the schemas cannot be composed. Needs HotChocolate Fusion
+  16.6.6 or later, which the package declares. See
+  [One schema over a modular monolith](docs/graphql.md#one-schema-over-a-modular-monolith).
 - `DDDToolkit.Messaging.MassTransit`, MassTransit 8 as the transport between one process's outbox and
   another's inbox, used the way MassTransit is used. `outbox.SendToMassTransit()` publishes each contract
   as a message type of its own, with the outbox's message id as MassTransit's and the toolkit's headers
@@ -36,8 +44,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - The monoliths compose their GraphQL with Fusion too, inside the process. Every module serves a source
   schema of its own and declares its own part of the types others own (Ordering's `Product` by SKU,
   Payments' and Shipping's `Order` by id), and a Fusion gateway in the monolith composes the five at
-  start-up and calls them in memory, with no HTTP. The joins `Shared/DDDToolkit.Examples.GraphQL` used to
-  make by hand are gone; a module's GraphQL is the same code as a service and in the monolith. A module
+  start-up and calls them in memory, with no HTTP, through `DDDToolkit.HotChocolate.Fusion.InMemory`. The
+  joins the examples used to make by hand are gone; a module's GraphQL is the same code as a service and in the monolith. A module
   registers its source schema in `Add{Module}Module` when the host serves GraphQL
   (`ModuleHost.WithGraphQL`), and the gateway composes whatever the modules registered. Inventory
   contributes a product's stock to `Product`, keyed on the SKU, in the monoliths and the services alike.

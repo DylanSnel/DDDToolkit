@@ -435,6 +435,58 @@ A schema without `AddSourceSchemaDefaults()` gets no directive. Entities stay un
 adds to another's entity declares a stub of it, keyed on its id, the way `Examples/Microservices.*` do
 for `Order`.
 
+## One schema over a modular monolith
+
+`DDDToolkit.HotChocolate.Fusion.InMemory` makes the modules of a monolith what Fusion makes services: each
+module serves a GraphQL source schema of its own, and a Fusion gateway inside the application composes
+them into one schema and answers every query by calling them directly, in memory, with no HTTP. Two
+modules can each declare their own `Product`, keyed on the same field, and a client sees one:
+
+```csharp
+// Catalog's source schema: the product's name and price, and the lookup it is fetched by
+builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType()...;
+
+// Inventory's: its own Product, keyed on the SKU, with the stock, and an internal lookup
+builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddQueryType()...;
+
+builder.Services.AddInMemoryFusionGateway();   // composes every source schema registered
+
+var app = builder.Build();
+app.MapInMemoryFusionGateway();                // /graphql
+```
+
+```graphql
+{ productBySku(sku: "COFFEE-1KG") { name price { amount } stock { available } } }
+#                                   └─ Catalog ─────────┘ └─ Inventory ─────┘
+```
+
+A module's GraphQL is then the same code in the monolith and as a service behind a Fusion gateway, and
+the modules still know nothing of each other's classes: they agree on a type's name and its key.
+`Examples/ModularMonolith.*` register every module this way; see the examples' README.
+
+**It needs HotChocolate Fusion 16.6.6 or later**, where the other HotChocolate integration asks for
+16.0.0: the in-memory connector it builds on is newer than that. The package declares it, so NuGet refuses
+an older HotChocolate rather than a gateway that fails at run time.
+
+Three things it takes care of, all found the hard way and shown in
+`Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`:
+
+- **The gateway has a service container of its own**, inside the application. HotChocolate and Fusion
+  each register themselves as the one `IRequestExecutorProvider` of a container: the endpoint asks it for
+  the gateway, and HotChocolate's in-memory connector asks it for the modules, so with
+  `AddGraphQLGatewayServer().AddInMemorySchema(...)` and more than one source schema one of the two loses
+  ("The requested schema '_Default' does not exist"). The package hands the gateway the modules
+  explicitly, through the same public classes `AddInMemorySchema` uses.
+- **A composition that fails no longer hangs.** The in-memory connector reports a composition error only
+  to observers subscribed at that moment, and the gateway then waits for a schema forever. The
+  application's start waits for the composed schema instead, and fails after
+  `InMemoryFusionGatewayOptions.CompositionTimeout` (thirty seconds), with the composer's error when it
+  was caught.
+- **Relay spans the modules**: `node(id:)` is answered by whichever module owns the type in the id.
+
+And one rule that is Fusion's, not the package's: every source schema's root query type must be called
+`Query`. `AddQueryType<CatalogQuery>()` names it `CatalogQuery`, and composition refuses it.
+
 ## The DomainEvent interface
 
 `AddDDDToolkitTypes()` registers one type of its own: a GraphQL interface over `IDomainEvent`.

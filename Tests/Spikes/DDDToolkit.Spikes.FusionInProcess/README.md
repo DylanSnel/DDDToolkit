@@ -1,7 +1,7 @@
 # Fusion in-process spike
 
 How the example monolith composes its modules with Fusion in-process, and why it is wired the way it is.
-`Examples/Shared/DDDToolkit.Examples.GraphQL/ModuleGateway.cs` is the `endpoint-own-container` case below,
+`Source/DDDToolkit.HotChocolate.Fusion.InMemory` is the `endpoint-own-container` case below,
 applied to the shop.
 
 The idea: each module serves a GraphQL source schema of its own, with its own version of a shared type

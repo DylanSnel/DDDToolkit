@@ -1,18 +1,18 @@
-using DDDToolkit.EntityFramework;
-using DDDToolkit.Examples.GraphQL;
-using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.EntityFramework.Supabase;
-using DDDToolkit.Examples.Hosting;
-using DDDToolkit.Examples.Catalog;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Catalog.Api;
-using DDDToolkit.Examples.Inventory;
+using DDDToolkit.Examples.Catalog;
+using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Inventory.Api;
-using DDDToolkit.Examples.Ordering;
+using DDDToolkit.Examples.Inventory;
 using DDDToolkit.Examples.Ordering.Api;
-using DDDToolkit.Examples.Payments;
+using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Payments.Api;
-using DDDToolkit.Examples.Shipping;
+using DDDToolkit.Examples.Payments;
 using DDDToolkit.Examples.Shipping.Api;
+using DDDToolkit.Examples.Shipping;
+using DDDToolkit.HotChocolate.Fusion.InMemory;
+using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes
@@ -56,7 +56,7 @@ builder.Services.AddShippingModule(host);
 
 // One GraphQL schema over the five modules' source schemas, composed by Fusion in this process, at
 // /graphql next to the REST endpoints.
-builder.Services.AddModuleGateway();
+builder.Services.AddInMemoryFusionGateway();
 
 var app = builder.Build();
 
@@ -74,7 +74,7 @@ app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
-app.MapModuleGateway();
+app.MapInMemoryFusionGateway();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

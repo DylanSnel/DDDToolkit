@@ -33,7 +33,6 @@ Modules/
     DDDToolkit.Examples.Catalog.Migrations.SqlServer   its SQL Server migrations, for hosts on SQL Server
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
 Shared/
-  DDDToolkit.Examples.GraphQL                the shop's GraphQL schema over every module, and the joins between them
   DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
   DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
 ModularMonolith.Supabase/
@@ -143,16 +142,14 @@ var host = ModuleHost.InProcess(database)
     .AlsoSendTo<GraphQlSubscriptionSink>()
     .WithGraphQL(graphql => graphql.AddInMemorySubscriptions());
 
-builder.Services.AddCatalogModule(host);   // ... and the other four
-builder.Services.AddModuleGateway();       // composes whatever source schemas the modules registered
+builder.Services.AddCatalogModule(host);         // ... and the other four
+builder.Services.AddInMemoryFusionGateway();     // composes whatever source schemas the modules registered
 
-app.MapModuleGateway();                    // /graphql
+app.MapInMemoryFusionGateway();                  // /graphql
 ```
 
-`Shared/DDDToolkit.Examples.GraphQL/ModuleGateway.cs` knows no module. It keeps the gateway in a service
-container of its own inside the same application, because HotChocolate and Fusion each claim the one
-executor provider of a container; `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why, apart from
-the shop.
+The gateway is the toolkit's `DDDToolkit.HotChocolate.Fusion.InMemory`, and it knows no module; see
+[One schema over a modular monolith](../docs/graphql.md#one-schema-over-a-modular-monolith).
 
 Every entity a client can refetch is a Relay node: `node(id:)` finds orders, products, payments,
 shipments and stock items, and the ids are the toolkit's identifiers written into HotChocolate's own node
@@ -439,7 +436,7 @@ Paths are under `Modules/`.
 | The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
 | The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
-| One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `Shared/DDDToolkit.Examples.GraphQL/ModuleGateway.cs` |
+| One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `DDDToolkit.HotChocolate.Fusion.InMemory` |
 | The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
 | Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in each module's `Add{Module}SourceSchema`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |

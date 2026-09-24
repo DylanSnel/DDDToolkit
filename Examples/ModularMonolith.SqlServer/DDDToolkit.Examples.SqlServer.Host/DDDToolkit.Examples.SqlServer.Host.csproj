@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <!-- Mediator generates into the composition root; see the Supabase host for the long version. -->
+    <!-- The transport of the subscriptions the modules declare; this host keeps them in memory. -->
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
     <PackageReference Include="Mediator.SourceGenerator">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -32,7 +34,7 @@
     <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping.Migrations.SqlServer\DDDToolkit.Examples.Shipping.Migrations.SqlServer.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.GraphQL\DDDToolkit.Examples.GraphQL.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
   </ItemGroup>
 
