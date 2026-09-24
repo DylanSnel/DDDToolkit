@@ -31,6 +31,12 @@ public static class CatalogModule
 
         services.AddHostedService<ListTheStartingRange>();
 
+        // GraphQL, when the host serves it: Catalog's own source schema, for a Fusion gateway to compose.
+        if (host.GraphQL is { } graphql)
+        {
+            graphql(services.AddCatalogSourceSchema());
+        }
+
         return services;
     }
 

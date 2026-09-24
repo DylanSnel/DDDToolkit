@@ -61,6 +61,12 @@ public static class OrderingModule
         // then, which is exactly why a failing consumer cannot refuse an order.
         services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
+        // GraphQL, when the host serves it: Ordering's own source schema, for a Fusion gateway to compose.
+        if (host.GraphQL is { } graphql)
+        {
+            graphql(services.AddOrderingSourceSchema());
+        }
+
         return services;
     }
 }

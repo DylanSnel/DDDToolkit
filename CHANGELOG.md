@@ -37,7 +37,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   schema of its own and declares its own part of the types others own (Ordering's `Product` by SKU,
   Payments' and Shipping's `Order` by id), and a Fusion gateway in the monolith composes the five at
   start-up and calls them in memory, with no HTTP. The joins `Shared/DDDToolkit.Examples.GraphQL` used to
-  make by hand are gone; a module's GraphQL is the same code as a service and in the monolith.
+  make by hand are gone; a module's GraphQL is the same code as a service and in the monolith. A module
+  registers its source schema in `Add{Module}Module` when the host serves GraphQL
+  (`ModuleHost.WithGraphQL`), and the gateway composes whatever the modules registered. Inventory
+  contributes a product's stock to `Product`, keyed on the SKU, in the monoliths and the services alike.
   `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why the gateway has a service container of its
   own in the application, and two traps on the way.
 - A Supabase Live workflow runs the Supabase monolith against a real Supabase project: the exported

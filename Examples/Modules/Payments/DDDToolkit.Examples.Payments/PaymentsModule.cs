@@ -37,6 +37,12 @@ public static class PaymentsModule
 
         services.AddOutboxBackgroundService<PaymentsContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
+        // GraphQL, when the host serves it: Payments's own source schema, for a Fusion gateway to compose.
+        if (host.GraphQL is { } graphql)
+        {
+            graphql(services.AddPaymentsSourceSchema());
+        }
+
         return services;
     }
 }

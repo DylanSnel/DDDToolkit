@@ -114,16 +114,20 @@ public abstract class ShopScenarios<TAppHost>(ShopFixture<TAppHost> shop) where 
                 $$"""
                 { order(id: "{{id}}") {
                     status
-                    lines { quantity product { name price { amount currency } } }
+                    lines { quantity product { name price { amount currency } stock { available } } }
                     payment { status order }
                     shipment { destination order } } }
                 """)).GetProperty("order");
             return order.GetProperty("shipment").ValueKind == JsonValueKind.Object;
         });
 
-        // Ordering answered the order, Catalog the product, Payments the payment, Shipping the van.
+        // Ordering answered the order, Catalog and Inventory the product, Payments the payment, Shipping the van.
         order.GetProperty("status").GetString().Should().Be("CONFIRMED");
         order.GetProperty("lines")[0].GetProperty("product").GetProperty("name").GetString().Should().Be("Coffee beans, 1 kg");
+
+        // One Product, from two modules: the name is Catalog's, the stock Inventory's, merged on the SKU.
+        order.GetProperty("lines")[0].GetProperty("product").GetProperty("stock").GetProperty("available").ValueKind
+            .Should().Be(JsonValueKind.Number);
         order.GetProperty("payment").GetProperty("status").GetString().Should().Be("CAPTURED");
 
         // The modules point back at the order with its own node id, and node(id:) finds it again.

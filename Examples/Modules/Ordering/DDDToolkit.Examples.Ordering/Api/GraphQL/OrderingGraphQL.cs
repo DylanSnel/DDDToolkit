@@ -34,4 +34,33 @@ public static class OrderingGraphQL
             .AddTypeExtension<OrderingSubscriptions>()
             .AddDataLoader<OrderByIdDataLoader>();
     }
+
+    /// <summary>The name of Ordering's source schema.</summary>
+    public const string SourceSchemaName = "ordering";
+
+    /// <summary>
+    /// Ordering's source schema: a GraphQL schema of its own, named <see cref="SourceSchemaName"/>, for a
+    /// Fusion gateway to compose with the other modules', in the same process or across services. It holds
+    /// its orders, and a line's product as the Product with that SKU, for Catalog to fill in. Its
+    /// subscriptions need a transport, which is the host's to choose: <c>AddInMemorySubscriptions()</c> on the
+    /// builder this returns, for a single process.
+    /// </summary>
+    public static IRequestExecutorBuilder AddOrderingSourceSchema(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services
+            .AddGraphQLServer(SourceSchemaName)
+            // A schema a gateway composes: lookups inferred as keys, node fields shareable.
+            .AddSourceSchemaDefaults()
+            // Relay, with node(id:) as the lookup a gateway fetches this module's part of a type through.
+            .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+            .AddDDDToolkitTypes()
+            .AddDDDToolkitErrors()
+            .AddQueryType()
+            .AddMutationType()
+            .AddSubscriptionType()
+            .AddOrderingGraphQL()
+            .AddOrderingProductStub();
+    }
 }

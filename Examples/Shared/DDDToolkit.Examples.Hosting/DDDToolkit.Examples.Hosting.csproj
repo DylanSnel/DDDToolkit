@@ -17,6 +17,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <!-- IRequestExecutorBuilder, for ModuleHost.GraphQL. -->
+    <PackageReference Include="HotChocolate" />
   </ItemGroup>
 
   <ItemGroup>

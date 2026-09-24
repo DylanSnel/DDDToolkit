@@ -35,6 +35,12 @@ public static class ShippingModule
         // publishes, and every module registered here is offered every message, whatever carried it here.
         services.AddModuleIntegrationEvents<ShippingContext>(module => module.AddShippingIntegrationEvents());
 
+        // GraphQL, when the host serves it: Shipping's own source schema, for a Fusion gateway to compose.
+        if (host.GraphQL is { } graphql)
+        {
+            graphql(services.AddShippingSourceSchema());
+        }
+
         return services;
     }
 }

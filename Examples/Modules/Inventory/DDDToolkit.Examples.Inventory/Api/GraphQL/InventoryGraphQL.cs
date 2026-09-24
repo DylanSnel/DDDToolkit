@@ -1,5 +1,6 @@
 using DDDToolkit.Examples.Inventory.GraphQl;
 using DDDToolkit.Examples.Ordering.Contracts.GraphQl;
+using DDDToolkit.HotChocolate;
 using GreenDonut;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
@@ -22,6 +23,31 @@ public static class InventoryGraphQL
             .AddType<StockReservationType>()
             .AddTypeExtension<InventoryQueries>()
             .AddDataLoader<StockItemByIdDataLoader>();
+    }
+
+    /// <summary>The name of Inventory's source schema.</summary>
+    public const string SourceSchemaName = "inventory";
+
+    /// <summary>
+    /// Inventory's source schema: a GraphQL schema of its own, named <see cref="SourceSchemaName"/>, for a
+    /// Fusion gateway to compose with the other modules', in the same process or across services. It holds
+    /// its stock and reservations, and the stock of a Product, by SKU.
+    /// </summary>
+    public static IRequestExecutorBuilder AddInventorySourceSchema(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services
+            .AddGraphQLServer(SourceSchemaName)
+            // A schema a gateway composes: lookups inferred as keys, node fields shareable.
+            .AddSourceSchemaDefaults()
+            // Relay, with node(id:) as the lookup a gateway fetches this module's part of a type through.
+            .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+            .AddDDDToolkitTypes()
+            .AddDDDToolkitErrors()
+            .AddQueryType()
+            .AddInventoryGraphQL()
+            .AddInventoryProductStock();
     }
 }
 

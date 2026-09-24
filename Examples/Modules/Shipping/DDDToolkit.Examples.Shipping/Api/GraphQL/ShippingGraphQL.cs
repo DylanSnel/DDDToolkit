@@ -1,6 +1,7 @@
 using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Examples.Ordering.Contracts.GraphQl;
 using DDDToolkit.Examples.Shipping.GraphQl;
+using DDDToolkit.HotChocolate;
 using GreenDonut;
 using HotChocolate.Execution.Configuration;
 using HotChocolate.Types;
@@ -23,6 +24,31 @@ public static class ShippingGraphQL
             .AddTypeExtension<ShippingQueries>()
             .AddDataLoader<ShipmentByIdDataLoader>()
             .AddDataLoader<ShipmentByOrderDataLoader>();
+    }
+
+    /// <summary>The name of Shipping's source schema.</summary>
+    public const string SourceSchemaName = "shipping";
+
+    /// <summary>
+    /// Shipping's source schema: a GraphQL schema of its own, named <see cref="SourceSchemaName"/>, for a
+    /// Fusion gateway to compose with the other modules', in the same process or across services. It holds
+    /// its shipments, and the shipment of an Order, by the order's id.
+    /// </summary>
+    public static IRequestExecutorBuilder AddShippingSourceSchema(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services
+            .AddGraphQLServer(SourceSchemaName)
+            // A schema a gateway composes: lookups inferred as keys, node fields shareable.
+            .AddSourceSchemaDefaults()
+            // Relay, with node(id:) as the lookup a gateway fetches this module's part of a type through.
+            .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+            .AddDDDToolkitTypes()
+            .AddDDDToolkitErrors()
+            .AddQueryType()
+            .AddShippingGraphQL()
+            .AddShippingOrderStub();
     }
 }
 

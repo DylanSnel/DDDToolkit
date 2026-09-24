@@ -62,7 +62,8 @@ builder.UseWolverine(wolverine =>
 });
 
 // GraphQL: this service's source schema, which the gateway composes with the other two. Besides stock
-// and shipments it declares Order, by id alone, with the one field Shipping adds to it: shipment.
+// and shipments it declares Product, by SKU, with the stock Inventory keeps of it, and Order, by id
+// alone, with the one field Shipping adds to it: shipment.
 builder.Services
     .AddGraphQLServer()
     .AddSourceSchemaDefaults()
@@ -71,6 +72,7 @@ builder.Services
     .AddDDDToolkitErrors()
     .AddQueryType()
     .AddInventoryGraphQL()
+    .AddInventoryProductStock()
     .AddShippingGraphQL()
     .AddShippingOrderStub();
 

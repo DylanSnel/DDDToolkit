@@ -34,6 +34,12 @@ public static class InventoryModule
 
         services.AddHostedService<StockTheShelves>();
 
+        // GraphQL, when the host serves it: Inventory's own source schema, for a Fusion gateway to compose.
+        if (host.GraphQL is { } graphql)
+        {
+            graphql(services.AddInventorySourceSchema());
+        }
+
         return services;
     }
 

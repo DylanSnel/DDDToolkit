@@ -125,16 +125,33 @@ Each module serves a GraphQL **source schema** of its own, from its `Api/GraphQL
 code-first descriptors (the domain classes carry no GraphQL attribute), its queries and mutations, and
 its own part of the types other modules own. Ordering says a line's product is the `Product` with that
 SKU (`ProductStub.cs`), Payments and Shipping say what they add to the `Order` with that id
-(`OrderStub.cs`), and Catalog marks `productBySku` as the lookup a `Product` is fetched by. No module
+(`OrderStub.cs`), Inventory adds a product's stock (`ProductStock.cs`), and Catalog marks
+`productBySku` as the lookup a `Product` is fetched by. So `lines { product { name stock { available } } }`
+is answered by three modules, the name by Catalog and the stock by Inventory, merged on the SKU. No module
 knows another's classes; they agree on a type's name and its key.
 
 A Fusion gateway inside the monolith composes the five into the one schema at start-up and answers each
 query by calling the modules' schemas directly, in the process, with no HTTP between them. It is the same
 Fusion the microservices samples run across processes, and the modules' GraphQL is the same code in
-both; see [GraphQL across services](#graphql-across-services). `Shared/DDDToolkit.Examples.GraphQL`
-only wires it: the modules' source schemas in the application's container, and the gateway in a
+both; see [GraphQL across services](#graphql-across-services).
+
+A module registers its source schema with the rest of itself, in `Add{Module}Module`, when the host
+serves GraphQL; the host says so once, and chooses what is its to choose, the subscriptions' transport:
+
+```csharp
+var host = ModuleHost.InProcess(database)
+    .AlsoSendTo<GraphQlSubscriptionSink>()
+    .WithGraphQL(graphql => graphql.AddInMemorySubscriptions());
+
+builder.Services.AddCatalogModule(host);   // ... and the other four
+builder.Services.AddModuleGateway();       // composes whatever source schemas the modules registered
+
+app.MapModuleGateway();                    // /graphql
+```
+
+`Shared/DDDToolkit.Examples.GraphQL/ModuleGateway.cs` knows no module. It keeps the gateway in a service
 container of its own inside the same application, because HotChocolate and Fusion each claim the one
-executor provider of a container. `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why, apart from
+executor provider of a container; `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why, apart from
 the shop.
 
 Every entity a client can refetch is a Relay node: `node(id:)` finds orders, products, payments,
@@ -422,10 +439,10 @@ Paths are under `Modules/`.
 | The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
 | The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
-| One GraphQL schema over modules that do not know each other: Fusion in the monolith | `Shared/DDDToolkit.Examples.GraphQL/ShopSchema.cs`, each module's `Api/GraphQL`, `ProductStub.cs`, `OrderStub.cs` |
+| One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `Shared/DDDToolkit.Examples.GraphQL/ModuleGateway.cs` |
 | The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
-| Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in `ShopSchema.cs`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
+| Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in each module's `Add{Module}SourceSchema`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
 | Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |

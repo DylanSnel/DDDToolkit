@@ -1,4 +1,5 @@
 using DDDToolkit.Examples.Catalog.GraphQl;
+using DDDToolkit.HotChocolate;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,5 +20,30 @@ public static class CatalogGraphQL
             .AddTypeExtension<CatalogMutations>()
             .AddDataLoader<ProductBySkuDataLoader>()
             .AddDataLoader<ProductByIdDataLoader>();
+    }
+
+    /// <summary>The name of Catalog's source schema.</summary>
+    public const string SourceSchemaName = "catalog";
+
+    /// <summary>
+    /// Catalog's source schema: a GraphQL schema of its own, named <see cref="SourceSchemaName"/>, for a
+    /// Fusion gateway to compose with the other modules', in the same process or across services. It holds
+    /// its products, the queries and mutations on them, and productBySku, the lookup a Product is fetched by.
+    /// </summary>
+    public static IRequestExecutorBuilder AddCatalogSourceSchema(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services
+            .AddGraphQLServer(SourceSchemaName)
+            // A schema a gateway composes: lookups inferred as keys, node fields shareable.
+            .AddSourceSchemaDefaults()
+            // Relay, with node(id:) as the lookup a gateway fetches this module's part of a type through.
+            .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+            .AddDDDToolkitTypes()
+            .AddDDDToolkitErrors()
+            .AddQueryType()
+            .AddMutationType()
+            .AddCatalogGraphQL();
     }
 }

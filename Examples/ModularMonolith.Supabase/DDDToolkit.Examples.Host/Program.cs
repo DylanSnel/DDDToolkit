@@ -44,7 +44,9 @@ var database = builder.Configuration.GetConnectionString("Supabase") is { Length
 // The whole shop in one process, so every message goes to the other modules through the module sink.
 // No module names another here or anywhere: each one says what it publishes and what it listens to.
 // The other modules, through the module sink, and whoever holds a GraphQL subscription to an order.
-var host = ModuleHost.InProcess(database).AlsoSendTo<GraphQlSubscriptionSink>();
+var host = ModuleHost.InProcess(database).AlsoSendTo<GraphQlSubscriptionSink>()
+    // GraphQL: each module registers its own source schema; the subscriptions' transport is this host's.
+    .WithGraphQL(graphql => graphql.AddInMemorySubscriptions());
 
 builder.Services.AddCatalogModule(host);
 builder.Services.AddOrderingModule(host);
@@ -52,8 +54,9 @@ builder.Services.AddInventoryModule(host);
 builder.Services.AddPaymentsModule(host);
 builder.Services.AddShippingModule(host);
 
-// One GraphQL schema over all five modules, at /graphql, next to the REST endpoints.
-builder.Services.AddShopGraphQL();
+// One GraphQL schema over the five modules' source schemas, composed by Fusion in this process, at
+// /graphql next to the REST endpoints.
+builder.Services.AddModuleGateway();
 
 var app = builder.Build();
 
@@ -71,7 +74,7 @@ app.MapOrderingEndpoints();
 app.MapInventoryEndpoints();
 app.MapPaymentsEndpoints();
 app.MapShippingEndpoints();
-app.MapShopGraphQL();
+app.MapModuleGateway();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();

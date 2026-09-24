@@ -1,10 +1,11 @@
 using DDDToolkit.EntityFramework.Options;
+using HotChocolate.Execution.Configuration;
 
 namespace DDDToolkit.Examples.Hosting;
 
 /// <summary>
-/// What a host decides for every module it runs: where the module's tables live, and where the
-/// integration events it publishes go. Everything else a module decides for itself.
+/// What a host decides for every module it runs: where the module's tables live, where the integration
+/// events it publishes go, and whether it serves GraphQL. Everything else a module decides for itself.
 /// </summary>
 /// <param name="Database">Where the module's tables live.</param>
 /// <param name="Publish">
@@ -32,4 +33,20 @@ public sealed record ModuleHost(ModuleDatabase Database, Action<OutboxOptions> P
                 outbox.SendTo<TSink>();
             },
         };
+
+    /// <summary>
+    /// What the host adds to the GraphQL source schema of every module, when it serves GraphQL at all;
+    /// <see langword="null"/> when it does not, and each module then registers none.
+    /// </summary>
+    public Action<IRequestExecutorBuilder>? GraphQL { get; init; }
+
+    /// <summary>
+    /// Serves GraphQL: every module registers its own source schema, for a Fusion gateway to compose, and
+    /// <paramref name="configure"/> adds what is the host's to choose, such as the subscription transport.
+    /// </summary>
+    public ModuleHost WithGraphQL(Action<IRequestExecutorBuilder> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        return this with { GraphQL = configure };
+    }
 }
