@@ -277,8 +277,20 @@ convention.
   aggregate and `AggregateRoot<TId>` works. It does not: the generator writes the base class itself,
   and a class that also names one fails with CS0263. The page now says so and suggests an interface
   instead, and a test pins the behaviour down.
+- `GetInvariantViolations()` and `GetOwnInvariantViolations()` were published as GraphQL fields on
+  every entity whose schema type bound its fields by convention, so any client could run an entity's
+  invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
+  `[Internal]` now, like the rest of the toolkit's bookkeeping.
 
 ### Changed
+
+- **Breaking for schemas that relied on it:** an entity, an aggregate or a value object bound by
+  convention no longer publishes its methods as GraphQL fields, only its properties.
+  `DomainBehaviourFieldsInterceptor`, registered by `AddDDDToolkitTypes()`, removes them. Before, a
+  `Money.Times(int)` was published as `times(quantity: Int!)`, and a method on an aggregate that changed
+  state and returned a result became a field that ran inside a query. A type declared with
+  `BindFieldsExplicitly()` still publishes every method it names, and type extensions are untouched. See
+  [Domain types publish their data, not their behaviour](docs/graphql.md#domain-types-publish-their-data-not-their-behaviour).
 
 - **Breaking:** `IInvariant<T>.Check` returns `InvariantFailure?` instead of `string?`, so a rule can
   hand on the values its message names. A string converts to `InvariantFailure` and `null` still means
@@ -292,21 +304,9 @@ convention.
   | Dependency | 3.0.0 required | Now requires |
   |---|---|---|
   | Microsoft.EntityFrameworkCore, .Relational | 10.0.12 | 10.0.0 |
-- `GetInvariantViolations()` and `GetOwnInvariantViolations()` were published as GraphQL fields on
-  every entity whose schema type bound its fields by convention, so any client could run an entity's
-  invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
-  `[Internal]` now, like the rest of the toolkit's bookkeeping.
   | Microsoft.Extensions.*.Abstractions | 10.0.12 | 10.0.0 |
   | Npgsql | 10.0.3 | 10.0.0 |
   | HotChocolate.AspNetCore, HotChocolate.Types.Analyzers | 16.6.6 | 16.0.0 |
-- **Breaking for schemas that relied on it:** an entity, an aggregate or a value object bound by
-  convention no longer publishes its methods as GraphQL fields, only its properties.
-  `DomainBehaviourFieldsInterceptor`, registered by `AddDDDToolkitTypes()`, removes them. Before, a
-  `Money.Times(int)` was published as `times(quantity: Int!)`, and a method on an aggregate that changed
-  state and returned a result became a field that ran inside a query. A type declared with
-  `BindFieldsExplicitly()` still publishes every method it names, and type extensions are untouched. See
-  [Domain types publish their data, not their behaviour](docs/graphql.md#domain-types-publish-their-data-not-their-behaviour).
-
   | FluentValidation | 12.1.1 | 12.0.0 |
   | Newtonsoft.Json | 13.0.4 | 13.0.1 |
   | Mediator.Abstractions | 3.0.2 | 3.0.1 |
