@@ -87,7 +87,7 @@ const packages = [
   ['DDDToolkit.Mediator', 'Domain events dispatched through Mediator.'],
   ['DDDToolkit.FluentValidation', 'A generated validator per value object.'],
   ['DDDToolkit.Localization', 'Failures phrased in the reader’s language.'],
-  ['DDDToolkit.Testing', 'Assertions for events, invariants and value objects.'],
+  ['DDDToolkit.Testing', 'Given/when/then tests for the domain events an aggregate raises.'],
 ];
 
 const hosts = [
