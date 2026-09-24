@@ -207,6 +207,21 @@ The shape a module ends up with is small:
 Two modules that share only that can be deployed together forever, and can be pulled apart on the day
 that stops being true. Two modules that share a navigation property cannot.
 
+## One API over the modules: GraphQL
+
+A module's boundary holds in its API as well. Rather than one GraphQL schema that knows every module,
+each module can serve a schema of its own: its types, its queries, and its part of the types other
+modules own, keyed on a name and a key they agree on. Catalog declares `Product` with its name and
+price; Inventory declares its own `Product`, keyed on the same SKU, with the stock; Ordering says a line's
+product is the `Product` with that SKU. No module references another's classes, and a client still sees
+one `Product`.
+
+`DDDToolkit.HotChocolate.Fusion.InMemory` composes those schemas inside the monolith with HotChocolate
+Fusion, and calls the modules in memory. The same schemas compose across processes when a module becomes
+a service, so its GraphQL does not change on that day either. See
+[One schema over a modular monolith](graphql.md#one-schema-over-a-modular-monolith), and
+`Examples/ModularMonolith.*` for five modules doing it.
+
 ## Adopting this on an existing codebase
 
 1. Pick the module with the fewest things pointing at it and add `[assembly: Module]` to it. Nothing
@@ -220,6 +235,8 @@ that stops being true. Two modules that share a navigation property cannot.
 ## Related
 
 - [Integration events](integration-events.md), the supported way across a boundary.
+- [One schema over a modular monolith](graphql.md#one-schema-over-a-modular-monolith), the modules'
+  GraphQL composed without a module knowing another.
 - [Entities and aggregates](entities-and-aggregates.md#reference-other-aggregates-by-id), the same
   argument one scale down, inside a single module.
 - [Diagnostics](diagnostics.md#ddd00022), the reference entries for both rules.

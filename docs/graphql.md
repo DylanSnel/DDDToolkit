@@ -22,6 +22,15 @@ dotnet add package DDDToolkit.HotChocolate
 The package brings its own source generator, so referencing it is the whole of the build-time setup.
 It depends on `HotChocolate.AspNetCore`, so you do not add HotChocolate separately.
 
+For a modular monolith whose modules each serve a schema of their own, composed into one:
+
+```bash
+dotnet add package DDDToolkit.HotChocolate.Fusion.InMemory
+```
+
+It needs HotChocolate Fusion 16.6.6 or later; see
+[One schema over a modular monolith](#one-schema-over-a-modular-monolith).
+
 ## Register
 
 Two kinds of call, both on the `IRequestExecutorBuilder`:
