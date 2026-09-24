@@ -168,6 +168,13 @@ outbox sends Ordering's contracts to `GraphQlSubscriptionSink` as well as to the
 dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host
 ```
 
+In Visual Studio or Rider, start one of two kinds of project. A monolith's `Host` runs on its own, on
+SQLite, and serves REST and GraphQL on port 5080 (5090 for SQL Server); it opens no browser, so use the
+`.http` file or a GraphQL client against it. An `AppHost` runs a whole sample under Aspire, containers
+included, and opens the Aspire dashboard, from which every resource's endpoint and logs are one click
+away. The microservices' services and gateways are not meant to be started on their own: they get their
+databases and brokers from their AppHost.
+
 Then work through `DDDToolkit.Examples.Host.http` from the top. It lists the products and the stock,
 refuses a bad address, an unknown SKU, a blank SKU and a duplicate SKU, places an order that is
 confirmed and shipped, refuses to cancel it, and then places one the payment provider declines and
