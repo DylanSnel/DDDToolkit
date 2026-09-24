@@ -183,7 +183,7 @@ var events = context.ChangeTracker.Entries<IHasDomainEvents>()
 ```
 
 Better still, delete it and use `PublishDomainEventsInterceptor`. See
-[Entity Framework](entity-framework.md#domain-event-delivery).
+[Entity Framework](event-delivery.md).
 
 ## 5. `IDomainEvent` carries an id and a timestamp
 
@@ -242,7 +242,7 @@ var order = new Order(orderId, customerId);
 order.DomainEvents.Single().OccurredAt.Should().Be(fakeClock.GetUtcNow());
 ```
 
-See [Domain events](domain-events.md#deterministic-time-in-tests).
+See [Deterministic time in tests](testing.md#deterministic-time-in-tests).
 
 ## 6. Events are dispatched before the save, on both paths
 
@@ -280,7 +280,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuild
 ```
 
 Outbox handlers must be idempotent, keyed on `EventId`. See
-[the outbox](entity-framework.md#the-outbox-in-detail).
+[the outbox](event-delivery.md#the-outbox-in-detail).
 
 One more thing that is new rather than changed: if an aggregate has pending events and no delivery
 mode is configured, `SaveChanges` throws instead of silently dropping them.
@@ -506,6 +506,22 @@ package now, so change the reference rather than looking for a newer version of 
 `GraphQLTypeAttribute<TSchemaType>` is constrained on `ITypeDefinition`, which replaced `INamedType`.
 If you named a custom scalar type in that attribute, the constraint is the only thing that changed.
 
+If you move your own HotChocolate code onto 16.6.6 alongside the toolkit, one more rename is likely to
+catch you: the type-system configuration classes. `DefinitionBase` and `ObjectTypeDefinition` do not
+exist in the 16.6.6 assemblies. The equivalents are `TypeSystemConfiguration`,
+`ObjectTypeConfiguration`, `InterfaceTypeConfiguration`, `InputObjectTypeConfiguration` and
+`FieldConfiguration`, all in `HotChocolate.Types.Descriptors.Configurations`, so a `TypeInterceptor`
+override now takes a `TypeSystemConfiguration`.
+
+What did not change is the part the toolkit relies on most:
+
+| Still the same in 16.6.6 | Where |
+|---|---|
+| `BindRuntimeType<TRuntimeType, TSchemaType>()` | `Microsoft.Extensions.DependencyInjection` |
+| `AddTypeConverter<T>()` | `Microsoft.Extensions.DependencyInjection` |
+| `IChangeTypeProvider` and the `ChangeType` delegate | `HotChocolate.Utilities` |
+| `[InterfaceType<T>]` with a `static partial void Configure` | `HotChocolate.Types.Analyzers` |
+
 There is a schema change too. `[Internal]` members are now removed during type discovery rather than
 flagged at completion, so the types they referenced stop appearing in the schema. If your 2.x schema
 contained FluentValidation's `ValidationFailure` or the always-valid twins, they are gone. That is
@@ -635,6 +651,56 @@ a second gives you a list rather than a build break.
 Do not confuse it with `DDD_Module`, which is unchanged and unrelated: that MSBuild property names
 the generated `Add{Module}Converters` method and describes no boundary to anybody. Adopt one project
 at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
+
+## From an earlier 3.0 build
+
+Skip this if you are coming from 2.0.22. Two things changed while 3.0 was being built, after some
+databases had already been created with it.
+
+### Outbox and inbox timestamps
+
+**On PostgreSQL, nothing happens.** Npgsql maps both a UTC `DateTime` and a `DateTimeOffset` to
+`timestamptz`. The column is the same column and the bytes in it are the same bytes. There is no
+migration to write.
+
+**On SQL Server the column type changes**, from `datetime2` to `datetimeoffset`. Scaffolding a
+migration after upgrading produces an `ALTER COLUMN` for each timestamp column of the outbox and the
+inbox. The stored instant is preserved: SQL Server reads an existing `datetime2` as the same time at
+`+00:00`, which is correct because every value the outbox ever wrote was already UTC. So the meaning
+of a row does not change, but the table does, and you have to run the migration.
+
+If you would rather not, keep the old shape explicitly:
+
+```csharp
+modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
+modelBuilder.AddDomainEventInbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
+```
+
+That produces exactly the columns you have, on every provider, and no migration at all.
+
+If you upgrade the code on SQL Server and do neither of those things, **reading the outbox throws**.
+The insert still works, because SQL Server converts the parameter into the column it has, and the
+instant it stores is correct. The read does not: `datetime2` comes back from the driver as a
+`DateTime`, the model wants a `DateTimeOffset`, and you get an `InvalidCastException` on the first
+row.
+
+That is the good outcome, and it is why this is safe to ship. An unmigrated database says so the first
+time the processor polls, rather than quietly disagreeing with the model. Both halves are asserted
+against a real SQL Server in `Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
+
+Rows written before you notice are fine. The value that reached the column was already the right
+instant, so running the migration afterwards needs no data repair.
+
+**On SQLite, nothing happens**, because SQLite never had a choice.
+
+See [Timestamps](event-delivery.md#timestamps) for what each provider gets now.
+
+### The outbox `Version` column
+
+An outbox table that predates the `Version` column needs it added as a non-nullable `int` with a
+default of 1, which is what every existing row was written as. A column added without a default reads
+as 0, and the processor treats that as 1 for the same reason, so an upgrade that forgets the default
+still works. See [Versioning and upcasting](integration-events.md#versioning-and-upcasting).
 
 ## What did not change
 

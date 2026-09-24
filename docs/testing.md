@@ -256,15 +256,56 @@ order.PendingEvents().RaisedExactly<OrderPlaced, OrderCancelled>();
 `PendingEvents()` leaves the events on the aggregate. `DrainEvents()` takes them off and returns the
 same kind of batch. `AsScenario()` is the same thing as `AggregateScenario.Given`.
 
-## What this kit does not do
+## Testing invariants
 
-**It does not control the clock, and it does not need to.** The assertions here never compare
-`EventId` or `OccurredAt`, so nothing in this package cares what they say. The hook belongs to the
-core package rather than to this one: `DomainEventClock.Use(timeProvider)` replaces the clock both
-initialisers read, for the current asynchronous flow only, so a test can fix the timestamp of an
-event the aggregate raised for itself.
+An invariant needs no scenario and no database either. Both stages are public on every entity, so a
+test asks the aggregate directly and your own assertion library does the rest. Say the order has a
+named rule, `Order.MustHaveLines`, that a confirmed order must have at least one line
+([Invariants](invariants.md#a-named-invariant) shows how to write one):
 
 ```csharp
+var order = Draft();
+order.Confirm();
+
+Assert.Throws<InvariantViolationException>(() => order.EnsureInvariants());
+
+// Or without an exception, asserting on the rule rather than on the message:
+order.GetInvariantViolations().Should().ContainSingle(v => v.Code == Order.MustHaveLines.ViolationCode);
+```
+
+Prefer the second form. The code is the rule's name and stays put; the message is written for people,
+and may be reworded or translated.
+
+Asking the root asks the whole aggregate, so a test for a child's rule needs no loop and no second
+subject. The violation names the child that reported it, which is what the assertion should be about:
+
+```csharp
+var order = Draft();
+order.AddLine(Sku.Of(""), 1);
+
+order.GetInvariantViolations().Should().ContainSingle(v =>
+    v.Code == OrderLine.MustNameASku.ViolationCode && v.EntityId!.Equals(order.Lines[0].Id));
+```
+
+A rule written as a nested `IInvariant<T>` is also an ordinary type, so it can be tested on its own
+with no aggregate mutation and nothing to catch: `new Order.MustHaveLines().Check(order)` returns
+`null` when the rule holds. See [Invariants](invariants.md#by-hand).
+
+## Deterministic time in tests
+
+`OccurredAt` and `EventId` are `init`, but the aggregate is what calls `new OrderCancelled(...)`. A
+test that calls `order.Cancel(reason)` never reaches that constructor, so it cannot pass an
+initialiser and the event is stamped with the wall clock.
+
+`DomainEventClock` replaces the clock both initialisers read, for the current asynchronous flow only.
+It belongs to the core package rather than to this one, because nothing here compares `EventId` or
+`OccurredAt`; it is there for a test that asserts on the time itself:
+
+```csharp
+using DDDToolkit.BaseTypes;
+
+var clock = new FakeTimeProvider(new DateTimeOffset(2024, 1, 21, 12, 0, 0, TimeSpan.Zero));
+
 using var scope = DomainEventClock.Use(clock);
 
 AggregateScenario.Given(Draft())
@@ -272,8 +313,32 @@ AggregateScenario.Given(Draft())
     .Raised<OrderCancelled>(e => e.OccurredAt == clock.GetUtcNow());
 ```
 
-See [Deterministic time in tests](domain-events.md#deterministic-time-in-tests) for the scope rules
-and for fixing the whole of `EventId`.
+Any `TimeProvider` will do. The toolkit does not ship a fake one: `FakeTimeProvider` from
+`Microsoft.Extensions.TimeProvider.Testing` already exists, and a five-line subclass of
+`TimeProvider` works just as well.
+
+The clock is held in an `AsyncLocal`, not in a static property, so it applies to the flow that opened
+the scope and to whatever that flow calls, including awaited work. Two test classes running in
+parallel do not see each other's clock, and a test that forgets to dispose the scope cannot poison
+the tests that run after it. Disposing restores the previous clock, so scopes nest.
+
+It does not reach work that was already running when you opened the scope, such as a hosted service
+started earlier; events raised there keep the system clock.
+
+`EventId` follows the same clock. A version 7 `Guid` is a timestamp plus random bits, so a fixed
+clock fixes the ordering and leaves the id unique. When you need the whole id to be predictable,
+supply the factory as well:
+
+```csharp
+var next = 0;
+using var scope = DomainEventClock.Use(clock, _ => new Guid(++next, 0, 0, new byte[8]));
+```
+
+The values still have to be distinct. `EventId` is the primary key of the outbox table and the key
+handlers deduplicate on, so a repeated one makes the save fail.
+
+One sharp edge: a clock set before 1970 throws, because a version 7 `Guid` encodes Unix
+milliseconds and cannot represent an earlier instant. Start fake clocks at a realistic date.
 
 Reach for it when the time is what you are asserting on. When the time is something the domain
 reasons about, it belongs in the payload instead, where a rule can read it:
@@ -285,6 +350,15 @@ public sealed record OrderCancelled(OrderId OrderId, string Reason, DateTimeOffs
 Then pass the time in from your own clock abstraction and assert on `CancelledAt` like any other
 member. `EventId` and `OccurredAt` stay what they are: the identity and the wall-clock stamp of the
 occurrence, useful for idempotency and ordering, not for describing the domain.
+
+Outside tests, leave the clock alone. An event that reports a time other than the time it happened
+is a lie told to every consumer downstream.
+
+## What this kit does not do
+
+**It does not control the clock, and it does not need to.** The assertions here never compare
+`EventId` or `OccurredAt`, so nothing in this package cares what they say. The hook for fixing them
+belongs to the core package; see [Deterministic time in tests](#deterministic-time-in-tests).
 
 **It is not an event sourcing kit.** There is no `Given(events)` that rebuilds an aggregate from a
 stream, because these aggregates are not built that way. Arrange with the constructor and with real
@@ -300,31 +374,8 @@ assertion library takes it from there. Two libraries fighting over one assertion
 none.
 
 **It does not assert on invariants.** There is no `.Violates<T>()`, because there does not need to
-be: both stages are public on every entity, so your own assertion library already covers them.
-
-```csharp
-var order = new Order(OrderId.CreateUnique(), customerId);
-order.Place();
-
-Assert.Throws<InvariantViolationException>(() => order.EnsureInvariants());
-
-// Or without an exception, asserting on the rule rather than on the message:
-order.GetInvariantViolations().Should().ContainSingle(v => v.Code == Order.MustHaveLines.ViolationCode);
-```
-
-Asking the root asks the whole aggregate, so a test for a child's rule needs no loop and no second
-subject. The violation names the child that reported it, which is what the assertion should be about:
-
-```csharp
-order.AddLine(sku: "", quantity: 1);
-
-order.GetInvariantViolations().Should().ContainSingle(v =>
-    v.Code == OrderLine.MustNameASku.ViolationCode && v.EntityId!.Equals(order.Lines[0].Id));
-```
-
-A rule written as a nested `IInvariant<T>` is also an ordinary type, so it can be tested on its own
-with no aggregate mutation and nothing to catch: `new Order.MustHaveLines().Check(order)` returns
-`null` when the rule holds. See [Invariants](invariants.md#by-hand).
+be: both stages are public on every entity, so your own assertion library already covers them, as
+[Testing invariants](#testing-invariants) shows.
 
 ## See also
 

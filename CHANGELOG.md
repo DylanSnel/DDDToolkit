@@ -109,12 +109,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `{migration}.{module}.ddd.sql` after the assembly's `[assembly: Module]`. DDD00031 reports a marked
   factory the build cannot create. `services.AddSupabaseMigrations<TContext, TFactory>()` plus
   `app.Services.EnsureSupabaseMigrationsAppliedAsync()` refuse to start the application while any
-  module has a migration missing. See [Entity Framework → Supabase](docs/entity-framework.md#supabase).
+  module has a migration missing. See [Entity Framework → Supabase](docs/supabase.md).
 - Registration a module can own. `AddDDDToolkitEntityFramework` may be called any number of times and
   every call configures the same options, so each module registers its own part next to its own
   context. `options.UseOutbox<TContext>(...)` gives one context an outbox of its own, next to the
   shared `UseOutbox(...)`, and `options.OutboxFor(type)` says which one a context gets. See
-  [An outbox per context](docs/entity-framework.md#an-outbox-per-context).
+  [An outbox per context](docs/event-delivery.md#an-outbox-per-context).
 - `Examples/ModularMonolith` is registered the way a modular monolith should be: `AddOrderingModule`
   and `AddShippingModule` register each module's context, outbox, consumers and migrations, and the
   host only switches them on. It also runs on a local Supabase as well as on SQLite, each module in a
@@ -301,6 +301,17 @@ convention.
 
 ### Changed
 
+- The documentation builds up. Each page starts with the problem it solves and the simplest use, and
+  leaves storage, GraphQL, modules and design rationale for later, so a first example no longer carries
+  `ColumnLength`, `[ModuleContract]` or `DDD_Module` before they mean anything. Every building block
+  shows the code the generator writes for it, copied from a real build. Getting started now builds one
+  module step by step, from an identifier to a second module that reacts to it. New pages split out of
+  the long ones: [Module contracts](docs/module-contracts.md) (why a module publishes anything),
+  [Designing aggregates](docs/aggregate-design.md), [Delivering domain events](docs/event-delivery.md),
+  [Supabase](docs/supabase.md) and [Transports](docs/transports.md). [DDD00033](docs/diagnostics.md#ddd00033)
+  is documented. Several statements were corrected on the way: `UseDDDToolkit` adds three interceptors,
+  not two, the save calls `EnsureOwnInvariants()`, and an MVC controller binds an identifier through its
+  generated `TryParse` with nothing extra.
 - **Breaking for schemas that relied on it:** an entity, an aggregate or a value object bound by
   convention no longer publishes its methods as GraphQL fields, only its properties.
   `DomainBehaviourFieldsInterceptor`, registered by `AddDDDToolkitTypes()`, removes them. Before, a
@@ -401,7 +412,7 @@ one of those now either works or reports a diagnostic that names the type and th
   PostgreSQL, and a UTC `DateTime` on SQLite, which cannot order by a `DateTimeOffset`. Pass
   `DomainEventTimestamps.UtcDateTime` for the UTC `DateTime` column on every provider.
   <br>**If you have a database from an earlier 3.0 build on SQL Server, read
-  [Timestamps](docs/entity-framework.md#timestamps) before upgrading.** The column moves from
+  [Outbox and inbox timestamps](docs/migrating-to-3.md#outbox-and-inbox-timestamps) before upgrading.** The column moves from
   `datetime2` to `datetimeoffset`, which needs a migration; without one, reading the outbox throws.
   The stored instant does not change, and PostgreSQL and SQLite are unaffected.
 

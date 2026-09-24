@@ -73,7 +73,7 @@ public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 `Order.g.cs` gives the class its base type, with the identifier type the attribute asked for, and the
 constructor Entity Framework needs to materialize a row:
 
-```csharp
+```csharp title="Order.g.cs, shortened"
 partial class Order : DDDToolkit.BaseTypes.AggregateRoot<Shop.OrderId>
 {
     /// <summary>Parameterless constructor for persistence frameworks and serializers.</summary>
@@ -85,7 +85,7 @@ partial class Order : DDDToolkit.BaseTypes.AggregateRoot<Shop.OrderId>
 Every rule nested in the class is created once and kept in a static array. The checks walk it, then
 the `CheckInvariants()` seam, then every child entity the aggregate holds in a collection:
 
-```csharp
+```csharp title="Order.g.cs, shortened"
     private static readonly DDDToolkit.Invariants.IInvariant<Shop.Order>[] __invariants =
     [
         new Shop.Order.MustHaveLines(),
@@ -113,7 +113,7 @@ The list of violations is created on the first failure, so a consistent aggregat
 
 The `partial` collection property gets a field behind it:
 
-```csharp
+```csharp title="Order.g.cs, shortened"
     private readonly System.Collections.Generic.List<Shop.OrderLine> _lines = new();
 
     private System.Collections.Generic.IReadOnlyList<Shop.OrderLine>? __linesView;
@@ -135,7 +135,7 @@ hand-written pattern for keeping a collection inside its aggregate, minus the wr
 `[AggregateRoot<Guid>("ORD")]` names the id type after the class, so the generator writes `OrderId`.
 No `OrderId.cs` exists anywhere. It is a `readonly record struct` around the `Guid`:
 
-```csharp
+```csharp title="OrderId.g.cs, shortened"
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
 public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>
 {
@@ -164,7 +164,7 @@ and the prefix.
 
 `Address.g.cs` gives the record its base type and equality over its components, in declaration order:
 
-```csharp
+```csharp title="Address.g.cs, shortened"
 partial record Address : DDDToolkit.BaseTypes.ValueObject, DDDToolkit.Validation.IValidatable<ValidAddress>
 {
     [System.Text.Json.Serialization.JsonInclude]
@@ -184,7 +184,7 @@ The positional parameters become properties with a `protected init` setter, so n
 record can make a changed copy with `with` and skip validation. What it offers instead is `With()`,
 which copies with changes and judges the copy afresh:
 
-```csharp
+```csharp title="Address.g.cs, shortened"
     public virtual Address With(DDDToolkit.BaseTypes.Optional<string> street = default, DDDToolkit.BaseTypes.Optional<string> city = default)
         => this with { Street = street.Or(Street), City = city.Or(City) };
 }
@@ -193,7 +193,7 @@ which copies with changes and judges the copy afresh:
 It also writes `ValidAddress`, the always-valid twin. Its only constructor validates, so a method that
 takes a `ValidAddress` never has to check one again:
 
-```csharp
+```csharp title="Address.g.cs, shortened"
 public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces.IAlwaysValid
 {
     public ValidAddress(Address value) : base(value)
@@ -210,7 +210,7 @@ public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value
 converter that stores it as its plain value:
 
-```csharp
+```csharp title="OrderId.Converter.g.cs"
 public readonly partial record struct OrderId
 {
     public sealed class OrderIdConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<Shop.OrderId, System.Guid>
@@ -225,7 +225,7 @@ public readonly partial record struct OrderId
 One method registers every converter in the project. It is named after the module, set with
 `<DDD_Module>Shop</DDD_Module>` in the project file, and you call it from `ConfigureConventions`:
 
-```csharp
+```csharp title="ConverterExtensions.g.cs, shortened"
 public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopConverters(this Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)
 {
     modelConfigurationBuilder.Properties<Shop.OrderId>().HaveConversion<Shop.OrderId.OrderIdConverter>();
@@ -241,7 +241,7 @@ them. Child entities are marked `[Owned]`, so they are saved with their aggregat
 `AddShopIntegrationEvents()` registers every domain event of the module with the outbox, under the
 name from `[DomainEventName]`:
 
-```csharp
+```csharp title="IntegrationEventExtensions.g.cs, shortened"
 outbox.RegisterEvent<Shop.OrderPlaced>("shop.order-placed", 1);
 ```
 
@@ -253,7 +253,7 @@ The name is what the outbox stores, so renaming the class does not orphan rows a
 With the HotChocolate package referenced, each id gets a type converter and a Relay node id
 serializer, and one method binds them all:
 
-```csharp
+```csharp title="BindingExtensions.g.cs, shortened"
 public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddShopGraphQlRuntimeBindings(this HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder)
 {
     builder.BindRuntimeType<Shop.OrderId, HotChocolate.Types.UuidType>();

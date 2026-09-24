@@ -18,3 +18,7 @@ The code on the homepage is compiled, not typed. `sample/` is a small project th
 and `npm run generate-sample` builds it and writes what they produced to `src/data/generated.json`,
 which is committed so the site build needs no .NET SDK. Run it after changing a generator or the
 sample.
+
+In the docs, a code block with a title is generated code: ```` ```csharp title="Order.g.cs, shortened" ````
+renders with a "Generated" label (`src/css/custom.css`). Give a title to generated files only, and copy
+their content from a real build rather than writing it by hand.

@@ -9,6 +9,10 @@ tenants have the same shape.
 the toolkit does: it builds the key. What the key part *means*, where its value comes from and who
 may see which rows are your application's business.
 
+This page is about Entity Framework only. The key is built by `KeyPartConvention`, which
+`AddDDDToolkitConventions()` from `DDDToolkit.EntityFramework` adds to the model. Without that
+package the attribute changes nothing about how an entity behaves.
+
 ```csharp
 [AggregateRoot<ProjectId>]
 public partial class Project
@@ -45,8 +49,26 @@ public partial class Milestone
 }
 ```
 
-With `AddDDDToolkitConventions()` in `ConfigureConventions` and nothing in `OnModelCreating`, that
-maps to:
+The generator writes one thing for a key part, in the entity's own generated part: the names of its
+key parts, in declaration order, behind the `IHasKeyParts` interface. That list is what the
+convention reads.
+
+```csharp title="Project.g.cs, shortened"
+partial class Project : AggregateRoot<ProjectId>, IHasKeyParts
+{
+    // ...
+
+    static IReadOnlyList<string> IHasKeyParts.KeyParts => new string[] { nameof(RegionId) };
+
+    // ...
+}
+```
+
+`Milestone` gets the same list. The Entity Framework generator writes nothing for a key part:
+`Milestone`'s Entity Framework part is the `[Owned]` every child entity gets, and nothing more. There is
+no generated `HasKey` or `HasForeignKey`; the key is decided by the convention while Entity Framework
+builds the model. With `AddDDDToolkitConventions()` in `ConfigureConventions` and nothing in
+`OnModelCreating`, the example maps to:
 
 ```sql
 CREATE TABLE "Projects" (
@@ -66,6 +88,18 @@ CREATE TABLE "Milestone" (
         REFERENCES "Projects" ("RegionId", "Id") ON DELETE CASCADE
 );
 ```
+
+## What it is not
+
+`[KeyPart]` builds a key. It does not fill the value in, filter queries by it, or check that the
+caller may see a row. If you need those, they are application concerns: an interceptor or the
+constructor to set the value, a global query filter or the database's own row-level security to
+restrict what is read. The toolkit stays out of that on purpose, so the attribute means the same thing
+in every application that uses it.
+
+Everything else about an entity is unchanged. Reference other aggregates by id as usual. A composite
+key does not change what another aggregate holds: `CustomerId` is still just a `CustomerId`, and a
+query that needs the other aggregate's region supplies it.
 
 ## The rules
 
@@ -100,8 +134,9 @@ the source, top to bottom:
 ```
 
 Not alphabetical order, and not whatever order reflection happens to return. The generator reads
-the order from the source and writes it down in the class, where the convention reads it back. That
-is also why all key parts of a class must be declared in one file ([DDD00030](diagnostics.md#ddd00030)):
+the order from the source and writes it down in the class, in the `KeyParts` list shown above
+(`nameof(Period), nameof(RegionId)` for these two), where the convention reads it back. That is also
+why all key parts of a class must be declared in one file ([DDD00030](diagnostics.md#ddd00030)):
 between the files of a partial class there is no declaration order to follow.
 
 **It is an ordinary property.** You set it, usually through the constructor, and the toolkit never
@@ -125,29 +160,6 @@ convention does something you do not want, configure that entity yourself and it
 modelBuilder.Entity<Project>().HasKey(project => project.Id);   // back to (Id), key part or not
 ```
 
-## What is not touched
-
-A model with no `[KeyPart]` anywhere is not changed in any way: the convention looks for key parts
-first and returns without touching the model when there are none. In a model that has some, every
-type that neither declares key parts nor is owned by one that does is mapped exactly as it would be
-without the convention. Both are covered by tests that compare the whole model with and without it.
-
-The generator adds nothing to a class without key parts either. A class with them also implements
-`DDDToolkit.Interfaces.IHasKeyParts`, which lists the parts in declaration order for the convention.
-You never implement that interface by hand.
-
-## What it is not
-
-`[KeyPart]` builds a key. It does not fill the value in, filter queries by it, or check that the
-caller may see a row. If you need those, they are application concerns: an interceptor or the
-constructor to set the value, a global query filter or the database's own row-level security to
-restrict what is read. The toolkit stays out of that on purpose, so the attribute means the same thing
-in every application that uses it.
-
-Everything else about an entity is unchanged. Reference other aggregates by id as usual. A composite
-key does not change what another aggregate holds: `CustomerId` is still just a `CustomerId`, and a
-query that needs the other aggregate's region supplies it.
-
 ## Limits
 
 - **Owned entities only.** The foreign keys the convention rewrites are ownerships, which is how
@@ -162,3 +174,14 @@ query that needs the other aggregate's region supplies it.
 - **Changing a key is a migration.** Adding `[KeyPart]` to an existing aggregate changes its primary
   key and every owned table's foreign key. Entity Framework generates the migration, but rebuilding a
   primary key on a large table is not something to find out about from `dotnet ef migrations add`.
+
+## What is not touched
+
+A model with no `[KeyPart]` anywhere is not changed in any way: the convention looks for key parts
+first and returns without touching the model when there are none. In a model that has some, every
+type that neither declares key parts nor is owned by one that does is mapped exactly as it would be
+without the convention. Both are covered by tests that compare the whole model with and without it.
+
+The generator adds nothing to a class without key parts either. Only a class with them implements
+`DDDToolkit.Interfaces.IHasKeyParts`, which lists the parts in declaration order for the convention.
+You never implement that interface by hand.
