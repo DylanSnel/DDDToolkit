@@ -12,6 +12,79 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
+  serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
+  them and calls them in memory: `services.AddInMemoryFusionGateway()` and `app.MapInMemoryFusionGateway()`.
+  It gives the gateway a service container of its own, because HotChocolate's `AddInMemorySchema` cannot
+  serve a gateway over HTTP next to more than one source schema, and fails the application's start with
+  the composer's error instead of hanging when the schemas cannot be composed. Needs HotChocolate Fusion
+  16.6.6 or later, which the package declares. See
+  [One schema over a modular monolith](docs/graphql.md#one-schema-over-a-modular-monolith).
+- `DDDToolkit.Messaging.MassTransit`, MassTransit 8 as the transport between one process's outbox and
+  another's inbox, used the way MassTransit is used. `outbox.SendToMassTransit()` publishes each contract
+  as a message type of its own, with the outbox's message id as MassTransit's and the toolkit's headers
+  alongside, so MassTransit gives it the exchange of its type;
+  `bus.AddIntegrationEventConsumers(services.IntegrationEventSubscriptions())` registers an
+  `IntegrationEventConsumer<TContract>` for every contract the modules handle and the process does not
+  publish itself, and `endpoint.ConfigureConsumers(context)` binds the service's queue to exactly those.
+  Built on MassTransit 8, the last version under the Apache 2.0 licence.
+- `Examples/Microservices.MassTransit` runs the same three services over RabbitMQ with MassTransit, each on
+  a SQL Server database of its own.
+- Value objects are `@shareable` in a Fusion source schema. A value object has no owner, so every service
+  that returns one answers for it alike, and composition refused a second service returning a `Money`
+  until each field said so. `AddDDDToolkitTypes()` now marks every value object type `@shareable` when the
+  schema declares itself a source schema with HotChocolate's `AddSourceSchemaDefaults()`, and leaves
+  other schemas alone. See [Value objects in a Fusion source schema](docs/graphql.md#value-objects-in-a-fusion-source-schema).
+- The microservices samples answer GraphQL through a Fusion gateway: every service serves its modules'
+  source schema, Payments and Fulfilment add `payment` and `shipment` to Ordering's `Order` through a
+  stub keyed on its node id, and the AppHost composes the gateway's schema with
+  `HotChocolate.Fusion.Aspire` before the gateway starts. The query the monoliths answer,
+  `order { lines { product { name } } payment { status } shipment { destination } }`, and `node(id:)` now
+  pass against all three samples. Every sample has a gateway of its own.
+- The monoliths compose their GraphQL with Fusion too, inside the process. Every module serves a source
+  schema of its own and declares its own part of the types others own (Ordering's `Product` by SKU,
+  Payments' and Shipping's `Order` by id), and a Fusion gateway in the monolith composes the five at
+  start-up and calls them in memory, with no HTTP, through `DDDToolkit.HotChocolate.Fusion.InMemory`. The
+  joins the examples used to make by hand are gone; a module's GraphQL is the same code as a service and in the monolith. A module
+  registers its source schema in `Add{Module}Module` when the host serves GraphQL
+  (`ModuleHost.WithGraphQL`), and the gateway composes whatever the modules registered. Inventory
+  contributes a product's stock to `Product`, keyed on the SKU, in the monoliths and the services alike.
+  `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess` shows why the gateway has a service container of its
+  own in the application, and two traps on the way.
+- A Supabase Live workflow runs the Supabase monolith against a real Supabase project: the exported
+  `supabase/migrations` go on with `supabase db push`, then the checkout scenarios run against the
+  project. With `SUPABASE_BRANCHING=true` every run gets a preview branch of its own, which needs a Pro
+  organisation; otherwise it resets the example's schemas on a project kept for these tests.
+- `DDDToolkit.Messaging.Wolverine`, Wolverine as the transport between one process's outbox and another's
+  inbox, used the way Wolverine is used. `outbox.SendToWolverine()` publishes each contract as a message
+  type of its own, the toolkit's headers alongside, routed by Wolverine's rules: with RabbitMQ's
+  conventional routing, an exchange per contract type and a queue per handling service.
+  `wolverine.ReceiveIntegrationEvents(services.IntegrationEventSubscriptions())` adds an
+  `IntegrationEventHandler<TContract>` to Wolverine's discovery for every contract the modules handle and
+  the process does not publish itself, with retries and Wolverine's error queue. Wolverine's own outbox,
+  inbox and sagas stay out of it.
+- The receiving end of a transport. `IntegrationEventReceiver` hands a message that arrived from another
+  process to the modules in this one, each handler inside its module's inbox, as the module sink does for
+  a message from next door; `AddModuleIntegrationEvents` registers it. `IntegrationEventHeaders` is the
+  envelope on the wire, the headers every transport writes and every consumer rebuilds the message from.
+  In `DDDToolkit.Messaging.Postgres`, `PgmqConsumer` (`services.AddPgmqConsumer(dataSource, queue)`)
+  reads a queue into the receiver, archives what was applied, lets a failure come back after the
+  visibility timeout and archives a message as poison after `MaxDeliveries`. Between services it uses
+  pgmq's own topic routing (pgmq 1.11 and later): `pgmq.UseTopics()` sends under the contract's published
+  name with `pgmq.send_topic`, and `consumer.BindTopics = true` binds the service's queue at start-up to
+  every contract its modules handle and another service publishes, so no sender names a receiver.
+  `PgmqSinkOptions.UseQueues(...)` still enqueues on named queues for a pgmq without topics. The tests
+  and the sample run on pgmq 1.13.
+- Relay node ids for identifiers. HotChocolate's global object identification needs an
+  `INodeIdValueSerializer` for a type it has never seen, so `ImplementsNode().IdField(order => order.Id)`
+  over an `OrderId` failed with *No serializer registered*. Every identifier over a `Guid`, `string`,
+  `int`, `long` or `short` now gets a nested `NodeIdValueSerializer`, derived from HotChocolate's
+  `CompositeNodeIdValueSerializer<T>`, and `Add{Module}GraphQlRuntimeBindings()` registers it. The node
+  id is the one HotChocolate writes for the bare value, so any HotChocolate server or Fusion gateway
+  reads it, `node(id:)` finds the entity, and `[ID<Order>] OrderId id` arrives as the `OrderId`.
+  DDD00032 warns against `AddNodeIdValueSerializerFrom<OrderId>()`, whose HotChocolate-generated
+  serializer cannot see the toolkit-generated `Value` and stores nothing. See
+  [Relay node ids](docs/graphql.md#relay-node-ids).
 - `DDDToolkit.EntityFramework.Supabase`, a new package that depends on nothing but Entity
   Framework's relational layer. Its `SupabaseMigrations` exports Entity Framework migrations as
   files in `supabase/migrations`, one per migration and named after it. `supabase db push`,
@@ -40,6 +113,40 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   host only switches them on. It also runs on a local Supabase as well as on SQLite, each module in a
   schema of its own with its own migration history, written into one `supabase/` project by the
   host's build and checked by CI.
+- The examples' modules moved to `Examples/Modules`, apart from any host, and the modular monolith's
+  host and its `supabase/` project to `Examples/ModularMonolith.Supabase`. More hosts over the same
+  modules follow.
+- The example is now a shop in five modules: Catalog, Ordering, Inventory, Payments and Shipping.
+  An order is confirmed once Inventory has reserved the stock and Payments has taken the money, and
+  cancelled, with the other modules undoing their part, when either says no. It shows domain services
+  (`OrderPricer`, `StockAllocator`), an anti-corruption layer in front of a payment provider, a read
+  model of another module's prices, a shared kernel (`Money`), policies that tolerate messages arriving
+  out of order, and every module with an outbox and an inbox in its own schema of one Supabase
+  database. Each module is laid out as `Domain/Aggregates/<Aggregate>/{Entities,Events,Invariants}`,
+  `Domain/ValueObjects`, `Domain/Services`, `Application`, `Infrastructure` and `Api`, and maps its
+  own endpoints. `Order.AddLine` is gone: an order being paid for cannot change its lines; it can be
+  cancelled instead.
+- The example shop runs under Aspire, on Supabase's Postgres and on SQL Server. A host hands each module
+  a `ModuleHost`: the database (`ModuleDatabase.Sqlite`, `.Supabase`, `.Postgres`, `.SqlServer`) and
+  where its messages go. `Examples/ModularMonolith.SqlServer` runs the same modules on SQL Server, with
+  the SQL Server migrations in an assembly of their own. The Supabase AppHost seeds a Postgres container
+  from `supabase/migrations`, or points at a live project. `Tests/DDDToolkit.Examples.AppHost.Tests`
+  plays the same checkout scenarios against every sample, containers included, in a new Sample Tests
+  workflow; Build and Test and the release leave them out with `Category!=Samples`.
+- The example shop serves one GraphQL schema over its five modules, next to REST:
+  `order { lines { product { name } } payment { status } shipment { destination } }` in one query.
+  Each module publishes its part and a lookup in `Api/GraphQL`; the fields that cross modules are
+  composed in `Shared/DDDToolkit.Examples.GraphQL`, so no module references another. Every entity is a
+  Relay node with the toolkit's identifier as its id, rules come back as errors with their codes, and
+  `orderConfirmed`/`orderCancelled` subscriptions are fed by the outbox.
+- `Examples/Microservices.Wolverine` runs the same three services over RabbitMQ with Wolverine, each on a
+  database of its own: Storefront on SQL Server, Payments and Fulfilment on Postgres.
+- `Examples/Microservices.Pgmq` runs the shop as three services (storefront, payments, fulfilment) behind
+  a YARP gateway, talking through pgmq queues in the one Postgres they share. The same checkout scenarios
+  pass against it as against the monoliths. Every microservices sample has a project per service, each
+  referencing only the modules it runs and saying itself what it sends and consumes; the gateway's routes
+  are in its `appsettings.json`. Each module's SQL Server migrations are a project next to the module, so a
+  service on SQL Server loads only its own.
 - `[KeyPart]` on a property of an `[AggregateRoot<T>]` or `[Entity<T>]` puts it into the primary key
   ahead of `Id`, and the new `KeyPartConvention`, added by `AddDDDToolkitConventions()`, carries it
   into the foreign key of every owned type below: a root keyed `(RegionId, Id)` owns rows keyed
@@ -104,9 +211,52 @@ convention.
 - A code fix for DDD00010 and DDD00011 that makes the setter `protected init` (`private protected
   init` on an `internal` property). It ships in the DDDToolkit.Analyzers package as
   `DDDToolkit.Analyzers.CodeFixes.dll`, next to the generators.
+- `IOutboundIntegrationEvent<TDomainEvent, TContract>`, the translation from a domain event to its
+  published contract as a class, the outbound counterpart of `IIntegrationEventHandler<TContract>`, so the
+  translations can live next to the aggregates they publish for rather than as lambdas in the module's
+  registration. It is async and is built from the outbox processor's scope, so it can read the module's
+  own context; it runs at delivery, so the docs say what it may and may not read. `IntegrationEventMap`
+  gains `PublishWith<TDomainEvent, TContract>(name, version, create)`, `ConvertAsync`, `IsMapped` and
+  `TryDescribeContract`. See [A class per published event](docs/integration-events.md#a-class-per-published-event).
+- A module's integration event registration, generated. `DDDToolkit.EntityFramework.Analyzers` writes
+  `Add{Module}IntegrationEvents()` on the outbox (every domain event under its stored name and version,
+  every outbound class with its contract's name and version), on the contract registry (every contract
+  the module's handlers read) and on `ModuleIntegrationEvents<TContext>` (every handler, under its
+  consumer name and its contract's name). Every name and version is read by the compiler and written out
+  as a literal, and every class is built with `new`, so nothing is scanned, read or activated by
+  reflection at run time; DDD00033 reports a class it cannot construct. The registries gain the explicit
+  overloads it calls: `DomainEventTypeRegistry.Register<TEvent>(name, version)` and `TryDescribe`,
+  `OutboxOptions.RegisterEvent<TEvent>(name, version)`, `IntegrationEventContractRegistry.Register<TContract>(name, version)`
+  and `ModuleIntegrationEvents.Handle<TContract, THandler>(contract, consumer, create)`, and the outbox and
+  the processor now look names and versions up in the registries before asking a type's attributes. See
+  [Registered when the module compiles](docs/integration-events.md#registered-when-the-module-compiles).
+- `IntegrationEventSubscriptions` (`services.IntegrationEventSubscriptions()`): the contracts a process
+  handles, the ones it publishes, and `FromElsewhere`, the ones other services have to send it, with
+  `VisitFromElsewhere` handing each contract type over as a generic argument. The transports read it to
+  subscribe in their own terms, and `IntegrationEventReceiver.ReceiveAsync<TContract>(contract, headers)`
+  takes a message a broker has already deserialized.
+- `outbox.SendTo<TSink>(services => ...)`, a sink built by a factory from the processor's scope rather than
+  constructed by reflection; `SendToMassTransit()` and `SendToWolverine()` use it. `GraphQlSubscriptionSink`
+  now pushes through a typed call the map captured when the contract was registered, and finds the entry
+  by the type of the contract the message carries, instead of making a generic method by reflection per
+  message; `Published` reads the contracts' attributes only when it is asked for.
+- The example shop registers its integration events through the generated methods, keeps its handlers in
+  `Application/<slice>/{DomainEvents,IntegrationEvents/{Inbound,Outbound}}`, and its microservices route
+  natively: pgmq topics, Wolverine's conventional routing, MassTransit's topology. No service names a
+  contract or another service.
+
+### Deprecated
+
+- `IntegrationEventMap.TryConvert`. It cannot run an `IOutboundIntegrationEvent`, which needs services
+  and may complete later, and throws for one. Use `ConvertAsync`. `PublishAs` and `DoNotPublish` entries
+  keep working through it.
 
 ### Fixed
 
+- A positional `[ValueObject]` record, such as `record Money(decimal Amount, string Currency)`, came
+  back from System.Text.Json with every property at its default. The generated properties are
+  `protected init`, which the serializer cannot reach by itself, so a value object inside a domain
+  event was published from the outbox empty. The generated properties are now `[JsonInclude]`.
 - `ToValid()` could hand back a twin holding a different value from the one it had just validated.
   The twin started from an empty object and copied the settable properties one by one, so a get-only
   property or a private field stayed at its default without any warning, and a `protected` property
@@ -137,8 +287,20 @@ convention.
   aggregate and `AggregateRoot<TId>` works. It does not: the generator writes the base class itself,
   and a class that also names one fails with CS0263. The page now says so and suggests an interface
   instead, and a test pins the behaviour down.
+- `GetInvariantViolations()` and `GetOwnInvariantViolations()` were published as GraphQL fields on
+  every entity whose schema type bound its fields by convention, so any client could run an entity's
+  invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
+  `[Internal]` now, like the rest of the toolkit's bookkeeping.
 
 ### Changed
+
+- **Breaking for schemas that relied on it:** an entity, an aggregate or a value object bound by
+  convention no longer publishes its methods as GraphQL fields, only its properties.
+  `DomainBehaviourFieldsInterceptor`, registered by `AddDDDToolkitTypes()`, removes them. Before, a
+  `Money.Times(int)` was published as `times(quantity: Int!)`, and a method on an aggregate that changed
+  state and returned a result became a field that ran inside a query. A type declared with
+  `BindFieldsExplicitly()` still publishes every method it names, and type extensions are untouched. See
+  [Domain types publish their data, not their behaviour](docs/graphql.md#domain-types-publish-their-data-not-their-behaviour).
 
 - **Breaking:** `IInvariant<T>.Check` returns `InvariantFailure?` instead of `string?`, so a rule can
   hand on the values its message names. A string converts to `InvariantFailure` and `null` still means

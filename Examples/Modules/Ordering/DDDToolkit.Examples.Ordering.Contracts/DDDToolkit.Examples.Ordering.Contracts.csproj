@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Names the generated AddOrderingContractsConverters method. See docs/getting-started.md. -->
+    <DDD_Module>OrderingContracts</DDD_Module>
+  </PropertyGroup>
+
+  <!--
+    A contracts assembly would rather depend on nothing, and it very nearly does. It needs
+    DDDToolkit.EntityFramework for one reason: OrderId is published, Shipping stores one in a column,
+    and the value converter that maps it is written by the Entity Framework generator into the assembly
+    that declares the id. Without this reference there is no converter for anybody to register.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <!-- GraphQL: the schema types in Api/GraphQL, and the generated bindings that print this assembly's ids as UUIDs. -->
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

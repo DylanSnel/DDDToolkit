@@ -5,7 +5,7 @@ using FluentValidation;
 namespace DDDToolkit.NugetApi;
 
 // Everything here exists to make a generator run. Nothing is a domain worth reading; read
-// Examples/ModularMonolith for that. What matters is that these declarations produce the same code
+// Examples/ModularMonolith.Supabase for that. What matters is that these declarations produce the same code
 // when the toolkit arrives as packages as they do when the repository references the projects.
 
 /// <summary>A struct identifier with a prefix, from DDDToolkit.Analyzers.</summary>

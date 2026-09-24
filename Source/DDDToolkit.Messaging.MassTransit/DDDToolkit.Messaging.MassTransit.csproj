@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - MassTransit messaging</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;messaging;masstransit;rabbitmq;outbox;inbox</PackageTags>
+    <Description>MassTransit as the transport for the DDDToolkit's outbox and inbox: a sink that publishes integration events through MassTransit, and a consumer that hands them to the modules of the receiving process.</Description>
+  </PropertyGroup>
+
+  <!--
+    MassTransit as a transport and nothing more, like the Wolverine package: the toolkit keeps its outbox
+    and its inbox, MassTransit carries the message between them.
+
+    Built on MassTransit 8, the last major version under the Apache 2.0 licence. MassTransit 9 is sold
+    under a commercial licence; whether to move to it is a decision for whoever deploys it, and nothing
+    here should make it for them. See the package README.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="MassTransit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

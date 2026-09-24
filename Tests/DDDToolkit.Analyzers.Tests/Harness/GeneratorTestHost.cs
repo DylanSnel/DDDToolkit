@@ -9,6 +9,7 @@ using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
+using EfIntegrationEventsGenerator = DDDToolkit.EntityFramework.Analyzers.IntegrationEventsGenerator;
 using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyzers.SingleValueObjectConverterGenerator;
 using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectGenerator;
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
@@ -84,12 +85,13 @@ public sealed class GeneratorTestHost
         new CoreEntityGenerator(),
     ];
 
-    /// <summary>The three generators in DDDToolkit.EntityFramework.Analyzers.</summary>
+    /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
     public static IIncrementalGenerator[] EntityFrameworkGenerators() =>
     [
         new EfSingleValueObjectConverterGenerator(),
         new EfEntityGenerator(),
         new EfValueObjectGenerator(),
+        new EfIntegrationEventsGenerator(),
     ];
 
     /// <summary>The generator in DDDToolkit.FluentValidation.Analyzers.</summary>
@@ -168,6 +170,16 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithEntityFramework()
     {
         _extraReferences.AddRange(ReferenceSets.EntityFramework);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds EF Core and DDDToolkit.EntityFramework itself, whose outbox and integration event types the
+    /// integration event registration is written against.
+    /// </summary>
+    public GeneratorTestHost WithEntityFrameworkRuntime()
+    {
+        _extraReferences.AddRange(ReferenceSets.EntityFrameworkRuntime);
         return this;
     }
 

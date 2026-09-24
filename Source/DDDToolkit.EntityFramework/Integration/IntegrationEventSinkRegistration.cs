@@ -11,6 +11,7 @@ public sealed class IntegrationEventSinkRegistration
 {
     private readonly Type? _sinkType;
     private readonly IIntegrationEventSink? _instance;
+    private readonly Func<IServiceProvider, IIntegrationEventSink>? _create;
 
     internal IntegrationEventSinkRegistration(Type sinkType)
     {
@@ -22,6 +23,12 @@ public sealed class IntegrationEventSinkRegistration
     {
         _instance = instance;
         Name = instance.GetType().Name;
+    }
+
+    internal IntegrationEventSinkRegistration(string name, Func<IServiceProvider, IIntegrationEventSink> create)
+    {
+        _create = create;
+        Name = name;
     }
 
     /// <summary>The sink's type name, used in log and error messages.</summary>
@@ -40,6 +47,11 @@ public sealed class IntegrationEventSinkRegistration
         if (_instance is not null)
         {
             return _instance;
+        }
+
+        if (_create is not null)
+        {
+            return _create(serviceProvider);
         }
 
         return (IIntegrationEventSink)ActivatorUtilities.GetServiceOrCreateInstance(serviceProvider, _sinkType!);

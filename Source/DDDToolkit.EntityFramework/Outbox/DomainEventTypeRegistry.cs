@@ -19,15 +19,38 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// </summary>
 public sealed class DomainEventTypeRegistry
 {
-    private readonly Dictionary<string, Type> _types = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Type Type, int Version)> _types = new(StringComparer.Ordinal);
+    private readonly Dictionary<Type, (string Name, int Version)> _described = [];
 
     /// <summary>The registered names.</summary>
     public IReadOnlyCollection<string> Names => _types.Keys;
 
-    /// <summary>Registers <typeparamref name="TEvent"/> under its stable name.</summary>
+    /// <summary>Every registered type with the name it is stored under.</summary>
+    internal IEnumerable<(Type Type, string Name)> Described => _described.Select(static pair => (pair.Key, pair.Value.Name));
+
+    /// <summary>
+    /// Registers <typeparamref name="TEvent"/> under <paramref name="name"/> at <paramref name="version"/>,
+    /// as they were read off its attributes when the module was compiled. This is what the generated
+    /// <c>outbox.Add{Module}IntegrationEvents()</c> calls; nothing here reads an attribute or scans an
+    /// assembly.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or another type is registered under the same name and version.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="version"/> is below 1.</exception>
+    public DomainEventTypeRegistry Register<TEvent>(string name, int version) where TEvent : IDomainEvent
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentOutOfRangeException.ThrowIfLessThan(version, 1);
+
+        return Add(typeof(TEvent), name, version);
+    }
+
+    /// <summary>Registers <typeparamref name="TEvent"/> under its stable name, read from its attributes at run time.</summary>
     public DomainEventTypeRegistry Register<TEvent>() where TEvent : IDomainEvent => Register(typeof(TEvent));
 
-    /// <summary>Registers <paramref name="eventType"/> under its stable name.</summary>
+    /// <summary>
+    /// Registers <paramref name="eventType"/> under its stable name, read from its attributes at run time.
+    /// The generated <c>outbox.Add{Module}IntegrationEvents()</c> does the same without reflection.
+    /// </summary>
     /// <exception cref="ArgumentException">The type is not a concrete <see cref="IDomainEvent"/>, or another type is registered under the same name.</exception>
     public DomainEventTypeRegistry Register(Type eventType)
     {
@@ -45,41 +68,43 @@ public sealed class DomainEventTypeRegistry
         {
             throw new ArgumentException(
                 $"'{eventType}' is stored under '{name}' and published as '{published.Name}', so a stored row could never be matched to a version. " +
-                "Give [IntegrationEvent] the same name as [DomainEventName], or publish through outbox.PublishAs<TEvent, TContract>(...) with a separate contract type.",
+                "Give [IntegrationEvent] the same name as [DomainEventName], or publish a separate contract type through an IOutboundIntegrationEvent<TEvent, TContract> or outbox.PublishAs<TEvent, TContract>(...).",
                 nameof(eventType));
         }
 
-        if (_types.TryGetValue(name, out var existing) && existing != eventType)
+        return Add(eventType, name, IntegrationEventContract.VersionOf(eventType));
+    }
+
+    private DomainEventTypeRegistry Add(Type eventType, string name, int version)
+    {
+        _described[eventType] = (name, version);
+
+        if (_types.TryGetValue(name, out var existing) && existing.Type != eventType)
         {
             // Two types under one name is how a versioned event looks while the old shape is still
             // readable: keep the newest, because that is the one new events are written as, and let the
             // contract registry hold the older shapes for reading.
-            var kept = Newer(existing, eventType, name);
-            _types[name] = kept;
+            if (existing.Version == version)
+            {
+                throw new ArgumentException(
+                    $"Both '{existing.Type}' and '{eventType}' use the domain event name '{name}' at version {version}. " +
+                    "Give one of them a different [DomainEventName], or say which is newer with [IntegrationEvent(\"" + name + "\", Version = n)].",
+                    nameof(eventType));
+            }
+
+            if (version > existing.Version)
+            {
+                _types[name] = (eventType, version);
+            }
+
             return this;
         }
 
-        _types[name] = eventType;
+        _types[name] = (eventType, version);
         return this;
     }
 
-    private static Type Newer(Type existing, Type candidate, string name)
-    {
-        var existingVersion = IntegrationEventContract.VersionOf(existing);
-        var candidateVersion = IntegrationEventContract.VersionOf(candidate);
-
-        if (existingVersion == candidateVersion)
-        {
-            throw new ArgumentException(
-                $"Both '{existing}' and '{candidate}' use the domain event name '{name}' at version {existingVersion}. " +
-                "Give one of them a different [DomainEventName], or say which is newer with [IntegrationEvent(\"" + name + "\", Version = n)].",
-                nameof(candidate));
-        }
-
-        return candidateVersion > existingVersion ? candidate : existing;
-    }
-
-    /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in <paramref name="assembly"/>.</summary>
+    /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in <paramref name="assembly"/>, by reflection.</summary>
     public DomainEventTypeRegistry RegisterFromAssembly(Assembly assembly)
     {
         ArgumentNullException.ThrowIfNull(assembly);
@@ -93,10 +118,40 @@ public sealed class DomainEventTypeRegistry
     }
 
     /// <summary>The type registered under <paramref name="eventName"/>, or <see langword="null"/>.</summary>
-    public Type? Resolve(string eventName) => _types.GetValueOrDefault(eventName);
+    public Type? Resolve(string eventName) => _types.TryGetValue(eventName, out var entry) ? entry.Type : null;
 
     /// <summary>Looks up the type registered under <paramref name="eventName"/>.</summary>
-    public bool TryResolve(string eventName, [NotNullWhen(true)] out Type? eventType) => _types.TryGetValue(eventName, out eventType);
+    public bool TryResolve(string eventName, [NotNullWhen(true)] out Type? eventType)
+    {
+        if (_types.TryGetValue(eventName, out var entry))
+        {
+            eventType = entry.Type;
+            return true;
+        }
+
+        eventType = null;
+        return false;
+    }
+
+    /// <summary>
+    /// The name and version <paramref name="eventType"/> was registered under, so the outbox can write and
+    /// read a row without asking the type's attributes.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="eventType"/> is null.</exception>
+    public bool TryDescribe(Type eventType, [NotNullWhen(true)] out string? name, out int version)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        if (_described.TryGetValue(eventType, out var described))
+        {
+            (name, version) = described;
+            return true;
+        }
+
+        name = null;
+        version = 0;
+        return false;
+    }
 
     private static bool IsConcreteEvent(Type type)
         => typeof(IDomainEvent).IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface && !type.IsGenericTypeDefinition;

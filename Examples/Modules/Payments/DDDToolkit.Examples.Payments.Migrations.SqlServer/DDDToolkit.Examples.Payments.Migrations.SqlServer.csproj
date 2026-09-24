@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- dotnet ef runs this project as its own startup project, which needs a runtime configuration. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+  </PropertyGroup>
+
+  <!--
+    Payments's SQL Server migrations, next to the module and apart from it.
+
+    The module's Postgres migrations live in the module, because Supabase is where the example started and
+    the export reads them there. A second provider cannot live next to them: Entity Framework keeps one
+    model snapshot per context per assembly, and a Postgres snapshot and a SQL Server snapshot of the same
+    context disagree on every column type. ModuleDatabase.UseSqlServer points the context at this assembly
+    by name, so a host on SQL Server references it and a host that is not never loads it.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
+    <ProjectReference Include="..\..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
+  </ItemGroup>
+
+</Project>

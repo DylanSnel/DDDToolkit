@@ -1,5 +1,8 @@
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Examples.Catalog;
+using DDDToolkit.Examples.Inventory;
 using DDDToolkit.Examples.Ordering;
+using DDDToolkit.Examples.Payments;
 using DDDToolkit.Examples.Shipping;
 using FluentAssertions;
 
@@ -15,18 +18,22 @@ public sealed class SupabaseMigrationsTests
     [Fact]
     public void Each_module_names_its_files_after_the_module_it_declares()
     {
+        SupabaseMigrations.ModuleNameOf(typeof(CatalogContext)).Should().Be("catalog");
         SupabaseMigrations.ModuleNameOf(typeof(OrderingContext)).Should().Be("ordering");
+        SupabaseMigrations.ModuleNameOf(typeof(InventoryContext)).Should().Be("inventory");
+        SupabaseMigrations.ModuleNameOf(typeof(PaymentsContext)).Should().Be("payments");
         SupabaseMigrations.ModuleNameOf(typeof(ShippingContext)).Should().Be("shipping");
     }
 
     [Fact]
     public void The_committed_files_carry_those_names()
     {
-        var migrations = SupabaseMigrations.FindDirectory(Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith"));
+        var migrations = SupabaseMigrations.FindDirectory(Path.Combine(RepositoryRoot(), "Examples", "ModularMonolith.Supabase"));
 
-        Directory.GetFiles(migrations, "*.ddd.sql").Select(Path.GetFileName).Should().BeEquivalentTo(
-            "20260922201049_CreateOrdering.ordering.ddd.sql",
-            "20260922201056_CreateShipping.shipping.ddd.sql");
+        Directory.GetFiles(migrations, "*.ddd.sql").Select(Path.GetFileName)
+            .Select(name => name!.Split('.')[^3])
+            .Distinct()
+            .Should().BeEquivalentTo("catalog", "ordering", "inventory", "payments", "shipping");
     }
 
     private static string RepositoryRoot()

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Reflection;
 using System.Text.Json;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.Interfaces;
@@ -62,11 +60,6 @@ namespace DDDToolkit.HotChocolate.Subscriptions;
 /// </summary>
 public sealed class GraphQlSubscriptionSink : IIntegrationEventSink
 {
-    private static readonly MethodInfo SendDefinition = typeof(ITopicEventSender)
-        .GetMethod(nameof(ITopicEventSender.SendAsync))!;
-
-    private static readonly ConcurrentDictionary<Type, MethodInfo> Senders = new();
-
     private readonly ITopicEventSender _sender;
     private readonly GraphQlSubscriptionMap _map;
     private readonly JsonSerializerOptions _jsonOptions;
@@ -99,25 +92,25 @@ public sealed class GraphQlSubscriptionSink : IIntegrationEventSink
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        if (!_map.TryGetTopic(message, out var contractType, out var topic))
+        if (!_map.TryGetEntry(message, out var entry))
         {
             _logger.LogDebug("'{Name}' version {Version} is not published to subscribers.", message.Name, message.Version);
             return;
         }
 
+        var topic = entry.Topic(message);
         if (topic is null)
         {
             _logger.LogDebug("Message {MessageId} produced no topic, so no client was woken.", message.MessageId);
             return;
         }
 
-        var payload = Payload(message, contractType);
+        var payload = Payload(message, entry.Contract);
 
         // SendAsync is generic and the topic is typed, so the generic argument has to be the contract's
-        // own type; a payload sent as object would not match a client's SubscribeAsync<TContract>.
-        var send = Senders.GetOrAdd(contractType, static type => SendDefinition.MakeGenericMethod(type));
-
-        await ((ValueTask)send.Invoke(_sender, [topic, payload, cancellationToken])!).ConfigureAwait(false);
+        // own type; a payload sent as object would not match a client's SubscribeAsync<TContract>. The map
+        // captured that call when the contract was registered.
+        await entry.Send(_sender, topic, payload, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

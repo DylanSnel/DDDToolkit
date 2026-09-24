@@ -28,8 +28,12 @@
     assemblies the host runs; nothing here is a stand-in.
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\Examples\ModularMonolith\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
-    <ProjectReference Include="..\..\Examples\ModularMonolith\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Catalog\DDDToolkit.Examples.Catalog\DDDToolkit.Examples.Catalog.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Inventory\DDDToolkit.Examples.Inventory\DDDToolkit.Examples.Inventory.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\SharedKernel\DDDToolkit.Examples.SharedKernel\DDDToolkit.Examples.SharedKernel.csproj" />
+    <ProjectReference Include="..\..\Examples\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Testing\DDDToolkit.Testing.csproj" />
     <!-- SupabaseMigrations, to hold the example's supabase/migrations to its Entity Framework migrations. -->
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />

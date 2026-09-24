@@ -33,6 +33,9 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Floors" Condition="'$(DDDDependencyVersions)' == 'Floor'">
+    <!-- The release the Wolverine integration was written and tested against; nothing older is known to work. -->
+    <WolverineVersion>6.39.1</WolverineVersion>
+    <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.0</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.0</EntityFrameworkCoreVersion>
     <NpgsqlVersion>10.0.0</NpgsqlVersion>
@@ -47,6 +50,8 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Latest" Condition="'$(DDDDependencyVersions)' == 'Latest'">
+    <WolverineVersion>6.39.1</WolverineVersion>
+    <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.12</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.12</EntityFrameworkCoreVersion>
     <NpgsqlVersion>10.0.3</NpgsqlVersion>
@@ -103,6 +108,14 @@
     <PackageVersion Include="FluentValidation" Version="$(FluentValidationVersion)" />
     <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
     <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
+    <!-- Wolverine and MassTransit are transports for DDDToolkit.Messaging.Wolverine and .MassTransit. -->
+    <!-- MassTransit 8: the last major version under Apache 2.0. 9 is commercial; see the package README. -->
+    <PackageVersion Include="MassTransit" Version="$(MassTransitVersion)" />
+    <PackageVersion Include="MassTransit.RabbitMQ" Version="$(MassTransitVersion)" />
+    <PackageVersion Include="WolverineFx" Version="$(WolverineVersion)" />
+    <PackageVersion Include="WolverineFx.RabbitMQ" Version="$(WolverineVersion)" />
+    <!-- Wolverine compiles its handler code at start-up; since 6.x that compiler is a package of its own. -->
+    <PackageVersion Include="WolverineFx.RuntimeCompilation" Version="$(WolverineVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Composition roots">
@@ -116,6 +129,43 @@
 
   <ItemGroup Label="Examples">
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <!--
+    Aspire runs the example shop's hosts and their databases and brokers, and its testing package runs
+    them end to end. Examples and tests only; nothing under Source/ depends on any of this, so there is
+    no floor to keep.
+  -->
+  <PropertyGroup>
+    <AspireVersion>13.5.4</AspireVersion>
+    <OpenTelemetryVersion>1.19.1</OpenTelemetryVersion>
+    <OpenTelemetryInstrumentationVersion>1.19.0</OpenTelemetryInstrumentationVersion>
+  </PropertyGroup>
+
+  <!-- Aspire.Hosting.AppHost is not listed: Aspire.AppHost.Sdk references it implicitly, at its own version. -->
+  <ItemGroup Label="Aspire">
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.SqlServer" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.RabbitMQ" Version="$(AspireVersion)" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="$(AspireVersion)" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="10.10.0" />
+    <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
+    <!--
+      Fusion: the gateway of the microservices samples and the AppHost side that composes its schema, and
+      the in-memory connector Tests/Spikes/DDDToolkit.Spikes.FusionInProcess tries.
+      Pinned rather than $(HotChocolateVersion): only the examples use them, and Fusion's Aspire
+      integration is newer than the floor the packages are built against.
+    -->
+    <PackageVersion Include="HotChocolate.Fusion.AspNetCore" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Fusion.Aspire" Version="16.6.6" />
+    <PackageVersion Include="HotChocolate.Fusion.Connectors.InMemory" Version="16.6.6" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="$(OpenTelemetryInstrumentationVersion)" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="$(OpenTelemetryInstrumentationVersion)" />
   </ItemGroup>
 
   <ItemGroup Label="Benchmarks">

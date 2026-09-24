@@ -13,6 +13,50 @@ public sealed class PgmqSinkOptions
     public const string DefaultQueueName = "integration_events";
 
     private Func<IntegrationEventMessage, string> _queue = _ => DefaultQueueName;
+    private Func<IntegrationEventMessage, IEnumerable<string>>? _queues;
+
+    /// <summary>
+    /// Sends each message with <c>pgmq.send_topic</c>, the contract's published name as the routing key, to
+    /// every queue bound to it. This is pgmq's own publish and subscribe, and the one to use between
+    /// services: the sender names no queue, and each consuming service binds its own queue to the contracts
+    /// it handles (<see cref="PgmqConsumerOptions.BindTopics"/>), as a RabbitMQ consumer binds its queue to a
+    /// topic exchange.
+    /// <para>
+    /// A message nobody is bound to reaches no queue, again as with a broker. The sends share the connection
+    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later.
+    /// </para>
+    /// </summary>
+    public PgmqSinkOptions UseTopics()
+    {
+        Topics = true;
+        return this;
+    }
+
+    /// <summary>True when messages are routed by topic (<see cref="UseTopics"/>) rather than to named queues.</summary>
+    public bool Topics { get; private set; }
+
+    /// <summary>
+    /// Sends each message to every queue <paramref name="queues"/> names: fan-out, for when several
+    /// deployables each read a queue of their own and more than one of them consumes the same message.
+    /// <para>
+    /// pgmq is a queue, not a topic: a message read by one consumer is gone for the others. Giving every
+    /// consuming service its own queue, and enqueueing a message once per service that wants it, is how
+    /// a queue carries publish and subscribe. The enqueues share the connection and the transaction, so a
+    /// message reaches all of its queues or none of them. A message that should go nowhere returns no
+    /// queue at all.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="queues"/> is null.</exception>
+    public PgmqSinkOptions UseQueues(Func<IntegrationEventMessage, IEnumerable<string>> queues)
+    {
+        ArgumentNullException.ThrowIfNull(queues);
+        _queues = queues;
+        return this;
+    }
+
+    /// <summary>The queues a message is enqueued on: those of <see cref="UseQueues"/>, or else the one <see cref="QueueName"/> names.</summary>
+    internal IEnumerable<string> Queues(IntegrationEventMessage message)
+        => _queues is { } queues ? queues(message) : [QueueName(message)];
 
     /// <summary>
     /// The queue a message goes to. One queue for everything by default, which is the shape that keeps

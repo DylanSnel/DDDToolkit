@@ -14,6 +14,8 @@ internal static class DiagnosticDescriptors
     private const string Modules = "DDDToolkit.Modules";
     private const string Invariants = "DDDToolkit.Invariants";
     private const string Supabase = "DDDToolkit.Supabase";
+    private const string GraphQL = "DDDToolkit.GraphQL";
+    private const string IntegrationEvents = "DDDToolkit.IntegrationEvents";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -229,4 +231,22 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The build exports a marked factory's migrations by creating the factory from generated code in the project that turns the export on. That needs a public, non-abstract, non-generic class with a public parameterless constructor that implements IDesignTimeDbContextFactory<TContext>. A factory that is not one is left out, and that is an error rather than a warning: a module whose migrations silently never reached Supabase would be found by a failing deployment instead of by the build.");
+
+    public static readonly DiagnosticDescriptor NodeIdSerializerFromToolkitId = new(
+        id: "DDD00032",
+        title: "Do not ask HotChocolate's generator for a toolkit identifier's node id serializer",
+        messageFormat: "AddNodeIdValueSerializerFrom<{0}>() writes a serializer that stores nothing: '{0}' is a toolkit identifier, and the generated GraphQL runtime bindings already register a working one",
+        category: GraphQL,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "HotChocolate's generator builds the serializer from the properties the type declares in source. A toolkit identifier's Value is written by the toolkit's own generator, and source generators do not see each other's output, so HotChocolate finds no property and emits a serializer that writes an empty node id and reads every node id back as an empty identifier. It compiles and runs without a sign of trouble. The generated Add{Module}GraphQlRuntimeBindings() already registers a serializer that works for every identifier; remove this call.");
+
+    public static readonly DiagnosticDescriptor IntegrationEventClassNotConstructible = new(
+        id: "DDD00033",
+        title: "The generated integration event registration must be able to construct the class",
+        messageFormat: "'{0}' is left out of the generated integration event registration: {1}",
+        category: IntegrationEvents,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The generated Add{Module}IntegrationEvents() constructs every outbound class and every handler with new, taking each constructor parameter from the scope the message is delivered in. It needs one accessible constructor with the most parameters, parameters it can resolve (no ref, out or params), and parameter types this assembly can see. A class it cannot construct is left out of the registration, so its events are not published or its contract is not handled; register it by hand or give it a constructor the registration can call.");
 }

@@ -1,0 +1,27 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.5.4">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <UserSecretsId>dddtoolkit-examples-masstransit-apphost</UserSecretsId>
+    <!-- ASPIRE010 asks for the Aspire CLI bundle, which only the CLI's own features need. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.Fusion.Aspire" />
+    <PackageReference Include="Aspire.Hosting.RabbitMQ" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Storefront\DDDToolkit.Examples.MassTransit.Storefront.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Payments\DDDToolkit.Examples.MassTransit.Payments.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Fulfilment\DDDToolkit.Examples.MassTransit.Fulfilment.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Examples.MassTransit.Gateway\DDDToolkit.Examples.MassTransit.Gateway.csproj" />
+  </ItemGroup>
+
+</Project>

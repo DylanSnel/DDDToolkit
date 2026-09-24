@@ -1,0 +1,187 @@
+name: Supabase Live
+
+# The modular monolith against a real Supabase project, not a Postgres container that imitates one. The
+# migrations the build exported to supabase/migrations go on with the Supabase CLI, exactly as a deploy
+# would put them there, and the checkout scenarios run against the result. It answers whether Supabase
+# accepts what the toolkit exports and whether the application then finds nothing missing.
+#
+# Two ways to get a database, switched by the repository variable SUPABASE_BRANCHING:
+#
+# - "true": every run creates a preview branch of its own, tests against it and deletes it, whatever
+#   the outcome. Branching needs the project's organisation on Supabase's Pro plan.
+# - otherwise: every run uses the project itself. The project is there for these tests alone, so each run
+#   first drops the module schemas the migrations create and forgets those migrations, and then applies
+#   them again. Runs take turns, since they share one database.
+#
+# Needs the secrets SUPABASE_ACCESS_TOKEN (a personal access token; Development Branches read-write,
+# Project Settings read, Database read) and, without branching, SUPABASE_DB_PASSWORD, plus the variable
+# SUPABASE_PROJECT_REF.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - Examples/**
+      - Source/DDDToolkit.EntityFramework/**
+      - Source/DDDToolkit.EntityFramework.Supabase/**
+      - .github/workflows/SupabaseLive.yml
+
+concurrency:
+  # One project: without branching two runs would reset each other's database.
+  group: supabase-live
+  cancel-in-progress: false
+
+jobs:
+  supabase-live:
+    name: ModularMonolith.Supabase on Supabase
+    runs-on: ubuntu-latest
+
+    # A pull request from a fork gets no secrets, so there is nothing to run against.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      BRANCHING: ${{ vars.SUPABASE_BRANCHING == 'true' }}
+      BRANCH_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # An expired token fails here, saying so, rather than somewhere later with a message about something else.
+      - name: Check the credentials
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::Set the secret SUPABASE_ACCESS_TOKEN and the variable SUPABASE_PROJECT_REF."
+            exit 1
+          fi
+          if [ "$BRANCHING" != "true" ] && [ -z "$SUPABASE_DB_PASSWORD" ]; then
+            echo "::error::Without branching the tests run on the project itself and need the secret SUPABASE_DB_PASSWORD."
+            exit 1
+          fi
+          status=$(curl -s -o project.json -w '%{http_code}' \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF")
+          case "$status" in
+            200) echo "Project: $(jq -r '.name + " (" + .region + ", " + .status + ")"' project.json)" ;;
+            401) echo "::error::SUPABASE_ACCESS_TOKEN is expired or revoked. Create a new personal access token in the Supabase dashboard (Account, Access Tokens) and run: gh secret set SUPABASE_ACCESS_TOKEN"
+                 exit 1 ;;
+            403) echo "::error::SUPABASE_ACCESS_TOKEN may not read project $SUPABASE_PROJECT_REF. It needs Project Settings (read)."
+                 exit 1 ;;
+            404) echo "::error::No project $SUPABASE_PROJECT_REF. Check the variable SUPABASE_PROJECT_REF."
+                 exit 1 ;;
+            *)   echo "::error::The Supabase API answered $status."; cat project.json; exit 1 ;;
+          esac
+          rm project.json
+
+      - name: Create a preview branch
+        if: env.BRANCHING == 'true'
+        run: supabase branches create "$BRANCH_NAME" --project-ref "$SUPABASE_PROJECT_REF" --size micro
+
+      # The database's own host has no IPv4 address and GitHub's runners have no IPv6, so everything goes
+      # through Supabase's pooler, in session mode (port 5432), which Entity Framework and migrations need.
+      - name: Connect
+        run: |
+          api() { curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "https://api.supabase.com/v1/$1"; }
+
+          if [ "$BRANCHING" = "true" ]; then
+            branch_id=$(api "projects/$SUPABASE_PROJECT_REF/branches" | jq -r --arg name "$BRANCH_NAME" '.[] | select(.name == $name) | .id')
+            for attempt in $(seq 1 60); do
+              api "branches/$branch_id" > branch.json || true
+              state=$(jq -r '.status // empty' branch.json)
+              echo "Branch $BRANCH_NAME: ${state:-not ready}"
+              [ "$state" = "ACTIVE_HEALTHY" ] && break
+              sleep 10
+            done
+            if [ "$state" != "ACTIVE_HEALTHY" ]; then
+              echo "::error::The preview branch did not become healthy in ten minutes."
+              exit 1
+            fi
+            ref=$(jq -r '.ref' branch.json)
+            password=$(jq -r '.db_pass' branch.json)
+            rm branch.json
+          else
+            ref="$SUPABASE_PROJECT_REF"
+            password="$SUPABASE_DB_PASSWORD"
+          fi
+          echo "::add-mask::$password"
+
+          host=$(api "projects/$ref/config/database/pooler" | jq -r '.[] | select(.database_type == "PRIMARY") | .db_host')
+          user="postgres.$ref"
+          encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$password")
+
+          echo "DATABASE_URL=postgresql://$user:$encoded@$host:5432/postgres" >> "$GITHUB_ENV"
+          # What the Supabase AppHost reads to point the monolith at a live project instead of a container.
+          # Quoted, so a password with a ';' in it stays one value.
+          echo "ConnectionStrings__Supabase=Host=$host;Port=5432;Database=postgres;Username=$user;Password=\"$password\";SSL Mode=Require" >> "$GITHUB_ENV"
+
+      # Only without branching, and only what the example's migrations create: its module schemas, and
+      # their rows in the history Supabase keeps of applied migrations.
+      - name: Start from an empty shop
+        if: env.BRANCHING != 'true'
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DROP SCHEMA IF EXISTS catalog, ordering, inventory, payments, shipping, ddd CASCADE;
+          DO $$
+          BEGIN
+            IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
+              DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE '%.ddd';
+            END IF;
+          END $$;
+          SQL
+
+      - name: Apply the exported migrations
+        run: supabase db push --db-url "$DATABASE_URL" --workdir Examples/ModularMonolith.Supabase --yes
+
+      - name: Build
+        run: dotnet build Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj --configuration Release
+
+      # With ConnectionStrings__Supabase set, the AppHost starts no Postgres and points the monolith at the
+      # project, where the monolith checks on start-up that every migration it knows was applied.
+      - name: Test
+        run: >
+          dotnet test Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
+          --no-build --configuration Release --verbosity normal
+          --filter "Sample=ModularMonolith.Supabase"
+          --logger "trx;LogFileName=supabase-live.trx"
+          --results-directory TestResults
+
+      - name: Prove tests actually ran
+        if: always()
+        run: |
+          trx=$(find TestResults -name 'supabase-live.trx' | head -1)
+          if [ -z "$trx" ]; then
+            echo "::error::No test results were written, so the project was never exercised."
+            exit 1
+          fi
+          executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          passed=$(grep -o 'passed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          echo "### Supabase live: $passed of $executed scenarios passed" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${executed:-0}" -lt 5 ]; then
+            echo "::error::Only ${executed:-0} scenarios ran against Supabase."
+            exit 1
+          fi
+
+      - name: Delete the preview branch
+        if: always() && env.BRANCHING == 'true'
+        run: supabase branches delete "$BRANCH_NAME" --project-ref "$SUPABASE_PROJECT_REF" --yes || echo "::warning::Delete the preview branch $BRANCH_NAME by hand."
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: supabase-live
+          path: TestResults
+          if-no-files-found: ignore

@@ -22,6 +22,15 @@ dotnet add package DDDToolkit.HotChocolate
 The package brings its own source generator, so referencing it is the whole of the build-time setup.
 It depends on `HotChocolate.AspNetCore`, so you do not add HotChocolate separately.
 
+For a modular monolith whose modules each serve a schema of their own, composed into one:
+
+```bash
+dotnet add package DDDToolkit.HotChocolate.Fusion.InMemory
+```
+
+It needs HotChocolate Fusion 16.6.6 or later; see
+[One schema over a modular monolith](#one-schema-over-a-modular-monolith).
+
 ## Register
 
 Two kinds of call, both on the `IRequestExecutorBuilder`:
@@ -192,6 +201,56 @@ input SeatReservationInput {
 }
 ```
 
+## Relay node ids
+
+HotChocolate's global object identification works with the toolkit's identifiers as they are. Make a
+type a node the way HotChocolate documents it, with the identifier itself as the id:
+
+```csharp
+builder.Services
+    .AddGraphQLServer()
+    .AddGlobalObjectIdentification()
+    .AddDDDToolkitTypes()
+    .AddOrderingContractsGraphQlRuntimeBindings()
+    .AddType<OrderType>();
+
+public sealed class OrderType : ObjectType<Order>
+{
+    protected override void Configure(IObjectTypeDescriptor<Order> descriptor)
+        => descriptor
+            .ImplementsNode()
+            .IdField(order => order.Id)                         // an OrderId
+            .ResolveNode((context, id) => /* id is an OrderId */);
+}
+```
+
+`id` prints as `ID!` and carries a node id such as `T3JkZXI6ERER…`, `node(id:)` finds the order again,
+and an argument declared `[ID<Order>] OrderId id` arrives as the `OrderId` inside the node id. Another
+type that points at an order can publish the reference as a node id of the owner's type, with
+`descriptor.Field(shipment => shipment.Order).ID("Order")`, without referencing `Order` at all.
+
+What makes that possible is one generated class per identifier. HotChocolate writes a node id through
+an `INodeIdValueSerializer` for the id's runtime type, and it has serializers for `Guid`, `string`,
+`int`, `long` and `short` but not for a type it has never seen, so an `OrderId` would fail with *No
+serializer registered*. The generator therefore adds a nested `NodeIdValueSerializer` to every
+identifier over one of those five, and `Add{Module}GraphQlRuntimeBindings()` registers it:
+
+```csharp
+builder.AddNodeIdValueSerializer<OrderId.NodeIdValueSerializer>();
+```
+
+It derives from HotChocolate's `CompositeNodeIdValueSerializer<OrderId>` and writes the wrapped value
+with HotChocolate's own helpers. The node id is therefore byte for byte the one HotChocolate writes for
+the bare `Guid`: `Order:` followed by the value. Any HotChocolate server reads it, and so does a Fusion
+gateway, which routes `node(id:)` by the type name in front and never looks at the value. A single value
+object gets no serializer, because it is not an identity.
+
+Do not use HotChocolate's own `AddNodeIdValueSerializerFrom<OrderId>()` for a toolkit identifier. Its
+generator reads the members of the type, and an identifier's `Value` is written by the toolkit's
+generator; source generators do not see each other's output, so it finds no member and emits a
+serializer that writes nothing and reads every node id back as an empty id. It compiles without a
+warning.
+
 ## The default scalar mapping
 
 When a type carries no `[GraphQLType<T>]`, the generator picks the schema type from the CLR type it
@@ -273,7 +332,8 @@ member stays hidden whether it is read or written. Covering interfaces matters t
 interface but dropped from an implementing object would make the schema invalid.
 
 In practice this hides `IsValid`, `IsValidated`, `EnsureValidated` and the FluentValidation
-integration's `Errors` on value objects, and `DomainEvents` on an aggregate root. It does not hide
+integration's `Errors` on value objects, `DomainEvents` on an aggregate root, and
+`GetInvariantViolations()` and `GetOwnInvariantViolations()` on every entity. It does not hide
 anything you did not mark. `Id` and `Version` stay, because they are API:
 
 ```graphql
@@ -311,6 +371,130 @@ appeared after discovery, such as a merged type extension.
 The visible effect is that the schema contains no type that exists only because a hidden field
 mentioned it. `ValidationFailure` and `Severity` are absent, and so is the `ValidPersonName` twin that
 a value object's `[Internal]` `ToValid()` would otherwise have pulled in.
+
+## Domain types publish their data, not their behaviour
+
+HotChocolate binds implicitly unless a type says otherwise: every public property and every public
+method that returns something becomes a field, and a method's parameters become its arguments. For a
+domain type that publishes its behaviour. A `Money` with `Plus(Money)` and `Times(int)` would come out as
+
+```graphql
+type Money {
+  plus(other: MoneyInput!): Money!
+  times(quantity: Int!): Money!
+  amount: Decimal!
+  currency: String!
+}
+```
+
+with a `MoneyInput` in the schema only because `plus` needs one. On an aggregate it is worse: a method
+that changes state and returns a result would become a field, and run inside an ordinary query. Neither
+GraphQL nor HotChocolate can tell a method with side effects from one without.
+
+So `AddDDDToolkitTypes()` registers `DomainBehaviourFieldsInterceptor`, which removes the fields that
+come from the methods of an entity, an aggregate or a value object, on every object type bound by
+convention:
+
+```graphql
+type Money {
+  amount: Decimal!
+  currency: String!
+}
+```
+
+Properties stay, computed ones included, so a value that belongs in the schema is best made a property.
+A type declared with `BindFieldsExplicitly()` is left alone and publishes exactly what it lists, a
+method among them if you name one. Fields added by a type extension stay as well. Methods named with
+`descriptor.Field(...)` on a type that still binds by convention are removed with the rest, because
+HotChocolate records them the same way as the ones it found itself; declare that type explicitly.
+
+Like `[Internal]`, the fields are removed during discovery, so a type that only a method's argument
+mentioned, such as `MoneyInput`, never enters the schema.
+
+## Value objects in a Fusion source schema
+
+A Fusion gateway composes one schema out of the source schemas of several services, and a field belongs
+to one of them unless it is marked `@shareable`: the gateway has to know who answers it. An entity has an
+owner, and other services add fields to it by its key. A value object has neither owner nor identity.
+`Money` in Catalog's prices and `Money` in Payments' amounts are the same type, and any service that
+holds one gives the same answer for it, which is exactly what `@shareable` says. Without it, composition
+refuses the second service that returns a `Money`:
+
+```
+The field 'Money.amount' in schema 'payments' must be shareable.
+```
+
+So in a source schema `AddDDDToolkitTypes()` marks every value object type `@shareable`:
+
+```csharp
+builder.Services
+    .AddGraphQLServer()
+    .AddSourceSchemaDefaults()       // HotChocolate: this schema is one a gateway composes
+    .AddDDDToolkitTypes();           // value objects become @shareable
+```
+
+```graphql
+type Money @shareable {
+  amount: Decimal!
+  currency: String!
+}
+```
+
+A schema without `AddSourceSchemaDefaults()` gets no directive. Entities stay unshared: a service that
+adds to another's entity declares a stub of it, keyed on its id, the way `Examples/Microservices.*` do
+for `Order`.
+
+## One schema over a modular monolith
+
+`DDDToolkit.HotChocolate.Fusion.InMemory` makes the modules of a monolith what Fusion makes services: each
+module serves a GraphQL source schema of its own, and a Fusion gateway inside the application composes
+them into one schema and answers every query by calling them directly, in memory, with no HTTP. Two
+modules can each declare their own `Product`, keyed on the same field, and a client sees one:
+
+```csharp
+// Catalog's source schema: the product's name and price, and the lookup it is fetched by
+builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType()...;
+
+// Inventory's: its own Product, keyed on the SKU, with the stock, and an internal lookup
+builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddQueryType()...;
+
+builder.Services.AddInMemoryFusionGateway();   // composes every source schema registered
+
+var app = builder.Build();
+app.MapInMemoryFusionGateway();                // /graphql
+```
+
+```graphql
+{ productBySku(sku: "COFFEE-1KG") { name price { amount } stock { available } } }
+#                                   └─ Catalog ─────────┘ └─ Inventory ─────┘
+```
+
+A module's GraphQL is then the same code in the monolith and as a service behind a Fusion gateway, and
+the modules still know nothing of each other's classes: they agree on a type's name and its key.
+`Examples/ModularMonolith.*` register every module this way; see the examples' README.
+
+**It needs HotChocolate Fusion 16.6.6 or later**, where the other HotChocolate integration asks for
+16.0.0: the in-memory connector it builds on is newer than that. The package declares it, so NuGet refuses
+an older HotChocolate rather than a gateway that fails at run time.
+
+Three things it takes care of, all found the hard way and shown in
+`Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`:
+
+- **The gateway has a service container of its own**, inside the application. HotChocolate and Fusion
+  each register themselves as the one `IRequestExecutorProvider` of a container: the endpoint asks it for
+  the gateway, and HotChocolate's in-memory connector asks it for the modules, so with
+  `AddGraphQLGatewayServer().AddInMemorySchema(...)` and more than one source schema one of the two loses
+  ("The requested schema '_Default' does not exist"). The package hands the gateway the modules
+  explicitly, through the same public classes `AddInMemorySchema` uses.
+- **A composition that fails no longer hangs.** The in-memory connector reports a composition error only
+  to observers subscribed at that moment, and the gateway then waits for a schema forever. The
+  application's start waits for the composed schema instead, and fails after
+  `InMemoryFusionGatewayOptions.CompositionTimeout` (thirty seconds), with the composer's error when it
+  was caught.
+- **Relay spans the modules**: `node(id:)` is answered by whichever module owns the type in the id.
+
+And one rule that is Fusion's, not the package's: every source schema's root query type must be called
+`Query`. `AddQueryType<CatalogQuery>()` names it `CatalogQuery`, and composition refuses it.
 
 ## The DomainEvent interface
 
@@ -538,9 +722,10 @@ What did not change is the part the toolkit relies on most:
 
 ## What this package does not do
 
-It maps identifiers and single value objects onto scalars. It does not turn a multi-property
-`[ValueObject]` into anything other than the object type HotChocolate would infer, and it generates no
-queries, mutations or resolvers. The schema is still yours to write.
+It maps identifiers and single value objects onto scalars, and identifiers into Relay node ids. It does
+not make any type a node: `ImplementsNode()` is yours to call. A multi-property `[ValueObject]` stays the
+object type HotChocolate would infer, less its methods, and it generates no queries, mutations or
+resolvers. The schema is still yours to write.
 
 That includes subscriptions. The sink publishes a contract to a topic; the subscription field, its
 arguments and its authorisation are yours, and so is the choice of transport.

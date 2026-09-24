@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <DDD_Module>CatalogContracts</DDD_Module>
+  </PropertyGroup>
+
+  <!--
+    Unlike Ordering's contracts, this one needs no Entity Framework reference: Catalog publishes no
+    identifier. Everyone else points at a product by its SKU, a string the shop prints on the box, so
+    there is no ProductId for another module to store and no converter to generate for one.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

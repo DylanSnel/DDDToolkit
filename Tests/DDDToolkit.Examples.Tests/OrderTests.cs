@@ -2,6 +2,7 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Examples.Ordering;
 using DDDToolkit.Examples.Ordering.Contracts;
+using DDDToolkit.Examples.SharedKernel;
 using DDDToolkit.Testing;
 using FluentAssertions;
 
@@ -12,38 +13,41 @@ namespace DDDToolkit.Examples.Tests;
 /// </summary>
 public class OrderTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 9, 23, 12, 0, 0, TimeSpan.Zero);
+
     private static ValidAddress ShipTo()
         => new Address("Oudegracht 1", "Utrecht", "3511 AA").ToValid();
 
     private static Order Place(params OrderLine[] lines)
-        => new(OrderId.CreateSequential(), ShipTo(), lines.Length > 0 ? lines : [Line("COFFEE-1KG", 2)]);
+        => new(OrderId.CreateSequential(), ShipTo(), lines.Length > 0 ? lines : [Line("COFFEE-1KG", 2, 12.50m)]);
 
-    private static OrderLine Line(string sku, int quantity)
-        => new(OrderLineId.CreateSequential(), sku, quantity);
+    private static OrderLine Line(string sku, int quantity, decimal unitPrice = 1m)
+        => new(OrderLineId.CreateSequential(), sku, quantity, new Money(unitPrice, Money.Euro));
+
+    /// <summary>An order that was placed and whose placement event has been looked at already.</summary>
+    private static AggregateScenario<Order> Placed()
+    {
+        var scenario = AggregateScenario.Given(Place());
+        scenario.IgnorePendingEvents();
+        return scenario;
+    }
 
     [Fact]
     public void Placing_an_order_raises_one_event_carrying_what_was_ordered()
     {
-        var order = Place(Line("COFFEE-1KG", 2), Line("MUG", 1));
+        var order = Place(Line("COFFEE-1KG", 2, 12.50m), Line("MUG", 1, 8m));
 
-        order.PendingEvents()
+        var placed = order.PendingEvents()
             .RaisedExactly<OrderPlaced>()
-            .SingleEvent<OrderPlaced>()
-            .LineCount.Should().Be(2);
+            .SingleEvent<OrderPlaced>();
+
+        placed.Lines.Should().Equal(new OrderPlaced.Line("COFFEE-1KG", 2), new OrderPlaced.Line("MUG", 1));
+        placed.Total.Should().Be(new Money(33m, Money.Euro));
     }
 
     [Fact]
-    public void The_event_carries_the_whole_payload_and_not_the_metadata()
-    {
-        var id = OrderId.CreateSequential();
-
-        var order = new Order(id, ShipTo(), [Line("COFFEE-1KG", 2)]);
-
-        // EventId and OccurredAt are never compared, which is what makes this readable at all: two
-        // events with identical payloads are never equal as records. The order holds its address as a
-        // ValidAddress, and a twin never equals a plain Address, so the expectation is a twin too.
-        order.PendingEvents().Raised(new OrderPlaced(id, new Address("Oudegracht 1", "Utrecht", "3511 AA").ToValid(), 1));
-    }
+    public void The_total_is_the_lines_added_up_when_the_order_is_placed()
+        => Place(Line("COFFEE-1KG", 2, 12.50m), Line("MUG", 3, 8m)).Total.Should().Be(new Money(49m, Money.Euro));
 
     [Fact]
     public void OccurredAt_is_whatever_the_domain_event_clock_says()
@@ -59,24 +63,11 @@ public class OrderTests
     }
 
     [Fact]
-    public void Amending_an_order_raises_nothing()
-    {
-        var scenario = AggregateScenario.Given(Place());
-        scenario.IgnorePendingEvents();
-
-        // Nothing outside Ordering reacts to a line being added, so no event describes it. Raising one
-        // anyway would be a promise nobody asked for and everybody would then be free to depend on.
-        scenario.When(order => order.AddLine("MUG", 1)).RaisedNothing();
-
-        scenario.Subject.Lines.Should().HaveCount(2);
-    }
-
-    [Fact]
     public void A_line_with_no_items_is_refused_before_anything_happens()
     {
-        // WhenThrows asserts both halves: the exception came out, and nothing was raised on the way.
-        AggregateScenario.Given(Place())
-            .WhenThrows<ArgumentOutOfRangeException>(order => order.AddLine("MUG", 0));
+        var zero = () => Line("MUG", 0);
+
+        zero.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]
@@ -92,7 +83,7 @@ public class OrderTests
     }
 
     [Fact]
-    public void An_order_with_lines_satisfies_its_invariant()
+    public void An_order_with_lines_satisfies_its_invariants()
     {
         Place().EnsureInvariants();
     }
@@ -105,5 +96,92 @@ public class OrderTests
         // The generated property hands out a view, not the list. There is no cast back to List<T>.
         order.Lines.Should().BeAssignableTo<IReadOnlyList<OrderLine>>();
         order.Lines.Should().NotBeAssignableTo<List<OrderLine>>();
+    }
+
+    // ------------------------------------------------------------------ checkout
+
+    [Fact]
+    public void One_answer_is_not_enough_to_confirm()
+    {
+        var scenario = Placed();
+
+        scenario.When(order => order.RecordStockReserved(Now)).RaisedNothing();
+
+        scenario.Subject.Status.Should().Be(OrderStatus.Placed);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Both_answers_confirm_the_order_whichever_arrives_first(bool stockFirst)
+    {
+        var scenario = Placed();
+
+        scenario.When(order =>
+        {
+            if (stockFirst)
+            {
+                order.RecordStockReserved(Now);
+                order.RecordPayment(Now);
+            }
+            else
+            {
+                order.RecordPayment(Now);
+                order.RecordStockReserved(Now);
+            }
+        }).RaisedExactly<OrderConfirmed>();
+
+        scenario.Subject.Status.Should().Be(OrderStatus.Confirmed);
+        scenario.Subject.ConfirmedAt.Should().Be(Now);
+    }
+
+    [Fact]
+    public void The_same_answer_twice_confirms_once()
+    {
+        var scenario = Placed();
+
+        scenario.When(order =>
+        {
+            order.RecordStockReserved(Now);
+            order.RecordPayment(Now);
+            order.RecordPayment(Now);
+        }).RaisedExactly<OrderConfirmed>();
+    }
+
+    [Fact]
+    public void Cancelling_says_why_and_cancelling_again_says_nothing()
+    {
+        var scenario = Placed();
+
+        scenario.When(order => order.Cancel("No stock.")).RaisedExactly<OrderCancelled>();
+        scenario.When(order => order.Cancel("Changed my mind.")).RaisedNothing();
+
+        scenario.Subject.CancellationReason.Should().Be("No stock.");
+    }
+
+    [Fact]
+    public void A_cancelled_order_ignores_answers_that_arrive_late()
+    {
+        var scenario = Placed();
+        scenario.When(order => order.Cancel("Payment refused.")).RaisedExactly<OrderCancelled>();
+
+        scenario.When(order => order.RecordStockReserved(Now)).RaisedNothing();
+
+        scenario.Subject.Status.Should().Be(OrderStatus.Cancelled);
+    }
+
+    [Fact]
+    public void A_confirmed_order_that_is_cancelled_breaks_a_named_rule()
+    {
+        var order = Place();
+        order.RecordStockReserved(Now);
+        order.RecordPayment(Now);
+
+        order.Cancel("Changed my mind.");
+
+        // Cancel did what it was told; the rule says the result may not exist. The endpoint asks this
+        // question and answers 422 with the code; the save would refuse it either way.
+        order.GetInvariantViolations().Select(v => v.Code)
+            .Should().ContainSingle().Which.Should().Be(Order.MustNotCancelAConfirmedOrder.ViolationCode);
     }
 }

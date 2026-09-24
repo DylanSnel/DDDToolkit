@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The shop's front door: one address for REST and GraphQL. It knows which service answers which path
+    (appsettings.json) and the composed GraphQL schema (gateway.far, written by the AppHost), and nothing
+    else: no module, no database, no reference to any service.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Yarp.ReverseProxy" />
+    <PackageReference Include="Microsoft.Extensions.ServiceDiscovery.Yarp" />
+    <PackageReference Include="HotChocolate.Fusion.AspNetCore" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -174,8 +174,10 @@ generated part contains:
 ```csharp
 partial record Money : global::DDDToolkit.BaseTypes.ValueObject, /* ... */
 {
+    [global::System.Text.Json.Serialization.JsonInclude]
     public decimal Amount { get; protected init; } = Amount;
 
+    [global::System.Text.Json.Serialization.JsonInclude]
     public string Currency { get; protected init; } = Currency;
 
     [global::System.Text.Json.Serialization.JsonConstructor]
@@ -189,7 +191,10 @@ partial record Money : global::DDDToolkit.BaseTypes.ValueObject, /* ... */
 
 `= Amount` reads the constructor parameter, not the property, so the primary constructor still fills
 the properties. The parameterless constructor chains to the primary one, because in a positional
-record every other constructor has to.
+record every other constructor has to. `[JsonInclude]` is there because System.Text.Json cannot reach a
+`protected init` on its own: without it the value would deserialize as its defaults, and a value
+object in a domain event would come out of the outbox empty. It is left out when the project does
+not reference System.Text.Json, and not repeated when the parameter already carries it.
 
 | What the positional record gives you | After generation |
 |---|---|

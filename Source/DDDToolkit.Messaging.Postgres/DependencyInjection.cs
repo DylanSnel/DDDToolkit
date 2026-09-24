@@ -1,7 +1,10 @@
+using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace DDDToolkit.Messaging.Postgres;
@@ -88,5 +91,39 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(outbox);
         return outbox.SendTo<PgmqSink>();
+    }
+
+    /// <summary>
+    /// Registers a <see cref="PgmqConsumer"/> that reads <paramref name="queue"/> and hands every message
+    /// to the modules in this process. The modules sign up for their contracts as they do for the module
+    /// sink, with <c>AddModuleIntegrationEvents</c>; nothing about them changes when their messages
+    /// start arriving through a queue.
+    /// <para>
+    /// Call it once per queue this process reads. With one queue per consuming service, and the
+    /// producing side enqueueing each message on the queue of every service that wants it
+    /// (<see cref="PgmqSinkOptions.UseQueues"/>), a queue does what a broker's topic would.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="dataSource"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="queue"/> is empty or white space.</exception>
+    public static IServiceCollection AddPgmqConsumer(this IServiceCollection services, NpgsqlDataSource dataSource, string queue, Action<PgmqConsumerOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(dataSource);
+        ArgumentException.ThrowIfNullOrWhiteSpace(queue);
+
+        var options = new PgmqConsumerOptions();
+        configure?.Invoke(options);
+
+        services.TryAddSingleton<IntegrationEventReceiver>();
+        services.AddSingleton<IHostedService>(provider => new PgmqConsumer(
+            dataSource,
+            queue,
+            provider.GetRequiredService<IntegrationEventReceiver>(),
+            options,
+            provider.GetService<ILogger<PgmqConsumer>>(),
+            provider.GetService<IntegrationEventSubscriptions>()));
+
+        return services;
     }
 }

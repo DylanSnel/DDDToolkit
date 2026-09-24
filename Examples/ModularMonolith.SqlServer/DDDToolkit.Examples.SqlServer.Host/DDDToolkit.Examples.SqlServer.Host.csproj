@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- The composition root, not a module: no <DDD_Module>, no [assembly: Module]. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mediator generates into the composition root; see the Supabase host for the long version. -->
+    <!-- The transport of the subscriptions the modules declare; this host keeps them in memory. -->
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog\DDDToolkit.Examples.Catalog.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering\DDDToolkit.Examples.Ordering.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory\DDDToolkit.Examples.Inventory.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
+    <!--
+      The SQL Server migrations. Nothing in Program.cs names a type from it: ModuleDatabase.UseSqlServer
+      points each context at the assembly by name, and this reference is what puts it next to the binary.
+    -->
+    <ProjectReference Include="..\..\Modules\Catalog\DDDToolkit.Examples.Catalog.Migrations.SqlServer\DDDToolkit.Examples.Catalog.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\DDDToolkit.Examples.Ordering.Migrations.SqlServer\DDDToolkit.Examples.Ordering.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\DDDToolkit.Examples.Inventory.Migrations.SqlServer\DDDToolkit.Examples.Inventory.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments.Migrations.SqlServer\DDDToolkit.Examples.Payments.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping.Migrations.SqlServer\DDDToolkit.Examples.Shipping.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
+    <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+  </ItemGroup>
+
+</Project>

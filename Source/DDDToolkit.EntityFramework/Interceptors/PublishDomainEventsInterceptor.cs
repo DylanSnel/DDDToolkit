@@ -148,14 +148,22 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
 
             foreach (var domainEvent in events)
             {
+                // The name and version the event was registered under, which the generated registration
+                // wrote down at compile time. Only an event nobody registered is asked for its attributes.
+                if (!outbox.EventTypes.TryDescribe(domainEvent.GetType(), out var eventName, out var version))
+                {
+                    eventName = DomainEventName.Of(domainEvent);
+                    version = IntegrationEventContract.VersionOf(domainEvent.GetType());
+                }
+
                 context.Add(new OutboxMessage
                 {
                     Id = domainEvent.EventId,
-                    EventName = DomainEventName.Of(domainEvent),
+                    EventName = eventName,
                     // The shape, not just the name: a row read after a deployment has to say which
                     // version of the event it was written as. Defaults to 1 for an event that never
                     // carried [IntegrationEvent].
-                    Version = IntegrationEventContract.VersionOf(domainEvent.GetType()),
+                    Version = version,
                     Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), outbox.JsonOptions),
                     OccurredAt = domainEvent.OccurredAt,
                     AggregateType = aggregateType,

@@ -46,10 +46,21 @@ public sealed class OutboxOptions
     /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in the assembly that declares <typeparamref name="TMarker"/>.</summary>
     public OutboxOptions RegisterEventsFromAssemblyContaining<TMarker>() => RegisterEventsFromAssembly(typeof(TMarker).Assembly);
 
-    /// <summary>Registers a single event type.</summary>
+    /// <summary>Registers a single event type, reading its name and version off its attributes.</summary>
     public OutboxOptions RegisterEvent<TEvent>() where TEvent : IDomainEvent
     {
         EventTypes.Register<TEvent>();
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a single event type under the name and version given, without reading its attributes.
+    /// The generated <c>outbox.Add{Module}IntegrationEvents()</c> calls this for every domain event in the
+    /// module.
+    /// </summary>
+    public OutboxOptions RegisterEvent<TEvent>(string name, int version) where TEvent : IDomainEvent
+    {
+        EventTypes.Register<TEvent>(name, version);
         return this;
     }
 
@@ -84,6 +95,19 @@ public sealed class OutboxOptions
     public OutboxOptions SendTo<TSink>() where TSink : IIntegrationEventSink
     {
         _sinks.Add(new IntegrationEventSinkRegistration(typeof(TSink)));
+        return this;
+    }
+
+    /// <summary>
+    /// Delivers published messages to the <typeparamref name="TSink"/> that <paramref name="create"/> builds
+    /// from the scope the processor runs in, once per batch. The way to add a sink that is not registered in
+    /// the container without having it constructed by reflection.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="create"/> is null.</exception>
+    public OutboxOptions SendTo<TSink>(Func<IServiceProvider, TSink> create) where TSink : IIntegrationEventSink
+    {
+        ArgumentNullException.ThrowIfNull(create);
+        _sinks.Add(new IntegrationEventSinkRegistration(typeof(TSink).Name, services => create(services)));
         return this;
     }
 
@@ -143,6 +167,22 @@ public sealed class OutboxOptions
     }
 
     /// <summary>
+    /// Publishes <typeparamref name="TDomainEvent"/> through the outbound class <paramref name="create"/>
+    /// builds. Shorthand for <see cref="IntegrationEventMap.PublishWith{TDomainEvent, TContract}"/>, which
+    /// the generated <c>outbox.Add{Module}IntegrationEvents()</c> calls for you.
+    /// </summary>
+    public OutboxOptions PublishWith<TDomainEvent, TContract>(
+        string contractName,
+        int contractVersion,
+        Func<IServiceProvider, IOutboundIntegrationEvent<TDomainEvent, TContract>> create)
+        where TDomainEvent : IDomainEvent
+        where TContract : class
+    {
+        IntegrationEvents.PublishWith(contractName, contractVersion, create);
+        return this;
+    }
+
+    /// <summary>
     /// Keeps <typeparamref name="TDomainEvent"/> off the sinks. Shorthand for
     /// <see cref="IntegrationEventMap.DoNotPublish{TDomainEvent}"/>.
     /// </summary>
@@ -150,6 +190,21 @@ public sealed class OutboxOptions
     {
         IntegrationEvents.DoNotPublish<TDomainEvent>();
         return this;
+    }
+
+    /// <summary>
+    /// The names this outbox sends out: every contract an entry names, and every registered event that
+    /// leaves as it stands. Nothing when it has no sink, because then nothing leaves the process.
+    /// </summary>
+    internal IEnumerable<string> PublishedNames()
+    {
+        if (!HasSinks)
+        {
+            return [];
+        }
+
+        return IntegrationEvents.ContractNames.Concat(
+            EventTypes.Described.Where(described => !IntegrationEvents.IsMapped(described.Type)).Select(static described => described.Name));
     }
 
     private readonly List<IntegrationEventSinkRegistration> _sinks = [];

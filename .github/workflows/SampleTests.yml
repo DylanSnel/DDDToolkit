@@ -1,0 +1,91 @@
+name: Sample Tests
+
+# The example shop, run whole: each sample's Aspire AppHost starts its databases and brokers in Docker
+# and its hosts as processes, and the same scenarios are played against every one of them over HTTP.
+# An order is placed and confirmed, a payment is refused and the stock comes back, and so on.
+#
+# Separate from Build and Test for the same reason the provider suite is: containers take a minute to
+# pull and start, and that is the wrong price for every push. Separate from Provider Tests because it
+# answers a different question: not "does the toolkit map to SQL Server" but "does the example still
+# work end to end, however it is hosted".
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sample-tests:
+    # One job per sample, so a red check names the sample that is red.
+    name: ${{ matrix.sample }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        sample:
+          - ModularMonolith.Supabase
+          - ModularMonolith.SqlServer
+          - Microservices.Pgmq
+          - Microservices.Wolverine
+          - Microservices.MassTransit
+
+    env:
+      # Without this the scenarios skip themselves when Docker is missing, which would report green
+      # having started nothing.
+      DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
+
+      - name: Build
+        run: dotnet build Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj --no-restore --configuration Release
+
+      - name: Check Docker is available
+        run: docker version
+
+      # The Sample trait picks one sample's scenarios, and xunit only starts the class fixture of a class
+      # that has something to run, so each job starts one sample's containers.
+      - name: Test
+        run: >
+          dotnet test Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
+          --no-build --configuration Release --verbosity normal
+          --filter "Sample=${{ matrix.sample }}"
+          --logger "trx;LogFileName=sample-tests.trx"
+          --results-directory TestResults
+
+      # A renamed trait would match nothing and leave this green; counting closes that.
+      - name: Prove tests actually ran
+        if: always()
+        run: |
+          trx=$(find TestResults -name 'sample-tests.trx' | head -1)
+          if [ -z "$trx" ]; then
+            echo "::error::No test results were written, so ${{ matrix.sample }} was never exercised."
+            exit 1
+          fi
+          executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          passed=$(grep -o 'passed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
+          echo "### ${{ matrix.sample }}: $passed of $executed scenarios passed" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${executed:-0}" -lt 5 ]; then
+            echo "::error::Only ${executed:-0} scenarios ran for ${{ matrix.sample }}."
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-tests-${{ matrix.sample }}
+          path: TestResults
+          if-no-files-found: error

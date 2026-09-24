@@ -51,13 +51,29 @@ public sealed class IntegrationEventContractRegistry
     /// <summary>The (name, version) pairs that can be read back.</summary>
     public IReadOnlyCollection<(string Name, int Version)> Registered => _types.Keys;
 
-    /// <summary>Registers <typeparamref name="TContract"/> under its own name and version.</summary>
+    /// <summary>
+    /// Registers <typeparamref name="TContract"/> under <paramref name="name"/> at <paramref name="version"/>,
+    /// as the compiler read them off its <c>[IntegrationEvent]</c>. This is what the generated
+    /// <c>contracts.Add{Module}IntegrationEvents()</c> calls for every contract a module's handlers read;
+    /// nothing here asks an attribute.
+    /// </summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or another type already claims the same name and version.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="version"/> is below 1.</exception>
+    public IntegrationEventContractRegistry Register<TContract>(string name, int version) where TContract : class
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentOutOfRangeException.ThrowIfLessThan(version, 1);
+
+        return Add(typeof(TContract), (name, version));
+    }
+
+    /// <summary>Registers <typeparamref name="TContract"/> under its own name and version, read off its attributes.</summary>
     public IntegrationEventContractRegistry Register<TContract>() where TContract : class => Register(typeof(TContract));
 
     /// <summary>
     /// Registers <paramref name="contractType"/> under the name and version of
-    /// <see cref="IntegrationEventContract"/>: <c>[IntegrationEvent]</c>, otherwise
-    /// <c>[DomainEventName]</c> with version 1, otherwise the class name with version 1.
+    /// <see cref="IntegrationEventContract"/>, read off its attributes at run time: <c>[IntegrationEvent]</c>,
+    /// otherwise <c>[DomainEventName]</c> with version 1, otherwise the class name with version 1.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="contractType"/> is null.</exception>
     /// <exception cref="ArgumentException">The type is not concrete, or another type already claims the same name and version.</exception>
@@ -70,12 +86,15 @@ public sealed class IntegrationEventContractRegistry
             throw new ArgumentException($"'{contractType}' is not a concrete type, so no payload can be read back as it.", nameof(contractType));
         }
 
-        var key = (IntegrationEventContract.NameOf(contractType), IntegrationEventContract.VersionOf(contractType));
+        return Add(contractType, (IntegrationEventContract.NameOf(contractType), IntegrationEventContract.VersionOf(contractType)));
+    }
 
+    private IntegrationEventContractRegistry Add(Type contractType, (string Name, int Version) key)
+    {
         if (_types.TryGetValue(key, out var existing) && existing != contractType)
         {
             throw new ArgumentException(
-                $"Both '{existing}' and '{contractType}' are published as '{key.Item1}' version {key.Item2}. " +
+                $"Both '{existing}' and '{contractType}' are published as '{key.Name}' version {key.Version}. " +
                 "Give one of them a different [IntegrationEvent] name or version.",
                 nameof(contractType));
         }
@@ -84,7 +103,7 @@ public sealed class IntegrationEventContractRegistry
         return this;
     }
 
-    /// <summary>Registers every type in <paramref name="assembly"/> that carries <c>[IntegrationEvent]</c>.</summary>
+    /// <summary>Registers every type in <paramref name="assembly"/> that carries <c>[IntegrationEvent]</c>, by reflection.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="assembly"/> is null.</exception>
     public IntegrationEventContractRegistry RegisterFromAssembly(Assembly assembly)
     {
@@ -123,8 +142,17 @@ public sealed class IntegrationEventContractRegistry
     {
         ArgumentNullException.ThrowIfNull(upcast);
 
-        Register(typeof(TStored));
-        Register(typeof(TNext));
+        // Registered already, by the generated registration or an earlier call, is registered enough:
+        // only a shape nothing has named yet is read off its attributes.
+        if (!_types.ContainsValue(typeof(TStored)))
+        {
+            Register(typeof(TStored));
+        }
+
+        if (!_types.ContainsValue(typeof(TNext)))
+        {
+            Register(typeof(TNext));
+        }
 
         if (!_upcasters.TryAdd(typeof(TStored), stored => upcast((TStored)stored)))
         {

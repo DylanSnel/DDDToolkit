@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - HotChocolate Fusion in memory</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;hotchocolate;graphql;fusion;modular;monolith</PackageTags>
+    <Description>One GraphQL schema over the modules of a modular monolith: every module serves a source schema of its own, and a HotChocolate Fusion gateway composes them in the process and calls them in memory, with no HTTP. Requires HotChocolate Fusion 16.6.6 or later.</Description>
+  </PropertyGroup>
+
+  <!--
+    HotChocolate Fusion 16.6.6 or later, and not the 16.0.0 floor of DDDToolkit.HotChocolate: the in-memory
+    connector this builds on arrived in 16.x after 16.0.0, and 16.6.6 is the version this package was
+    written and tested against. The dependencies below declare it, so NuGet refuses an older HotChocolate
+    rather than a gateway that fails at run time. Directory.Packages.props pins these two at 16.6.6 in both
+    version sets for that reason.
+
+    It relies on public but low-level Fusion classes (InMemoryConfigurationProvider,
+    InMemorySourceSchemaClientFactory, FusionSetupUtilities), because AddInMemorySchema cannot serve a
+    gateway over HTTP next to more than one source schema in one service container. See the README.
+  -->
+  <ItemGroup>
+    <PackageReference Include="HotChocolate.Fusion.AspNetCore" />
+    <PackageReference Include="HotChocolate.Fusion.Connectors.InMemory" />
+  </ItemGroup>
+
+</Project>
