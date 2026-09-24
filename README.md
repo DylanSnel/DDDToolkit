@@ -4,6 +4,9 @@ Source generators that remove the repetitive parts of domain driven design in .N
 intent with an attribute; the generator writes the base type, the equality members, the identifier
 plumbing, the persistence mapping and the API conversions.
 
+**Documentation:** [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/), the
+[`docs/`](docs) folder as a site.
+
 ```csharp
 [AggregateRoot<Guid>("ORD")]
 public partial class Order

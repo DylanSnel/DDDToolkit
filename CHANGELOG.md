@@ -12,6 +12,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
+  `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, search-friendly pages and links
+  to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
+  failing on a broken link, and publishes it to GitHub Pages from `main`.
 - `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
   serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
   them and calls them in memory: `services.AddInMemoryFusionGateway()` and `app.MapInMemoryFusionGateway()`.

@@ -1,0 +1,33 @@
+/**
+ * The colours of the DDDToolkit icon: steel blue on a dark navy.
+ */
+
+:root {
+  --ifm-color-primary: #2b6a8a;
+  --ifm-color-primary-dark: #275f7c;
+  --ifm-color-primary-darker: #245a75;
+  --ifm-color-primary-darkest: #1e4a61;
+  --ifm-color-primary-light: #2f7598;
+  --ifm-color-primary-lighter: #327a9f;
+  --ifm-color-primary-lightest: #3a8ab3;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #6fb3d6;
+  --ifm-color-primary-dark: #55a6cf;
+  --ifm-color-primary-darker: #489fcc;
+  --ifm-color-primary-darkest: #3288b5;
+  --ifm-color-primary-light: #89c0dd;
+  --ifm-color-primary-lighter: #96c7e0;
+  --ifm-color-primary-lightest: #bddbeb;
+  --ifm-background-color: #0f1a24;
+  --ifm-navbar-background-color: #13212e;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+.hero--primary {
+  --ifm-hero-background-color: #13212e;
+  --ifm-hero-text-color: #e8f1f6;
+}
