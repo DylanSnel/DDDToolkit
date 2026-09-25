@@ -1,6 +1,7 @@
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -58,6 +59,27 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Registers <see cref="PgmqSink{TContext}"/> as the overload above does, with its options read from
+    /// <paramref name="configuration"/> (<see cref="PgmqSinkOptions.ReadFrom"/>) and then handed to
+    /// <paramref name="configure"/>, so code has the last word.
+    /// <code>
+    /// builder.Services.AddPgmqSink&lt;OrderingContext&gt;(builder.Configuration.GetSection("Pgmq:Sink"));
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configuration"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The section has a key the options do not know, or a value that does not parse.</exception>
+    public static IServiceCollection AddPgmqSink<TContext>(this IServiceCollection services, IConfiguration configuration, Action<PgmqSinkOptions>? configure = null) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return services.AddPgmqSink<TContext>(options =>
+        {
+            options.ReadFrom(configuration);
+            configure?.Invoke(options);
+        });
+    }
+
+    /// <summary>
     /// Registers <see cref="PgmqSink"/> (singleton), which opens its own connections from
     /// <paramref name="dataSource"/>. For a queue in a database this process does not otherwise write
     /// to; there is no shared transaction on this path. Registers the same start-up check as the overload
@@ -81,6 +103,27 @@ public static class DependencyInjection
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers <see cref="PgmqSink"/> as the overload above does, with its options read from
+    /// <paramref name="configuration"/> (<see cref="PgmqSinkOptions.ReadFrom"/>) and then handed to
+    /// <paramref name="configure"/>, so code has the last word.
+    /// <code>
+    /// builder.Services.AddPgmqSink(dataSource, builder.Configuration.GetSection("Pgmq:Sink"));
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/>, <paramref name="dataSource"/> or <paramref name="configuration"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The section has a key the options do not know, or a value that does not parse.</exception>
+    public static IServiceCollection AddPgmqSink(this IServiceCollection services, NpgsqlDataSource dataSource, IConfiguration configuration, Action<PgmqSinkOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return services.AddPgmqSink(dataSource, options =>
+        {
+            options.ReadFrom(configuration);
+            configure?.Invoke(options);
+        });
     }
 
     /// <summary>
@@ -152,6 +195,28 @@ public static class DependencyInjection
             provider.GetService<IntegrationEventSubscriptions>()));
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers a <see cref="PgmqConsumer"/> as the overload above does, with its options read from
+    /// <paramref name="configuration"/> (<see cref="PgmqConsumerOptions.ReadFrom"/>) and then handed to
+    /// <paramref name="configure"/>, so code has the last word.
+    /// <code>
+    /// builder.Services.AddPgmqConsumer(dataSource, "fulfilment", builder.Configuration.GetSection("Pgmq:Consumer"));
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/>, <paramref name="dataSource"/> or <paramref name="configuration"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="queue"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">The section has a key the options do not know, or a value that does not parse.</exception>
+    public static IServiceCollection AddPgmqConsumer(this IServiceCollection services, NpgsqlDataSource dataSource, string queue, IConfiguration configuration, Action<PgmqConsumerOptions>? configure = null)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return services.AddPgmqConsumer(dataSource, queue, options =>
+        {
+            options.ReadFrom(configuration);
+            configure?.Invoke(options);
+        });
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -68,6 +69,36 @@ public sealed class PgmqConsumerOptions
     /// to a consumer registered with <c>AddPgmqConsumer</c>. See <see cref="PgmqSinkOptions.CheckExtensionOnStart"/>.
     /// </summary>
     public bool CheckExtensionOnStart { get; set; } = true;
+
+    private static readonly Dictionary<string, Action<PgmqConsumerOptions, IConfigurationSection>> Settings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [nameof(VisibilityTimeout)] = (options, setting) => options.VisibilityTimeout = PgmqSettings.TimeSpan(setting),
+        [nameof(BatchSize)] = (options, setting) => options.BatchSize = PgmqSettings.Int32(setting),
+        [nameof(LongPollTimeout)] = (options, setting) => options.LongPollTimeout = PgmqSettings.TimeSpan(setting),
+        [nameof(LongPollInterval)] = (options, setting) => options.LongPollInterval = PgmqSettings.TimeSpan(setting),
+        [nameof(PollingInterval)] = (options, setting) => options.PollingInterval = PgmqSettings.TimeSpan(setting),
+        [nameof(MaxDeliveries)] = (options, setting) => options.MaxDeliveries = PgmqSettings.Int32(setting),
+        [nameof(BindTopics)] = (options, setting) => options.BindTopics = PgmqSettings.Boolean(setting),
+        [nameof(CheckExtensionOnStart)] = (options, setting) => options.CheckExtensionOnStart = PgmqSettings.Boolean(setting),
+    };
+
+    /// <summary>
+    /// Sets the options named in <paramref name="configuration"/>, a section such as <c>Pgmq:Consumer</c>,
+    /// and leaves the others as they are. Every property here is a key of the same name, in any case; a time
+    /// span is written <c>00:00:05</c>.
+    /// <code>
+    /// "Pgmq": { "Consumer": { "LongPollTimeout": "00:00:10", "MaxDeliveries": 5 } }
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The section has a key these options do not know, or a value that does not parse; the message names it.
+    /// </exception>
+    public PgmqConsumerOptions ReadFrom(IConfiguration configuration)
+    {
+        PgmqSettings.Read(configuration, this, Settings);
+        return this;
+    }
 }
 
 /// <summary>

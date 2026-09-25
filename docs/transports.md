@@ -282,6 +282,43 @@ builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.CheckExtensionOnStart = fa
 builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.CheckExtensionOnStart = false);
 ```
 
+### Settings from configuration
+
+The sink and the consumer both take a configuration section, before the lambda or instead of it, so the
+settings can differ per environment without a rebuild:
+
+```csharp
+builder.Services.AddPgmqSink(dataSource, builder.Configuration.GetSection("Pgmq:Sink"));
+builder.Services.AddPgmqConsumer(dataSource, "fulfilment", builder.Configuration.GetSection("Pgmq:Consumer"),
+    consumer => consumer.BindTopics = true);
+```
+
+```json
+{
+  "Pgmq": {
+    "Sink": { "Queue": "shop" },
+    "Consumer": { "LongPollTimeout": "00:00:10", "MaxDeliveries": 5 }
+  }
+}
+```
+
+Every property of `PgmqConsumerOptions` is a key of the same name. The sink reads `Queue` for one queue,
+`Queues` for a list that every message goes to, `Topics` set to `true` to route by topic, and
+`CreateQueueIfMissing`, `SendHeaders` and `CheckExtensionOnStart`. Keys match in any case, a time span is
+written `00:00:05`, and a key that is not there keeps its default, so an environment variable such as
+`Pgmq__Consumer__LongPollTimeout` works as it does for any other setting. A queue chosen per message stays
+in code, with `UseQueue(message => ...)`.
+
+The section is read by hand rather than with the configuration binder, so a mistake fails when the
+services are registered instead of being ignored: a key the options do not know (`LongPolTimeout`), a
+value that does not parse, or a sink section with more than one of `Queue`, `Queues` and `Topics`. The
+message names the key.
+
+The lambda runs after the section, so code has the last word. For the sink that includes the routing:
+whichever of `UseTopics`, `UseQueues` and `UseQueue` is called last decides, whether the call came from
+the section or from code. `ReadFrom(section)` on either options class does the same inside a lambda of
+your own.
+
 ### For a queue in another database
 
 `PgmqSink` (no type argument) opens its own connections from an `NpgsqlDataSource`:

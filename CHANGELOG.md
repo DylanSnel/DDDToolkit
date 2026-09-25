@@ -33,6 +33,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `ConsumeOnceAsync` still reads once and does not wait. `PgmqQueue.ReadWithPollAsync` is the read on its
   own. `read_with_poll` is in pgmq 1.5.1, so this works on Supabase too, and is tested there. See
   [Reading the queue](docs/transports.md#reading-the-queue).
+- The pgmq sink and consumer read their settings from configuration. `AddPgmqSink` and
+  `AddPgmqConsumer` take an `IConfiguration` section, such as `Pgmq:Sink` or `Pgmq:Consumer`, before an
+  optional lambda that runs after it; `ReadFrom(section)` on `PgmqSinkOptions` and `PgmqConsumerOptions`
+  does the same by hand. Every consumer option is a key of the same name, and the sink reads `Queue`,
+  `Queues`, `Topics`, `CreateQueueIfMissing`, `SendHeaders` and `CheckExtensionOnStart`. A key the options
+  do not know, a value that does not parse, or a sink section that routes more than one way fails at
+  registration, naming the key, instead of being ignored. So that code can override a section, the last of
+  `UseTopics`, `UseQueues` and `UseQueue` called now decides how the sink routes; before, topics beat
+  several queues and several queues beat one, whatever the order. The package now references
+  `Microsoft.Extensions.Configuration.Abstractions`. See
+  [Settings from configuration](docs/transports.md#settings-from-configuration).
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
