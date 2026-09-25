@@ -19,6 +19,118 @@ This page assumes a context wired up as in [Entity Framework](entity-framework.m
 
 ## Choosing
 
+In process, the handlers run inside the save. Whatever they change on the same context is written with
+the aggregate, in one transaction, and a handler that throws stops the save:
+
+```mermaid
+sequenceDiagram
+    participant Code as Your code
+    participant Order as Order
+    participant Save as SaveChanges
+    participant Handlers as Your handlers
+    participant Db as Database
+
+    Code->>Order: order.Cancel(reason)
+    Order->>Order: RaiseDomainEvent(new OrderCancelled(...))
+    Note over Order: the event waits on the aggregate
+    Code->>Save: SaveChangesAsync()
+    Save->>Order: take the pending events
+    Save->>Handlers: dispatch them, in the order raised
+    Handlers-->>Save: changes to other tracked entities
+    Note over Save,Handlers: events the handlers raise: another round
+    Save->>Save: check the invariants, raise Version
+    Save->>Db: one transaction: the order and the handlers' changes
+```
+
+<details>
+<summary>Show the code: dispatching in process</summary>
+
+Register the toolkit with Mediator as the dispatcher, and add the toolkit to the context:
+
+```csharp
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+builder.Services.AddDbContext<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+```
+
+The event is a Mediator notification, and a handler is an ordinary Mediator handler. It runs in the
+saving context's scope, so what it changes on that context is saved with the order:
+
+```csharp
+[DomainEventName("ordering.order-cancelled")]
+public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent, INotification;
+
+public sealed class OrderLog(ILogger<OrderLog> logger) : INotificationHandler<OrderCancelled>
+{
+    public ValueTask Handle(OrderCancelled notification, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Order {OrderId} was cancelled: {Reason}", notification.OrderId, notification.Reason);
+        return default;
+    }
+}
+```
+
+*[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/DomainEvents/OrderLog.cs)*
+
+See [In-process dispatch](#in-process-dispatch).
+
+</details>
+
+Through the outbox, the save only writes the events down, next to the aggregate. Delivering them is a
+separate step that comes after the commit, and keeps trying until it succeeds:
+
+```mermaid
+sequenceDiagram
+    participant Code as Your code
+    participant Save as SaveChanges
+    participant Db as Database
+    participant Processor as Outbox processor
+    participant Target as Handlers or sinks
+
+    Code->>Save: SaveChangesAsync()
+    Save->>Db: one transaction: the order and one outbox row per event
+    Note over Code,Db: committed, and nothing has been delivered yet
+    loop every polling interval
+        Processor->>Db: rows not yet processed, oldest first
+        Processor->>Target: deliver each event
+        alt delivered
+            Processor->>Db: set ProcessedAt
+        else it failed
+            Processor->>Db: Attempts + 1 and LastError, try again later
+        end
+    end
+```
+
+<details>
+<summary>Show the code: the outbox</summary>
+
+Map the outbox table in the context:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+    => modelBuilder.AddDomainEventOutbox(Database);
+```
+
+Turn the outbox on, and run the processor that delivers from it:
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options =>
+{
+    options.DispatchWithMediator();   // where the processor delivers to
+    options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
+});
+
+builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+The handlers are the same as in process. They must be idempotent, because a crash between delivering
+and marking the row delivers it again. See [The outbox](#the-outbox).
+
+</details>
+
 | | In-process | Outbox |
 |---|---|---|
 | When handlers run | Inside `SaveChanges`, before the write | After the commit, on the processor |

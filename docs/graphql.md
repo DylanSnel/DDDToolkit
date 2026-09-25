@@ -521,6 +521,89 @@ dotnet add package DDDToolkit.HotChocolate.Fusion.InMemory
 16.0.0: the in-memory connector it builds on is newer than that. The package declares it, so NuGet refuses
 an older HotChocolate rather than a gateway that fails at run time.
 
+How the example shop's `Product` comes together. No module references another's classes; they agree
+on a type name and a key:
+
+```mermaid
+flowchart LR
+    subgraph catalog ["Catalog's source schema"]
+        CatalogProduct["Product: sku, name, price"]
+    end
+    subgraph inventory ["Inventory's source schema"]
+        InventoryProduct["Product: sku, stock"]
+    end
+    subgraph ordering ["Ordering's source schema"]
+        Line["OrderLine: product, a Product by its sku"]
+    end
+    catalog --> Gateway["Fusion gateway, in the application"]
+    inventory --> Gateway
+    ordering --> Gateway
+    Gateway --> Client["one Product: sku, name, price, stock"]
+```
+
+<details>
+<summary>Show the code: Inventory's Product and Ordering's reference to one</summary>
+
+Inventory declares its own `Product`, keyed on the SKU, with the one field it knows, and an internal
+lookup the gateway fetches it by:
+
+```csharp
+public sealed record InventoryProduct(string Sku);
+
+public sealed class InventoryProductType : ObjectType<InventoryProduct>
+{
+    protected override void Configure(IObjectTypeDescriptor<InventoryProduct> descriptor)
+    {
+        descriptor.Name("Product");
+        descriptor.BindFieldsExplicitly();
+        descriptor.Directive(new EntityKey("sku"));
+        descriptor.Field(product => product.Sku);
+        descriptor
+            .Field("stock")
+            .Type<StockItemType>()
+            .Resolve(async context => await context.DataLoader<StockItemBySkuDataLoader>()
+                .LoadAsync(context.Parent<InventoryProduct>().Sku, context.RequestAborted));
+    }
+}
+
+[ExtendObjectType(OperationTypeNames.Query)]
+public sealed class InventoryProductLookup
+{
+    [Lookup]
+    [Internal]
+    public InventoryProduct GetProductBySku(string sku) => new(sku);
+}
+```
+
+*[`Inventory/Api/GraphQL/ProductStock.cs`](../Examples/Modules/Inventory/DDDToolkit.Examples.Inventory/Api/GraphQL/ProductStock.cs)*
+
+Ordering knows only the SKU on a line, and says that it is a `Product`:
+
+```csharp
+public sealed record ProductStub(string Sku);
+
+public sealed class ProductStubType : ObjectType<ProductStub>
+{
+    protected override void Configure(IObjectTypeDescriptor<ProductStub> descriptor)
+    {
+        descriptor.Name("Product");
+        descriptor.BindFieldsExplicitly();
+        descriptor.Directive(new EntityKey("sku"));
+        descriptor.Field(product => product.Sku);
+    }
+}
+
+[ExtendObjectType<OrderLine>]
+public sealed class OrderLineProductStub
+{
+    public ProductStub? GetProduct([Parent] OrderLine line) => new(line.Sku);
+}
+```
+
+*[`Ordering/Api/GraphQL/ProductStub.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/GraphQL/ProductStub.cs)*
+
+</details>
+
 Two modules can each declare their own `Product`, keyed on the same field, and a client sees one:
 
 ```csharp
