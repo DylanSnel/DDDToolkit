@@ -6,9 +6,9 @@ using DDDToolkit.Examples.Ordering.Contracts;
 namespace DDDToolkit.Examples.Payments.Contracts;
 
 /// <summary>The money for the order was taken.</summary>
-[IntegrationEvent("payments.payment-succeeded", Version = 1)]
+[IntegrationEvent]
 public sealed record PaymentSucceededV1(OrderId OrderId, decimal Amount, string Currency);
 
 /// <summary>The payment provider refused. No money was taken.</summary>
-[IntegrationEvent("payments.payment-failed", Version = 1)]
+[IntegrationEvent]
 public sealed record PaymentFailedV1(OrderId OrderId, string Reason);

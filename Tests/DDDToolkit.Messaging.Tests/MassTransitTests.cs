@@ -18,7 +18,7 @@ public sealed class MassTransitTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    private static async Task<IHost> StartAsync(Failures? failures = null)
+    private static async Task<IHost> StartAsync(Failures? failures = null, bool integrationEventNames = false)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddLibraryModule(failures);
@@ -26,7 +26,15 @@ public sealed class MassTransitTests
         {
             bus.AddIntegrationEventConsumers(builder.Services.IntegrationEventSubscriptions());
             bus.AddConfigureEndpointsCallback((_, _, endpoint) => endpoint.UseMessageRetry(retry => retry.Intervals(50, 50, 50)));
-            bus.UsingInMemory((context, memory) => memory.ConfigureEndpoints(context));
+            bus.UsingInMemory((context, memory) =>
+            {
+                if (integrationEventNames)
+                {
+                    memory.UseIntegrationEventNames();
+                }
+
+                memory.ConfigureEndpoints(context);
+            });
         });
 
         var host = builder.Build();
@@ -74,5 +82,32 @@ public sealed class MassTransitTests
         await SendAsync(host, Receiving.Message());
 
         (await host.Services.WaitForShelvesAsync(1)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task With_the_toolkit_names_a_contract_has_the_exchange_of_its_name_and_version_and_still_arrives()
+    {
+        using var host = await StartAsync(integrationEventNames: true);
+
+        host.Services.GetRequiredService<IBus>().Topology.Message<ShelfOpenedV1>().EntityName
+            .Should().Be("library.shelf-opened.v1", "the published name and version, not the CLR type");
+
+        await SendAsync(host, Receiving.Message(displayName: "Fiction"));
+
+        (await host.Services.WaitForShelvesAsync(1)).Should().Equal(["Fiction"], "the consumer's queue is bound through the same formatter");
+    }
+
+    [Fact]
+    public void The_toolkit_names_only_its_own_events_and_leaves_every_other_message_to_MassTransit()
+    {
+        var formatter = new IntegrationEventEntityNameFormatter(new FixedName("mass-transit's own"));
+
+        formatter.FormatEntityName<ShelfOpenedV1>().Should().Be("library.shelf-opened.v1");
+        formatter.FormatEntityName<OpenedShelf>().Should().Be("mass-transit's own");
+    }
+
+    private sealed class FixedName(string name) : IEntityNameFormatter
+    {
+        public string FormatEntityName<T>() => name;
     }
 }

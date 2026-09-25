@@ -500,8 +500,8 @@ client is pushed the contract, never the domain event, for the reasons in
 [It publishes the contract, never the domain event](#it-publishes-the-contract-never-the-domain-event).
 
 Be aware of what `eventType` currently returns. It resolves to the CLR type name of the event, so
-`TicketIssued` returns `"TicketIssued"`, and `[DomainEventName("ordering.ticket-issued")]` does not
-change it. If you rename the class, the value changes with it. Treat `eventType` as a hint for
+`TicketIssued` returns `"TicketIssued"`, not its stored name `ordering.ticket-issued`, and
+`[DomainEventName]` does not change it. If you rename the class, the value changes with it. Treat `eventType` as a hint for
 building a client, not as the stable wire name; the stable name is
 [`DomainEventName.Of<T>()`](domain-events.md#stable-names).
 

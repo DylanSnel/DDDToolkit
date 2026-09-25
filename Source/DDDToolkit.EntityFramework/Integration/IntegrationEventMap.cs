@@ -13,7 +13,7 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// </para>
 /// <para>
 /// Registering nothing is a valid answer. A domain event with no entry is published as it stands,
-/// under its own <c>[DomainEventName]</c>, using the JSON the outbox already stored, so a team that
+/// under its own name, using the JSON the outbox already stored, so a team that
 /// does not want two types yet pays nothing for the seam.
 /// </para>
 /// </summary>

@@ -12,6 +12,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- Events are named by convention. An event without `[DomainEventName]` is stored, and a contract without
+  a name in `[IntegrationEvent]` is published, under its module and its class name in kebab case:
+  `OrderPlaced` in `[assembly: Module("Ordering")]` is `ordering.order-placed`. A class name that ends in
+  `V` and a number carries the version, so `OrderPlacedV2` is `ordering.order-placed` version 2 and every
+  version of an event shares one name. `[IntegrationEvent(Version = n)]` is for a class whose name does not
+  end in one. The rule is one source file compiled into both the runtime and the generators, so
+  `DomainEventName.Of`, `IntegrationEventContract.NameOf` and `VersionOf` and the generated
+  `Add{Module}IntegrationEvents()` cannot disagree. See [Stable names](docs/domain-events.md#stable-names).
+- `{Module}EventNames`, a constant for every name a project's events are stored or published under,
+  written by the core generator: `OrderingEventNames.OrderPlaced` is `"ordering.order-placed"`. A contracts
+  assembly's class is `[ModuleContract]`, so other modules can bind to its names.
+- Four diagnostics about event names, all reported where the module compiles.
+  [DDD00034](docs/diagnostics.md#ddd00034) (error): the class name's version and `Version` disagree, with
+  a code fix that removes `Version`. [DDD00035](docs/diagnostics.md#ddd00035) (error): a class name that
+  ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
+  contracts, of one module under one name and version, typically two classes of one name in different
+  namespaces, with a code fix that pins another name on one of them, such as
+  `[DomainEventName("ordering.returns-order-placed")]`. [DDD00037](docs/diagnostics.md#ddd00037)
+  (warning): two names that would share a constant.
+- Broker exchanges named after the event rather than the CLR type. `rabbit.UseIntegrationEventNames()` for
+  MassTransit and `conventions.UseIntegrationEventNames()` for Wolverine's conventional routing name a
+  contract's exchange `ordering.order-placed.v1`, from the new `IntegrationEventContract.EntityNameOf`, so
+  renaming or moving a contract class no longer moves its messages. Message types the toolkit does not
+  name keep the transport's names. The MassTransit and Wolverine samples use it. See
+  [Transports](docs/transports.md).
+
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
@@ -307,6 +333,20 @@ convention.
   `[Internal]` now, like the rest of the toolkit's bookkeeping.
 
 ### Changed
+
+- **Breaking for events without `[DomainEventName]`:** such an event used to be stored and published under
+  its bare class name, `OrderPlaced`, and is now named by convention, `ordering.order-placed`, or
+  `order-placed` in an assembly without `[assembly: Module]`. Rows an earlier build wrote under the class
+  name are still read: the outbox registry finds a type by its class name as well, and the processor
+  publishes such a row under the type's current name. What changes is the name on messages published from
+  now on, so a consumer in another process that routes on the old name has to be deployed with the
+  producer, or the producer's events pinned to their old names with `[DomainEventName("OrderPlaced")]`. A
+  contract whose class name ends in `V` and a number, and that states no `Version`, is now that version
+  instead of version 1.
+- `[IntegrationEvent]` takes its name as an optional argument, and `IntegrationEventAttribute.Name` is
+  `string?`. `[IntegrationEvent]` alone marks a contract named by convention.
+- The example shop's events and contracts carry no names any more; the convention gives them the names
+  they had, which `EventNameTests` in the examples' tests pins down.
 
 - The documentation builds up. Each page starts with the problem it solves and the simplest use, and
   leaves storage, GraphQL, modules and design rationale for later, so a first example no longer carries

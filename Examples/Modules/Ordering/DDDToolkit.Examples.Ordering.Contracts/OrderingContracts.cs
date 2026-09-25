@@ -25,9 +25,11 @@ public readonly partial record struct OrderId;
 /// </summary>
 /// <remarks>
 /// It needs no <c>[ModuleContract]</c>: a type whose whole job is to be read by somebody else is
-/// already a contract. The name and the version are pinned here, so the class can be renamed or moved
-/// without breaking a consumer that deployed against it. Bump <c>Version</c> and keep this record when
-/// the payload changes shape; see <c>docs/integration-events.md</c>.
+/// already a contract. Its name is <c>ordering.order-placed</c>, from the module and the class name, and its
+/// version is the 1 the class name ends in. When the payload changes shape, keep this record and add an
+/// <c>OrderPlacedV2</c> beside it; when the class is renamed, put the old name in the attribute,
+/// <c>[IntegrationEvent("ordering.order-placed")]</c>, so consumers keep routing on it. See
+/// <c>docs/integration-events.md</c>.
 /// <para>
 /// Note what it carries. <see cref="OrderId"/> travels because the id is published and pointing at an
 /// order is the whole point. The address does not: <c>Address</c> is Ordering's own value object, and a
@@ -39,7 +41,7 @@ public readonly partial record struct OrderId;
 /// needs the total, to know what to charge. Neither needs the other's half, and neither is named here.
 /// </para>
 /// </remarks>
-[IntegrationEvent("ordering.order-placed", Version = 1)]
+[IntegrationEvent]
 public sealed record OrderPlacedV1(
     OrderId OrderId,
     string City,
@@ -55,12 +57,12 @@ public sealed record OrderedLineV1(string Sku, int Quantity);
 /// The stock is set aside and the money is taken: the order will be delivered. Shipping books a van on
 /// this, and not on <see cref="OrderPlacedV1"/>, because an order that is placed may still be cancelled.
 /// </summary>
-[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+[IntegrationEvent]
 public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 
 /// <summary>
 /// The order will not be delivered. Whatever a module did for it, it undoes: Inventory releases the
 /// stock it set aside, Payments voids a payment it has not taken yet.
 /// </summary>
-[IntegrationEvent("ordering.order-cancelled", Version = 1)]
+[IntegrationEvent]
 public sealed record OrderCancelledV1(OrderId OrderId, string Reason);

@@ -8,7 +8,7 @@ namespace DDDToolkit.EntityFramework.Outbox;
 
 /// <summary>
 /// Maps the stable name of a domain event (<see cref="DomainEventName.Of(Type)"/>, i.e. the
-/// <c>[DomainEventName]</c> or the class name) back to its CLR type, so outbox payloads can be
+/// <c>[DomainEventName]</c> or the conventional name) back to its CLR type, so outbox payloads can be
 /// deserialized after the class has been renamed or moved.
 /// <para>
 /// One name, one type: the shape new events are written as today. When an event has been versioned and
@@ -16,11 +16,21 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <c>[IntegrationEvent(Version = n)]</c> wins here. The older shapes belong in
 /// <c>IntegrationEventContractRegistry</c>, which is what the processor reads an old row through.
 /// </para>
+/// <para>
+/// Every type is also found by its bare class name, the name an event without <c>[DomainEventName]</c> was
+/// stored under before events were named by convention. That is what keeps rows written by an older build
+/// readable: a row stored as <c>OrderPlaced</c> still finds <c>OrderPlaced</c> after the type's name became
+/// <c>ordering.order-placed</c>. The class name only answers when no current name is spelled the same, and
+/// not at all when two registered classes share it.
+/// </para>
 /// </summary>
 public sealed class DomainEventTypeRegistry
 {
     private readonly Dictionary<string, (Type Type, int Version)> _types = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, (string Name, int Version)> _described = [];
+
+    /// <summary>Class names as the pre-convention fallback names; null where two registered classes share one.</summary>
+    private readonly Dictionary<string, Type?> _classNames = new(StringComparer.Ordinal);
 
     /// <summary>The registered names.</summary>
     public IReadOnlyCollection<string> Names => _types.Keys;
@@ -63,12 +73,13 @@ public sealed class DomainEventTypeRegistry
 
         var name = DomainEventName.Of(eventType);
 
-        if (Attribute.GetCustomAttribute(eventType, typeof(IntegrationEventAttribute), inherit: false) is IntegrationEventAttribute published
-            && !string.Equals(published.Name, name, StringComparison.Ordinal))
+        if (Attribute.GetCustomAttribute(eventType, typeof(IntegrationEventAttribute), inherit: false) is IntegrationEventAttribute { Name: { } publishedName }
+            && !string.Equals(publishedName, name, StringComparison.Ordinal))
         {
             throw new ArgumentException(
-                $"'{eventType}' is stored under '{name}' and published as '{published.Name}', so a stored row could never be matched to a version. " +
-                "Give [IntegrationEvent] the same name as [DomainEventName], or publish a separate contract type through an IOutboundIntegrationEvent<TEvent, TContract> or outbox.PublishAs<TEvent, TContract>(...).",
+                $"'{eventType}' is stored under '{name}' and published as '{publishedName}', so a stored row could never be matched to a version. " +
+                "Give [IntegrationEvent] the same name as [DomainEventName], leave the name out of [IntegrationEvent] so both follow the convention, " +
+                "or publish a separate contract type through an IOutboundIntegrationEvent<TEvent, TContract> or outbox.PublishAs<TEvent, TContract>(...).",
                 nameof(eventType));
         }
 
@@ -78,6 +89,7 @@ public sealed class DomainEventTypeRegistry
     private DomainEventTypeRegistry Add(Type eventType, string name, int version)
     {
         _described[eventType] = (name, version);
+        AddClassName(eventType);
 
         if (_types.TryGetValue(name, out var existing) && existing.Type != eventType)
         {
@@ -104,6 +116,21 @@ public sealed class DomainEventTypeRegistry
         return this;
     }
 
+    private void AddClassName(Type eventType)
+    {
+        if (_classNames.TryGetValue(eventType.Name, out var existing))
+        {
+            if (existing != eventType)
+            {
+                _classNames[eventType.Name] = null;
+            }
+
+            return;
+        }
+
+        _classNames[eventType.Name] = eventType;
+    }
+
     /// <summary>Registers every concrete <see cref="IDomainEvent"/> type in <paramref name="assembly"/>, by reflection.</summary>
     public DomainEventTypeRegistry RegisterFromAssembly(Assembly assembly)
     {
@@ -117,19 +144,44 @@ public sealed class DomainEventTypeRegistry
         return this;
     }
 
-    /// <summary>The type registered under <paramref name="eventName"/>, or <see langword="null"/>.</summary>
-    public Type? Resolve(string eventName) => _types.TryGetValue(eventName, out var entry) ? entry.Type : null;
+    /// <summary>
+    /// The type registered under <paramref name="eventName"/>, or under the class name
+    /// <paramref name="eventName"/> spells, or <see langword="null"/>.
+    /// </summary>
+    public Type? Resolve(string eventName) => TryResolve(eventName, out var eventType) ? eventType : null;
 
-    /// <summary>Looks up the type registered under <paramref name="eventName"/>.</summary>
+    /// <summary>
+    /// Looks up the type registered under <paramref name="eventName"/>, and otherwise the registered type
+    /// whose class name it is (see the remarks on the class).
+    /// </summary>
     public bool TryResolve(string eventName, [NotNullWhen(true)] out Type? eventType)
+        => TryResolve(eventName, out eventType, out _);
+
+    /// <summary>
+    /// Looks up the type registered under <paramref name="eventName"/>, and otherwise the registered type
+    /// whose class name it is. <paramref name="byClassName"/> says which: a row found by its class name was
+    /// written by exactly that class, before the type had the name it is registered under now.
+    /// </summary>
+    public bool TryResolve(string eventName, [NotNullWhen(true)] out Type? eventType, out bool byClassName)
     {
+        ArgumentNullException.ThrowIfNull(eventName);
+
         if (_types.TryGetValue(eventName, out var entry))
         {
             eventType = entry.Type;
+            byClassName = false;
+            return true;
+        }
+
+        if (_classNames.TryGetValue(eventName, out var named) && named is not null)
+        {
+            eventType = named;
+            byClassName = true;
             return true;
         }
 
         eventType = null;
+        byClassName = false;
         return false;
     }
 

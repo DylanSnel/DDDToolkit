@@ -34,7 +34,6 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
 {
     private const string IntegrationNamespace = "DDDToolkit.EntityFramework.Integration";
     private const string OutboxOptionsMetadataName = "DDDToolkit.EntityFramework.Options.OutboxOptions";
-    private const string DomainEventNameAttribute = KnownTypes.AttributesNamespace + ".DomainEventNameAttribute";
     private const string ConsumerAttribute = IntegrationNamespace + ".IntegrationEventConsumerAttribute";
 
     private const string Services = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
@@ -100,13 +99,13 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
             return null;
         }
 
-        var isDomainEvent = type.AllInterfaces.Any(static candidate => Is(candidate, "DDDToolkit.Interfaces", "IDomainEvent", 0));
+        var isDomainEvent = EventNaming.IsDomainEvent(type);
 
         var outbound = type.AllInterfaces
             .Where(static candidate => Is(candidate, IntegrationNamespace, "IOutboundIntegrationEvent", 2))
             .Select(candidate =>
             {
-                var contract = ContractOf(candidate.TypeArguments[1]);
+                var contract = EventNaming.ContractOf(candidate.TypeArguments[1]);
                 return new Outbound(Name(candidate.TypeArguments[0]), Name(candidate.TypeArguments[1]), contract.Name, contract.Version);
             })
             .OrderBy(static entry => entry.DomainEvent, StringComparer.Ordinal)
@@ -116,7 +115,7 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
             .Where(static candidate => Is(candidate, IntegrationNamespace, "IIntegrationEventHandler", 1))
             .Select(candidate =>
             {
-                var contract = ContractOf(candidate.TypeArguments[0]);
+                var contract = EventNaming.ContractOf(candidate.TypeArguments[0]);
                 return new Handler(Name(candidate.TypeArguments[0]), contract.Name, contract.Version, ConsumerOf(type));
             })
             .OrderBy(static entry => entry.Contract, StringComparer.Ordinal)
@@ -127,7 +126,7 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
             return null;
         }
 
-        var (eventName, eventVersion) = isDomainEvent ? DomainEventOf(type) : (null, 0);
+        var (eventName, eventVersion) = isDomainEvent ? EventNaming.DomainEventOf(type) : (null, 0);
 
         EquatableArray<string> arguments = default;
         DiagnosticInfo? problem = null;
@@ -211,28 +210,6 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
         return null;
     }
 
-    /// <summary>The stable name and version the outbox stores the event under, as <c>DomainEventName.Of</c> and <c>IntegrationEventContract.VersionOf</c> read them.</summary>
-    private static (string Name, int Version) DomainEventOf(INamedTypeSymbol type)
-    {
-        var name = StringArgument(Attribute(type, DomainEventNameAttribute)) ?? type.MetadataName;
-        return (name, VersionArgument(Attribute(type, KnownTypes.IntegrationEventAttribute)));
-    }
-
-    /// <summary>
-    /// The published name and version of a contract, with the fallbacks <c>IntegrationEventContract</c> uses:
-    /// <c>[IntegrationEvent]</c>, otherwise <c>[DomainEventName]</c> at version 1, otherwise the class name at
-    /// version 1.
-    /// </summary>
-    private static (string Name, int Version) ContractOf(ITypeSymbol contract)
-    {
-        if (Attribute(contract, KnownTypes.IntegrationEventAttribute) is { } published && StringArgument(published) is { } name)
-        {
-            return (name, VersionArgument(published));
-        }
-
-        return (StringArgument(Attribute(contract, DomainEventNameAttribute)) ?? contract.MetadataName, 1);
-    }
-
     /// <summary>The consumer name the inbox keys on: <c>[IntegrationEventConsumer]</c>, otherwise the full CLR type name.</summary>
     private static string ConsumerOf(INamedTypeSymbol handler)
     {
@@ -256,24 +233,6 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
 
     private static string? StringArgument(AttributeData? attribute)
         => attribute is { ConstructorArguments.Length: > 0 } && attribute.ConstructorArguments[0].Value is string value ? value : null;
-
-    private static int VersionArgument(AttributeData? attribute)
-    {
-        if (attribute is null)
-        {
-            return 1;
-        }
-
-        foreach (var argument in attribute.NamedArguments)
-        {
-            if (argument.Key == "Version" && argument.Value.Value is int version)
-            {
-                return version;
-            }
-        }
-
-        return 1;
-    }
 
     private static bool Is(INamedTypeSymbol candidate, string @namespace, string name, int arity)
         => candidate.Name == name

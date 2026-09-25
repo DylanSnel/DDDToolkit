@@ -16,6 +16,7 @@ internal static class DiagnosticDescriptors
     private const string Supabase = "DDDToolkit.Supabase";
     private const string GraphQL = "DDDToolkit.GraphQL";
     private const string IntegrationEvents = "DDDToolkit.IntegrationEvents";
+    private const string Events = "DDDToolkit.Events";
 
     public static readonly DiagnosticDescriptor ValueObjectShouldBeRecord = new(
         id: "DDD00001",
@@ -249,4 +250,40 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "The generated Add{Module}IntegrationEvents() constructs every outbound class and every handler with new, taking each constructor parameter from the scope the message is delivered in. It needs one accessible constructor with the most parameters, parameters it can resolve (no ref, out or params), and parameter types this assembly can see. A class it cannot construct is left out of the registration, so its events are not published or its contract is not handled; register it by hand or give it a constructor the registration can call.");
+
+    public static readonly DiagnosticDescriptor EventVersionDisagreesWithItsName = new(
+        id: "DDD00034",
+        title: "An event's class name and its Version disagree",
+        messageFormat: "'{0}' is version {1} by its name, but its [IntegrationEvent] says Version = {2}; remove Version and let the name say it, or rename the class",
+        category: Events,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A class name that ends in V and a number is the event's version: OrderPlacedV2 is version 2 of its event. Version on [IntegrationEvent] is for a class whose name does not end in one. Where both are written and differ, one of them would be silently ignored, and a consumer would read a payload as the wrong shape, so the build stops instead.");
+
+    public static readonly DiagnosticDescriptor EventVersionSuffixIsNotAVersion = new(
+        id: "DDD00035",
+        title: "An event's class name ends in something that is not a version",
+        messageFormat: "'{0}' ends in 'V{1}', which reads as a version but is not one: versions start at V1 and have no leading zeros",
+        category: Events,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A class name that ends in V and a number carries the event's version, and every event class name is read that way. V0 and a number with a leading zero, such as V01, cannot be a version, and reading them as part of the name instead would give one event a version everywhere else and not here. Rename the class: V1 for a first version, or a name that does not end in V and digits.");
+
+    public static readonly DiagnosticDescriptor EventNameTaken = new(
+        id: "DDD00036",
+        title: "Two events of one module share a name and version",
+        messageFormat: "'{0}' and '{1}' are both stored or published as '{2}' version {3}, so a message could not say which of them it is; rename one, or pin another name on one with {4}",
+        category: Events,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "An event is found by its name and version when a stored row or a delivered message is read back. Two domain events, or two published contracts, of one module under the same name and version cannot both be found, and the registry would refuse the second at start-up. Usually two classes in different namespaces share a class name, and the convention gives both the module's name and that class name. The name is deliberately not made unique from the namespace: that would change a name the moment the class moved, or the moment a second class of the same name appeared.");
+
+    public static readonly DiagnosticDescriptor EventNameConstantTaken = new(
+        id: "DDD00037",
+        title: "Two event names give one constant name",
+        messageFormat: "'{0}' would be the constant for both '{1}' and '{2}', so the generated {3} only has it for '{1}'",
+        category: Events,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Every name the module's events are stored or published under gets a constant in the generated {Module}EventNames class, named after the name without its module: ordering.order-placed becomes OrderPlaced. Two names that differ only in punctuation, such as order-placed and order.placed, would give one constant, and only the first of them gets it. Pin one of the names to something that reads differently.");
 }

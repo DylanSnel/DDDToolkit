@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.Text;
 using DDDToolkit.Analyzers.Analyzers;
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
+using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
@@ -76,13 +77,14 @@ public sealed class GeneratorTestHost
     public static GeneratorTestHost Create(string source, string path = "Source.cs")
         => new GeneratorTestHost().WithSource(source, path);
 
-    /// <summary>The four generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
+    /// <summary>The five generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
     public static IIncrementalGenerator[] CoreGenerators() =>
     [
         new CoreEntityIdGenerator(),
         new CoreSingleValueObjectGenerator(),
         new CoreValueObjectGenerator(),
         new CoreEntityGenerator(),
+        new CoreEventNamesGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
@@ -228,7 +230,7 @@ public sealed class GeneratorTestHost
         return this;
     }
 
-    /// <summary>Runs the four DDDToolkit.Analyzers generators.</summary>
+    /// <summary>Runs the five DDDToolkit.Analyzers generators.</summary>
     public GeneratorRunOutcome RunCore() => Run(CoreGenerators());
 
     /// <summary>Runs the core generators plus the given integration generators (the integrations build on the core output).</summary>

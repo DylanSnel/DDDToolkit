@@ -31,6 +31,10 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
 | [DDD00032](#ddd00032) | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer |
 | [DDD00033](#ddd00033) | Warning | The generated integration event registration must be able to construct the class |
+| [DDD00034](#ddd00034) | Error | An event's class name and its Version disagree |
+| [DDD00035](#ddd00035) | Error | An event's class name ends in something that is not a version |
+| [DDD00036](#ddd00036) | Error | Two events of one module share a name and version |
+| [DDD00037](#ddd00037) | Warning | Two event names give one constant name |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -46,6 +50,8 @@ worth catching is a module whose migrations never reach Supabase. [DDD00032](#dd
 [Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing.
 [DDD00033](#ddd00033) is about the [generated integration event registration](integration-events.md#registered-when-the-module-compiles),
 where it is an outbound class or a handler that is never registered.
+[DDD00034](#ddd00034) to [DDD00037](#ddd00037) are about [event names](domain-events.md#stable-names), where
+it is a stored row or a message read back as the wrong type, or as the wrong shape.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -963,6 +969,88 @@ message says which of those failed.
 A class the registration cannot construct is left out of it, so its domain event is never published, or
 its contract is never handled. That is a warning rather than silence because nothing else would tell
 you. Give the class a constructor the registration can call, or register it by hand.
+
+---
+
+## DDD00034
+
+**An event's class name and its Version disagree.**
+
+```csharp
+[IntegrationEvent(Version = 3)]                     // DDD00034, at Version = 3
+public sealed record OrderPlacedV2(OrderId OrderId);
+```
+
+A class name that ends in `V` and a number is that version of its event, so `OrderPlacedV2` is version 2.
+`Version` on `[IntegrationEvent]` is for a class whose name does not end in one. Written both ways and
+different, one of the two would be ignored without a word, and a consumer would read a version 2 payload
+as the version 3 shape.
+
+The code fix removes `Version = 3`, which leaves the class name to say it. If the attribute was right and
+the name was not, rename the class instead. See [Versions are in the class name](domain-events.md#versions-are-in-the-class-name).
+
+---
+
+## DDD00035
+
+**An event's class name ends in something that is not a version.**
+
+```csharp
+public sealed record OrderPlacedV0(OrderId OrderId) : DomainEvent;    // DDD00035
+public sealed record OrderPlacedV01(OrderId OrderId) : DomainEvent;   // DDD00035
+```
+
+Every event's class name is read for a version suffix. Versions start at 1 and are written without leading
+zeros, so `V0` and `V01` cannot be one, and reading them as part of the name instead would give this event
+a version rule of its own. Rename the class: `V1` for a first version, or a name that does not end in `V`
+and digits. Digits that do not follow a `V`, as in `Level2Reached`, are part of the name and fine.
+
+---
+
+## DDD00036
+
+**Two events of one module share a name and version.**
+
+```csharp
+[assembly: Module("Ordering")]
+
+namespace Ordering.Orders  { public sealed record OrderPlaced(OrderId OrderId) : DomainEvent; }   // DDD00036
+namespace Ordering.Returns { public sealed record OrderPlaced(OrderId OrderId) : DomainEvent; }   // DDD00036
+```
+
+An event is found by its name and version when a stored row or a delivered message is read back, and both
+of these are `ordering.order-placed` version 1. The registry would refuse the second at start-up; this
+refuses it when the module compiles, on both classes, because neither is more wrong than the other.
+
+The code fix pins another name on the class you invoke it on, made from its namespace or containing type:
+`[DomainEventName("ordering.returns-order-placed")]` on a domain event, the name in its
+`[IntegrationEvent("...")]` on a contract. A class whose name is already pinned is offered nothing, since
+that name was chosen by hand. Renaming one of the classes works as well.
+
+Two domain events are compared with each other, and two contracts with each other. A domain event and the
+contract it is published as share a name on purpose, and so do the versions of one event; neither is
+reported. The toolkit does not make a name unique from the namespace by itself, because that name would
+change when the class moved. See [Two events with one name](domain-events.md#two-events-with-one-name).
+
+---
+
+## DDD00037
+
+**Two event names give one constant name.**
+
+```csharp
+[DomainEventName("ordering.order-placed")]
+public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;
+
+[DomainEventName("ordering.order.placed")]                           // DDD00037
+public sealed record PlacedOrder(OrderId OrderId) : DomainEvent;
+```
+
+Every name gets a constant in the generated `{Module}EventNames`, named after the name without its module
+and in PascalCase: both of these would be `OrderingEventNames.OrderPlaced`. The first name in ordinal order
+keeps it and the other gets none. It is a warning, not an error, because nothing about storing or
+publishing either event is wrong; only the constant is missing. Pin one of the names to something that
+reads differently.
 
 ---
 

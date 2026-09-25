@@ -5,6 +5,8 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Wolverine;
+using Wolverine.RabbitMQ;
+using Wolverine.Util;
 
 namespace DDDToolkit.Messaging.Tests;
 
@@ -75,5 +77,24 @@ public sealed class WolverineTests
         await SendAsync(host, Receiving.Message());
 
         (await host.Services.WaitForShelvesAsync(1)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public void With_the_toolkit_names_conventional_routing_sends_a_contract_to_its_name_and_version()
+    {
+        var conventions = new SenderNames();
+        conventions.UseIntegrationEventNames();
+
+        conventions.For(typeof(ShelfOpenedV1)).Should().Be("library.shelf-opened.v1");
+        conventions.For(typeof(OpenedShelf)).Should().Be(typeof(OpenedShelf).ToMessageTypeName(), "a message the toolkit does not name keeps Wolverine's name");
+    }
+
+    /// <summary>
+    /// Reads the name conventional routing sends a type to, which is also the exchange a listener's queue is
+    /// bound to. Wolverine keeps it in a protected field, so a subclass is the way to look.
+    /// </summary>
+    private sealed class SenderNames : RabbitMqMessageRoutingConvention
+    {
+        public string? For(Type type) => _identifierForSender(type);
     }
 }
