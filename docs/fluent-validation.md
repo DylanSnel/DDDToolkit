@@ -100,8 +100,10 @@ Which types get a validator:
 | `[EntityId<T>] partial record`, the record form of an identifier | Yes |
 | `[EntityId<T>] partial record struct` | No: a struct identifier is well formed by construction |
 
-Every value object in a project that references the package gets the generated `Validate()` overrides,
-so its rules belong in its `Validator`.
+A value object that writes its own `Validate()` or `Validate(ValidationErrorBuilder)`, in any part, is
+left alone: it gets no `Validator`, no `Errors` and no generated overrides, so one project can mix
+hand-validated value objects with ones validated by rules. Only those two signatures count; a
+`Validate` with other parameters is an ordinary method, and the type still gets its validator.
 
 ## What the rules produce
 

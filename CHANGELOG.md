@@ -319,6 +319,12 @@ convention.
   every entity whose schema type bound its fields by convention, so any client could run an entity's
   invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
   `[Internal]` now, like the rest of the toolkit's bookkeeping.
+- With `DDDToolkit.FluentValidation` referenced, a value object that wrote its own `Validate()` or
+  `Validate(ValidationErrorBuilder)` failed to compile with CS0111: the generator added both overrides
+  to every value object, so a project could not mix hand-validated value objects with ones validated by
+  rules. The generator now leaves such a type alone, whichever part declares the method: no `Validator`,
+  no `Errors`, no generated overrides. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and
+  record identifiers.
 
 ### Changed
 
