@@ -190,7 +190,11 @@ internal sealed record EntityIdDefinition(
     bool SystemTextJsonAvailable,
     bool IParsableAvailable,
     bool CanGenerate,
-    EquatableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics)
+{
+    /// <summary>True when the author wrote a <c>Validate</c> of their own; see <see cref="ValueObjectDefinition.DeclaresValidate"/>.</summary>
+    public bool DeclaresValidate { get; init; }
+}
 
 internal sealed record SingleValueObjectDefinition(
     TypeDeclarationInfo Type,
@@ -199,7 +203,11 @@ internal sealed record SingleValueObjectDefinition(
     string? GraphQLSchemaType,
     bool SystemTextJsonAvailable,
     bool CanGenerate,
-    EquatableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics)
+{
+    /// <summary>True when the author wrote a <c>Validate</c> of their own; see <see cref="ValueObjectDefinition.DeclaresValidate"/>.</summary>
+    public bool DeclaresValidate { get; init; }
+}
 
 internal sealed record ValueObjectDefinition(
     TypeDeclarationInfo Type,
@@ -216,6 +224,13 @@ internal sealed record ValueObjectDefinition(
 
     /// <summary>False when the author declared a member named <c>With</c>, which the generated one would clash with.</summary>
     public bool GenerateWith { get; init; } = true;
+
+    /// <summary>
+    /// True when the author declared <c>Validate()</c> or <c>Validate(ValidationErrorBuilder)</c> in any part
+    /// of the type. DDDToolkit.FluentValidation generates both, so it leaves such a type alone: the author's
+    /// validation is the validation, and there is no nested <c>Validator</c> or <c>Errors</c>.
+    /// </summary>
+    public bool DeclaresValidate { get; init; }
 
     /// <summary>
     /// True when HotChocolate is referenced. Without the toolkit's conventions HotChocolate publishes every

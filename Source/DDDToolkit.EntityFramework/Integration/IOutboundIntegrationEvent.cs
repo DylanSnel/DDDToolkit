@@ -5,8 +5,8 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// <summary>
 /// What one domain event becomes when it leaves this module: the outbound counterpart of
 /// <see cref="IIntegrationEventHandler{TContract}"/>. Implement it in the module that raises the event,
-/// once per event it publishes, and register it on the outbox with
-/// <c>outbox.PublishWith&lt;T&gt;()</c> or <c>outbox.PublishFromAssemblyContaining&lt;T&gt;()</c>.
+/// once per event it publishes. The generated <c>outbox.Add{Module}IntegrationEvents()</c> registers it on
+/// the outbox; by hand, it is <c>outbox.PublishWith&lt;TDomainEvent, TContract&gt;(...)</c>.
 /// <code>
 /// public sealed class PublishOrderPlaced : IOutboundIntegrationEvent&lt;OrderPlaced, OrderPlacedV2&gt;
 /// {

@@ -84,63 +84,6 @@ An invariant violation is looked up as `{EntityType}.{Code}` first and then as t
 shared by several entities can then have one translation, and still get a different one where the
 sentence has to differ: `Drawer.NotNegative` beats `NotNegative`.
 
-## Giving a failure its arguments
-
-### Value objects
-
-A rule you write by hand adds its values next to its message:
-
-```csharp
-protected override void Validate(ValidationErrorBuilder errors)
-{
-    if (Value.Length > 40)
-    {
-        errors.Add("A street is at most 40 characters.", nameof(Value), "Street.TooLong", Value,
-            new Dictionary<string, object?> { ["MaxLength"] = 40 });
-    }
-}
-```
-
-`new ValidationError(...).With("MaxLength", 40)` does the same for a single failure.
-
-With FluentValidation you write nothing: every placeholder value FluentValidation knows (`MaxLength`,
-`TotalLength`, `ComparisonValue`, `PropertyName`, and anything you add with
-`context.MessageFormatter.AppendArgument`) arrives in `Arguments`, and the error code
-(`MaximumLengthValidator`, `NotEmptyValidator`, ...) is the key. The same goes for
-`result.ToValidationErrors()` on a validator you wrote yourself.
-
-FluentValidation also has its own translations, and they are used for `Message`. But a value object
-validates once and caches the verdict, so that message is in whichever language was current *the first
-time* anything asked. The localizer phrases the failure when it is read, which is the moment that
-counts.
-
-### Invariants
-
-`IInvariant<T>.Check` returns an `InvariantFailure`. A string converts to one, so a rule with nothing
-to add returns its message as before. A rule whose message names values adds them:
-
-```csharp
-public sealed class MustStayWithinTheCreditLimit : IInvariant<Order>
-{
-    public const string ViolationCode = "Order.OverCreditLimit";
-
-    public string Code => ViolationCode;
-
-    public InvariantFailure? Check(Order order)
-        => order.Total <= order.CreditLimit
-            ? null
-            : new InvariantFailure($"An order may total at most {order.CreditLimit}.")
-                .With("CreditLimit", order.CreditLimit)
-                .With("Total", order.Total);
-}
-```
-
-The happy path still returns `null` and allocates nothing.
-
-The `CheckInvariants()` seam reports strings, so its violations carry `InvariantViolation.SeamCode`
-and have no code worth translating. A rule that needs translating needs a code, which is one more
-reason to give it [a type of its own](invariants.md#a-named-invariant).
-
 ## Using it
 
 `IFailureLocalizer` phrases one failure. The extension methods phrase a list and keep everything else,
@@ -176,6 +119,70 @@ catch (InvariantViolationException exception)
         .Select(v => new { v.Code, v.Message }));
 }
 ```
+
+## Giving a failure its arguments
+
+A template's placeholders are filled from the failure's `Arguments`, so a failure whose message names a
+value has to carry that value as well.
+
+### Value objects
+
+A rule you write by hand adds its values next to its message:
+
+```csharp
+protected override void Validate(ValidationErrorBuilder errors)
+{
+    if (Value.Length > 40)
+    {
+        errors.Add("A street is at most 40 characters.", nameof(Value), "Street.TooLong", Value,
+            new Dictionary<string, object?> { ["MaxLength"] = 40 });
+    }
+}
+```
+
+`new ValidationError(...).With("MaxLength", 40)` does the same for a single failure.
+
+With [FluentValidation](fluent-validation.md) you write nothing: every placeholder value FluentValidation knows (`MaxLength`,
+`TotalLength`, `ComparisonValue`, `PropertyName`, and anything you add with
+`context.MessageFormatter.AppendArgument`) arrives in `Arguments`, and the error code
+(`MaximumLengthValidator`, `NotEmptyValidator`, ...) is the key. The same goes for
+`result.ToValidationErrors()` on a validator you wrote yourself.
+
+FluentValidation also has its own translations, and they are used for `Message`. But a value object
+validates once and caches the verdict, so that message is in whichever language was current *the first
+time* anything asked. The localizer phrases the failure when it is read, which is the moment that
+counts.
+
+### Invariants
+
+`IInvariant<T>.Check` returns an `InvariantFailure`. A string converts to one, so a rule with nothing
+to add returns its message. A rule whose message names values adds them:
+
+```csharp
+public partial class Order
+{
+    public sealed class MustStayWithinTheCreditLimit : IInvariant<Order>
+    {
+        public const string ViolationCode = "Order.OverCreditLimit";
+
+        public string Code => ViolationCode;
+
+        public InvariantFailure? Check(Order order)
+            => order.Total <= order.CreditLimit
+                ? null
+                : new InvariantFailure($"An order may total at most {order.CreditLimit}.")
+                    .With("CreditLimit", order.CreditLimit)
+                    .With("Total", order.Total);
+    }
+}
+```
+
+The rule is nested inside the entity it is about, which is where the generator looks for rules to run.
+The happy path returns `null` and allocates nothing.
+
+The `CheckInvariants()` seam reports strings, so its violations carry `InvariantViolation.SeamCode`
+and have no code worth translating. A rule that needs translating needs a code, which is one more
+reason to give it [a type of its own](invariants.md#a-named-invariant).
 
 ## GraphQL
 

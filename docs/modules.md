@@ -27,64 +27,23 @@ An assembly with no `[Module]` is not a module. It is never reported for, and ne
 The framework, your NuGet packages, a shared kernel and every project you have not got round to yet
 all stay out of the way. Nothing changes in a codebase until somebody adds the attribute.
 
-### Why not namespaces
+## What it publishes
 
-Several modules inside one project is the other common layout, and this analyzer does not support it.
-
-The reason is what an analyzer can see. It gets this compilation plus the *metadata* of everything the
-compilation references. When code in `Ordering` names a type from `Billing`, the analyzer has to ask
-that type which module it belongs to, and the only answer available is whatever survived into
-`Billing.dll`. An assembly attribute survives. A namespace cannot carry an attribute at all, so a
-namespace layout would have to be described by a convention that the other side cannot confirm, and a
-boundary you cannot confirm is not a boundary.
-
-There is a second reason to prefer a project per module, and it is the better one: the compiler
-already enforces `internal` at the assembly boundary. Put a module in its own project and half the job
-is done by C# itself. What the analyzer adds is the other half, which C# has no word for: *public, but
-not for you*.
-
-### Why not the DDD_Module MSBuild property
-
-`DDD_Module` already exists in this toolkit and it is not this. It names the generated
-`Add{Module}Converters` and `Add{Module}GraphQlRuntimeBindings` methods, and it is an MSBuild property,
-which means it reaches the compiler of the project that sets it and travels no further. The compiler
-building `Ordering` cannot read what `Billing.csproj` set. Leave `DDD_Module` where it is; it is a
-naming knob, not a boundary.
-
-## The published contract
-
-A module says what it publishes type by type.
+Once there are two modules, each one decides what the other may use. It marks those types
+`[ModuleContract]`, and every integration event it declares is published without being marked:
 
 ```csharp
-using DDDToolkit.Abstractions.Attributes;
-
 [ModuleContract]
 [EntityId<Guid>("CUS")]
 public readonly partial record struct CustomerId;
 
 [ModuleContract]
 public sealed record CustomerSummary(CustomerId Id, string Name);
-
-[IntegrationEvent("crm.customer-registered")]
-public sealed record CustomerRegistered(Guid CustomerId, string Name);
 ```
 
-Three things are published there. `[ModuleContract]` publishes a type. An
-[integration event](integration-events.md) is published without a second attribute, because a type
-whose whole job is to be read by somebody else is already a contract. A type nested inside a published
-type is published with it.
-
-Everything else in the assembly, `public` or not, is the module's own business.
-
-What belongs in a contract, in rough order of how often you will want it:
-
-| Publish | Why |
-|---|---|
-| Integration events | The supported way for another module to learn that something happened |
-| Identifiers | Another module has to be able to point at your things |
-| Value objects and read models | A copy of data, with no behaviour and no navigation |
-| Interfaces your module implements | A front door with a signature |
-| Entities and aggregate roots | Almost never. See below |
+Everything else in the assembly, `public` or not, is the module's own business. Why a module would
+want that, what belongs in a contract and where to keep it is a page of its own:
+[Module contracts](module-contracts.md).
 
 ## What the analyzer catches
 
@@ -179,7 +138,7 @@ Read this list before you trust the rule, because the gaps are real.
 
 | Not caught | Why |
 |---|---|
-| Several modules inside one project | A module is an assembly here. See [above](#why-not-namespaces) |
+| Several modules inside one project | A module is an assembly here. See [below](#why-not-namespaces) |
 | A type you never name, such as `var buyer = summary.Owner;` | The rule reports names in your source, and there is no name in that line |
 | An extension method called on an instance, `customer.Deactivate()` | You named the method, not the class that declares it |
 | A member inherited from an unpublished base type | Reporting it would fire on types the author never saw |
@@ -207,6 +166,67 @@ The shape a module ends up with is small:
 Two modules that share only that can be deployed together forever, and can be pulled apart on the day
 that stops being true. Two modules that share a navigation property cannot.
 
+## One set of modules, any host
+
+A module registers everything it needs itself, so a host only chooses which modules it runs and how
+their messages travel. The example shop runs the same five modules as one process and as three
+services:
+
+```mermaid
+flowchart TB
+    subgraph monolith ["ModularMonolith: one host, messages in process or through one queue"]
+        direction LR
+        M1["Catalog"] ~~~ M2["Ordering"] ~~~ M3["Inventory"] ~~~ M4["Payments"] ~~~ M5["Shipping"]
+    end
+    subgraph services ["Microservices: three hosts, messages over pgmq, Wolverine or MassTransit"]
+        direction LR
+        Gateway["Gateway: one GraphQL schema"] --> Storefront["Storefront: Catalog, Ordering"]
+        Gateway --> PaymentsService["Payments: Payments"]
+        Gateway --> Fulfilment["Fulfilment: Inventory, Shipping"]
+    end
+    monolith ~~~ services
+```
+
+A module does not know which of the two it is in. What changes is the host's `Program.cs`, and the
+modules' boundaries are what make that possible: nothing crosses between them except contracts, and a
+contract travels as well over a queue as through a method call.
+
+<details>
+<summary>Show the code: two hosts over the same modules</summary>
+
+The monolith runs all five, and hands each module's messages to the others in process:
+
+```csharp
+var host = ModuleHost.InProcess(database);
+
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+builder.Services.AddInventoryModule(host);
+builder.Services.AddPaymentsModule(host);
+builder.Services.AddShippingModule(host);
+```
+
+*[`ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+
+The storefront service runs two of them, and sends what the others need through pgmq:
+
+```csharp
+var host = new ModuleHost(
+    ModuleDatabase.Postgres(connectionString),
+    outbox =>
+    {
+        outbox.SendToModules();   // Catalog to Ordering, next door
+        outbox.SendToPgmq();      // everything the other services handle
+    });
+
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+```
+
+*[`Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Storefront/Program.cs`](../Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Storefront/Program.cs)*
+
+</details>
+
 ## One API over the modules: GraphQL
 
 A module's boundary holds in its API as well. Rather than one GraphQL schema that knows every module,
@@ -232,8 +252,35 @@ a service, so its GraphQL does not change on that day either. See
 4. Turn `DDD00023` into an error for those two projects when its list is empty, then `DDD00022`.
 5. Repeat with the next module. The rules stay silent about every project you have not reached.
 
+## Design choices
+
+### Why not namespaces
+
+Several modules inside one project is the other common layout, and this analyzer does not support it.
+
+The reason is what an analyzer can see. It gets this compilation plus the *metadata* of everything the
+compilation references. When code in `Ordering` names a type from `Billing`, the analyzer has to ask
+that type which module it belongs to, and the only answer available is whatever survived into
+`Billing.dll`. An assembly attribute survives. A namespace cannot carry an attribute at all, so a
+namespace layout would have to be described by a convention that the other side cannot confirm, and a
+boundary you cannot confirm is not a boundary.
+
+There is a second reason to prefer a project per module, and it is the better one: the compiler
+already enforces `internal` at the assembly boundary. Put a module in its own project and half the job
+is done by C# itself. What the analyzer adds is the other half, which C# has no word for: *public, but
+not for you*.
+
+### Why not the DDD_Module MSBuild property
+
+`DDD_Module` already exists in this toolkit and it is not this. It names the generated
+`Add{Module}Converters` and `Add{Module}GraphQlRuntimeBindings` methods, and it is an MSBuild property,
+which means it reaches the compiler of the project that sets it and travels no further. The compiler
+building `Ordering` cannot read what `Billing.csproj` set. Leave `DDD_Module` where it is; it is a
+naming knob, not a boundary.
+
 ## Related
 
+- [Module contracts](module-contracts.md), what a module publishes and why.
 - [Integration events](integration-events.md), the supported way across a boundary.
 - [One schema over a modular monolith](graphql.md#one-schema-over-a-modular-monolith), the modules'
   GraphQL composed without a module knowing another.

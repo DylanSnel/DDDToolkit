@@ -1,10 +1,19 @@
 # Integration events
 
-The [outbox](entity-framework.md#the-outbox) makes a domain event durable. This page is about the other
-half: getting it to whoever has to react, and consuming it safely at the other end.
+When something happens in one module, another module often has to react. Ordering places an order and
+Billing raises an invoice for it. Billing cannot simply handle Ordering's domain event: that means
+referencing Ordering's domain assembly, with its identifiers, its value objects and whatever else the
+event touches, and from then on Ordering cannot change any of it without breaking Billing's build.
 
-Most of the time that is another module in the same process. That is the case this page starts with,
-because it is the common one and because the toolkit used to get it wrong.
+An integration event is what Ordering publishes instead: a small record, usually of primitives, owned by
+Ordering, that Billing reads without knowing anything else about Ordering. This page is about declaring it, getting it
+to whoever has to react, and consuming it safely at the other end. It starts where
+[the outbox](event-delivery.md#the-outbox) stops: the outbox makes a domain event durable, and this is
+the other half.
+
+Most of the time the module that reacts is in the same process. That is the case this page is written
+around, because it is the common one. When a module moves to a process of its own, only the way the
+message travels changes; that is on [Transports](transports.md).
 
 `DDDToolkit.EntityFramework` gives you four things. A seam between the event you raise and the message
 you publish, so the two can change at different speeds. A sink interface, so the outbox has somewhere to
@@ -12,14 +21,8 @@ deliver to, with an in-process module sink ready made. An inbox, so a consumer c
 message twice without doing the work twice. And versioning, so a payload written by last year's build is
 still readable by this year's.
 
-It does not give you a bus. There is no client here for RabbitMQ, Azure Service Bus, Kafka or SQS, and
-there is not going to be one. [MassTransit](https://masstransit.io/) and
-[Wolverine](https://wolverinefx.net/) are far more mature at that job than anything this repository
-would write, so the toolkit hands its messages to them
-([Wolverine](#through-a-broker-wolverine), [MassTransit](#through-a-broker-masstransit)) and keeps only
-the outbox and the inbox on either side. What it does ship itself is a sink for Postgres queues
-([pgmq](#when-a-module-becomes-its-own-deployable-pgmq)), because there the queue is a table and the
-guarantees change.
+It does not give you a bus. Between processes it hands its messages to pgmq, Wolverine or MassTransit, and
+keeps only the outbox and the inbox on either side; see [Transports](transports.md).
 
 ## Two kinds of event
 
@@ -33,19 +36,265 @@ They look the same in C# and they are not the same thing.
 | Carries | Your identifiers, your value objects | Primitives, usually |
 | Lifetime | As long as the aggregate | As long as the oldest consumer |
 
-A domain event is internal. `OrderPlaced(OrderId, CustomerId, Money)` uses your types because the only
+A domain event is internal. `OrderPlaced(OrderId, CustomerName, Money)` uses your types because the only
 things that read it are in the same module. The moment something outside that module reads it, that
 stops being true. Now the record is a published schema, and every field is a promise.
+
+What changes between the two, in the example shop. The domain event speaks Ordering's language; the
+contract speaks plain types, because it outlives any one version of Ordering:
+
+```mermaid
+flowchart LR
+    subgraph inside ["inside Ordering, free to change"]
+        Event["OrderPlaced: OrderId, Address, the lines, Money"]
+    end
+    Publish["PublishOrderPlaced"]
+    subgraph published ["published, versioned, a promise"]
+        Contract["OrderPlacedV1: OrderId, City, PostalCode, the lines, a decimal and a currency"]
+    end
+    Event --> Publish --> Contract
+    Contract --> Inventory["Inventory"]
+    Contract --> Payments["Payments"]
+```
+
+<details>
+<summary>Show the code: the domain event, the contract and the class between them</summary>
+
+```csharp
+// Ordering's own event, with Ordering's own types
+[DomainEventName("ordering.order-placed")]
+public sealed record OrderPlaced(OrderId OrderId, Address ShipTo, IReadOnlyList<OrderPlaced.Line> Lines, Money Total)
+    : DomainEvent, INotification
+{
+    public sealed record Line(string Sku, int Quantity);
+}
+
+// what the other modules get, in Ordering's contracts project
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+// the one place that knows both
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV1>
+{
+    public ValueTask<OrderPlacedV1?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV1(
+            placed.OrderId,
+            placed.ShipTo.City,
+            placed.ShipTo.PostalCode,
+            [.. placed.Lines.Select(line => new OrderedLineV1(line.Sku, line.Quantity))],
+            placed.Total.Amount,
+            placed.Total.Currency));
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
+
+</details>
 
 Note the boundary in the first row. It is the **module**, not the process. A record that only another
 assembly in the same solution deserializes is already a published schema, because you cannot change it
 without changing them.
+
+That is why an integration event is part of the module's published contract: the short list of types
+other modules may use, where everything else stays the module's own to change. `[IntegrationEvent]` is
+enough to put a type on that list. Why a module publishes anything at all, what else belongs on the list,
+and why the example shop keeps it in a `*.Contracts` project of its own is on
+[Module contracts](module-contracts.md).
+
+## Saying what gets published
+
+The domain event is Ordering's own, written in Ordering's types:
+
+```csharp
+public sealed record OrderPlaced(OrderId OrderId, CustomerName Customer, Money Total) : DomainEvent;
+```
+
+The contract is what the other modules read, written in primitives:
+
+```csharp
+[IntegrationEvent("ordering.order-placed", Version = 2)]
+public sealed record OrderPlacedV2(Guid OrderId, string Customer, decimal Total, string Currency);
+```
+
+`[IntegrationEvent]` pins the name and the version. Without it a contract falls back to
+`[DomainEventName]`, and without that to the class name, with version 1. See
+[Domain events](domain-events.md#stable-names) for why the name has to be pinned at all, and
+[Versioning and upcasting](#versioning-and-upcasting) for what the version is for.
+
+The outbox does not publish the contract until you say how one becomes the other. By default, nothing is
+mapped and the domain event is published as it stands, under the name the outbox stored, reusing the JSON
+already in the row. No second type, no second serialization, no configuration. If you are not ready to
+split the two yet, you pay nothing for the seam being there.
+
+When you are ready, register a conversion:
+
+```csharp
+options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.RegisterEventsFromAssemblyContaining<Order>();
+
+    outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(
+        e.OrderId.Value,
+        e.Customer.Value,
+        e.Total.Amount,
+        e.Total.Currency));
+});
+```
+
+Now `OrderPlaced` can grow a field, lose a field or be renamed, and the wire is untouched until you change
+`OrderPlacedV2` on purpose. What the conversion makes is what every sink is handed; the sink for the other
+modules in this process comes [below](#the-common-case-another-module-in-this-process).
+
+Two more things that map:
+
+```csharp
+// This event is nobody else's business. Local handlers still get it; no sink is called.
+outbox.DoNotPublish<CustomerCreditChecked>();
+
+// Publish only some occurrences. Returning null drops that one message.
+outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => e.Total.Amount < 1000 ? null : Map(e));
+```
+
+### A class per published event
+
+A lambda is fine for one line. It stops being fine when a module publishes five events and its
+registration turns into the place where every contract is assembled, and it cannot grow: it has no
+services and it cannot await. The translation is application code, and it belongs next to the aggregate
+it publishes for, not in the composition root.
+
+So the same seam also takes a class, the outbound counterpart of the `IIntegrationEventHandler<TContract>`
+a consuming module writes ([further down](#the-common-case-another-module-in-this-process)):
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
+}
+```
+
+```csharp
+options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.AddOrderingIntegrationEvents();   // generated: every domain event and every IOutboundIntegrationEvent in the module
+});
+```
+
+`AddOrderingIntegrationEvents()` is written by the compiler when the module builds, and is named after the
+module. It takes the place of both the `RegisterEventsFromAssemblyContaining` line and the `PublishAs`
+lambda; [Registered when the module compiles](#registered-when-the-module-compiles) shows what is in it.
+
+A class may implement the interface more than once to publish several events. Everything else is as for
+`PublishAs`: returning `null` drops that occurrence, a domain event has one entry however it was registered
+(a second one throws at start-up), and events with no entry are published as they stand.
+
+The class is built with `new` once per message, each constructor parameter taken from the scope the outbox
+processor runs in. Throwing from it fails the delivery the way a failing sink does: the error is recorded
+on the row and the message is retried.
+
+Name it for what it does, like a handler: `PublishOrderPlaced` next to `BookShipment` and `RecordPayment`.
+Avoid "Publisher", because it sends nothing. The sink does that.
+
+### Where the mapping happens
+
+The outbox row always stores the domain event. The conversion runs at delivery, not at save.
+
+That is a deliberate trade. It keeps the row a faithful record of what actually happened in the domain, it
+means the in-process path and the sink path read the same row, and it means fixing a wrong mapping is a
+deployment rather than a data migration: reset `Attempts` and the rows go out again in the new shape. The
+cost is that the domain event type must still exist and still deserialize when the processor runs, which
+is what [Versioning and upcasting](#versioning-and-upcasting) is about.
 
 ## The common case: another module in this process
 
 Integration events exist so that another module can pick something up. In a modular monolith that module
 is in the same process, which makes this the most valuable sink in the package and the one to reach for
 first.
+
+One message, from the save in Ordering to the handler in Billing:
+
+```mermaid
+sequenceDiagram
+    participant Save as Ordering's save
+    participant Outbox as Ordering's outbox
+    participant Processor as Outbox processor
+    participant Publish as PublishOrderPlaced
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Handler as RaiseInvoice
+
+    Save->>Outbox: the order and an OrderPlaced row, one transaction
+    Processor->>Outbox: read the row, after the commit
+    Processor->>Publish: OrderPlaced, the domain event
+    Publish-->>Processor: OrderPlacedV2, the contract
+    Processor->>Sink: the contract, in its envelope
+    Sink->>Inbox: offered to every module that handles OrderPlacedV2
+    alt billing.invoicer applied this message before
+        Inbox-->>Sink: skipped
+    else the first time
+        Inbox->>Handler: HandleAsync(contract, message)
+        Handler-->>Inbox: an invoice, added to Billing's context
+        Inbox->>Inbox: the invoice and an inbox row, one transaction
+    end
+    Sink-->>Processor: delivered
+    Processor->>Outbox: set ProcessedAt
+```
+
+A handler that fails fails the delivery, and the processor tries again later. Every module is offered
+the message again, and the inboxes skip what they already applied, which is what makes at-least-once
+delivery safe.
+
+<details>
+<summary>Show the code: both modules' registration</summary>
+
+Ordering publishes, through its outbox, to the modules in this process:
+
+```csharp
+// inside AddOrderingModule
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.AddOrderingIntegrationEvents();   // generated: its domain events and its outbound classes
+    outbox.SendToModules();
+}));
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+One class says what the domain event becomes for the others:
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
+}
+```
+
+Billing handles the contract, and signs up with the contracts it reads and the handlers that run under
+its inbox:
+
+```csharp
+[IntegrationEventConsumer("billing.invoicer")]
+public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHandler<OrderPlacedV2>
+{
+    public Task HandleAsync(OrderPlacedV2 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        context.Invoices.Add(new Invoice(contract.OrderId, contract.Total));
+        return Task.CompletedTask;
+    }
+}
+
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
+services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
+```
+
+Both contexts map their tables: `modelBuilder.AddDomainEventOutbox(Database)` in Ordering's,
+`modelBuilder.AddDomainEventInbox(Database)` in Billing's. The rest of this section goes through each
+part.
+
+</details>
 
 Each module registers its own half, next to its own context. The producing module says what it publishes
 and that it goes to the other modules:
@@ -60,19 +309,11 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingConte
 services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
 ```
 
-A consuming module says which contracts it reads and which handlers run under its inbox:
+`SendToModules()` is the sink: it offers each message the outbox delivers to the modules in this process
+that asked for it. The background service is the processor that reads the outbox rows after the commit
+and hands them to the sink; see [Running the processor](event-delivery.md#running-the-processor).
 
-```csharp
-// inside AddBillingModule
-services.AddDDDToolkitEntityFramework(options =>
-    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
-services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
-```
-
-The `Add{Module}IntegrationEvents()` methods are written by a source generator when the module compiles,
-so nothing is found, read or created by reflection when it runs; see
-[Registered when the module compiles](#registered-when-the-module-compiles). `{Module}` is the project's
-`<DDD_Module>`, or its assembly name without the dots.
+A consuming module writes a handler for the contract:
 
 ```csharp
 [IntegrationEventConsumer("billing.invoicer")]
@@ -85,6 +326,26 @@ public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHand
     }
 }
 ```
+
+`[IntegrationEventConsumer]` names the handler for the inbox, which remembers that `billing.invoicer` has
+applied a message; [further down](#each-handler-has-its-own-inbox-row) is why the name matters. `message`
+is the envelope the contract arrived in, with its id, its published name and when the thing happened;
+[Transports](transports.md#why-an-envelope-and-not-the-event) lists what it carries.
+
+The consuming module then says which contracts it reads and which handlers run under its inbox:
+
+```csharp
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
+services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
+```
+
+`MapIntegrationEvents` registers the contracts Billing reads, so that a delivered payload can be turned
+back into an `OrderPlacedV2`. `AddModuleIntegrationEvents<BillingContext>` signs Billing up as a consumer:
+its handlers, and the inbox in `BillingContext` that guards them. The `Add{Module}IntegrationEvents()`
+methods are written by a source generator when the module compiles, so nothing is found, read or created
+by reflection when it runs; see [Registered when the module compiles](#registered-when-the-module-compiles).
 
 Neither module names the other. `SendToModules()` offers every message to every module registered with
 `AddModuleIntegrationEvents`, and each runs only its own handlers, under its own inbox, in its own
@@ -100,12 +361,10 @@ Three things in that handler are worth reading twice.
 
 ### It is typed on the contract, not on the domain event
 
-`IIntegrationEventHandler<OrderPlacedV2>`, never `IIntegrationEventHandler<OrderPlaced>`. The toolkit
-used to dispatch the domain event itself to local handlers, and that is the thing this replaces. A
-handler typed on `OrderPlaced` forces the billing module to reference the ordering module's domain
-assembly, which means `OrderId`, `Money`, and whatever else that record touches. Ordering can no longer
-rename a field without breaking a build somewhere else, and the two modules are one module with extra
-folders.
+`IIntegrationEventHandler<OrderPlacedV2>`, never `IIntegrationEventHandler<OrderPlaced>`. A handler typed
+on `OrderPlaced` forces the billing module to reference the ordering module's domain assembly, which means
+`OrderId`, `Money`, and whatever else that record touches. Ordering can no longer rename a field without
+breaking a build somewhere else, and the two modules are one module with extra folders.
 
 `OrderPlacedV2` is a record of primitives that both modules can see. Ordering owns it and publishes it,
 billing reads it, and neither knows anything else about the other.
@@ -153,10 +412,12 @@ The inbox table, in the consuming context:
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
-    modelBuilder.AddDomainEventOutbox(Database);
     modelBuilder.AddDomainEventInbox(Database);
 }
 ```
+
+A module that publishes as well as consumes maps its outbox next to it, with
+`modelBuilder.AddDomainEventOutbox(Database)`.
 
 `AddModuleIntegrationEvents<TContext>(...)` registers the module, its inbox and its handlers together.
 Handlers should write through that same `TContext`, because that is the context whose transaction the
@@ -178,491 +439,84 @@ its own outbox table and its own processor.
 
 It does not order anything. See [the guarantees](#the-guarantees-honestly).
 
-## When a module becomes its own deployable: pgmq
+## Registered when the module compiles
 
-`DDDToolkit.Messaging.Postgres` sends published messages to a
-[pgmq](https://github.com/pgmq/pgmq) queue.
+`DDDToolkit.EntityFramework.Analyzers` writes a module's integration event registration as code, one
+`Add{Module}IntegrationEvents()` for each of the three places that need it, in the namespace
+`{assembly}.IntegrationEvents`. `{Module}` is the project's `<DDD_Module>`, or its assembly name without
+the dots; [Store it with Entity Framework](getting-started.md#store-it-with-entity-framework) introduces
+the setting.
 
-pgmq is a Postgres extension whose queues are ordinary tables, and `pgmq.send` is an ordinary insert.
-That one fact is the whole reason this package exists: the enqueue obeys the transaction it is called in.
-No broker can do that, which is why every broker needs an outbox in front of it. On Postgres you get the
-outbox guarantee from the queue itself.
+Ordering, in the example on this page, declares one domain event, `OrderPlaced`, and one outbound class,
+`PublishOrderPlaced`. Its build writes the registration for the outbox:
 
-Supabase Queues is this extension with a UI on top, so a Supabase project already has it. The sink
-knows nothing about Supabase; it talks to Postgres through Npgsql and SQL. To have the Supabase CLI
-apply your migrations, see `DDDToolkit.EntityFramework.Supabase` in
-[Entity Framework → Supabase](entity-framework.md#supabase).
+```csharp title="IntegrationEventExtensions.g.cs, shortened"
+namespace Ordering.IntegrationEvents;
 
-```bash
-dotnet add package DDDToolkit.Messaging.Postgres
-```
-
-```csharp
-builder.Services.AddPgmqSink<OrderingContext>(pgmq => pgmq.UseQueue("ordering_events"));
-
-builder.Services.AddDDDToolkitEntityFramework(options =>
+public static class IntegrationEventExtensions
 {
-    options.UseOutbox(outbox =>
+    public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
     {
-        outbox.AddOrderingIntegrationEvents();
-        outbox.SendToPgmq<OrderingContext>();
-        outbox.DeliverInTransaction = true;
-    });
-});
-```
+        ArgumentNullException.ThrowIfNull(outbox);
+        outbox.RegisterEvent<OrderPlaced>("OrderPlaced", 1);
+        outbox.PublishWith<OrderPlaced, OrderPlacedV2>("ordering.order-placed", 2, static services => new PublishOrderPlaced());
+        return outbox;
+    }
 
-`PgmqSink<TContext>` sends on that context's connection, and joins that context's current transaction if
-it has one. `DeliverInTransaction` is what makes that pay: the outbox processor then wraps one message's
-delivery and its "processed" mark in a single transaction. Either the message is on the queue and the row
-is marked, or neither happened. The handoff from the outbox to the queue is exactly once.
-
-Turn `DeliverInTransaction` on for a sink that writes to the same database, and leave it off otherwise. A
-send to a broker or an HTTP endpoint cannot be rolled back, so widening the transaction around it buys
-nothing. It also changes what `SendToModules` guarantees: the inbox joins the caller's transaction, so
-with one transaction around the whole message a failing consumer rolls back the consumers that already
-succeeded. Use one or the other on a given outbox, not both.
-
-### Enqueueing in the aggregate's own transaction
-
-You can go further and skip the outbox, because `pgmq.send` is just an insert:
-
-```csharp
-await using var transaction = await context.Database.BeginTransactionAsync();
-
-context.Orders.Add(order);
-await context.SaveChangesAsync();
-
-await PgmqQueue.SendAsync(
-    (NpgsqlConnection)context.Database.GetDbConnection(),
-    (NpgsqlTransaction?)context.Database.CurrentTransaction?.GetDbTransaction(),
-    "ordering_events",
-    JsonSerializer.Serialize(new OrderPlacedV2(order.Id.Value, order.Total.Amount)));
-
-await transaction.CommitAsync();
-```
-
-The order and the message now commit together, with nothing in between.
-
-The outbox is still the better default. It keeps the queue name and the payload shape out of the code
-path that writes the aggregate, it retries for you, it lets you add a second sink without touching the
-aggregate, and it survives the queue being briefly unreachable. Reach for the direct call when you have a
-specific reason and can name it.
-
-### Reading the queue
-
-The receiving process registers its modules exactly as a monolith does, with
-`AddModuleIntegrationEvents`, and a `PgmqConsumer` for its queue:
-
-```csharp
-builder.Services.AddShippingModule(...);   // AddModuleIntegrationEvents<ShippingContext>(m => m.AddShippingIntegrationEvents())
-builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.BindTopics = true);
-```
-
-The consumer reads the queue, rebuilds each envelope from its headers
-(`IntegrationEventHeaders.ToMessage`), and hands it to `IntegrationEventReceiver`, which offers it to
-every module in the process the way the module sink does: each handler inside its module's inbox. So
-`BookShipment` is the same class whether the message came from Ordering next door or through a queue,
-and a message delivered twice is applied once.
-
-pgmq is at-least-once like everything else. Reading hides a message for a visibility timeout rather than
-removing it, and the consumer archives a message only after every module applied it. When a handler
-throws, the message is left alone and becomes visible again after `VisibilityTimeout`: a retry is a wait.
-After `MaxDeliveries` reads it is archived as poison and logged as an error, so one bad message cannot
-hold up the queue; it stays readable in the archive table. A message without the toolkit's headers has
-no identity to deduplicate on, and is archived unread.
-
-`PgmqQueue.ReadAsync` and `ArchiveAsync` are there for anything the consumer does not do.
-`PgmqMessage.MessageId` is pgmq's own counter, not the integration message id; idempotency keys on the
-`messageId` header, the domain event's `EventId`, the same one the
-[inbox](#the-inbox-on-the-other-side) stores.
-
-### Publish and subscribe: topics
-
-A pgmq queue is a queue: a message read by one consumer is gone for the others. Since version 1.11 pgmq
-routes by topic as well, the way a RabbitMQ topic exchange does. A queue is bound to routing-key patterns
-(`pgmq.bind_topic`), and `pgmq.send_topic` puts a message on every queue bound to a pattern its key
-matches. That is pgmq's own publish and subscribe, and the way to use it between services:
-
-```csharp
-// every service: send by topic, the contract's published name as the routing key
-builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.UseTopics());
-
-// every service: its own queue, bound to what it has to be sent
-builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.BindTopics = true);
-```
-
-The sender names no queue. Each consumer binds its own queue at start-up to every contract its modules
-handle and another service publishes (`IntegrationEventSubscriptions.FromElsewhere`), and unbinds the exact
-names it no longer handles; a wildcard somebody bound by hand is left alone. The sends ride one connection
-and one transaction, so a message reaches all of its queues or none. A message nobody is bound to reaches
-no queue, which is how a broker's exchange behaves too: a consumer that has never started has asked for
-nothing yet. `Examples/Microservices.Pgmq` routes the whole shop this way.
-
-Without topic routing, on a pgmq older than 1.11, `pgmq.UseQueues(message => ...)` enqueues on named
-queues instead, which means the sender has to know its receivers.
-
-### What the sink sends
-
-The body is the envelope's `Payload`, stored as `jsonb`. The envelope's routing fields go into pgmq's
-`headers` column, so a consumer can filter without parsing the body and a human reading the table can
-tell what a row is:
-
-```json
-{
-  "messageId": "0199...", "name": "ordering.order-placed", "version": "2",
-  "contentType": "application/json", "occurredAt": "2026-09-13T12:00:00.0000000+00:00",
-  "aggregateType": "Order", "aggregateId": "ORD_0199..."
+    // ... the two overloads for the contract registry and the module's handlers, which register
+    // nothing: Ordering has no handler
 }
 ```
 
-Turn that off with `pgmq.SendHeaders = false`.
+Billing declares one handler, `RaiseInvoice`. Its build writes the other two:
 
-### Queues, creation and the missing extension
+```csharp title="IntegrationEventExtensions.g.cs, shortened"
+namespace Billing.IntegrationEvents;
 
-By default the sink sends everything to one queue called `integration_events` and creates it on first use.
-`pgmq.create` is idempotent, and the create runs on a connection of its own rather than on yours, because
-creating a table is DDL and Postgres rolls DDL back like anything else. A queue is deployment state; it
-should not vanish when a business transaction changes its mind.
-
-```csharp
-pgmq.UseQueue("ordering_events");                                   // one queue, named
-pgmq.UseQueue(message => message.Name.Replace('.', '_'));           // one queue per event name
-pgmq.CreateQueueIfMissing = false;                                  // queues come from a migration
-```
-
-pgmq builds table names from the queue name, so keep them short, lower case, and free of anything that is
-not a letter, a digit or an underscore. A published name like `ordering.order-placed` has to be rewritten,
-not passed through. Turn creation off when the application's database user may not create tables; the sink
-then fails on a missing queue instead of hiding it.
-
-If the extension is not installed you get a `PgmqNotInstalledException` naming the database and saying
-what to run, rather than `schema "pgmq" does not exist` from somewhere deep in the driver:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS pgmq;
-```
-
-The extension has to be on the server first. `ghcr.io/pgmq/pg17-pgmq` is an image that ships it, and
-managed Postgres that offers queues generally has it already.
-
-### For a queue in another database
-
-`PgmqSink` (no type argument) opens its own connections from an `NpgsqlDataSource`:
-
-```csharp
-builder.Services.AddPgmqSink(NpgsqlDataSource.Create(connectionString), pgmq => pgmq.UseQueue("events"));
-
-// and on the outbox:
-outbox.SendToPgmq();
-```
-
-There is no shared transaction on that path, so it is at-least-once like any other remote sink. Use it
-when the queue genuinely lives somewhere else.
-
-## Through a broker: Wolverine
-
-`DDDToolkit.Messaging.Wolverine` makes Wolverine the transport between the outbox of one process and the
-inbox of another. Wolverine carries the message; the toolkit keeps the outbox that writes it in the
-aggregate's transaction and the inbox that applies it once. Wolverine's own outbox, inbox and sagas are
-not used, so there is one of each rather than two that disagree.
-
-Messages travel the way Wolverine sends anything: each contract is a message type of its own, and
-Wolverine's routing decides where it goes. With RabbitMQ's conventional routing every contract type gets a
-fanout exchange, and every service that handles the type a queue bound to it. What the contract does not
-carry travels in headers, the same ones the pgmq sink writes (`IntegrationEventHeaders`): the outbox's
-message id, the published name and version, the time and the aggregate.
-
-```csharp
-builder.Services.AddFulfilmentModules(...);   // first: the modules say what this service handles
-
-builder.UseWolverine(wolverine =>
+public static class IntegrationEventExtensions
 {
-    wolverine.UseRabbitMq(rabbitUri)
-        .AutoProvision()
-        .UseConventionalRouting(conventions => conventions
-            .QueueNameForListener(type => $"fulfilment.{type.Name}")      // a queue per service and contract
-            .ConfigureListeners((listener, _) => listener.ProcessInline())
-            .ConfigureSending((sender, _) => sender.SendInline()));
+    // ... the overload for the outbox, which registers nothing: Billing raises no domain event
 
-    // a handler per contract this service has to be sent; retries, then the error queue
-    wolverine.ReceiveIntegrationEvents(builder.Services.IntegrationEventSubscriptions());
-    wolverine.Policies.DisableConventionalLocalRouting();    // what this process publishes goes to the broker
-});
-
-// the outbox of each module
-options.UseOutbox<OrderingContext>(outbox => outbox.SendToWolverine());
-```
-
-`WolverineSink` publishes the contract through `IMessageBus`. `ReceiveIntegrationEvents` adds an
-`IntegrationEventHandler<TContract>` to Wolverine's discovery for every contract the modules handle and
-this process does not publish itself, so Wolverine listens for exactly those types; nothing names a
-contract by hand. The handler hands the message to `IntegrationEventReceiver`, which delivers it to the
-modules of the process, each handler inside its module's inbox. When a handler throws, Wolverine retries
-with a cooldown and then moves the message to its error queue; a retry cannot apply anything twice.
-
-Three things to get right. Name the listener queues per service, as above, or two services that handle
-one contract share a queue and each get half the messages. Listen inline (`ProcessInline()`), so a message
-is acknowledged after the modules applied it; a buffered listener acknowledges first, and a crash in
-between loses the message. And
-reference `WolverineFx.RuntimeCompilation` in the process, because Wolverine compiles its handler adapters
-at start-up and since 6.x ships that compiler separately. `Examples/Microservices.Wolverine` runs the shop
-this way.
-
-## Through a broker: MassTransit
-
-`DDDToolkit.Messaging.MassTransit` does the same with MassTransit: each contract a message type of its
-own, published and consumed as MassTransit does any message, the same receiver behind it, MassTransit's
-own outbox and sagas left out. It is built on **MassTransit 8**,
-the last major version under the Apache 2.0 licence; 9 and later are commercial, and moving to them is
-for whoever deploys the software to decide.
-
-```csharp
-builder.Services.AddFulfilmentModules(...);   // first: the modules say what this service handles
-
-builder.Services.AddMassTransit(bus =>
-{
-    // a consumer per contract the modules handle and another service publishes
-    bus.AddIntegrationEventConsumers(builder.Services.IntegrationEventSubscriptions());
-
-    bus.UsingRabbitMq((context, rabbit) =>
+    public static IntegrationEventContractRegistry AddBillingIntegrationEvents(this IntegrationEventContractRegistry contracts)
     {
-        rabbit.Host(rabbitUri);
+        ArgumentNullException.ThrowIfNull(contracts);
+        contracts.Register<OrderPlacedV2>("ordering.order-placed", 2);
+        return contracts;
+    }
 
-        // this service's queue; MassTransit binds it to the exchange of every contract its consumers take
-        rabbit.ReceiveEndpoint("fulfilment", endpoint =>
-        {
-            endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
-            endpoint.ConfigureConsumers(context);
-        });
-    });
-});
-
-// the outbox of each module
-options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());
-```
-
-`MassTransitSink` publishes the contract through `IPublishEndpoint`, so MassTransit gives it the exchange of
-its type, with the outbox's message id as MassTransit's message id and the toolkit's headers alongside.
-`IntegrationEventConsumer<TContract>` hands it to `IntegrationEventReceiver`; MassTransit acknowledges it
-when the consumer returns, retries it as the endpoint says when a handler throws, and then moves it to the
-endpoint's error queue.
-
-One thing to know: MassTransit has an `AddMediator` of its own on `IServiceCollection`. In a file that
-imports the `MassTransit` namespace, the [Mediator](https://github.com/martinothamar/Mediator) source
-generator no longer reads the options of your `AddMediator` call, and the process stops at start-up saying
-it generated for another lifetime. Configure MassTransit in a file of its own, as
-`Examples/Microservices.MassTransit` does in each service's `RabbitMq.cs`.
-
-## For screens: the GraphQL subscription sink
-
-`DDDToolkit.HotChocolate` has a third sink, and it is a different axis from the two above.
-
-The module sink and pgmq are integration: durable, retried, and the receiver gets the message whether or
-not it was running at the time. A GraphQL subscription is none of that. Nothing is stored, only the
-clients holding a socket right now are reached, and a client that reconnects has missed whatever happened
-while it was away.
-
-Use it to keep a browser in step with the server. Never as the path by which some other part of the
-system learns that an order was placed.
-
-```csharp
-builder.Services.AddIntegrationEventSubscriptions(map => map.Publish<OrderPlacedV2>("orderPlaced"));
-
-outbox.SendTo<GraphQlSubscriptionSink>();
-```
-
-See [Subscriptions](graphql.md#pushing-integration-events-to-subscribers) for the subscription field, the
-transports, and why it publishes the contract rather than the domain event.
-
-## Writing a sink of your own
-
-One method, one message, one cancellation token. Return and the transport accepted it. Throw and it did
-not.
-
-```csharp
-public interface IIntegrationEventSink
-{
-    Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken = default);
-}
-```
-
-```csharp
-using DDDToolkit.BaseTypes;
-using DDDToolkit.Interfaces;
-
-public sealed class WebhookSink(HttpClient client) : IIntegrationEventSink
-{
-    public async Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken)
+    public static ModuleIntegrationEvents<TContext> AddBillingIntegrationEvents<TContext>(this ModuleIntegrationEvents<TContext> module) where TContext : DbContext
     {
-        using var content = new StringContent(message.Payload, Encoding.UTF8, message.ContentType);
-        content.Headers.Add("X-Message-Id", message.MessageId.ToString());
-        content.Headers.Add("X-Message-Name", $"{message.Name}/v{message.Version}");
-
-        var response = await client.PostAsync("/events", content, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        ArgumentNullException.ThrowIfNull(module);
+        module.Handle<OrderPlacedV2, RaiseInvoice>("ordering.order-placed", "billing.invoicer", static services => new RaiseInvoice(ServiceProviderServiceExtensions.GetRequiredService<BillingContext>(services)));
+        return module;
     }
 }
 ```
 
-A sink for a real broker is the same shape. Topic from `Name`, deduplication id from `MessageId`,
-partition key from `AggregateId`, body from `Payload`:
+Line by line, that is everything the two modules register:
 
-```csharp
-public sealed class ServiceBusSink(ServiceBusSender sender) : IIntegrationEventSink
-{
-    public Task SendAsync(IntegrationEventMessage message, CancellationToken cancellationToken)
-        => sender.SendMessageAsync(
-            new ServiceBusMessage(message.Payload)
-            {
-                MessageId = message.MessageId.ToString(),
-                Subject = message.Name,
-                PartitionKey = message.AggregateId,
-                ContentType = message.ContentType,
-                ApplicationProperties = { ["version"] = message.Version },
-            },
-            cancellationToken);
-}
-```
+- `RegisterEvent<OrderPlaced>("OrderPlaced", 1)` puts the domain event in the outbox's map from stored
+  name to type, which the processor reads a row back through. The name is the event's
+  `[DomainEventName]`, and `OrderPlaced` has none, so it is the class name; the version is its
+  `[IntegrationEvent(Version = n)]`, otherwise 1. Every concrete domain event declared in the project is
+  listed, whether it leaves the module or not, because the outbox stores all of them.
+- `PublishWith<OrderPlaced, OrderPlacedV2>(...)` is the entry `PublishAs` would have made, with a class
+  instead of a lambda: the contract's published name and version, read off its `[IntegrationEvent]`, and
+  the code that builds `PublishOrderPlaced` for each message. The published name is also how this process
+  knows it publishes `ordering.order-placed` itself, so a [transport](transports.md) does not ask a broker
+  for it.
+- `contracts.Register<OrderPlacedV2>("ordering.order-placed", 2)` tells the contract registry which type a
+  payload of that name and version is read as. The module sink and the inbox read through it. Only the
+  contracts this module's handlers take are listed, not the ones it publishes.
+- `module.Handle<OrderPlacedV2, RaiseInvoice>(...)` does three things. It registers `RaiseInvoice` in the
+  container as scoped, built by the lambda. It adds the handler to Billing's consumers under
+  `billing.invoicer`, the name its inbox rows carry. And it records that this process handles
+  `ordering.order-placed`, which is what a transport subscribes to.
 
-`SendTo<TSink>()` takes the sink from the scope the processor runs in when you registered it there, and
-otherwise builds it with its constructor services injected. `SendTo(sink)` takes an instance you already
-have, which is what tests usually want.
-
-### Why an envelope and not the event
-
-The sink receives an `IntegrationEventMessage`, not an `IDomainEvent` and not the outbox row. Both of
-those were considered and neither is right.
-
-Handing a sink the `IDomainEvent` makes every sink responsible for serializing it, which means every sink
-has to know your JSON options, and it quietly puts the domain type on the wire. Handing it the
-`OutboxMessage` row is worse: that row carries `Attempts`, `ProcessedAt` and `LastError`, which are this
-process's bookkeeping and no transport's business, and it drags Entity Framework into the signature. A
-sink project would then have to reference `DDDToolkit.EntityFramework` to send an HTTP request.
-
-The envelope is neither. It lives in the core `DDDToolkit` package, it has no Entity Framework types at
-all, and it carries exactly what a transport routes on:
-
-| Member | What it is |
-|---|---|
-| `MessageId` | The idempotency key. The domain event's `EventId`, which is also the outbox row's key |
-| `Name` | What consumers route on |
-| `Version` | The schema version of `Payload` |
-| `Payload` | The serialized body |
-| `ContentType` | `application/json` unless you change it |
-| `OccurredAt` | When the thing happened, not when delivery was attempted |
-| `AggregateType` | CLR type name of the aggregate it came from |
-| `AggregateId` | The aggregate's key as text. Useful as a partition key |
-| `Body` | The object `Payload` came from, for transports that speak CLR objects |
-
-One identifier runs the whole way. `EventId` on the event, `Id` on the outbox row, `MessageId` on the
-envelope, `MessageId` on the consumer's inbox row. That is deliberate, and it is what makes the
-guarantees below add up.
-
-## Saying what gets published
-
-By default, nothing is mapped and the domain event is published as it stands, under the name the outbox
-stored, reusing the JSON already in the row. No second type, no second serialization, no configuration.
-If you are not ready to split the two yet, you pay nothing for the seam being there.
-
-When you are ready, register a conversion:
-
-```csharp
-[IntegrationEvent("ordering.order-placed", Version = 2)]
-public sealed record OrderPlacedV2(Guid OrderId, string Customer, decimal Total, string Currency);
-```
-
-```csharp
-options.UseOutbox<OrderingContext>(outbox =>
-{
-    outbox.RegisterEventsFromAssemblyContaining<Order>();
-    outbox.SendToModules();
-
-    outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => new OrderPlacedV2(
-        e.OrderId.Value,
-        e.Customer.Value,
-        e.Total.Amount,
-        e.Total.Currency));
-});
-```
-
-Now `OrderPlaced` can grow a field, lose a field or be renamed, and the wire is untouched until you change
-`OrderPlacedV2` on purpose.
-
-Two more things that map:
-
-```csharp
-// This event is nobody else's business. Local handlers still get it; no sink is called.
-outbox.DoNotPublish<CustomerCreditChecked>();
-
-// Publish only some occurrences. Returning null drops that one message.
-outbox.PublishAs<OrderPlaced, OrderPlacedV2>(e => e.Total.Amount < 1000 ? null : Map(e));
-```
-
-`[IntegrationEvent]` pins the name and the version. Without it a contract falls back to
-`[DomainEventName]`, and without that to the class name, with version 1. See
-[Domain events](domain-events.md#stable-names) for why the name has to be pinned at all.
-
-### A class per published event
-
-A lambda is fine for one line. It stops being fine when a module publishes five events and its
-registration turns into the place where every contract is assembled, and it cannot grow: it has no
-services and it cannot await. The translation is application code, and it belongs next to the aggregate
-it publishes for, not in the composition root.
-
-So the same seam also takes a class, the outbound counterpart of `IIntegrationEventHandler<TContract>`:
-
-```csharp
-public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
-{
-    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
-        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
-}
-```
-
-```csharp
-options.UseOutbox<OrderingContext>(outbox =>
-{
-    outbox.AddOrderingIntegrationEvents();   // generated: every domain event and every IOutboundIntegrationEvent in the module
-    outbox.SendToModules();
-});
-```
-
-A class may implement the interface more than once to publish several events. Everything else is as for
-`PublishAs`: returning `null` drops that occurrence, a domain event has one entry however it was registered
-(a second one throws at start-up), and events with no entry are published as they stand.
-
-The class is built with `new` once per message, each constructor parameter taken from the scope the outbox
-processor runs in. Throwing from it fails the delivery the way a failing sink does: the error is recorded
-on the row and the message is retried.
-
-### Registered when the module compiles
-
-`DDDToolkit.EntityFramework.Analyzers` writes a module's integration event registration as code, one
-`Add{Module}IntegrationEvents()` for each of the three places that need it, in the namespace
-`{assembly}.IntegrationEvents`:
-
-```csharp
-// <auto-generated/>, in DDDToolkit.Examples.Ordering
-public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
-{
-    outbox.RegisterEvent<OrderPlaced>("OrderPlaced", 1);
-    outbox.PublishWith<OrderPlaced, OrderPlacedV1>("ordering.order-placed", 1, static services => new PublishOrderPlaced());
-    // ...
-}
-
-public static IntegrationEventContractRegistry AddOrderingIntegrationEvents(this IntegrationEventContractRegistry contracts)
-{
-    contracts.Register<StockReservedV1>("inventory.stock-reserved", 1);
-    // ...
-}
-
-public static ModuleIntegrationEvents<TContext> AddOrderingIntegrationEvents<TContext>(this ModuleIntegrationEvents<TContext> module)
-{
-    module.Handle<StockReservedV1, RecordStockReservation>("inventory.stock-reserved", "ordering.checkout.stock-reserved",
-        static services => new RecordStockReservation(ServiceProviderServiceExtensions.GetRequiredService<OrderingContext>(services)));
-    // ...
-}
-```
+`BillingContext` in that lambda comes from the handler's constructor. The constructor with the most
+parameters is the one called, and each parameter is taken from the scope the message is delivered in:
+`GetRequiredService` for an ordinary parameter, `GetService` for a reference type with a default value,
+and the scope itself for an `IServiceProvider`.
 
 Everything the run-time registration would read off attributes is read by the compiler instead and written
 out as literals: the stored name and version of every domain event (`[DomainEventName]`,
@@ -672,25 +526,12 @@ look names up in the registries rather than asking a type. Nothing is scanned, r
 reflection; add a handler class and the next build registers it.
 
 A class the registration cannot build with `new` is left out and reported as a warning, DDD00033: one
-with two equally long constructors, one whose parameter types the module cannot see, one with `ref` or
-`params` parameters. The reflection-based registrations (`RegisterEventsFromAssemblyContaining`,
-`RegisterFromAssemblyContaining`, `Handle<TContract, THandler>()`) still work for code without the
-generator.
+with no constructor the module can call, one whose two longest constructors are equally long, one whose
+parameter types the module cannot see, one with `ref`, `out` or `params` parameters. The reflection-based
+registrations (`RegisterEventsFromAssemblyContaining`, `RegisterFromAssemblyContaining`,
+`Handle<TContract, THandler>()`) work for code without the generator.
 
-Name it for what it does, like a handler: `PublishOrderPlaced` next to `BookShipment` and `RecordPayment`.
-Avoid "Publisher", because it sends nothing. The sink does that.
-
-### Where the mapping happens
-
-The outbox row always stores the domain event. The conversion runs at delivery, not at save.
-
-That is a deliberate trade. It keeps the row a faithful record of what actually happened in the domain, it
-means the in-process path and the sink path read the same row, and it means fixing a wrong mapping is a
-deployment rather than a data migration: reset `Attempts` and the rows go out again in the new shape. The
-cost is that the domain event type must still exist and still deserialize when the processor runs, which
-is what [the next section](#versioning-and-upcasting) is about.
-
-### Enriching a contract, and what not to read
+## Enriching a contract, and what not to read
 
 Because a class can take services, it can add something the domain event does not carry, such as
 reading a product's name from the module's own read model. Be careful what you read, because of when it
@@ -706,10 +547,11 @@ same message id, which the first consumer's inbox then ignores.
 | Data that has to be right as of the event (a price, an address, a status) | **The domain event.** Add it there, not in the class. |
 | Data owned by another module | Neither. Keep a read model of it in this module, fed by that module's events. |
 
-The class reads and never writes. With `DeliverInTransaction` a write would commit together with the
-mark that says the message went out.
+The class reads and never writes. With
+[`DeliverInTransaction`](transports.md#when-a-module-becomes-its-own-deployable-pgmq) a write would commit
+together with the mark that says the message went out.
 
-### There is one way out, and a "no" takes it too
+## There is one way out, and a "no" takes it too
 
 An integration event is always a translation of a domain event, and a domain event only reaches the
 outbox when an aggregate raised it: the save collects them from the tracked aggregates and writes them in
@@ -745,7 +587,7 @@ if (!new Money(contract.Total, contract.Currency).TryToValid(out var total, out 
 A synchronous caller is different: an invalid request changed nothing and nobody else needs to hear
 about it, so it gets a `ValidationProblem` and nothing is published.
 
-### Where the classes live
+## Where the classes live
 
 In the example shop each module keeps both directions next to the aggregate or read model they belong
 to, split by kind and by direction:
@@ -766,126 +608,7 @@ Application/
 
 Every outbound class has an owner, because every domain event is raised by an aggregate. An inbound one
 belongs to the aggregate or read model it changes. The overview of what a module promises the others is
-its `*.Contracts` project.
-
-## Versioning and upcasting
-
-`[DomainEventName]` keeps the name stable while you rename the class. Nothing kept the **shape** stable,
-and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
-queued it, or is about to read it back. A payload written before a deployment has to stay readable after
-it.
-
-Two places have to hold, and the toolkit covers both.
-
-### The outbox reading its own old rows
-
-Every outbox row records the shape it was written in, in a `Version` column, taken from
-`[IntegrationEvent(Version = n)]` on the event type. An event that never changed shape says nothing and is
-version 1.
-
-When the processor reads a row whose version matches the type registered under that name, which is every
-row until you bump something, nothing changes. When it does not match, the processor reads the payload as
-the type registered for that older version and then upcasts it.
-
-```csharp
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 1)]
-public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;
-
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 2)]
-public sealed record OrderPlaced(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;
-```
-
-```csharp
-options.MapIntegrationEvents(contracts => contracts
-    .UpcastFrom<OrderPlacedV1, OrderPlaced>(v1 => new OrderPlaced(v1.OrderId, v1.Total, Channel.Unknown)));
-```
-
-Both attributes carry the same name on purpose. `[DomainEventName]` is what the outbox stores in the row,
-`[IntegrationEvent]` is what says which shape that row is, and a version means nothing unless the two
-agree. Giving them different names is refused at registration rather than left to be discovered later.
-
-Keeping two types under one domain event name is fine. `RegisterEvent` and `RegisterEventsFromAssembly`
-keep the newest as the type new events are written as, and the older one is only ever read.
-
-A row whose shape nobody kept is not guessed at. The message fails, `LastError` names the version and the
-call that would fix it, and the row waits for a human.
-
-### A consumer reading a message
-
-The same registry reads on the receiving side, so a handler is written against one shape and never
-branches on a version number:
-
-```csharp
-await inbox.ExecuteOnceAsync<OrderPlacedV2>(message, "billing.invoicer", (order, received, token) =>
-{
-    context.Invoices.Add(new Invoice(order.OrderId, order.Total));
-    return Task.CompletedTask;
-});
-```
-
-A v1 message arrives, is deserialized as `OrderPlacedV1`, is upcast, and reaches the handler as
-`OrderPlacedV2`. The module sink does the same thing for every handler it calls, so a handler typed on the
-current contract keeps working when an older message turns up.
-
-### The rules
-
-- **Bump the version when you break the payload.** Removing a field, renaming one, or changing its meaning
-  is a break. Adding an optional one is not.
-- **Register the step, not the jump.** v1 to v2 and v2 to v3, and a v1 payload arrives as v3. Adding v4
-  later is one more line instead of a rewrite of every upcaster you have.
-- **An upcaster invents the fields the old payload never had.** That is unavoidable and it is the reason a
-  version bump is a decision. Write a substitute the consumer can tell apart, such as an explicit
-  `Unknown`, not a value that looks like real data.
-- **Never delete the old record.** It is the only thing that can read a payload written against it. It
-  costs a file.
-- **An upcaster is a pure function.** It runs on the read path, possibly for every message in a backlog.
-  Do not put a database call in it.
-
-The version also travels on the envelope, so a consumer that has not adopted upcasting can still branch on
-`message.Version` without parsing the body first.
-
-## Which delivery wins
-
-| Configured | What the processor does |
-|---|---|
-| `DispatchInProcess` only | Calls the delegate with the domain event |
-| One or more `SendTo` | Publishes the message to every sink. The delegate is not called |
-| Both | Sinks win. The delegate is skipped |
-| Both, plus `AlsoDispatchInProcess = true` | Delegate first with the domain event, then the sinks with the contract |
-
-```csharp
-options.UseOutbox<OrderingContext>(outbox =>
-{
-    outbox.SendToModules();
-    outbox.AlsoDispatchInProcess = true;   // handlers inside this module, and the other modules
-});
-```
-
-With `AlsoDispatchInProcess`, a throwing local handler fails the message before any sink sees it. That is
-the right order: publishing a message whose local side effect failed would be a lie.
-
-Use the delegate for handlers inside the producing module, which may legitimately see the domain event,
-and the module sink for everything outside it.
-
-A processor with neither a sink nor a delegate throws at construction, naming both calls.
-
-## When one sink fails and another does not
-
-Every sink is attempted, in registration order. A sink that throws does not stop the sinks behind it.
-
-The message as a whole then counts as failed. It is not marked processed, `Attempts` goes up, and
-`LastError` records an `IntegrationEventDeliveryException` naming the sinks that threw. The next run hands
-the message to **all** the sinks again, including the ones that already accepted it.
-
-That is the honest consequence of one row per message. Per-sink progress would need one row per sink per
-message, which is a different table and a different set of failure modes, and it is not what this package
-does. Two sinks over the same outbox means both must tolerate a repeat. If one of your transports cannot,
-give it its own outbox table and its own processor, or put a queue in front of it.
-
-The module sink is the exception, and only because it keeps that bookkeeping itself: it has an inbox row
-per consumer in each consuming module, so its handlers do make per-consumer progress across a retry.
+its `*.Contracts` project; see [Module contracts](module-contracts.md#a-project-of-its-own).
 
 ## The inbox on the other side
 
@@ -973,14 +696,141 @@ throws instead, because only the caller can roll that back; their retry then fin
 It also does not order anything. If message B arrives before message A, the inbox applies B. Handlers that
 care about order have to say so themselves, usually with a version or a sequence number in the payload.
 
+## Versioning and upcasting
+
+`[DomainEventName]` keeps the name stable while you rename the class. Nothing kept the **shape** stable,
+and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
+queued it, or is about to read it back. A payload written before a deployment has to stay readable after
+it.
+
+Two places have to hold, and the toolkit covers both.
+
+### The outbox reading its own old rows
+
+Every outbox row records the shape it was written in, in a `Version` column, taken from
+`[IntegrationEvent(Version = n)]` on the event type. An event that never changed shape says nothing and is
+version 1.
+
+When the processor reads a row whose version matches the type registered under that name, which is every
+row until you bump something, nothing changes. When it does not match, the processor reads the payload as
+the type registered for that older version and then upcasts it.
+
+```csharp
+[DomainEventName("ordering.order-placed")]
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;
+
+[DomainEventName("ordering.order-placed")]
+[IntegrationEvent("ordering.order-placed", Version = 2)]
+public sealed record OrderPlaced(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;
+```
+
+```csharp
+options.MapIntegrationEvents(contracts => contracts
+    .UpcastFrom<OrderPlacedV1, OrderPlaced>(v1 => new OrderPlaced(v1.OrderId, v1.Total, Channel.Unknown)));
+```
+
+Both attributes carry the same name on purpose. `[DomainEventName]` is what the outbox stores in the row,
+`[IntegrationEvent]` is what says which shape that row is, and a version means nothing unless the two
+agree. `RegisterEvent<TEvent>()` and `RegisterEventsFromAssembly` refuse two different names when they
+register the event. The generated registration takes the name from one attribute and the version from the
+other without comparing them, so there it is up to you to keep them the same; a mismatch shows only when
+an older row cannot be read.
+
+Keeping two types under one domain event name is fine. `RegisterEvent` and `RegisterEventsFromAssembly`
+keep the newest as the type new events are written as, and the older one is only ever read.
+
+A row whose shape nobody kept is not guessed at. The message fails, `LastError` names the version and the
+call that would fix it, and the row waits for a human.
+
+An outbox table created by an earlier 3.0 build may not have the `Version` column yet; see
+[From an earlier 3.0 build](migrating-to-3.md#from-an-earlier-30-build).
+
+### A consumer reading a message
+
+The same registry reads on the receiving side, so a handler is written against one shape and never
+branches on a version number:
+
+```csharp
+await inbox.ExecuteOnceAsync<OrderPlacedV2>(message, "billing.invoicer", (order, received, token) =>
+{
+    context.Invoices.Add(new Invoice(order.OrderId, order.Total));
+    return Task.CompletedTask;
+});
+```
+
+A v1 message arrives, is deserialized as `OrderPlacedV1`, is upcast, and reaches the handler as
+`OrderPlacedV2`. The module sink does the same thing for every handler it calls, so a handler typed on the
+current contract keeps working when an older message turns up.
+
+### The rules
+
+- **Bump the version when you break the payload.** Removing a field, renaming one, or changing its meaning
+  is a break. Adding an optional one is not.
+- **Register the step, not the jump.** v1 to v2 and v2 to v3, and a v1 payload arrives as v3. Adding v4
+  later is one more line instead of a rewrite of every upcaster you have.
+- **An upcaster invents the fields the old payload never had.** That is unavoidable and it is the reason a
+  version bump is a decision. Write a substitute the consumer can tell apart, such as an explicit
+  `Unknown`, not a value that looks like real data.
+- **Never delete the old record.** It is the only thing that can read a payload written against it. It
+  costs a file.
+- **An upcaster is a pure function.** It runs on the read path, possibly for every message in a backlog.
+  Do not put a database call in it.
+
+The version also travels on the envelope, so a consumer that has not adopted upcasting can still branch on
+`message.Version` without parsing the body first.
+
+## Which delivery wins
+
+| Configured | What the processor does |
+|---|---|
+| `DispatchInProcess` only | Calls the delegate with the domain event |
+| One or more `SendTo` | Publishes the message to every sink. The delegate is not called |
+| Both | Sinks win. The delegate is skipped |
+| Both, plus `AlsoDispatchInProcess = true` | Delegate first with the domain event, then the sinks with the contract |
+
+```csharp
+options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.SendToModules();
+    outbox.AlsoDispatchInProcess = true;   // handlers inside this module, and the other modules
+});
+```
+
+With `AlsoDispatchInProcess`, a throwing local handler fails the message before any sink sees it. That is
+the right order: publishing a message whose local side effect failed would be a lie.
+
+Use the delegate for handlers inside the producing module, which may legitimately see the domain event,
+and the module sink for everything outside it.
+
+A processor with neither a sink nor a delegate throws at construction, naming both calls.
+
+## When one sink fails and another does not
+
+Every sink is attempted, in registration order. A sink that throws does not stop the sinks behind it.
+
+The message as a whole then counts as failed. It is not marked processed, `Attempts` goes up, and
+`LastError` records an `IntegrationEventDeliveryException` naming the sinks that threw. The next run hands
+the message to **all** the sinks again, including the ones that already accepted it.
+
+That is the honest consequence of one row per message. Per-sink progress would need one row per sink per
+message, which is a different table and a different set of failure modes, and it is not what this package
+does. Two sinks over the same outbox means both must tolerate a repeat. If one of your transports cannot,
+give it its own outbox table and its own processor, or put a queue in front of it.
+
+The module sink is the exception, and only because it keeps that bookkeeping itself: it has an inbox row
+per consumer in each consuming module, so its handlers do make per-consumer progress across a retry.
+
 ## The guarantees, honestly
 
 - **At-least-once, end to end.** Every hop can repeat. The outbox marks a row processed only after delivery
   returned, a queue redelivers what was not archived, and a retry redelivers to sinks that already accepted
   the message. Nothing anywhere is exactly-once on the wire.
-- **Two exceptions, both narrow.** With `DeliverInTransaction` and a sink that writes to the same database,
-  the delivery and the mark commit together, so that one hop does not repeat. And the module sink's inbox
-  rows mean a consumer that already applied a message is skipped rather than run again.
+- **Two exceptions, both narrow.** With
+  [`DeliverInTransaction`](transports.md#when-a-module-becomes-its-own-deployable-pgmq) and a sink that
+  writes to the same database, the delivery and the mark commit together, so that one hop does not repeat.
+  And the module sink's inbox rows mean a consumer that already applied a message is skipped rather than
+  run again.
 - **Idempotency is keyed on `MessageId`.** It is the domain event's `EventId`, stable across every
   redelivery, and it is what the inbox stores. If you write your own deduplication, key it on that and
   nothing else.
@@ -1009,8 +859,8 @@ SQLite has no schemas. Its provider drops the schema when it writes an identifie
 `OutboxMessages` and `InboxMessages` there and everything works unchanged. Nothing to configure and nothing
 to work around.
 
-pgmq creates its own tables in its own `pgmq` schema. It is not part of your model and you do not migrate
-it.
+[pgmq](transports.md#when-a-module-becomes-its-own-deployable-pgmq) creates its own tables in its own
+`pgmq` schema. It is not part of your model and you do not migrate it.
 
 The inbox table is four columns:
 
@@ -1047,10 +897,6 @@ They take the same `tableName` and `schema` you gave the model builder, so pass 
 places. They create the schema first where the provider has schemas, and leave the schema off entirely
 where it does not. The shapes are checked against the model in the tests, so a hand-written migration and a
 scaffolded one produce the same table.
-
-Upgrading an outbox table that predates the `Version` column: add it as a non-nullable `int` with a default
-of 1, which is what every existing row was written as. A column added without a default reads as 0, and the
-processor treats that as 1 for the same reason, so an upgrade that forgets the default still works.
 
 ## Keeping the tables small
 
@@ -1095,16 +941,18 @@ await retention.DeleteDeliveredOutboxMessagesAsync(DateTimeOffset.UtcNow.AddDays
 
 ## Where to look next
 
+- [Transports](transports.md) for pgmq, Wolverine, MassTransit, and writing a sink of your own.
+- [Module contracts](module-contracts.md) for why a module publishes contracts, and where to keep them.
 - [Domain events](domain-events.md) for raising, draining and `[DomainEventName]`.
-- [Entity Framework](entity-framework.md#domain-event-delivery) for the outbox itself, the processor,
-  retries and `MaxAttempts`.
+- [Delivering domain events](event-delivery.md) for the outbox itself, the processor, retries and
+  `MaxAttempts`.
 - [GraphQL](graphql.md#pushing-integration-events-to-subscribers) for the subscription sink.
 - `Tests/DDDToolkit.EntityFramework.Tests/ModuleIntegrationEventTests.cs` for the module sink and the
   per-consumer retry behaviour.
-- `Tests/DDDToolkit.EntityFramework.Tests/PgmqSinkTests.cs` for the transactional enqueue, against a real
-  Postgres.
+- `Tests/DDDToolkit.EntityFramework.Tests/OutboundIntegrationEventTests.cs` for the outbound classes.
+- `Tests/DDDToolkit.Analyzers.Tests/Integrations/IntegrationEventsGeneratorTests.cs` for the generated
+  registration and DDD00033.
 - `Tests/DDDToolkit.EntityFramework.Tests/EventVersioningTests.cs` for upcasting on both read paths.
-- `Tests/DDDToolkit.EntityFramework.Tests/OutboxTransactionTests.cs` for `DeliverInTransaction`.
 - `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract and the
   multi-sink failure behaviour.
 - `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, a

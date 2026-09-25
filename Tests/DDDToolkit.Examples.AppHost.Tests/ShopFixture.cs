@@ -25,6 +25,9 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
     /// <summary>The resources that have to be healthy before a scenario may run.</summary>
     protected virtual IEnumerable<string> ResourcesToWaitFor => [ShopResource];
 
+    /// <summary>What the AppHost is started with, as on its command line: a variant of the sample, for instance.</summary>
+    protected virtual string[] Arguments => [];
+
     /// <summary>An HTTP client for <paramref name="resource"/>, the shop's own when left out.</summary>
     public HttpClient Client(string? resource = null)
         => (_app ?? throw new InvalidOperationException("The sample has not started."))
@@ -48,7 +51,7 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
         }
 
         var builder = await DistributedApplicationTestingBuilder.CreateAsync<TAppHost>(
-            [],
+            Arguments,
             (options, settings) => options.DisableDashboard = true,
             TestContext.Current.CancellationToken);
 

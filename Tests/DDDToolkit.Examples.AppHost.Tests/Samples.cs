@@ -17,6 +17,22 @@ public sealed class SupabaseMonolith : ShopFixture<Projects.DDDToolkit_Examples_
 public sealed class ModularMonolithOnSupabase(SupabaseMonolith shop)
     : ShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolith>;
 
+public sealed class SupabaseMonolithOverQueues : ShopFixture<Projects.DDDToolkit_Examples_Supabase_AppHost>
+{
+    protected override string ShopResource => "monolith";
+
+    protected override string[] Arguments => ["--Messaging=pgmq"];
+}
+
+/// <summary>
+/// The same monolith with its modules talking through Supabase Queues, pgmq 1.5.1 as Supabase ships it,
+/// instead of in process: nothing reaches a module except through the queue.
+/// </summary>
+[Trait("Category", "Samples")]
+[Trait("Sample", "ModularMonolith.Supabase.Pgmq")]
+public sealed class ModularMonolithOverSupabaseQueues(SupabaseMonolithOverQueues shop)
+    : ShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolithOverQueues>;
+
 public sealed class SqlServerMonolith : ShopFixture<Projects.DDDToolkit_Examples_SqlServer_AppHost>
 {
     protected override string ShopResource => "monolith";

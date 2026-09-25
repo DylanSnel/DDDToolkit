@@ -59,9 +59,9 @@ costs **4 times the memory**: 64 bytes per identifier against 16, which is an 8-
 array plus a 56-byte object holding the object header, the `Guid`, the prefix reference and the two
 validation bookkeeping fields it inherits from `ValueObject`.
 
-Note that 4x is worse than [Identifiers](identifiers.md#struct-or-record) implies. That page counts a
-reference and an object header; it does not mention that the record form also carries the value object
-validation state, which is two more fields per identifier that an identifier never uses.
+That is the same 64 bytes [Identifiers](identifiers.md#struct-or-record) counts. The two fields at the
+end are easy to forget: the record form carries the value object validation state, two fields per
+identifier that an identifier never uses.
 
 The time difference here (1.37x) is mostly garbage collection, and it is the least reliable number on
 this page: the record run had a standard deviation of 13.8 μs against a mean of 58.5 μs, because 625 KB
@@ -194,9 +194,9 @@ after that change.
 
 ## The Entity Framework round trip
 
-The claim under test is the last paragraph of
-[Identifiers](identifiers.md#struct-or-record): *"the struct form costs nothing in persistence"*. Both
-aggregates are the same shape, with the same payload column, keyed differently:
+The question is whether the form of the identifier matters to persistence at all.
+[Identifiers](identifiers.md#struct-or-record) says it does not, on the strength of this measurement.
+Both aggregates are the same shape, with the same payload column, keyed differently:
 
 ```csharp
 [AggregateRoot<StructOrderId>] public partial class StructOrder { ... }
@@ -239,12 +239,12 @@ If you were choosing between the two forms on persistence alone, there would be 
 
 ## What this means for the recommendation
 
-[Identifiers](identifiers.md) says to prefer the struct form. The measurements support that, but not
-always for the reasons the page gives:
+[Identifiers](identifiers.md) says to prefer the struct form. These are the reasons that
+recommendation has rested on, and what the measurements say about each:
 
 | Claim | Verdict |
 |---|---|
-| The struct is 16 bytes and the record adds a reference and a header | True, and understated: 64 bytes against 16, because the record also carries validation state. |
+| The struct is 16 bytes and the record adds a reference and a header | True, and more than it sounds: 64 bytes against 16, because the record also carries validation state. |
 | A list of ten thousand is one block instead of ten thousand objects | True. Reading through the reference costs about 20%. |
 | The struct costs nothing in persistence | True. So does the record: this is not a reason to choose either. |
 | (unstated) Equality and hashing | Was the strongest reason by far, at 17x to 70x with allocation on every comparison. Writing this page found the cause and it is fixed; the gap is now 1.4x to 2.5x with nothing allocated. |
