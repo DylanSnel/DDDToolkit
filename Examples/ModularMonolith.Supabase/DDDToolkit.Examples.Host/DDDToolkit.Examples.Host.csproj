@@ -49,6 +49,8 @@
     <ProjectReference Include="..\..\Modules\Payments\DDDToolkit.Examples.Payments\DDDToolkit.Examples.Payments.csproj" />
     <ProjectReference Include="..\..\Modules\Shipping\DDDToolkit.Examples.Shipping\DDDToolkit.Examples.Shipping.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+    <!-- Supabase Queues, when the host runs with Messaging=pgmq. -->
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.Hosting\DDDToolkit.Examples.Hosting.csproj" />
     <ProjectReference Include="..\..\Shared\DDDToolkit.Examples.ServiceDefaults\DDDToolkit.Examples.ServiceDefaults.csproj" />
     <!-- The shop's GraphQL schema: every module's part, and the fields that cross between them. -->

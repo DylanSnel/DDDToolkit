@@ -18,7 +18,7 @@ way to run it. Each sample is a different way, over the very same modules:
 
 | Sample | Topology | Database | Messages travel by |
 |---|---|---|---|
-| `ModularMonolith.Supabase/` | one process | SQLite, or Postgres/Supabase | the module sink, in process |
+| `ModularMonolith.Supabase/` | one process | SQLite, or Postgres/Supabase | the module sink, in process; or Supabase Queues, with `Messaging=pgmq` |
 | `ModularMonolith.SqlServer/` | one process | SQL Server | the module sink, in process |
 | `Microservices.Pgmq/` | three services and a gateway | one Postgres, a schema per module | pgmq: a queue per service, in the same database |
 | `Microservices.Wolverine/` | three services and a gateway | a database per service: SQL Server and Postgres | RabbitMQ, through Wolverine |
@@ -209,9 +209,10 @@ supabase start          # a local Supabase in Docker; applies supabase/migration
 dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
 ```
 
-The AppHost's container is plain Postgres: it runs every file in `supabase/migrations` on its first
-start, in name order, which is what Supabase does with them, so the host's start-up check finds every
-migration applied. The `supabase` launch profile points at the CLI's local database on port 54322.
+The AppHost's container is Postgres 17 with pgmq 1.5.1, the versions a Supabase project has. It runs
+every file in `supabase/migrations` on its first start, in name order, which is what Supabase does with
+them, so the host's start-up check finds every migration applied. The `supabase` launch profile points
+at the CLI's local database on port 54322.
 
 After changing a model,
 scaffold the migration in the module that owns it, and build:
@@ -227,6 +228,29 @@ and the host's project file sets `SupabaseMigrationsExport`: `Write` locally, so
 files a new migration needs, and `Check` in CI, so a pull request that adds a migration without its file
 fails. The files are committed, because Supabase branching reads them from the repository. See
 [Entity Framework → Supabase](../docs/supabase.md) for what the build writes and how.
+
+#### Through Supabase Queues
+
+The same host, with its modules talking through Supabase Queues instead of in process. Every module's
+outbox sends to one pgmq queue, `shop`, in the same database, and the host reads it back into the modules
+through the same inboxes the module sink uses. No module and no handler changes; `OverSupabaseQueues` at
+the bottom of the host's `Program.cs` is the whole difference.
+
+```bash
+# Aspire: the same container, the host with Messaging=pgmq
+dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost --launch-profile pgmq
+
+# Against the Supabase CLI's local stack
+dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host --launch-profile supabase-pgmq
+```
+
+One queue rather than one per module, because Supabase ships pgmq 1.5.1, and the topic routing
+`Microservices.Pgmq` uses to give every service a queue of its own came in pgmq 1.11. The extension is
+turned on by `supabase/migrations/20260925090000_enable_queues.sql`, a migration written by hand next to
+the exported ones; the build's export leaves a file it did not write alone. In the Supabase dashboard the
+queue is under Integrations, Queues, where its messages can be watched as the scenarios run. See
+[Transports](../docs/transports.md#when-a-module-becomes-its-own-deployable-pgmq) for what each pgmq
+version supports.
 
 ### On SQL Server
 
@@ -326,7 +350,10 @@ builder.Services.AddPgmqConsumer(queues, "storefront", consumer => consumer.Bind
 Nothing names another service or a contract. What Storefront is bound to follows from the handlers of
 Catalog and Ordering, less what Storefront publishes itself, which the module sink already delivers.
 
-No broker to run: a queue is a table, and on Supabase it is a Queue you can watch in the dashboard.
+No broker to run: a queue is a table in the database the outbox is already in. Topic routing needs pgmq
+1.11 or later, and Supabase ships 1.5.1 today, so this sample runs on Postgres with pgmq 1.13; on
+Supabase, the monolith [through Supabase Queues](#through-supabase-queues) shows the shape that works
+there.
 `BookShipment` in Shipping is the same class it is in the monolith; it cannot tell that
 `OrderConfirmedV1` came through `pgmq.q_fulfilment` rather than from the module next door.
 
@@ -396,13 +423,14 @@ workflow, one job per sample:
 
 ```bash
 dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.SqlServer"
+dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.Supabase.Pgmq"   # through Supabase Queues
 ```
 
-The Supabase monolith also runs against a real Supabase project, in the Supabase Live workflow. It puts
-the exported `supabase/migrations` on with `supabase db push`, as a deploy would, and plays the same
-scenarios against the project, where the monolith checks on start-up that every migration was applied.
-The project exists for these tests alone: each run first drops the module schemas and forgets their
-migrations. With the repository variable `SUPABASE_BRANCHING` set to `true`, each run gets a preview
+The Supabase monolith also runs against a real Supabase project, in the Supabase Live workflow, twice: in
+process and through Supabase Queues. It puts the exported `supabase/migrations` on with `supabase db push`,
+as a deploy would, and plays the same scenarios against the project, where the monolith checks on
+start-up that every migration was applied. The project exists for these tests alone: each run first
+drops the module schemas and the shop's queue and forgets their migrations. With the repository variable `SUPABASE_BRANCHING` set to `true`, each run gets a preview
 branch of its own instead and deletes it afterwards; branching needs a Supabase Pro organisation. The
 workflow connects through Supabase's pooler, because the database's own host has no IPv4 address and
 GitHub's runners have no IPv6.
@@ -450,14 +478,14 @@ Paths are under `Modules/`.
 | Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
+| Modules talking through Supabase Queues | `OverSupabaseQueues` in `ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`, `supabase/migrations/20260925090000_enable_queues.sql` |
 | The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
 
 There are no repositories. A module's `DbContext` is its repository and unit of work, used directly by
 the endpoints and the policies. The toolkit has no repository abstraction to show, and a wrapper
 around a `DbContext` in a sample would only hide what the toolkit does to it.
 
-What it does not show: Newtonsoft, FluentValidation validators, pgmq, and upcasting an older
-payload. Those have runnable coverage in `Tests/` and a page each in [docs](../docs).
+What it does not show: Newtonsoft, FluentValidation validators, and upcasting an older payload. Those have runnable coverage in `Tests/` and a page each in [docs](../docs).
 
 ## `DDDToolkit.ExampleApi` and `DDDToolkit.ExampleLibrary`
 

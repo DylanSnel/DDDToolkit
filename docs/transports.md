@@ -30,9 +30,26 @@ That one fact is the whole reason this package exists: the enqueue obeys the tra
 No broker can do that, which is why every broker needs an outbox in front of it. On Postgres you get the
 outbox guarantee from the queue itself.
 
-Supabase Queues is this extension with a UI on top, so a Supabase project already has it. The sink
-knows nothing about Supabase; it talks to Postgres through Npgsql and SQL. To have the Supabase CLI
-apply your migrations, see `DDDToolkit.EntityFramework.Supabase` on [Supabase](supabase.md).
+Supabase Queues is this extension with a UI on top. A project has it once Queues is turned on in the
+dashboard, or once a migration runs `create extension if not exists pgmq;`. The sink knows nothing about
+Supabase; it talks to Postgres through Npgsql and SQL. To have the Supabase CLI apply your migrations,
+see `DDDToolkit.EntityFramework.Supabase` on [Supabase](supabase.md).
+
+Which pgmq a database has decides what you can use, and Supabase's is not the newest. A Supabase project
+gets the pgmq that goes with its Postgres version: 1.5.1 on Postgres 17 at the time of writing. Ask a
+project which one it offers:
+
+```sql
+select default_version, installed_version from pg_available_extensions where name = 'pgmq';
+```
+
+| | pgmq | On Supabase's 1.5.1 |
+|---|---|---|
+| Named queues: `UseQueue`, `UseQueues`, the consumer, headers | 1.5.1 and later | Yes |
+| [Topics](#publish-and-subscribe-topics): `UseTopics`, `BindTopics` | 1.11 and later | No |
+
+Both columns are tested: the example shop runs over named queues on a real Supabase project in the
+Supabase Live workflow, and over topics on pgmq 1.13 in `Examples/Microservices.Pgmq`.
 
 ```bash
 dotnet add package DDDToolkit.Messaging.Postgres
@@ -141,6 +158,24 @@ nothing yet. `Examples/Microservices.Pgmq` routes the whole shop this way.
 
 Without topic routing, on a pgmq older than 1.11, `pgmq.UseQueues(message => ...)` enqueues on named
 queues instead, which means the sender has to know its receivers.
+
+That is the shape on Supabase today. Where the receivers are the modules of one process, it is also the
+simplest one: every message on one queue, read back into the modules, whose inboxes decide what each
+one handles. `Examples/ModularMonolith.Supabase` does that when it runs with `Messaging=pgmq`:
+
+```csharp
+// every module's outbox sends to the one queue, and this host reads it back into the modules
+services.AddPgmqSink(queues, pgmq => pgmq.UseQueue("shop"));
+services.AddPgmqConsumer(queues, "shop");
+
+var host = new ModuleHost(database, outbox => outbox.SendToPgmq());
+```
+
+*[`ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+
+No module sink is involved, so nothing reaches a module except through the queue. That makes it the
+step before a module moves out: its messages already travel through the database rather than a method
+call, so moving the module changes where it runs, not how it hears.
 
 ### What the sink sends
 

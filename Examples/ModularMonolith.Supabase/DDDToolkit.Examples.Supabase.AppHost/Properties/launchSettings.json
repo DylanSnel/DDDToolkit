@@ -25,6 +25,19 @@
         "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "http://localhost:23104",
         "ASPIRE_ALLOW_UNSECURED_TRANSPORT": "true"
       }
+    },
+    "pgmq": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:17104;http://localhost:15104",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DOTNET_ENVIRONMENT": "Development",
+        "ASPIRE_DASHBOARD_OTLP_ENDPOINT_URL": "https://localhost:21104",
+        "ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL": "https://localhost:22104",
+        "Messaging": "pgmq"
+      }
     }
   }
 }

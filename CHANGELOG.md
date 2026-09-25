@@ -19,6 +19,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - [What the generator writes](docs/generated-code.md): the generated code for one small aggregate,
   file by file, and why it is generated rather than written. The site's homepage shows the same
   output, compiled from `website/sample` rather than typed out.
+- The Supabase monolith through Supabase Queues. With `Messaging=pgmq` the example host sends every
+  module's messages to one pgmq queue and reads it back into the modules, with no module sink in between;
+  a hand-written migration, `enable_queues`, turns the extension on. It runs on pgmq 1.5.1, the version
+  Supabase ships, which has no topic routing (that came in 1.11), and the Supabase Live workflow plays the
+  scenarios against a real project both in process and through its queue. The AppHost's container is now
+  Postgres 17 with that same pgmq. [Transports](docs/transports.md#when-a-module-becomes-its-own-deployable-pgmq)
+  lists what each pgmq version supports.
 - `DDDToolkit.HotChocolate.Fusion.InMemory`, one GraphQL schema over a modular monolith. Every module
   serves a source schema of its own and a HotChocolate Fusion gateway inside the application composes
   them and calls them in memory: `services.AddInMemoryFusionGateway()` and `app.MapInMemoryFusionGateway()`.

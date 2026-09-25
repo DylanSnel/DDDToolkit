@@ -5,6 +5,9 @@ name: Supabase Live
 # would put them there, and the checkout scenarios run against the result. It answers whether Supabase
 # accepts what the toolkit exports and whether the application then finds nothing missing.
 #
+# Twice: once with the modules talking in process, and once through Supabase Queues, the project's own
+# pgmq, which is the version Supabase ships and not the one a container would pick.
+#
 # Two ways to get a database, switched by the repository variable SUPABASE_BRANCHING:
 #
 # - "true": every run creates a preview branch of its own, tests against it and deletes it, whatever
@@ -25,6 +28,7 @@ on:
       - Examples/**
       - Source/DDDToolkit.EntityFramework/**
       - Source/DDDToolkit.EntityFramework.Supabase/**
+      - Source/DDDToolkit.Messaging.Postgres/**
       - .github/workflows/SupabaseLive.yml
 
 concurrency:
@@ -34,8 +38,20 @@ concurrency:
 
 jobs:
   supabase-live:
-    name: ModularMonolith.Supabase on Supabase
+    name: ModularMonolith.Supabase on Supabase, ${{ matrix.messaging }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      # One after the other: without branching both play against the project's one database, and the
+      # scenarios share its stock.
+      max-parallel: 1
+      matrix:
+        include:
+          - messaging: in process
+            sample: ModularMonolith.Supabase
+          - messaging: Supabase Queues
+            sample: ModularMonolith.Supabase.Pgmq
 
     # A pull request from a fork gets no secrets, so there is nothing to run against.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -45,7 +61,7 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       BRANCHING: ${{ vars.SUPABASE_BRANCHING == 'true' }}
-      BRANCH_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      BRANCH_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
       DDDTOOLKIT_REQUIRE_CONTAINERS: "1"
 
     steps:
@@ -127,8 +143,10 @@ jobs:
           # Quoted, so a password with a ';' in it stays one value.
           echo "ConnectionStrings__Supabase=Host=$host;Port=5432;Database=postgres;Username=$user;Password=\"$password\";SSL Mode=Require" >> "$GITHUB_ENV"
 
-      # Only without branching, and only what the example's migrations create: its module schemas, and
-      # their rows in the history Supabase keeps of applied migrations.
+      # Only without branching, and only what the example's migrations create: its module schemas, their
+      # rows in the history Supabase keeps of applied migrations, and the queue the shop talks through. The
+      # pgmq extension stays, but its migration is forgotten with the rest: it is the latest file, and the
+      # CLI refuses to apply migrations older than the last one it remembers. Applying it again is harmless.
       - name: Start from an empty shop
         if: env.BRANCHING != 'true'
         run: |
@@ -137,7 +155,10 @@ jobs:
           DO $$
           BEGIN
             IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-              DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE '%.ddd';
+              DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE '%.ddd' OR name = 'enable_queues';
+            END IF;
+            IF to_regclass('pgmq.q_shop') IS NOT NULL THEN
+              PERFORM pgmq.drop_queue('shop');
             END IF;
           END $$;
           SQL
@@ -154,7 +175,7 @@ jobs:
         run: >
           dotnet test Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
           --no-build --configuration Release --verbosity normal
-          --filter "Sample=ModularMonolith.Supabase"
+          --filter "Sample=${{ matrix.sample }}"
           --logger "trx;LogFileName=supabase-live.trx"
           --results-directory TestResults
 
@@ -168,7 +189,7 @@ jobs:
           fi
           executed=$(grep -o 'executed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
           passed=$(grep -o 'passed="[0-9]*"' "$trx" | head -1 | grep -o '[0-9]*')
-          echo "### Supabase live: $passed of $executed scenarios passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Supabase live, ${{ matrix.messaging }}: $passed of $executed scenarios passed" >> "$GITHUB_STEP_SUMMARY"
           if [ "${executed:-0}" -lt 5 ]; then
             echo "::error::Only ${executed:-0} scenarios ran against Supabase."
             exit 1
@@ -182,6 +203,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: supabase-live
+          name: supabase-live-${{ strategy.job-index }}
           path: TestResults
           if-no-files-found: ignore
