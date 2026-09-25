@@ -10,7 +10,7 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// Every payload shape this process can read, keyed by the pair a message carries on the wire: its
 /// published name and its version. Plus the upcasters that turn an old shape into the current one.
 /// <para>
-/// <c>[DomainEventName]</c> keeps the name stable while you rename the class. Nothing kept the
+/// Every version of a contract shares one name, and the class name says which version it is. Nothing kept the
 /// <em>shape</em> stable, and the shape is the harder promise: once the outbox has published a payload,
 /// somebody has stored it, queued it or is about to read it back. A payload written before a deployment
 /// has to stay readable after it.
@@ -22,10 +22,10 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// number.
 /// </para>
 /// <code>
-/// [IntegrationEvent("library.shelf-opened", Version = 1)]
+/// [IntegrationEvent] // library.shelf-opened, version 1
 /// public sealed record ShelfOpenedV1(string ShelfId, string Name);
 ///
-/// [IntegrationEvent("library.shelf-opened", Version = 2)]
+/// [IntegrationEvent] // library.shelf-opened, version 2
 /// public sealed record ShelfOpenedV2(string ShelfId, string DisplayName, string Library);
 ///
 /// options.MapIntegrationEvents(contracts => contracts
@@ -72,8 +72,9 @@ public sealed class IntegrationEventContractRegistry
 
     /// <summary>
     /// Registers <paramref name="contractType"/> under the name and version of
-    /// <see cref="IntegrationEventContract"/>, read off its attributes at run time: <c>[IntegrationEvent]</c>,
-    /// otherwise <c>[DomainEventName]</c> with version 1, otherwise the class name with version 1.
+    /// <see cref="IntegrationEventContract"/>, read off the type at run time: the name from <c>[IntegrationEvent]</c>,
+    /// otherwise <c>[DomainEventName]</c>, otherwise the convention, and the version from the class name's
+    /// <c>V</c> suffix, otherwise <c>[IntegrationEvent(Version = n)]</c>, otherwise 1.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="contractType"/> is null.</exception>
     /// <exception cref="ArgumentException">The type is not concrete, or another type already claims the same name and version.</exception>

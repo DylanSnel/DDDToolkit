@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Reflection;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Interfaces;
 
@@ -136,15 +138,49 @@ public static class DomainEventClock
     }
 }
 
-/// <summary>Resolves the stable name of a domain event type (see <see cref="DomainEventNameAttribute"/>).</summary>
+/// <summary>
+/// Resolves the stable name of a domain event type: the name <see cref="DomainEventNameAttribute"/> pins,
+/// or otherwise the conventional one, its module and its class name in kebab case
+/// (<c>ordering.order-placed</c>). A trailing <c>V</c> and a number is the version, not part of the name.
+/// </summary>
 public static class DomainEventName
 {
-    /// <summary>The name declared by <see cref="DomainEventNameAttribute"/>, or the type name.</summary>
+    private static readonly ConcurrentDictionary<Type, string> Names = new();
+
+    /// <summary>The name declared by <see cref="DomainEventNameAttribute"/>, otherwise the conventional one (<see cref="ConventionalNameOf"/>).</summary>
     public static string Of(Type eventType)
     {
         ArgumentNullException.ThrowIfNull(eventType);
-        var attribute = (DomainEventNameAttribute?)Attribute.GetCustomAttribute(eventType, typeof(DomainEventNameAttribute), inherit: false);
-        return attribute?.Name ?? eventType.Name;
+
+        return Names.GetOrAdd(eventType, static type =>
+            ((DomainEventNameAttribute?)Attribute.GetCustomAttribute(type, typeof(DomainEventNameAttribute), inherit: false))?.Name
+            ?? ConventionalNameOf(type));
+    }
+
+    /// <summary>
+    /// The name the convention gives <paramref name="eventType"/>, whatever its attributes say: the module its
+    /// assembly declares with <c>[assembly: Module]</c> and its class name without a version suffix, both in
+    /// kebab case. <c>OrderPlacedV2</c> in module <c>Ordering</c> is <c>ordering.order-placed</c>; outside a
+    /// module it is <c>order-placed</c>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="eventType"/> is null.</exception>
+    public static string ConventionalNameOf(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+
+        var module = eventType.Assembly.GetCustomAttribute<ModuleAttribute>()?.Name.Trim();
+        return EventNameConvention.NameFor(eventType.Name, string.IsNullOrEmpty(module) ? null : module);
+    }
+
+    /// <summary>
+    /// The version a trailing <c>V</c> and a number in the class name gives, <c>2</c> for <c>OrderPlacedV2</c>,
+    /// or null when the name has no such suffix.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="eventType"/> is null.</exception>
+    public static int? VersionSuffixOf(Type eventType)
+    {
+        ArgumentNullException.ThrowIfNull(eventType);
+        return EventNameConvention.Split(eventType.Name).Version;
     }
 
     /// <summary>The stable name of <typeparamref name="TEvent"/>.</summary>

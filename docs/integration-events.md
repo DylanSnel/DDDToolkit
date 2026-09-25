@@ -40,6 +40,58 @@ A domain event is internal. `OrderPlaced(OrderId, CustomerName, Money)` uses you
 things that read it are in the same module. The moment something outside that module reads it, that
 stops being true. Now the record is a published schema, and every field is a promise.
 
+What changes between the two, in the example shop. The domain event speaks Ordering's language; the
+contract speaks plain types, because it outlives any one version of Ordering:
+
+```mermaid
+flowchart LR
+    subgraph inside ["inside Ordering, free to change"]
+        Event["OrderPlaced: OrderId, Address, the lines, Money"]
+    end
+    Publish["PublishOrderPlaced"]
+    subgraph published ["published, versioned, a promise"]
+        Contract["OrderPlacedV1: OrderId, City, PostalCode, the lines, a decimal and a currency"]
+    end
+    Event --> Publish --> Contract
+    Contract --> Inventory["Inventory"]
+    Contract --> Payments["Payments"]
+```
+
+<details>
+<summary>Show the code: the domain event, the contract and the class between them</summary>
+
+```csharp
+// Ordering's own event, with Ordering's own types
+[DomainEventName("ordering.order-placed")]
+public sealed record OrderPlaced(OrderId OrderId, Address ShipTo, IReadOnlyList<OrderPlaced.Line> Lines, Money Total)
+    : DomainEvent, INotification
+{
+    public sealed record Line(string Sku, int Quantity);
+}
+
+// what the other modules get, in Ordering's contracts project
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+// the one place that knows both
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV1>
+{
+    public ValueTask<OrderPlacedV1?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV1(
+            placed.OrderId,
+            placed.ShipTo.City,
+            placed.ShipTo.PostalCode,
+            [.. placed.Lines.Select(line => new OrderedLineV1(line.Sku, line.Quantity))],
+            placed.Total.Amount,
+            placed.Total.Currency));
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
+
+</details>
+
 Note the boundary in the first row. It is the **module**, not the process. A record that only another
 assembly in the same solution deserializes is already a published schema, because you cannot change it
 without changing them.
@@ -61,13 +113,15 @@ public sealed record OrderPlaced(OrderId OrderId, CustomerName Customer, Money T
 The contract is what the other modules read, written in primitives:
 
 ```csharp
-[IntegrationEvent("ordering.order-placed", Version = 2)]
+[IntegrationEvent]
 public sealed record OrderPlacedV2(Guid OrderId, string Customer, decimal Total, string Currency);
 ```
 
-`[IntegrationEvent]` pins the name and the version. Without it a contract falls back to
-`[DomainEventName]`, and without that to the class name, with version 1. See
-[Domain events](domain-events.md#stable-names) for why the name has to be pinned at all, and
+`[IntegrationEvent]` marks the type as a contract. Its name and version come from the module and the class
+name, so in `[assembly: Module("Ordering")]` this is published as `ordering.order-placed` version 2, the
+same name its domain event is stored under. Pin the name in the attribute only when the convention would
+give the wrong one, typically after renaming the class: `[IntegrationEvent("ordering.order-placed")]`. See
+[Stable names](domain-events.md#stable-names) for the whole rule, and
 [Versioning and upcasting](#versioning-and-upcasting) for what the version is for.
 
 The outbox does not publish the contract until you say how one becomes the other. By default, nothing is
@@ -159,6 +213,90 @@ is what [Versioning and upcasting](#versioning-and-upcasting) is about.
 Integration events exist so that another module can pick something up. In a modular monolith that module
 is in the same process, which makes this the most valuable sink in the package and the one to reach for
 first.
+
+One message, from the save in Ordering to the handler in Billing:
+
+```mermaid
+sequenceDiagram
+    participant Save as Ordering's save
+    participant Outbox as Ordering's outbox
+    participant Processor as Outbox processor
+    participant Publish as PublishOrderPlaced
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Handler as RaiseInvoice
+
+    Save->>Outbox: the order and an OrderPlaced row, one transaction
+    Processor->>Outbox: read the row, after the commit
+    Processor->>Publish: OrderPlaced, the domain event
+    Publish-->>Processor: OrderPlacedV2, the contract
+    Processor->>Sink: the contract, in its envelope
+    Sink->>Inbox: offered to every module that handles OrderPlacedV2
+    alt billing.invoicer applied this message before
+        Inbox-->>Sink: skipped
+    else the first time
+        Inbox->>Handler: HandleAsync(contract, message)
+        Handler-->>Inbox: an invoice, added to Billing's context
+        Inbox->>Inbox: the invoice and an inbox row, one transaction
+    end
+    Sink-->>Processor: delivered
+    Processor->>Outbox: set ProcessedAt
+```
+
+A handler that fails fails the delivery, and the processor tries again later. Every module is offered
+the message again, and the inboxes skip what they already applied, which is what makes at-least-once
+delivery safe.
+
+<details>
+<summary>Show the code: both modules' registration</summary>
+
+Ordering publishes, through its outbox, to the modules in this process:
+
+```csharp
+// inside AddOrderingModule
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.AddOrderingIntegrationEvents();   // generated: its domain events and its outbound classes
+    outbox.SendToModules();
+}));
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+One class says what the domain event becomes for the others:
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
+}
+```
+
+Billing handles the contract, and signs up with the contracts it reads and the handlers that run under
+its inbox:
+
+```csharp
+[IntegrationEventConsumer("billing.invoicer")]
+public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHandler<OrderPlacedV2>
+{
+    public Task HandleAsync(OrderPlacedV2 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        context.Invoices.Add(new Invoice(contract.OrderId, contract.Total));
+        return Task.CompletedTask;
+    }
+}
+
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
+services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
+```
+
+Both contexts map their tables: `modelBuilder.AddDomainEventOutbox(Database)` in Ordering's,
+`modelBuilder.AddDomainEventInbox(Database)` in Billing's. The rest of this section goes through each
+part.
+
+</details>
 
 Each module registers its own half, next to its own context. The producing module says what it publishes
 and that it goes to the other modules:
@@ -322,7 +460,7 @@ public static class IntegrationEventExtensions
     public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
     {
         ArgumentNullException.ThrowIfNull(outbox);
-        outbox.RegisterEvent<OrderPlaced>("OrderPlaced", 1);
+        outbox.RegisterEvent<OrderPlaced>("ordering.order-placed", 1);
         outbox.PublishWith<OrderPlaced, OrderPlacedV2>("ordering.order-placed", 2, static services => new PublishOrderPlaced());
         return outbox;
     }
@@ -359,13 +497,15 @@ public static class IntegrationEventExtensions
 
 Line by line, that is everything the two modules register:
 
-- `RegisterEvent<OrderPlaced>("OrderPlaced", 1)` puts the domain event in the outbox's map from stored
-  name to type, which the processor reads a row back through. The name is the event's
-  `[DomainEventName]`, and `OrderPlaced` has none, so it is the class name; the version is its
-  `[IntegrationEvent(Version = n)]`, otherwise 1. Every concrete domain event declared in the project is
-  listed, whether it leaves the module or not, because the outbox stores all of them.
+- `RegisterEvent<OrderPlaced>("ordering.order-placed", 1)` puts the domain event in the outbox's map from
+  stored name to type, which the processor reads a row back through. The name is the event's
+  `[DomainEventName]`, and `OrderPlaced` has none, so it is the module and the class name; the version is
+  its `[IntegrationEvent(Version = n)]`, otherwise the one its class name ends in, otherwise 1. Every
+  concrete domain event declared in the project is listed, whether it leaves the module or not, because
+  the outbox stores all of them.
 - `PublishWith<OrderPlaced, OrderPlacedV2>(...)` is the entry `PublishAs` would have made, with a class
-  instead of a lambda: the contract's published name and version, read off its `[IntegrationEvent]`, and
+  instead of a lambda: the contract's published name and version, read off its class name and
+  `[IntegrationEvent]`, and
   the code that builds `PublishOrderPlaced` for each message. The published name is also how this process
   knows it publishes `ordering.order-placed` itself, so a [transport](transports.md) does not ask a broker
   for it.
@@ -383,8 +523,8 @@ parameters is the one called, and each parameter is taken from the scope the mes
 and the scope itself for an `IServiceProvider`.
 
 Everything the run-time registration would read off attributes is read by the compiler instead and written
-out as literals: the stored name and version of every domain event (`[DomainEventName]`,
-`[IntegrationEvent]`), the published name and version of every contract, the consumer name of every
+out as literals: the stored name and version of every domain event and the published name and version of
+every contract (the convention, `[DomainEventName]`, `[IntegrationEvent]`), the consumer name of every
 handler (`[IntegrationEventConsumer]`, otherwise the class's full name). The outbox and the processor then
 look names up in the registries rather than asking a type. Nothing is scanned, read or activated by
 reflection; add a handler class and the next build registers it.
@@ -550,8 +690,8 @@ care about order have to say so themselves, usually with a version or a sequence
 
 ## Versioning and upcasting
 
-`[DomainEventName]` keeps the name stable while you rename the class. Nothing kept the **shape** stable,
-and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
+A name stays put while the class moves, and `[DomainEventName]` keeps it while the class is renamed. Nothing
+kept the **shape** stable, and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
 queued it, or is about to read it back. A payload written before a deployment has to stay readable after
 it.
 
@@ -559,35 +699,32 @@ Two places have to hold, and the toolkit covers both.
 
 ### The outbox reading its own old rows
 
-Every outbox row records the shape it was written in, in a `Version` column, taken from
-`[IntegrationEvent(Version = n)]` on the event type. An event that never changed shape says nothing and is
-version 1.
+Every outbox row records the shape it was written in, in a `Version` column:
+`[IntegrationEvent(Version = n)]` on the event type, otherwise the version its class name ends in. An event
+that never changed shape says nothing and is version 1.
 
 When the processor reads a row whose version matches the type registered under that name, which is every
 row until you bump something, nothing changes. When it does not match, the processor reads the payload as
 the type registered for that older version and then upcasts it.
 
 ```csharp
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 1)]
-public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;
-
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 2)]
-public sealed record OrderPlaced(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;
+public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;                    // ordering.order-placed, version 1
+public sealed record OrderPlacedV2(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;   // ordering.order-placed, version 2
 ```
 
 ```csharp
 options.MapIntegrationEvents(contracts => contracts
-    .UpcastFrom<OrderPlacedV1, OrderPlaced>(v1 => new OrderPlaced(v1.OrderId, v1.Total, Channel.Unknown)));
+    .UpcastFrom<OrderPlacedV1, OrderPlacedV2>(v1 => new OrderPlacedV2(v1.OrderId, v1.Total, Channel.Unknown)));
 ```
 
-Both attributes carry the same name on purpose. `[DomainEventName]` is what the outbox stores in the row,
-`[IntegrationEvent]` is what says which shape that row is, and a version means nothing unless the two
-agree. `RegisterEvent<TEvent>()` and `RegisterEventsFromAssembly` refuse two different names when they
-register the event. The generated registration takes the name from one attribute and the version from the
-other without comparing them, so there it is up to you to keep them the same; a mismatch shows only when
-an older row cannot be read.
+The two classes share a name because the convention leaves the suffix out of it, and each says its version
+in its class name, so there is nothing to keep in step. To go on raising `OrderPlaced` rather than
+`OrderPlacedV2`, give it the version in the attribute instead, `[IntegrationEvent(Version = 2)]`: a class
+name without a suffix is version 1, and two version 1 classes under one name fail the build
+([DDD00036](diagnostics.md#ddd00036)). If the name is pinned, pin the same name on every version.
+`RegisterEvent<TEvent>()` and `RegisterEventsFromAssembly` refuse an event whose `[DomainEventName]` and
+`[IntegrationEvent]` name two different names, because a stored row could then never be matched to a
+version.
 
 Keeping two types under one domain event name is fine. `RegisterEvent` and `RegisterEventsFromAssembly`
 keep the newest as the type new events are written as, and the older one is only ever read.
@@ -752,7 +889,7 @@ scaffolded one produce the same table.
 
 - [Transports](transports.md) for pgmq, Wolverine, MassTransit, and writing a sink of your own.
 - [Module contracts](module-contracts.md) for why a module publishes contracts, and where to keep them.
-- [Domain events](domain-events.md) for raising, draining and `[DomainEventName]`.
+- [Domain events](domain-events.md) for raising, draining and [how an event is named](domain-events.md#stable-names).
 - [Delivering domain events](event-delivery.md) for the outbox itself, the processor, retries and
   `MaxAttempts`.
 - [GraphQL](graphql.md#pushing-integration-events-to-subscribers) for the subscription sink.

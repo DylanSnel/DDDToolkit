@@ -364,7 +364,8 @@ dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHos
 **`Microservices.Wolverine/`** gives every service a database of its own, and not of one kind: Storefront
 on SQL Server, Payments and Fulfilment on Postgres. What they share is RabbitMQ, used the way Wolverine
 uses it: conventional routing, a fanout exchange per contract type and, per service, a queue for every
-contract it handles. The modules are registered first, so Wolverine knows what the service handles; from
+contract it handles. `UseIntegrationEventNames()` names each exchange after the contract's published name
+and version, `ordering.order-placed.v1`, rather than its CLR type. The modules are registered first, so Wolverine knows what the service handles; from
 Payments':
 
 ```csharp
@@ -390,8 +391,8 @@ dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolver
 
 **`Microservices.MassTransit/`** is the same topology with MassTransit, every service on a SQL Server
 database of its own, and RabbitMQ used the way MassTransit uses it: every contract a message type with an
-exchange of its own, one receive endpoint per service, bound by MassTransit to the exchanges of the
-contracts its consumers take. In each service's `RabbitMq.cs`, called after the modules:
+exchange of its own, named `ordering.order-placed.v1` by `UseIntegrationEventNames()`, one receive
+endpoint per service, bound by MassTransit to the exchanges of the contracts its consumers take. In each service's `RabbitMq.cs`, called after the modules:
 
 ```csharp
 bus.AddIntegrationEventConsumers(services.IntegrationEventSubscriptions());

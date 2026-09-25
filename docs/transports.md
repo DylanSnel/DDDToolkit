@@ -20,6 +20,60 @@ them. The sending module publishes the same contract through the same outbox, wi
 receiving process registers its modules with `AddModuleIntegrationEvents`, exactly as a monolith does, and
 each handler runs inside its module's inbox. A handler cannot tell which way a message came.
 
+The roads a message can take, from the one that needs nothing to the ones that cross a network:
+
+```mermaid
+flowchart TB
+    subgraph inproc ["In process: the module sink"]
+        direction LR
+        A1["Ordering's outbox"] -->|"in memory"| B1["Shipping's inbox"]
+    end
+    subgraph onequeue ["In process, one pgmq queue: pgmq 1.5 and later"]
+        direction LR
+        A2["every module's outbox"] --> Q2[("queue shop")] --> B2["every module's inbox"]
+    end
+    subgraph topics ["Services, pgmq topics: pgmq 1.11 and later"]
+        direction LR
+        A3["Storefront's outbox"] -->|"send_topic"| Q3a[("queue payments")] --> B3a["Payments' inboxes"]
+        A3 -->|"send_topic"| Q3b[("queue fulfilment")] --> B3b["Fulfilment's inboxes"]
+    end
+    subgraph broker ["Services, RabbitMQ: Wolverine or MassTransit"]
+        direction LR
+        A4["a service's outbox"] --> R4[["RabbitMQ"]] --> B4["other services' inboxes"]
+    end
+    inproc ~~~ onequeue ~~~ topics ~~~ broker
+```
+
+<details>
+<summary>Show the code: choosing the road</summary>
+
+Only the sink on the outbox and, away from the module sink, what reads on the other side change. The
+modules and their handlers stay as they are:
+
+```csharp
+// one process: the module sink
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToModules());
+
+// one process, through one pgmq queue
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueue("shop"));
+builder.Services.AddPgmqConsumer(queues, "shop");
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToPgmq());
+
+// services over pgmq topics
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseTopics());
+builder.Services.AddPgmqConsumer(queues, "fulfilment", consumer => consumer.BindTopics = true);
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToPgmq());
+
+// services over RabbitMQ
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToWolverine());     // and wolverine.ReceiveIntegrationEvents(...)
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());   // and bus.AddIntegrationEventConsumers(...)
+```
+
+`queues` is an `NpgsqlDataSource` on the database the queues live in. Each section below has the whole
+registration for its road, and `Examples/` runs every one of them.
+
+</details>
+
 ## When a module becomes its own deployable: pgmq
 
 `DDDToolkit.Messaging.Postgres` sends published messages to a
@@ -354,6 +408,7 @@ builder.UseWolverine(wolverine =>
     wolverine.UseRabbitMq(rabbitUri)
         .AutoProvision()
         .UseConventionalRouting(conventions => conventions
+            .UseIntegrationEventNames()                                    // exchanges named ordering.order-placed.v1
             .QueueNameForListener(type => $"fulfilment.{type.Name}")      // a queue per service and contract
             .ConfigureListeners((listener, _) => listener.ProcessInline())
             .ConfigureSending((sender, _) => sender.SendInline()));
@@ -382,6 +437,15 @@ reference `WolverineFx.RuntimeCompilation` in the process, because Wolverine com
 at start-up and since 6.x ships that compiler separately. `Examples/Microservices.Wolverine` runs the shop
 this way.
 
+`UseIntegrationEventNames()` is optional, and it is what the samples do. Without it Wolverine names a
+contract's exchange after its CLR type, so renaming the contract class or moving it to another namespace
+moves its messages to another exchange, and a service still on the old name sends into the void. With it
+the exchange is the contract's published name and version, `ordering.order-placed.v1`
+([Stable names](domain-events.md#stable-names)), which stays put while the class is renamed as long as the
+name is pinned. Each version is an exchange of its own, because each version is a type of its own to
+Wolverine. Listeners bind their queues to the same name, so every service that shares the events has to
+switch together. Other message types keep Wolverine's names.
+
 ## Through a broker: MassTransit
 
 `DDDToolkit.Messaging.MassTransit` does the same with MassTransit: each contract a message type of its
@@ -401,6 +465,7 @@ builder.Services.AddMassTransit(bus =>
     bus.UsingRabbitMq((context, rabbit) =>
     {
         rabbit.Host(rabbitUri);
+        rabbit.UseIntegrationEventNames();   // exchanges named ordering.order-placed.v1, before any endpoint
 
         // this service's queue; MassTransit binds it to the exchange of every contract its consumers take
         rabbit.ReceiveEndpoint("fulfilment", endpoint =>
@@ -417,6 +482,11 @@ options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());
 
 `MassTransitSink` publishes the contract through `IPublishEndpoint`, so MassTransit gives it the exchange of
 its type, with the outbox's message id as MassTransit's message id and the toolkit's headers alongside.
+MassTransit names that exchange after the CLR type, `Shop.Ordering.Contracts:OrderPlacedV1`, unless
+`UseIntegrationEventNames()` replaces its entity name formatter with `IntegrationEventEntityNameFormatter`:
+then it is the published name and version, `ordering.order-placed.v1`, and survives renaming the class for
+the same reasons as under Wolverine above. Consumers bind through the same formatter, so switch every
+service together. Message types the toolkit does not name, `Fault<T>` among them, keep MassTransit's names.
 `IntegrationEventConsumer<TContract>` hands it to `IntegrationEventReceiver`; MassTransit acknowledges it
 when the consumer returns, retries it as the endpoint says when a handler throws, and then moves it to the
 endpoint's error queue.

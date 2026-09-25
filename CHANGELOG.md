@@ -44,6 +44,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   several queues and several queues beat one, whatever the order. The package now references
   `Microsoft.Extensions.Configuration.Abstractions`. See
   [Settings from configuration](docs/transports.md#settings-from-configuration).
+- Events are named by convention. An event without `[DomainEventName]` is stored, and a contract without
+  a name in `[IntegrationEvent]` is published, under its module and its class name in kebab case:
+  `OrderPlaced` in `[assembly: Module("Ordering")]` is `ordering.order-placed`. A class name that ends in
+  `V` and a number carries the version, so `OrderPlacedV2` is `ordering.order-placed` version 2 and every
+  version of an event shares one name. `[IntegrationEvent(Version = n)]` states a version explicitly and
+  wins over the suffix. The rule is one source file compiled into both the runtime and the generators, so
+  `DomainEventName.Of`, `IntegrationEventContract.NameOf` and `VersionOf` and the generated
+  `Add{Module}IntegrationEvents()` cannot disagree. See [Stable names](docs/domain-events.md#stable-names).
+- `{Module}EventNames`, a constant for every name a project's events are stored or published under,
+  written by the core generator: `OrderingEventNames.OrderPlaced` is `"ordering.order-placed"`. A contracts
+  assembly's class is `[ModuleContract]`, so other modules can bind to its names.
+- Four diagnostics about event names, all reported where the module compiles.
+  [DDD00034](docs/diagnostics.md#ddd00034) (warning): the class name's version and `Version` disagree, so
+  the suffix is ignored, with code fixes that rename the class to the stated version or remove `Version`. [DDD00035](docs/diagnostics.md#ddd00035) (error):
+  a class name that ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
+  contracts, of one module under one name and version, typically two classes of one name in different
+  namespaces, with a code fix that pins another name on one of them, such as
+  `[DomainEventName("ordering.returns-order-placed")]`. [DDD00037](docs/diagnostics.md#ddd00037)
+  (error): two names that would share a constant, which code could then use for the wrong event.
+- Broker exchanges named after the event rather than the CLR type. `rabbit.UseIntegrationEventNames()` for
+  MassTransit and `conventions.UseIntegrationEventNames()` for Wolverine's conventional routing name a
+  contract's exchange `ordering.order-placed.v1`, from the new `IntegrationEventContract.EntityNameOf`, so
+  renaming or moving a contract class no longer moves its messages. Message types the toolkit does not
+  name keep the transport's names. The MassTransit and Wolverine samples use it. See
+  [Transports](docs/transports.md).
+
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
@@ -51,6 +77,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - [What the generator writes](docs/generated-code.md): the generated code for one small aggregate,
   file by file, and why it is generated rather than written. The site's homepage shows the same
   output, compiled from `website/sample` rather than typed out.
+- [FluentValidation](docs/fluent-validation.md), a page of its own instead of a section at the end of Value
+  objects: a value object's rules as a validator, which types get one, the two shapes its failures come
+  in, `MustBeValid()` in a request validator with the failures it reports, one list for a whole request,
+  and what it does not do. Getting started and the sidebar point to it.
+- Diagrams in the documentation, each with a "Show the code" section under it holding the registration
+  or setup it shows: delivering domain events in process and through the outbox, one message from
+  one module's save to another's inbox, the example shop's checkout across its modules, the roads a
+  message can take between modules, the two stages of an invariant, a module's contracts project, an
+  aggregate's boundary and what the generators write. And for how modules refer to each other: what a
+  module keeps and what its contract publishes, with the two references the analyzer refuses drawn in
+  red; the example shop's modules and the contracts between them; a domain event becoming a contract.
+  Also the order's states, the always-valid twin, one set of modules under two kinds of host, three
+  modules composing one GraphQL `Product`, and a migration's way from `dotnet ef` to Supabase. They are
+  Mermaid, so GitHub draws the same diagrams in `docs/`.
 - The Supabase monolith through Supabase Queues. With `Messaging=pgmq` the example host sends every
   module's messages to one pgmq queue and reads it back into the modules, with no module sink in between;
   a hand-written migration, `enable_queues`, turns the extension on. It runs on pgmq 1.5.1, the version
@@ -337,12 +377,32 @@ convention.
   every entity whose schema type bound its fields by convention, so any client could run an entity's
   invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
   `[Internal]` now, like the rest of the toolkit's bookkeeping.
+- With `DDDToolkit.FluentValidation` referenced, a value object that wrote its own `Validate()` or
+  `Validate(ValidationErrorBuilder)` failed to compile with CS0111: the generator added both overrides
+  to every value object, so a project could not mix hand-validated value objects with ones validated by
+  rules. The generator now leaves such a type alone, whichever part declares the method: no `Validator`,
+  no `Errors`, no generated overrides. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and
+  record identifiers.
 
 ### Changed
 
 - `AddPgmqSink` needs the database when the application starts, for the pgmq check above; before, it did
   not touch the database until the first send. Set `CheckExtensionOnStart = false` on the sink's options
   to start without it.
+- **Breaking for events without `[DomainEventName]`:** such an event used to be stored and published under
+  its bare class name, `OrderPlaced`, and is now named by convention, `ordering.order-placed`, or
+  `order-placed` in an assembly without `[assembly: Module]`. Rows an earlier build wrote under the class
+  name are still read: the outbox registry finds a type by its class name as well, and the processor
+  publishes such a row under the type's current name. What changes is the name on messages published from
+  now on, so a consumer in another process that routes on the old name has to be deployed with the
+  producer, or the producer's events pinned to their old names with `[DomainEventName("OrderPlaced")]`. A
+  contract whose class name ends in `V` and a number, and that states no `Version`, is now that version
+  instead of version 1.
+- `[IntegrationEvent]` takes its name as an optional argument, and `IntegrationEventAttribute.Name` is
+  `string?`. `[IntegrationEvent]` alone marks a contract named by convention.
+- The example shop's events and contracts carry no names any more; the convention gives them the names
+  they had, which `EventNameTests` in the examples' tests pins down.
+
 - The documentation builds up. Each page starts with the problem it solves and the simplest use, and
   leaves storage, GraphQL, modules and design rationale for later, so a first example no longer carries
   `ColumnLength`, `[ModuleContract]` or `DDD_Module` before they mean anything. Every building block

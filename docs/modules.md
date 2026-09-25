@@ -166,6 +166,67 @@ The shape a module ends up with is small:
 Two modules that share only that can be deployed together forever, and can be pulled apart on the day
 that stops being true. Two modules that share a navigation property cannot.
 
+## One set of modules, any host
+
+A module registers everything it needs itself, so a host only chooses which modules it runs and how
+their messages travel. The example shop runs the same five modules as one process and as three
+services:
+
+```mermaid
+flowchart TB
+    subgraph monolith ["ModularMonolith: one host, messages in process or through one queue"]
+        direction LR
+        M1["Catalog"] ~~~ M2["Ordering"] ~~~ M3["Inventory"] ~~~ M4["Payments"] ~~~ M5["Shipping"]
+    end
+    subgraph services ["Microservices: three hosts, messages over pgmq, Wolverine or MassTransit"]
+        direction LR
+        Gateway["Gateway: one GraphQL schema"] --> Storefront["Storefront: Catalog, Ordering"]
+        Gateway --> PaymentsService["Payments: Payments"]
+        Gateway --> Fulfilment["Fulfilment: Inventory, Shipping"]
+    end
+    monolith ~~~ services
+```
+
+A module does not know which of the two it is in. What changes is the host's `Program.cs`, and the
+modules' boundaries are what make that possible: nothing crosses between them except contracts, and a
+contract travels as well over a queue as through a method call.
+
+<details>
+<summary>Show the code: two hosts over the same modules</summary>
+
+The monolith runs all five, and hands each module's messages to the others in process:
+
+```csharp
+var host = ModuleHost.InProcess(database);
+
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+builder.Services.AddInventoryModule(host);
+builder.Services.AddPaymentsModule(host);
+builder.Services.AddShippingModule(host);
+```
+
+*[`ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+
+The storefront service runs two of them, and sends what the others need through pgmq:
+
+```csharp
+var host = new ModuleHost(
+    ModuleDatabase.Postgres(connectionString),
+    outbox =>
+    {
+        outbox.SendToModules();   // Catalog to Ordering, next door
+        outbox.SendToPgmq();      // everything the other services handle
+    });
+
+builder.Services.AddCatalogModule(host);
+builder.Services.AddOrderingModule(host);
+```
+
+*[`Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Storefront/Program.cs`](../Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.Storefront/Program.cs)*
+
+</details>
+
 ## One API over the modules: GraphQL
 
 A module's boundary holds in its API as well. Rather than one GraphQL schema that knows every module,

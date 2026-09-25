@@ -57,6 +57,7 @@ builder.UseWolverine(wolverine =>
             ?? throw new InvalidOperationException("ConnectionStrings:rabbitmq is not set. Run DDDToolkit.Examples.Wolverine.AppHost.")))
         .AutoProvision()
         .UseConventionalRouting(conventions => conventions
+            .UseIntegrationEventNames()
             .QueueNameForListener(type => $"storefront.{type.Name}")
             .ConfigureListeners((listener, _) => listener.ProcessInline())
             .ConfigureSending((sender, _) => sender.SendInline()));

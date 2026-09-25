@@ -235,6 +235,66 @@ public sealed class EventVersioningTests : IDisposable
         mismatch.Should().Throw<ArgumentException>().WithMessage("*shelf.misnamed*library.something-else*");
     }
 
+    [Fact]
+    public async Task A_row_an_older_build_stored_under_the_class_name_is_published_under_the_current_name()
+    {
+        var sink = new RecordingSink();
+        using var host = CreateHost(options => options.UseOutbox(outbox => outbox.RegisterEvent<BookAdded>().SendTo(sink)));
+
+        // Before events were named by convention, an event without [DomainEventName] was stored under its
+        // bare class name. Such a row is still in the table when the new build starts.
+        var bookAdded = new BookAdded(ShelfId.CreateUnique(), BookId.CreateUnique(), "Dune");
+        WriteRow(bookAdded, version: 1, name: nameof(BookAdded));
+
+        var processed = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+
+        processed.Should().Be(1);
+        var published = sink.Messages.Should().ContainSingle().Subject;
+        published.Name.Should().Be("book-added", "consumers route on the name the event has now, not on the one the row was written under");
+        published.Body.Should().BeOfType<BookAdded>().Which.Title.Should().Be("Dune");
+    }
+
+    [Fact]
+    public async Task A_row_stored_under_the_class_name_of_an_older_shape_is_upcast()
+    {
+        var sink = new RecordingSink();
+        using var host = CreateHost(options =>
+        {
+            options.MapIntegrationEvents(contracts => contracts.UpcastFrom<NoteTaken, NoteTakenV2>(v1 => new NoteTakenV2(v1.Text, Author: "unknown")));
+            options.UseOutbox(outbox => outbox.RegisterEvent<NoteTaken>().RegisterEvent<NoteTakenV2>().SendTo(sink));
+        });
+
+        // Written by the class NoteTaken under its class name, whatever version the row says: the class name
+        // is what says which shape it is.
+        WriteRow(new NoteTaken("remember the milk"), version: 1, name: nameof(NoteTaken));
+
+        var processed = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+
+        processed.Should().Be(1);
+        var published = sink.Messages.Should().ContainSingle().Subject;
+        published.Name.Should().Be("note-taken");
+        published.Version.Should().Be(2, "the version its class name ends in");
+        published.Body.Should().BeOfType<NoteTakenV2>().Which.Should().BeEquivalentTo(new { Text = "remember the milk", Author = "unknown" });
+    }
+
+    [Fact]
+    public void The_registry_finds_a_type_by_its_class_name_only_when_one_registered_class_has_it()
+    {
+        var registry = new DomainEventTypeRegistry().Register<BookAdded>();
+
+        registry.TryResolve("book-added", out var current, out var byClassName).Should().BeTrue();
+        current.Should().Be<BookAdded>();
+        byClassName.Should().BeFalse();
+
+        registry.TryResolve(nameof(BookAdded), out var legacy, out byClassName).Should().BeTrue("rows an older build wrote are still in the table");
+        legacy.Should().Be<BookAdded>();
+        byClassName.Should().BeTrue();
+
+        var ambiguous = new DomainEventTypeRegistry().Register<First.Moved>().Register<Second.Moved>();
+        ambiguous.Resolve("first.moved").Should().Be<First.Moved>();
+        ambiguous.Resolve(nameof(First.Moved)).Should().BeNull("two registered classes are called Moved, and guessing between them would read a row as the wrong type");
+    }
+
     private TestHost CreateHost(Action<DDDEntityFrameworkOptions>? configure = null)
         => new(
             _db,
@@ -255,13 +315,13 @@ public sealed class EventVersioningTests : IDisposable
             });
 
     /// <summary>Writes a row by hand, which is the only way to have a payload an older build produced.</summary>
-    private void WriteRow(IDomainEvent domainEvent, int version)
+    private void WriteRow(IDomainEvent domainEvent, int version, string? name = null)
     {
         using var context = _db.CreateLibraryContext();
         context.Outbox.Add(new OutboxMessage
         {
             Id = domainEvent.EventId,
-            EventName = DomainEventName.Of(domainEvent),
+            EventName = name ?? DomainEventName.Of(domainEvent),
             Version = version,
             Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), new OutboxOptions().JsonOptions),
             OccurredAt = domainEvent.OccurredAt,
@@ -283,6 +343,26 @@ public sealed class EventVersioningTests : IDisposable
     /// <summary>Claims the same published name and version as <see cref="BookShelvedV1"/>.</summary>
     [Abstractions.Attributes.IntegrationEvent("library.book-shelved", Version = 1)]
     private sealed record ClashingContract(string Other);
+
+    /// <summary>The first shape of an event nobody named, <c>note-taken</c> version 1.</summary>
+    private sealed record NoteTaken(string Text) : DomainEvent;
+
+    /// <summary>The second shape, <c>note-taken</c> version 2 by its class name.</summary>
+    private sealed record NoteTakenV2(string Text, string Author) : DomainEvent;
+
+    /// <summary>Two classes called <c>Moved</c>, each under a name of its own.</summary>
+    private static class First
+    {
+        [Abstractions.Attributes.DomainEventName("first.moved")]
+        public sealed record Moved : DomainEvent;
+    }
+
+    /// <summary>See <see cref="First"/>.</summary>
+    private static class Second
+    {
+        [Abstractions.Attributes.DomainEventName("second.moved")]
+        public sealed record Moved : DomainEvent;
+    }
 
     /// <summary>Stored under one name and published under another, which no version could reconcile.</summary>
     [Abstractions.Attributes.DomainEventName("shelf.misnamed")]

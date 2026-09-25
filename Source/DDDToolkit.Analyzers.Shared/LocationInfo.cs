@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
@@ -38,13 +39,34 @@ internal sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationI
     public static DiagnosticInfo Create(DiagnosticDescriptor descriptor, LocationInfo? location, params string[] messageArguments)
         => new(descriptor, location, new EquatableArray<string>(messageArguments));
 
+    /// <summary>
+    /// What a code fix needs to know and cannot read off the code at the location, as alternating keys and
+    /// values. Empty for most diagnostics.
+    /// </summary>
+    public EquatableArray<string> Properties { get; init; } = EquatableArray<string>.Empty;
+
     public bool IsError => Descriptor.DefaultSeverity == DiagnosticSeverity.Error;
 
     public Diagnostic ToDiagnostic()
-        => Diagnostic.Create(
+    {
+        ImmutableDictionary<string, string?>? properties = null;
+        if (Properties.Count > 0)
+        {
+            var builder = ImmutableDictionary.CreateBuilder<string, string?>(StringComparer.Ordinal);
+            for (var i = 0; i + 1 < Properties.Count; i += 2)
+            {
+                builder[Properties[i]] = Properties[i + 1];
+            }
+
+            properties = builder.ToImmutable();
+        }
+
+        return Diagnostic.Create(
             Descriptor,
             Location?.ToLocation() ?? Microsoft.CodeAnalysis.Location.None,
+            properties,
             MessageArguments.Select(argument => (object)argument).ToArray());
+    }
 
     public void Report(SourceProductionContext context) => context.ReportDiagnostic(ToDiagnostic());
 }

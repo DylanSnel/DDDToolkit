@@ -19,6 +19,8 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="WolverineFx.RuntimeCompilation" />
+    <!-- Only for its routing convention: the naming test reads which exchange a contract is sent to. -->
+    <PackageReference Include="WolverineFx.RabbitMQ" />
   </ItemGroup>
 
   <!--

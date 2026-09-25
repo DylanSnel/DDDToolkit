@@ -9,7 +9,7 @@ public sealed record ShelfCreated(ShelfId ShelfId, string Name) : DomainEvent;
 [DomainEventName("shelf.renamed")]
 public sealed record ShelfRenamed(ShelfId ShelfId, string Name) : DomainEvent;
 
-/// <summary>No [DomainEventName]: the stable name falls back to the class name.</summary>
+/// <summary>No [DomainEventName]: the stable name is the conventional one, <c>book-added</c>.</summary>
 public sealed record BookAdded(ShelfId ShelfId, BookId BookId, string Title) : DomainEvent;
 
 /// <summary>

@@ -32,7 +32,7 @@ const sidebars = {
       type: 'category',
       label: 'Integrations',
       collapsed: false,
-      items: ['graphql', 'localization'],
+      items: ['graphql', 'fluent-validation', 'localization'],
     },
     {
       type: 'category',

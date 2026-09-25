@@ -98,6 +98,36 @@ integrity problem, not a style issue.
 Raising an event puts it in a list on the aggregate. Getting it to a handler is a separate concern
 with a real trade-off, handled by `DDDToolkit.EntityFramework`.
 
+```mermaid
+flowchart LR
+    Raise["RaiseDomainEvent(...), inside the aggregate"] --> Pending["pending on the aggregate"]
+    Pending --> Save["SaveChanges takes them"]
+    Save -->|"in process"| Handlers["your handlers, inside the save"]
+    Save -->|"outbox"| Rows["outbox rows, delivered after the commit"]
+```
+
+<details>
+<summary>Show the code: choosing how events are delivered</summary>
+
+One line in the registration decides, and the aggregate does not change:
+
+```csharp
+// in process: handlers run inside the save
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+// through the outbox: rows in the same transaction, delivered afterwards
+builder.Services.AddDDDToolkitEntityFramework(options =>
+{
+    options.DispatchWithMediator();
+    options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
+});
+builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+[Delivering domain events](event-delivery.md) draws both, step by step, with the rest of the setup.
+
+</details>
+
 **In-process dispatch** runs handlers during `SaveChanges`, before the commit. Handler changes to the
 same `DbContext` ride along in the same transaction, and a throwing handler aborts the save. It is
 simple and transactional, but it is best-effort: nothing survives a process crash, and handlers must
@@ -135,14 +165,18 @@ You can implement `IDomainEvent` directly instead of deriving from `DomainEvent`
 
 As long as an event only lives in memory, its name does not matter. Once it is stored or published, a
 name is written down with it, in an outbox row or on a message, and read back later by code that may
-have been renamed in between.
+have been renamed in between. So every event has a name, and you rarely have to write it.
 
-`[DomainEventName]` decouples the wire name from the class name, so renaming or moving the class does
-not break anything that stored or published the old name:
+### The convention
+
+An event nobody named is named after its module and its class, both in kebab case. The module is the one
+the assembly declares with `[assembly: Module]` ([Modules](modules.md)):
 
 ```csharp
-[DomainEventName("ordering.order-placed")]
-public sealed record OrderPlaced(OrderId OrderId, CustomerId Customer) : DomainEvent;
+[assembly: Module("Ordering")]
+
+public sealed record OrderPlaced(OrderId OrderId, CustomerId Customer) : DomainEvent;   // ordering.order-placed
+public sealed record HTTPCallbackReceived(string Url) : DomainEvent;                   // ordering.http-callback-received
 ```
 
 ```csharp
@@ -150,29 +184,123 @@ DomainEventName.Of<OrderPlaced>();   // "ordering.order-placed"
 DomainEventName.Of(someEvent);       // same, from an instance
 ```
 
-Without the attribute the name is the class name, which is fine until the first rename. Add the
-attribute to any event that is serialized, stored or published.
+An assembly without `[assembly: Module]` leaves the module out: `order-placed`. The namespace plays no
+part, so moving a class to another namespace or folder changes nothing.
 
-With `DDDToolkit.EntityFramework` referenced, its generator writes the module's outbox registration,
-and the stored name of every domain event is written into it as a literal. For a module with
-`OrderPlaced` above and an `OrderCancelled` without the attribute:
+### Versions are in the class name
+
+A class name that ends in `V` and a number is that version of its event, and the suffix is not part of
+the name. Every version of one event shares the name:
+
+| Class | Name | Version |
+|---|---|---|
+| `OrderPlaced` | `ordering.order-placed` | 1 |
+| `OrderPlacedV2` | `ordering.order-placed` | 2 |
+| `Level2Reached` | `ordering.level2-reached` | 1, the digits do not follow a `V` |
+
+A class can also state its version with `[IntegrationEvent(Version = n)]`, and a stated version wins over
+the one in the name: it is the one somebody wrote on purpose, the suffix is the convention for when nobody
+did. When a class does both and they differ, the suffix is ignored and the build warns,
+[DDD00034](diagnostics.md#ddd00034), with a fix that renames the class to the version it is. A suffix that
+cannot be a version, `V0` or `V01`, fails the build with [DDD00035](diagnostics.md#ddd00035). What a version is for is in
+[Versioning and upcasting](integration-events.md#versioning-and-upcasting).
+
+### Renaming a class
+
+The conventional name follows the class. Rename `OrderPlaced` to `PlacedOrder` and new rows are written as
+`ordering.placed-order`, while the rows already in the outbox, and every consumer, still say
+`ordering.order-placed`. So a rename is the moment to pin the old name:
+
+```csharp
+[DomainEventName("ordering.order-placed")]
+public sealed record PlacedOrder(OrderId OrderId, CustomerId Customer) : DomainEvent;
+```
+
+A published contract pins its name in its own attribute, `[IntegrationEvent("ordering.order-placed")]`.
+The version still comes from the class name, so `PlacedOrderV2` with that attribute is
+`ordering.order-placed` version 2.
+
+### Two events with one name
+
+Two classes of one module can have the same name in different namespaces, and the convention then gives
+both the same event name. An outbox row or a message could not say which of the two it is, so that is a
+compile error, [DDD00036](diagnostics.md#ddd00036), on both classes:
+
+```csharp
+namespace Ordering.Orders  { public sealed record OrderPlaced(OrderId OrderId) : DomainEvent; }
+namespace Ordering.Returns { public sealed record OrderPlaced(OrderId OrderId) : DomainEvent; }
+// error DDD00036: 'Ordering.Returns.OrderPlaced' and 'Ordering.Orders.OrderPlaced' are both stored or
+// published as 'ordering.order-placed' version 1 ...
+```
+
+The code fix pins another name on the class you invoke it on, taken from its namespace or containing
+type: `[DomainEventName("ordering.returns-order-placed")]`. Or rename one of the classes. The toolkit does
+not make the names unique by itself, from the namespace for instance, because then a name would change
+the moment a class moved, or the moment a second class of the same name appeared, and the rows written
+under the old one would be orphaned without a word.
+
+Only events of one kind are compared:
+
+| These two | Error? |
+|---|---|
+| Two domain events under one name and version | Yes |
+| Two published contracts under one name and version, such as `OrderPlaced` and `OrderPlacedV1` | Yes |
+| A domain event and the contract it is published as, `OrderPlaced` and `OrderPlacedV1` | No, that is the pattern |
+| `OrderPlacedV1` and `OrderPlacedV2` | No, those are versions |
+
+The check runs where the module compiles, so it sees that assembly's events. Two assemblies that declare
+the same module without referencing each other are still compared when the application starts, by the
+outbox registry, which refuses the second.
+
+### The names as constants
+
+For every name its events are stored or published under, the generator writes a constant into a class
+named after the module:
+
+```csharp title="EventNames.g.cs"
+public static class OrderingEventNames
+{
+    /// <summary><c>ordering.order-placed</c>: OrderPlaced (version 1), OrderPlacedV2 (version 2).</summary>
+    public const string OrderPlaced = "ordering.order-placed";
+}
+```
+
+Use them where a name is written by hand: a topic binding, a test, a log query. Not in an event's own
+`[DomainEventName]` or `[IntegrationEvent]`: the generator reads those attributes to write the constants,
+so a constant cannot be what names its own event. Write the literal there. The constant is named after the
+name, not the class, so a renamed class that pins its old name keeps its old constant. A contracts
+assembly, where every name belongs to a published contract, marks the class `[ModuleContract]` so other
+modules can use it.
+
+### Where the name ends up
+
+- **The outbox row** stores it in `EventName`, and the generated registration writes it out as a literal
+  when the module compiles, so nothing reads an attribute at start-up.
+- **The published message** carries it in its `Name`, which is what an inbox and a pgmq topic route on.
+- **A broker exchange**, with MassTransit or Wolverine and `UseIntegrationEventNames()`, is the name and
+  the version, `ordering.order-placed.v1` ([Transports](transports.md)).
 
 ```csharp title="IntegrationEventExtensions.g.cs, shortened"
 public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
 {
     ArgumentNullException.ThrowIfNull(outbox);
-    outbox.RegisterEvent<Ordering.OrderCancelled>("OrderCancelled", 1);
+    outbox.RegisterEvent<Ordering.OrderCancelled>("ordering.order-cancelled", 1);
     outbox.RegisterEvent<Ordering.OrderPlaced>("ordering.order-placed", 1);
     return outbox;
 }
 ```
 
-`OrderCancelled` is stored under its class name, and that is the row a rename would orphan. The name is
-read when the module compiles, so nothing reads the attribute at start-up; the `1` is the version of
-the event's shape, which matters once the shape changes
-([Versioning and upcasting](integration-events.md#versioning-and-upcasting)). See
-[Registered when the module compiles](integration-events.md#registered-when-the-module-compiles) for
-the rest of what that method registers.
+The `1` is the version of the event's shape, which matters once the shape changes. See
+[Registered when the module compiles](integration-events.md#registered-when-the-module-compiles) for the
+rest of what that method registers.
+
+### Rows written by an older build
+
+Before events were named by convention, an event without `[DomainEventName]` was stored under its bare
+class name, `OrderPlaced`. The outbox still finds such a row: every registered type answers to its class
+name as well, as long as no current name is spelled the same and no other registered class has that class
+name. A row found that way is read as exactly that class, upcast if the class is an older shape, and
+published under the name the type has now.
 
 ## Testing
 
