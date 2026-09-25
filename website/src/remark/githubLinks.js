@@ -14,6 +14,13 @@ function visit(node, callback) {
   }
 }
 
+/** The file or folder at an absolute path inside the repository, on GitHub. */
+function githubUrl(resolved, hash, repoRoot) {
+  const relative = path.relative(repoRoot, resolved).split(path.sep).join('/');
+  const kind = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? 'tree' : 'blob';
+  return `${repository}/${kind}/${branch}/${relative}${hash ? `#${hash}` : ''}`;
+}
+
 module.exports = function githubLinks({ docsDir, repoRoot }) {
   return (tree, file) => {
     visit(tree, (node) => {
@@ -27,9 +34,9 @@ module.exports = function githubLinks({ docsDir, repoRoot }) {
         return;
       }
 
-      const relative = path.relative(repoRoot, resolved).split(path.sep).join('/');
-      const kind = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? 'tree' : 'blob';
-      node.url = `${repository}/${kind}/${branch}/${relative}${hash ? `#${hash}` : ''}`;
+      node.url = githubUrl(resolved, hash, repoRoot);
     });
   };
 };
+
+module.exports.githubUrl = githubUrl;

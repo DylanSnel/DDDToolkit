@@ -1,18 +1,21 @@
 name: Docs
 
-# The docs site: Docusaurus in website/, reading its pages from docs/. A pull request builds it, which
-# fails on a broken link; a push to main publishes it to GitHub Pages.
+# The docs site: Docusaurus in website/, reading its pages from docs/ and, for llms.txt, their descriptions
+# from the README. A pull request builds it, which fails on a broken link; a push to main publishes it to
+# GitHub Pages.
 on:
   push:
     branches: [main]
     paths:
       - docs/**
       - website/**
+      - README.md
       - .github/workflows/Docs.yml
   pull_request:
     paths:
       - docs/**
       - website/**
+      - README.md
       - .github/workflows/Docs.yml
   workflow_dispatch:
 
