@@ -481,6 +481,10 @@ options.UseOutbox(outbox => outbox.MaxAttempts = 5);
 
 They stay in the table with their last error for you to inspect. Reset `Attempts` to retry one.
 
+Delivered rows stay too, until something deletes them. `services.AddDomainEventRetention<TContext>(...)`
+deletes them once they are older than a window you choose, and never touches a row that was not
+delivered. See [Keeping the tables small](integration-events.md#keeping-the-tables-small).
+
 Note that a batch in which every message fails returns zero, which ends the background service's
 drain for that tick. The next tick picks the messages up again.
 

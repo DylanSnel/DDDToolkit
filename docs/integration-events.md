@@ -665,6 +665,43 @@ Steps 4 to 7 are the whole point. The row that says "applied" and the effect of 
 one `SaveChanges` inside one transaction, so there is no instant where one exists without the other. A
 crash anywhere in between rolls back both, and the next delivery applies the message cleanly.
 
+When a step fails, the transaction is rolled back and so is the change tracker. Whatever the attempt started
+tracking, the inbox row included, is detached. Without that, the next save on the same context would write
+the failed handler's changes after all, without its row, and the retry would apply them a second time. The
+module sink runs every handler of a module on one context, so the next save is usually the next consumer's.
+Entities the context was already tracking before the attempt are left alone.
+
+```mermaid
+sequenceDiagram
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Context as BillingContext
+    participant Db as Billing's database
+
+    Sink->>Inbox: billing.invoicer
+    Inbox->>Context: an inbox row and an invoice
+    Note over Inbox: the invoicer throws
+    Inbox->>Db: roll back
+    Inbox->>Context: detach both
+    Sink->>Inbox: billing.ledger
+    Inbox->>Db: the ledger's entry and row only
+    Note over Sink,Db: same context: the invoice stays out. The retry runs the invoicer again.
+```
+
+<details>
+<summary>Show the code: two consumers in one module</summary>
+
+Two handlers of the same contract, each under a consumer name of its own. They run one after the other, on
+the one `BillingContext` of the delivery's scope:
+
+```csharp
+services.AddModuleIntegrationEvents<BillingContext>(module => module
+    .Handle<OrderPlacedV2, RaiseInvoice>()      // [IntegrationEventConsumer("billing.invoicer")]
+    .Handle<OrderPlacedV2, PostToLedger>());    // [IntegrationEventConsumer("billing.ledger")]
+```
+
+</details>
+
 The key is the pair, not the message. Two consumers of the same message each get a row and each run once,
 so adding a consumer later does not mean replaying its backlog through the consumers that are already up
 to date. Pick consumer names you will not want to change, the same way you pick `[DomainEventName]`.
@@ -684,6 +721,52 @@ no inbox row and both run. One save then inserts the inbox row, and the other fa
 everything it wrote, so the database ends up with one effect. Anything the losing copy did outside that
 transaction, a counter in memory or a call to another system, happened twice. Only what a handler does
 through its module's context is exactly-once.
+
+The losing copy is not reported as a failure. Once its transaction is rolled back, the inbox looks for the
+row again. If the winner's row is there, it returns `false`, as it would for any other repeat. It does not
+matter whether the loser failed on the inbox row itself or on an aggregate the winner changed first. The
+broker then sees a message that was handled, not one to retry. Inside a caller's transaction the inbox
+throws instead, because only the caller can roll that back; their retry then finds the row.
+
+```mermaid
+sequenceDiagram
+    participant A as Copy A
+    participant B as Copy B
+    participant Db as Billing's database
+
+    A->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>A: none
+    B->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>B: none
+    Note over A,B: both run the handler, each in a transaction of its own
+    A->>Db: the invoice and the inbox row, commit
+    Note over A: true: this copy applied it
+    B->>Db: the invoice and the inbox row
+    Db-->>B: refused: the row is taken, or the aggregate moved on
+    B->>Db: roll back
+    B->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>B: copy A's
+    Note over B: false: a repeat, acknowledged like any other
+```
+
+<details>
+<summary>Show the code: what a consumer sees</summary>
+
+Nothing changes in the consumer. Both answers are success, so it acknowledges the message either way:
+
+```csharp
+var applied = await inbox.ExecuteOnceAsync<OrderPlacedV2>(message, "billing.invoicer", (order, received, token) =>
+{
+    context.Invoices.Add(new Invoice(order.OrderId, order.Total));
+    return Task.CompletedTask;
+},
+cancellationToken);
+
+// true: this copy applied the message.
+// false: it had been applied already, before this copy arrived or while it ran.
+```
+
+</details>
 
 It also does not order anything. If message B arrives before message A, the inbox applies B. Handlers that
 care about order have to say so themselves, usually with a version or a sequence number in the payload.
@@ -823,6 +906,8 @@ per consumer in each consuming module, so its handlers do make per-consumer prog
 - **Idempotency is keyed on `MessageId`.** It is the domain event's `EventId`, stable across every
   redelivery, and it is what the inbox stores. If you write your own deduplication, key it on that and
   nothing else.
+- **The inbox remembers for as long as its rows exist.** With [retention](#keeping-the-tables-small), a
+  message that comes back after its row was deleted is applied again.
 - **Ordering is best effort.** The processor loads oldest first, but a failed message is retried after
   messages written later, two processors can interleave, and a queue makes its own decisions. Do not build
   anything on delivery order.
@@ -885,6 +970,101 @@ places. They create the schema first where the provider has schemas, and leave t
 where it does not. The shapes are checked against the model in the tests, so a hand-written migration and a
 scaffolded one produce the same table.
 
+## Keeping the tables small
+
+Neither table shrinks by itself. The outbox marks a row delivered and leaves it there. The inbox writes a
+row for every message every consumer applies. Retention deletes those rows once they are older than you
+want to keep them:
+
+```csharp
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepInboxFor = TimeSpan.FromDays(30);
+});
+```
+
+That registers `DomainEventRetention<OrderingContext>` and a background service that runs it at start and
+then every `Interval`, an hour by default. What one run deletes, and what it leaves:
+
+```mermaid
+flowchart LR
+    Run["DomainEventRetention, at start and every Interval"]
+    Run --> Outbox["OutboxMessages"]
+    Run --> Inbox["InboxMessages"]
+    Outbox -->|"delivered longer ago than KeepOutboxFor"| Gone["deleted, BatchSize rows per statement"]
+    Inbox -->|"applied longer ago than KeepInboxFor"| Gone
+    Outbox -.->|"delivered recently, still waiting, or out of attempts"| Kept["kept"]
+    Inbox -.->|"applied recently"| Kept
+```
+
+Each run deletes with `ExecuteDelete`, in the database and past the change tracker, `BatchSize` rows per
+statement (1000 by default). A large backlog therefore goes in many short transactions, not one long one.
+Both windows count from `ProcessedAt`, which both tables already index. Leave a window unset and that table
+is not touched. A context with only an inbox sets only `KeepInboxFor`.
+
+Only delivered outbox rows are deleted. A row still waiting, or one that ran out of attempts, stays however
+old it is, because it is not history yet; it is work somebody still has to look at.
+
+<details>
+<summary>Show the code: what the example shop keeps, and running it yourself</summary>
+
+Every module registers its own retention, next to its own outbox. Ordering has both tables, Catalog only
+publishes and Shipping only consumes, so those two set one window each:
+
+```csharp
+// inside AddOrderingModule
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepInboxFor = TimeSpan.FromDays(30);
+});
+
+// inside AddCatalogModule: an outbox and no inbox
+services.AddDomainEventRetention<CatalogContext>(retention => retention.KeepOutboxFor = TimeSpan.FromDays(7));
+
+// inside AddShippingModule: an inbox and no outbox
+services.AddDomainEventRetention<ShippingContext>(retention => retention.KeepInboxFor = TimeSpan.FromDays(30));
+```
+
+To run it from a scheduler of your own instead, skip the registration and call it directly:
+
+```csharp
+var retention = new DomainEventRetention<OrderingContext>(context, new DomainEventRetentionOptions<OrderingContext>
+{
+    KeepInboxFor = TimeSpan.FromDays(30),
+});
+
+await retention.DeleteExpiredAsync(cancellationToken);                                     // by the windows
+await retention.DeleteDeliveredOutboxMessagesAsync(DateTimeOffset.UtcNow.AddDays(-7), cancellationToken); // or by a cutoff
+```
+
+</details>
+
+### How long to keep the inbox
+
+The inbox window needs more thought than the outbox's. An inbox row is what makes a repeat a repeat, and once
+it is deleted, the same message delivered again is applied again:
+
+```mermaid
+sequenceDiagram
+    participant Broker
+    participant Inbox as Billing's inbox
+    participant Retention
+
+    Broker->>Inbox: message 42, day 0
+    Note over Inbox: applied, and its row written
+    Broker->>Inbox: message 42 again, day 3
+    Inbox-->>Broker: a repeat, skipped
+    Retention->>Inbox: day 31: rows older than 30 days go, message 42's with them
+    Broker->>Inbox: message 42 again, day 40
+    Note over Inbox: no row any more: applied a second time
+```
+
+So keep inbox rows longer than any message can take to come back: the broker's own retention, the outbox's
+retries, and an operator resetting `Attempts` on a row that failed last week. Days is usually right for the
+outbox, and weeks for the inbox.
+
 ## Where to look next
 
 - [Transports](transports.md) for pgmq, Wolverine, MassTransit, and writing a sink of your own.
@@ -901,7 +1081,8 @@ scaffolded one produce the same table.
 - `Tests/DDDToolkit.EntityFramework.Tests/EventVersioningTests.cs` for upcasting on both read paths.
 - `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract and the
   multi-sink failure behaviour.
-- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, and
-  for the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, a
+  copy that loses the race to another copy, and the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/RetentionTests.cs` for what retention deletes and what it keeps.
 - `Tests/DDDToolkit.EntityFramework.Tests/MessagingSchemaTests.cs` for the schema override and the
   migration helpers.

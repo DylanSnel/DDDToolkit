@@ -61,6 +61,15 @@ public static class OrderingModule
         // then, which is exactly why a failing consumer cannot refuse an order.
         services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
+        // Neither table shrinks by itself. A delivered outbox row is history after a week. An inbox row is
+        // what turns a redelivery into a repeat, so it is kept for a month, far longer than any message
+        // here can take to come back.
+        services.AddDomainEventRetention<OrderingContext>(retention =>
+        {
+            retention.KeepOutboxFor = TimeSpan.FromDays(7);
+            retention.KeepInboxFor = TimeSpan.FromDays(30);
+        });
+
         // GraphQL, when the host serves it: Ordering's own source schema, for a Fusion gateway to compose.
         if (host.GraphQL is { } graphql)
         {
