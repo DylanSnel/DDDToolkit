@@ -28,3 +28,8 @@ through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). A di
 `<details><summary>Show the code: ...</summary>` directly under it with the registration or setup it
 shows; leave a blank line after `<summary>` and before `</details>`, or the Markdown inside is not read.
 Keep Mermaid labels free of `;`, which ends a statement.
+
+An aside that should stand out is a GitHub alert: a blockquote whose first line is `[!NOTE]`, `[!TIP]`,
+`[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. GitHub draws it as a banner, and `src/remark/githubAlerts.js`
+turns it into the matching Docusaurus admonition. Use Docusaurus's own `:::note` and GitHub shows the
+colons as text.

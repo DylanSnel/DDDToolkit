@@ -423,3 +423,26 @@ html[data-theme='dark'] .theme-code-block {
 .markdown details.alert .theme-code-block {
   box-shadow: none;
 }
+
+/* A [!NOTE] in the docs (src/remark/githubAlerts.js) is drawn in the site's colours rather than
+   Infima's grey. The other kinds keep Docusaurus's colours, since there the colour is the message. */
+.markdown .theme-admonition-note {
+  --ifm-alert-background-color: color-mix(in srgb, var(--ifm-color-primary) 5%, var(--ddd-card));
+  --ifm-alert-background-color-highlight: color-mix(in srgb, var(--ifm-color-primary) 12%, transparent);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: var(--ifm-color-primary);
+  border: 1px solid color-mix(in srgb, var(--ifm-color-primary) 25%, var(--ddd-border));
+  border-left: 3px solid var(--ifm-color-primary);
+  box-shadow: none;
+}
+
+/* The heading and its icon; the icon is filled with the alert's foreground colour. */
+.markdown .theme-admonition-note > :first-child {
+  --ifm-alert-foreground-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+}
+
+/* Infima points --ifm-link-color at the alert's foreground inside an alert, so name the colour. */
+.markdown .theme-admonition-note a {
+  color: var(--ifm-color-primary);
+}

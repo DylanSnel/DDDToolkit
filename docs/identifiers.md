@@ -298,6 +298,11 @@ Reach for `partial record` only when you need inheritance or the
 [always-valid twin](value-objects.md#the-always-valid-twin). Neither is common for identifiers:
 validation belongs to value objects, and an id is either well-formed or it is not.
 
+The struct form could not have a twin in any case: the twin derives from the type it validates, and a
+struct cannot be derived from. Nor does it need one. A struct id does not derive from `ValueObject`
+and has no rules to run, so it is well formed by construction, and it has no `TryToValid` or
+`TryValidate` either.
+
 ## The record form
 
 ```csharp

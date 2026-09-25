@@ -1,6 +1,7 @@
 // @ts-check
 const path = require('path');
 const { themes: prismThemes } = require('prism-react-renderer');
+const githubAlerts = require('./src/remark/githubAlerts');
 const githubLinks = require('./src/remark/githubLinks');
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -56,8 +57,9 @@ const config = {
           routeBasePath: 'docs',
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/DylanSnel/DDDToolkit/edit/main/docs/',
-          // Before Docusaurus resolves the links between docs, so it never sees the ones that leave docs/.
-          beforeDefaultRemarkPlugins: [[githubLinks, { docsDir, repoRoot }]],
+          // Before Docusaurus resolves the links between docs, so it never sees the ones that leave docs/,
+          // and before its admonitions plugin, which turns what githubAlerts makes into a banner.
+          beforeDefaultRemarkPlugins: [[githubLinks, { docsDir, repoRoot }], githubAlerts],
         },
         blog: false,
         theme: {

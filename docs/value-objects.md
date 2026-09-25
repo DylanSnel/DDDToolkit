@@ -268,7 +268,20 @@ whichever side is asked. To compare a twin with a plain value, compare twin to t
 on the other side) or compare the components. Hash codes do not include the type, so a twin and a plain
 value with the same components hash alike; that is allowed, and harmless.
 
-This is why value objects cannot be `sealed` ([DDD00013](diagnostics.md#ddd00013)).
+> [!NOTE]
+> **Why the twin rules out `sealed` and structs.** `ValidEmailAddress` derives from `EmailAddress`,
+> and three things rest on that. A twin is accepted anywhere the original is, so a signature can ask
+> for `ValidEmailAddress` while the rest of the code carries on with `EmailAddress`. The twin is built
+> by the record's copy constructor, which the compiler makes `protected` on a record that is not
+> sealed and `private` on one that is. And `With` is virtual, so the twin's override validates a copy
+> even when the twin is held as its base type.
+>
+> A sealed record cannot be derived from, which is [DDD00013](diagnostics.md#ddd00013), and neither
+> can a struct, which is why a value object has to be a reference record
+> ([DDD00001](diagnostics.md#ddd00001)). A twin that wrapped the value instead of deriving from it
+> would lose all three, and around a struct it could not even keep its promise: `default` and every
+> element of a new array skip the constructor, and the check with it. The same goes for
+> [struct identifiers](identifiers.md#struct-or-record), which have no twin.
 
 ## Failure handling
 
