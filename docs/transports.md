@@ -310,6 +310,7 @@ builder.UseWolverine(wolverine =>
     wolverine.UseRabbitMq(rabbitUri)
         .AutoProvision()
         .UseConventionalRouting(conventions => conventions
+            .UseIntegrationEventNames()                                    // exchanges named ordering.order-placed.v1
             .QueueNameForListener(type => $"fulfilment.{type.Name}")      // a queue per service and contract
             .ConfigureListeners((listener, _) => listener.ProcessInline())
             .ConfigureSending((sender, _) => sender.SendInline()));
@@ -338,6 +339,15 @@ reference `WolverineFx.RuntimeCompilation` in the process, because Wolverine com
 at start-up and since 6.x ships that compiler separately. `Examples/Microservices.Wolverine` runs the shop
 this way.
 
+`UseIntegrationEventNames()` is optional, and it is what the samples do. Without it Wolverine names a
+contract's exchange after its CLR type, so renaming the contract class or moving it to another namespace
+moves its messages to another exchange, and a service still on the old name sends into the void. With it
+the exchange is the contract's published name and version, `ordering.order-placed.v1`
+([Stable names](domain-events.md#stable-names)), which stays put while the class is renamed as long as the
+name is pinned. Each version is an exchange of its own, because each version is a type of its own to
+Wolverine. Listeners bind their queues to the same name, so every service that shares the events has to
+switch together. Other message types keep Wolverine's names.
+
 ## Through a broker: MassTransit
 
 `DDDToolkit.Messaging.MassTransit` does the same with MassTransit: each contract a message type of its
@@ -357,6 +367,7 @@ builder.Services.AddMassTransit(bus =>
     bus.UsingRabbitMq((context, rabbit) =>
     {
         rabbit.Host(rabbitUri);
+        rabbit.UseIntegrationEventNames();   // exchanges named ordering.order-placed.v1, before any endpoint
 
         // this service's queue; MassTransit binds it to the exchange of every contract its consumers take
         rabbit.ReceiveEndpoint("fulfilment", endpoint =>
@@ -373,6 +384,11 @@ options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());
 
 `MassTransitSink` publishes the contract through `IPublishEndpoint`, so MassTransit gives it the exchange of
 its type, with the outbox's message id as MassTransit's message id and the toolkit's headers alongside.
+MassTransit names that exchange after the CLR type, `Shop.Ordering.Contracts:OrderPlacedV1`, unless
+`UseIntegrationEventNames()` replaces its entity name formatter with `IntegrationEventEntityNameFormatter`:
+then it is the published name and version, `ordering.order-placed.v1`, and survives renaming the class for
+the same reasons as under Wolverine above. Consumers bind through the same formatter, so switch every
+service together. Message types the toolkit does not name, `Fault<T>` among them, keep MassTransit's names.
 `IntegrationEventConsumer<TContract>` hands it to `IntegrationEventReceiver`; MassTransit acknowledges it
 when the consumer returns, retries it as the endpoint says when a handler throws, and then moves it to the
 endpoint's error queue.

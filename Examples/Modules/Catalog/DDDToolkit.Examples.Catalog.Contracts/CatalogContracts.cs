@@ -10,9 +10,9 @@ namespace DDDToolkit.Examples.Catalog.Contracts;
 /// message outlives the code that wrote it, and a consumer that deployed against these two fields
 /// keeps reading them whatever happens to <c>Money</c> later.
 /// </remarks>
-[IntegrationEvent("catalog.product-listed", Version = 1)]
+[IntegrationEvent]
 public sealed record ProductListedV1(string Sku, string Name, decimal Price, string Currency);
 
 /// <summary>A product's price changed. Orders placed from now on are priced at <see cref="Price"/>.</summary>
-[IntegrationEvent("catalog.product-price-changed", Version = 1)]
+[IntegrationEvent]
 public sealed record ProductPriceChangedV1(string Sku, decimal Price, string Currency);

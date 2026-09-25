@@ -1,8 +1,12 @@
+using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Wolverine;
+using Wolverine.Configuration;
 using Wolverine.ErrorHandling;
+using Wolverine.Transports;
+using Wolverine.Util;
 
 namespace DDDToolkit.Messaging.Wolverine;
 
@@ -59,6 +63,35 @@ public static class WolverineOptionsExtensions
             .Then.MoveToErrorQueue();
 
         return options;
+    }
+
+    /// <summary>
+    /// Names the exchange or topic of every toolkit event after its published name and version,
+    /// <c>ordering.order-placed.v1</c>, instead of after its CLR type name. Every other message type keeps
+    /// Wolverine's own name for it.
+    /// <code>
+    /// opts.UseRabbitMq(uri).UseConventionalRouting(conventions => conventions
+    ///     .UseIntegrationEventNames()
+    ///     .QueueNameForListener(type => $"storefront.{type.Name}"));
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// Conventional routing sends a message to the entity this names, and binds a listener's queue to the same
+    /// one, so the sending and the receiving service agree as long as both use it. What it buys is that the
+    /// exchange no longer moves when the contract class is renamed or moved to another namespace. A service
+    /// that switches over gets new exchanges, so switch every service that shares the events together.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="conventions"/> is null.</exception>
+    public static TSelf UseIntegrationEventNames<TTransport, TListener, TSubscriber, TSelf>(this MessageRoutingConvention<TTransport, TListener, TSubscriber, TSelf> conventions)
+        where TTransport : IBrokerTransport, new()
+        where TSubscriber : IDelayedEndpointConfiguration
+        where TSelf : MessageRoutingConvention<TTransport, TListener, TSubscriber, TSelf>
+    {
+        ArgumentNullException.ThrowIfNull(conventions);
+
+        return conventions.IdentifierForSender(static type => IntegrationEventContract.IsNamedByToolkit(type)
+            ? IntegrationEventContract.EntityNameOf(type)
+            : type.ToMessageTypeName());
     }
 
     private sealed class HandlerDiscovery(WolverineOptions options) : IIntegrationEventContractVisitor

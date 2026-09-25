@@ -86,7 +86,7 @@ public class IntegrationEventsGeneratorTests
         result.ShouldCompile();
         result.ShouldContain(Hint, "public static global::DDDToolkit.EntityFramework.Options.OutboxOptions AddSalesIntegrationEvents(this global::DDDToolkit.EntityFramework.Options.OutboxOptions outbox)");
         result.ShouldContain(Hint, "outbox.RegisterEvent<global::Sales.OrderPlaced>(\"sales.order-placed\", 1);", "[DomainEventName] is the stored name");
-        result.ShouldContain(Hint, "outbox.RegisterEvent<global::Sales.OrderShipped>(\"OrderShipped\", 1);", "without it the class name is, as at run time");
+        result.ShouldContain(Hint, "outbox.RegisterEvent<global::Sales.OrderShipped>(\"order-shipped\", 1);", "without it the convention names it, as at run time");
         result.ShouldContain(
             Hint,
             "outbox.PublishWith<global::Sales.OrderPlaced, global::Sales.OrderPlacedV1>(\"sales.order-placed\", 1, static services => new global::Sales.PublishOrderPlaced());");

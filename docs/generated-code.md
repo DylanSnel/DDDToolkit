@@ -80,7 +80,7 @@ public partial record Address(string Street, string City)
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 ```
 
-58 lines in, 946 lines out, in 14 files.
+58 lines in, 963 lines out, in 15 files.
 
 ## Why generate it
 
@@ -237,6 +237,23 @@ public partial record ValidAddress : Address, DDDToolkit.Abstractions.Interfaces
 
 [Value objects](value-objects.md) explains validation, the twin and `With()` in full.
 
+## The event names
+
+Every name the project's events are stored or published under becomes a constant, in a class named after
+the module:
+
+```csharp title="EventNames.g.cs, shortened"
+public static class ShopEventNames
+{
+    /// <summary><c>shop.order-placed</c>: <see cref="Shop.OrderPlaced"/> (version 1).</summary>
+    public const string OrderPlaced = "shop.order-placed";
+}
+```
+
+`OrderPlaced` pins its name with `[DomainEventName]`. Without it the name would be the module and the class
+name in kebab case; [Stable names](domain-events.md#stable-names) has the rule, and the checks the same
+pass runs on it.
+
 ## `DDDToolkit.EntityFramework`
 
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value
@@ -270,8 +287,8 @@ public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopCon
 Value objects are marked `[ComplexType]`, so their fields become columns of the table that holds
 them. Child entities are marked `[Owned]`, so they are saved with their aggregate and never alone.
 
-`AddShopIntegrationEvents()` registers every domain event of the module with the outbox, under the
-name from `[DomainEventName]`:
+`AddShopIntegrationEvents()` registers every domain event of the module with the outbox, under its stable
+name, here the one from `[DomainEventName]`:
 
 ```csharp title="IntegrationEventExtensions.g.cs, shortened"
 outbox.RegisterEvent<Shop.OrderPlaced>("shop.order-placed", 1);

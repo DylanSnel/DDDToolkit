@@ -7,6 +7,11 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <DDD_Module>EfTests</DDD_Module>
+    <!--
+      Two events under one name and version fail the build (DDD00036). A few tests declare exactly that on
+      purpose, to pin down that the registries still refuse it at start-up for code the build never saw.
+    -->
+    <NoWarn>$(NoWarn);DDD00036</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
