@@ -457,7 +457,7 @@ public static Result<ValidEmailAddress> ToResult(this EmailAddress email)
   let [`DDDToolkit.Localization`](localization.md) phrase it from `Code` and `Arguments`.
 - Nothing validates across value objects. A rule sees one value object, never the request around it.
   That is what a containing validator is for, and
-  [`MustBeValid()`](#with-fluentvalidation) folds a value object into one.
+  [`MustBeValid()`](fluent-validation.md#a-value-object-in-a-request-validator) folds a value object into one.
 
 ## Changing a value: `With`
 
@@ -769,8 +769,8 @@ partial record ValidPersonName
 
 ## With FluentValidation
 
-Reference `DDDToolkit.FluentValidation` and the generator writes the `Validate()` override for you,
-along with an `Errors` collection and a nested `Validator` class. You supply only the rules:
+If you write rules with FluentValidation, reference `DDDToolkit.FluentValidation` and write a value
+object's rules as a validator instead of a `Validate()` override:
 
 ```csharp
 [SingleValueObject<string>]
@@ -785,73 +785,9 @@ public partial record EmailAddress
 }
 ```
 
-```csharp title="EmailAddress.FluentValidation.g.cs, shortened"
-partial record EmailAddress
-{
-    [Internal]
-    [NotMapped]
-    public ReadOnlyCollection<FluentValidation.Results.ValidationFailure> Errors => _errors.AsReadOnly();
-
-    private List<FluentValidation.Results.ValidationFailure> _errors = new();
-
-    protected override bool Validate()
-    {
-        var validator = new Validator();
-        var result = validator.Validate(this);
-        _errors = result.Errors;
-        return result.IsValid;
-    }
-
-    protected override void Validate(ValidationErrorBuilder errors)
-    {
-        foreach (var failure in _errors)
-        {
-            // ... copies each failure, with its placeholder values as arguments, into a ValidationError
-        }
-    }
-
-    partial class Validator : FluentValidation.AbstractValidator<EmailAddress>
-    {
-    }
-}
-```
-
-The two halves of `Validator` are the point: the generator states the base class, you state the rules.
-Note which failure shape is which. `Errors` is FluentValidation's own `ValidationFailure`, handy when
-you already work in that library; the second `Validate` overload copies the same failures into the
-toolkit's `ValidationError`, which is what `ValidationErrors` and `TryToValid()` hand back and what
-lets a caller read failures without referencing FluentValidation at all. Each carries the same
-property, code and attempted value, and its placeholder values as `Arguments`.
-
-```csharp
-var email = EmailAddress.Create("nope");
-email.IsValid;                     // false
-email.Errors[0].PropertyName;      // "Value"
-```
-
-Struct identifiers get no validator, since they are well-formed by construction.
-
-A value object validates itself, which is not the same as taking part in the validator you write for a
-command or a request DTO. `MustBeValid()` folds it into one:
-
-```csharp
-public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
-{
-    public PlaceOrderValidator()
-    {
-        RuleFor(x => x.Email).NotNull().MustBeValid();
-        RuleFor(x => x.Quantity).GreaterThan(0);
-    }
-}
-```
-
-The failure is reported against the containing property, so the caller gets one flat result. A `null`
-property passes, exactly as with FluentValidation's own rules, so chain `NotNull()` when the value is
-required.
-
-If the containing validator is a FluentValidation one, `result.ToValidationErrors()` from
-`DDDToolkit.FluentValidation` converts its failures too, so everything ends up in one list with the
-ones from `TryToValid`.
+The generator writes the rest, and `IsValid`, `TryToValid()` and the twin run your rules.
+`MustBeValid()` folds a value object into the validator you write for a request. See
+[FluentValidation](fluent-validation.md).
 
 ## Requirements
 

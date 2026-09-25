@@ -19,6 +19,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - [What the generator writes](docs/generated-code.md): the generated code for one small aggregate,
   file by file, and why it is generated rather than written. The site's homepage shows the same
   output, compiled from `website/sample` rather than typed out.
+- [FluentValidation](docs/fluent-validation.md), a page of its own instead of a section at the end of Value
+  objects: a value object's rules as a validator, which types get one, the two shapes its failures come
+  in, `MustBeValid()` in a request validator with the failures it reports, one list for a whole request,
+  and what it does not do. Getting started and the sidebar point to it.
 - Diagrams in the documentation, each with a "Show the code" section under it holding the registration
   or setup it shows: delivering domain events in process and through the outbox, one message from
   one module's save to another's inbox, the example shop's checkout across its modules, the roads a

@@ -140,6 +140,9 @@ An `Address` may be invalid; it is what a form handed you. A `ValidAddress` cann
 constructor validates. That lets a method say in its signature that it wants a checked address, and the
 aggregate in the next step does exactly that. See [Value objects](value-objects.md).
 
+The rules here are a hand-written `Validate` override. If your team writes rules with FluentValidation,
+a value object's rules can be a FluentValidation validator instead; see [FluentValidation](fluent-validation.md).
+
 ## Declare an aggregate
 
 The order itself. It has an identity, it holds its lines, and it is the one place that decides what
