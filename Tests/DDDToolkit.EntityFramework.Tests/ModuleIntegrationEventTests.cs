@@ -265,6 +265,7 @@ public sealed class ModuleIntegrationEventTests : IDisposable
             {
                 row.ProcessedAt = null;
                 row.Attempts = 0;
+                row.NextAttemptAt = null;
             }
 
             await reset.SaveChangesAsync(TestContext.Current.CancellationToken);

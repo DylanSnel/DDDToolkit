@@ -86,6 +86,7 @@ public static class DomainEventMigrationBuilderExtensions
                 CreatedAt = table.TimestampColumn(utcDateTime),
                 ProcessedAt = table.TimestampColumn(utcDateTime, nullable: true),
                 Attempts = table.Column<int>(nullable: false),
+                NextAttemptAt = table.TimestampColumn(utcDateTime, nullable: true),
                 LastError = table.Column<string>(maxLength: DomainEventStorage.MaxErrorLength, nullable: true),
             },
             constraints: table => table.PrimaryKey($"PK_{tableName}", x => x.Id));

@@ -196,16 +196,19 @@ public sealed class MessagingSchemaTests : IDisposable
     }
 
     [Fact]
-    public void Only_ProcessedAt_is_a_nullable_timestamp()
+    public void Only_ProcessedAt_and_NextAttemptAt_are_nullable_timestamps()
     {
         var builder = new MigrationBuilder(SqlServer);
         builder.CreateDomainEventOutbox();
         builder.CreateDomainEventInbox();
 
         // The outbox's ProcessedAt is what "pending" means, so it has to stay nullable through the change
-        // of column type. The inbox's is written when the row is, so it does not.
+        // of column type, and a null NextAttemptAt is what "due now" means, which is also what lets the
+        // column be added to an existing table without touching a row. The inbox's ProcessedAt is
+        // written when the row is, so it is not nullable.
         var outbox = builder.Operations.OfType<CreateTableOperation>().Single(o => o.Name == "OutboxMessages");
         outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.ProcessedAt)).IsNullable.Should().BeTrue();
+        outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.NextAttemptAt)).IsNullable.Should().BeTrue();
         outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.CreatedAt)).IsNullable.Should().BeFalse();
         outbox.Columns.Single(c => c.Name == nameof(OutboxMessage.OccurredAt)).IsNullable.Should().BeFalse();
 
@@ -230,7 +233,7 @@ public sealed class MessagingSchemaTests : IDisposable
         => builder.Operations
             .OfType<CreateTableOperation>()
             .SelectMany(table => table.Columns)
-            .Where(column => column.Name is nameof(OutboxMessage.OccurredAt) or nameof(OutboxMessage.CreatedAt) or nameof(OutboxMessage.ProcessedAt));
+            .Where(column => column.Name is nameof(OutboxMessage.OccurredAt) or nameof(OutboxMessage.CreatedAt) or nameof(OutboxMessage.ProcessedAt) or nameof(OutboxMessage.NextAttemptAt));
 
     private static void AssertMatchesModel(CreateTableOperation operation, IEntityType entityType)
     {

@@ -33,6 +33,35 @@ public sealed class OutboxOptions
     /// </summary>
     public int MaxAttempts { get; set; } = 10;
 
+    /// <summary>
+    /// How long a message waits after a failed attempt before it is tried again, given the number of
+    /// attempts made so far (1 after the first failure). The processor writes the moment to
+    /// <see cref="OutboxMessage.NextAttemptAt"/> and does not load the row before it, so a failing
+    /// message neither holds back the ones behind it nor uses up its <see cref="MaxAttempts"/> in one
+    /// busy drain.
+    /// <para>
+    /// Defaults to <see cref="DefaultRetryDelay"/>: 5 seconds, then five times longer after every
+    /// failure, up to 10 minutes. With the default <see cref="MaxAttempts"/>, a message that keeps
+    /// failing is given up on about an hour after its first attempt. <see cref="TimeSpan.Zero"/>
+    /// retries on the next poll.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is null.</exception>
+    public Func<int, TimeSpan> RetryDelay
+    {
+        get => _retryDelay;
+        set => _retryDelay = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// The default <see cref="RetryDelay"/>: 5 seconds after the first failed attempt, 25 after the
+    /// second, a little over 2 minutes after the third and 10 minutes after every later one.
+    /// </summary>
+    /// <param name="attempts">The attempts made so far, 1 after the first failure.</param>
+    public static TimeSpan DefaultRetryDelay(int attempts)
+        // In double, so a MaxAttempts in the thousands reaches infinity and the cap rather than overflowing.
+        => TimeSpan.FromSeconds(Math.Min(5 * Math.Pow(5, Math.Max(attempts, 1) - 1), 600));
+
     /// <summary>The event types the processor can deserialize, keyed by their stable name.</summary>
     public DomainEventTypeRegistry EventTypes { get; } = new();
 
@@ -208,4 +237,5 @@ public sealed class OutboxOptions
     }
 
     private readonly List<IntegrationEventSinkRegistration> _sinks = [];
+    private Func<int, TimeSpan> _retryDelay = DefaultRetryDelay;
 }

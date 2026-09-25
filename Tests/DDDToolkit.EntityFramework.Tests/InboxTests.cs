@@ -255,6 +255,7 @@ public sealed class InboxTests : IDisposable
         People().Should().ContainSingle("the working sink did apply it");
 
         broken.Refuse = false;
+        _clock.Advance(TimeSpan.FromSeconds(5));
         var secondRun = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
 
         secondRun.Should().Be(1);

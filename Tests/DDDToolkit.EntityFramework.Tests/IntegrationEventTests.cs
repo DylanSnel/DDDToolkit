@@ -136,6 +136,7 @@ public sealed class IntegrationEventTests : IDisposable
             .And.Contain("is down");
 
         broken.Refuse = false;
+        _clock.Advance(TimeSpan.FromSeconds(5));
         var retried = await ProcessAsync(host);
 
         retried.Should().Be(1);

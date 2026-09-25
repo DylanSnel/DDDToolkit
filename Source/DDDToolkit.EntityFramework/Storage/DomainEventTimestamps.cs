@@ -1,13 +1,14 @@
 namespace DDDToolkit.EntityFramework.Storage;
 
 /// <summary>
-/// What column the outbox and the inbox keep their timestamps in. The three outbox timestamps and the
+/// What column the outbox and the inbox keep their timestamps in. The four outbox timestamps and the
 /// inbox's <c>ProcessedAt</c> are <see cref="DateTimeOffset"/> in the model either way; this decides
 /// what that becomes in the database.
 /// <para>
-/// The processor orders by <c>CreatedAt</c>, so whatever the column is, it has to sort as an instant.
-/// That is the whole constraint, and it is why there is a choice at all: SQLite stores a
-/// <see cref="DateTimeOffset"/> as text and refuses to order by it, so on SQLite, and only on SQLite,
+/// The processor orders by <c>CreatedAt</c> and compares <c>NextAttemptAt</c> with the current time, so
+/// whatever the column is, it has to sort as an instant. That is the whole constraint, and it is why
+/// there is a choice at all: SQLite stores a <see cref="DateTimeOffset"/> as text and refuses to order
+/// by it or compare it, so on SQLite, and only on SQLite,
 /// the toolkit converts to a UTC <see cref="DateTime"/>.
 /// </para>
 /// </summary>

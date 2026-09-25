@@ -91,6 +91,7 @@ public sealed class OutboxTransactionTests : IDisposable
         row.ProcessedAt.Should().BeNull();
         row.Attempts.Should().Be(1);
         row.LastError.Should().Contain("is down");
+        row.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(5), "the wait is bookkeeping too");
     }
 
     [Fact]
