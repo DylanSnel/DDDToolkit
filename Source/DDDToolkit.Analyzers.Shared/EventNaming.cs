@@ -14,8 +14,8 @@ namespace DDDToolkit.Analyzers.Common;
 ///   (<c>DomainEventName.Of</c>).</description></item>
 ///   <item><description>A contract is published under <c>[IntegrationEvent("name")]</c>, otherwise
 ///   <c>[DomainEventName]</c>, otherwise the conventional name (<c>IntegrationEventContract.NameOf</c>).</description></item>
-///   <item><description>Either one's version is its class name's <c>V</c> suffix, otherwise
-///   <c>[IntegrationEvent(Version = n)]</c>, otherwise 1 (<c>IntegrationEventContract.VersionOf</c>).</description></item>
+///   <item><description>Either one's version is <c>[IntegrationEvent(Version = n)]</c>, otherwise its class name's
+///   <c>V</c> suffix, otherwise 1 (<c>IntegrationEventContract.VersionOf</c>).</description></item>
 /// </list>
 /// </summary>
 internal static class EventNaming
@@ -34,9 +34,9 @@ internal static class EventNaming
     public static string ConventionalNameOf(ITypeSymbol type)
         => EventNameConvention.NameFor(type.MetadataName, ModuleBoundary.ModuleOf(type.ContainingAssembly));
 
-    /// <summary>The version: the class name's suffix, otherwise <c>[IntegrationEvent(Version = n)]</c>, otherwise 1.</summary>
+    /// <summary>The version: <c>[IntegrationEvent(Version = n)]</c>, otherwise the class name's suffix, otherwise 1.</summary>
     public static int VersionOf(ITypeSymbol type)
-        => EventNameConvention.Split(type.MetadataName).Version ?? ExplicitVersion(IntegrationEventAttributeOf(type)) ?? 1;
+        => ExplicitVersion(IntegrationEventAttributeOf(type)) ?? EventNameConvention.Split(type.MetadataName).Version ?? 1;
 
     /// <summary>The name <c>[DomainEventName("...")]</c> pins, or null.</summary>
     public static string? PinnedDomainEventName(ITypeSymbol type) => StringArgument(Find(type, DomainEventNameAttribute));

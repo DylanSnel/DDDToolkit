@@ -16,8 +16,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a name in `[IntegrationEvent]` is published, under its module and its class name in kebab case:
   `OrderPlaced` in `[assembly: Module("Ordering")]` is `ordering.order-placed`. A class name that ends in
   `V` and a number carries the version, so `OrderPlacedV2` is `ordering.order-placed` version 2 and every
-  version of an event shares one name. `[IntegrationEvent(Version = n)]` is for a class whose name does not
-  end in one. The rule is one source file compiled into both the runtime and the generators, so
+  version of an event shares one name. `[IntegrationEvent(Version = n)]` states a version explicitly and
+  wins over the suffix. The rule is one source file compiled into both the runtime and the generators, so
   `DomainEventName.Of`, `IntegrationEventContract.NameOf` and `VersionOf` and the generated
   `Add{Module}IntegrationEvents()` cannot disagree. See [Stable names](docs/domain-events.md#stable-names).
 - `{Module}EventNames`, a constant for every name a project's events are stored or published under,
@@ -25,7 +25,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   assembly's class is `[ModuleContract]`, so other modules can bind to its names.
 - Four diagnostics about event names, all reported where the module compiles.
   [DDD00034](docs/diagnostics.md#ddd00034) (warning): the class name's version and `Version` disagree, so
-  `Version` is ignored, with a code fix that removes it. [DDD00035](docs/diagnostics.md#ddd00035) (error):
+  the suffix is ignored, with code fixes that rename the class to the stated version or remove `Version`. [DDD00035](docs/diagnostics.md#ddd00035) (error):
   a class name that ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
   contracts, of one module under one name and version, typically two classes of one name in different
   namespaces, with a code fix that pins another name on one of them, such as

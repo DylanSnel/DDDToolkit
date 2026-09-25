@@ -20,7 +20,7 @@ namespace DDDToolkit.Analyzers;
 /// The same pass checks the names, because it is the pass that works them out (<see cref="EventNaming"/>):
 /// </para>
 /// <list type="bullet">
-///   <item><description>DDD00034: the class name's version suffix and <c>[IntegrationEvent(Version = n)]</c> disagree.</description></item>
+///   <item><description>DDD00034: the class name's version suffix and <c>[IntegrationEvent(Version = n)]</c> disagree, and the suffix is ignored.</description></item>
 ///   <item><description>DDD00035: the class name ends in a <c>V</c> and digits that cannot be a version.</description></item>
 ///   <item><description>DDD00036: two domain events, or two contracts, of this assembly share a name and version.</description></item>
 ///   <item><description>DDD00037: two different names would give one constant, which code could then use for the wrong event.</description></item>
@@ -39,6 +39,9 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
 
     /// <summary>The diagnostic property holding the attribute a DDD00036 fix pins it with: <c>DomainEventName</c> or <c>IntegrationEvent</c>.</summary>
     public const string PinWithProperty = "PinWith";
+
+    /// <summary>The diagnostic property holding the class name a DDD00034 fix renames the event to, <c>OrderPlacedV3</c>.</summary>
+    public const string RenameToProperty = "RenameTo";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -135,12 +138,18 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
 
         if (suffix.Version is { } named && EventNaming.ExplicitVersion(published) is { } stated && named != stated)
         {
+            var statedText = stated.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
             diagnostics.Add(DiagnosticInfo.Create(
                 DiagnosticDescriptors.EventVersionDisagreesWithItsName,
                 VersionArgumentLocation(published!, cancellationToken) ?? location,
                 displayName,
                 named.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                stated.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                statedText) with
+            {
+                // The name the class would have if its name said the version it is: the fix renames it to that.
+                Properties = new EquatableArray<string>([RenameToProperty, suffix.Name + "V" + statedText]),
+            });
         }
 
         var (storedName, version) = EventNaming.DomainEventOf(type);

@@ -76,10 +76,11 @@ public class DomainEventNameTests
     }
 
     [Fact]
-    public void TheVersionComesFromTheNameBeforeTheAttribute()
+    public void AStatedVersionComesFirstAndTheNameAfterIt()
     {
         IntegrationEventContract.VersionOf<Spelling.ReservedV3>().Should().Be(3, "the suffix and Version agree");
-        IntegrationEventContract.VersionOf<Spelling.Released>().Should().Be(4, "a name without a suffix leaves it to [IntegrationEvent(Version = 4)]");
+        IntegrationEventContract.VersionOf<Spelling.Released>().Should().Be(4, "[IntegrationEvent(Version = 4)] on a name without a suffix");
+        IntegrationEventContract.VersionOf<Spelling.HeldV2>().Should().Be(2, "[IntegrationEvent] that states no Version leaves it to the name, although its Version property reads 1");
         IntegrationEventContract.NameOf<Spelling.Released>().Should().Be("released", "[IntegrationEvent] without a name leaves the name to the convention");
     }
 
@@ -167,5 +168,8 @@ public class DomainEventNameTests
 
         [IntegrationEvent(Version = 4)]
         public sealed class Released;
+
+        [IntegrationEvent]
+        public sealed class HeldV2;
     }
 }

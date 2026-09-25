@@ -364,7 +364,7 @@ Line by line, that is everything the two modules register:
 - `RegisterEvent<OrderPlaced>("ordering.order-placed", 1)` puts the domain event in the outbox's map from
   stored name to type, which the processor reads a row back through. The name is the event's
   `[DomainEventName]`, and `OrderPlaced` has none, so it is the module and the class name; the version is
-  the one its class name ends in, otherwise its `[IntegrationEvent(Version = n)]`, otherwise 1. Every
+  its `[IntegrationEvent(Version = n)]`, otherwise the one its class name ends in, otherwise 1. Every
   concrete domain event declared in the project is listed, whether it leaves the module or not, because
   the outbox stores all of them.
 - `PublishWith<OrderPlaced, OrderPlacedV2>(...)` is the entry `PublishAs` would have made, with a class
@@ -563,9 +563,9 @@ Two places have to hold, and the toolkit covers both.
 
 ### The outbox reading its own old rows
 
-Every outbox row records the shape it was written in, in a `Version` column: the version the event's class
-name ends in, otherwise `[IntegrationEvent(Version = n)]` on the event type. An event that never changed
-shape says nothing and is version 1.
+Every outbox row records the shape it was written in, in a `Version` column:
+`[IntegrationEvent(Version = n)]` on the event type, otherwise the version its class name ends in. An event
+that never changed shape says nothing and is version 1.
 
 When the processor reads a row whose version matches the type registered under that name, which is every
 row until you bump something, nothing changes. When it does not match, the processor reads the payload as

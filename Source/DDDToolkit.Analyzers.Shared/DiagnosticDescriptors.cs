@@ -254,11 +254,11 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor EventVersionDisagreesWithItsName = new(
         id: "DDD00034",
         title: "An event's class name and its Version disagree",
-        messageFormat: "'{0}' is version {1} by its name, so Version = {2} on its [IntegrationEvent] is ignored; remove Version, or rename the class if the attribute was right",
+        messageFormat: "'{0}' is version {2}, as its [IntegrationEvent] says, so the V{1} its name ends in is ignored; rename the class to end in V{2}, or remove Version if the name was right",
         category: Events,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "A class name that ends in V and a number is the event's version: OrderPlacedV2 is version 2 of its event, and the name wins wherever the version is read. Version on [IntegrationEvent] is for a class whose name does not end in one. Written both ways and different, the attribute is ignored, which is fine if the name was right and a payload read as the wrong shape if the attribute was, so the build says so.");
+        description: "A class name that ends in V and a number is the event's version by convention: OrderPlacedV2 is version 2 of its event. Version on [IntegrationEvent] states it explicitly, and a stated version wins wherever the version is read. Written both ways and different, the name says one thing and the event is another, which is how a reader ends up writing an upcaster for the wrong version, so the build says so.");
 
     public static readonly DiagnosticDescriptor EventVersionSuffixIsNotAVersion = new(
         id: "DDD00035",

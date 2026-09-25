@@ -20,9 +20,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </code>
 /// <para>
 /// The version is what a consumer checks when the payload changes shape: bump it when you break the schema,
-/// leave it when you only add an optional field. Say it in the class name; <see cref="Version"/> is for a
-/// class whose name does not end in one. When both are written and differ, the class name wins and the
-/// analyzer warns that <see cref="Version"/> is ignored (DDD00034).
+/// leave it when you only add an optional field. Say it in the class name, or with <see cref="Version"/>.
+/// When both are written, <see cref="Version"/> wins, being the one somebody wrote on purpose, and the
+/// analyzer warns when they differ (DDD00034).
 /// </para>
 /// <para>
 /// A type without this attribute still publishes, under <c>[DomainEventName]</c> or the conventional name,
@@ -54,8 +54,8 @@ public sealed class IntegrationEventAttribute : Attribute
     public string? Name { get; }
 
     /// <summary>
-    /// The schema version of the payload, for a class whose name does not end in <c>V</c> and a number.
-    /// Defaults to 1, and cannot be lower.
+    /// The schema version of the payload. Wins over a <c>V</c> and a number the class name ends in; left out,
+    /// the version is that suffix, otherwise 1. Cannot be lower than 1.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The version is below 1.</exception>
     public int Version

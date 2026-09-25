@@ -168,10 +168,11 @@ the name. Every version of one event shares the name:
 | `OrderPlacedV2` | `ordering.order-placed` | 2 |
 | `Level2Reached` | `ordering.level2-reached` | 1, the digits do not follow a `V` |
 
-A class whose name does not end in a version can state one with `[IntegrationEvent(Version = n)]`. When a
-class does both and they differ, the class name wins and `Version` is ignored, with a warning,
-[DDD00034](diagnostics.md#ddd00034); a suffix that cannot be a version, `V0` or `V01`, fails the build with
-[DDD00035](diagnostics.md#ddd00035). What a version is for is in
+A class can also state its version with `[IntegrationEvent(Version = n)]`, and a stated version wins over
+the one in the name: it is the one somebody wrote on purpose, the suffix is the convention for when nobody
+did. When a class does both and they differ, the suffix is ignored and the build warns,
+[DDD00034](diagnostics.md#ddd00034), with a fix that renames the class to the version it is. A suffix that
+cannot be a version, `V0` or `V01`, fails the build with [DDD00035](diagnostics.md#ddd00035). What a version is for is in
 [Versioning and upcasting](integration-events.md#versioning-and-upcasting).
 
 ### Renaming a class

@@ -9,8 +9,8 @@ using Microsoft.CodeAnalysis.Text;
 namespace DDDToolkit.Analyzers.Tests.CodeFixes;
 
 /// <summary>
-/// The fixes for DDD00034 (remove the <c>Version</c> the class name contradicts) and DDD00036 (pin another
-/// name on one of two events that share one). Like the other fix tests, each runs the real generators for the
+/// The fixes for DDD00034 (rename the class to the version it states, or remove the <c>Version</c> the class
+/// name contradicts) and DDD00036 (pin another name on one of two events that share one). Like the other fix tests, each runs the real generators for the
 /// diagnostics, applies the fix through a workspace the way an IDE does, including the clean-up that adds
 /// usings and shortens names, and runs the generators again: a fix is right when the diagnostic is gone and
 /// the code still compiles.
@@ -22,7 +22,7 @@ public class EventNameCodeFixTests
     [Theory]
     [InlineData("[IntegrationEvent(Version = 3)]", "[IntegrationEvent]")]
     [InlineData("[IntegrationEvent(\"ordering.placed\", Version = 3)]", "[IntegrationEvent(\"ordering.placed\")]")]
-    public async Task The_version_fix_removes_Version_and_leaves_the_name_to_say_it(string before, string after)
+    public async Task The_second_version_fix_removes_Version_and_leaves_the_name_to_say_it(string before, string after)
     {
         var source =
             $$"""
@@ -34,9 +34,55 @@ public class EventNameCodeFixTests
             public sealed record OrderPlacedV2(string OrderId);
             """;
 
-        var fixedSource = await Fix(new EventVersionCodeFixProvider(), "DDD00034", source);
+        var fixedSource = await Fix(new EventVersionCodeFixProvider(), "DDD00034", source, key: "DDDToolkit.EventVersionFromName");
 
         fixedSource.Should().Be(Lf(source.Replace(before, after)));
+    }
+
+    [Fact]
+    public async Task The_first_version_fix_renames_the_class_to_the_version_it_is_everywhere_it_is_used()
+    {
+        const string Source =
+            """
+            using DDDToolkit.Abstractions.Attributes;
+
+            namespace Ordering.Contracts;
+
+            [IntegrationEvent(Version = 3)]
+            public sealed record OrderPlacedV2(string OrderId);
+
+            public static class Samples
+            {
+                public static OrderPlacedV2 Placed => new("ORD-1");
+            }
+            """;
+
+        var fixedSource = await Fix(new EventVersionCodeFixProvider(), "DDD00034", Source, key: "DDDToolkit.EventVersionRenameClass");
+
+        fixedSource.Should().Be(Lf(Source.Replace("OrderPlacedV2", "OrderPlacedV3")), "the event stays version 3; only its name stops saying 2");
+    }
+
+    [Fact]
+    public async Task The_rename_is_not_offered_when_the_name_is_taken()
+    {
+        const string Source =
+            """
+            using DDDToolkit.Abstractions.Attributes;
+
+            namespace Ordering.Contracts;
+
+            [IntegrationEvent(Version = 3)]
+            public sealed record OrderPlacedV2(string OrderId);
+
+            public sealed record OrderPlacedV3(string OrderId);
+            """;
+
+        var (document, diagnostics) = await Open(Source, "DDD00034");
+        var actions = new List<CodeAction>();
+        await new EventVersionCodeFixProvider().RegisterCodeFixesAsync(
+            new CodeFixContext(document, diagnostics.Single(), (action, _) => actions.Add(action), CancellationToken.None));
+
+        actions.Select(action => action.EquivalenceKey).Should().Equal("DDDToolkit.EventVersionFromName");
     }
 
     // ------------------------------------------------------------------ DDD00036
@@ -158,7 +204,7 @@ public class EventNameCodeFixTests
     /// Applies the one fix offered for the diagnostic whose line mentions <paramref name="at"/> (or the only
     /// one) and returns the fixed text.
     /// </summary>
-    private static async Task<string> Fix(CodeFixProvider provider, string id, string source, string? at = null)
+    private static async Task<string> Fix(CodeFixProvider provider, string id, string source, string? at = null, string? key = null)
     {
         var (document, diagnostics) = await Open(source, id);
         var text = Lf(source);
@@ -168,9 +214,11 @@ public class EventNameCodeFixTests
 
         var actions = new List<CodeAction>();
         await provider.RegisterCodeFixesAsync(new CodeFixContext(document, diagnostic, (action, _) => actions.Add(action), CancellationToken.None));
-        actions.Should().ContainSingle();
+        var chosen = key is null
+            ? actions.Should().ContainSingle().Subject
+            : actions.Should().ContainSingle(action => action.EquivalenceKey == key).Subject;
 
-        var operations = await actions[0].GetOperationsAsync(CancellationToken.None);
+        var operations = await chosen.GetOperationsAsync(CancellationToken.None);
         var solution = operations.OfType<ApplyChangesOperation>().Single().ChangedSolution;
         var fixedText = (await solution.GetDocument(document.Id)!.GetTextAsync()).ToString().Replace("\r\n", "\n");
 

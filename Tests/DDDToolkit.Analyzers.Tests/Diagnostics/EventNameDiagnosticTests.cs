@@ -27,7 +27,7 @@ public class EventNameDiagnosticTests
     // ------------------------------------------------------------------ DDD00034
 
     [Fact]
-    public void A_Version_that_disagrees_with_the_class_name_is_ignored_and_reports_DDD00034_at_the_Version()
+    public void A_Version_that_disagrees_with_the_class_name_wins_and_reports_DDD00034_at_the_Version()
     {
         var result = Run(
             """
@@ -38,19 +38,20 @@ public class EventNameDiagnosticTests
             """);
 
         var diagnostic = result.ShouldHaveDiagnostic("DDD00034", at: "Version = 3");
-        diagnostic.GetMessage().Should().Contain("version 2 by its name").And.Contain("Version = 3").And.Contain("is ignored");
-        diagnostic.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Warning, "the name wins, so nothing is ambiguous; the build only says so");
+        diagnostic.GetMessage().Should().Contain("is version 3").And.Contain("the V2 its name ends in is ignored");
+        diagnostic.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Warning, "the stated version wins, so nothing is ambiguous; the build only says so");
+        diagnostic.Properties["RenameTo"].Should().Be("OrderPlacedV3", "the fix renames the class to the version it is");
 
         result.ShouldCompile();
-        result.ShouldContain("EventNames", "(version 2)", "the generator reads the version from the name");
+        result.ShouldContain("EventNames", "(version 3)", "the generator reads the stated version");
         DDDToolkit.BaseTypes.IntegrationEventContract.VersionOf(result.Emit().Type("Ordering.Contracts.OrderPlacedV2"))
-            .Should().Be(2, "and so does the runtime");
+            .Should().Be(3, "and so does the runtime");
     }
 
     [Theory]
     [InlineData("[IntegrationEvent(Version = 2)]\npublic sealed record OrderPlacedV2(string OrderId);", "the two agree")]
     [InlineData("[IntegrationEvent(Version = 4)]\npublic sealed record OrderPlaced(string OrderId);", "a name without a suffix leaves the version to the attribute")]
-    [InlineData("[IntegrationEvent]\npublic sealed record OrderPlacedV2(string OrderId);", "the name alone says it")]
+    [InlineData("[IntegrationEvent]\npublic sealed record OrderPlacedV2(string OrderId);", "an attribute without Version does not contradict the name")]
     [InlineData("[IntegrationEvent(\"ordering.placed\", Version = 2)]\npublic sealed record OrderPlacedV2(string OrderId);", "a pinned name with an agreeing version")]
     public void A_Version_that_agrees_or_stands_alone_is_fine(string declaration, string because)
     {

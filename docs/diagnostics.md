@@ -981,14 +981,15 @@ you. Give the class a constructor the registration can call, or register it by h
 public sealed record OrderPlacedV2(OrderId OrderId);
 ```
 
-A class name that ends in `V` and a number is that version of its event, so `OrderPlacedV2` is version 2,
-and the name wins wherever the version is read: the outbox, the published message, the generated
-registration. `Version` on `[IntegrationEvent]` is for a class whose name does not end in one, so here it is
-ignored. Nothing is ambiguous, which is why this is a warning and not an error, but it is not silent either:
-if it was the attribute that was right, payloads go out as the wrong version.
+A class name that ends in `V` and a number is that version of its event by convention, and `Version` on
+`[IntegrationEvent]` states one explicitly. The stated version wins wherever the version is read: the
+outbox, the published message, the generated registration. So this event is version 3, and the `V2` in its
+name is ignored. Nothing is ambiguous, which is why this is a warning and not an error, but a name that
+says 2 about an event that is 3 is how somebody ends up writing an upcaster for the wrong version.
 
-The code fix removes `Version = 3`, which leaves the class name to say it. If the attribute was right and
-the name was not, rename the class instead. See [Versions are in the class name](domain-events.md#versions-are-in-the-class-name).
+There are two fixes. The first renames the class to the version it is, `OrderPlacedV3`, everywhere it is
+used; the event does not change. The second removes `Version = 3`, which makes the event version 2, the
+name's, for when the name was right and the attribute was not. See [Versions are in the class name](domain-events.md#versions-are-in-the-class-name).
 
 ---
 

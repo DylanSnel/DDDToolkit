@@ -1,3 +1,4 @@
+using System.Reflection;
 using DDDToolkit.Abstractions.Attributes;
 
 namespace DDDToolkit.BaseTypes;
@@ -8,12 +9,12 @@ namespace DDDToolkit.BaseTypes;
 /// <list type="number">
 ///   <item><description>The name: <c>[IntegrationEvent("name")]</c>, otherwise <c>[DomainEventName("name")]</c>,
 ///   otherwise the conventional name (<see cref="DomainEventName.ConventionalNameOf"/>).</description></item>
-///   <item><description>The version: a trailing <c>V</c> and a number in the class name, <c>OrderPlacedV2</c>,
-///   otherwise <c>[IntegrationEvent(Version = n)]</c>, otherwise 1.</description></item>
+///   <item><description>The version: <c>[IntegrationEvent(Version = n)]</c>, otherwise a trailing <c>V</c> and a
+///   number in the class name, <c>OrderPlacedV2</c>, otherwise 1.</description></item>
 /// </list>
 /// <para>
-/// The suffix comes first because it is the one a reader sees. Where the two disagree the attribute is
-/// ignored, and the analyzer says so (DDD00034).
+/// A stated <c>Version</c> comes first because somebody wrote it on purpose; the suffix is the convention for
+/// when nobody did. Where the two disagree the suffix is ignored, and the analyzer says so (DDD00034).
 /// </para>
 /// </summary>
 public static class IntegrationEventContract
@@ -44,21 +45,47 @@ public static class IntegrationEventContract
     }
 
     /// <summary>
-    /// The schema version of <paramref name="contractType"/>: the one its class name ends in, otherwise
-    /// <c>[IntegrationEvent(Version = n)]</c>, otherwise 1.
+    /// The schema version of <paramref name="contractType"/>: <c>[IntegrationEvent(Version = n)]</c>, otherwise
+    /// the one its class name ends in, otherwise 1.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="contractType"/> is null.</exception>
     public static int VersionOf(Type contractType)
     {
         ArgumentNullException.ThrowIfNull(contractType);
 
-        if (DomainEventName.VersionSuffixOf(contractType) is { } suffix)
+        if (Attribute.GetCustomAttribute(contractType, typeof(IntegrationEventAttribute), inherit: false) is IntegrationEventAttribute attribute
+            && StatesVersion(contractType))
         {
-            return suffix;
+            return attribute.Version;
         }
 
-        var attribute = (IntegrationEventAttribute?)Attribute.GetCustomAttribute(contractType, typeof(IntegrationEventAttribute), inherit: false);
-        return attribute?.Version ?? 1;
+        return DomainEventName.VersionSuffixOf(contractType) ?? 1;
+    }
+
+    /// <summary>
+    /// Whether the type's <c>[IntegrationEvent]</c> says <c>Version = n</c>. The attribute's own
+    /// <see cref="IntegrationEventAttribute.Version"/> reads 1 either way, so this asks the metadata, which is
+    /// what the generator reads as well.
+    /// </summary>
+    private static bool StatesVersion(Type contractType)
+    {
+        foreach (var data in contractType.GetCustomAttributesData())
+        {
+            if (data.AttributeType != typeof(IntegrationEventAttribute))
+            {
+                continue;
+            }
+
+            foreach (var argument in data.NamedArguments)
+            {
+                if (argument.MemberName == nameof(IntegrationEventAttribute.Version))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The schema version of <typeparamref name="TContract"/>.</summary>
