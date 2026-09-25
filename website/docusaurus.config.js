@@ -1,6 +1,7 @@
 // @ts-check
 const path = require('path');
 const { themes: prismThemes } = require('prism-react-renderer');
+const githubAlerts = require('./src/remark/githubAlerts');
 const githubLinks = require('./src/remark/githubLinks');
 
 const repoRoot = path.resolve(__dirname, '..');
@@ -30,6 +31,9 @@ const config = {
   markdown: {
     // The docs are plain Markdown, full of C# generics such as IInvariant<T>; read as MDX they would be JSX.
     format: 'detect',
+    // ```mermaid blocks become diagrams: here through the theme below, and on GitHub natively, so the
+    // docs folder shows the same diagrams wherever it is read.
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'throw',
     },
@@ -39,6 +43,8 @@ const config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   presets: [
     [
@@ -51,8 +57,9 @@ const config = {
           routeBasePath: 'docs',
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/DylanSnel/DDDToolkit/edit/main/docs/',
-          // Before Docusaurus resolves the links between docs, so it never sees the ones that leave docs/.
-          beforeDefaultRemarkPlugins: [[githubLinks, { docsDir, repoRoot }]],
+          // Before Docusaurus resolves the links between docs, so it never sees the ones that leave docs/,
+          // and before its admonitions plugin, which turns what githubAlerts makes into a banner.
+          beforeDefaultRemarkPlugins: [[githubLinks, { docsDir, repoRoot }], githubAlerts],
         },
         blog: false,
         theme: {
@@ -116,6 +123,12 @@ const config = {
           },
         ],
         copyright: `DDDToolkit, MIT licensed. Built with Docusaurus.`,
+      },
+      mermaid: {
+        theme: { light: 'neutral', dark: 'dark' },
+        options: {
+          fontFamily: 'Inter, system-ui, sans-serif',
+        },
       },
       prism: {
         theme: prismThemes.oneLight,

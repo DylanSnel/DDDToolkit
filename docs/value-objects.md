@@ -217,6 +217,40 @@ everywhere:
 public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
 ```
 
+```mermaid
+flowchart LR
+    Input["a form, a request, a file"] --> Plain["EmailAddress: may be invalid"]
+    Plain -->|"ToValid(), throws when invalid"| Valid["ValidEmailAddress: always valid"]
+    Plain -->|"TryToValid(out valid, out errors)"| Valid
+    Plain -->|"TryToValid, false"| Errors["the failures, for the caller"]
+    Valid -->|"accepted wherever an EmailAddress is"| Use["SendWelcome(ValidEmailAddress)"]
+    Valid -->|"With(...), the copy is validated"| Valid
+```
+
+<details>
+<summary>Show the code: checking once, at the boundary</summary>
+
+The endpoint turns what it was sent into the twin, or into a refusal. Everything behind it takes the
+twin, and never checks again:
+
+```csharp
+app.MapPost("/subscribers", (SubscribeRequest body) =>
+{
+    if (!EmailAddress.Create(body.Email).TryToValid(out var email, out var errors))
+    {
+        return Results.ValidationProblem(errors.ToErrorDictionary());
+    }
+
+    return Results.Ok(subscribers.Add(email));   // email is a ValidEmailAddress
+});
+
+public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
+```
+
+See [Failure handling](#failure-handling).
+
+</details>
+
 The generator writes the twin next to the value object. Every way into it validates first, so there
 is no way to hold a `ValidEmailAddress` that was not checked:
 
@@ -268,7 +302,20 @@ whichever side is asked. To compare a twin with a plain value, compare twin to t
 on the other side) or compare the components. Hash codes do not include the type, so a twin and a plain
 value with the same components hash alike; that is allowed, and harmless.
 
-This is why value objects cannot be `sealed` ([DDD00013](diagnostics.md#ddd00013)).
+> [!NOTE]
+> **Why the twin rules out `sealed` and structs.** `ValidEmailAddress` derives from `EmailAddress`,
+> and three things rest on that. A twin is accepted anywhere the original is, so a signature can ask
+> for `ValidEmailAddress` while the rest of the code carries on with `EmailAddress`. The twin is built
+> by the record's copy constructor, which the compiler makes `protected` on a record that is not
+> sealed and `private` on one that is. And `With` is virtual, so the twin's override validates a copy
+> even when the twin is held as its base type.
+>
+> A sealed record cannot be derived from, which is [DDD00013](diagnostics.md#ddd00013), and neither
+> can a struct, which is why a value object has to be a reference record
+> ([DDD00001](diagnostics.md#ddd00001)). A twin that wrapped the value instead of deriving from it
+> would lose all three, and around a struct it could not even keep its promise: `default` and every
+> element of a new array skip the constructor, and the check with it. The same goes for
+> [struct identifiers](identifiers.md#struct-or-record), which have no twin.
 
 ## Failure handling
 
@@ -410,7 +457,7 @@ public static Result<ValidEmailAddress> ToResult(this EmailAddress email)
   let [`DDDToolkit.Localization`](localization.md) phrase it from `Code` and `Arguments`.
 - Nothing validates across value objects. A rule sees one value object, never the request around it.
   That is what a containing validator is for, and
-  [`MustBeValid()`](#with-fluentvalidation) folds a value object into one.
+  [`MustBeValid()`](fluent-validation.md#a-value-object-in-a-request-validator) folds a value object into one.
 
 ## Changing a value: `With`
 
@@ -722,8 +769,8 @@ partial record ValidPersonName
 
 ## With FluentValidation
 
-Reference `DDDToolkit.FluentValidation` and the generator writes the `Validate()` override for you,
-along with an `Errors` collection and a nested `Validator` class. You supply only the rules:
+If you write rules with FluentValidation, reference `DDDToolkit.FluentValidation` and write a value
+object's rules as a validator instead of a `Validate()` override:
 
 ```csharp
 [SingleValueObject<string>]
@@ -738,73 +785,9 @@ public partial record EmailAddress
 }
 ```
 
-```csharp title="EmailAddress.FluentValidation.g.cs, shortened"
-partial record EmailAddress
-{
-    [Internal]
-    [NotMapped]
-    public ReadOnlyCollection<FluentValidation.Results.ValidationFailure> Errors => _errors.AsReadOnly();
-
-    private List<FluentValidation.Results.ValidationFailure> _errors = new();
-
-    protected override bool Validate()
-    {
-        var validator = new Validator();
-        var result = validator.Validate(this);
-        _errors = result.Errors;
-        return result.IsValid;
-    }
-
-    protected override void Validate(ValidationErrorBuilder errors)
-    {
-        foreach (var failure in _errors)
-        {
-            // ... copies each failure, with its placeholder values as arguments, into a ValidationError
-        }
-    }
-
-    partial class Validator : FluentValidation.AbstractValidator<EmailAddress>
-    {
-    }
-}
-```
-
-The two halves of `Validator` are the point: the generator states the base class, you state the rules.
-Note which failure shape is which. `Errors` is FluentValidation's own `ValidationFailure`, handy when
-you already work in that library; the second `Validate` overload copies the same failures into the
-toolkit's `ValidationError`, which is what `ValidationErrors` and `TryToValid()` hand back and what
-lets a caller read failures without referencing FluentValidation at all. Each carries the same
-property, code and attempted value, and its placeholder values as `Arguments`.
-
-```csharp
-var email = EmailAddress.Create("nope");
-email.IsValid;                     // false
-email.Errors[0].PropertyName;      // "Value"
-```
-
-Struct identifiers get no validator, since they are well-formed by construction.
-
-A value object validates itself, which is not the same as taking part in the validator you write for a
-command or a request DTO. `MustBeValid()` folds it into one:
-
-```csharp
-public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
-{
-    public PlaceOrderValidator()
-    {
-        RuleFor(x => x.Email).NotNull().MustBeValid();
-        RuleFor(x => x.Quantity).GreaterThan(0);
-    }
-}
-```
-
-The failure is reported against the containing property, so the caller gets one flat result. A `null`
-property passes, exactly as with FluentValidation's own rules, so chain `NotNull()` when the value is
-required.
-
-If the containing validator is a FluentValidation one, `result.ToValidationErrors()` from
-`DDDToolkit.FluentValidation` converts its failures too, so everything ends up in one list with the
-ones from `TryToValid`.
+The generator writes the rest, and `IsValid`, `TryToValid()` and the twin run your rules.
+`MustBeValid()` folds a value object into the validator you write for a request. See
+[FluentValidation](fluent-validation.md).
 
 ## Requirements
 

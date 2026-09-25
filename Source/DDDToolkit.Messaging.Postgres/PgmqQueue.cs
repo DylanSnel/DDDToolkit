@@ -15,15 +15,22 @@ namespace DDDToolkit.Messaging.Postgres;
 /// Supabase Queues is this extension with a UI on top, and nothing here knows or cares about Supabase.
 /// </para>
 /// <para>
-/// The functions are verified against pgmq 1.13.0; the topic functions need 1.11 or later. Names and argument names are passed explicitly, because
-/// <c>send</c> is overloaded on its third argument (<c>headers jsonb</c> against <c>delay integer</c>)
-/// and positional arguments would pick whichever Postgres liked.
+/// The functions are verified against pgmq 1.5.1, the version Supabase ships, and 1.13.0; the topic
+/// functions need 1.11 or later (<see cref="TopicRoutingVersion"/>). Names and argument names are passed
+/// explicitly, because <c>send</c> is overloaded on its third argument (<c>headers jsonb</c> against
+/// <c>delay integer</c>) and positional arguments would pick whichever Postgres liked.
 /// </para>
 /// </summary>
 public static class PgmqQueue
 {
     /// <summary>The schema the extension creates and the toolkit never writes to directly.</summary>
     public const string Schema = "pgmq";
+
+    /// <summary>
+    /// The first pgmq with topic routing (<c>pgmq.send_topic</c>, <c>pgmq.bind_topic</c>), which
+    /// <see cref="PgmqSinkOptions.UseTopics"/> and <see cref="PgmqConsumerOptions.BindTopics"/> need.
+    /// </summary>
+    public static readonly Version TopicRoutingVersion = new(1, 11);
 
     /// <summary>Postgres says the schema is missing.</summary>
     private const string InvalidSchemaName = "3F000";
@@ -53,6 +60,64 @@ public static class PgmqQueue
         {
             throw new PgmqNotInstalledException(connection.Database);
         }
+    }
+
+    /// <summary>
+    /// The version of the pgmq extension installed in the connection's database, as
+    /// <c>pg_extension.extversion</c> gives it, or <see langword="null"/> when it is not installed.
+    /// <para>
+    /// This is the version the database runs, not the newest the server could install; after the server
+    /// gets a newer pgmq the database keeps the old one until <c>ALTER EXTENSION pgmq UPDATE</c>.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
+    /// <exception cref="FormatException">The extension reports a version that is not a number.</exception>
+    public static async Task<Version?> InstalledVersionAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        await using var command = Command(connection, transaction, "SELECT extversion FROM pg_extension WHERE extname = 'pgmq'");
+        return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is string version
+            ? ParseVersion(version)
+            : null;
+    }
+
+    /// <summary>
+    /// Throws when the database cannot route by topic: <see cref="PgmqNotInstalledException"/> without the
+    /// extension, <see cref="PgmqTopicsNotSupportedException"/> when it is older than
+    /// <see cref="TopicRoutingVersion"/>. The sink and the consumer run the same check at start-up when
+    /// they are registered with topics.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
+    /// <exception cref="PgmqNotInstalledException">The extension is not installed.</exception>
+    /// <exception cref="PgmqTopicsNotSupportedException">The extension predates topic routing.</exception>
+    public static async Task EnsureTopicRoutingAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction = null, CancellationToken cancellationToken = default)
+    {
+        var version = await InstalledVersionAsync(connection, transaction, cancellationToken).ConfigureAwait(false)
+            ?? throw new PgmqNotInstalledException(connection.Database);
+
+        if (version < TopicRoutingVersion)
+        {
+            throw new PgmqTopicsNotSupportedException(connection.Database, version);
+        }
+    }
+
+    /// <summary>
+    /// <c>1.5.1</c> as a <see cref="Version"/>. Anything after the numbers, a pre-release suffix for
+    /// instance, is ignored, and a bare major version gets a minor of zero.
+    /// </summary>
+    private static Version ParseVersion(string text)
+    {
+        var numbers = new string(text.TakeWhile(c => char.IsAsciiDigit(c) || c == '.').ToArray()).TrimEnd('.');
+
+        if (!numbers.Contains('.', StringComparison.Ordinal))
+        {
+            numbers += ".0";
+        }
+
+        return Version.TryParse(numbers, out var version)
+            ? version
+            : throw new FormatException($"The pgmq extension reports version '{text}', which is not a version number.");
     }
 
     /// <summary>
@@ -132,6 +197,66 @@ public static class PgmqQueue
         command.Parameters.Add(Integer(visibilityTimeout));
         command.Parameters.Add(Integer(count));
 
+        return await ReadMessagesAsync(connection, command, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads like <see cref="ReadAsync"/>, but when the queue is empty waits inside Postgres, with
+    /// <c>pgmq.read_with_poll</c>, for up to <paramref name="maxPollSeconds"/> for a message to arrive. It
+    /// returns as soon as there is one, and empty when the time runs out.
+    /// <para>
+    /// Postgres looks at the queue again every <paramref name="pollIntervalMilliseconds"/>, which costs no
+    /// round trip, so a message is picked up within that interval rather than after the client's next
+    /// poll. The price is the connection: it is busy for as long as the read waits. The command timeout is
+    /// lengthened by the wait, so the connection's own timeout still applies to the read itself.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="queue"/> is empty or white space.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="count"/>, <paramref name="maxPollSeconds"/> or <paramref name="pollIntervalMilliseconds"/>
+    /// is below 1, or <paramref name="visibilityTimeout"/> is negative.
+    /// </exception>
+    /// <exception cref="PgmqNotInstalledException">The extension is not installed.</exception>
+    public static async Task<IReadOnlyList<PgmqMessage>> ReadWithPollAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        string queue,
+        int visibilityTimeout = 30,
+        int count = 10,
+        int maxPollSeconds = 5,
+        int pollIntervalMilliseconds = 100,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(queue);
+        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(visibilityTimeout);
+        // pgmq checks the clock before its first look, so a zero wait would never read at all.
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxPollSeconds, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pollIntervalMilliseconds, 1);
+
+        await using var command = Command(
+            connection,
+            transaction,
+            "SELECT msg_id, read_ct, enqueued_at, vt, message, headers FROM pgmq.read_with_poll(queue_name => $1, vt => $2, qty => $3, max_poll_seconds => $4, poll_interval_ms => $5)");
+        command.Parameters.Add(Text(queue));
+        command.Parameters.Add(Integer(visibilityTimeout));
+        command.Parameters.Add(Integer(count));
+        command.Parameters.Add(Integer(maxPollSeconds));
+        command.Parameters.Add(Integer(pollIntervalMilliseconds));
+
+        // Zero means no timeout at all, and stays that way.
+        if (command.CommandTimeout > 0)
+        {
+            command.CommandTimeout += maxPollSeconds;
+        }
+
+        return await ReadMessagesAsync(connection, command, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<IReadOnlyList<PgmqMessage>> ReadMessagesAsync(NpgsqlConnection connection, NpgsqlCommand command, CancellationToken cancellationToken)
+    {
         var messages = new List<PgmqMessage>();
 
         try
@@ -200,7 +325,7 @@ public static class PgmqQueue
     /// <exception cref="ArgumentNullException"><paramref name="connection"/> or <paramref name="body"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="routingKey"/> is empty or white space.</exception>
     /// <exception cref="PgmqNotInstalledException">The extension is not installed.</exception>
-    /// <exception cref="InvalidOperationException">The installed pgmq predates topic routing, which came in 1.11.</exception>
+    /// <exception cref="PgmqTopicsNotSupportedException">The installed pgmq predates topic routing, which came in 1.11.</exception>
     public static async Task<int> SendTopicAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string routingKey, string body, string? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -222,7 +347,7 @@ public static class PgmqQueue
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="pattern"/> or <paramref name="queue"/> is empty or white space.</exception>
-    /// <exception cref="InvalidOperationException">The installed pgmq predates topic routing, which came in 1.11.</exception>
+    /// <exception cref="PgmqTopicsNotSupportedException">The installed pgmq predates topic routing, which came in 1.11.</exception>
     public static async Task BindTopicAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string pattern, string queue, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -243,7 +368,7 @@ public static class PgmqQueue
     /// <summary>Removes the binding of <paramref name="queue"/> to <paramref name="pattern"/>. False when there was none.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="pattern"/> or <paramref name="queue"/> is empty or white space.</exception>
-    /// <exception cref="InvalidOperationException">The installed pgmq predates topic routing, which came in 1.11.</exception>
+    /// <exception cref="PgmqTopicsNotSupportedException">The installed pgmq predates topic routing, which came in 1.11.</exception>
     public static async Task<bool> UnbindTopicAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string pattern, string queue, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -259,7 +384,7 @@ public static class PgmqQueue
     /// <summary>The patterns <paramref name="queue"/> is bound to.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="connection"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="queue"/> is empty or white space.</exception>
-    /// <exception cref="InvalidOperationException">The installed pgmq predates topic routing, which came in 1.11.</exception>
+    /// <exception cref="PgmqTopicsNotSupportedException">The installed pgmq predates topic routing, which came in 1.11.</exception>
     public static async Task<IReadOnlyList<string>> TopicBindingsAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, string queue, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
@@ -309,8 +434,9 @@ public static class PgmqQueue
     private static bool IsMissingTopicRouting(PostgresException exception)
         => exception.SqlState == UndefinedFunction && exception.Message.Contains("topic", StringComparison.OrdinalIgnoreCase);
 
-    private static InvalidOperationException NoTopicRouting(NpgsqlConnection connection, PostgresException exception)
-        => new($"The pgmq extension in database '{connection.Database}' has no topic routing (pgmq.send_topic, pgmq.bind_topic), which pgmq added in version 1.11. Update the extension, or route to named queues with UseQueue/UseQueues instead of UseTopics.", exception);
+    /// <summary>The installed version is not known here: a query that failed has aborted any transaction it was in.</summary>
+    private static PgmqTopicsNotSupportedException NoTopicRouting(NpgsqlConnection connection, PostgresException exception)
+        => new(connection.Database, installedVersion: null, exception);
 
     private static NpgsqlCommand Command(NpgsqlConnection connection, NpgsqlTransaction? transaction, string sql)
         => new(sql, connection) { Transaction = transaction };

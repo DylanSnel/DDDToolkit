@@ -42,6 +42,8 @@ const explanations = {
     'Equality over Street and City, a With() that copies with changes, and ValidAddress: a twin type that can only exist when the address is valid.',
   'Address.EntityFramework.g.cs': 'Maps Address as an EF Core complex type, so its fields become columns of the table it is stored in.',
   'ConverterExtensions.g.cs': 'AddShopConverters(): one call in ConfigureConventions and every id is stored as its plain value.',
+  'EventNames.g.cs':
+    'ShopEventNames.OrderPlaced: every name an event is stored or published under, as a constant, so a topic binding or a test never spells one out by hand.',
   'IntegrationEventExtensions.g.cs':
     'AddShopIntegrationEvents(): registers OrderPlaced with the outbox under its stored name, without scanning an assembly at start-up.',
   'OrderId.Converter.g.cs': 'Stores an OrderId as a plain uuid column and reads it back as an OrderId.',

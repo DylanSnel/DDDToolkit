@@ -19,6 +19,118 @@ This page assumes a context wired up as in [Entity Framework](entity-framework.m
 
 ## Choosing
 
+In process, the handlers run inside the save. Whatever they change on the same context is written with
+the aggregate, in one transaction, and a handler that throws stops the save:
+
+```mermaid
+sequenceDiagram
+    participant Code as Your code
+    participant Order as Order
+    participant Save as SaveChanges
+    participant Handlers as Your handlers
+    participant Db as Database
+
+    Code->>Order: order.Cancel(reason)
+    Order->>Order: RaiseDomainEvent(new OrderCancelled(...))
+    Note over Order: the event waits on the aggregate
+    Code->>Save: SaveChangesAsync()
+    Save->>Order: take the pending events
+    Save->>Handlers: dispatch them, in the order raised
+    Handlers-->>Save: changes to other tracked entities
+    Note over Save,Handlers: events the handlers raise: another round
+    Save->>Save: check the invariants, raise Version
+    Save->>Db: one transaction: the order and the handlers' changes
+```
+
+<details>
+<summary>Show the code: dispatching in process</summary>
+
+Register the toolkit with Mediator as the dispatcher, and add the toolkit to the context:
+
+```csharp
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+builder.Services.AddDbContext<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+```
+
+The event is a Mediator notification, and a handler is an ordinary Mediator handler. It runs in the
+saving context's scope, so what it changes on that context is saved with the order:
+
+```csharp
+[DomainEventName("ordering.order-cancelled")]
+public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent, INotification;
+
+public sealed class OrderLog(ILogger<OrderLog> logger) : INotificationHandler<OrderCancelled>
+{
+    public ValueTask Handle(OrderCancelled notification, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Order {OrderId} was cancelled: {Reason}", notification.OrderId, notification.Reason);
+        return default;
+    }
+}
+```
+
+*[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/DomainEvents/OrderLog.cs)*
+
+See [In-process dispatch](#in-process-dispatch).
+
+</details>
+
+Through the outbox, the save only writes the events down, next to the aggregate. Delivering them is a
+separate step that comes after the commit, and keeps trying until it succeeds:
+
+```mermaid
+sequenceDiagram
+    participant Code as Your code
+    participant Save as SaveChanges
+    participant Db as Database
+    participant Processor as Outbox processor
+    participant Target as Handlers or sinks
+
+    Code->>Save: SaveChangesAsync()
+    Save->>Db: one transaction: the order and one outbox row per event
+    Note over Code,Db: committed, and nothing has been delivered yet
+    loop every polling interval
+        Processor->>Db: rows not yet processed, oldest first
+        Processor->>Target: deliver each event
+        alt delivered
+            Processor->>Db: set ProcessedAt
+        else it failed
+            Processor->>Db: Attempts + 1 and LastError, try again later
+        end
+    end
+```
+
+<details>
+<summary>Show the code: the outbox</summary>
+
+Map the outbox table in the context:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+    => modelBuilder.AddDomainEventOutbox(Database);
+```
+
+Turn the outbox on, and run the processor that delivers from it:
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options =>
+{
+    options.DispatchWithMediator();   // where the processor delivers to
+    options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
+});
+
+builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+The handlers are the same as in process. They must be idempotent, because a crash between delivering
+and marking the row delivers it again. See [The outbox](#the-outbox).
+
+</details>
+
 | | In-process | Outbox |
 |---|---|---|
 | When handlers run | Inside `SaveChanges`, before the write | After the commit, on the processor |
@@ -206,7 +318,7 @@ ignores the argument, so the table is plain `OutboxMessages` there. The mapping 
 | Column | Type | Meaning |
 |---|---|---|
 | `Id` | `Guid`, key, never generated | The event's `EventId`. This is the idempotency key |
-| `EventName` | `string`, required, 256 | The stable name, from `[DomainEventName]` or the class name |
+| `EventName` | `string`, required, 256 | The stable name, from `[DomainEventName]` or the convention, `ordering.order-placed` |
 | `Payload` | `string`, required | The event serialized with System.Text.Json |
 | `Version` | `int` | The shape the payload was written in, 1 unless the event type says otherwise; see [The outbox reading its own old rows](integration-events.md#the-outbox-reading-its-own-old-rows) |
 | `OccurredAt` | `DateTimeOffset` | Taken from the event |
@@ -281,17 +393,19 @@ assembly scans register every concrete type implementing `IDomainEvent`. Registe
 under the same stable name throws an `ArgumentException` naming both, which is the failure you want
 at start-up rather than at delivery time.
 
-This is where `[DomainEventName]` earns its keep. The name is written into the row, so a class rename
-without the attribute orphans every row already stored under the old name. With the attribute the
-wire name is pinned and the class can move or be renamed freely. See
-[Domain events](domain-events.md#stable-names).
+This is where a stable name earns its keep. The name is written into the row and read back later, so it
+must not change while rows are waiting. The conventional name, the module and the class name in kebab
+case, does not change when the class moves; when the class is renamed, `[DomainEventName]` keeps the old
+one. See [Stable names](domain-events.md#stable-names).
 
 The compiler can write this registration for you. With the Entity Framework package referenced, every
 assembly gets an `Add{Module}IntegrationEvents()` that registers each of its domain events under the
-name it is stored as, read from the attribute at compile time, so nothing is scanned at start-up:
+name it is stored as, worked out at compile time, so nothing is scanned at start-up:
 
 ```csharp
-[DomainEventName("ordering.order-placed")]
+[assembly: Module("Ordering")]
+
+[DomainEventName("ordering.order-received")]   // renamed from OrderReceived; rows keep the old name
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 
 public sealed record OrderCancelled(OrderId Order) : DomainEvent;
@@ -301,13 +415,13 @@ public sealed record OrderCancelled(OrderId Order) : DomainEvent;
 public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
 {
     ArgumentNullException.ThrowIfNull(outbox);
-    outbox.RegisterEvent<OrderCancelled>("OrderCancelled", 1);
-    outbox.RegisterEvent<OrderPlaced>("ordering.order-placed", 1);
+    outbox.RegisterEvent<OrderCancelled>("ordering.order-cancelled", 1);
+    outbox.RegisterEvent<OrderPlaced>("ordering.order-received", 1);
     return outbox;
 }
 ```
 
-`OrderPlaced` goes into the row under its pinned name and `OrderCancelled` under its class name. Call
+`OrderPlaced` goes into the row under its pinned name and `OrderCancelled` under the conventional one. Call
 `outbox.AddOrderingIntegrationEvents()` in place of the assembly scan. The same method registers what a
 module publishes, which [Integration events](integration-events.md#registered-when-the-module-compiles)
 covers.
@@ -366,6 +480,10 @@ options.UseOutbox(outbox => outbox.MaxAttempts = 5);
 ```
 
 They stay in the table with their last error for you to inspect. Reset `Attempts` to retry one.
+
+Delivered rows stay too, until something deletes them. `services.AddDomainEventRetention<TContext>(...)`
+deletes them once they are older than a window you choose, and never touches a row that was not
+delivered. See [Keeping the tables small](integration-events.md#keeping-the-tables-small).
 
 Note that a batch in which every message fails returns zero, which ends the background service's
 drain for that tick. The next tick picks the messages up again.

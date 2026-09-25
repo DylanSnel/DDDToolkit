@@ -32,6 +32,12 @@ public static class InventoryModule
 
         services.AddOutboxBackgroundService<InventoryContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
+        services.AddDomainEventRetention<InventoryContext>(retention =>
+        {
+            retention.KeepOutboxFor = TimeSpan.FromDays(7);
+            retention.KeepInboxFor = TimeSpan.FromDays(30);
+        });
+
         services.AddHostedService<StockTheShelves>();
 
         // GraphQL, when the host serves it: Inventory's own source schema, for a Fusion gateway to compose.

@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" />
+    <!-- IConfiguration, for the overloads that read their options from a configuration section. -->
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

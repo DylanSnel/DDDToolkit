@@ -29,6 +29,9 @@ public static class CatalogModule
 
         services.AddOutboxBackgroundService<CatalogContext>(pollingInterval: TimeSpan.FromSeconds(1));
 
+        // Catalog has an outbox and no inbox, so only the outbox has a window.
+        services.AddDomainEventRetention<CatalogContext>(retention => retention.KeepOutboxFor = TimeSpan.FromDays(7));
+
         services.AddHostedService<ListTheStartingRange>();
 
         // GraphQL, when the host serves it: Catalog's own source schema, for a Fusion gateway to compose.

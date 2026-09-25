@@ -43,6 +43,19 @@ public static class MassTransitExtensions
         return configurator;
     }
 
+    /// <summary>
+    /// Names the exchange of every toolkit event after its published name and version,
+    /// <c>ordering.order-placed.v1</c>, rather than after its CLR type (see
+    /// <see cref="IntegrationEventEntityNameFormatter"/>). Call it first inside <c>UsingRabbitMq</c>, in every
+    /// service that sends or receives the toolkit's events, before any endpoint is configured.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configurator"/> is null.</exception>
+    public static void UseIntegrationEventNames(this IBusFactoryConfigurator configurator)
+    {
+        ArgumentNullException.ThrowIfNull(configurator);
+        configurator.MessageTopology.SetEntityNameFormatter(new IntegrationEventEntityNameFormatter(configurator.MessageTopology.EntityNameFormatter));
+    }
+
     private sealed class ConsumerRegistration(IBusRegistrationConfigurator configurator) : IIntegrationEventContractVisitor
     {
         public void Visit<TContract>() where TContract : class => configurator.AddConsumer<IntegrationEventConsumer<TContract>>();

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,7 +21,31 @@ public sealed class PgmqConsumerOptions
     /// <summary>How many messages one read takes.</summary>
     public int BatchSize { get; set; } = 10;
 
-    /// <summary>How long to wait before reading again when the queue was empty.</summary>
+    /// <summary>
+    /// How long one read waits inside Postgres for a message to arrive, with <c>pgmq.read_with_poll</c>,
+    /// before it comes back empty and the next one starts. Five seconds by default, in whole seconds,
+    /// rounded up. <see cref="TimeSpan.Zero"/> turns long polling off.
+    /// <para>
+    /// A long poll picks a message up within <see cref="LongPollInterval"/> of its commit, where polling from
+    /// here finds it only on the next read, and an idle queue costs one round trip per wait instead of one
+    /// per <see cref="PollingInterval"/>. What it costs is a connection: the consumer holds one from its data
+    /// source for as long as it waits, which is nearly all the time on a quiet queue. Count one per
+    /// consumer when sizing the pool, and keep the wait below any <c>statement_timeout</c> of the role the
+    /// consumer connects as.
+    /// </para>
+    /// </summary>
+    public TimeSpan LongPollTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// While a long poll waits, how often Postgres looks at the queue again. Each look is a query inside the
+    /// server, with no round trip. 100 milliseconds by default, as in pgmq itself.
+    /// </summary>
+    public TimeSpan LongPollInterval { get; set; } = TimeSpan.FromMilliseconds(100);
+
+    /// <summary>
+    /// How long to wait before reading again when the queue was empty and long polling is off
+    /// (<see cref="LongPollTimeout"/> is zero), and, either way, after a read that failed.
+    /// </summary>
     public TimeSpan PollingInterval { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
@@ -33,9 +58,47 @@ public sealed class PgmqConsumerOptions
     /// Binds the queue, when the consumer starts, to the published name of every contract this process has
     /// to be sent (<c>IntegrationEventSubscriptions.FromElsewhere</c>), and unbinds the exact names it no
     /// longer handles. The receiving half of <see cref="PgmqSinkOptions.UseTopics"/>: the service asks for its
-    /// messages itself, and no sender has to know it exists. Off by default; needs pgmq 1.11 or later.
+    /// messages itself, and no sender has to know it exists. Off by default; needs pgmq 1.11 or later,
+    /// which <see cref="CheckExtensionOnStart"/> verifies at start-up.
     /// </summary>
     public bool BindTopics { get; set; }
+
+    /// <summary>
+    /// Checks at start-up, once per database, that the pgmq extension is installed, and with
+    /// <see cref="BindTopics"/> that it is 1.11 or later, before any consumer starts. On by default; applies
+    /// to a consumer registered with <c>AddPgmqConsumer</c>. See <see cref="PgmqSinkOptions.CheckExtensionOnStart"/>.
+    /// </summary>
+    public bool CheckExtensionOnStart { get; set; } = true;
+
+    private static readonly Dictionary<string, Action<PgmqConsumerOptions, IConfigurationSection>> Settings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [nameof(VisibilityTimeout)] = (options, setting) => options.VisibilityTimeout = PgmqSettings.TimeSpan(setting),
+        [nameof(BatchSize)] = (options, setting) => options.BatchSize = PgmqSettings.Int32(setting),
+        [nameof(LongPollTimeout)] = (options, setting) => options.LongPollTimeout = PgmqSettings.TimeSpan(setting),
+        [nameof(LongPollInterval)] = (options, setting) => options.LongPollInterval = PgmqSettings.TimeSpan(setting),
+        [nameof(PollingInterval)] = (options, setting) => options.PollingInterval = PgmqSettings.TimeSpan(setting),
+        [nameof(MaxDeliveries)] = (options, setting) => options.MaxDeliveries = PgmqSettings.Int32(setting),
+        [nameof(BindTopics)] = (options, setting) => options.BindTopics = PgmqSettings.Boolean(setting),
+        [nameof(CheckExtensionOnStart)] = (options, setting) => options.CheckExtensionOnStart = PgmqSettings.Boolean(setting),
+    };
+
+    /// <summary>
+    /// Sets the options named in <paramref name="configuration"/>, a section such as <c>Pgmq:Consumer</c>,
+    /// and leaves the others as they are. Every property here is a key of the same name, in any case; a time
+    /// span is written <c>00:00:05</c>.
+    /// <code>
+    /// "Pgmq": { "Consumer": { "LongPollTimeout": "00:00:10", "MaxDeliveries": 5 } }
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The section has a key these options do not know, or a value that does not parse; the message names it.
+    /// </exception>
+    public PgmqConsumerOptions ReadFrom(IConfiguration configuration)
+    {
+        PgmqSettings.Read(configuration, this, Settings);
+        return this;
+    }
 }
 
 /// <summary>
@@ -52,6 +115,12 @@ public sealed class PgmqConsumerOptions
 /// <para>
 /// A message without the toolkit's headers cannot be given an identity to deduplicate on, so it is
 /// archived at once and logged: it did not come from a toolkit outbox.
+/// </para>
+/// <para>
+/// While the host runs, the consumer reads with a long poll (<see cref="PgmqConsumerOptions.LongPollTimeout"/>):
+/// an empty read waits inside Postgres for the next message instead of returning at once, so a message is
+/// picked up within <see cref="PgmqConsumerOptions.LongPollInterval"/> of its commit, a tenth of a second by
+/// default. That keeps one connection busy per consumer.
 /// </para>
 /// </remarks>
 public sealed class PgmqConsumer : BackgroundService
@@ -130,19 +199,36 @@ public sealed class PgmqConsumer : BackgroundService
 
     /// <summary>
     /// Reads one batch and delivers it. Returns how many messages were read, so a caller polling by hand,
-    /// a test for instance, knows when the queue is empty.
+    /// a test for instance, knows when the queue is empty. It does not wait for a message: an empty queue
+    /// returns 0 at once, whatever <see cref="PgmqConsumerOptions.LongPollTimeout"/> says.
     /// </summary>
-    public async Task<int> ConsumeOnceAsync(CancellationToken cancellationToken = default)
+    public Task<int> ConsumeOnceAsync(CancellationToken cancellationToken = default)
+        => ConsumeAsync(longPoll: false, cancellationToken);
+
+    private bool LongPolling => _options.LongPollTimeout > TimeSpan.Zero;
+
+    private async Task<int> ConsumeAsync(bool longPoll, CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var messages = await PgmqQueue.ReadAsync(
-            connection,
-            transaction: null,
-            _queue,
-            visibilityTimeout: (int)Math.Ceiling(_options.VisibilityTimeout.TotalSeconds),
-            count: _options.BatchSize,
-            cancellationToken).ConfigureAwait(false);
+        var visibilityTimeout = (int)Math.Ceiling(_options.VisibilityTimeout.TotalSeconds);
+        var messages = longPoll
+            ? await PgmqQueue.ReadWithPollAsync(
+                connection,
+                transaction: null,
+                _queue,
+                visibilityTimeout,
+                count: _options.BatchSize,
+                maxPollSeconds: (int)Math.Ceiling(_options.LongPollTimeout.TotalSeconds),
+                pollIntervalMilliseconds: Math.Max(1, (int)Math.Ceiling(_options.LongPollInterval.TotalMilliseconds)),
+                cancellationToken).ConfigureAwait(false)
+            : await PgmqQueue.ReadAsync(
+                connection,
+                transaction: null,
+                _queue,
+                visibilityTimeout,
+                count: _options.BatchSize,
+                cancellationToken).ConfigureAwait(false);
 
         foreach (var message in messages)
         {
@@ -158,9 +244,10 @@ public sealed class PgmqConsumer : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             int read;
+            var failed = false;
             try
             {
-                read = await ConsumeOnceAsync(stoppingToken).ConfigureAwait(false);
+                read = await ConsumeAsync(LongPolling, stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -170,9 +257,12 @@ public sealed class PgmqConsumer : BackgroundService
             {
                 _logger.LogError(exception, "Reading pgmq queue '{Queue}' failed; trying again.", _queue);
                 read = 0;
+                failed = true;
             }
 
-            if (read == 0)
+            // An empty long poll has already waited, in Postgres, so the next one starts at once. A failed
+            // read waits either way, so a database that is down is not asked again in a tight loop.
+            if (read == 0 && (failed || !LongPolling))
             {
                 await Task.Delay(_options.PollingInterval, stoppingToken).ConfigureAwait(false);
             }

@@ -24,11 +24,11 @@ public sealed record IntegrationEventMessage
 
     /// <summary>
     /// The published name consumers route on, from <c>[IntegrationEvent]</c>, otherwise
-    /// <c>[DomainEventName]</c>, otherwise the class name.
+    /// <c>[DomainEventName]</c>, otherwise the conventional name: module and class name in kebab case.
     /// </summary>
     public required string Name { get; init; }
 
-    /// <summary>The schema version of <see cref="Payload"/>, from <c>[IntegrationEvent]</c>. Defaults to 1.</summary>
+    /// <summary>The schema version of <see cref="Payload"/>, from the class name's <c>V</c> suffix or <c>[IntegrationEvent]</c>. Defaults to 1.</summary>
     public int Version { get; init; } = 1;
 
     /// <summary>The serialized message body.</summary>

@@ -27,6 +27,9 @@ var connectionString = builder.Configuration.GetConnectionString("shop")
 builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
+// pgmq is an extension, installed once by whoever deploys the database: the AppHost here, Supabase on a
+// project with Queues. The sink and the consumer below check for it before anything starts, so a database
+// without it, or with a pgmq too old for topics, fails the start by name.
 var queues = NpgsqlDataSource.Create(connectionString);
 
 // Sending: by topic, pgmq's own publish and subscribe. Each message goes out under its contract's
@@ -49,10 +52,6 @@ builder.Services.AddShippingModule(host);
 // and another service publishes, as a RabbitMQ queue binds to a topic exchange. It is read into the same
 // modules the module sink feeds: a handler cannot tell which way a message came.
 builder.Services.AddPgmqConsumer(queues, "fulfilment", consumer => consumer.BindTopics = true);
-
-// pgmq is an extension, installed once by whoever deploys the database: the AppHost here, Supabase on a
-// project with Queues. This only checks, so a database without it fails at start-up, by name.
-builder.Services.AddHostedService(_ => new RequirePgmq(queues));
 
 // GraphQL: this service's source schema, which the gateway composes with the other two. Besides stock
 // and shipments it declares Product, by SKU, with the stock Inventory keeps of it, and Order, by id
@@ -77,23 +76,3 @@ app.MapGraphQL();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();
-
-/// <summary>Fails the start, naming the problem, when the pgmq extension is not installed.</summary>
-internal sealed class RequirePgmq(NpgsqlDataSource dataSource) : IHostedLifecycleService
-{
-    public async Task StartingAsync(CancellationToken cancellationToken)
-    {
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await PgmqQueue.EnsureInstalledAsync(connection, transaction: null, cancellationToken);
-    }
-
-    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-}

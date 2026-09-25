@@ -27,6 +27,10 @@ internal static class RabbitMq
             {
                 rabbit.Host(new Uri(connectionString));
 
+                // Every contract's exchange is its published name and version, ordering.order-placed.v1, not its
+                // CLR type, so renaming or moving a contract class does not move its messages. Every service does this.
+                rabbit.UseIntegrationEventNames();
+
                 // Receiving: this service's queue, retried a few times before MassTransit's error queue, and
                 // acknowledged when the modules have applied it.
                 rabbit.ReceiveEndpoint("fulfilment", endpoint =>

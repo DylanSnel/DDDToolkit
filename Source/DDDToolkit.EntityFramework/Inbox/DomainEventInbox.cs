@@ -2,6 +2,7 @@ using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -30,6 +31,18 @@ namespace DDDToolkit.EntityFramework.Inbox;
 ///     // applied is false when this consumer had already seen the message. Acknowledge it either way.
 /// }
 /// </code>
+/// <para>
+/// Two copies of one message delivered at the same moment both find no row and both run. The first to
+/// commit wins, and the other's save fails on the row, or on whatever the winner changed, and is rolled
+/// back. When the inbox owns the transaction it then looks again, finds the winner's row and returns
+/// <see langword="false"/>, the same as for any other repeat. Inside a caller's transaction it throws
+/// instead, because only the caller can roll that back.
+/// </para>
+/// <para>
+/// A failed attempt is rolled back in the change tracker as well as in the database: whatever the
+/// attempt started tracking is detached, so the next save on the same context does not write it after
+/// all. Entities the context tracked before the attempt are left as they are.
+/// </para>
 /// <para>
 /// What it cannot do: undo effects outside the database. If your handler sends a mail and the
 /// transaction then rolls back, the mail is gone but sent. Do outside work by writing a row the
@@ -163,8 +176,11 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
             ProcessedAt = _timeProvider.GetUtcNow(),
         };
 
+        // Whatever the context tracks beyond this once the handler ran is the attempt's own.
+        var trackedBefore = TrackedEntities();
+
         // Added before the handler runs, so a handler that saves for itself carries the marker along.
-        var entry = _context.Add(row);
+        _context.Add(row);
 
         try
         {
@@ -178,16 +194,32 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
 
             return true;
         }
-        catch
+        catch (Exception exception)
         {
             if (transaction is not null)
             {
                 await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
             }
 
-            // The database is back where it was; the change tracker is not, so drop the marker at least.
-            entry.State = EntityState.Detached;
-            throw;
+            // The database is back where it was; the change tracker is not. Left there, the attempt's
+            // writes would go out with the next save on this context, the next consumer's, without the
+            // marker, and the retry would apply them a second time.
+            ForgetAttempt(trackedBefore);
+
+            // Whether another copy got there first is only known once the transaction is rolled back, and
+            // a caller's transaction is theirs to roll back.
+            if (transaction is null || cancellationToken.IsCancellationRequested
+                || !await AppliedMeanwhileAsync(messageId, consumer, cancellationToken).ConfigureAwait(false))
+            {
+                throw;
+            }
+
+            _logger.LogInformation(
+                "Another delivery of message {MessageId} was applied by consumer {Consumer} while this one ran; this one ({Failure}) was rolled back as a repeat.",
+                messageId,
+                consumer,
+                exception.GetType().Name);
+            return false;
         }
         finally
         {
@@ -195,6 +227,68 @@ public sealed class DomainEventInbox<TContext> where TContext : DbContext
             {
                 await transaction.DisposeAsync().ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Whether the inbox holds this message for this consumer after all: another delivery of the same
+    /// message committed while this attempt ran, which is why this one failed. No when it cannot tell,
+    /// so the attempt's own failure is what gets reported.
+    /// </summary>
+    private async Task<bool> AppliedMeanwhileAsync(Guid messageId, string consumer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await HasProcessedAsync(messageId, consumer, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogDebug(exception, "Could not tell whether message {MessageId} was applied by another delivery.", messageId);
+            return false;
+        }
+    }
+
+    private HashSet<object> TrackedEntities()
+    {
+        var tracked = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var entry in Entries())
+        {
+            tracked.Add(entry.Entity);
+        }
+
+        return tracked;
+    }
+
+    /// <summary>
+    /// Stops tracking everything this attempt started tracking, the marker included. What was tracked
+    /// before it is the caller's and stays, so a change the handler made to one of those entities is not
+    /// undone: a context the attempt shares with earlier work is only as clean as that work left it.
+    /// </summary>
+    private void ForgetAttempt(HashSet<object> trackedBefore)
+    {
+        foreach (var entry in Entries())
+        {
+            if (!trackedBefore.Contains(entry.Entity))
+            {
+                entry.State = EntityState.Detached;
+            }
+        }
+    }
+
+    /// <summary>The tracked entries as they stand, without the change detection a plain read would run first.</summary>
+    private List<EntityEntry> Entries()
+    {
+        var tracker = _context.ChangeTracker;
+        var detect = tracker.AutoDetectChangesEnabled;
+        tracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            return [.. tracker.Entries()];
+        }
+        finally
+        {
+            tracker.AutoDetectChangesEnabled = detect;
         }
     }
 

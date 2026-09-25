@@ -225,9 +225,11 @@ public sealed record OrderPlaced(OrderId OrderId) : DomainEvent, IBaseDomainEven
 
 You can still implement `IDomainEvent` directly. You then write the two properties yourself.
 
-`[DomainEventName]` is new and optional, but add it to anything you serialize, store or publish. The
-wire name is otherwise the class name, which is fine until the first rename. The outbox uses it as
-the message name, and `DomainEventName.Of` resolves it.
+`[DomainEventName]` is new and optional. Without it, an event is named by convention: its module and its
+class name in kebab case, `ordering.order-placed`. Add the attribute when you rename a class whose name
+is already stored or published, to keep the old name; see [Stable names](domain-events.md#stable-names).
+The outbox uses the name as the message name, and `DomainEventName.Of` resolves it. (Early 3.0 builds used
+the bare class name instead; rows they wrote are still read.)
 
 ### Making the timestamp deterministic in tests
 
