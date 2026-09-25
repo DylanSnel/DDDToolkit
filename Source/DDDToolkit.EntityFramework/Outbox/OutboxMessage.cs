@@ -45,6 +45,14 @@ public sealed class OutboxMessage
     /// <summary>How often delivery was attempted.</summary>
     public int Attempts { get; set; }
 
+    /// <summary>
+    /// When the processor may try again after a failure, <see cref="Attempts"/> and
+    /// <c>OutboxOptions.RetryDelay</c> after it; the processor does not load the row before then.
+    /// <see langword="null"/> when the row is due now: it was never tried, it was delivered, or it used
+    /// its last attempt, in which case resetting <see cref="Attempts"/> makes it due at once.
+    /// </summary>
+    public DateTimeOffset? NextAttemptAt { get; set; }
+
     /// <summary>The last failure, or <see langword="null"/>.</summary>
     public string? LastError { get; set; }
 }

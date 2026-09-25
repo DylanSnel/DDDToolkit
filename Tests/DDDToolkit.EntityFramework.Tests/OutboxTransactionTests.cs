@@ -91,6 +91,7 @@ public sealed class OutboxTransactionTests : IDisposable
         row.ProcessedAt.Should().BeNull();
         row.Attempts.Should().Be(1);
         row.LastError.Should().Contain("is down");
+        row.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(5), "the wait is bookkeeping too");
     }
 
     [Fact]
@@ -104,6 +105,26 @@ public sealed class OutboxTransactionTests : IDisposable
 
         using var check = _db.CreateLibraryContext();
         check.People.Should().BeEmpty("the whole attempt was one transaction, so the first sink's write went with it");
+    }
+
+    [Fact]
+    public async Task A_sink_that_saved_through_the_same_context_does_not_take_the_attempt_with_it()
+    {
+        // The sink's save wrote the incremented Attempts inside the transaction, and the rollback took it
+        // back while the change tracker still counted it as written. Unless the processor writes it
+        // again the count never moves: the wait never grows and MaxAttempts never stops the message.
+        var broken = new SecondRecordingSink { Refuse = true };
+        using var host = CreateHost(inTransaction: true, outbox => outbox.SendTo<WritingSink>().SendTo(broken));
+        await SaveShelfAsync(host);
+
+        await ProcessAsync(host);
+        _clock.Advance(TimeSpan.FromSeconds(5));
+        await ProcessAsync(host);
+
+        var row = Row();
+        row.Attempts.Should().Be(2);
+        row.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(25), "the second failure waits longer than the first");
+        row.LastError.Should().Contain("is down");
     }
 
     [Fact]

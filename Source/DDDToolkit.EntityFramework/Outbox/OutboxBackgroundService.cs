@@ -60,7 +60,12 @@ public sealed class OutboxBackgroundService<TContext> : BackgroundService where 
         while (await WaitForNextTickAsync(timer, stoppingToken).ConfigureAwait(false));
     }
 
-    /// <summary>Processes batches until one delivers nothing.</summary>
+    /// <summary>
+    /// Processes batches until one delivers nothing. A message that fails waits for its
+    /// <see cref="OutboxMessage.NextAttemptAt"/>, so the next batch reaches past it rather than trying it
+    /// again, and a batch in which everything failed ends the drain: a sink that is down is asked about
+    /// one batch a poll, not the whole table in a loop.
+    /// </summary>
     public async Task DrainAsync(CancellationToken cancellationToken)
     {
         int delivered;

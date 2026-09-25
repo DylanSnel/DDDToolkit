@@ -327,10 +327,16 @@ ignores the argument, so the table is plain `OutboxMessages` there. The mapping 
 | `CreatedAt` | `DateTimeOffset` | When the row was written |
 | `ProcessedAt` | `DateTimeOffset?` | When the handlers succeeded, `null` while pending |
 | `Attempts` | `int` | How often delivery was attempted |
+| `NextAttemptAt` | `DateTimeOffset?` | When a failed message may be tried again, `null` when it is due now; see [Failures, retries and poison messages](#failures-retries-and-poison-messages) |
 | `LastError` | `string?`, 4000 | Type and message of the last failure |
 
 `CreatedAt` comes from `options.TimeProvider`, which defaults to `TimeProvider.System` and can be
-replaced in tests.
+replaced in tests. So does the current time the processor compares `NextAttemptAt` with.
+
+The index is on `ProcessedAt` alone, because that is what separates the few pending rows from the many
+delivered ones. `NextAttemptAt` is not in it. It only divides the pending rows into due and waiting,
+and "`null` or not after now" is not one range an index could seek, so adding it would make the index
+bigger without making the poll faster.
 
 Payloads are written with System.Text.Json through `outbox.JsonOptions`, which by default are
 case-insensitive on read and carry the toolkit's `SingleValueObjectConverterFactory`, so identifiers
@@ -339,8 +345,8 @@ the payload back, so change them with care once messages exist.
 
 ### Timestamps
 
-`OccurredAt`, `CreatedAt` and `ProcessedAt` are `DateTimeOffset` in the model. What they become in the
-database depends on the provider, and you can say otherwise:
+`OccurredAt`, `CreatedAt`, `ProcessedAt` and `NextAttemptAt` are `DateTimeOffset` in the model. What
+they become in the database depends on the provider, and you can say otherwise:
 
 ```csharp
 // The provider's own instant type.
@@ -357,8 +363,9 @@ modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.Ut
 | SQLite | UTC `DateTime` as text | UTC `DateTime` as text |
 
 The one thing the outbox needs from these columns is that they sort as instants, because the processor
-reads pending messages oldest first. SQLite stores a `DateTimeOffset` as text and refuses to order by
-one, so on SQLite the toolkit converts to a UTC `DateTime` whatever you ask for. Every other provider
+reads pending messages oldest first and compares `NextAttemptAt` with the current time. SQLite stores a
+`DateTimeOffset` as text and refuses to order by one or compare one, so on SQLite the toolkit converts
+to a UTC `DateTime` whatever you ask for. Every other provider
 has an instant type that orders correctly, and gets it.
 
 Whichever column it lands in, the value is normalized to UTC on the way in. Write a `DateTimeOffset`
@@ -428,7 +435,7 @@ covers.
 
 An event name nobody registered is not fatal. The processor records the failure on the row, with a
 `LastError` that names the missing event and the registration call, increments `Attempts`, leaves
-`ProcessedAt` null and carries on with the rest of the batch. Register the type and the next run
+`ProcessedAt` null and carries on with the rest of the batch. Register the type and the next attempt
 delivers the row.
 
 ### Running the processor
@@ -457,8 +464,9 @@ var processor = scope.ServiceProvider.GetRequiredService<OutboxProcessor<Orderin
 var delivered = await processor.ProcessPendingAsync(batchSize: 100, cancellationToken);
 ```
 
-`ProcessPendingAsync` loads pending messages oldest first, by `CreatedAt`, then `OccurredAt`, then
-`Id`, delivers each one on its own, and returns how many were delivered successfully. The processor
+`ProcessPendingAsync` loads the pending messages that are due, oldest first, by `CreatedAt`, then
+`OccurredAt`, then `Id`, delivers each one on its own, and returns how many were delivered
+successfully. The processor
 throws at construction if the outbox is not enabled, or if it has neither a sink nor a dispatch
 delegate to deliver through.
 
@@ -470,8 +478,29 @@ change become new outbox rows.
 
 A handler that throws does not stop the batch. The exception type and message are written to
 `LastError`, truncated at 4000 characters, `Attempts` is incremented, `ProcessedAt` stays null, and
-the processor moves to the next message. A later run retries it, and on success `LastError` is
+the processor moves to the next message. The message is retried later, and on success `LastError` is
 cleared.
+
+A failed message is not tried again straight away. The processor records in `NextAttemptAt` when it may
+be, and loads only the messages that are due, still oldest first. The wait grows with every failure:
+
+| After attempt | 1 | 2 | 3 | 4 and later |
+|---|---|---|---|---|
+| The message waits | 5 s | 25 s | 2 min 5 s | 10 min |
+
+The wait does two things. A message that keeps failing does not hold back the messages written after
+it: the next poll reaches past it. And a sink that is down for a few seconds costs a message one
+attempt, not all of them, because a busy drain does not load it again before its time.
+
+`RetryDelay` sets the schedule. It is given the number of attempts made so far, 1 after the first
+failure:
+
+```csharp
+options.UseOutbox(outbox => outbox.RetryDelay = attempts => TimeSpan.FromSeconds(30 * attempts));
+```
+
+`TimeSpan.Zero` retries on the next poll. `OutboxOptions.DefaultRetryDelay` is the default schedule,
+for a policy that builds on it.
 
 `MaxAttempts` defaults to 10. Messages that reached it are no longer loaded:
 
@@ -479,14 +508,19 @@ cleared.
 options.UseOutbox(outbox => outbox.MaxAttempts = 5);
 ```
 
-They stay in the table with their last error for you to inspect. Reset `Attempts` to retry one.
+With both defaults, a message that keeps failing is given up on about an hour after its first attempt.
+It stays in the table with its last error for you to inspect, and with no `NextAttemptAt`, so resetting
+`Attempts` retries it on the next poll. To retry a message that is still waiting, set its
+`NextAttemptAt` to null.
 
 Delivered rows stay too, until something deletes them. `services.AddDomainEventRetention<TContext>(...)`
 deletes them once they are older than a window you choose, and never touches a row that was not
 delivered. See [Keeping the tables small](integration-events.md#keeping-the-tables-small).
 
-Note that a batch in which every message fails returns zero, which ends the background service's
-drain for that tick. The next tick picks the messages up again.
+A batch that delivers nothing ends the background service's drain for that tick, whether its messages
+failed or none was due. A sink that is down is asked about one batch a tick, not about every message
+in a loop. The next tick carries on: the messages behind the ones that failed, and those that failed
+once their time has come.
 
 ### An outbox per context
 
@@ -520,8 +554,16 @@ an outbox refuses to start and names the context.
 
 ### Honest limits
 
-- **Ordering is best-effort.** Messages are loaded oldest first, but a failed message is retried
-  later than messages written after it, so delivery order is not the order of writing.
+- **Ordering is best-effort.** Messages are loaded oldest first, but a failed message waits while
+  messages written after it are delivered, so delivery order is not the order of writing.
+- **A waiting message waits out its time.** Once a sink is back, a message that failed during the
+  outage is not sent until its `NextAttemptAt`, up to 10 minutes later with the default schedule.
+  Nothing tells the processor the sink recovered. Set `NextAttemptAt` to null to send the waiting
+  messages at once.
+- **A slow failure still takes its time.** The wait keeps a failing message from being tried too
+  often, but each attempt still lasts as long as the sink takes to fail, and a batch is delivered one
+  message at a time. A batch of 100 messages that each wait out a 30 second timeout holds the
+  processor for 50 minutes. Keep sink timeouts short, or the batch small.
 - **Concurrent processors can double-deliver.** The processor takes no lock, so two instances polling
   the same table may both pick up the same row. Combined with the crash window before
   `ProcessedAt` is written, that is the at-least-once guarantee: handlers must be idempotent, keyed
@@ -532,7 +574,8 @@ an outbox refuses to start and names the context.
   [Integration events](integration-events.md#when-one-sink-fails-and-another-does-not).
 
 `Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` exercises the transactional write, the
-retries, `MaxAttempts`, unknown event names and the background service.
+retries, `MaxAttempts`, unknown event names and the background service, and `OutboxRetryTests.cs`
+next to it the wait between attempts.
 
 ## The dispatch loop
 

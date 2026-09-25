@@ -30,7 +30,7 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// </para>
 /// <para>
 /// Throwing says this consumer did not apply the message. Its inbox row is rolled back with its writes,
-/// the outbox message as a whole counts as failed, and the next run replays it to <em>this</em>
+/// the outbox message as a whole counts as failed, and the next attempt replays it to <em>this</em>
 /// handler only: handlers that already succeeded keep their rows and are skipped.
 /// </para>
 /// </summary>

@@ -70,6 +70,7 @@ public sealed class OutboxTests : IDisposable
         created.CreatedAt.Should().Be(_clock.GetUtcNow());
         created.ProcessedAt.Should().BeNull();
         created.Attempts.Should().Be(0);
+        created.NextAttemptAt.Should().BeNull("a new row is due at once");
         created.LastError.Should().BeNull();
         created.Payload.Should().Contain("\"Name\":\"Fiction\"");
 
@@ -223,9 +224,14 @@ public sealed class OutboxTests : IDisposable
             failed.ProcessedAt.Should().BeNull();
             failed.Attempts.Should().Be(1);
             failed.LastError.Should().Be("System.InvalidOperationException: mail server down");
+            failed.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(5));
         }
 
         shouldFail = false;
+        var early = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+        early.Should().Be(0, "the failed message waits for its NextAttemptAt");
+
+        _clock.Advance(TimeSpan.FromSeconds(5));
         var retried = await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
         retried.Should().Be(1);
 
@@ -235,6 +241,7 @@ public sealed class OutboxTests : IDisposable
             row.ProcessedAt.Should().NotBeNull();
             row.Attempts.Should().Be(2);
             row.LastError.Should().BeNull();
+            row.NextAttemptAt.Should().BeNull();
         }
 
         host.Recorder.Events.Select(e => e.GetType()).Should().Equal(typeof(ShelfCreated), typeof(BookAdded));
@@ -252,9 +259,11 @@ public sealed class OutboxTests : IDisposable
             await context.SaveChangesAsync();
         });
 
+        // An hour apart, well past every wait, so only MaxAttempts can stop a retry.
         for (var i = 0; i < 4; i++)
         {
             await host.InScopeAsync((_, services) => services.GetRequiredService<OutboxProcessor<LibraryContext>>().ProcessPendingAsync());
+            _clock.Advance(TimeSpan.FromHours(1));
         }
 
         using var check = _db.CreateLibraryContext();

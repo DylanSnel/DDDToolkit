@@ -68,6 +68,13 @@ public static class OutboxModelBuilderExtensions
             builder.Property(m => m.OccurredAt).AsTimestamp(utcDateTime);
             builder.Property(m => m.CreatedAt).AsTimestamp(utcDateTime);
             builder.Property(m => m.ProcessedAt).AsTimestamp(utcDateTime);
+            builder.Property(m => m.NextAttemptAt).AsTimestamp(utcDateTime);
+
+            // The processor filters on ProcessedAt IS NULL, which is what separates the few pending rows
+            // from the many delivered ones, so that is what the index is on. NextAttemptAt is left out:
+            // it only divides the pending rows into due and waiting, and as "IS NULL OR <= now" it is
+            // no single range an index could seek. Leaving the index alone also keeps the upgrade to
+            // one nullable column.
             builder.HasIndex(m => m.ProcessedAt);
         });
 

@@ -33,7 +33,7 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <para>
 /// <b>When one sink fails and another succeeds</b>, every sink is still attempted: a broken transport
 /// does not stop the others. The message as a whole then counts as failed, so it is not marked
-/// processed and the next run hands it to <em>all</em> sinks again, including the ones that already
+/// processed and the next attempt hands it to <em>all</em> sinks again, including the ones that already
 /// accepted it. That is the honest cost of one row per message: per-sink bookkeeping would need one
 /// row per sink. The failure is recorded on the row as an
 /// <see cref="IntegrationEventDeliveryException"/> naming the sinks that threw.
@@ -41,8 +41,10 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <para>
 /// A failure of any kind, an event name nobody registered included, is recorded on the row
 /// (<see cref="OutboxMessage.LastError"/>, <see cref="OutboxMessage.Attempts"/>) and does not stop the
-/// rest of the batch; rows that reached <see cref="OutboxOptions.MaxAttempts"/> are skipped until
-/// <c>Attempts</c> is reset.
+/// rest of the batch. The row is then left alone until its <see cref="OutboxMessage.NextAttemptAt"/>,
+/// which <see cref="OutboxOptions.RetryDelay"/> pushes further out after every failure, so it neither
+/// holds back the rows behind it nor spends its attempts in one busy drain. Rows that reached
+/// <see cref="OutboxOptions.MaxAttempts"/> are skipped until <c>Attempts</c> is reset.
 /// </para>
 /// <para>
 /// Each message is saved individually through the same context, so when an in-process handler resolves
@@ -88,9 +90,11 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     }
 
     /// <summary>
-    /// Loads up to <paramref name="batchSize"/> pending messages, oldest first (by write time, then by
-    /// the event's <c>OccurredAt</c>), and delivers them. Returns the number of messages delivered
-    /// successfully. Order is best-effort: retries and concurrent processors can reorder delivery.
+    /// Loads up to <paramref name="batchSize"/> pending messages that are due, oldest first (by write
+    /// time, then by the event's <c>OccurredAt</c>), and delivers them. A message that failed is due again
+    /// at its <see cref="OutboxMessage.NextAttemptAt"/>, so the messages behind it are loaded in the
+    /// meantime. Returns the number of messages delivered successfully. Order is best-effort: retries
+    /// and concurrent processors can reorder delivery.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="batchSize"/> is below 1.</exception>
     public async Task<int> ProcessPendingAsync(int batchSize = 100, CancellationToken cancellationToken = default)
@@ -99,9 +103,11 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
         var outbox = _outbox;
         var maxAttempts = outbox.MaxAttempts;
+        var now = _options.TimeProvider.GetUtcNow();
 
         var messages = await _context.Set<OutboxMessage>()
             .Where(message => message.ProcessedAt == null && message.Attempts < maxAttempts)
+            .Where(message => message.NextAttemptAt == null || message.NextAttemptAt <= now)
             // Write time, then occurrence time (events written by one save share CreatedAt), then id.
             .OrderBy(message => message.CreatedAt)
             .ThenBy(message => message.OccurredAt)
@@ -149,19 +155,38 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                 await DeliverAsync(message, outbox, cancellationToken).ConfigureAwait(false);
 
                 message.ProcessedAt = _options.TimeProvider.GetUtcNow();
+                message.NextAttemptAt = null;
                 message.LastError = null;
                 delivered = true;
             }
             catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 message.LastError = Describe(exception);
-                _logger.LogError(exception, "Delivery of outbox message {MessageId} ({EventName}) failed on attempt {Attempt}.", message.Id, message.EventName, message.Attempts);
+                message.NextAttemptAt = NextAttemptAfterFailure(message.Attempts, outbox);
+
+                if (message.NextAttemptAt is { } next)
+                {
+                    _logger.LogError(exception, "Delivery of outbox message {MessageId} ({EventName}) failed on attempt {Attempt}; it is tried again at {NextAttemptAt}.", message.Id, message.EventName, message.Attempts, next);
+                }
+                else
+                {
+                    _logger.LogError(exception, "Delivery of outbox message {MessageId} ({EventName}) failed on attempt {Attempt}, its last; it stays in the outbox until Attempts is reset.", message.Id, message.EventName, message.Attempts);
+                }
 
                 if (transaction is not null)
                 {
                     // Roll the failed attempt back with whatever the sinks wrote here, then record the
                     // failure on its own so the attempt count and the error survive.
                     await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+
+                    // A sink that saved through this context saved the incremented Attempts with it,
+                    // and the rollback took that write back while the change tracker still counts it
+                    // as done. Mark the bookkeeping as changed so it is written whatever a sink saved.
+                    var entry = _context.Entry(message);
+                    entry.Property(m => m.Attempts).IsModified = true;
+                    entry.Property(m => m.NextAttemptAt).IsModified = true;
+                    entry.Property(m => m.LastError).IsModified = true;
+
                     await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     return false;
                 }
@@ -183,6 +208,34 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                 await transaction.DisposeAsync().ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>
+    /// When a message that just failed its <paramref name="attempts"/>th attempt is due again, or
+    /// <see langword="null"/> when that was its last. A row out of attempts is not loaded whatever this
+    /// says, so the null only means that resetting <c>Attempts</c> makes it due at once, rather than
+    /// after a wait nobody asked for.
+    /// </summary>
+    private DateTimeOffset? NextAttemptAfterFailure(int attempts, OutboxOptions outbox)
+    {
+        if (attempts >= outbox.MaxAttempts)
+        {
+            return null;
+        }
+
+        // Read now rather than at the start of the batch, so an attempt that waited out a timeout is
+        // not due again the moment it gave up.
+        var now = _options.TimeProvider.GetUtcNow();
+        var delay = outbox.RetryDelay(attempts);
+
+        if (delay <= TimeSpan.Zero)
+        {
+            return now;
+        }
+
+        // A delay past the end of the calendar means never, and must not throw on the failure path,
+        // where it would lose the record of the attempt.
+        return delay < DateTimeOffset.MaxValue - now ? now + delay : DateTimeOffset.MaxValue;
     }
 
     private async Task DeliverAsync(OutboxMessage message, OutboxOptions outbox, CancellationToken cancellationToken)

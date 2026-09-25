@@ -29,6 +29,7 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
 
     private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
     private readonly List<IDomainEvent> _dispatched = [];
+    private Predicate<IDomainEvent> _refuses = _ => false;
 
     private ProviderHost CreateOutboxHost()
         => new(
@@ -38,6 +39,11 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
                 options.TimeProvider = _clock;
                 options.DispatchInProcess((_, events, _) =>
                 {
+                    if (events.Any(e => _refuses(e)))
+                    {
+                        throw new InvalidOperationException("refused");
+                    }
+
                     _dispatched.AddRange(events);
                     return Task.CompletedTask;
                 });
@@ -164,6 +170,53 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
         rows.Select(r => r.CreatedAt).Should().BeInAscendingOrder().And.AllSatisfy(at => at.Offset.Should().Be(TimeSpan.Zero));
         rows[0].CreatedAt.Should().Be(start, "the row written last is the oldest instant, whatever offset it arrived in");
         rows[3].CreatedAt.Should().Be(start.AddHours(3), "and it crossed into the next year on the way");
+    }
+
+    [Fact]
+    public async Task A_failed_message_waits_for_its_NextAttemptAt_on_this_providers_timestamp_column()
+    {
+        SkipIfUnavailable();
+
+        // The processor compares NextAttemptAt with the current time in SQL, so like the ordering above it
+        // has to hold on each provider's own column. The clock carries an offset: the comparison's
+        // parameter has to be normalized the way a written value is, or Npgsql refuses it.
+        using var host = CreateOutboxHost();
+        _refuses = e => e is ShelfCreated { Name: "broken" };
+        _clock.Set(new DateTimeOffset(2026, 9, 13, 14, 0, 0, TimeSpan.FromHours(2)));
+
+        foreach (var name in new[] { "broken", "healthy" })
+        {
+            await host.InScopeAsync(async context =>
+            {
+                context.Shelves.Add(NewShelf(name));
+                await context.SaveChangesAsync(Cancellation);
+            });
+            _clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Task<int> ProcessAsync() => host.InScopeAsync((_, services) => services
+            .GetRequiredService<OutboxProcessor<ProviderContext>>()
+            .ProcessPendingAsync(batchSize: 1, Cancellation));
+
+        (await ProcessAsync()).Should().Be(0, "the oldest row fails");
+        (await ProcessAsync()).Should().Be(1, "and then waits, so the next batch of one reaches the row behind it");
+        _dispatched.OfType<ShelfCreated>().Select(e => e.Name).Should().Equal("healthy");
+
+        await using (var check = Database.CreateContext())
+        {
+            var waiting = await check.Outbox.SingleAsync(m => m.ProcessedAt == null, Cancellation);
+            waiting.Attempts.Should().Be(1);
+            waiting.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(5));
+            waiting.NextAttemptAt!.Value.Offset.Should().Be(TimeSpan.Zero);
+        }
+
+        _refuses = _ => false;
+        _clock.Advance(TimeSpan.FromSeconds(5) - TimeSpan.FromMilliseconds(1));
+        (await ProcessAsync()).Should().Be(0, "a millisecond early is still early");
+
+        _clock.Advance(TimeSpan.FromMilliseconds(1));
+        (await ProcessAsync()).Should().Be(1, "at NextAttemptAt the row is due");
+        _dispatched.OfType<ShelfCreated>().Select(e => e.Name).Should().Equal("healthy", "broken");
     }
 
     [Fact]

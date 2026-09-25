@@ -656,7 +656,7 @@ at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the o
 
 ## From an earlier 3.0 build
 
-Skip this if you are coming from 2.0.22. Two things changed while 3.0 was being built, after some
+Skip this if you are coming from 2.0.22. Three things changed while 3.0 was being built, after some
 databases had already been created with it.
 
 ### Outbox and inbox timestamps
@@ -703,6 +703,13 @@ An outbox table that predates the `Version` column needs it added as a non-nulla
 default of 1, which is what every existing row was written as. A column added without a default reads
 as 0, and the processor treats that as 1 for the same reason, so an upgrade that forgets the default
 still works. See [Versioning and upcasting](integration-events.md#versioning-and-upcasting).
+
+### The outbox `NextAttemptAt` column
+
+An outbox table that predates `NextAttemptAt` needs it added as a nullable column of the same type as
+`ProcessedAt`, without an index. A scaffolded migration writes exactly that. Existing rows read `null`,
+which means due now, so no row has to change. See
+[Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages).
 
 ## What did not change
 

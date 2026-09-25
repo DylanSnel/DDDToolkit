@@ -402,6 +402,23 @@ convention.
   rules. The generator now leaves such a type alone, whichever part declares the method: no `Validator`,
   no `Errors`, no generated overrides. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and
   record identifiers.
+- A failing outbox message held back every message written after it. The processor loads pending
+  messages oldest first, and a failure only incremented `Attempts`, so a failed message was loaded
+  again on the next poll. When the oldest batch all failed, every poll loaded the same messages and the
+  newer ones were not reached until those had used up `MaxAttempts`: about 50 seconds when failures
+  were quick, hours when each attempt waited out a timeout. A busy drain also retried a failing message
+  in every batch, so a sink outage of a few seconds could use up all ten attempts. A failed message now
+  waits before it is tried again: the outbox row records when in a new `NextAttemptAt`, the processor
+  loads only messages that are due, and the wait grows with every failure, from 5 seconds to 10
+  minutes. `OutboxOptions.RetryDelay` sets the schedule. See
+  [Failures, retries and poison messages](docs/event-delivery.md#failures-retries-and-poison-messages);
+  a database from an earlier 3.0 build needs
+  [the column](docs/migrating-to-3.md#the-outbox-nextattemptat-column).
+- With `DeliverInTransaction`, a failed delivery could lose its attempt. A sink that saved through the
+  outbox's own context, such as a module consumer in the same database, saved the incremented
+  `Attempts` inside the transaction, and the rollback that followed the failure took it back. `Attempts`
+  stayed at 0, so the retry wait never grew and `MaxAttempts` never stopped the message. The count is
+  now written again after the rollback.
 
 ### Changed
 

@@ -199,7 +199,8 @@ public sealed class PgmqSinkTests : IAsyncLifetime
         await context.Database.EnsureCreatedAsync(Cancellation);
 
         var broken = new RecordingSink { Refuse = true };
-        var options = new Options.DDDEntityFrameworkOptions();
+        var clock = new ManualClock(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        var options = new Options.DDDEntityFrameworkOptions { TimeProvider = clock };
         options.UseOutbox(outbox =>
         {
             outbox.RegisterEvent<Domain.Events.ShelfCreated>();
@@ -218,6 +219,7 @@ public sealed class PgmqSinkTests : IAsyncLifetime
         (await ReadAsync(database, "outbox_q")).Should().BeEmpty("the attempt was one transaction, so a later sink failing undid the enqueue");
 
         broken.Refuse = false;
+        clock.Advance(TimeSpan.FromSeconds(5));
         var processed = await processor.ProcessPendingAsync(cancellationToken: Cancellation);
 
         processed.Should().Be(1);

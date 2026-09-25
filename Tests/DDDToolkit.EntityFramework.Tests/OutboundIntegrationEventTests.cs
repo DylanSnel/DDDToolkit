@@ -20,17 +20,22 @@ namespace DDDToolkit.EntityFramework.Tests;
 public sealed class OutboundIntegrationEventTests : IDisposable
 {
     private readonly SqliteDatabase _db = new();
+    private readonly ManualClock _clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
 
     public void Dispose() => _db.Dispose();
 
     private TestHost CreateHost(Action<OutboxOptions> outbox, OutboundSwitch? outboundSwitch = null)
         => new(
             _db,
-            options => options.UseOutbox(o =>
+            options =>
             {
-                o.RegisterEvent<ShelfCreated>().RegisterEvent<ShelfRenamed>().RegisterEvent<BookAdded>();
-                outbox(o);
-            }),
+                options.TimeProvider = _clock;
+                options.UseOutbox(o =>
+                {
+                    o.RegisterEvent<ShelfCreated>().RegisterEvent<ShelfRenamed>().RegisterEvent<BookAdded>();
+                    outbox(o);
+                });
+            },
             dispatchThroughRecorder: false,
             collection =>
             {
@@ -117,6 +122,7 @@ public sealed class OutboundIntegrationEventTests : IDisposable
         }
 
         outboundSwitch.Fail = false;
+        _clock.Advance(TimeSpan.FromSeconds(5));
         (await ProcessAsync(host)).Should().Be(1);
         sink.Messages.Should().ContainSingle();
     }

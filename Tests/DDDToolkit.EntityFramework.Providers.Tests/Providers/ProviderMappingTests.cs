@@ -358,7 +358,7 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
 
         // The default is no longer SQLite's shape imposed on everybody. Every provider that can order
         // its own offset type gets it; SQLite, which cannot, still gets the UTC DateTime.
-        foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt) })
+        foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt), nameof(OutboxMessage.NextAttemptAt) })
         {
             (await Database.ColumnTypeAsync(DomainEventStorage.DefaultOutboxTableName, column, Cancellation))
                 .Should().Be(ProviderTimestampColumnType);
@@ -397,7 +397,7 @@ public abstract class ProviderMappingTests(ProviderFixture fixture) : ProviderTe
             await Database.ExecuteScriptAsync(legacy.Database.GenerateCreateScript(), Cancellation);
         }
 
-        foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt) })
+        foreach (var column in new[] { nameof(OutboxMessage.OccurredAt), nameof(OutboxMessage.CreatedAt), nameof(OutboxMessage.ProcessedAt), nameof(OutboxMessage.NextAttemptAt) })
         {
             (await Database.ColumnTypeAsync(TimestampShapeContext.OutboxTable, column, Cancellation))
                 .Should().Be(UtcDateTimeColumnType);
