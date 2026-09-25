@@ -13,6 +13,9 @@ npm run build      # what the workflow builds; broken links fail it
 ```
 
 The sidebar's order is `sidebars.js`: a new page in `docs/` has to be added there.
+`npm start` does not notice a new file in `docs/`, because the folder is outside the site: until you
+restart it, every link to the new page is reported as broken ("compiled with problems"). The production
+build reads everything afresh and is the one to believe.
 
 The code on the homepage is compiled, not typed. `sample/` is a small project the generators run over,
 and `npm run generate-sample` builds it and writes what they produced to `src/data/generated.json`,
