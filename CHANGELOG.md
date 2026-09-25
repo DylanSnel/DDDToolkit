@@ -23,8 +23,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   or setup it shows: delivering domain events in process and through the outbox, one message from
   one module's save to another's inbox, the example shop's checkout across its modules, the roads a
   message can take between modules, the two stages of an invariant, a module's contracts project, an
-  aggregate's boundary and what the generators write. They are Mermaid, so GitHub draws the same
-  diagrams in `docs/`.
+  aggregate's boundary and what the generators write. And for how modules refer to each other: what a
+  module keeps and what its contract publishes, with the two references the analyzer refuses drawn in
+  red; the example shop's modules and the contracts between them; a domain event becoming a contract.
+  Also the order's states, the always-valid twin, one set of modules under two kinds of host, three
+  modules composing one GraphQL `Product`, and a migration's way from `dotnet ef` to Supabase. They are
+  Mermaid, so GitHub draws the same diagrams in `docs/`.
 - The Supabase monolith through Supabase Queues. With `Messaging=pgmq` the example host sends every
   module's messages to one pgmq queue and reads it back into the modules, with no module sink in between;
   a hand-written migration, `enable_queues`, turns the extension on. It runs on pgmq 1.5.1, the version

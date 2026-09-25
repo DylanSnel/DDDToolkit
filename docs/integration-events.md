@@ -40,6 +40,58 @@ A domain event is internal. `OrderPlaced(OrderId, CustomerName, Money)` uses you
 things that read it are in the same module. The moment something outside that module reads it, that
 stops being true. Now the record is a published schema, and every field is a promise.
 
+What changes between the two, in the example shop. The domain event speaks Ordering's language; the
+contract speaks plain types, because it outlives any one version of Ordering:
+
+```mermaid
+flowchart LR
+    subgraph inside ["inside Ordering, free to change"]
+        Event["OrderPlaced: OrderId, Address, the lines, Money"]
+    end
+    Publish["PublishOrderPlaced"]
+    subgraph published ["published, versioned, a promise"]
+        Contract["OrderPlacedV1: OrderId, City, PostalCode, the lines, a decimal and a currency"]
+    end
+    Event --> Publish --> Contract
+    Contract --> Inventory["Inventory"]
+    Contract --> Payments["Payments"]
+```
+
+<details>
+<summary>Show the code: the domain event, the contract and the class between them</summary>
+
+```csharp
+// Ordering's own event, with Ordering's own types
+[DomainEventName("ordering.order-placed")]
+public sealed record OrderPlaced(OrderId OrderId, Address ShipTo, IReadOnlyList<OrderPlaced.Line> Lines, Money Total)
+    : DomainEvent, INotification
+{
+    public sealed record Line(string Sku, int Quantity);
+}
+
+// what the other modules get, in Ordering's contracts project
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+// the one place that knows both
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV1>
+{
+    public ValueTask<OrderPlacedV1?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV1(
+            placed.OrderId,
+            placed.ShipTo.City,
+            placed.ShipTo.PostalCode,
+            [.. placed.Lines.Select(line => new OrderedLineV1(line.Sku, line.Quantity))],
+            placed.Total.Amount,
+            placed.Total.Currency));
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
+
+</details>
+
 Note the boundary in the first row. It is the **module**, not the process. A record that only another
 assembly in the same solution deserializes is already a published schema, because you cannot change it
 without changing them.

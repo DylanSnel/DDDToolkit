@@ -45,6 +45,78 @@ What that buys:
   [microservices samples](../Examples/README.md) run the same five modules as three services for
   exactly that reason.
 
+What that looks like between two modules. Sales may hold Crm's identifier, read its summary and react
+to its event. Holding Crm's entity or naming its `DbContext` is what the analyzer reports:
+
+```mermaid
+flowchart LR
+    subgraph crm ["module Crm"]
+        direction TB
+        subgraph crmown ["its own business"]
+            Customer["Customer, an aggregate"]
+            CrmContext["CrmContext, its handlers, its queries"]
+        end
+        subgraph crmcontract ["its contract"]
+            CustomerId["CustomerId"]
+            Summary["CustomerSummary, a read model"]
+            Registered["CustomerRegistered, an integration event"]
+        end
+    end
+    subgraph sales ["module Sales"]
+        direction TB
+        Invoice["Invoice"]
+        Welcome["a handler of CustomerRegistered"]
+    end
+    Invoice -->|"holds"| CustomerId
+    Invoice -->|"reads"| Summary
+    Welcome -->|"handles"| Registered
+    Invoice -. "DDD00023" .-x Customer
+    Welcome -. "DDD00022" .-x CrmContext
+    linkStyle 3,4 stroke:#e5484d,color:#e5484d
+```
+
+<details>
+<summary>Show the code: publishing, and what the analyzer says</summary>
+
+Crm says it is a module and publishes three types. Everything else it declares, `public` or not, stays
+its own:
+
+```csharp
+[assembly: Module("Crm")]
+
+[ModuleContract]
+[EntityId<Guid>("CUS")]
+public readonly partial record struct CustomerId;
+
+[ModuleContract]
+public sealed record CustomerSummary(CustomerId Id, string Name);
+
+[IntegrationEvent("crm.customer-registered")]
+public sealed record CustomerRegistered(Guid CustomerId, string Name);
+```
+
+In Sales, using what Crm published is fine, and the rest is reported:
+
+```csharp
+[assembly: Module("Sales")]
+
+[AggregateRoot<Guid>("INV")]
+public partial class Invoice
+{
+    public CustomerId Customer { get; private set; }      // fine: published
+    public Customer Buyer { get; private set; }           // DDD00023: another module's entity, stored
+}
+
+public sealed class InvoiceReport
+{
+    public string Describe(CrmContext crm) => "...";      // DDD00022: named, and not published
+}
+```
+
+See [What the analyzer catches](modules.md#what-the-analyzer-catches).
+
+</details>
+
 ## What goes in a contract
 
 In rough order of how often you will want it:
@@ -59,6 +131,70 @@ In rough order of how often you will want it:
 
 A small contract is a good contract. The example shop's Ordering module publishes one identifier and
 three integration events, and the modules that react to orders need nothing more from it.
+
+The whole shop, drawn the same way: each arrow is a contract one module publishes and another handles.
+No arrow is a method call, and no module holds another's objects; an `OrderId` is all that travels
+with an order:
+
+```mermaid
+flowchart LR
+    Catalog["Catalog: products and prices"]
+    Ordering["Ordering: orders, a copy of the prices"]
+    Inventory["Inventory: stock and reservations"]
+    Payments["Payments: payments"]
+    Shipping["Shipping: shipments"]
+
+    Catalog -->|"ProductListedV1, ProductPriceChangedV1"| Ordering
+    Ordering -->|"OrderPlacedV1, OrderCancelledV1"| Inventory
+    Ordering -->|"OrderPlacedV1, OrderCancelledV1"| Payments
+    Inventory -->|"StockReservedV1"| Payments
+    Inventory -->|"StockReservedV1, StockReservationFailedV1"| Ordering
+    Payments -->|"PaymentSucceededV1, PaymentFailedV1"| Ordering
+    Ordering -->|"OrderConfirmedV1"| Shipping
+```
+
+<details>
+<summary>Show the code: one module's contracts, and another reading them</summary>
+
+What Ordering publishes, in its contracts project:
+
+```csharp
+[ModuleContract]
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
+
+[IntegrationEvent("ordering.order-cancelled", Version = 1)]
+public sealed record OrderCancelledV1(OrderId OrderId, string Reason);
+```
+
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+
+Shipping reads one of them, and keeps the `OrderId` it carries:
+
+```csharp
+[IntegrationEventConsumer("shipping.booker")]
+public sealed class BookShipment(ShippingContext context) : IIntegrationEventHandler<OrderConfirmedV1>
+{
+    public Task HandleAsync(OrderConfirmedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        context.Shipments.Add(new Shipment(
+            ShipmentId.CreateSequential(), contract.OrderId, $"{contract.PostalCode}, {contract.City}", message.OccurredAt));
+
+        return Task.CompletedTask;
+    }
+}
+```
+
+*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
+
+</details>
 
 ## Declaring it
 

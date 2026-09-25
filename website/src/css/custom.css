@@ -356,9 +356,10 @@ html[data-theme='dark'] .theme-code-block {
   color: var(--ddd-muted) !important;
 }
 
+/* A link the diagram colours itself (linkStyle, as for what the analyzer refuses) keeps its colour. */
 .docusaurus-mermaid-container .messageLine0,
 .docusaurus-mermaid-container .messageLine1,
-.docusaurus-mermaid-container .flowchart-link {
+.docusaurus-mermaid-container .flowchart-link:not([style*='stroke:']) {
   stroke: var(--ddd-muted) !important;
 }
 

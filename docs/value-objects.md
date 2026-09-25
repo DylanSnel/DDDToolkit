@@ -217,6 +217,40 @@ everywhere:
 public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
 ```
 
+```mermaid
+flowchart LR
+    Input["a form, a request, a file"] --> Plain["EmailAddress: may be invalid"]
+    Plain -->|"ToValid(), throws when invalid"| Valid["ValidEmailAddress: always valid"]
+    Plain -->|"TryToValid(out valid, out errors)"| Valid
+    Plain -->|"TryToValid, false"| Errors["the failures, for the caller"]
+    Valid -->|"accepted wherever an EmailAddress is"| Use["SendWelcome(ValidEmailAddress)"]
+    Valid -->|"With(...), the copy is validated"| Valid
+```
+
+<details>
+<summary>Show the code: checking once, at the boundary</summary>
+
+The endpoint turns what it was sent into the twin, or into a refusal. Everything behind it takes the
+twin, and never checks again:
+
+```csharp
+app.MapPost("/subscribers", (SubscribeRequest body) =>
+{
+    if (!EmailAddress.Create(body.Email).TryToValid(out var email, out var errors))
+    {
+        return Results.ValidationProblem(errors.ToErrorDictionary());
+    }
+
+    return Results.Ok(subscribers.Add(email));   // email is a ValidEmailAddress
+});
+
+public Task SendWelcome(ValidEmailAddress address)   // no re-validation needed
+```
+
+See [Failure handling](#failure-handling).
+
+</details>
+
 The generator writes the twin next to the value object. Every way into it validates first, so there
 is no way to hold a `ValidEmailAddress` that was not checked:
 

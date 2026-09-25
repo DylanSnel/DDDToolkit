@@ -630,6 +630,66 @@ services.AddModuleIntegrationEvents<OrderingContext>(module => module.AddOrderin
 
 </details>
 
+The order's side of the checkout is a small state machine. It does not care in which order the answers
+arrive, and an answer that comes too late changes nothing:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Placed: new Order(...)
+    Placed --> Placed: RecordStockReserved, or RecordPayment, the first of the two
+    Placed --> Confirmed: the second of the two
+    Placed --> Cancelled: Cancel(reason)
+    Confirmed --> [*]
+    Cancelled --> [*]
+    note right of Confirmed
+        Cancel() here breaks MustNotCancelAConfirmedOrder,
+        so the order cannot be saved that way
+    end note
+```
+
+<details>
+<summary>Show the code: the order's methods</summary>
+
+```csharp
+public void RecordStockReserved(DateTimeOffset at)
+{
+    if (Status is not OrderStatus.Placed || StockReserved)
+    {
+        return;
+    }
+
+    StockReserved = true;
+    ConfirmWhenReady(at);
+}
+
+public void RecordPayment(DateTimeOffset at)
+{
+    if (Status is not OrderStatus.Placed || Paid)
+    {
+        return;
+    }
+
+    Paid = true;
+    ConfirmWhenReady(at);
+}
+
+private void ConfirmWhenReady(DateTimeOffset at)
+{
+    if (!StockReserved || !Paid)
+    {
+        return;
+    }
+
+    Status = OrderStatus.Confirmed;
+    ConfirmedAt = at;
+    RaiseDomainEvent(new OrderConfirmed(Id, ShipTo));
+}
+```
+
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
+
+</details>
+
 The host only switches the modules on, and sets the one thing that is the host's: how domain events that
 stay inside a module are published.
 
