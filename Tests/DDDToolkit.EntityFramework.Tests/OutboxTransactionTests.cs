@@ -108,6 +108,26 @@ public sealed class OutboxTransactionTests : IDisposable
     }
 
     [Fact]
+    public async Task A_sink_that_saved_through_the_same_context_does_not_take_the_attempt_with_it()
+    {
+        // The sink's save wrote the incremented Attempts inside the transaction, and the rollback took it
+        // back while the change tracker still counted it as written. Unless the processor writes it
+        // again the count never moves: the wait never grows and MaxAttempts never stops the message.
+        var broken = new SecondRecordingSink { Refuse = true };
+        using var host = CreateHost(inTransaction: true, outbox => outbox.SendTo<WritingSink>().SendTo(broken));
+        await SaveShelfAsync(host);
+
+        await ProcessAsync(host);
+        _clock.Advance(TimeSpan.FromSeconds(5));
+        await ProcessAsync(host);
+
+        var row = Row();
+        row.Attempts.Should().Be(2);
+        row.NextAttemptAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromSeconds(25), "the second failure waits longer than the first");
+        row.LastError.Should().Contain("is down");
+    }
+
+    [Fact]
     public async Task Without_the_option_the_same_write_survives_the_failure()
     {
         var broken = new SecondRecordingSink { Refuse = true };

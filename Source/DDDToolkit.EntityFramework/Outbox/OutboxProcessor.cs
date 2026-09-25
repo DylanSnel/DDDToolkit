@@ -178,6 +178,15 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
                     // Roll the failed attempt back with whatever the sinks wrote here, then record the
                     // failure on its own so the attempt count and the error survive.
                     await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+
+                    // A sink that saved through this context saved the incremented Attempts with it,
+                    // and the rollback took that write back while the change tracker still counts it
+                    // as done. Mark the bookkeeping as changed so it is written whatever a sink saved.
+                    var entry = _context.Entry(message);
+                    entry.Property(m => m.Attempts).IsModified = true;
+                    entry.Property(m => m.NextAttemptAt).IsModified = true;
+                    entry.Property(m => m.LastError).IsModified = true;
+
                     await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
                     return false;
                 }
