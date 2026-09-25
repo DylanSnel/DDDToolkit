@@ -662,8 +662,8 @@ A processor with neither a sink nor a delegate throws at construction, naming bo
 Every sink is attempted, in registration order. A sink that throws does not stop the sinks behind it.
 
 The message as a whole then counts as failed. It is not marked processed, `Attempts` goes up, and
-`LastError` records an `IntegrationEventDeliveryException` naming the sinks that threw. The next run hands
-the message to **all** the sinks again, including the ones that already accepted it.
+`LastError` records an `IntegrationEventDeliveryException` naming the sinks that threw. The next attempt
+hands the message to **all** the sinks again, including the ones that already accepted it.
 
 That is the honest consequence of one row per message. Per-sink progress would need one row per sink per
 message, which is a different table and a different set of failure modes, and it is not what this package

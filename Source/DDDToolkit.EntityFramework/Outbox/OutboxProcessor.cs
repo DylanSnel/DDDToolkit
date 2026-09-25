@@ -33,7 +33,7 @@ namespace DDDToolkit.EntityFramework.Outbox;
 /// <para>
 /// <b>When one sink fails and another succeeds</b>, every sink is still attempted: a broken transport
 /// does not stop the others. The message as a whole then counts as failed, so it is not marked
-/// processed and the next run hands it to <em>all</em> sinks again, including the ones that already
+/// processed and the next attempt hands it to <em>all</em> sinks again, including the ones that already
 /// accepted it. That is the honest cost of one row per message: per-sink bookkeeping would need one
 /// row per sink. The failure is recorded on the row as an
 /// <see cref="IntegrationEventDeliveryException"/> naming the sinks that threw.

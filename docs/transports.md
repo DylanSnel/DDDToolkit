@@ -404,9 +404,10 @@ those were considered and neither is right.
 
 Handing a sink the `IDomainEvent` makes every sink responsible for serializing it, which means every sink
 has to know your JSON options, and it quietly puts the domain type on the wire. Handing it the
-`OutboxMessage` row is worse: that row carries `Attempts`, `ProcessedAt` and `LastError`, which are this
-process's bookkeeping and no transport's business, and it drags Entity Framework into the signature. A
-sink project would then have to reference `DDDToolkit.EntityFramework` to send an HTTP request.
+`OutboxMessage` row is worse: that row carries `Attempts`, `NextAttemptAt`, `ProcessedAt` and
+`LastError`, which are this process's bookkeeping and no transport's business, and it drags Entity
+Framework into the signature. A sink project would then have to reference `DDDToolkit.EntityFramework`
+to send an HTTP request.
 
 The envelope is neither. It lives in the core `DDDToolkit` package, it has no Entity Framework types at
 all, and it carries exactly what a transport routes on:
