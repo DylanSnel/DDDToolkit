@@ -313,7 +313,10 @@ convention.
   in every batch, so a sink outage of a few seconds could use up all ten attempts. A failed message now
   waits before it is tried again: the outbox row records when in a new `NextAttemptAt`, the processor
   loads only messages that are due, and the wait grows with every failure, from 5 seconds to 10
-  minutes. See [Failures, retries and poison messages](docs/event-delivery.md#failures-retries-and-poison-messages).
+  minutes. `OutboxOptions.RetryDelay` sets the schedule. See
+  [Failures, retries and poison messages](docs/event-delivery.md#failures-retries-and-poison-messages);
+  a database from an earlier 3.0 build needs
+  [the column](docs/migrating-to-3.md#the-outbox-nextattemptat-column).
 - With `DeliverInTransaction`, a failed delivery could lose its attempt. A sink that saved through the
   outbox's own context, such as a module consumer in the same database, saved the incremented
   `Attempts` inside the transaction, and the rollback that followed the failure took it back. `Attempts`
@@ -365,13 +368,6 @@ convention.
 - The Build and Test workflow gained a job that builds and tests the whole solution against those
   minimums, next to the existing job on the newest versions. `Directory.Packages.props` explains the
   two sets; `-p:DDDDependencyVersions=Floor` reproduces the job locally.
-- **Needs a migration:** the outbox table has a new nullable column, `NextAttemptAt`, of the same type
-  as its other timestamps, for the retry wait above. Scaffold a migration, or see
-  [The outbox `NextAttemptAt` column](docs/migrating-to-3.md#the-outbox-nextattemptat-column) if you
-  write them by hand. Existing rows read `null` and are due at once, so no data has to change, but
-  until the column exists every save that writes an outbox row fails. `CreateDomainEventOutbox` creates
-  the column, and the index stays on `ProcessedAt` alone. `OutboxOptions.RetryDelay` sets the wait
-  between attempts; `TimeSpan.Zero` retries on the next poll, as before.
 
 ## [3.0.0]
 

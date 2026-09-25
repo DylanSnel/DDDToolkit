@@ -704,29 +704,10 @@ still works. See [Versioning and upcasting](integration-events.md#versioning-and
 
 ### The outbox `NextAttemptAt` column
 
-The outbox table gained `NextAttemptAt`, which holds back a failed message until it may be tried again;
-see [Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages). A
-table created before it needs the column added: nullable, the same type as `ProcessedAt`, and no index.
-Scaffolding a migration after upgrading writes exactly that. Existing rows read `null`, which means due
-now, so no row has to change.
-
-Add the column before the new code runs. Without it, every save that writes an outbox row fails, and so
-does every poll, with the provider's error for a column that does not exist, naming `NextAttemptAt`.
-Adding it first is safe: the old code does not map the column and never reads it.
-
-If you write migrations by hand, add it next to the table you created with `CreateDomainEventOutbox`:
-
-```csharp
-migrationBuilder.AddColumn<DateTimeOffset>(
-    name: "NextAttemptAt",
-    schema: "ddd",
-    table: "OutboxMessages",
-    nullable: true);
-```
-
-On SQLite, and wherever you passed `DomainEventTimestamps.UtcDateTime`, the column is a `DateTime`
-rather than a `DateTimeOffset`. SQLite also takes no `schema`. A table `CreateDomainEventOutbox` creates
-from now on has the column already.
+An outbox table that predates `NextAttemptAt` needs it added as a nullable column of the same type as
+`ProcessedAt`, without an index. A scaffolded migration writes exactly that. Existing rows read `null`,
+which means due now, so no row has to change. See
+[Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages).
 
 ## What did not change
 
