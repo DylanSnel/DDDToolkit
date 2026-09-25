@@ -1,0 +1,20 @@
+{
+  "name": "dddtoolkit",
+  "owner": {
+    "name": "Dylan Snel"
+  },
+  "metadata": {
+    "description": "The DDDToolkit skill for Claude Code, from the repository that ships the toolkit."
+  },
+  "plugins": [
+    {
+      "name": "dddtoolkit",
+      "source": "./",
+      "description": "Teaches Claude to write, review and fix .NET domain code built on DDDToolkit: identifiers, value objects, aggregates, invariants, domain events, modules and their Entity Framework persistence, and every DDD000xx diagnostic.",
+      "homepage": "https://dylansnel.github.io/DDDToolkit/",
+      "repository": "https://github.com/DylanSnel/DDDToolkit",
+      "license": "MIT",
+      "keywords": ["dotnet", "csharp", "ddd", "domain-driven-design", "source-generators", "entity-framework"]
+    }
+  ]
+}

@@ -528,7 +528,7 @@ written in the same transaction as the order. The context maps it:
 
 ```csharp
 protected override void OnModelCreating(ModelBuilder modelBuilder)
-    => modelBuilder.AddDomainEventOutbox();
+    => modelBuilder.AddDomainEventOutbox(Database, schema: Schema);
 ```
 
 and Ordering's registration picks up the publishing classes and says that what they make goes to the

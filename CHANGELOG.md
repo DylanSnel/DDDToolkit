@@ -12,6 +12,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- An agent skill, [`skills/dddtoolkit`](skills/dddtoolkit), that teaches an AI coding agent the
+  declarations, the rules the generators enforce, the wiring for Entity Framework, event delivery and
+  modules, and the fix for every DDD diagnostic. The repository is a Claude Code plugin marketplace
+  for it (`/plugin marketplace add DylanSnel/DDDToolkit`), and `npx skills add DylanSnel/DDDToolkit`
+  installs it for other agents. A test fails when a diagnostic has no section in the skill.
+- The docs site writes the docs for language models: `llms.txt`, an index of every page with the
+  description from the README's table, `llms-full.txt` with every page in one file, and each page as
+  Markdown at its own address with `.md` added. Relative links in them are made absolute.
+- Every diagnostic carries a help link to its heading in [Diagnostics](docs/diagnostics.md) on the docs
+  site, so an IDE opens it from the error list and an agent reading the build output can follow it. A
+  test holds every id to a heading of its own on that page.
 - The pgmq sink and consumer check the database when the application starts. `AddPgmqSink` and
   `AddPgmqConsumer` register a lifecycle service that reads the installed pgmq version once per database
   in `StartingAsync`, before any consumer or the outbox processor starts. Without the extension the start
@@ -347,6 +358,9 @@ convention.
 
 ### Fixed
 
+- [Getting started](docs/getting-started.md) mapped the outbox with `modelBuilder.AddDomainEventOutbox()`,
+  which does not compile: the method takes the context's `Database`. It now shows the call the example
+  makes, `AddDomainEventOutbox(Database, schema: Schema)`.
 - A consumer that failed inside the inbox could still have its changes saved, without its inbox row, by
   the next save on the same context. The transaction was rolled back but the change tracker was not, and
   the module sink and the receiver run every handler of a module on one context. So the next consumer's

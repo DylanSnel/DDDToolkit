@@ -69,6 +69,11 @@ const config = {
     ],
   ],
 
+  plugins: [
+    // llms.txt, llms-full.txt and every page as Markdown, for language models; see the plugin for the format.
+    ['./src/plugins/llms', { docsDir, repoRoot, routeBasePath: 'docs', sidebar: require('./sidebars').docs }],
+  ],
+
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
@@ -111,6 +116,8 @@ const config = {
             items: [
               { label: 'Examples', href: 'https://github.com/DylanSnel/DDDToolkit/tree/main/Examples' },
               { label: 'Changelog', href: 'https://github.com/DylanSnel/DDDToolkit/blob/main/CHANGELOG.md' },
+              // A file the build writes rather than a route, so pathname:// keeps it out of the router.
+              { label: 'llms.txt', href: 'pathname:///llms.txt' },
               { label: 'GitHub', href: 'https://github.com/DylanSnel/DDDToolkit' },
             ],
           },
