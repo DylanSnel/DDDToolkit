@@ -23,7 +23,7 @@ namespace DDDToolkit.Analyzers;
 ///   <item><description>DDD00034: the class name's version suffix and <c>[IntegrationEvent(Version = n)]</c> disagree.</description></item>
 ///   <item><description>DDD00035: the class name ends in a <c>V</c> and digits that cannot be a version.</description></item>
 ///   <item><description>DDD00036: two domain events, or two contracts, of this assembly share a name and version.</description></item>
-///   <item><description>DDD00037: two different names would give one constant.</description></item>
+///   <item><description>DDD00037: two different names would give one constant, which code could then use for the wrong event.</description></item>
 /// </list>
 /// <para>
 /// Only this assembly's own events are named here. A contract another module publishes gets its constant
@@ -240,7 +240,9 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
             .ToList();
 
         var constants = new List<(string Identifier, string Name, List<FoundEvent> Types)>();
-        var taken = new Dictionary<string, string>(StringComparer.Ordinal);
+        var taken = new Dictionary<string, (string Name, List<FoundEvent> Types)>(StringComparer.Ordinal);
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        var className = ClassNameFor(module, fallbackModule);
 
         foreach (var group in names)
         {
@@ -255,17 +257,18 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
 
             if (taken.TryGetValue(identifier, out var first))
             {
-                DiagnosticInfo.Create(
-                    DiagnosticDescriptors.EventNameConstantTaken,
-                    holders[0].Location,
-                    identifier,
-                    first,
-                    group.Key,
-                    ClassNameFor(module, fallbackModule)).Report(production);
+                // Neither name is more wrong than the other, so the events of both are reported. The first keeps
+                // the constant only so that code already using it does not pile more errors onto this one.
+                if (reported.Add(first.Name))
+                {
+                    ReportConstantTaken(production, first.Types, identifier, first.Name, group.Key, className);
+                }
+
+                ReportConstantTaken(production, holders, identifier, group.Key, first.Name, className);
                 continue;
             }
 
-            taken[identifier] = group.Key;
+            taken[identifier] = (group.Key, holders);
             constants.Add((identifier, group.Key, holders));
         }
 
@@ -291,7 +294,7 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
             writer.Line("[global::DDDToolkit.Abstractions.Attributes.ModuleContract]");
         }
 
-        using (writer.Block("public static class " + ClassNameFor(module, fallbackModule)))
+        using (writer.Block("public static class " + className))
         {
             for (var i = 0; i < constants.Count; i++)
             {
@@ -312,6 +315,15 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
         }
 
         return writer.ToString();
+    }
+
+    /// <summary>DDD00037 on every event stored or published under <paramref name="name"/>.</summary>
+    private static void ReportConstantTaken(SourceProductionContext production, List<FoundEvent> holders, string identifier, string name, string other, string className)
+    {
+        foreach (var type in holders)
+        {
+            DiagnosticInfo.Create(DiagnosticDescriptors.EventNameConstantTaken, type.Location, identifier, name, other, className).Report(production);
+        }
     }
 
     /// <summary><c>{Module}EventNames</c>, after <c>[assembly: Module]</c>, otherwise <c>DDD_Module</c> or the assembly name.</summary>

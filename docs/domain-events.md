@@ -169,8 +169,8 @@ the name. Every version of one event shares the name:
 | `Level2Reached` | `ordering.level2-reached` | 1, the digits do not follow a `V` |
 
 A class whose name does not end in a version can state one with `[IntegrationEvent(Version = n)]`. When a
-class does both they have to agree, or the build fails with
-[DDD00034](diagnostics.md#ddd00034); a suffix that cannot be a version, `V0` or `V01`, fails with
+class does both and they differ, the class name wins and `Version` is ignored, with a warning,
+[DDD00034](diagnostics.md#ddd00034); a suffix that cannot be a version, `V0` or `V01`, fails the build with
 [DDD00035](diagnostics.md#ddd00035). What a version is for is in
 [Versioning and upcasting](integration-events.md#versioning-and-upcasting).
 

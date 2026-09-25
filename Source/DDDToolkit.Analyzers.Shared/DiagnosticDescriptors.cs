@@ -254,11 +254,11 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor EventVersionDisagreesWithItsName = new(
         id: "DDD00034",
         title: "An event's class name and its Version disagree",
-        messageFormat: "'{0}' is version {1} by its name, but its [IntegrationEvent] says Version = {2}; remove Version and let the name say it, or rename the class",
+        messageFormat: "'{0}' is version {1} by its name, so Version = {2} on its [IntegrationEvent] is ignored; remove Version, or rename the class if the attribute was right",
         category: Events,
-        DiagnosticSeverity.Error,
+        DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "A class name that ends in V and a number is the event's version: OrderPlacedV2 is version 2 of its event. Version on [IntegrationEvent] is for a class whose name does not end in one. Where both are written and differ, one of them would be silently ignored, and a consumer would read a payload as the wrong shape, so the build stops instead.");
+        description: "A class name that ends in V and a number is the event's version: OrderPlacedV2 is version 2 of its event, and the name wins wherever the version is read. Version on [IntegrationEvent] is for a class whose name does not end in one. Written both ways and different, the attribute is ignored, which is fine if the name was right and a payload read as the wrong shape if the attribute was, so the build says so.");
 
     public static readonly DiagnosticDescriptor EventVersionSuffixIsNotAVersion = new(
         id: "DDD00035",
@@ -281,9 +281,9 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor EventNameConstantTaken = new(
         id: "DDD00037",
         title: "Two event names give one constant name",
-        messageFormat: "'{0}' would be the constant for both '{1}' and '{2}', so the generated {3} only has it for '{1}'",
+        messageFormat: "'{0}' in the generated {3} would be the constant for both '{1}' and '{2}'; pin one of the two names to something that reads differently",
         category: Events,
-        DiagnosticSeverity.Warning,
+        DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every name the module's events are stored or published under gets a constant in the generated {Module}EventNames class, named after the name without its module: ordering.order-placed becomes OrderPlaced. Two names that differ only in punctuation, such as order-placed and order.placed, would give one constant, and only the first of them gets it. Pin one of the names to something that reads differently.");
+        description: "Every name the module's events are stored or published under gets a constant in the generated {Module}EventNames class, named after the name without its module: ordering.order-placed becomes OrderPlaced. Two names that differ only in punctuation, such as order-placed and order.placed, would give one constant. Whichever name it held, code that used it for the other event would bind a topic or a test to the wrong event without a word, so the build stops instead. It is reported on the events of both names, because neither is more wrong than the other.");
 }

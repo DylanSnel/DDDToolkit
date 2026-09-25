@@ -21,7 +21,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <para>
 /// The version is what a consumer checks when the payload changes shape: bump it when you break the schema,
 /// leave it when you only add an optional field. Say it in the class name; <see cref="Version"/> is for a
-/// class whose name does not end in one. When both are written they have to agree (DDD00034).
+/// class whose name does not end in one. When both are written and differ, the class name wins and the
+/// analyzer warns that <see cref="Version"/> is ignored (DDD00034).
 /// </para>
 /// <para>
 /// A type without this attribute still publishes, under <c>[DomainEventName]</c> or the conventional name,

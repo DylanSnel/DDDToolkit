@@ -31,10 +31,10 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
 | [DDD00032](#ddd00032) | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer |
 | [DDD00033](#ddd00033) | Warning | The generated integration event registration must be able to construct the class |
-| [DDD00034](#ddd00034) | Error | An event's class name and its Version disagree |
+| [DDD00034](#ddd00034) | Warning | An event's class name and its Version disagree |
 | [DDD00035](#ddd00035) | Error | An event's class name ends in something that is not a version |
 | [DDD00036](#ddd00036) | Error | Two events of one module share a name and version |
-| [DDD00037](#ddd00037) | Warning | Two event names give one constant name |
+| [DDD00037](#ddd00037) | Error | Two event names give one constant name |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -981,10 +981,11 @@ you. Give the class a constructor the registration can call, or register it by h
 public sealed record OrderPlacedV2(OrderId OrderId);
 ```
 
-A class name that ends in `V` and a number is that version of its event, so `OrderPlacedV2` is version 2.
-`Version` on `[IntegrationEvent]` is for a class whose name does not end in one. Written both ways and
-different, one of the two would be ignored without a word, and a consumer would read a version 2 payload
-as the version 3 shape.
+A class name that ends in `V` and a number is that version of its event, so `OrderPlacedV2` is version 2,
+and the name wins wherever the version is read: the outbox, the published message, the generated
+registration. `Version` on `[IntegrationEvent]` is for a class whose name does not end in one, so here it is
+ignored. Nothing is ambiguous, which is why this is a warning and not an error, but it is not silent either:
+if it was the attribute that was right, payloads go out as the wrong version.
 
 The code fix removes `Version = 3`, which leaves the class name to say it. If the attribute was right and
 the name was not, rename the class instead. See [Versions are in the class name](domain-events.md#versions-are-in-the-class-name).
@@ -1042,15 +1043,16 @@ change when the class moved. See [Two events with one name](domain-events.md#two
 [DomainEventName("ordering.order-placed")]
 public sealed record OrderPlaced(OrderId OrderId) : DomainEvent;
 
-[DomainEventName("ordering.order.placed")]                           // DDD00037
+[DomainEventName("ordering.order.placed")]                           // DDD00037, on both
 public sealed record PlacedOrder(OrderId OrderId) : DomainEvent;
 ```
 
 Every name gets a constant in the generated `{Module}EventNames`, named after the name without its module
-and in PascalCase: both of these would be `OrderingEventNames.OrderPlaced`. The first name in ordinal order
-keeps it and the other gets none. It is a warning, not an error, because nothing about storing or
-publishing either event is wrong; only the constant is missing. Pin one of the names to something that
-reads differently.
+and in PascalCase: both of these would be `OrderingEventNames.OrderPlaced`. Whichever name the constant
+held, code that reached for it meaning the other event would bind a topic or a test to the wrong event and
+never find out, so this is an error, on the events of both names. Pin one of the names to something that
+reads differently. Until then the first name in ordinal order keeps the constant, only so that code already
+using it does not add errors of its own to this one.
 
 ---
 

@@ -27,7 +27,7 @@ public class EventNameDiagnosticTests
     // ------------------------------------------------------------------ DDD00034
 
     [Fact]
-    public void A_Version_that_disagrees_with_the_class_name_reports_DDD00034_at_the_Version()
+    public void A_Version_that_disagrees_with_the_class_name_is_ignored_and_reports_DDD00034_at_the_Version()
     {
         var result = Run(
             """
@@ -38,8 +38,13 @@ public class EventNameDiagnosticTests
             """);
 
         var diagnostic = result.ShouldHaveDiagnostic("DDD00034", at: "Version = 3");
-        diagnostic.GetMessage().Should().Contain("version 2 by its name").And.Contain("Version = 3");
-        diagnostic.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
+        diagnostic.GetMessage().Should().Contain("version 2 by its name").And.Contain("Version = 3").And.Contain("is ignored");
+        diagnostic.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Warning, "the name wins, so nothing is ambiguous; the build only says so");
+
+        result.ShouldCompile();
+        result.ShouldContain("EventNames", "(version 2)", "the generator reads the version from the name");
+        DDDToolkit.BaseTypes.IntegrationEventContract.VersionOf(result.Emit().Type("Ordering.Contracts.OrderPlacedV2"))
+            .Should().Be(2, "and so does the runtime");
     }
 
     [Theory]
@@ -197,7 +202,7 @@ public class EventNameDiagnosticTests
     // ------------------------------------------------------------------ DDD00037
 
     [Fact]
-    public void Two_names_that_give_one_constant_report_DDD00037_and_keep_the_first()
+    public void Two_names_that_give_one_constant_report_DDD00037_on_both_events()
     {
         var result = Run(
             """
@@ -210,9 +215,13 @@ public class EventNameDiagnosticTests
             public sealed record PlacedOrder(string OrderId) : DomainEvent;
             """);
 
-        result.ShouldHaveDiagnostic("DDD00037", at: "PlacedOrder").GetMessage().Should().Contain("'OrderPlaced'");
-        result.ShouldContain("EventNames", "public const string OrderPlaced = \"ordering.order-placed\";");
+        result.Count("DDD00037").Should().Be(2, "neither name is more wrong than the other");
+        var diagnostic = result.ShouldHaveDiagnostic("DDD00037", at: "PlacedOrder");
+        diagnostic.GetMessage().Should().Contain("'OrderPlaced'").And.Contain("'ordering.order.placed'").And.Contain("'ordering.order-placed'");
+        diagnostic.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error, "code using the constant for the other event would bind to the wrong one");
+        result.ShouldHaveDiagnostic("DDD00037", at: "OrderPlaced");
+
+        result.ShouldContain("EventNames", "public const string OrderPlaced = \"ordering.order-placed\";", "the first keeps it, so code using it adds no errors of its own");
         result.ShouldNotContain("EventNames", "ordering.order.placed\";");
-        result.ShouldCompile();
     }
 }

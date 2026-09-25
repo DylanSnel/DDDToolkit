@@ -12,8 +12,8 @@ namespace DDDToolkit.BaseTypes;
 ///   otherwise <c>[IntegrationEvent(Version = n)]</c>, otherwise 1.</description></item>
 /// </list>
 /// <para>
-/// The suffix comes first because it is the one a reader sees. The analyzer refuses a class whose suffix and
-/// <c>Version</c> disagree (DDD00034), so where both are written they say the same thing.
+/// The suffix comes first because it is the one a reader sees. Where the two disagree the attribute is
+/// ignored, and the analyzer says so (DDD00034).
 /// </para>
 /// </summary>
 public static class IntegrationEventContract

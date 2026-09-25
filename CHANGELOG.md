@@ -24,13 +24,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   written by the core generator: `OrderingEventNames.OrderPlaced` is `"ordering.order-placed"`. A contracts
   assembly's class is `[ModuleContract]`, so other modules can bind to its names.
 - Four diagnostics about event names, all reported where the module compiles.
-  [DDD00034](docs/diagnostics.md#ddd00034) (error): the class name's version and `Version` disagree, with
-  a code fix that removes `Version`. [DDD00035](docs/diagnostics.md#ddd00035) (error): a class name that
-  ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
+  [DDD00034](docs/diagnostics.md#ddd00034) (warning): the class name's version and `Version` disagree, so
+  `Version` is ignored, with a code fix that removes it. [DDD00035](docs/diagnostics.md#ddd00035) (error):
+  a class name that ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
   contracts, of one module under one name and version, typically two classes of one name in different
   namespaces, with a code fix that pins another name on one of them, such as
   `[DomainEventName("ordering.returns-order-placed")]`. [DDD00037](docs/diagnostics.md#ddd00037)
-  (warning): two names that would share a constant.
+  (error): two names that would share a constant, which code could then use for the wrong event.
 - Broker exchanges named after the event rather than the CLR type. `rabbit.UseIntegrationEventNames()` for
   MassTransit and `conventions.UseIntegrationEventNames()` for Wolverine's conventional routing name a
   contract's exchange `ordering.order-placed.v1`, from the new `IntegrationEventContract.EntityNameOf`, so
