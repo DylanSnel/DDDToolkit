@@ -65,6 +65,7 @@ public partial class Order { }
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
+| [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |
 | [Localization](docs/localization.md) | Validation errors and invariant violations in the reader's language, looked up by code |
 | [Performance](docs/performance.md) | The benchmarks behind the struct-versus-record advice, including where they disagree with it |
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx diagnostic and how to fix it |

@@ -19,6 +19,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - [What the generator writes](docs/generated-code.md): the generated code for one small aggregate,
   file by file, and why it is generated rather than written. The site's homepage shows the same
   output, compiled from `website/sample` rather than typed out.
+- [FluentValidation](docs/fluent-validation.md), a page of its own instead of a section at the end of Value
+  objects: a value object's rules as a validator, which types get one, the two shapes its failures come
+  in, `MustBeValid()` in a request validator with the failures it reports, one list for a whole request,
+  and what it does not do. Getting started and the sidebar point to it.
+- Diagrams in the documentation, each with a "Show the code" section under it holding the registration
+  or setup it shows: delivering domain events in process and through the outbox, one message from
+  one module's save to another's inbox, the example shop's checkout across its modules, the roads a
+  message can take between modules, the two stages of an invariant, a module's contracts project, an
+  aggregate's boundary and what the generators write. And for how modules refer to each other: what a
+  module keeps and what its contract publishes, with the two references the analyzer refuses drawn in
+  red; the example shop's modules and the contracts between them; a domain event becoming a contract.
+  Also the order's states, the always-valid twin, one set of modules under two kinds of host, three
+  modules composing one GraphQL `Product`, and a migration's way from `dotnet ef` to Supabase. They are
+  Mermaid, so GitHub draws the same diagrams in `docs/`.
 - The Supabase monolith through Supabase Queues. With `Messaging=pgmq` the example host sends every
   module's messages to one pgmq queue and reads it back into the modules, with no module sink in between;
   a hand-written migration, `enable_queues`, turns the extension on. It runs on pgmq 1.5.1, the version
@@ -305,6 +319,12 @@ convention.
   every entity whose schema type bound its fields by convention, so any client could run an entity's
   invariant checks and the schema carried an `InvariantViolation` type nobody meant to publish. Both are
   `[Internal]` now, like the rest of the toolkit's bookkeeping.
+- With `DDDToolkit.FluentValidation` referenced, a value object that wrote its own `Validate()` or
+  `Validate(ValidationErrorBuilder)` failed to compile with CS0111: the generator added both overrides
+  to every value object, so a project could not mix hand-validated value objects with ones validated by
+  rules. The generator now leaves such a type alone, whichever part declares the method: no `Validator`,
+  no `Errors`, no generated overrides. This applies to `[ValueObject]`, `[SingleValueObject<T>]` and
+  record identifiers.
 
 ### Changed
 

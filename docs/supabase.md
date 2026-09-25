@@ -16,6 +16,58 @@ its own source generator: not on Npgsql, which your application already brings, 
 the toolkit, so it works for any context that has migrations. Reference it from the module that holds
 the context.
 
+From a change to a model to a database that has it:
+
+```mermaid
+flowchart LR
+    Add["dotnet ef migrations add, in the module"] --> Build["dotnet build, of the host"]
+    Build --> Files["supabase/migrations, one .ddd.sql file per migration"]
+    Files --> Commit["committed with the change"]
+    Commit --> Push["supabase db push, or a preview branch"]
+    Push --> Start["the host starts, and checks every module's migrations were applied"]
+    Build -. "in CI the build only checks, and fails when a file is missing" .-> Files
+```
+
+<details>
+<summary>Show the code: the three places it is switched on</summary>
+
+The design-time factory of each module's context is marked:
+
+```csharp
+[SupabaseMigrations]
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+    {
+        var options = new DbContextOptionsBuilder<OrderingContext>();
+        OrderingContext.UsePostgres(options, "Host=unused");
+        return new OrderingContext(options.Options);
+    }
+}
+```
+
+The host's project file turns the export on, writing locally and only checking in CI:
+
+```xml
+<PropertyGroup>
+  <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+  <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+</PropertyGroup>
+```
+
+And the host refuses to start against a database that lacks a migration:
+
+```csharp
+// in the module
+services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
+
+// in the host
+var app = builder.Build();
+await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+```
+
+</details>
+
 ## Exporting as part of the build
 
 The export needs a context on Npgsql, but it never connects, so a connection string that points nowhere

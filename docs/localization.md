@@ -142,7 +142,7 @@ protected override void Validate(ValidationErrorBuilder errors)
 
 `new ValidationError(...).With("MaxLength", 40)` does the same for a single failure.
 
-With FluentValidation you write nothing: every placeholder value FluentValidation knows (`MaxLength`,
+With [FluentValidation](fluent-validation.md) you write nothing: every placeholder value FluentValidation knows (`MaxLength`,
 `TotalLength`, `ComparisonValue`, `PropertyName`, and anything you add with
 `context.MessageFormatter.AppendArgument`) arrives in `Arguments`, and the error code
 (`MaximumLengthValidator`, `NotEmptyValidator`, ...) is the key. The same goes for

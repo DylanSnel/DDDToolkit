@@ -98,6 +98,36 @@ integrity problem, not a style issue.
 Raising an event puts it in a list on the aggregate. Getting it to a handler is a separate concern
 with a real trade-off, handled by `DDDToolkit.EntityFramework`.
 
+```mermaid
+flowchart LR
+    Raise["RaiseDomainEvent(...), inside the aggregate"] --> Pending["pending on the aggregate"]
+    Pending --> Save["SaveChanges takes them"]
+    Save -->|"in process"| Handlers["your handlers, inside the save"]
+    Save -->|"outbox"| Rows["outbox rows, delivered after the commit"]
+```
+
+<details>
+<summary>Show the code: choosing how events are delivered</summary>
+
+One line in the registration decides, and the aggregate does not change:
+
+```csharp
+// in process: handlers run inside the save
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+// through the outbox: rows in the same transaction, delivered afterwards
+builder.Services.AddDDDToolkitEntityFramework(options =>
+{
+    options.DispatchWithMediator();
+    options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
+});
+builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+[Delivering domain events](event-delivery.md) draws both, step by step, with the rest of the setup.
+
+</details>
+
 **In-process dispatch** runs handlers during `SaveChanges`, before the commit. Handler changes to the
 same `DbContext` ride along in the same transaction, and a throwing handler aborts the save. It is
 simple and transactional, but it is best-effort: nothing survives a process crash, and handlers must

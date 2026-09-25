@@ -40,6 +40,58 @@ A domain event is internal. `OrderPlaced(OrderId, CustomerName, Money)` uses you
 things that read it are in the same module. The moment something outside that module reads it, that
 stops being true. Now the record is a published schema, and every field is a promise.
 
+What changes between the two, in the example shop. The domain event speaks Ordering's language; the
+contract speaks plain types, because it outlives any one version of Ordering:
+
+```mermaid
+flowchart LR
+    subgraph inside ["inside Ordering, free to change"]
+        Event["OrderPlaced: OrderId, Address, the lines, Money"]
+    end
+    Publish["PublishOrderPlaced"]
+    subgraph published ["published, versioned, a promise"]
+        Contract["OrderPlacedV1: OrderId, City, PostalCode, the lines, a decimal and a currency"]
+    end
+    Event --> Publish --> Contract
+    Contract --> Inventory["Inventory"]
+    Contract --> Payments["Payments"]
+```
+
+<details>
+<summary>Show the code: the domain event, the contract and the class between them</summary>
+
+```csharp
+// Ordering's own event, with Ordering's own types
+[DomainEventName("ordering.order-placed")]
+public sealed record OrderPlaced(OrderId OrderId, Address ShipTo, IReadOnlyList<OrderPlaced.Line> Lines, Money Total)
+    : DomainEvent, INotification
+{
+    public sealed record Line(string Sku, int Quantity);
+}
+
+// what the other modules get, in Ordering's contracts project
+[IntegrationEvent("ordering.order-placed", Version = 1)]
+public sealed record OrderPlacedV1(
+    OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
+
+// the one place that knows both
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV1>
+{
+    public ValueTask<OrderPlacedV1?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV1(
+            placed.OrderId,
+            placed.ShipTo.City,
+            placed.ShipTo.PostalCode,
+            [.. placed.Lines.Select(line => new OrderedLineV1(line.Sku, line.Quantity))],
+            placed.Total.Amount,
+            placed.Total.Currency));
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
+
+</details>
+
 Note the boundary in the first row. It is the **module**, not the process. A record that only another
 assembly in the same solution deserializes is already a published schema, because you cannot change it
 without changing them.
@@ -159,6 +211,90 @@ is what [Versioning and upcasting](#versioning-and-upcasting) is about.
 Integration events exist so that another module can pick something up. In a modular monolith that module
 is in the same process, which makes this the most valuable sink in the package and the one to reach for
 first.
+
+One message, from the save in Ordering to the handler in Billing:
+
+```mermaid
+sequenceDiagram
+    participant Save as Ordering's save
+    participant Outbox as Ordering's outbox
+    participant Processor as Outbox processor
+    participant Publish as PublishOrderPlaced
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Handler as RaiseInvoice
+
+    Save->>Outbox: the order and an OrderPlaced row, one transaction
+    Processor->>Outbox: read the row, after the commit
+    Processor->>Publish: OrderPlaced, the domain event
+    Publish-->>Processor: OrderPlacedV2, the contract
+    Processor->>Sink: the contract, in its envelope
+    Sink->>Inbox: offered to every module that handles OrderPlacedV2
+    alt billing.invoicer applied this message before
+        Inbox-->>Sink: skipped
+    else the first time
+        Inbox->>Handler: HandleAsync(contract, message)
+        Handler-->>Inbox: an invoice, added to Billing's context
+        Inbox->>Inbox: the invoice and an inbox row, one transaction
+    end
+    Sink-->>Processor: delivered
+    Processor->>Outbox: set ProcessedAt
+```
+
+A handler that fails fails the delivery, and the processor tries again later. Every module is offered
+the message again, and the inboxes skip what they already applied, which is what makes at-least-once
+delivery safe.
+
+<details>
+<summary>Show the code: both modules' registration</summary>
+
+Ordering publishes, through its outbox, to the modules in this process:
+
+```csharp
+// inside AddOrderingModule
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.AddOrderingIntegrationEvents();   // generated: its domain events and its outbound classes
+    outbox.SendToModules();
+}));
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+One class says what the domain event becomes for the others:
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
+}
+```
+
+Billing handles the contract, and signs up with the contracts it reads and the handlers that run under
+its inbox:
+
+```csharp
+[IntegrationEventConsumer("billing.invoicer")]
+public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHandler<OrderPlacedV2>
+{
+    public Task HandleAsync(OrderPlacedV2 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        context.Invoices.Add(new Invoice(contract.OrderId, contract.Total));
+        return Task.CompletedTask;
+    }
+}
+
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
+services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
+```
+
+Both contexts map their tables: `modelBuilder.AddDomainEventOutbox(Database)` in Ordering's,
+`modelBuilder.AddDomainEventInbox(Database)` in Billing's. The rest of this section goes through each
+part.
+
+</details>
 
 Each module registers its own half, next to its own context. The producing module says what it publishes
 and that it goes to the other modules:
