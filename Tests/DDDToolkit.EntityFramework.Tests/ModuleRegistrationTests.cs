@@ -66,7 +66,7 @@ public sealed class ModuleRegistrationTests : IDisposable
             .UseOutbox<LibraryContext>(outbox => outbox.RegisterEvent<ShelfCreated>())
             .UseOutbox<LibraryContext>(outbox => outbox.RegisterEvent<BookAdded>());
 
-        options.ContextOutboxes[typeof(LibraryContext)].EventTypes.Names.Should().BeEquivalentTo("shelf.created", nameof(BookAdded));
+        options.ContextOutboxes[typeof(LibraryContext)].EventTypes.Names.Should().BeEquivalentTo("shelf.created", "book-added");
     }
 
     [Fact]

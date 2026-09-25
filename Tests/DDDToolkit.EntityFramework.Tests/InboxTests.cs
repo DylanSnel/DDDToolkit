@@ -1,3 +1,4 @@
+using System.Data.Common;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Options;
@@ -10,6 +11,7 @@ using DDDToolkit.ExampleLibrary.Common.ValueObjects;
 using DDDToolkit.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.EntityFramework.Tests;
@@ -115,6 +117,71 @@ public sealed class InboxTests : IDisposable
         applied.Should().BeTrue("nothing was recorded, so the redelivery is the first real attempt");
         People().Should().ContainSingle();
         Rows().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task A_failed_attempt_leaves_nothing_tracked_for_the_next_save_on_the_same_context()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        var applied = await host.InScopeAsync(async (context, services) =>
+        {
+            var inbox = services.GetRequiredService<DomainEventInbox<LibraryContext>>();
+
+            var failing = () => inbox.ExecuteOnceAsync(messageId, "billing", _ =>
+            {
+                context.People.Add(NewPerson("Half"));
+                return Task.FromException(new InvalidOperationException("billing failed"));
+            });
+            await failing.Should().ThrowAsync<InvalidOperationException>();
+
+            // The next consumer of the same message on the same context, the way the module sink runs them.
+            return await inbox.ExecuteOnceAsync(messageId, "search", token => ProjectAsync(context, token));
+        });
+
+        applied.Should().BeTrue();
+        People().Select(p => p.Name.FirstName).Should().Equal(["Ada"], "the failed attempt was rolled back, so its write must not ride along with the next save");
+        Rows().Select(r => r.Consumer).Should().Equal("search");
+    }
+
+    [Fact]
+    public async Task A_copy_that_loses_the_race_to_another_copy_is_a_repeat_rather_than_an_error()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        // The other copy is applied after this one found no inbox row and before it started its own
+        // transaction: the window two parallel deliveries of one message share.
+        var race = new BeforeTransaction(() => DeliverAsync(host, messageId, ProjectAsync));
+        await using var context = _db.CreateLibraryContext(options => options.AddInterceptors(race));
+        var inbox = new DomainEventInbox<LibraryContext>(context, host.Options);
+
+        var applied = await inbox.ExecuteOnceAsync(messageId, Consumer, token => ProjectAsync(context, token), TestContext.Current.CancellationToken);
+
+        race.Ran.Should().BeTrue();
+        applied.Should().BeFalse("the other copy applied the message first, which makes this one a repeat");
+        People().Should().ContainSingle("the losing copy's write is rolled back together with its inbox row");
+        Rows().Should().ContainSingle();
+        context.ChangeTracker.Entries().Should().BeEmpty("nothing of the rolled back attempt stays tracked");
+    }
+
+    [Fact]
+    public async Task A_failure_that_is_not_a_lost_race_still_throws()
+    {
+        using var host = CreateHost();
+        var messageId = Guid.CreateVersion7();
+
+        // Another consumer applied the message meanwhile. That does not make this consumer's failure a repeat.
+        var race = new BeforeTransaction(() => DeliverAsync(host, messageId, ProjectAsync, consumer: "search"));
+        await using var context = _db.CreateLibraryContext(options => options.AddInterceptors(race));
+        var inbox = new DomainEventInbox<LibraryContext>(context, host.Options);
+
+        var act = () => inbox.ExecuteOnceAsync(messageId, Consumer, _ => Task.FromException(new InvalidOperationException("billing failed")), TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("billing failed");
+        race.Ran.Should().BeTrue();
+        Rows().Select(r => r.Consumer).Should().Equal("search");
     }
 
     [Fact]
@@ -261,6 +328,27 @@ public sealed class InboxTests : IDisposable
         secondRun.Should().Be(1);
         People().Should().ContainSingle("the sink saw the message twice; the inbox applied it once");
         Rows().Should().ContainSingle().Which.Consumer.Should().Be("library.person-projector");
+    }
+
+    /// <summary>Runs <paramref name="action"/> once, just before the context starts its first transaction.</summary>
+    private sealed class BeforeTransaction(Func<Task> action) : DbTransactionInterceptor
+    {
+        public bool Ran { get; private set; }
+
+        public override async ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(
+            DbConnection connection,
+            TransactionStartingEventData eventData,
+            InterceptionResult<DbTransaction> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Ran)
+            {
+                Ran = true;
+                await action();
+            }
+
+            return result;
+        }
     }
 
     /// <summary>A sink that consumes through the inbox, which is how a real consumer would be written.</summary>

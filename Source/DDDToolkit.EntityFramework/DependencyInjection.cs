@@ -3,6 +3,7 @@ using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -244,6 +245,48 @@ public static class DependencyInjection
         services.AddOutboxProcessor<TContext>();
         services.TryAddSingleton(new OutboxBackgroundServiceOptions<TContext> { PollingInterval = pollingInterval, BatchSize = batchSize });
         services.AddHostedService<OutboxBackgroundService<TContext>>();
+        return services;
+    }
+
+    /// <summary>
+    /// Deletes the outbox and inbox rows of <typeparamref name="TContext"/> once they are older than you
+    /// want to keep them, every <see cref="DomainEventRetentionOptions{TContext}.Interval"/>:
+    /// <code>
+    /// services.AddDomainEventRetention&lt;OrderingContext&gt;(retention =&gt;
+    /// {
+    ///     retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    ///     retention.KeepInboxFor = TimeSpan.FromDays(30);
+    /// });
+    /// </code>
+    /// Registers <see cref="DomainEventRetention{TContext}"/> (scoped) and
+    /// <see cref="DomainEventRetentionService{TContext}"/>. Calling it again for the same context
+    /// configures the same options, so a module can add its own window to a host's.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
+    /// <exception cref="ArgumentException">Neither window is set.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A window or the interval is not positive, or the batch size is below 1.</exception>
+    public static IServiceCollection AddDomainEventRetention<TContext>(this IServiceCollection services, Action<DomainEventRetentionOptions<TContext>> configure) where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = services
+            .Where(descriptor => descriptor.ServiceType == typeof(DomainEventRetentionOptions<TContext>))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<DomainEventRetentionOptions<TContext>>()
+            .FirstOrDefault();
+
+        if (options is null)
+        {
+            options = new DomainEventRetentionOptions<TContext>();
+            services.AddSingleton(options);
+        }
+
+        configure(options);
+        options.Validate(nameof(configure));
+
+        services.TryAddScoped<DomainEventRetention<TContext>>();
+        services.AddHostedService<DomainEventRetentionService<TContext>>();
         return services;
     }
 }

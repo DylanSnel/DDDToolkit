@@ -62,10 +62,15 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
                 options.TimeProvider = _clock;
 
                 // The handler's effect happens to be an aggregate that raises events. The inbox is what
-                // is under test, so they are recorded and go no further.
+                // is under test, so they are recorded and go no further. Locked, because the race tests
+                // save from two copies at once.
                 options.DispatchInProcess((_, events, _) =>
                 {
-                    _dispatched.AddRange(events);
+                    lock (_dispatched)
+                    {
+                        _dispatched.AddRange(events);
+                    }
+
                     return Task.CompletedTask;
                 });
             },
@@ -267,6 +272,70 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
     }
 
     [Fact]
+    public async Task Two_copies_delivered_at_once_apply_the_message_once_and_neither_fails()
+    {
+        SkipIfUnavailable();
+
+        using var host = CreateInboxHost();
+        var messageId = Guid.CreateVersion7();
+        var bothInside = new Rendezvous(2);
+
+        // Each copy waits inside its own transaction until the other is there too, so both have already
+        // found no inbox row. Then both save, and the server decides which one was first.
+        Task<bool> DeliverAsync() => host.InScopeAsync((context, services) => services
+            .GetRequiredService<DomainEventInbox<ProviderContext>>()
+            .ExecuteOnceAsync(messageId, Consumer, async token =>
+            {
+                await bothInside.ArriveAsync(token);
+                context.Shelves.Add(NewShelf("projected"));
+            }, Cancellation));
+
+        var results = await Task.WhenAll(DeliverAsync(), DeliverAsync());
+
+        results.Should().BeEquivalentTo([true, false], "one copy applied the message and the other is a repeat, not a failure");
+        (await Database.CountRowsAsync("Shelves", schema: null, Cancellation)).Should().Be(1);
+        (await Database.CountRowsAsync(DomainEventStorage.DefaultInboxTableName, DomainEventStorage.DefaultSchema, Cancellation)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Two_copies_changing_the_same_aggregate_at_once_apply_the_message_once()
+    {
+        SkipIfUnavailable();
+
+        using var host = CreateInboxHost();
+        var messageId = Guid.CreateVersion7();
+        var shelf = NewShelf("unnamed");
+        await host.InScopeAsync(async context =>
+        {
+            context.Shelves.Add(shelf);
+            await context.SaveChangesAsync(Cancellation);
+        });
+
+        var bothInside = new Rendezvous(2);
+
+        // The loser may fail on the aggregate's version rather than on the inbox row, depending on which
+        // the server reaches first. Either way it lost to the other copy of the same message.
+        Task<bool> DeliverAsync(string name) => host.InScopeAsync((context, services) => services
+            .GetRequiredService<DomainEventInbox<ProviderContext>>()
+            .ExecuteOnceAsync(messageId, Consumer, async token =>
+            {
+                var loaded = await context.Shelves.SingleAsync(s => s.Id == shelf.Id, token);
+                await bothInside.ArriveAsync(token);
+                loaded.Rename(name);
+            }, Cancellation));
+
+        var results = await Task.WhenAll(DeliverAsync("first"), DeliverAsync("second"));
+
+        results.Should().BeEquivalentTo([true, false]);
+
+        await using var check = Database.CreateContext();
+        var stored = await check.Shelves.SingleAsync(s => s.Id == shelf.Id, Cancellation);
+        stored.Name.Should().BeOneOf("first", "second");
+        stored.Version.Should().Be(shelf.Version + 1, "the aggregate was changed once");
+        (await check.Inbox.CountAsync(Cancellation)).Should().Be(1);
+    }
+
+    [Fact]
     public async Task A_handler_that_throws_leaves_neither_its_effect_nor_the_inbox_marker()
     {
         SkipIfUnavailable();
@@ -298,5 +367,83 @@ public abstract class ProviderMessagingTests(ProviderFixture fixture) : Provider
 
         applied.Should().BeTrue();
         (await Database.CountRowsAsync("Shelves", schema: null, Cancellation)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Retention_deletes_expired_rows_batch_by_batch_on_this_providers_timestamp_column()
+    {
+        SkipIfUnavailable();
+
+        // Two things only a server answers: whether a batched ExecuteDelete translates here, over the
+        // inbox's composite key too, and whether "older than" compares right on this provider's own
+        // timestamp column.
+        using var host = new ProviderHost(
+            Database,
+            options => options.TimeProvider = _clock,
+            services => services.AddDomainEventRetention<ProviderContext>(retention =>
+            {
+                retention.KeepOutboxFor = TimeSpan.FromDays(7);
+                retention.KeepInboxFor = TimeSpan.FromDays(30);
+                retention.BatchSize = 2;
+            }));
+
+        var now = _clock.GetUtcNow();
+        await using (var seed = Database.CreateContext())
+        {
+            foreach (var age in new[] { 8, 9, 10, 6 })
+            {
+                seed.Outbox.Add(Delivered(now.AddDays(-age)));
+            }
+
+            var waiting = Delivered(now.AddDays(-40));
+            waiting.ProcessedAt = null;
+            seed.Outbox.Add(waiting);
+
+            foreach (var age in new[] { 31, 32, 33, 29 })
+            {
+                seed.Inbox.Add(new InboxMessage { MessageId = Guid.CreateVersion7(), Consumer = Consumer, ProcessedAt = now.AddDays(-age) });
+            }
+
+            await seed.SaveChangesAsync(Cancellation);
+        }
+
+        var result = await host.InScopeAsync((_, services) => services
+            .GetRequiredService<DomainEventRetention<ProviderContext>>()
+            .DeleteExpiredAsync(Cancellation));
+
+        result.Should().Be(new DomainEventRetentionResult(OutboxMessages: 3, InboxMessages: 3));
+
+        await using var check = Database.CreateContext();
+        (await check.Outbox.CountAsync(Cancellation)).Should().Be(2, "the recent delivered row and the one never delivered");
+        (await check.Outbox.CountAsync(m => m.ProcessedAt == null, Cancellation)).Should().Be(1);
+        (await check.Inbox.SingleAsync(Cancellation)).ProcessedAt.Should().Be(now.AddDays(-29));
+    }
+
+    private static OutboxMessage Delivered(DateTimeOffset at) => new()
+    {
+        Id = Guid.CreateVersion7(),
+        EventName = "shelf.created",
+        Payload = "{}",
+        OccurredAt = at,
+        CreatedAt = at,
+        ProcessedAt = at,
+        Attempts = 1,
+    };
+
+    /// <summary>Holds everyone who arrives until <paramref name="count"/> have.</summary>
+    private sealed class Rendezvous(int count)
+    {
+        private readonly TaskCompletionSource _all = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _arrived;
+
+        public Task ArriveAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _arrived) == count)
+            {
+                _all.TrySetResult();
+            }
+
+            return _all.Task.WaitAsync(TimeSpan.FromSeconds(30), cancellationToken);
+        }
     }
 }

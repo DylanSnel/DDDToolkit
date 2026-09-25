@@ -304,11 +304,14 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
             return null;
         }
 
-        // Published as it stands, the row already says what it is. Published as a contract, the entry
-        // says it when it was registered with a name and version, as the generated registration does; a
-        // PublishAs lambda leaves it to the contract's attributes.
+        // Published as it stands, the event goes out under the name its type is registered under today,
+        // which is the row's own name except for a row written before events were named by convention.
+        // Published as a contract, the entry says it when it was registered with a name and version, as
+        // the generated registration does; a PublishAs lambda leaves it to the contract's attributes.
         var (name, version) = !mapped
-            ? (message.EventName, CurrentVersionOf(domainEvent.GetType(), outbox))
+            ? outbox.EventTypes.TryDescribe(domainEvent.GetType(), out var eventName, out var eventVersion)
+                ? (eventName, eventVersion)
+                : (message.EventName, CurrentVersionOf(domainEvent.GetType(), outbox))
             : outbox.IntegrationEvents.TryDescribeContract(domainEvent.GetType(), out var contractName, out var contractVersion)
                 ? (contractName, contractVersion)
                 : (IntegrationEventContract.NameOf(contract), IntegrationEventContract.VersionOf(contract));
@@ -345,10 +348,15 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
     /// </summary>
     private static IDomainEvent Deserialize(OutboxMessage message, OutboxOptions outbox, IntegrationEventContractRegistry contracts)
     {
-        if (!outbox.EventTypes.TryResolve(message.EventName, out var eventType))
+        if (!outbox.EventTypes.TryResolve(message.EventName, out var eventType, out var byClassName))
         {
             throw new InvalidOperationException(
                 $"No domain event type is registered under the name '{message.EventName}'. Register it with outbox.RegisterEventsFromAssembly(...) or outbox.RegisterEvent<T>().");
+        }
+
+        if (byClassName)
+        {
+            return ReadByClassName(message, outbox, contracts, eventType);
         }
 
         // A column added to an existing table without a default reads as 0; that row predates versioning.
@@ -362,6 +370,24 @@ public sealed class OutboxProcessor<TContext> where TContext : DbContext
 
         return JsonSerializer.Deserialize(message.Payload, eventType, outbox.JsonOptions) as IDomainEvent
             ?? throw new JsonException($"The payload of outbox message {message.Id} deserialized to null.");
+    }
+
+    /// <summary>
+    /// A row stored before events were named by convention, under the bare class name of the type it found.
+    /// Exactly that class wrote it, so the payload is that class's shape whatever version the row says: read
+    /// it as that class, and let the upcasters take it on to the current shape as they would any older one.
+    /// </summary>
+    private static IDomainEvent ReadByClassName(OutboxMessage message, OutboxOptions outbox, IntegrationEventContractRegistry contracts, Type storedType)
+    {
+        var (name, version) = outbox.EventTypes.TryDescribe(storedType, out var registeredName, out var registeredVersion)
+            ? (registeredName, registeredVersion)
+            : (message.EventName, message.Version);
+
+        var read = contracts.ReadAs(message.Payload, storedType, name, version);
+
+        return read as IDomainEvent
+            ?? throw new InvalidOperationException(
+                $"Outbox message {message.Id}, stored as '{message.EventName}', upcast from '{storedType}' to '{read.GetType()}', which is not a domain event. The chain has to end at the type registered under '{name}'.");
     }
 
     private static IDomainEvent Upcast(OutboxMessage message, IntegrationEventContractRegistry contracts, Type currentType, int storedVersion, int currentVersion)

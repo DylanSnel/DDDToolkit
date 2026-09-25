@@ -495,15 +495,19 @@ integration event instead: a contract, separate from the domain event, so the tw
 different speeds:
 
 ```csharp
-[IntegrationEvent("ordering.order-placed", Version = 1)]
+[IntegrationEvent]
 public sealed record OrderPlacedV1(
     OrderId OrderId, string City, string PostalCode, IReadOnlyList<OrderedLineV1> Lines, decimal Total, string Currency);
 
-[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+[IntegrationEvent]
 public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 ```
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+
+Nothing names them: they are published as `ordering.order-placed` and `ordering.order-confirmed`, the
+module and the class name in kebab case, and the `V1` is their version. The build also writes those names
+as constants, `OrderingEventNames.OrderPlaced`. See [Stable names](domain-events.md#stable-names).
 
 One small class per event says how the one becomes the other. It lives next to the aggregate it
 publishes for:

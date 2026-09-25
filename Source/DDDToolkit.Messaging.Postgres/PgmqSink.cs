@@ -102,9 +102,7 @@ public sealed class PgmqSink<TContext> : IIntegrationEventSink where TContext : 
 
         if (_context.Database.GetDbConnection() is not NpgsqlConnection connection)
         {
-            throw new InvalidOperationException(
-                $"'{typeof(TContext).Name}' is not on a Npgsql connection ({_context.Database.ProviderName ?? "no provider"}), so it cannot reach a pgmq queue. " +
-                $"Use the {nameof(PgmqSink)} overload that takes an NpgsqlDataSource when the queue lives in another database.");
+            throw NotPostgres(_context);
         }
 
         // The context's own transaction, so the enqueue commits with whatever else it is doing.
@@ -124,6 +122,11 @@ public sealed class PgmqSink<TContext> : IIntegrationEventSink where TContext : 
             }
         }
     }
+
+    /// <summary>What to say when the context is on another provider; the start-up check says the same.</summary>
+    internal static InvalidOperationException NotPostgres(TContext context)
+        => new($"'{typeof(TContext).Name}' is not on a Npgsql connection ({context.Database.ProviderName ?? "no provider"}), so it cannot reach a pgmq queue. " +
+            $"Use the {nameof(PgmqSink)} overload that takes an NpgsqlDataSource when the queue lives in another database.");
 
     /// <summary>
     /// A second connection to the same database, for creating the queue. Creating a queue is DDL and

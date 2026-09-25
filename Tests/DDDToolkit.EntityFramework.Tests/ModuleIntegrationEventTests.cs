@@ -71,6 +71,12 @@ public sealed class ModuleIntegrationEventTests : IDisposable
         return [.. check.Inbox];
     }
 
+    private List<Person> People()
+    {
+        using var check = _db.CreateLibraryContext();
+        return [.. check.People];
+    }
+
     private OutboxMessage Row()
     {
         using var check = _db.CreateLibraryContext();
@@ -143,6 +149,31 @@ public sealed class ModuleIntegrationEventTests : IDisposable
         index.Seen.Should().ContainSingle();
         Rows().Select(r => r.Consumer).Should().BeEquivalentTo("library.shelf-board", "search.shelf-index");
         Row().ProcessedAt.Should().Be(_clock.GetUtcNow());
+    }
+
+    [Fact]
+    public async Task A_consumer_that_fails_after_writing_leaves_nothing_behind_for_the_consumers_after_it()
+    {
+        var projector = new ProjectorSwitch { Refuse = true };
+        var board = new ShelfBoard();
+        using var host = CreateHost(
+            module => module
+                .Handle<ShelfOpenedV3, RefusingProjector>()
+                .Handle(board),
+            services: collection => collection.AddSingleton(projector));
+        await SaveShelfAsync(host);
+
+        await ProcessAsync(host);
+
+        board.Seen.Should().ContainSingle();
+        People().Should().BeEmpty("the failed consumer's write was rolled back, and the next consumer's save must not carry it in");
+        Rows().Select(r => r.Consumer).Should().Equal("library.shelf-board");
+
+        projector.Refuse = false;
+        await RetryAsync(host);
+
+        People().Should().ContainSingle("applied once, on the retry, together with its inbox row");
+        Rows().Select(r => r.Consumer).Should().BeEquivalentTo("library.shelf-board", "library.refusing-projector");
     }
 
     [Fact]
@@ -272,6 +303,23 @@ public sealed class ModuleIntegrationEventTests : IDisposable
         }
 
         return await ProcessAsync(host);
+    }
+
+    /// <summary>Whether <see cref="RefusingProjector"/> fails, shared with the test through the container.</summary>
+    private sealed class ProjectorSwitch
+    {
+        public bool Refuse { get; set; }
+    }
+
+    /// <summary>A consumer that writes through the context and then fails, before its write was saved.</summary>
+    [IntegrationEventConsumer("library.refusing-projector")]
+    private sealed class RefusingProjector(LibraryContext context, ProjectorSwitch projector) : IIntegrationEventHandler<ShelfOpenedV3>
+    {
+        public Task HandleAsync(ShelfOpenedV3 contract, BaseTypes.IntegrationEventMessage message, CancellationToken cancellationToken = default)
+        {
+            context.People.Add(new Person(MemberId.CreateUnique(), new PersonName("Ada", "Lovelace"), null, new ValidDateOfBirth(new DateOnly(1815, 12, 10))));
+            return projector.Refuse ? Task.FromException(new InvalidOperationException("the projector is down")) : Task.CompletedTask;
+        }
     }
 
     /// <summary>A consumer that writes through the same context, which is how a projection is built.</summary>

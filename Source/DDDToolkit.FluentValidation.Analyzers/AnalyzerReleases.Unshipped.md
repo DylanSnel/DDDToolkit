@@ -31,3 +31,7 @@ DDD00030 | DDDToolkit.Entities | Error | Declare all key parts of a type in one 
 DDD00031 | DDDToolkit.Supabase | Error | A [SupabaseMigrations] factory must be one the build can create
 DDD00032 | DDDToolkit.GraphQL | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer
 DDD00033 | DDDToolkit.IntegrationEvents | Warning | The generated integration event registration must be able to construct the class
+DDD00034 | DDDToolkit.Events | Warning | An event's class name and its Version disagree
+DDD00035 | DDDToolkit.Events | Error | An event's class name ends in something that is not a version
+DDD00036 | DDDToolkit.Events | Error | Two events of one module share a name and version
+DDD00037 | DDDToolkit.Events | Error | Two event names give one constant name

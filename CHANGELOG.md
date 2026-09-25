@@ -12,6 +12,64 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- The pgmq sink and consumer check the database when the application starts. `AddPgmqSink` and
+  `AddPgmqConsumer` register a lifecycle service that reads the installed pgmq version once per database
+  in `StartingAsync`, before any consumer or the outbox processor starts. Without the extension the start
+  fails with `PgmqNotInstalledException`. With `UseTopics` or `BindTopics` on a pgmq older than 1.11 it
+  fails with the new `PgmqTopicsNotSupportedException`, which names the installed version, says that
+  Supabase ships 1.5.1 and that `UseQueue` and `UseQueues` work there. Before, both failures came with the
+  first message sent, or when the consumer bound its queue. `PgmqQueue.InstalledVersionAsync` and
+  `PgmqQueue.EnsureTopicRoutingAsync` do the same for a check of your own, and
+  `CheckExtensionOnStart = false` on the sink's or the consumer's options turns it off. The topic
+  functions of `PgmqQueue` throw `PgmqTopicsNotSupportedException` as well, an
+  `InvalidOperationException` as before.
+  `Examples/Microservices.Pgmq` drops its hand-written check for this one. See
+  [Queues, creation and the missing extension](docs/transports.md#queues-creation-and-the-missing-extension).
+- Long polling in `PgmqConsumer`. While the host runs, an empty read waits inside Postgres with
+  `pgmq.read_with_poll` for up to `LongPollTimeout` (five seconds) instead of returning at once and
+  sleeping `PollingInterval`, so a message is picked up within `LongPollInterval` (100 milliseconds) of its
+  commit and a quiet queue costs one round trip per wait. It is on by default, and holds one connection per
+  consumer while it waits; `LongPollTimeout = TimeSpan.Zero` goes back to polling every `PollingInterval`.
+  `ConsumeOnceAsync` still reads once and does not wait. `PgmqQueue.ReadWithPollAsync` is the read on its
+  own. `read_with_poll` is in pgmq 1.5.1, so this works on Supabase too, and is tested there. See
+  [Reading the queue](docs/transports.md#reading-the-queue).
+- The pgmq sink and consumer read their settings from configuration. `AddPgmqSink` and
+  `AddPgmqConsumer` take an `IConfiguration` section, such as `Pgmq:Sink` or `Pgmq:Consumer`, before an
+  optional lambda that runs after it; `ReadFrom(section)` on `PgmqSinkOptions` and `PgmqConsumerOptions`
+  does the same by hand. Every consumer option is a key of the same name, and the sink reads `Queue`,
+  `Queues`, `Topics`, `CreateQueueIfMissing`, `SendHeaders` and `CheckExtensionOnStart`. A key the options
+  do not know, a value that does not parse, or a sink section that routes more than one way fails at
+  registration, naming the key, instead of being ignored. So that code can override a section, the last of
+  `UseTopics`, `UseQueues` and `UseQueue` called now decides how the sink routes; before, topics beat
+  several queues and several queues beat one, whatever the order. The package now references
+  `Microsoft.Extensions.Configuration.Abstractions`. See
+  [Settings from configuration](docs/transports.md#settings-from-configuration).
+- Events are named by convention. An event without `[DomainEventName]` is stored, and a contract without
+  a name in `[IntegrationEvent]` is published, under its module and its class name in kebab case:
+  `OrderPlaced` in `[assembly: Module("Ordering")]` is `ordering.order-placed`. A class name that ends in
+  `V` and a number carries the version, so `OrderPlacedV2` is `ordering.order-placed` version 2 and every
+  version of an event shares one name. `[IntegrationEvent(Version = n)]` states a version explicitly and
+  wins over the suffix. The rule is one source file compiled into both the runtime and the generators, so
+  `DomainEventName.Of`, `IntegrationEventContract.NameOf` and `VersionOf` and the generated
+  `Add{Module}IntegrationEvents()` cannot disagree. See [Stable names](docs/domain-events.md#stable-names).
+- `{Module}EventNames`, a constant for every name a project's events are stored or published under,
+  written by the core generator: `OrderingEventNames.OrderPlaced` is `"ordering.order-placed"`. A contracts
+  assembly's class is `[ModuleContract]`, so other modules can bind to its names.
+- Four diagnostics about event names, all reported where the module compiles.
+  [DDD00034](docs/diagnostics.md#ddd00034) (warning): the class name's version and `Version` disagree, so
+  the suffix is ignored, with code fixes that rename the class to the stated version or remove `Version`. [DDD00035](docs/diagnostics.md#ddd00035) (error):
+  a class name that ends in `V0` or `V01`. [DDD00036](docs/diagnostics.md#ddd00036) (error): two domain events, or two
+  contracts, of one module under one name and version, typically two classes of one name in different
+  namespaces, with a code fix that pins another name on one of them, such as
+  `[DomainEventName("ordering.returns-order-placed")]`. [DDD00037](docs/diagnostics.md#ddd00037)
+  (error): two names that would share a constant, which code could then use for the wrong event.
+- Broker exchanges named after the event rather than the CLR type. `rabbit.UseIntegrationEventNames()` for
+  MassTransit and `conventions.UseIntegrationEventNames()` for Wolverine's conventional routing name a
+  contract's exchange `ordering.order-placed.v1`, from the new `IntegrationEventContract.EntityNameOf`, so
+  renaming or moving a contract class no longer moves its messages. Message types the toolkit does not
+  name keep the transport's names. The MassTransit and Wolverine samples use it. See
+  [Transports](docs/transports.md).
+
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
@@ -272,6 +330,14 @@ convention.
   `Application/<slice>/{DomainEvents,IntegrationEvents/{Inbound,Outbound}}`, and its microservices route
   natively: pgmq topics, Wolverine's conventional routing, MassTransit's topology. No service names a
   contract or another service.
+- Retention for the outbox and the inbox, which never shrank by themselves.
+  `services.AddDomainEventRetention<TContext>(retention => { retention.KeepOutboxFor = ...; retention.KeepInboxFor = ...; })`
+  registers `DomainEventRetention<TContext>` and a background service that deletes rows older than their
+  table's window every `Interval`, with `ExecuteDelete` in batches of `BatchSize`. Only delivered outbox
+  rows are deleted; a row still waiting, or out of attempts, stays. An inbox row is what makes a repeat a
+  repeat, so a message that comes back after its row was deleted is applied again; keep inbox rows longer
+  than any redelivery can take. The example modules keep a week of outbox and a month of inbox. See
+  [Keeping the tables small](docs/integration-events.md#keeping-the-tables-small).
 
 ### Deprecated
 
@@ -281,6 +347,17 @@ convention.
 
 ### Fixed
 
+- A consumer that failed inside the inbox could still have its changes saved, without its inbox row, by
+  the next save on the same context. The transaction was rolled back but the change tracker was not, and
+  the module sink and the receiver run every handler of a module on one context. So the next consumer's
+  save wrote the failed consumer's changes, and the retry applied them a second time. A failed attempt
+  now detaches everything it started tracking.
+- When two copies of one message ran at the same moment, the inbox made the losing copy throw a
+  `DbUpdateException` on the inbox's primary key (or on an aggregate the winner had changed), so the
+  transport counted a message that had been applied as a failure and retried it. When the inbox owns the
+  transaction it now looks again after the rollback and returns `false` if the other copy applied the
+  message, as for any repeat. Inside a caller's transaction it still throws, because only the caller can
+  roll that back.
 - A positional `[ValueObject]` record, such as `record Money(decimal Amount, string Currency)`, came
   back from System.Text.Json with every property at its default. The generated properties are
   `protected init`, which the serializer cannot reach by itself, so a value object inside a domain
@@ -344,6 +421,23 @@ convention.
   now written again after the rollback.
 
 ### Changed
+
+- `AddPgmqSink` needs the database when the application starts, for the pgmq check above; before, it did
+  not touch the database until the first send. Set `CheckExtensionOnStart = false` on the sink's options
+  to start without it.
+- **Breaking for events without `[DomainEventName]`:** such an event used to be stored and published under
+  its bare class name, `OrderPlaced`, and is now named by convention, `ordering.order-placed`, or
+  `order-placed` in an assembly without `[assembly: Module]`. Rows an earlier build wrote under the class
+  name are still read: the outbox registry finds a type by its class name as well, and the processor
+  publishes such a row under the type's current name. What changes is the name on messages published from
+  now on, so a consumer in another process that routes on the old name has to be deployed with the
+  producer, or the producer's events pinned to their old names with `[DomainEventName("OrderPlaced")]`. A
+  contract whose class name ends in `V` and a number, and that states no `Version`, is now that version
+  instead of version 1.
+- `[IntegrationEvent]` takes its name as an optional argument, and `IntegrationEventAttribute.Name` is
+  `string?`. `[IntegrationEvent]` alone marks a contract named by convention.
+- The example shop's events and contracts carry no names any more; the convention gives them the names
+  they had, which `EventNameTests` in the examples' tests pins down.
 
 - The documentation builds up. Each page starts with the problem it solves and the simplest use, and
   leaves storage, GraphQL, modules and design rationale for later, so a first example no longer carries

@@ -35,6 +35,9 @@ public static class ShippingModule
         // publishes, and every module registered here is offered every message, whatever carried it here.
         services.AddModuleIntegrationEvents<ShippingContext>(module => module.AddShippingIntegrationEvents());
 
+        // Shipping has an inbox and no outbox, so only the inbox has a window.
+        services.AddDomainEventRetention<ShippingContext>(retention => retention.KeepInboxFor = TimeSpan.FromDays(30));
+
         // GraphQL, when the host serves it: Shipping's own source schema, for a Fusion gateway to compose.
         if (host.GraphQL is { } graphql)
         {

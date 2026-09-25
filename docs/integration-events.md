@@ -113,13 +113,15 @@ public sealed record OrderPlaced(OrderId OrderId, CustomerName Customer, Money T
 The contract is what the other modules read, written in primitives:
 
 ```csharp
-[IntegrationEvent("ordering.order-placed", Version = 2)]
+[IntegrationEvent]
 public sealed record OrderPlacedV2(Guid OrderId, string Customer, decimal Total, string Currency);
 ```
 
-`[IntegrationEvent]` pins the name and the version. Without it a contract falls back to
-`[DomainEventName]`, and without that to the class name, with version 1. See
-[Domain events](domain-events.md#stable-names) for why the name has to be pinned at all, and
+`[IntegrationEvent]` marks the type as a contract. Its name and version come from the module and the class
+name, so in `[assembly: Module("Ordering")]` this is published as `ordering.order-placed` version 2, the
+same name its domain event is stored under. Pin the name in the attribute only when the convention would
+give the wrong one, typically after renaming the class: `[IntegrationEvent("ordering.order-placed")]`. See
+[Stable names](domain-events.md#stable-names) for the whole rule, and
 [Versioning and upcasting](#versioning-and-upcasting) for what the version is for.
 
 The outbox does not publish the contract until you say how one becomes the other. By default, nothing is
@@ -458,7 +460,7 @@ public static class IntegrationEventExtensions
     public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
     {
         ArgumentNullException.ThrowIfNull(outbox);
-        outbox.RegisterEvent<OrderPlaced>("OrderPlaced", 1);
+        outbox.RegisterEvent<OrderPlaced>("ordering.order-placed", 1);
         outbox.PublishWith<OrderPlaced, OrderPlacedV2>("ordering.order-placed", 2, static services => new PublishOrderPlaced());
         return outbox;
     }
@@ -495,13 +497,15 @@ public static class IntegrationEventExtensions
 
 Line by line, that is everything the two modules register:
 
-- `RegisterEvent<OrderPlaced>("OrderPlaced", 1)` puts the domain event in the outbox's map from stored
-  name to type, which the processor reads a row back through. The name is the event's
-  `[DomainEventName]`, and `OrderPlaced` has none, so it is the class name; the version is its
-  `[IntegrationEvent(Version = n)]`, otherwise 1. Every concrete domain event declared in the project is
-  listed, whether it leaves the module or not, because the outbox stores all of them.
+- `RegisterEvent<OrderPlaced>("ordering.order-placed", 1)` puts the domain event in the outbox's map from
+  stored name to type, which the processor reads a row back through. The name is the event's
+  `[DomainEventName]`, and `OrderPlaced` has none, so it is the module and the class name; the version is
+  its `[IntegrationEvent(Version = n)]`, otherwise the one its class name ends in, otherwise 1. Every
+  concrete domain event declared in the project is listed, whether it leaves the module or not, because
+  the outbox stores all of them.
 - `PublishWith<OrderPlaced, OrderPlacedV2>(...)` is the entry `PublishAs` would have made, with a class
-  instead of a lambda: the contract's published name and version, read off its `[IntegrationEvent]`, and
+  instead of a lambda: the contract's published name and version, read off its class name and
+  `[IntegrationEvent]`, and
   the code that builds `PublishOrderPlaced` for each message. The published name is also how this process
   knows it publishes `ordering.order-placed` itself, so a [transport](transports.md) does not ask a broker
   for it.
@@ -519,8 +523,8 @@ parameters is the one called, and each parameter is taken from the scope the mes
 and the scope itself for an `IServiceProvider`.
 
 Everything the run-time registration would read off attributes is read by the compiler instead and written
-out as literals: the stored name and version of every domain event (`[DomainEventName]`,
-`[IntegrationEvent]`), the published name and version of every contract, the consumer name of every
+out as literals: the stored name and version of every domain event and the published name and version of
+every contract (the convention, `[DomainEventName]`, `[IntegrationEvent]`), the consumer name of every
 handler (`[IntegrationEventConsumer]`, otherwise the class's full name). The outbox and the processor then
 look names up in the registries rather than asking a type. Nothing is scanned, read or activated by
 reflection; add a handler class and the next build registers it.
@@ -661,6 +665,43 @@ Steps 4 to 7 are the whole point. The row that says "applied" and the effect of 
 one `SaveChanges` inside one transaction, so there is no instant where one exists without the other. A
 crash anywhere in between rolls back both, and the next delivery applies the message cleanly.
 
+When a step fails, the transaction is rolled back and so is the change tracker. Whatever the attempt started
+tracking, the inbox row included, is detached. Without that, the next save on the same context would write
+the failed handler's changes after all, without its row, and the retry would apply them a second time. The
+module sink runs every handler of a module on one context, so the next save is usually the next consumer's.
+Entities the context was already tracking before the attempt are left alone.
+
+```mermaid
+sequenceDiagram
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Context as BillingContext
+    participant Db as Billing's database
+
+    Sink->>Inbox: billing.invoicer
+    Inbox->>Context: an inbox row and an invoice
+    Note over Inbox: the invoicer throws
+    Inbox->>Db: roll back
+    Inbox->>Context: detach both
+    Sink->>Inbox: billing.ledger
+    Inbox->>Db: the ledger's entry and row only
+    Note over Sink,Db: same context: the invoice stays out. The retry runs the invoicer again.
+```
+
+<details>
+<summary>Show the code: two consumers in one module</summary>
+
+Two handlers of the same contract, each under a consumer name of its own. They run one after the other, on
+the one `BillingContext` of the delivery's scope:
+
+```csharp
+services.AddModuleIntegrationEvents<BillingContext>(module => module
+    .Handle<OrderPlacedV2, RaiseInvoice>()      // [IntegrationEventConsumer("billing.invoicer")]
+    .Handle<OrderPlacedV2, PostToLedger>());    // [IntegrationEventConsumer("billing.ledger")]
+```
+
+</details>
+
 The key is the pair, not the message. Two consumers of the same message each get a row and each run once,
 so adding a consumer later does not mean replaying its backlog through the consumers that are already up
 to date. Pick consumer names you will not want to change, the same way you pick `[DomainEventName]`.
@@ -681,13 +722,59 @@ everything it wrote, so the database ends up with one effect. Anything the losin
 transaction, a counter in memory or a call to another system, happened twice. Only what a handler does
 through its module's context is exactly-once.
 
+The losing copy is not reported as a failure. Once its transaction is rolled back, the inbox looks for the
+row again. If the winner's row is there, it returns `false`, as it would for any other repeat. It does not
+matter whether the loser failed on the inbox row itself or on an aggregate the winner changed first. The
+broker then sees a message that was handled, not one to retry. Inside a caller's transaction the inbox
+throws instead, because only the caller can roll that back; their retry then finds the row.
+
+```mermaid
+sequenceDiagram
+    participant A as Copy A
+    participant B as Copy B
+    participant Db as Billing's database
+
+    A->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>A: none
+    B->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>B: none
+    Note over A,B: both run the handler, each in a transaction of its own
+    A->>Db: the invoice and the inbox row, commit
+    Note over A: true: this copy applied it
+    B->>Db: the invoice and the inbox row
+    Db-->>B: refused: the row is taken, or the aggregate moved on
+    B->>Db: roll back
+    B->>Db: an inbox row for this message and billing.invoicer?
+    Db-->>B: copy A's
+    Note over B: false: a repeat, acknowledged like any other
+```
+
+<details>
+<summary>Show the code: what a consumer sees</summary>
+
+Nothing changes in the consumer. Both answers are success, so it acknowledges the message either way:
+
+```csharp
+var applied = await inbox.ExecuteOnceAsync<OrderPlacedV2>(message, "billing.invoicer", (order, received, token) =>
+{
+    context.Invoices.Add(new Invoice(order.OrderId, order.Total));
+    return Task.CompletedTask;
+},
+cancellationToken);
+
+// true: this copy applied the message.
+// false: it had been applied already, before this copy arrived or while it ran.
+```
+
+</details>
+
 It also does not order anything. If message B arrives before message A, the inbox applies B. Handlers that
 care about order have to say so themselves, usually with a version or a sequence number in the payload.
 
 ## Versioning and upcasting
 
-`[DomainEventName]` keeps the name stable while you rename the class. Nothing kept the **shape** stable,
-and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
+A name stays put while the class moves, and `[DomainEventName]` keeps it while the class is renamed. Nothing
+kept the **shape** stable, and the shape is the harder promise. Once the outbox has published a payload, somebody has stored it,
 queued it, or is about to read it back. A payload written before a deployment has to stay readable after
 it.
 
@@ -695,35 +782,32 @@ Two places have to hold, and the toolkit covers both.
 
 ### The outbox reading its own old rows
 
-Every outbox row records the shape it was written in, in a `Version` column, taken from
-`[IntegrationEvent(Version = n)]` on the event type. An event that never changed shape says nothing and is
-version 1.
+Every outbox row records the shape it was written in, in a `Version` column:
+`[IntegrationEvent(Version = n)]` on the event type, otherwise the version its class name ends in. An event
+that never changed shape says nothing and is version 1.
 
 When the processor reads a row whose version matches the type registered under that name, which is every
 row until you bump something, nothing changes. When it does not match, the processor reads the payload as
 the type registered for that older version and then upcasts it.
 
 ```csharp
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 1)]
-public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;
-
-[DomainEventName("ordering.order-placed")]
-[IntegrationEvent("ordering.order-placed", Version = 2)]
-public sealed record OrderPlaced(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;
+public sealed record OrderPlacedV1(OrderId OrderId, Money Total) : DomainEvent;                    // ordering.order-placed, version 1
+public sealed record OrderPlacedV2(OrderId OrderId, Money Total, Channel Channel) : DomainEvent;   // ordering.order-placed, version 2
 ```
 
 ```csharp
 options.MapIntegrationEvents(contracts => contracts
-    .UpcastFrom<OrderPlacedV1, OrderPlaced>(v1 => new OrderPlaced(v1.OrderId, v1.Total, Channel.Unknown)));
+    .UpcastFrom<OrderPlacedV1, OrderPlacedV2>(v1 => new OrderPlacedV2(v1.OrderId, v1.Total, Channel.Unknown)));
 ```
 
-Both attributes carry the same name on purpose. `[DomainEventName]` is what the outbox stores in the row,
-`[IntegrationEvent]` is what says which shape that row is, and a version means nothing unless the two
-agree. `RegisterEvent<TEvent>()` and `RegisterEventsFromAssembly` refuse two different names when they
-register the event. The generated registration takes the name from one attribute and the version from the
-other without comparing them, so there it is up to you to keep them the same; a mismatch shows only when
-an older row cannot be read.
+The two classes share a name because the convention leaves the suffix out of it, and each says its version
+in its class name, so there is nothing to keep in step. To go on raising `OrderPlaced` rather than
+`OrderPlacedV2`, give it the version in the attribute instead, `[IntegrationEvent(Version = 2)]`: a class
+name without a suffix is version 1, and two version 1 classes under one name fail the build
+([DDD00036](diagnostics.md#ddd00036)). If the name is pinned, pin the same name on every version.
+`RegisterEvent<TEvent>()` and `RegisterEventsFromAssembly` refuse an event whose `[DomainEventName]` and
+`[IntegrationEvent]` name two different names, because a stored row could then never be matched to a
+version.
 
 Keeping two types under one domain event name is fine. `RegisterEvent` and `RegisterEventsFromAssembly`
 keep the newest as the type new events are written as, and the older one is only ever read.
@@ -822,6 +906,8 @@ per consumer in each consuming module, so its handlers do make per-consumer prog
 - **Idempotency is keyed on `MessageId`.** It is the domain event's `EventId`, stable across every
   redelivery, and it is what the inbox stores. If you write your own deduplication, key it on that and
   nothing else.
+- **The inbox remembers for as long as its rows exist.** With [retention](#keeping-the-tables-small), a
+  message that comes back after its row was deleted is applied again.
 - **Ordering is best effort.** The processor loads oldest first, but a failed message is retried after
   messages written later, two processors can interleave, and a queue makes its own decisions. Do not build
   anything on delivery order.
@@ -884,11 +970,106 @@ places. They create the schema first where the provider has schemas, and leave t
 where it does not. The shapes are checked against the model in the tests, so a hand-written migration and a
 scaffolded one produce the same table.
 
+## Keeping the tables small
+
+Neither table shrinks by itself. The outbox marks a row delivered and leaves it there. The inbox writes a
+row for every message every consumer applies. Retention deletes those rows once they are older than you
+want to keep them:
+
+```csharp
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepInboxFor = TimeSpan.FromDays(30);
+});
+```
+
+That registers `DomainEventRetention<OrderingContext>` and a background service that runs it at start and
+then every `Interval`, an hour by default. What one run deletes, and what it leaves:
+
+```mermaid
+flowchart LR
+    Run["DomainEventRetention, at start and every Interval"]
+    Run --> Outbox["OutboxMessages"]
+    Run --> Inbox["InboxMessages"]
+    Outbox -->|"delivered longer ago than KeepOutboxFor"| Gone["deleted, BatchSize rows per statement"]
+    Inbox -->|"applied longer ago than KeepInboxFor"| Gone
+    Outbox -.->|"delivered recently, still waiting, or out of attempts"| Kept["kept"]
+    Inbox -.->|"applied recently"| Kept
+```
+
+Each run deletes with `ExecuteDelete`, in the database and past the change tracker, `BatchSize` rows per
+statement (1000 by default). A large backlog therefore goes in many short transactions, not one long one.
+Both windows count from `ProcessedAt`, which both tables already index. Leave a window unset and that table
+is not touched. A context with only an inbox sets only `KeepInboxFor`.
+
+Only delivered outbox rows are deleted. A row still waiting, or one that ran out of attempts, stays however
+old it is, because it is not history yet; it is work somebody still has to look at.
+
+<details>
+<summary>Show the code: what the example shop keeps, and running it yourself</summary>
+
+Every module registers its own retention, next to its own outbox. Ordering has both tables, Catalog only
+publishes and Shipping only consumes, so those two set one window each:
+
+```csharp
+// inside AddOrderingModule
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepInboxFor = TimeSpan.FromDays(30);
+});
+
+// inside AddCatalogModule: an outbox and no inbox
+services.AddDomainEventRetention<CatalogContext>(retention => retention.KeepOutboxFor = TimeSpan.FromDays(7));
+
+// inside AddShippingModule: an inbox and no outbox
+services.AddDomainEventRetention<ShippingContext>(retention => retention.KeepInboxFor = TimeSpan.FromDays(30));
+```
+
+To run it from a scheduler of your own instead, skip the registration and call it directly:
+
+```csharp
+var retention = new DomainEventRetention<OrderingContext>(context, new DomainEventRetentionOptions<OrderingContext>
+{
+    KeepInboxFor = TimeSpan.FromDays(30),
+});
+
+await retention.DeleteExpiredAsync(cancellationToken);                                     // by the windows
+await retention.DeleteDeliveredOutboxMessagesAsync(DateTimeOffset.UtcNow.AddDays(-7), cancellationToken); // or by a cutoff
+```
+
+</details>
+
+### How long to keep the inbox
+
+The inbox window needs more thought than the outbox's. An inbox row is what makes a repeat a repeat, and once
+it is deleted, the same message delivered again is applied again:
+
+```mermaid
+sequenceDiagram
+    participant Broker
+    participant Inbox as Billing's inbox
+    participant Retention
+
+    Broker->>Inbox: message 42, day 0
+    Note over Inbox: applied, and its row written
+    Broker->>Inbox: message 42 again, day 3
+    Inbox-->>Broker: a repeat, skipped
+    Retention->>Inbox: day 31: rows older than 30 days go, message 42's with them
+    Broker->>Inbox: message 42 again, day 40
+    Note over Inbox: no row any more: applied a second time
+```
+
+So keep inbox rows longer than any message can take to come back: the broker's own retention, the outbox's
+retries, and an operator resetting `Attempts` on a row that failed last week. Days is usually right for the
+outbox, and weeks for the inbox.
+
 ## Where to look next
 
 - [Transports](transports.md) for pgmq, Wolverine, MassTransit, and writing a sink of your own.
 - [Module contracts](module-contracts.md) for why a module publishes contracts, and where to keep them.
-- [Domain events](domain-events.md) for raising, draining and `[DomainEventName]`.
+- [Domain events](domain-events.md) for raising, draining and [how an event is named](domain-events.md#stable-names).
 - [Delivering domain events](event-delivery.md) for the outbox itself, the processor, retries and
   `MaxAttempts`.
 - [GraphQL](graphql.md#pushing-integration-events-to-subscribers) for the subscription sink.
@@ -900,7 +1081,8 @@ scaffolded one produce the same table.
 - `Tests/DDDToolkit.EntityFramework.Tests/EventVersioningTests.cs` for upcasting on both read paths.
 - `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract and the
   multi-sink failure behaviour.
-- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, and
-  for the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, a
+  copy that loses the race to another copy, and the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/RetentionTests.cs` for what retention deletes and what it keeps.
 - `Tests/DDDToolkit.EntityFramework.Tests/MessagingSchemaTests.cs` for the schema override and the
   migration helpers.

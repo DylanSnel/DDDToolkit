@@ -74,7 +74,7 @@ public sealed class OutboxTests : IDisposable
         created.LastError.Should().BeNull();
         created.Payload.Should().Contain("\"Name\":\"Fiction\"");
 
-        rows.Single(r => r.EventName == nameof(BookAdded)).Payload.Should().Contain(book.Id.Value.ToString());
+        rows.Single(r => r.EventName == "book-added").Payload.Should().Contain(book.Id.Value.ToString());
     }
 
     [Fact]
@@ -192,10 +192,10 @@ public sealed class OutboxTests : IDisposable
         host.Recorder.Events.Should().ContainSingle().Which.Should().BeOfType<ShelfCreated>();
 
         using var check = _db.CreateLibraryContext();
-        var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
+        var failed = await check.Outbox.SingleAsync(m => m.EventName == "book-added", TestContext.Current.CancellationToken);
         failed.ProcessedAt.Should().BeNull();
         failed.Attempts.Should().Be(1);
-        failed.LastError.Should().Contain("BookAdded").And.Contain("RegisterEventsFromAssembly");
+        failed.LastError.Should().Contain("book-added").And.Contain("RegisterEventsFromAssembly");
         (await check.Outbox.SingleAsync(m => m.EventName == "shelf.created", TestContext.Current.CancellationToken)).ProcessedAt.Should().NotBeNull();
     }
 
@@ -220,7 +220,7 @@ public sealed class OutboxTests : IDisposable
 
         using (var check = _db.CreateLibraryContext())
         {
-            var failed = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
+            var failed = await check.Outbox.SingleAsync(m => m.EventName == "book-added", TestContext.Current.CancellationToken);
             failed.ProcessedAt.Should().BeNull();
             failed.Attempts.Should().Be(1);
             failed.LastError.Should().Be("System.InvalidOperationException: mail server down");
@@ -237,7 +237,7 @@ public sealed class OutboxTests : IDisposable
 
         using (var check = _db.CreateLibraryContext())
         {
-            var row = await check.Outbox.SingleAsync(m => m.EventName == nameof(BookAdded), TestContext.Current.CancellationToken);
+            var row = await check.Outbox.SingleAsync(m => m.EventName == "book-added", TestContext.Current.CancellationToken);
             row.ProcessedAt.Should().NotBeNull();
             row.Attempts.Should().Be(2);
             row.LastError.Should().BeNull();

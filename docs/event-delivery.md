@@ -318,7 +318,7 @@ ignores the argument, so the table is plain `OutboxMessages` there. The mapping 
 | Column | Type | Meaning |
 |---|---|---|
 | `Id` | `Guid`, key, never generated | The event's `EventId`. This is the idempotency key |
-| `EventName` | `string`, required, 256 | The stable name, from `[DomainEventName]` or the class name |
+| `EventName` | `string`, required, 256 | The stable name, from `[DomainEventName]` or the convention, `ordering.order-placed` |
 | `Payload` | `string`, required | The event serialized with System.Text.Json |
 | `Version` | `int` | The shape the payload was written in, 1 unless the event type says otherwise; see [The outbox reading its own old rows](integration-events.md#the-outbox-reading-its-own-old-rows) |
 | `OccurredAt` | `DateTimeOffset` | Taken from the event |
@@ -400,17 +400,19 @@ assembly scans register every concrete type implementing `IDomainEvent`. Registe
 under the same stable name throws an `ArgumentException` naming both, which is the failure you want
 at start-up rather than at delivery time.
 
-This is where `[DomainEventName]` earns its keep. The name is written into the row, so a class rename
-without the attribute orphans every row already stored under the old name. With the attribute the
-wire name is pinned and the class can move or be renamed freely. See
-[Domain events](domain-events.md#stable-names).
+This is where a stable name earns its keep. The name is written into the row and read back later, so it
+must not change while rows are waiting. The conventional name, the module and the class name in kebab
+case, does not change when the class moves; when the class is renamed, `[DomainEventName]` keeps the old
+one. See [Stable names](domain-events.md#stable-names).
 
 The compiler can write this registration for you. With the Entity Framework package referenced, every
 assembly gets an `Add{Module}IntegrationEvents()` that registers each of its domain events under the
-name it is stored as, read from the attribute at compile time, so nothing is scanned at start-up:
+name it is stored as, worked out at compile time, so nothing is scanned at start-up:
 
 ```csharp
-[DomainEventName("ordering.order-placed")]
+[assembly: Module("Ordering")]
+
+[DomainEventName("ordering.order-received")]   // renamed from OrderReceived; rows keep the old name
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 
 public sealed record OrderCancelled(OrderId Order) : DomainEvent;
@@ -420,13 +422,13 @@ public sealed record OrderCancelled(OrderId Order) : DomainEvent;
 public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outbox)
 {
     ArgumentNullException.ThrowIfNull(outbox);
-    outbox.RegisterEvent<OrderCancelled>("OrderCancelled", 1);
-    outbox.RegisterEvent<OrderPlaced>("ordering.order-placed", 1);
+    outbox.RegisterEvent<OrderCancelled>("ordering.order-cancelled", 1);
+    outbox.RegisterEvent<OrderPlaced>("ordering.order-received", 1);
     return outbox;
 }
 ```
 
-`OrderPlaced` goes into the row under its pinned name and `OrderCancelled` under its class name. Call
+`OrderPlaced` goes into the row under its pinned name and `OrderCancelled` under the conventional one. Call
 `outbox.AddOrderingIntegrationEvents()` in place of the assembly scan. The same method registers what a
 module publishes, which [Integration events](integration-events.md#registered-when-the-module-compiles)
 covers.
@@ -510,6 +512,10 @@ With both defaults, a message that keeps failing is given up on about an hour af
 It stays in the table with its last error for you to inspect, and with no `NextAttemptAt`, so resetting
 `Attempts` retries it on the next poll. To retry a message that is still waiting, set its
 `NextAttemptAt` to null.
+
+Delivered rows stay too, until something deletes them. `services.AddDomainEventRetention<TContext>(...)`
+deletes them once they are older than a window you choose, and never touches a row that was not
+delivered. See [Keeping the tables small](integration-events.md#keeping-the-tables-small).
 
 A batch that delivers nothing ends the background service's drain for that tick, whether its messages
 failed or none was due. A sink that is down is asked about one batch a tick, not about every message

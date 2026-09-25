@@ -6,5 +6,8 @@
   -->
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)**\*.cs" Link="Shared\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- The event naming convention, compiled into the runtime as well, so both spell a name the same way. -->
+    <Compile Include="$(MSBuildThisFileDirectory)..\DDDToolkit\BaseTypes\EventNameConvention.cs" Link="Shared\EventNameConvention.cs" />
   </ItemGroup>
 </Project>

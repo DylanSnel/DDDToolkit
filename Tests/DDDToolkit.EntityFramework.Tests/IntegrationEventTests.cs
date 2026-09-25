@@ -175,7 +175,7 @@ public sealed class IntegrationEventTests : IDisposable
     }
 
     [Fact]
-    public async Task A_contract_without_the_attribute_falls_back_to_its_class_name_and_version_one()
+    public async Task A_contract_without_the_attribute_falls_back_to_the_conventional_name_and_version_one()
     {
         var sink = new RecordingSink();
         using var host = CreateHost(outbox => outbox
@@ -186,7 +186,7 @@ public sealed class IntegrationEventTests : IDisposable
         await ProcessAsync(host);
 
         var published = sink.Messages.Single(m => m.Body is BookShelved);
-        published.Name.Should().Be(nameof(BookShelved));
+        published.Name.Should().Be("book-shelved", "the class name in kebab case, with no module prefix because this assembly declares no module");
         published.Version.Should().Be(1);
     }
 
@@ -310,7 +310,7 @@ public sealed class IntegrationEventTests : IDisposable
         IntegrationEventContract.NameOf<ShelfCreated>().Should().Be("shelf.created", "a domain event published directly keeps its [DomainEventName]");
         IntegrationEventContract.VersionOf<ShelfCreated>().Should().Be(1);
 
-        IntegrationEventContract.NameOf(new BookShelved("B")).Should().Be(nameof(BookShelved), "with no attribute at all the class name is the name");
+        IntegrationEventContract.NameOf(new BookShelved("B")).Should().Be("book-shelved", "with no attribute at all the convention names it");
         IntegrationEventContract.VersionOf(new BookShelved("B")).Should().Be(1);
     }
 

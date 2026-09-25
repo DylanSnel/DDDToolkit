@@ -210,7 +210,7 @@ public readonly partial record struct CustomerId;
 [ModuleContract]
 public sealed record CustomerSummary(CustomerId Id, string Name);
 
-[IntegrationEvent("crm.customer-registered")]
+[IntegrationEvent]                  // in module Crm, published as crm.customer-registered
 public sealed record CustomerRegistered(Guid CustomerId, string Name);
 ```
 

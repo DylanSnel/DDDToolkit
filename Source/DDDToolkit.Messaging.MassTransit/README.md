@@ -18,6 +18,9 @@ builder.Services.AddMassTransit(bus =>
     bus.AddIntegrationEventConsumers(builder.Services.IntegrationEventSubscriptions());
     bus.UsingRabbitMq((context, rabbit) =>
     {
+        // optional: exchanges named after the event, ordering.order-placed.v1, not the CLR type
+        rabbit.UseIntegrationEventNames();
+
         rabbit.ReceiveEndpoint("fulfilment", endpoint =>
         {
             endpoint.UseMessageRetry(retry => retry.Intervals(250, 1000, 5000));
