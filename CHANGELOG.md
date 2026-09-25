@@ -244,6 +244,14 @@ convention.
   `Application/<slice>/{DomainEvents,IntegrationEvents/{Inbound,Outbound}}`, and its microservices route
   natively: pgmq topics, Wolverine's conventional routing, MassTransit's topology. No service names a
   contract or another service.
+- Retention for the outbox and the inbox, which never shrank by themselves.
+  `services.AddDomainEventRetention<TContext>(retention => { retention.KeepOutboxFor = ...; retention.KeepInboxFor = ...; })`
+  registers `DomainEventRetention<TContext>` and a background service that deletes rows older than their
+  table's window every `Interval`, with `ExecuteDelete` in batches of `BatchSize`. Only delivered outbox
+  rows are deleted; a row still waiting, or out of attempts, stays. An inbox row is what makes a repeat a
+  repeat, so a message that comes back after its row was deleted is applied again; keep inbox rows longer
+  than any redelivery can take. The example modules keep a week of outbox and a month of inbox. See
+  [Keeping the tables small](docs/integration-events.md#keeping-the-tables-small).
 
 ### Deprecated
 
@@ -253,6 +261,17 @@ convention.
 
 ### Fixed
 
+- A consumer that failed inside the inbox could still have its changes saved, without its inbox row, by
+  the next save on the same context. The transaction was rolled back but the change tracker was not, and
+  the module sink and the receiver run every handler of a module on one context. So the next consumer's
+  save wrote the failed consumer's changes, and the retry applied them a second time. A failed attempt
+  now detaches everything it started tracking.
+- When two copies of one message ran at the same moment, the inbox made the losing copy throw a
+  `DbUpdateException` on the inbox's primary key (or on an aggregate the winner had changed), so the
+  transport counted a message that had been applied as a failure and retried it. When the inbox owns the
+  transaction it now looks again after the rollback and returns `false` if the other copy applied the
+  message, as for any repeat. Inside a caller's transaction it still throws, because only the caller can
+  roll that back.
 - A positional `[ValueObject]` record, such as `record Money(decimal Amount, string Currency)`, came
   back from System.Text.Json with every property at its default. The generated properties are
   `protected init`, which the serializer cannot reach by itself, so a value object inside a domain

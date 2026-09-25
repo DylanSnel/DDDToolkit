@@ -938,6 +938,12 @@ Steps 4 to 7 are the whole point. The row that says "applied" and the effect of 
 one `SaveChanges` inside one transaction, so there is no instant where one exists without the other. A
 crash anywhere in between rolls back both, and the next delivery applies the message cleanly.
 
+When a step fails, the transaction is rolled back and so is the change tracker. Whatever the attempt started
+tracking, the inbox row included, is detached. Without that, the next save on the same context would write
+the failed handler's changes after all, without its row, and the retry would apply them a second time. The
+module sink runs every handler of a module on one context, so the next save is usually the next consumer's.
+Entities the context was already tracking before the attempt are left alone.
+
 The key is the pair, not the message. Two consumers of the same message each get a row and each run once,
 so adding a consumer later does not mean replaying its backlog through the consumers that are already up
 to date. Pick consumer names you will not want to change, the same way you pick `[DomainEventName]`.
@@ -958,6 +964,12 @@ everything it wrote, so the database ends up with one effect. Anything the losin
 transaction, a counter in memory or a call to another system, happened twice. Only what a handler does
 through its module's context is exactly-once.
 
+The losing copy is not reported as a failure. Once its transaction is rolled back, the inbox looks for the
+row again. If the winner's row is there, it returns `false`, as it would for any other repeat. It does not
+matter whether the loser failed on the inbox row itself or on an aggregate the winner changed first. The
+broker then sees a message that was handled, not one to retry. Inside a caller's transaction the inbox
+throws instead, because only the caller can roll that back; their retry then finds the row.
+
 It also does not order anything. If message B arrives before message A, the inbox applies B. Handlers that
 care about order have to say so themselves, usually with a version or a sequence number in the payload.
 
@@ -972,6 +984,8 @@ care about order have to say so themselves, usually with a version or a sequence
 - **Idempotency is keyed on `MessageId`.** It is the domain event's `EventId`, stable across every
   redelivery, and it is what the inbox stores. If you write your own deduplication, key it on that and
   nothing else.
+- **The inbox remembers for as long as its rows exist.** With [retention](#keeping-the-tables-small), a
+  message that comes back after its row was deleted is applied again.
 - **Ordering is best effort.** The processor loads oldest first, but a failed message is retried after
   messages written later, two processors can interleave, and a queue makes its own decisions. Do not build
   anything on delivery order.
@@ -1038,6 +1052,47 @@ Upgrading an outbox table that predates the `Version` column: add it as a non-nu
 of 1, which is what every existing row was written as. A column added without a default reads as 0, and the
 processor treats that as 1 for the same reason, so an upgrade that forgets the default still works.
 
+## Keeping the tables small
+
+Neither table shrinks by itself. The outbox marks a row delivered and leaves it there. The inbox writes a
+row for every message every consumer applies. Retention deletes those rows once they are older than you
+want to keep them:
+
+```csharp
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepInboxFor = TimeSpan.FromDays(30);
+});
+```
+
+That registers `DomainEventRetention<OrderingContext>` and a background service that runs it at start and
+then every `Interval`, an hour by default. Each run deletes with `ExecuteDelete`, in the database and past
+the change tracker, `BatchSize` rows per statement (1000 by default). A large backlog therefore goes in many
+short transactions, not one long one. Both windows count from `ProcessedAt`, which both tables already
+index. Leave a window unset and that table is not touched. A context with only an inbox sets only
+`KeepInboxFor`.
+
+Only delivered outbox rows are deleted. A row still waiting, or one that ran out of attempts, stays however
+old it is, because it is not history yet; it is work somebody still has to look at.
+
+The inbox window needs more thought. An inbox row is what makes a repeat a repeat, and once it is deleted,
+the same message delivered again is applied again. Keep inbox rows longer than any message can take to come
+back: the broker's own retention, the outbox's retries, and an operator resetting `Attempts` on a row that
+failed last week. Days is usually right for the outbox, and weeks for the inbox.
+
+To run it from a scheduler of your own instead, skip the registration and call it directly:
+
+```csharp
+var retention = new DomainEventRetention<OrderingContext>(context, new DomainEventRetentionOptions<OrderingContext>
+{
+    KeepInboxFor = TimeSpan.FromDays(30),
+});
+
+await retention.DeleteExpiredAsync(cancellationToken);                                     // by the windows
+await retention.DeleteDeliveredOutboxMessagesAsync(DateTimeOffset.UtcNow.AddDays(-7), cancellationToken); // or by a cutoff
+```
+
 ## Where to look next
 
 - [Domain events](domain-events.md) for raising, draining and `[DomainEventName]`.
@@ -1052,7 +1107,8 @@ processor treats that as 1 for the same reason, so an upgrade that forgets the d
 - `Tests/DDDToolkit.EntityFramework.Tests/OutboxTransactionTests.cs` for `DeliverInTransaction`.
 - `Tests/DDDToolkit.EntityFramework.Tests/IntegrationEventTests.cs` for the sink contract and the
   multi-sink failure behaviour.
-- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, and
-  for the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/InboxTests.cs` for the crash between handling and marking, a
+  copy that loses the race to another copy, and the outbox and inbox working together.
+- `Tests/DDDToolkit.EntityFramework.Tests/RetentionTests.cs` for what retention deletes and what it keeps.
 - `Tests/DDDToolkit.EntityFramework.Tests/MessagingSchemaTests.cs` for the schema override and the
   migration helpers.
