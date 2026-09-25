@@ -103,7 +103,9 @@ select default_version, installed_version from pg_available_extensions where nam
 | [Topics](#publish-and-subscribe-topics): `UseTopics`, `BindTopics` | 1.11 and later | No |
 
 Both columns are tested: the example shop runs over named queues on a real Supabase project in the
-Supabase Live workflow, and over topics on pgmq 1.13 in `Examples/Microservices.Pgmq`.
+Supabase Live workflow, and over topics on pgmq 1.13 in `Examples/Microservices.Pgmq`. The sink and the
+consumer read the installed version when the application starts, and refuse topics on a pgmq without them;
+see [Queues, creation and the missing extension](#queues-creation-and-the-missing-extension).
 
 ```bash
 dotnet add package DDDToolkit.Messaging.Postgres
@@ -183,9 +185,34 @@ After `MaxDeliveries` reads it is archived as poison and logged as an error, so 
 hold up the queue; it stays readable in the archive table. A message without the toolkit's headers has
 no identity to deduplicate on, and is archived unread.
 
-`PgmqQueue.ReadAsync` and `ArchiveAsync` are there for anything the consumer does not do.
-`PgmqMessage.MessageId` is pgmq's own counter, not the integration message id; idempotency keys on the
-`messageId` header, the domain event's `EventId`, the same one the
+The consumer reads with a long poll. When the queue is empty, a read waits inside Postgres, with
+`pgmq.read_with_poll`, for up to `LongPollTimeout` (five seconds), and returns as soon as a message is
+committed. Postgres looks at the queue every `LongPollInterval` (100 milliseconds) while it waits, with no
+round trip, so a message is picked up within a tenth of a second of its commit rather than on the
+application's next poll, and a quiet queue costs one round trip every five seconds rather than one a
+second. `read_with_poll` is in pgmq 1.5.1, so this works on Supabase too.
+
+The cost is a connection. A long poll holds one from the consumer's data source for as long as it waits,
+which on a quiet queue is nearly all the time, so every consumer in the process keeps one connection busy.
+It is the default all the same, because a consumer's whole job is to wait for messages, and one connection
+each is a small price for hearing about them at once. Count one per consumer when you size the pool, and
+keep `LongPollTimeout` below any `statement_timeout` of the role the consumer connects as, or Postgres
+cancels the read and the consumer logs it as a failure.
+
+```csharp
+consumer.LongPollTimeout = TimeSpan.FromSeconds(20);           // wait longer in each read
+consumer.LongPollInterval = TimeSpan.FromMilliseconds(250);    // look at the queue less often while waiting
+consumer.LongPollTimeout = TimeSpan.Zero;                      // no long poll: read, then wait PollingInterval
+```
+
+With long polling off, the consumer reads with `pgmq.read` and waits `PollingInterval` (one second) after
+an empty read, as it also does after a read that failed. `ConsumeOnceAsync` never waits, whatever the
+options say: it reads one batch, delivers it and returns how many messages there were, which is what a
+test that polls by hand needs.
+
+`PgmqQueue.ReadAsync`, `ReadWithPollAsync` and `ArchiveAsync` are there for anything the consumer does
+not do. `PgmqMessage.MessageId` is pgmq's own counter, not the integration message id; idempotency keys
+on the `messageId` header, the domain event's `EventId`, the same one the
 [inbox](integration-events.md#the-inbox-on-the-other-side) stores.
 
 ### Publish and subscribe: topics
@@ -274,6 +301,77 @@ CREATE EXTENSION IF NOT EXISTS pgmq;
 
 The extension has to be on the server first. `ghcr.io/pgmq/pg17-pgmq` is an image that ships it, and
 managed Postgres that offers queues generally has it already.
+
+That failure comes when the application starts, not with the first message. `AddPgmqSink` and
+`AddPgmqConsumer` register a check that runs before any hosted service starts, the consumers and the
+outbox processor included. It reads the installed version once per database, however many sinks and
+consumers share it:
+
+```sql
+select extversion from pg_extension where extname = 'pgmq';
+```
+
+When there is no row, the start fails with `PgmqNotInstalledException`. Where the sink uses topics or a
+consumer binds them, a pgmq older than 1.11 fails it with `PgmqTopicsNotSupportedException`, which names
+the installed version and says what works instead:
+
+```text
+The pgmq extension in database 'postgres' is version 1.5.1, and topics (UseTopics on the sink, BindTopics
+on the consumer) need pgmq 1.11 or later. Supabase ships pgmq 1.5.1 with Postgres 17 at the time of this
+release, so a Supabase project cannot route by topic yet. Named queues work on every version: send with
+UseQueue or UseQueues instead of UseTopics, and leave BindTopics off. ...
+```
+
+`PgmqQueue.InstalledVersionAsync` returns the same version for a check of your own, and
+`PgmqQueue.EnsureTopicRoutingAsync` throws the same two exceptions.
+
+The check needs the database when the application starts. It runs in `StartingAsync`, and the host calls
+that for its services in the order they were registered, unless it starts them concurrently. A migration
+applied before `RunAsync` is done by then. Something that installs the extension as the host starts, a
+hosted service running a migration with `CREATE EXTENSION` for instance, has to be registered before the
+sink and the consumer. Where neither fits, turn the check off on the sink and on the consumer:
+
+```csharp
+builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.CheckExtensionOnStart = false);
+builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.CheckExtensionOnStart = false);
+```
+
+### Settings from configuration
+
+The sink and the consumer both take a configuration section, before the lambda or instead of it, so the
+settings can differ per environment without a rebuild:
+
+```csharp
+builder.Services.AddPgmqSink(dataSource, builder.Configuration.GetSection("Pgmq:Sink"));
+builder.Services.AddPgmqConsumer(dataSource, "fulfilment", builder.Configuration.GetSection("Pgmq:Consumer"),
+    consumer => consumer.BindTopics = true);
+```
+
+```json
+{
+  "Pgmq": {
+    "Sink": { "Queue": "shop" },
+    "Consumer": { "LongPollTimeout": "00:00:10", "MaxDeliveries": 5 }
+  }
+}
+```
+
+Every property of `PgmqConsumerOptions` is a key of the same name. The sink reads `Queue` for one queue,
+`Queues` for a list that every message goes to, `Topics` set to `true` to route by topic, and
+`CreateQueueIfMissing`, `SendHeaders` and `CheckExtensionOnStart`. Keys match in any case, a time span is
+written `00:00:05`, and a key that is not there keeps its default, so an environment variable such as
+`Pgmq__Consumer__LongPollTimeout` works as it does for any other setting. A queue chosen per message stays
+in code, with `UseQueue(message => ...)`.
+
+The section is read by hand rather than with the configuration binder, so a mistake fails when the
+services are registered instead of being ignored: a key the options do not know (`LongPolTimeout`), a
+value that does not parse, or a sink section with more than one of `Queue`, `Queues` and `Topics`. The
+message names the key.
+
+The lambda runs after the section, so code has the last word. For the sink that includes the routing:
+whichever of `UseTopics`, `UseQueues` and `UseQueue` is called last decides, whether the call came from
+the section or from code. `ReadFrom(section)` on either options class does the same inside a lambda of
+your own.
 
 ### For a queue in another database
 

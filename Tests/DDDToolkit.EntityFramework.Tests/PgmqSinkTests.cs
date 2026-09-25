@@ -4,6 +4,7 @@ using DDDToolkit.Messaging.Postgres;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 
 namespace DDDToolkit.EntityFramework.Tests;
@@ -224,6 +225,22 @@ public sealed class PgmqSinkTests : IAsyncLifetime
 
         await using var check = database.CreateContext();
         (await check.Outbox.SingleAsync(m => m.Id == id, Cancellation)).ProcessedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Queues_read_from_configuration_each_get_the_message()
+    {
+        var database = Database;
+        var section = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Pgmq:Sink:Queues:0"] = "config_a", ["Pgmq:Sink:Queues:1"] = "config_b" })
+            .Build()
+            .GetSection("Pgmq:Sink");
+        var sink = new PgmqSink(NpgsqlDataSource.Create(database.ConnectionString), new PgmqSinkOptions().ReadFrom(section));
+
+        await sink.SendAsync(Message(), Cancellation);
+
+        (await ReadAsync(database, "config_a")).Should().ContainSingle();
+        (await ReadAsync(database, "config_b")).Should().ContainSingle();
     }
 
     [Fact]

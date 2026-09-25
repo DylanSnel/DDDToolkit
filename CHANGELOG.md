@@ -12,6 +12,38 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- The pgmq sink and consumer check the database when the application starts. `AddPgmqSink` and
+  `AddPgmqConsumer` register a lifecycle service that reads the installed pgmq version once per database
+  in `StartingAsync`, before any consumer or the outbox processor starts. Without the extension the start
+  fails with `PgmqNotInstalledException`. With `UseTopics` or `BindTopics` on a pgmq older than 1.11 it
+  fails with the new `PgmqTopicsNotSupportedException`, which names the installed version, says that
+  Supabase ships 1.5.1 and that `UseQueue` and `UseQueues` work there. Before, both failures came with the
+  first message sent, or when the consumer bound its queue. `PgmqQueue.InstalledVersionAsync` and
+  `PgmqQueue.EnsureTopicRoutingAsync` do the same for a check of your own, and
+  `CheckExtensionOnStart = false` on the sink's or the consumer's options turns it off. The topic
+  functions of `PgmqQueue` throw `PgmqTopicsNotSupportedException` as well, an
+  `InvalidOperationException` as before.
+  `Examples/Microservices.Pgmq` drops its hand-written check for this one. See
+  [Queues, creation and the missing extension](docs/transports.md#queues-creation-and-the-missing-extension).
+- Long polling in `PgmqConsumer`. While the host runs, an empty read waits inside Postgres with
+  `pgmq.read_with_poll` for up to `LongPollTimeout` (five seconds) instead of returning at once and
+  sleeping `PollingInterval`, so a message is picked up within `LongPollInterval` (100 milliseconds) of its
+  commit and a quiet queue costs one round trip per wait. It is on by default, and holds one connection per
+  consumer while it waits; `LongPollTimeout = TimeSpan.Zero` goes back to polling every `PollingInterval`.
+  `ConsumeOnceAsync` still reads once and does not wait. `PgmqQueue.ReadWithPollAsync` is the read on its
+  own. `read_with_poll` is in pgmq 1.5.1, so this works on Supabase too, and is tested there. See
+  [Reading the queue](docs/transports.md#reading-the-queue).
+- The pgmq sink and consumer read their settings from configuration. `AddPgmqSink` and
+  `AddPgmqConsumer` take an `IConfiguration` section, such as `Pgmq:Sink` or `Pgmq:Consumer`, before an
+  optional lambda that runs after it; `ReadFrom(section)` on `PgmqSinkOptions` and `PgmqConsumerOptions`
+  does the same by hand. Every consumer option is a key of the same name, and the sink reads `Queue`,
+  `Queues`, `Topics`, `CreateQueueIfMissing`, `SendHeaders` and `CheckExtensionOnStart`. A key the options
+  do not know, a value that does not parse, or a sink section that routes more than one way fails at
+  registration, naming the key, instead of being ignored. So that code can override a section, the last of
+  `UseTopics`, `UseQueues` and `UseQueue` called now decides how the sink routes; before, topics beat
+  several queues and several queues beat one, whatever the order. The package now references
+  `Microsoft.Extensions.Configuration.Abstractions`. See
+  [Settings from configuration](docs/transports.md#settings-from-configuration).
 - Events are named by convention. An event without `[DomainEventName]` is stored, and a contract without
   a name in `[IntegrationEvent]` is published, under its module and its class name in kebab case:
   `OrderPlaced` in `[assembly: Module("Ordering")]` is `ordering.order-placed`. A class name that ends in
@@ -354,6 +386,9 @@ convention.
 
 ### Changed
 
+- `AddPgmqSink` needs the database when the application starts, for the pgmq check above; before, it did
+  not touch the database until the first send. Set `CheckExtensionOnStart = false` on the sink's options
+  to start without it.
 - **Breaking for events without `[DomainEventName]`:** such an event used to be stored and published under
   its bare class name, `OrderPlaced`, and is now named by convention, `ordering.order-placed`, or
   `order-placed` in an assembly without `[assembly: Module]`. Rows an earlier build wrote under the class

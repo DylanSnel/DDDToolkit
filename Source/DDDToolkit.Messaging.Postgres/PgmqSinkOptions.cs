@@ -1,11 +1,17 @@
 using System.Collections.Concurrent;
 using DDDToolkit.BaseTypes;
+using Microsoft.Extensions.Configuration;
 
 namespace DDDToolkit.Messaging.Postgres;
 
 /// <summary>
 /// How the pgmq sink turns a published message into a queue row: which queue, and what rides alongside
 /// the payload.
+/// <para>
+/// A message is routed one way: by topic (<see cref="UseTopics"/>), to several queues
+/// (<see cref="UseQueues"/>) or to one (<see cref="UseQueue(string)"/>). Whichever of them was called last
+/// decides, so code can override what a configuration section (<see cref="ReadFrom"/>) said.
+/// </para>
 /// </summary>
 public sealed class PgmqSinkOptions
 {
@@ -23,12 +29,15 @@ public sealed class PgmqSinkOptions
     /// topic exchange.
     /// <para>
     /// A message nobody is bound to reaches no queue, again as with a broker. The sends share the connection
-    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later.
+    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later, which
+    /// <see cref="CheckExtensionOnStart"/> verifies at start-up; Supabase has 1.5.1, where
+    /// <see cref="UseQueue(string)"/> and <see cref="UseQueues"/> work instead.
     /// </para>
     /// </summary>
     public PgmqSinkOptions UseTopics()
     {
         Topics = true;
+        _queues = null;
         return this;
     }
 
@@ -51,6 +60,7 @@ public sealed class PgmqSinkOptions
     {
         ArgumentNullException.ThrowIfNull(queues);
         _queues = queues;
+        Topics = false;
         return this;
     }
 
@@ -65,7 +75,7 @@ public sealed class PgmqSinkOptions
     public Func<IntegrationEventMessage, string> QueueName
     {
         get => _queue;
-        set => _queue = value ?? throw new ArgumentNullException(nameof(value));
+        set => RouteTo(value ?? throw new ArgumentNullException(nameof(value)));
     }
 
     /// <summary>Sends every message to <paramref name="queue"/>.</summary>
@@ -73,7 +83,7 @@ public sealed class PgmqSinkOptions
     public PgmqSinkOptions UseQueue(string queue)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(queue);
-        _queue = _ => queue;
+        RouteTo(_ => queue);
         return this;
     }
 
@@ -89,8 +99,16 @@ public sealed class PgmqSinkOptions
     public PgmqSinkOptions UseQueue(Func<IntegrationEventMessage, string> queue)
     {
         ArgumentNullException.ThrowIfNull(queue);
-        _queue = queue;
+        RouteTo(queue);
         return this;
+    }
+
+    /// <summary>One queue per message, instead of topics or several queues.</summary>
+    private void RouteTo(Func<IntegrationEventMessage, string> queue)
+    {
+        _queue = queue;
+        _queues = null;
+        Topics = false;
     }
 
     /// <summary>
@@ -102,6 +120,18 @@ public sealed class PgmqSinkOptions
     /// </para>
     /// </summary>
     public bool CreateQueueIfMissing { get; set; } = true;
+
+    /// <summary>
+    /// Checks at start-up, once per database, that the pgmq extension is installed, and with
+    /// <see cref="UseTopics"/> that it is 1.11 or later, so a database that cannot take the messages fails
+    /// the start by name instead of the first send. On by default; applies to a sink registered with
+    /// <c>AddPgmqSink</c>.
+    /// <para>
+    /// The check needs the database at start-up. Turn it off when the application has to start without it,
+    /// or when something in the application itself installs the extension later in its start.
+    /// </para>
+    /// </summary>
+    public bool CheckExtensionOnStart { get; set; } = true;
 
     /// <summary>
     /// Writes the envelope's routing fields into pgmq's <c>headers</c> column: the message id, the
@@ -117,4 +147,74 @@ public sealed class PgmqSinkOptions
     /// sink instance shares.
     /// </summary>
     internal ConcurrentDictionary<string, bool> KnownQueues { get; } = new(StringComparer.Ordinal);
+
+    private static readonly Dictionary<string, Action<PgmqSinkOptions, IConfigurationSection>> Settings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Queue"] = (options, setting) => options.UseQueue(PgmqSettings.Name(setting)),
+        ["Queues"] = (options, setting) =>
+        {
+            var queues = PgmqSettings.Names(setting);
+            options.UseQueues(_ => queues);
+        },
+        [nameof(Topics)] = (options, setting) =>
+        {
+            if (PgmqSettings.Boolean(setting))
+            {
+                options.UseTopics();
+            }
+        },
+        [nameof(CreateQueueIfMissing)] = (options, setting) => options.CreateQueueIfMissing = PgmqSettings.Boolean(setting),
+        [nameof(SendHeaders)] = (options, setting) => options.SendHeaders = PgmqSettings.Boolean(setting),
+        [nameof(CheckExtensionOnStart)] = (options, setting) => options.CheckExtensionOnStart = PgmqSettings.Boolean(setting),
+    };
+
+    /// <summary>
+    /// Sets the options named in <paramref name="configuration"/>, a section such as <c>Pgmq:Sink</c>, and
+    /// leaves the others as they are. Keys match without regard to case.
+    /// <list type="bullet">
+    /// <item><c>Queue</c>: one queue name, as <see cref="UseQueue(string)"/>.</item>
+    /// <item><c>Queues</c>: a list of queue names, every message to each of them, as <see cref="UseQueues"/>.</item>
+    /// <item><c>Topics</c>: <c>true</c> to route by topic, as <see cref="UseTopics"/>.</item>
+    /// <item><c>CreateQueueIfMissing</c>, <c>SendHeaders</c>, <c>CheckExtensionOnStart</c>: <c>true</c> or <c>false</c>.</item>
+    /// </list>
+    /// <code>
+    /// "Pgmq": { "Sink": { "Queue": "shop", "CheckExtensionOnStart": false } }
+    /// </code>
+    /// A queue per message, chosen from its name, is code: <see cref="UseQueue(Func{IntegrationEventMessage, string})"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The section has a key these options do not know, a value that does not parse, or more than one of
+    /// <c>Queue</c>, <c>Queues</c> and <c>Topics</c>; the message says which.
+    /// </exception>
+    public PgmqSinkOptions ReadFrom(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        // Keys in a section have no order that means anything, so two ways to route is a mistake, not an override.
+        var routes = new List<string>();
+        if (configuration.GetSection("Queue").Exists())
+        {
+            routes.Add("Queue");
+        }
+
+        if (configuration.GetSection("Queues").Exists())
+        {
+            routes.Add("Queues");
+        }
+
+        if (bool.TryParse(configuration[nameof(Topics)], out var topics) && topics)
+        {
+            routes.Add(nameof(Topics));
+        }
+
+        if (routes.Count > 1)
+        {
+            var where = configuration is IConfigurationSection section ? $"'{section.Path}'" : "The configuration";
+            throw new InvalidOperationException($"{where} routes messages more than one way ({string.Join(", ", routes)}). Keep one of them.");
+        }
+
+        PgmqSettings.Read(configuration, this, Settings);
+        return this;
+    }
 }
