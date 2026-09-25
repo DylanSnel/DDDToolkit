@@ -28,6 +28,7 @@ jobs:
       matrix:
         sample:
           - ModularMonolith.Supabase
+          - ModularMonolith.Supabase.Pgmq
           - ModularMonolith.SqlServer
           - Microservices.Pgmq
           - Microservices.Wolverine

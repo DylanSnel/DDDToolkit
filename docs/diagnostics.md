@@ -30,6 +30,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00030](#ddd00030) | Error | Declare all key parts of a type in one file |
 | [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
 | [DDD00032](#ddd00032) | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer |
+| [DDD00033](#ddd00033) | Warning | The generated integration event registration must be able to construct the class |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -40,9 +41,11 @@ between two [modules](modules.md) and say nothing at all until a project declare
 failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
 the one key-part mistake that can only be caught when the Entity Framework model is built.
-[DDD00031](#ddd00031) is about the [Supabase export](entity-framework.md#supabase), where the failure
+[DDD00031](#ddd00031) is about the [Supabase export](supabase.md), where the failure
 worth catching is a module whose migrations never reach Supabase. [DDD00032](#ddd00032) is about
 [Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing.
+[DDD00033](#ddd00033) is about the [generated integration event registration](integration-events.md#registered-when-the-module-compiles),
+where it is an outbound class or a handler that is never registered.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -936,6 +939,30 @@ back as an empty `OrderId`. Nothing fails to compile and nothing throws.
 Remove the call. `Add{Module}GraphQlRuntimeBindings()` already registers a serializer for every
 identifier over a `Guid`, `string`, `int`, `long` or `short`, in HotChocolate's own format; see
 [Relay node ids](graphql.md#relay-node-ids).
+
+---
+
+## DDD00033
+
+**The generated integration event registration must be able to construct the class.**
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    private PublishOrderPlaced() { }   // DDD00033: no constructor this assembly can call
+    // ...
+}
+```
+
+The generated `Add{Module}IntegrationEvents()` registers every outbound class and every handler in the
+module by writing `new` for it, and takes each constructor parameter from the scope the message is
+delivered in. That only works for a class with one accessible constructor with the most parameters,
+whose parameters are not `ref`, `out` or `params`, and whose parameter types the assembly can see. The
+message says which of those failed.
+
+A class the registration cannot construct is left out of it, so its domain event is never published, or
+its contract is never handled. That is a warning rather than silence because nothing else would tell
+you. Give the class a constructor the registration can call, or register it by hand.
 
 ---
 

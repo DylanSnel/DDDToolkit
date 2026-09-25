@@ -14,6 +14,8 @@ using DDDToolkit.Examples.Shipping;
 using DDDToolkit.HotChocolate.Fusion.InMemory;
 using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
+using DDDToolkit.Messaging.Postgres;
+using Npgsql;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes
 // supabase/migrations from every [SupabaseMigrations] factory this host references; see the csproj.
@@ -37,14 +39,20 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 // rather than one is the cheapest way to be sure no query and no transaction ever crosses the boundary.
 // With ConnectionStrings:Supabase (the "supabase" launch profile, or the AppHost), the modules share one
 // Postgres database, as they would on one Supabase project, each in a schema of its own.
-var database = builder.Configuration.GetConnectionString("Supabase") is { Length: > 0 } supabase
-    ? ModuleDatabase.Supabase(supabase)
-    : ModuleDatabase.Sqlite();
+var supabase = builder.Configuration.GetConnectionString("Supabase") is { Length: > 0 } connectionString
+    ? connectionString
+    : null;
 
-// The whole shop in one process, so every message goes to the other modules through the module sink.
-// No module names another here or anywhere: each one says what it publishes and what it listens to.
-// The other modules, through the module sink, and whoever holds a GraphQL subscription to an order.
-var host = ModuleHost.InProcess(database).AlsoSendTo<GraphQlSubscriptionSink>()
+var database = supabase is not null ? ModuleDatabase.Supabase(supabase) : ModuleDatabase.Sqlite();
+
+// How the modules hear from each other. No module names another here or anywhere: each one says what it
+// publishes and what it listens to, and the host only chooses the road between them.
+var host = builder.Configuration["Messaging"] is "pgmq"
+    ? OverSupabaseQueues(builder.Services, database, supabase)
+    : ModuleHost.InProcess(database);
+
+// Whoever holds a GraphQL subscription to an order hears about it too, whichever road the modules take.
+host = host.AlsoSendTo<GraphQlSubscriptionSink>()
     // GraphQL: each module registers its own source schema; the subscriptions' transport is this host's.
     .WithGraphQL(graphql => graphql.AddInMemorySubscriptions());
 
@@ -78,3 +86,23 @@ app.MapInMemoryFusionGateway();
 app.MapDefaultEndpoints();
 
 await app.RunAsync();
+
+// The modules talk through Supabase Queues instead of in process. Every module's outbox sends to one
+// queue in the same database, and this host reads it back into the modules, through the same inboxes the
+// module sink uses: a handler cannot tell which road a message took. Nothing else changes, which is the
+// point: this is the step before a module moves out. Its messages already travel through the database
+// rather than a method call, so moving it changes where it runs, not how it hears.
+//
+// One queue for the whole shop, because Supabase ships pgmq 1.5, and the topic routing that would give
+// each module a queue bound to what it handles (Microservices.Pgmq uses it) came in pgmq 1.11. The
+// extension itself is turned on by a migration, supabase/migrations/..._enable_queues.sql.
+static ModuleHost OverSupabaseQueues(IServiceCollection services, ModuleDatabase database, string? supabase)
+{
+    var queues = NpgsqlDataSource.Create(supabase
+        ?? throw new InvalidOperationException("Messaging=pgmq needs ConnectionStrings:Supabase: the queues live in the database."));
+
+    services.AddPgmqSink(queues, pgmq => pgmq.UseQueue("shop"));
+    services.AddPgmqConsumer(queues, "shop");
+
+    return new ModuleHost(database, outbox => outbox.SendToPgmq());
+}

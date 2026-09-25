@@ -2,23 +2,24 @@
 
 `DDDToolkit.EntityFramework` is the persistence half of the toolkit. It teaches Entity Framework Core
 about the types the generators produce, so a domain model written the way the other pages describe
-maps to tables without hand-written configuration. It also carries the two behaviours that need a
-save to hang off: domain event delivery and optimistic concurrency.
+maps to tables without hand-written configuration. It also carries the behaviours that need a save to
+hang off: domain event delivery, the invariant check and optimistic concurrency.
 
-The package does four things:
+The package does five things:
 
 | | What it gives you |
 |---|---|
 | Generated converters | A `ValueConverter` per identifier and single value object, and one registration call per assembly |
 | Conventions | Read-only collections mapped, `Version` made a concurrency token, `[Internal]` members ignored |
 | Domain event delivery | In-process dispatch during `SaveChanges`, or a transactional outbox |
+| Invariants at the save | Every entity a save adds or changes is asked for its invariants first; see [Invariants](invariants.md#at-the-save) |
 | Optimistic concurrency | `Version` incremented per save, stale writes turned into `ConcurrencyConflictException` |
 
 It does not give you a repository abstraction or a message bus. `DbContext` is already the unit of
 work, and the delegate that hands events to your publisher is one you write. If your publisher is
 [Mediator](https://github.com/martinothamar/Mediator), the companion package `DDDToolkit.Mediator`
-writes that delegate for you; see [In-process dispatch](#in-process-dispatch). If the events have to
-leave the process, the outbox delivers to a sink you implement; see
+writes that delegate for you; see [In-process dispatch](event-delivery.md#in-process-dispatch). If the
+events have to leave the process, the outbox delivers to a sink you implement; see
 [Integration events](integration-events.md).
 
 ## Install
@@ -33,17 +34,12 @@ targets .NET 10 and Entity Framework Core 10.
 ## Wiring it up
 
 Three calls. One in your service registration, one on the `DbContextOptionsBuilder`, and one or more
-in `ConfigureConventions`. `DispatchWithMediator()` is the short way to hand domain events to
-[Mediator](https://github.com/martinothamar/Mediator); it lives in a separate package and is
-optional, because delivery is a delegate you can write yourself. See
-[Domain event delivery](#domain-event-delivery) below for both.
+in `ConfigureConventions`.
 
 ```csharp
 using DDDToolkit.EntityFramework;
-using DDDToolkit.Mediator;
 
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
-builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddDDDToolkitEntityFramework();
 
 builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseSqlite(connectionString)
@@ -66,42 +62,74 @@ public class OrderingContext(DbContextOptions<OrderingContext> options) : DbCont
 }
 ```
 
-### `AddDDDToolkitEntityFramework`
+That stores and loads aggregates. It does not yet save an aggregate that raised a domain event: with
+events pending, `SaveChanges` throws an `InvalidOperationException` that names the aggregate, says that
+no delivery mode is configured and names the two calls that would configure one. Dropping the events
+quietly would be worse, because each of them is a promise that something will happen.
 
-Registers the delivery configuration and the two interceptors. The options object is a singleton,
-`PublishDomainEventsInterceptor` is scoped so that it can hand handlers the scope that owns the
-`DbContext` being saved, and `AggregateVersionInterceptor` is a singleton because it holds no state.
+The argument to `AddDDDToolkitEntityFramework` says how events are delivered. Handing them to
+[Mediator](https://github.com/martinothamar/Mediator) handlers in the same process takes a second
+package, besides Mediator itself:
 
-The argument configures delivery. See [Domain event delivery](#domain-event-delivery) below. If your
-aggregates never raise events you can call it with no argument at all, but you still need it, because
-it is what registers the interceptors.
+```bash
+dotnet add package DDDToolkit.Mediator
+```
 
-Call it as often as you like. The first call registers everything, and every call configures the one
-options object the process has. That is what lets each module of a modular monolith register its own
-part next to its own context: its outbox with `options.UseOutbox<TContext>(...)`, the contracts it reads
-with `options.MapIntegrationEvents(...)`. The host keeps what is process-wide, such as
-`DispatchWithMediator()`. The dispatch delegate can only be set once; a second call throws instead of
-quietly handing one module's events to another module's publisher. See
-[Integration events](integration-events.md#the-common-case-another-module-in-this-process) for the
-module registration end to end.
+```csharp
+using DDDToolkit.Mediator;
+
+builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+```
+
+That package is optional, because delivery is a delegate you can write yourself against any library or
+none, and because the outbox is the other way to deliver. [Delivering domain events](event-delivery.md)
+explains both and when to use which.
 
 ### `UseDDDToolkit`
 
-Adds both interceptors to the context, domain events first and concurrency second. Pass the
-`IServiceProvider` that the `AddDbContext` callback gives you, not the root provider. That provider
-belongs to the same scope as the context, so a handler that injects `OrderingContext` receives the
-very instance that is saving.
+Adds the toolkit's interceptors to the context: the one that delivers domain events, the one that
+checks invariants and the one that raises the version. Pass the `IServiceProvider` that the
+`AddDbContext` callback gives you, not the root provider. That provider belongs to the same scope as
+the context, so a handler that injects `OrderingContext` receives the very instance that is saving.
+[The interceptors](#the-interceptors) lists them in the order they run.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
 `AddDDDToolkitConventions` adds the four toolkit conventions to the model. It is the same for every
-context, so it takes no arguments.
+context, so it takes no arguments. What each one does is under
+[What is generated and what is a convention](#what-is-generated-and-what-is-a-convention).
 
 `Add{Module}Converters` is generated, one per assembly that declares identifiers or single value
-objects. The name comes from the `DDD_Module` property described in
-[Getting started](getting-started.md#name-your-module), so a project with
-`<DDD_Module>Ordering</DDD_Module>` gets `AddOrderingConverters`. It lives in a `Converters`
-namespace under the assembly name, in a static class called `ConverterExtensions`.
+objects. It registers the value converter the generator wrote for each of them, so Entity Framework
+stores an `OrderId` as the `Guid` inside it:
+
+```csharp title="ConverterExtensions.g.cs, shortened"
+namespace Ordering.Domain.Converters;
+
+public static class ConverterExtensions
+{
+    public static ModelConfigurationBuilder AddOrderingConverters(this ModelConfigurationBuilder modelConfigurationBuilder)
+    {
+        // ...
+        modelConfigurationBuilder.Properties<OrderId>().HaveConversion<OrderId.OrderIdConverter>();
+        modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<OrderId.OrderIdConverter>();
+        // ...
+        return modelConfigurationBuilder;
+    }
+}
+```
+
+The method lives in a `Converters` namespace under the assembly name, in a static class called
+`ConverterExtensions`. Its name comes from the `DDD_Module` property that
+[Getting started](getting-started.md#store-it-with-entity-framework) sets in the project file, so a
+project with `<DDD_Module>Ordering</DDD_Module>` gets `AddOrderingConverters`. Without it the
+generators use the assembly name with the dots removed.
+
+`DDD_Module` is only a name for generated methods. It is not what makes a project a module: that is
+`[assembly: Module("Ordering")]`, the boundary the analyzer checks, described in [Modules](modules.md).
+[Why not the DDD_Module MSBuild property](modules.md#why-not-the-ddd_module-msbuild-property) explains
+why the two are separate.
 
 Call one per assembly. A solution with a shared kernel and two modules calls three:
 
@@ -118,52 +146,15 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 An assembly that declares no identifier and no single value object produces no method, because there
 would be nothing for it to register.
 
-## What is generated and what is a convention
+### `AddDDDToolkitEntityFramework`
 
-The split is not arbitrary. A value converter is specific to one type, so it has to be written per
-type and registered per assembly, which is work for a generator. A convention is a rule about the
-shape of a model, identical in every context, so it lives in the runtime package.
+Registers the delivery configuration and the interceptors `UseDDDToolkit` adds. The argument
+configures delivery; see [Delivering domain events](event-delivery.md). If your aggregates never raise
+events you can call it with no argument at all, but you still need it, because it is what registers the
+interceptors.
 
-The generator emits, for each type:
-
-| You wrote | Generated |
-|---|---|
-| `[EntityId<T>]` | A nested `ValueConverter`, for example `OrderId.OrderIdConverter`, storing `Value` |
-| `[SingleValueObject<T>]` | The same, plus a converter for the always-valid twin |
-| `[ValueObject]` | `[ComplexType]` on the record and on its twin |
-| `[Entity<TId>]` | `[Owned]` on the class |
-
-and once per assembly, the registration method, which registers every converter twice:
-
-```csharp
-modelConfigurationBuilder.Properties<OrderId>().HaveConversion<OrderId.OrderIdConverter>();
-modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<OrderId.OrderIdConverter>();
-```
-
-Both lines are needed and neither covers the other's ground. `Properties<T>()` configures properties
-of that type, which is most of what a model contains. `DefaultTypeMapping<T>()` configures the type
-where no property is involved: query parameters, constants, and the element type of a primitive
-collection. The read-only collection convention reads that default type mapping to find the converter
-for the elements of a generated `IReadOnlyList<T>`, because Entity Framework does not carry property
-configuration down to collection elements.
-
-`ColumnLength` on an identifier or single value object becomes `HaveMaxLength` on the property
-registration and `HasMaxLength` on the type mapping. See [Identifiers](identifiers.md#column-length).
-
-The conventions, added by `AddDDDToolkitConventions`, are:
-
-| Convention | What it does |
-|---|---|
-| `InternalMemberConvention` | Ignores every member carrying `[Internal]`, on entity types and complex types alike |
-| `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, applying the element converter |
-| `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
-| `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below; see [Composite keys](composite-keys.md) |
-
-`InternalMemberConvention` is why `DomainEvents` never reaches your tables. It is marked `[Internal]`
-by the generator, so the convention ignores it exactly as `[NotMapped]` would.
-
-Explicit configuration in `OnModelCreating` still wins over any of this. The conventions fill in what
-you did not say.
+It can be called more than once, which is what lets each module of a modular monolith register its own
+outbox next to its own context. See [An outbox per context](event-delivery.md#an-outbox-per-context).
 
 ## Mapping
 
@@ -172,9 +163,37 @@ Everything in this section works with no `OnModelCreating` code at all. The mapp
 
 ### Identifiers
 
-A struct identifier works as a primary key, as an ordinary property, and as a nullable property. The
-converter stores the underlying value, so the column is a `Guid`, an `int` or a `string`, not a
-serialized object, and the identifier is usable in a query predicate:
+A struct identifier works as a primary key, as an ordinary property, and as a nullable property:
+
+```csharp
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public CustomerId Customer { get; private set; }
+
+    public CourierId? Courier { get; private set; }
+}
+```
+
+The generator writes a converter into each identifier. It stores the underlying value, so the column is
+a `Guid`, an `int` or a `string`, not a serialized object:
+
+```csharp title="OrderId.Converter.g.cs"
+readonly partial record struct OrderId
+{
+    public sealed class OrderIdConverter : ValueConverter<OrderId, Guid>
+    {
+        public OrderIdConverter() : base(static v => v.Value, static v => new OrderId(v))
+        {
+        }
+    }
+}
+```
+
+and the identifier is usable in a query predicate:
 
 ```csharp
 var order = context.Orders.Single(o => o.Id == orderId);          // the key
@@ -188,18 +207,110 @@ same way and get a converter for their always-valid twin as well.
 ### Value objects
 
 A `[ValueObject]` record is annotated `[ComplexType]`, so its properties are stored inline in the
-owning table. A `PersonName` with `FirstName` and `LastName` becomes `Name_FirstName` and
-`Name_LastName` columns on the owner, not a table of its own.
+owning table:
+
+```csharp
+[ValueObject]
+public partial record PersonName(string FirstName, string LastName);
+```
+
+```csharp title="PersonName.EntityFramework.g.cs"
+[ComplexType]
+partial record PersonName
+{
+}
+
+[ComplexType]
+partial record ValidPersonName
+{
+}
+```
+
+An order's `Recipient`, a `PersonName`, becomes `Recipient_FirstName` and `Recipient_LastName` columns
+on the `Orders` table, not a table of its own.
 
 A `[SingleValueObject<T>]` is a converted scalar, so it becomes one column, and a nullable one stores
-and reads `null`. See [Value objects](value-objects.md#entity-framework).
+and reads `null`. Its converter is written the same way as an identifier's, with a second one for the
+always-valid twin:
+
+```csharp
+[SingleValueObject<string>]
+public partial record EmailAddress
+{
+    public static EmailAddress Create(string value) => new(value);
+}
+```
+
+```csharp title="EmailAddress.Converter.g.cs"
+partial record EmailAddress
+{
+    public sealed class EmailAddressConverter : ValueConverter<EmailAddress, string>
+    {
+        public EmailAddressConverter() : base(static v => v.Value, static v => new EmailAddress(v))
+        {
+        }
+    }
+}
+
+partial record ValidEmailAddress
+{
+    public sealed class ValidEmailAddressConverter : ValueConverter<ValidEmailAddress, string>
+    {
+        public ValidEmailAddressConverter() : base(static v => v.Value, static v => new ValidEmailAddress(v))
+        {
+        }
+    }
+}
+```
+
+See [Value objects](value-objects.md#entity-framework).
 
 ### Child entities and owned collections
 
-`[Entity<TId>]` produces `[Owned]`, so a child entity is loaded and saved with its aggregate. A
-generated `partial IReadOnlyList<OrderLine> Lines { get; }` is discovered as an owned collection: the
-`[BackingField]` annotation on the generated property points Entity Framework at the private list, so
-it reads and writes the field and never tries to write through the read-only view.
+`[Entity<TId>]` produces `[Owned]`, so a child entity is loaded and saved with its aggregate:
+
+```csharp
+[Entity<Guid>("LINE")]
+public partial class OrderLine
+{
+    // Sku and Quantity
+}
+```
+
+```csharp title="OrderLine.EntityFramework.g.cs"
+[Owned]
+partial class OrderLine
+{
+}
+```
+
+A generated `partial IReadOnlyList<OrderLine> Lines { get; }` on the aggregate is discovered as an owned
+collection. The `[BackingField]` annotation on the generated property points Entity Framework at the
+private list, so it reads and writes the field and never tries to write through the read-only view:
+
+```csharp title="Order.g.cs, shortened"
+partial class Order : AggregateRoot<OrderId>
+{
+    protected Order()
+    {
+    }
+
+    // ...
+
+    private readonly List<OrderLine> _lines = new();
+
+    private IReadOnlyList<OrderLine>? __linesView;
+
+    [BackingField(nameof(_lines))]
+    public partial IReadOnlyList<OrderLine> Lines => __linesView ??= _lines.AsReadOnly();
+
+    // ...
+}
+```
+
+The protected constructor is the one Entity Framework uses to materialize a row. The core generator
+writes `[BackingField]` only when the project references Entity Framework, so a domain project without
+it gets the same property without the annotation.
 
 Removing an element removes the row. Callers still cannot cast `Lines` back to `List<OrderLine>` and
 mutate it.
@@ -261,443 +372,151 @@ public partial IReadOnlyList<string> Keywords { get; }  // maps
 An `IReadOnlySet<T>` of entities is fine. That is a navigation, not a primitive collection, so
 relationship discovery handles it and the children round-trip with their aggregate.
 
-## Domain event delivery
+## Optimistic concurrency
 
-Raising an event puts it on the aggregate. Getting it to a handler is the part with a real trade-off,
-and the integration offers two modes. Configure exactly one for production.
+Every aggregate root carries `long Version`. It is 0 on a new instance, becomes 1 when the aggregate
+is inserted, and increases by exactly one per save that touches the aggregate. `AddDDDToolkitConventions`
+maps it as a concurrency token, so the `UPDATE` carries the loaded version in its `WHERE` clause.
 
-Both modes deliver through the same delegate, so handlers are written once:
+"Touches the aggregate" includes more than the root's own properties. `AggregateVersionInterceptor`
+walks from each changed entry to the aggregate root it belongs to, through ownership or through a
+foreign key whose principal is an aggregate root, and bumps that root. A change to an owned child, an
+element added to or removed from an owned collection, or a change to a primitive collection on a
+child, all version the root. Each root is bumped at most once per save, however many entries changed,
+and a save that changes nothing does not bump anything.
 
-```csharp
-Func<IServiceProvider, IReadOnlyList<IDomainEvent>, CancellationToken, Task>
-```
+Deleting an aggregate does not bump its version, but the token is still checked, so deleting an
+aggregate somebody else has changed in the meantime conflicts like any other stale write.
 
-The provider is the scope that owns the saving `DbContext`, and the events arrive in the order they
-were raised.
+The version is what makes the aggregate a unit of consistency: two people editing different lines of
+the same order still conflict, which is the point.
 
-Both modes keep the event inside this process. To send it somewhere else, add a sink to the outbox:
-that is a third destination and a separate page, [Integration events](integration-events.md).
-
-### In-process dispatch
-
-With `DispatchInProcess` and no outbox, handlers run inside `SaveChanges`, before the database is
-written.
-
-#### The short way: `DispatchWithMediator()`
-
-`DDDToolkit.Mediator` writes that delegate for you, against
-[Mediator](https://github.com/martinothamar/Mediator):
-
-```bash
-dotnet add package DDDToolkit.Mediator
-```
+When a save writes a stale version, you get a `ConcurrencyConflictException` naming the aggregate:
 
 ```csharp
-using DDDToolkit.Mediator;
-
-builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetime.Scoped);
-builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
-```
-
-It resolves `IPublisher` from the scope that owns the saving `DbContext` and publishes each event in
-the order it was raised, awaiting one before starting the next. That is the delegate below plus a
-check that each event is publishable at all, so it serves both delivery modes: add `UseOutbox` and the
-processor delivers through the same call.
-
-Three things are worth knowing before you reach for it.
-
-**Your events have to implement `Mediator.INotification`.** Mediator cannot publish anything else. One
-marker interface for the whole solution is the usual way to say it once:
-
-```csharp
-public interface IOrderingEvent : IDomainEvent, INotification;
-```
-
-An event that does not implement it makes the dispatch throw, naming the event type. It is not
-skipped. By the time the delegate runs the interceptor has already dequeued the event from the
-aggregate, so skipping would destroy it with no row, no log and nothing to retry.
-
-**Register Mediator as scoped when handlers touch the `DbContext`.** Mediator registers every handler
-as a singleton by default, and a singleton cannot depend on a scoped service. The lifetime is read off
-your `AddMediator` call at compile time, so it has to be written there; setting it any other way
-throws at start-up.
-
-**Keep `Mediator.SourceGenerator` in your composition root.** Mediator generates its implementation
-and `AddMediator` into whichever assembly the generator runs in, so reference the generator from the
-project that builds the container and from nowhere else. Handlers in other projects are still
-discovered, as long as those projects are referenced. `DDDToolkit.Mediator` itself references only
-`Mediator.Abstractions`, so it adds no generator to your domain projects.
-
-Mediator also reports `MSG0005` at build time for a notification that no handler handles. That is
-usually the mistake it looks like, but an event you deliberately leave unhandled needs the warning
-suppressed.
-
-#### Why Mediator and not MediatR
-
-MediatR did this job for the first two major versions of the toolkit and does it well. From version 13
-it is commercially licensed. This repository prefers dependencies its users can take for free, so the
-examples and this package target Mediator, which is MIT and source generated rather than reflection
-based. Nothing here stops you using MediatR: write the delegate below and it publishes through
-`IPublisher` exactly as it always did.
-
-#### The delegate
-
-`DispatchWithMediator()` is a convenience. The toolkit core has no mediator dependency and is not
-getting one: in-process delivery is a delegate, and you can write it against any library or none.
-
-```csharp
-builder.Services.AddDDDToolkitEntityFramework(options =>
+try
 {
-    options.DispatchInProcess(async (services, events, cancellationToken) =>
-    {
-        var publisher = services.GetRequiredService<IPublisher>();
-        foreach (var domainEvent in events)
-        {
-            await publisher.Publish(domainEvent, cancellationToken);
-        }
-    });
-});
-```
-
-What you get, either way:
-
-- Anything a handler changes on the same `DbContext` rides the same save, and therefore the same
-  transaction. The interceptor calls `DetectChanges` after each round so those changes are seen.
-- A throwing handler aborts the save. Nothing is written.
-- New events raised by handlers on tracked aggregates are dispatched in a further round.
-
-What you do not get is durability. Delivery is best-effort. The events are dequeued from the
-aggregate before dispatch, so once a handler has them they exist only in memory: if the save then
-fails, the events are gone. Nothing survives a process crash. And a handler that talks to the outside
-world has already sent the mail or made the HTTP call by the time a later failure rolls the
-transaction back.
-
-Do not call `SaveChanges` from a handler in this mode. The save is already in progress and it will
-pick your changes up.
-
-### The outbox
-
-With `UseOutbox`, nothing is dispatched at save time. Instead one row per event is added to the
-saving context, so the events commit atomically with the aggregate, and a separate processor delivers
-them afterwards through the same dispatch delegate.
-
-```csharp
-builder.Services.AddDDDToolkitEntityFramework(options =>
+    await context.SaveChangesAsync(cancellationToken);
+}
+catch (ConcurrencyConflictException conflict)
 {
-    options.DispatchWithMediator();   // or your own DispatchInProcess(...) delegate
-    options.UseOutbox(outbox => outbox.RegisterEventsFromAssemblyContaining<Program>());
-});
-
-builder.Services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
-```
-
-An event is never lost and never published for a transaction that rolled back. Rolling back the
-aggregate rolls back its events, because they are rows in the same transaction.
-
-The cost is at-least-once delivery. A message is marked processed only after its handlers returned,
-so a crash in between redelivers it. Handlers must be idempotent, keyed on `EventId`.
-
-Written this way the outbox is durable but still in-process: the processor hands the event back to the
-same delegate. Add a sink and the row leaves the process instead:
-
-```csharp
-options.UseOutbox(outbox =>
-{
-    outbox.RegisterEventsFromAssemblyContaining<Program>();
-    outbox.SendTo<ServiceBusSink>();
-});
-```
-
-Sinks, the published contract that is not your domain event, and the inbox that makes at-least-once
-delivery safe to consume are all on [Integration events](integration-events.md).
-
-#### An outbox per context
-
-`UseOutbox(...)` configures one outbox shared by every context. With a context per module, give each
-producing module an outbox of its own, registered by that module:
-
-```csharp
-services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
-{
-    outbox.RegisterEventsFromAssemblyContaining<Order>();
-    outbox.SendToModules();
-}));
-
-services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
-```
-
-A context uses its own outbox when it has one, the shared one when it has not, and none at all when
-neither exists: its events are then dispatched in process at save time, as if the outbox were not there.
-`options.OutboxFor(typeof(TContext))` says which of the three applies. A processor for a context without
-an outbox refuses to start and names the context.
-
-### Choosing
-
-| | In-process | Outbox |
-|---|---|---|
-| When handlers run | Inside `SaveChanges`, before the write | After the commit, on the processor |
-| Survives a crash | No | Yes |
-| Handler failure | Aborts the save | Recorded on the row, retried |
-| Delivery | Best-effort, at most once | At-least-once |
-| Handlers must be idempotent | No | Yes |
-| Extra table | No | Yes |
-| Extra moving part | No | A processor or background service |
-
-Use in-process dispatch for side effects inside the same database, where the transaction is the
-guarantee you want. Use the outbox for anything that leaves the process, and give it a sink to leave
-through.
-
-Nothing stops you from mapping the outbox table from the start and switching later. The example
-context does exactly that, so moving from one mode to the other is a change in `Program.cs` with no
-schema change.
-
-### The dispatch loop
-
-Both modes run through the same loop in `PublishDomainEventsInterceptor`, once per `SaveChanges`:
-
-1. Dequeue the pending events of every tracked aggregate. If there are none, stop.
-2. In outbox mode, add a row per event and go back to step 1.
-3. Otherwise call the dispatch delegate with the whole batch, then call `DetectChanges`, then go back
-   to step 1.
-
-The loop exists because a handler may change a tracked aggregate, which may raise a further event.
-`MaxDispatchRounds` caps it at 10 by default. If a further batch of events appears after that many
-rounds, `SaveChanges` throws an `InvalidOperationException` naming the events still pending and
-suggesting either a handler that triggers itself or a higher limit:
-
-```csharp
-options.MaxDispatchRounds = 20;
-```
-
-### When no delivery mode is configured
-
-If an aggregate has pending events and neither `DispatchInProcess` nor `UseOutbox` was called,
-`SaveChanges` throws rather than dropping the events. The message names the aggregate types involved
-and both calls that would fix it. A save with no pending events needs no delivery mode, so a context
-that only writes aggregates which raise nothing works out of the box.
-
-### Prefer `SaveChangesAsync`
-
-The dispatch delegate is asynchronous. Synchronous `SaveChanges` therefore blocks on it. That is safe
-in console applications and in ASP.NET Core, which have no synchronization context, but it can
-deadlock under a UI or legacy ASP.NET synchronization context. Both overloads are otherwise
-identical: events are dispatched before the write either way.
-
-## The outbox in detail
-
-### The table
-
-Map it in `OnModelCreating`:
-
-```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    modelBuilder.AddDomainEventOutbox(Database);
+    // conflict.AggregateType is typeof(Order), conflict.AggregateId is the OrderId.
+    // Reload the aggregate, reapply the change and save again, or report it to the user.
+    return Conflict(conflict.Message);
 }
 ```
 
-`Database` is the context's own property. The method reads one thing from it, the provider name, which
-is what lets the timestamp columns be the right shape for the database you are actually on. See
-[Timestamps](#timestamps) below.
+There is no safe generic answer for the catch block, which is why the toolkit does not retry for you.
+Reloading and reapplying is right when the change is a command you can repeat, such as adding a line.
+Reporting the conflict is right when the user needs to see what changed underneath them. Blindly
+retrying a computed value is wrong.
 
-The table is `ddd.OutboxMessages` by default. The method takes `tableName` and `schema` if you want
-something else, and `schema: null` puts it in the provider's default schema. SQLite has no schemas and
-ignores the argument, so the table is plain `OutboxMessages` there. The mapping sets a primary key on
-`Id`, an index on `ProcessedAt`, and the lengths below.
+`conflict.InnerException` is the original `DbUpdateConcurrencyException` if you need the entries.
+[Why the exception is rethrown from `SaveChangesFailed`](#why-the-exception-is-rethrown-from-savechangesfailed)
+explains how it reaches your catch block unwrapped.
 
-| Column | Type | Meaning |
+## Migrations
+
+There is nothing special to do. The toolkit adds types and configuration to your own `DbContext`
+model, so everything it maps appears in your ordinary migrations:
+
+```bash
+dotnet ef migrations add AddOutbox
+dotnet ef database update
+```
+
+The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
+the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
+is no separate package, no separate migration history table and no separate command. The same goes for
+`AddDomainEventInbox(Database)` on the consuming side. See [The table](event-delivery.md#the-table).
+
+If you write migrations by hand rather than scaffolding them, `migrationBuilder.CreateDomainEventOutbox()`
+and its inbox and drop counterparts write the same tables. See
+[Integration events](integration-events.md#tables-schema-and-migrations).
+
+The same applies to everything else on this page. Struct identifier columns, complex type columns,
+primitive collection columns and the `Version` column are all just columns in your model, so a
+`migrations add` after changing an aggregate produces the diff you would expect.
+
+If you map the outbox table before you need it, as the example context does, switching from
+in-process dispatch to the outbox later costs no migration at all.
+
+On Supabase the CLI applies migrations, not Entity Framework; see [Supabase](#supabase).
+
+## What is generated and what is a convention
+
+The split is not arbitrary. A value converter is specific to one type, so it has to be written per
+type and registered per assembly, which is work for a generator. A convention is a rule about the
+shape of a model, identical in every context, so it lives in the runtime package.
+
+The generator emits, for each type:
+
+| You wrote | Generated |
+|---|---|
+| `[EntityId<T>]` | A nested `ValueConverter`, for example `OrderId.OrderIdConverter`, storing `Value` |
+| `[SingleValueObject<T>]` | The same, plus a converter for the always-valid twin |
+| `[ValueObject]` | `[ComplexType]` on the record and on its twin |
+| `[Entity<TId>]` | `[Owned]` on the class |
+
+and once per assembly, the registration method, which registers every converter twice:
+
+```csharp title="ConverterExtensions.g.cs, shortened"
+modelConfigurationBuilder.Properties<OrderId>().HaveConversion<OrderId.OrderIdConverter>();
+modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<OrderId.OrderIdConverter>();
+```
+
+Both lines are needed and neither covers the other's ground. `Properties<T>()` configures properties
+of that type, which is most of what a model contains. `DefaultTypeMapping<T>()` configures the type
+where no property is involved: query parameters, constants, and the element type of a primitive
+collection. The read-only collection convention reads that default type mapping to find the converter
+for the elements of a generated `IReadOnlyList<T>`, because Entity Framework does not carry property
+configuration down to collection elements.
+
+`ColumnLength` on an identifier or single value object becomes `HaveMaxLength` on the property
+registration and `HasMaxLength` on the type mapping. See [Identifiers](identifiers.md#column-length).
+
+The conventions, added by `AddDDDToolkitConventions`, are:
+
+| Convention | What it does |
+|---|---|
+| `InternalMemberConvention` | Ignores every member carrying `[Internal]`, on entity types and complex types alike |
+| `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, applying the element converter |
+| `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
+| `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below; see [Composite keys](composite-keys.md) |
+
+`InternalMemberConvention` is why `DomainEvents` never reaches your tables. The `AggregateRoot<TId>`
+base class marks it `[Internal]`, so the convention ignores it exactly as `[NotMapped]` would.
+
+Explicit configuration in `OnModelCreating` still wins over any of this. The conventions fill in what
+you did not say.
+
+## The interceptors
+
+`UseDDDToolkit` adds three interceptors, in the order they run:
+
+| | Interceptor | Why there |
 |---|---|---|
-| `Id` | `Guid`, key, never generated | The event's `EventId`. This is the idempotency key |
-| `EventName` | `string`, required, 256 | The stable name, from `[DomainEventName]` or the class name |
-| `Payload` | `string`, required | The event serialized with System.Text.Json |
-| `OccurredAt` | `DateTimeOffset` | Taken from the event |
-| `AggregateType` | `string?`, 512 | CLR type name of the aggregate that raised it |
-| `AggregateId` | `string?`, 256 | The aggregate's key as text, parts joined with `\|` |
-| `CreatedAt` | `DateTimeOffset` | When the row was written |
-| `ProcessedAt` | `DateTimeOffset?` | When the handlers succeeded, `null` while pending |
-| `Attempts` | `int` | How often delivery was attempted |
-| `LastError` | `string?`, 4000 | Type and message of the last failure |
+| 1 | `PublishDomainEventsInterceptor` | Delivers domain events first, so whatever the handlers change is part of the same save |
+| 2 | `InvariantInterceptor` | Sees whatever those handlers changed |
+| 3 | `AggregateVersionInterceptor` | Comes last, so a save the invariants reject leaves no version bumped |
 
-`CreatedAt` comes from `options.TimeProvider`, which defaults to `TimeProvider.System` and can be
-replaced in tests.
+`AddDDDToolkitEntityFramework` registers them. The options object is a singleton,
+`PublishDomainEventsInterceptor` is scoped so that it can hand handlers the scope that owns the
+`DbContext` being saved, and `InvariantInterceptor` and `AggregateVersionInterceptor` are singletons
+because they hold no state.
 
-Payloads are written with System.Text.Json through `outbox.JsonOptions`, which by default are
-case-insensitive on read and carry the toolkit's `SingleValueObjectConverterFactory`, so identifiers
-and single value objects are stored as their raw values rather than as objects. The same options read
-the payload back, so change them with care once messages exist.
+## Why the exception is rethrown from `SaveChangesFailed`
 
-### Timestamps
+The interceptor translates the conflict in `ThrowingConcurrencyException`, but the update pipeline
+wraps whatever that throws in a `DbUpdateException`, so callers would have to dig through inner
+exceptions to find it. The interceptor therefore also handles `SaveChangesFailed`, unwraps the
+`ConcurrencyConflictException` and rethrows it, which is what lets you write
+`catch (ConcurrencyConflictException)` directly. It does the same for a provider that raised the
+conflict without passing through `ThrowingConcurrencyException`.
 
-`OccurredAt`, `CreatedAt` and `ProcessedAt` are `DateTimeOffset` in the model. What they become in the
-database depends on the provider, and you can say otherwise:
-
-```csharp
-// The provider's own instant type.
-modelBuilder.AddDomainEventOutbox(Database);
-
-// A UTC DateTime column, on every provider.
-modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
-```
-
-| Provider | `ProviderDefault` | `UtcDateTime` |
-|---|---|---|
-| PostgreSQL | `timestamp with time zone` | `timestamp with time zone` |
-| SQL Server | `datetimeoffset` | `datetime2` |
-| SQLite | UTC `DateTime` as text | UTC `DateTime` as text |
-
-The one thing the outbox needs from these columns is that they sort as instants, because the processor
-reads pending messages oldest first. SQLite stores a `DateTimeOffset` as text and refuses to order by
-one, so on SQLite the toolkit converts to a UTC `DateTime` whatever you ask for. Every other provider
-has an instant type that orders correctly, and now gets it.
-
-Whichever column it lands in, the value is normalized to UTC on the way in. Write a `DateTimeOffset`
-that carries `+02:00` and the row holds the same instant with an offset of zero, and reads back that
-way. That makes the two shapes interchangeable in meaning, and it is also what keeps Npgsql happy:
-PostgreSQL refuses a `DateTimeOffset` whose offset is not zero.
-
-`AddDomainEventInbox` takes the same argument for its own `ProcessedAt`. Pass both the same thing.
-
-If you write migrations by hand, `CreateDomainEventOutbox` and `CreateDomainEventInbox` take
-`timestamps` too and default to the same `ProviderDefault`. They read `MigrationBuilder.ActiveProvider`,
-so the hand-written table and the scaffolded one agree.
-
-#### If you already have a database
-
-This changed in 3.0 during development, so it can affect a database created by an earlier 3.0 build.
-Read this before upgrading one.
-
-**On PostgreSQL, nothing happens.** Npgsql maps both a UTC `DateTime` and a `DateTimeOffset` to
-`timestamptz`. The column is the same column and the bytes in it are the same bytes. There is no
-migration to write.
-
-**On SQL Server the column type changes**, from `datetime2` to `datetimeoffset`. Scaffolding a
-migration after upgrading produces an `ALTER COLUMN` for each timestamp column of the outbox and
-the inbox. The stored
-instant is preserved: SQL Server reads an existing `datetime2` as the same time at `+00:00`, which is
-correct because every value the outbox ever wrote was already UTC. So the meaning of a row does not
-change, but the table does, and you have to run the migration.
-
-If you would rather not, keep the old shape explicitly:
-
-```csharp
-modelBuilder.AddDomainEventOutbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
-modelBuilder.AddDomainEventInbox(Database, timestamps: DomainEventTimestamps.UtcDateTime);
-```
-
-That produces exactly the columns you have, on every provider, and no migration at all.
-
-If you upgrade the code on SQL Server and do neither of those things, **reading the outbox throws**.
-The insert still works, because SQL Server converts the parameter into the column it has, and the
-instant it stores is correct. The read does not: `datetime2` comes back from the driver as a
-`DateTime`, the model wants a `DateTimeOffset`, and you get an `InvalidCastException` on the first row.
-
-That is the good outcome, and it is why this is safe to ship. An unmigrated database says so the first
-time the processor polls, rather than quietly disagreeing with the model. Both halves are asserted
-against a real SQL Server in
-`Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
-
-Rows written before you notice are fine. The value that reached the column was already the right
-instant, so running the migration afterwards needs no data repair.
-
-**On SQLite, nothing happens**, because SQLite never had a choice.
-
-### Registering event types
-
-The row stores a name, so the processor needs a name-to-type map:
-
-```csharp
-options.UseOutbox(outbox =>
-{
-    outbox.RegisterEventsFromAssemblyContaining<Program>();
-    outbox.RegisterEventsFromAssembly(typeof(OrderPlaced).Assembly);
-    outbox.RegisterEvent<OrderCancelled>();
-});
-```
-
-The three calls are additive, so use whichever suits; most applications need only the first. The
-assembly scans register every concrete type implementing `IDomainEvent`. Registering two types
-under the same stable name throws an `ArgumentException` naming both, which is the failure you want
-at start-up rather than at delivery time.
-
-This is where `[DomainEventName]` earns its keep. The name is written into the row, so a class rename
-without the attribute orphans every row already stored under the old name. With the attribute the
-wire name is pinned and the class can move or be renamed freely. See
-[Domain events](domain-events.md#stable-names).
-
-An event name nobody registered is not fatal. The processor records the failure on the row, with a
-`LastError` that names the missing event and the registration call, increments `Attempts`, leaves
-`ProcessedAt` null and carries on with the rest of the batch. Register the type and the next run
-delivers the row.
-
-### Running the processor
-
-For a hosted application, the background service:
-
-```csharp
-builder.Services.AddOutboxBackgroundService<OrderingContext>(
-    pollingInterval: TimeSpan.FromSeconds(2),
-    batchSize: 100);
-```
-
-It registers the processor, the polling options and the hosted service. On each tick it drains the
-outbox batch after batch until a batch delivers nothing, each batch in its own service scope so the
-processor and the handlers get a fresh context. A failure in a tick is logged and the next tick tries
-again.
-
-To drive it yourself, from a job scheduler or a test, register the processor alone:
-
-```csharp
-builder.Services.AddOutboxProcessor<OrderingContext>();
-```
-
-```csharp
-var processor = scope.ServiceProvider.GetRequiredService<OutboxProcessor<OrderingContext>>();
-var delivered = await processor.ProcessPendingAsync(batchSize: 100, cancellationToken);
-```
-
-`ProcessPendingAsync` loads pending messages oldest first, by `CreatedAt`, then `OccurredAt`, then
-`Id`, delivers each one on its own, and returns how many were delivered successfully. The processor
-throws at construction if the outbox is not enabled, or if it has neither a sink nor a dispatch
-delegate to deliver through.
-
-Each message is saved through the same scoped context, so a handler that resolves that context and
-changes an aggregate commits its change together with the processed mark. Events raised by that
-change become new outbox rows.
-
-### Failures, retries and poison messages
-
-A handler that throws does not stop the batch. The exception type and message are written to
-`LastError`, truncated at 4000 characters, `Attempts` is incremented, `ProcessedAt` stays null, and
-the processor moves to the next message. A later run retries it, and on success `LastError` is
-cleared.
-
-`MaxAttempts` defaults to 10. Messages that reached it are no longer loaded:
-
-```csharp
-options.UseOutbox(outbox => outbox.MaxAttempts = 5);
-```
-
-They stay in the table with their last error for you to inspect. Reset `Attempts` to retry one.
-
-Note that a batch in which every message fails returns zero, which ends the background service's
-drain for that tick. The next tick picks the messages up again.
-
-### Honest limits
-
-- **Ordering is best-effort.** Messages are loaded oldest first, but a failed message is retried
-  later than messages written after it, so delivery order is not the order of writing.
-- **Concurrent processors can double-deliver.** The processor takes no lock, so two instances polling
-  the same table may both pick up the same row. Combined with the crash window before
-  `ProcessedAt` is written, that is the at-least-once guarantee: handlers must be idempotent, keyed
-  on `EventId`, which is `OutboxMessage.Id`.
-- **Delivery is not immediate.** It happens on the next poll, not at commit.
-
-- **Two sinks share one row.** When a message goes to more than one sink and one of them refuses, the
-  message as a whole is retried and the sinks that accepted it see it again. See
-  [Integration events](integration-events.md#when-one-sink-fails-and-another-does-not).
-
-`Tests/DDDToolkit.EntityFramework.Tests/OutboxTests.cs` exercises the transactional write, the
-retries, `MaxAttempts`, unknown event names and the background service.
+Both the synchronous and the asynchronous save path behave the same.
+`Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, child-only
+changes, deletes and both paths.
 
 ## Providers
 
@@ -715,9 +534,9 @@ that none of it is a surprise in production.
 | Primitive collection | JSON `TEXT` | `integer[]` | JSON `nvarchar` |
 | Schemas | ignored | yes | yes |
 
-Timestamps are covered above. Schemas are ignored by SQLite, which drops the schema when it writes an
-identifier, so `ddd.OutboxMessages` is plain `OutboxMessages` there and nothing else changes. The
-primitive collection is the one that needs a paragraph.
+Timestamps are covered under [Timestamps](event-delivery.md#timestamps). Schemas are ignored by SQLite,
+which drops the schema when it writes an identifier, so `ddd.OutboxMessages` is plain `OutboxMessages`
+there and nothing else changes. The primitive collection is the one that needs a paragraph.
 
 ### Primitive collections do not port below LINQ
 
@@ -773,7 +592,45 @@ portability, not by accident.
 Both halves are asserted against real servers in
 `Tests/DDDToolkit.EntityFramework.Providers.Tests/Providers/ProviderMappingTests.cs`.
 
-### Running the provider tests yourself
+## Domain event delivery
+
+A raised domain event is a promise that something will happen, and this package keeps it when the
+context saves: by running your handlers inside `SaveChanges`, or by writing the events to an outbox
+table in the same transaction and delivering them afterwards. [Delivering domain events](event-delivery.md)
+explains both modes, how to choose between them, and the outbox's table, processor and retries.
+
+## Supabase
+
+The Supabase CLI applies migrations from SQL files in `supabase/migrations`, not from Entity Framework.
+`DDDToolkit.EntityFramework.Supabase` writes one such file per Entity Framework migration as part of the
+build, and can check at start-up that Supabase applied them. See [Supabase](supabase.md).
+
+## Where to look next
+
+- [Getting started](getting-started.md) for the module name and your first aggregate.
+- [Delivering domain events](event-delivery.md) for in-process dispatch, Mediator and the outbox.
+- [Identifiers](identifiers.md) for what a struct identifier actually is, and `ColumnLength`.
+- [Value objects](value-objects.md) for `[ValueObject]` and `[SingleValueObject<T>]`.
+- [Entities and aggregates](entities-and-aggregates.md) for read-only collections and `[BackingField]`.
+- [Invariants](invariants.md) for the check every save runs.
+- [Domain events](domain-events.md) for raising, draining and stable names.
+- [Integration events](integration-events.md) for sinks, published contracts and the inbox.
+- [Supabase](supabase.md) for exporting migrations to the Supabase CLI.
+- [Diagnostics](diagnostics.md) for the build errors the generators report.
+
+The runnable version of everything here is the shop in
+[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase). The host's
+[`Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs) shows the
+registration,
+[`OrderingContext.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs)
+shows the conventions and the generated converters,
+[`OrderingModule.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs) shows
+the outbox, and
+[`OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)
+shows the conflict catch block. The example's `supabase/` folder and each module's `Migrations` folder
+show the Supabase export.
+
+## For contributors: running the provider tests
 
 ```bash
 dotnet test Tests/DDDToolkit.EntityFramework.Providers.Tests --filter "Provider=Postgres"
@@ -793,293 +650,3 @@ The images are pinned exactly, in
 for each next to it. No floating tag, so a red build is always something we changed. PostgreSQL matches
 the major of the pgmq image the Postgres package is tested against; SQL Server is the older release
 still in mainstream support, which is the weaker of the two and therefore the one worth testing.
-
-## Optimistic concurrency
-
-Every aggregate root carries `long Version`. It is 0 on a new instance, becomes 1 when the aggregate
-is inserted, and increases by exactly one per save that touches the aggregate. `AddDDDToolkitConventions`
-maps it as a concurrency token, so the `UPDATE` carries the loaded version in its `WHERE` clause.
-
-"Touches the aggregate" includes more than the root's own properties. `AggregateVersionInterceptor`
-walks from each changed entry to the aggregate root it belongs to, through ownership or through a
-foreign key whose principal is an aggregate root, and bumps that root. A change to an owned child, an
-element added to or removed from an owned collection, or a change to a primitive collection on a
-child, all version the root. Each root is bumped at most once per save, however many entries changed,
-and a save that changes nothing does not bump anything.
-
-Deleting an aggregate does not bump its version, but the token is still checked, so deleting an
-aggregate somebody else has changed in the meantime conflicts like any other stale write.
-
-The version is what makes the aggregate a unit of consistency: two people editing different lines of
-the same order still conflict, which is the point.
-
-When a save writes a stale version, you get a `ConcurrencyConflictException` naming the aggregate:
-
-```csharp
-try
-{
-    await context.SaveChangesAsync(cancellationToken);
-}
-catch (ConcurrencyConflictException conflict)
-{
-    // conflict.AggregateType is typeof(Order), conflict.AggregateId is the OrderId.
-    // Reload the aggregate, reapply the change and save again, or report it to the user.
-    return Conflict(conflict.Message);
-}
-```
-
-There is no safe generic answer for the catch block, which is why the toolkit does not retry for you.
-Reloading and reapplying is right when the change is a command you can repeat, such as adding a line.
-Reporting the conflict is right when the user needs to see what changed underneath them. Blindly
-retrying a computed value is wrong.
-
-`conflict.InnerException` is the original `DbUpdateConcurrencyException` if you need the entries.
-
-### Why the exception is rethrown from `SaveChangesFailed`
-
-The interceptor translates the conflict in `ThrowingConcurrencyException`, but the update pipeline
-wraps whatever that throws in a `DbUpdateException`, so callers would have to dig through inner
-exceptions to find it. The interceptor therefore also handles `SaveChangesFailed`, unwraps the
-`ConcurrencyConflictException` and rethrows it, which is what lets you write
-`catch (ConcurrencyConflictException)` directly. It does the same for a provider that raised the
-conflict without passing through `ThrowingConcurrencyException`.
-
-Both the synchronous and the asynchronous save path behave the same.
-`Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, child-only
-changes, deletes and both paths.
-
-## Migrations
-
-There is nothing special to do. The toolkit adds types and configuration to your own `DbContext`
-model, so everything it maps appears in your ordinary migrations:
-
-```bash
-dotnet ef migrations add AddOutbox
-dotnet ef database update
-```
-
-The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
-the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
-is no separate package, no separate migration history table and no separate command. The same goes for
-`AddDomainEventInbox(Database)` on the consuming side.
-
-If you write migrations by hand rather than scaffolding them, `migrationBuilder.CreateDomainEventOutbox()`
-and its inbox and drop counterparts write the same tables. See
-[Integration events](integration-events.md#tables-schema-and-migrations).
-
-The same applies to everything else on this page. Struct identifier columns, complex type columns,
-primitive collection columns and the `Version` column are all just columns in your model, so a
-`migrations add` after changing an aggregate produces the diff you would expect.
-
-If you map the outbox table before you need it, as the example context does, switching from
-in-process dispatch to the outbox later costs no migration at all.
-
-### Supabase
-
-The Supabase CLI does not run Entity Framework migrations. It runs the SQL files in
-`supabase/migrations`, and so do `supabase db reset` and Supabase branching.
-`DDDToolkit.EntityFramework.Supabase` turns each Entity Framework migration into one of those files,
-so you keep writing migrations with `dotnet ef migrations add` and Supabase applies them.
-
-```bash
-dotnet add package DDDToolkit.EntityFramework.Supabase
-```
-
-It depends on Entity Framework's relational layer and the dependency injection abstractions, and brings
-its own source generator: not on Npgsql, which your application already brings, and not on the rest of
-the toolkit, so it works for any context that has migrations. Reference it from the module that holds
-the context.
-
-#### Exporting as part of the build
-
-The export needs a context on Npgsql, but it never connects, so a connection string that points nowhere
-is enough. That is exactly what the design-time factory `dotnet ef` already uses gives you. Mark it:
-
-```csharp
-[SupabaseMigrations]
-public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
-{
-    public OrderingContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<OrderingContext>();
-        OrderingContext.UsePostgres(options, "Host=unused");
-        return new OrderingContext(options.Options);
-    }
-}
-```
-
-and turn the export on in the project that references every module: the host of a modular monolith,
-the presentation layer of a service.
-
-```xml
-<PropertyGroup>
-  <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
-  <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
-</PropertyGroup>
-```
-
-That is all. Nothing in `Program.cs`, no command to remember, no list of modules to keep up to date.
-
-- **`Write`** writes a file for every migration that has none, after every build. Locally that means
-  the files exist by the time you commit, and `supabase start` or `db reset` has them.
-- **`Check`** only compares, and fails the build when a file is missing, changed or orphaned, naming
-  each one. In CI that catches the migration somebody added without building locally.
-- **Unset** does nothing, which is every project but the one you turned it on in.
-
-Commit the files. Supabase branching and the GitHub integration read `supabase/migrations` from the
-repository, so the files have to be there, and `Check` is what guarantees they are. If you do not use
-branching you can generate them in the pipeline instead, with `Write` in a release build followed by
-`supabase db push`, and leave them out of the repository.
-
-How it works, since it runs your code at build time. A source generator in the package looks, in the
-project that turned the export on, for every factory marked `[SupabaseMigrations]` in the assemblies it
-references, and writes the list as ordinary generic code,
-`SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>("Ordering")`, together with a module
-initializer. After the build, a target in the package starts the application it just built with one
-environment variable set. The module initializer runs before `Main`, sees the variable, exports, and
-ends the process. None of the application's own start-up runs: no host builder, no configuration
-providers, no Azure App Configuration, no hosted services. Without the variable, which is every other
-time the application starts, the initializer returns at once. Nothing is found or created by
-reflection; the factory is `new TFactory()`. It adds about a second to a build of that one project.
-
-A marked factory the generated code cannot create, because it is not public, has no public
-parameterless constructor or does not implement `IDesignTimeDbContextFactory<TContext>`, is reported as
-[DDD00031](diagnostics.md#ddd00031) instead of being skipped.
-
-The package brings the generator and the build step to the host through the module that references it,
-so the host does not reference the package itself unless it uses the start-up check below.
-
-#### Exporting by hand
-
-Everything the build does is also an API, for a test, a tool of your own or a context without a
-factory:
-
-```csharp
-var ordering = SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>();
-
-SupabaseMigrations.Export([ordering, shipping]);        // writes what is missing
-SupabaseMigrations.EnsureInSync([ordering, shipping]);  // throws unless everything is there
-```
-
-`SupabaseMigrationSource.For(() => ...)` takes a delegate instead of a factory. `Export`, `Compare` and
-`EnsureInSync` also take a single `DbContext`. Leave the directory out and they find the Supabase
-project the way the CLI does: from the current directory upwards to the nearest `supabase/config.toml`.
-`SupabaseMigrations.FindDirectory(start)` does the same from a directory you choose.
-
-#### Checking at start-up
-
-On Supabase the migrations are the CLI's to apply, so the application must not call
-`Database.Migrate()`. It can still refuse to run against an older schema. Each module registers its
-source, and the host checks them all once it is built:
-
-```csharp
-// in the module
-services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
-
-// in the host
-var app = builder.Build();
-await app.Services.EnsureSupabaseMigrationsAppliedAsync();
-```
-
-It asks each context's own migration history and throws a `SupabaseMigrationsPendingException` that
-names every context with migrations missing, and each missing migration. Registering the same context
-twice registers it once; with no sources registered it does nothing, which is what a module running on
-something other than Supabase wants.
-
-Each file is named after its migration and its module: `20260922120000_AddOrders` in a project with
-`[assembly: Module("Ordering")]` becomes `20260922120000_AddOrders.ordering.ddd.sql`. Without a module
-attribute the context's name stands in, less its `Context`. Entity Framework ids and Supabase versions
-are both `yyyyMMddHHmmss` timestamps, so the two histories sort the same way, and a file written with
-`supabase migration new` takes its place between them by date. The Supabase CLI reads everything
-between the first underscore and `.sql` as the name, so `.ordering.ddd` is only there for people: next
-to the policies and triggers you write by hand, it says which files the build writes and which module
-each belongs to.
-
-The file is what `dotnet ef migrations script` writes for that one step, with three differences:
-
-- **No `START TRANSACTION` and `COMMIT`.** The CLI already runs a file, and the row it records in
-  `supabase_migrations.schema_migrations`, in one transaction. It runs statements that cannot be in a
-  transaction, such as `CREATE INDEX CONCURRENTLY`, on their own.
-- **Row level security on new tables in `public`.** Supabase serves `public` through its Data API and
-  grants the `anon` and `authenticated` roles access to it. Without row level security, a table
-  Entity Framework creates there can be read and written by anyone who has the publishable key. With
-  it on and no policy, those roles see nothing. Your application still works, because it connects as
-  the table's owner, and row level security does not apply to the owner. Change
-  `SupabaseMigrationOptions.RowLevelSecuritySchemas` to cover other schemas, or clear it to turn this
-  off. Putting your tables in a schema the Data API does not expose, with
-  `modelBuilder.HasDefaultSchema("app")`, is even simpler. The toolkit's own `ddd` schema is not
-  exposed.
-- **A header comment naming the migration and its context.** That comment is how a file whose
-  migration was removed gets recognised.
-
-The `__EFMigrationsHistory` insert stays in. After Supabase applies a file, `GetPendingMigrations()`
-and `dotnet ef migrations list` agree that the migration is applied. Let one of the two apply
-migrations, not both. Supabase does not read Entity Framework's history, so if the application calls
-`Database.Migrate()` first, the CLI applies that migration a second time and fails.
-
-`Export` never overwrites or deletes a file. Supabase applies each version once, so rewriting a file
-that was already applied changes nothing on that database, and a database that has not applied it yet
-ends up with a different schema. Instead, the report (and `EnsureInSync`) lists:
-
-| Status | Meaning |
-|---|---|
-| `Missing` / `Created` | The migration had no file; `Export` writes it. |
-| `Changed` | The file is not what the migration generates now. Delete and export again only if it was never applied anywhere; otherwise make the change in a new migration. |
-| `VersionTaken` | Another file already has this timestamp. |
-| `Orphaned` | An exported file whose migration is gone, usually after `dotnet ef migrations remove`. |
-
-The comparison ignores line endings, and it ignores the Entity Framework version in the history
-insert, so a checkout with `\r\n` or an Entity Framework update does not show every file as changed.
-Files you wrote yourself, such as policies, triggers and storage buckets, are left alone.
-
-If a database already has these migrations from `dotnet ef database update`, tell Supabase once:
-`supabase migration repair --status applied <version>` for each exported version.
-
-#### Several modules, one Supabase project
-
-A Supabase project is one database, so a modular monolith's modules share it. Give each module a
-schema of its own and a migration history table in that schema, and export them all into the same
-`supabase/migrations`:
-
-```csharp
-public const string Schema = "ordering";
-
-public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-    => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
-
-protected override void OnModelCreating(ModelBuilder modelBuilder)
-{
-    modelBuilder.HasDefaultSchema(Schema);
-    modelBuilder.AddDomainEventOutbox(Database);
-}
-```
-
-Each module's migrations only ever see its own history table, so neither can report the other's as
-pending. Supabase has one history, which interleaves the modules by timestamp. That is fine, because no
-module's migration touches another module's schema. A context only reports its own exported files as
-orphaned, and if two modules scaffold migrations in the same second, the second one is reported as
-`VersionTaken` rather than written.
-
-Module schemas are not in the Data API's `schemas` list in `supabase/config.toml`, so the Data API does
-not serve them and nothing needs row level security.
-
-`Examples/ModularMonolith.Supabase` does all of this. Each module's factory is marked `[SupabaseMigrations]`,
-its migrations are in its `Migrations` folder, and its registration (`OrderingModule.cs`,
-`ShippingModule.cs`) registers the start-up check. The host's project file turns the export on, `Write`
-locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
-[its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
-
-## Where to look next
-
-- [Getting started](getting-started.md) for the module name and your first aggregate.
-- [Identifiers](identifiers.md) for what a struct identifier actually is, and `ColumnLength`.
-- [Value objects](value-objects.md) for `[ValueObject]` and `[SingleValueObject<T>]`.
-- [Entities and aggregates](entities-and-aggregates.md) for read-only collections and `[BackingField]`.
-- [Domain events](domain-events.md) for raising, draining and stable names.
-- [Integration events](integration-events.md) for sinks, published contracts and the inbox.
-- [Diagnostics](diagnostics.md) for the build errors the generators report.
-
-The runnable version of everything here is `Examples/ModularMonolith.Supabase`: the host's `Program.cs` shows
-the registration and the outbox, `Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs` shows the
-conventions and the generated converters, and the host's `Endpoints.cs` shows the conflict catch
-block. Its `supabase/` folder and the `Migrations` folders in both modules show the Supabase export.

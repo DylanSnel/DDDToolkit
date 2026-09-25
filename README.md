@@ -4,6 +4,9 @@ Source generators that remove the repetitive parts of domain driven design in .N
 intent with an attribute; the generator writes the base type, the equality members, the identifier
 plumbing, the persistence mapping and the API conversions.
 
+**Documentation:** [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/), the
+[`docs/`](docs) folder as a site.
+
 ```csharp
 [AggregateRoot<Guid>("ORD")]
 public partial class Order
@@ -43,22 +46,28 @@ public partial class Order { }
 
 | Page | What it covers |
 |---|---|
-| [Getting started](docs/getting-started.md) | Installing the packages, the one MSBuild property you need, your first aggregate |
+| [Getting started](docs/getting-started.md) | One module built step by step: an id, a value object, an aggregate, a test, a database, a second module |
+| [What the generator writes](docs/generated-code.md) | The generated code for one small aggregate, file by file, and why it is generated |
 | [Identifiers](docs/identifiers.md) | `[EntityId<T>]`, struct versus record ids, parsing, prefixes |
 | [Value objects](docs/value-objects.md) | `[ValueObject]`, `[SingleValueObject<T>]`, validation and the always-valid twin |
-| [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, read-only collections, versioning |
-| [Invariants](docs/invariants.md) | The two stages, named `IInvariant<T>` rules and the `CheckInvariants()` seam, and the interceptor that runs them at every save |
-| [Domain events](docs/domain-events.md) | Raising, draining, stable names, delivery, deterministic time in tests |
-| [Integration events](docs/integration-events.md) | Publishing outside the process: integration events, sinks, versioning and the inbox |
-| [Modules](docs/modules.md) | `[assembly: Module]`, `[ModuleContract]`, and the boundary the analyzer checks |
-| [Entity Framework](docs/entity-framework.md) | Converters and conventions, mapping, event dispatch, the outbox, concurrency, migrations, and exporting them for Supabase |
-| [Composite keys](docs/composite-keys.md) | `[KeyPart]`: keying a table on more than the id, and carrying that into every owned table |
-| [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, hiding `[Internal]` members, the `DomainEvent` interface |
+| [Entities and aggregates](docs/entities-and-aggregates.md) | `[Entity<T>]`, `[AggregateRoot<T>]`, child entities, read-only collections, referencing by id |
+| [Invariants](docs/invariants.md) | Named `IInvariant<T>` rules and the `CheckInvariants()` seam, the two stages, and the save that runs them |
+| [Domain events](docs/domain-events.md) | Declaring, raising and draining events, and their stable names |
+| [Designing aggregates](docs/aggregate-design.md) | The four rules of aggregate design, and how the toolkit holds each one |
 | [Testing](docs/testing.md) | The aggregate testing kit: acting on an aggregate and asserting on what it raised |
 | [Failure handling](docs/value-objects.md#failure-handling) | Validating without exceptions, and when to throw anyway |
+| [Entity Framework](docs/entity-framework.md) | Wiring, the generated converters, mapping, concurrency and migrations |
+| [Composite keys](docs/composite-keys.md) | `[KeyPart]`: keying a table on more than the id, and carrying that into every owned table |
+| [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, and how to choose |
+| [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
+| [Modules](docs/modules.md) | `[assembly: Module]` and the boundary the analyzer checks |
+| [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
+| [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
+| [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
+| [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [Localization](docs/localization.md) | Validation errors and invariant violations in the reader's language, looked up by code |
 | [Performance](docs/performance.md) | The benchmarks behind the struct-versus-record advice, including where they disagree with it |
-| [Diagnostics](docs/diagnostics.md) | Every DDD000xx error and how to fix it |
+| [Diagnostics](docs/diagnostics.md) | Every DDD000xx diagnostic and how to fix it |
 | [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
 
 ## Packages
@@ -100,7 +109,7 @@ The core has no mediator dependency and does not need one: in-process event deli
 write, and `DDDToolkit.Mediator` only saves you writing it. The examples publish through Mediator
 rather than MediatR because MediatR is commercially licensed from version 13, and this repository
 prefers dependencies its users can take for free. MediatR still works perfectly well with the toolkit;
-[Entity Framework](docs/entity-framework.md#the-delegate) shows the delegate to write for it.
+[Delivering domain events](docs/event-delivery.md#the-delegate) shows the delegate to write for it.
 
 ## What the generators produce
 

@@ -1,20 +1,25 @@
 # Entities and aggregates
 
-An entity has identity: it is the same entity tomorrow even when every property changed. An aggregate
-root is an entity that owns a cluster of other objects and forms the consistency boundary around
-them. The toolkit distinguishes the two, and the distinction carries real behaviour.
+An order is placed, gets another line, has its address corrected, is paid and is shipped. Every
+property changed, and it is still the same order. Something whose identity outlives its values is an
+entity, and two entities are the same when their identifiers are, whatever else they hold.
 
-| | `[Entity<TId>]` | `[AggregateRoot<TId>]` |
-|---|---|---|
-| Base type | `Entity<TId>` | `AggregateRoot<TId>` |
-| Identity and equality | Yes | Yes |
-| Domain events | No | Yes |
-| Concurrency version | No | Yes |
-| Invariants | Yes, run by a save that changes it | Yes, run by a save that changes it or anything it owns |
-| Entity Framework | Mapped as an owned type | Mapped as its own entity type |
+Some rules are not about one entity. "A placed order has at least one line" is about an order and its
+lines together, and it only holds if nobody can take a line away without the order knowing. An
+aggregate is that group: a root entity, the order, and the objects it owns, the lines, treated as one
+unit. The root owns the cluster and forms the consistency boundary around it. It is the only way in:
+code outside holds the order, never a line on its own, and every change goes through a method on the
+order, which knows the rules.
 
-Use `[AggregateRoot<TId>]` for the object you load, save and reference from elsewhere. Use
-`[Entity<TId>]` for something that only exists inside one aggregate, like an order line.
+That is why the aggregate is the unit of consistency. Its rules hold after every change, and it is
+changed as a whole or not at all. Two aggregates, such as an order and the customer who placed it, are
+kept apart, and each answers only for itself.
+
+The toolkit distinguishes the two, and the distinction carries real behaviour. Use
+`[AggregateRoot<TId>]` for the object you load, save and reference from elsewhere. Use `[Entity<TId>]`
+for something that only exists inside one aggregate, like an order line. This page declares both, then
+the collections that hold one inside the other and the references between aggregates, then events,
+invariants and the version. Storage comes last.
 
 ## Declaring an aggregate
 
@@ -25,7 +30,6 @@ public partial class Order
     public Order(OrderId id, CustomerId customer) : base(id)
     {
         Customer = customer;
-        RaiseDomainEvent(new OrderPlaced(id, customer));
     }
 
     public CustomerId Customer { get; private set; }
@@ -34,40 +38,88 @@ public partial class Order
 }
 ```
 
-The generator supplies the base class and a protected parameterless constructor for Entity Framework
-and serializers. Your own constructor calls `base(id)`.
+`OrderId` is an identifier type, declared with `[EntityId<Guid>]`; see [Identifiers](identifiers.md).
+The class has to be `partial` so the generator can add to it. It supplies the base class and a
+protected parameterless constructor for Entity Framework and serializers, which is why your own
+constructor calls `base(id)`:
 
-### Declaring the identifier with it
+```csharp title="Order.g.cs, shortened"
+partial class Order : AggregateRoot<OrderId>
+{
+    protected Order()
+    {
+    }
 
-`OrderId` above is a type you declared with `[EntityId<Guid>]`. When the identifier is only ever used
-to identify this one aggregate, you can skip that declaration and name the raw value instead:
+    partial void CheckInvariants();
 
-```csharp
-[AggregateRoot<Guid>("ORD")]
-public partial class Order { }          // also generates OrderId
+    // ... the invariant checks, see Invariants below
+}
 ```
 
-The toolkit then generates `OrderId` as well, as a `readonly partial record struct` with everything an
-explicitly declared identifier gets. The name is the entity's name with `Id` appended, and the first
-argument is the optional prefix. `[Entity<T>]` does the same for a child entity.
-
-Keep the separate `[EntityId<Guid>]` declaration for an identifier that other aggregates, DTOs or API
-contracts refer to; a type other people read deserves a declaration they can find. See
-[Identifiers](identifiers.md#letting-the-entity-declare-the-id).
+The base class brings the `Id`, and for a root the `Version` and `RaiseDomainEvent` described further
+down.
 
 Equality comes from the base type and compares identifiers, so two instances of the same order loaded
 in different contexts are equal. `==`, `!=`, `Equals` and `GetHashCode` are all consistent and
 null-safe.
 
+## Child entities
+
+```csharp
+[Entity<OrderLineId>]
+public partial class OrderLine
+{
+    public OrderLine(OrderLineId id, ProductId product, int quantity) : base(id)
+        => (Product, Quantity) = (product, quantity);
+
+    public ProductId Product { get; private set; }
+
+    public int Quantity { get; private set; }
+}
+```
+
+The generator writes the same as for a root, with `Entity<OrderLineId>` as the base class:
+
+```csharp title="OrderLine.g.cs, shortened"
+partial class OrderLine : Entity<OrderLineId>
+{
+    protected OrderLine()
+    {
+    }
+
+    // ...
+}
+```
+
+A child entity has identity and equality but no events and no version, because it is not a
+consistency boundary; its root is. With Entity Framework referenced, that package's generator adds a
+part of its own that marks it owned, so it is loaded and saved with the aggregate that owns it:
+
+```csharp title="OrderLine.EntityFramework.g.cs"
+[Owned]
+partial class OrderLine
+{
+}
+```
+
+Side by side:
+
+| | `[Entity<TId>]` | `[AggregateRoot<TId>]` |
+|---|---|---|
+| Base type | `Entity<TId>` | `AggregateRoot<TId>` |
+| Identity and equality | Yes | Yes |
+| Domain events | No | Yes |
+| Concurrency version | No | Yes |
+| Invariants | Yes, run by a save that changes it | Yes, run by a save that changes it or anything it owns |
+| Entity Framework | Mapped as an owned type | Mapped as its own entity type |
+
 ## Read-only collections
 
-Exposing a `List<T>` from an aggregate lets any caller add to it and bypass your invariants. Exposing
-`_items.AsReadOnly()` from a hand-written field is correct but tedious, and Entity Framework then
-needs to be told about the field. The toolkit does both for you.
+An order holds its lines. Exposing a `List<T>` from the aggregate lets any caller add to it and bypass
+your invariants. Exposing `_items.AsReadOnly()` from a hand-written field is correct but tedious: a
+field, a property and a wrapper for every collection. The toolkit writes them for you.
 
-Declare the property you want, get-only and `partial`. What the generator adds is spliced in here so
-you can read both halves at once, marked off and simplified; it really lives in its own file and is
-fully qualified.
+Declare the property you want, get-only and `partial`:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -75,17 +127,25 @@ public partial class Order
 {
     public partial IReadOnlyList<OrderLine> Lines { get; }
 
-    // ---- generated ----------------------------------------------------------
+    public void AddLine(OrderLine line) => _lines.Add(line);
+
+    public void RemoveLine(OrderLineId id) => _lines.RemoveAll(l => l.Id == id);
+}
+```
+
+The generator writes the field behind it and the read-only view in front of it:
+
+```csharp title="Order.g.cs, shortened"
+partial class Order : AggregateRoot<OrderId>
+{
+    // ...
+
     private readonly List<OrderLine> _lines = new();
+
     private IReadOnlyList<OrderLine>? __linesView;
 
     [BackingField(nameof(_lines))]
     public partial IReadOnlyList<OrderLine> Lines => __linesView ??= _lines.AsReadOnly();
-    // -------------------------------------------------------------------------
-
-    public void AddLine(OrderLine line) => _lines.Add(line);
-
-    public void RemoveLine(OrderLineId id) => _lines.RemoveAll(l => l.Id == id);
 }
 ```
 
@@ -95,15 +155,7 @@ usable from your half the moment you declare the property, which is why `AddLine
 without you having written the field.
 
 Callers see a read-only view that cannot be cast back to `List<T>`; the aggregate mutates through
-`_lines`. Entity Framework reads and writes the field directly thanks to `[BackingField]`, so it
-never tries to write through the read-only property.
-
-The view is held rather than rebuilt. `AsReadOnly()` is `new ReadOnlyCollection<T>(this)` with no
-cache of its own, so an expression bodied property would build one wrapper per read and throw it
-away: 24 bytes every time somebody looks. Holding it is safe because the list field is `readonly`, so
-the collection the view wraps can never be swapped out from under it, and the view is a window on the
-list rather than a copy, so it shows everything the aggregate does afterwards. See
-[Performance](performance.md#reading-a-read-only-collection).
+`_lines`. `[BackingField]` is for Entity Framework, and is described [below](#stored-with-entity-framework).
 
 ### Supported property types
 
@@ -118,8 +170,7 @@ The field name is the property name in camel case with a leading underscore: `Li
 `OrderLines` gives `_orderLines`. Accessibility and `virtual`, `override` and `sealed` are mirrored
 from your declaration, so a `protected partial IReadOnlyList<T>` stays protected.
 
-The `[BackingField]` annotation is only emitted when the project references Entity Framework, so the
-same declaration works in a domain project with no persistence dependency.
+Child entities may declare partial collection properties exactly like roots.
 
 ### The property must be get-only
 
@@ -130,6 +181,105 @@ public partial IReadOnlyList<OrderLine> Lines { get; set; }   // DDD00020
 A setter would let a caller replace the whole collection, which defeats the purpose. Declaring one
 reports [DDD00020](diagnostics.md#ddd00020) and the property is left unimplemented, so the build
 fails loudly rather than silently producing something you did not ask for.
+
+### Stored with Entity Framework
+
+Entity Framework reads and writes the field directly thanks to `[BackingField]`, so it never tries to
+write through the read-only property. See
+[Child entities and owned collections](entity-framework.md#child-entities-and-owned-collections).
+
+The `[BackingField]` annotation is only emitted when the project references Entity Framework, so the
+same declaration works in a domain project with no persistence dependency.
+
+### Why the view is kept
+
+The view is held rather than rebuilt. `AsReadOnly()` is `new ReadOnlyCollection<T>(this)` with no
+cache of its own, so an expression bodied property would build one wrapper per read and throw it
+away: 24 bytes every time somebody looks. Holding it is safe because the list field is `readonly`, so
+the collection the view wraps can never be swapped out from under it, and the view is a window on the
+list rather than a copy, so it shows everything the aggregate does afterwards. See
+[Performance](performance.md#reading-a-read-only-collection).
+
+## Reference other aggregates by id
+
+An aggregate owns everything inside it and nothing outside it. Another aggregate is referenced by its
+id:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public CustomerId Buyer { get; private set; }        // an id, not a Customer
+
+    public partial IReadOnlyList<OrderLine> Lines { get; }   // owned, so a reference
+}
+```
+
+Holding the `Customer` itself instead reports [DDD00021](diagnostics.md#ddd00021).
+
+### Why the id is what keeps the boundary
+
+An aggregate is two boundaries at once, and a direct reference breaks both.
+
+It is a **loading boundary**. `context.Orders.Find(id)` should load an order, its lines and nothing
+else. The moment `Order` has a `Customer` property, Entity Framework has a navigation to follow.
+Either it loads the customer with every order, or it leaves a proxy that loads one later, per order,
+in a loop nobody wrote. An `OrderId`-shaped hole in the object graph is a decision you can see: the
+code that needs the customer asks for it, by id, through the customer repository.
+
+It is a **consistency boundary**. Every root carries its own `Version`, and the point of that number
+is that one save changes one aggregate and one version says whether anyone else changed it. With a
+direct reference, `order.Buyer.Rename(...)` inside an order method makes a single `SaveChanges` write
+two roots in one transaction. Now a conflict on the customer rolls back the order, the order's
+version says nothing about the customer, and the two aggregates are one aggregate wearing two names.
+
+The id also survives things a reference does not. It serialises into an event, crosses a queue, goes
+into a URL, and still means the same customer when the two aggregates end up in different services or
+different databases. A reference only works while both objects are in the same unit of work.
+
+None of this is unique to this toolkit; it is the oldest rule in the pattern. What the toolkit adds is
+that it already knows which of your types are aggregate roots and which are ids, so it can check.
+
+### The one reference that is allowed
+
+A child entity may navigate back to the root that owns it:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public partial IReadOnlyList<OrderLine> Lines { get; }
+}
+
+[Entity<OrderLineId>]
+public partial class OrderLine
+{
+    public Order Order { get; private set; } = default!;   // allowed
+}
+```
+
+This one does not widen anything. The line is loaded with the order, saved with the order and cannot
+outlive it, and Entity Framework uses the inverse navigation when it maps the owned type.
+
+The toolkit checks the claim rather than taking it: `Order` has to hold `OrderLine` back, in a
+collection or in a single property, and the reference from the child has to be single valued. A child
+entity holding a root that does not own it reports DDD00021 like anything else.
+
+### When you disagree
+
+DDD00021 is a warning, and nothing about generation changes when it fires. A model that really is
+loaded and saved as one unit, or a legacy mapping you are not ready to unpick, can keep its reference
+by turning the rule off for the project:
+
+```xml
+<PropertyGroup>
+  <NoWarn>$(NoWarn);DDD00021</NoWarn>
+</PropertyGroup>
+```
+
+There is no per-member escape hatch. A `#pragma warning disable` cannot suppress a source generator's
+diagnostic, so it is the whole project or nothing. See [DDD00021](diagnostics.md#ddd00021) for why,
+and for the full list of what does and does not report.
 
 ## Domain events
 
@@ -160,37 +310,11 @@ var events = ((IHasDomainEvents)order).DequeueDomainEvents();      // persistenc
 
 See [Domain events](domain-events.md).
 
-## Optimistic concurrency
-
-Every aggregate root carries a version:
-
-```csharp
-public long Version { get; private set; }
-```
-
-It is 0 for a new aggregate. The Entity Framework integration maps it as a concurrency token and
-increments it on every save that touches the aggregate, including saves that only changed something
-it owns. Two users editing the same order produce a `ConcurrencyConflictException` for the second
-one, naming the aggregate type and id, rather than a generic `DbUpdateException`:
-
-```csharp
-try
-{
-    await context.SaveChangesAsync(cancellationToken);
-}
-catch (ConcurrencyConflictException conflict)
-{
-    // reload, reapply, retry, or report the conflict to the user
-}
-```
-
-The version is what makes an aggregate a unit of consistency. Without it two concurrent saves are
-last-write-wins, silently.
-
 ## Invariants
 
-The version says nobody else changed the aggregate. It says nothing about whether the aggregate is
-*consistent*. That is what the generated `CheckInvariants()` seam is for:
+A rule about the whole aggregate, such as "a placed order has at least one line", belongs to the
+root. The generator declared a `CheckInvariants()` seam in its half of the class; implement it in
+yours:
 
 ```csharp
 [AggregateRoot<OrderId>]
@@ -209,30 +333,80 @@ public partial class Order
 A rule that deserves a name, a code a caller can branch on, or a test of its own is better written as
 a nested `IInvariant<Order>` instead. The entity runs both.
 
-`UseDDDToolkit` registers an interceptor that checks every entity a `SaveChanges` adds or modifies,
-child entities included, and the root of every changed child, so a broken rule stops the save and
-nothing is written. An aggregate that states nothing costs nothing: the compiler erases an
+Once the aggregate is stored with Entity Framework, every save that writes it runs them, and a broken
+rule stops the save. An aggregate that states nothing costs nothing: the compiler erases an
 unimplemented `partial void` and every call to it.
 
 The same question can be asked without a database, and asking the root asks the whole aggregate:
 
 ```csharp
-order.AddLine(sku, quantity);
+order.AddLine(line);
 
 var broken = order.GetInvariantViolations();   // the order's rules, and every line's
 order.EnsureInvariants();                      // the same, and throws instead of answering
 ```
 
-That is the boundary made real. The root is the consistency boundary, so answering for it means
-answering for what is inside it, and each violation names the entity that reported it. A command
-handler can act on an aggregate, ask what that broke, and refuse, with no `DbContext` anywhere near
-the question.
-
 See [Invariants](invariants.md) for the two stages, what one question covers and when the self-only
 pair is the one you want, for when to reach for each shape of rule, for the interceptor order, and for
 why an invariant across two aggregates is a design question rather than a missing feature.
 
-## Auditing and soft delete
+## Declaring the identifier with it
+
+`OrderId` above is a type you declared with `[EntityId<Guid>]`. When the identifier is only ever used
+to identify this one aggregate, you can skip that declaration and name the raw value instead:
+
+```csharp
+[AggregateRoot<Guid>("ORD")]
+public partial class Order { }          // also generates OrderId
+```
+
+The toolkit then generates `OrderId` as well, as a `readonly partial record struct` with everything an
+explicitly declared identifier gets. The name is the entity's name with `Id` appended, and the first
+argument is the optional prefix. `[Entity<T>]` does the same for a child entity.
+
+Keep the separate `[EntityId<Guid>]` declaration for an identifier that other aggregates, DTOs or API
+contracts refer to; a type other people read deserves a declaration they can find. See
+[Identifiers](identifiers.md#letting-the-entity-declare-the-id).
+
+## Optimistic concurrency
+
+Every aggregate root carries a version, from its base class:
+
+```csharp
+public long Version { get; private set; }
+```
+
+It is 0 for a new aggregate. The Entity Framework integration increments it on every save that
+touches the aggregate, including saves that only changed something it owns, and refuses a save that
+carries a stale one: two users editing the same order produce a `ConcurrencyConflictException` for the
+second one, naming the aggregate type and id.
+
+The version is what makes an aggregate a unit of consistency. Without it two concurrent saves are
+last-write-wins, silently. It says nobody else changed the aggregate; it says nothing about whether
+the aggregate is *consistent*, which is what the [invariants](#invariants) are for.
+
+See [Optimistic concurrency](entity-framework.md#optimistic-concurrency) for how the version is
+mapped and checked, what counts as touching the aggregate, and what to do when the exception arrives.
+
+## Designing aggregates
+
+Declaring an aggregate is one attribute. Deciding what belongs inside it is the hard part, and it is
+a question about your rules and your write patterns that no compiler can see. Vaughn Vernon's four
+rules of aggregate design are the best short guide to it. [Designing aggregates](aggregate-design.md)
+says why each rule exists, what the toolkit does for it, and, for the rule it cannot help with, what to
+ask yourself instead.
+
+## Persistence
+
+Nothing above needs a database. With `DDDToolkit.EntityFramework` referenced, the same declarations are
+mapped with no configuration: a root as an entity type, a child entity as an owned type, a read-only
+collection through its backing field, and `Version` as a concurrency token. See
+[Entity Framework](entity-framework.md).
+
+What the toolkit deliberately does not add is the bookkeeping many persistence layers put on every
+row.
+
+### Auditing and soft delete
 
 The toolkit has no `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy`, `IAuditable`, `IsDeleted` or
 `ISoftDeletable`, and it is not going to grow them. `Version` is the only bookkeeping field an
@@ -245,6 +419,9 @@ means every aggregate in the system carries four properties its behaviour never 
 constructors take a user, and your unit tests need a logged-in principal to build an order. A base
 class in your own solution can do it in twenty lines and can say what your organisation actually
 means by "modified", which no library can guess.
+
+Nothing in this section is generated, and the toolkit adds no convention or interceptor for it. What
+follows is plain Entity Framework, in your own context.
 
 So decide which of these you are actually asking for.
 
@@ -328,7 +505,7 @@ different base classes").
 
 **It is a history of what happened.** Then you already have it. The domain events an aggregate
 raises are a record of every meaningful change, written by the aggregate that knows what the change
-meant. Turn on the [outbox](entity-framework.md#the-outbox) and keep the rows instead of deleting
+meant. Turn on the [outbox](event-delivery.md#the-outbox) and keep the rows instead of deleting
 them, or write your own handler that appends them to an event table. An audit trail assembled from
 `UpdatedBy` columns tells you a row changed; a trail of `OrderCancelled` tells you what happened, and
 why.
@@ -345,272 +522,6 @@ Two things to know before you reach for it. A filtered row still occupies its un
 anything outside Entity Framework, so the flag is a convention your reporting jobs have to know
 about. Often the honest model is a domain state, `OrderStatus.Cancelled`, which the rest of the
 domain can reason about, rather than a row that pretends not to exist.
-
-## Child entities
-
-```csharp
-[Entity<OrderLineId>]
-public partial class OrderLine
-{
-    public OrderLine(OrderLineId id, ProductId product, int quantity) : base(id)
-        => (Product, Quantity) = (product, quantity);
-
-    public ProductId Product { get; private set; }
-
-    public int Quantity { get; private set; }
-}
-```
-
-A child entity has identity and equality but no events and no version, because it is not a
-consistency boundary; its root is. With Entity Framework referenced it is annotated `[Owned]`, so it
-is loaded and saved with the aggregate that owns it.
-
-Child entities may declare partial collection properties exactly like roots.
-
-## Reference other aggregates by id
-
-An aggregate owns everything inside it and nothing outside it. Another aggregate is referenced by its
-id:
-
-```csharp
-[AggregateRoot<OrderId>]
-public partial class Order
-{
-    public CustomerId Buyer { get; private set; }        // an id, not a Customer
-
-    public partial IReadOnlyList<OrderLine> Lines { get; }   // owned, so a reference
-}
-```
-
-Holding the `Customer` itself instead reports [DDD00021](diagnostics.md#ddd00021).
-
-### Why the id is what keeps the boundary
-
-An aggregate is two boundaries at once, and a direct reference breaks both.
-
-It is a **loading boundary**. `context.Orders.Find(id)` should load an order, its lines and nothing
-else. The moment `Order` has a `Customer` property, Entity Framework has a navigation to follow.
-Either it loads the customer with every order, or it leaves a proxy that loads one later, per order,
-in a loop nobody wrote. An `OrderId`-shaped hole in the object graph is a decision you can see: the
-code that needs the customer asks for it, by id, through the customer repository.
-
-It is a **consistency boundary**. Every root carries its own `Version`, and the point of that number
-is that one save changes one aggregate and one version says whether anyone else changed it. With a
-direct reference, `order.Buyer.Rename(...)` inside an order method makes a single `SaveChanges` write
-two roots in one transaction. Now a conflict on the customer rolls back the order, the order's
-version says nothing about the customer, and the two aggregates are one aggregate wearing two names.
-
-The id also survives things a reference does not. It serialises into an event, crosses a queue, goes
-into a URL, and still means the same customer when the two aggregates end up in different services or
-different databases. A reference only works while both objects are in the same unit of work.
-
-None of this is unique to this toolkit; it is the oldest rule in the pattern. What the toolkit adds is
-that it already knows which of your types are aggregate roots and which are ids, so it can check.
-
-### The one reference that is allowed
-
-A child entity may navigate back to the root that owns it:
-
-```csharp
-[AggregateRoot<OrderId>]
-public partial class Order
-{
-    public partial IReadOnlyList<OrderLine> Lines { get; }
-}
-
-[Entity<OrderLineId>]
-public partial class OrderLine
-{
-    public Order Order { get; private set; } = default!;   // allowed
-}
-```
-
-This one does not widen anything. The line is loaded with the order, saved with the order and cannot
-outlive it, and Entity Framework uses the inverse navigation when it maps the owned type.
-
-The toolkit checks the claim rather than taking it: `Order` has to hold `OrderLine` back, in a
-collection or in a single property, and the reference from the child has to be single valued. A child
-entity holding a root that does not own it reports DDD00021 like anything else.
-
-### When you disagree
-
-DDD00021 is a warning, and nothing about generation changes when it fires. A model that really is
-loaded and saved as one unit, or a legacy mapping you are not ready to unpick, can keep its reference
-by turning the rule off for the project:
-
-```xml
-<PropertyGroup>
-  <NoWarn>$(NoWarn);DDD00021</NoWarn>
-</PropertyGroup>
-```
-
-There is no per-member escape hatch. A `#pragma warning disable` cannot suppress a source generator's
-diagnostic, so it is the whole project or nothing. See [DDD00021](diagnostics.md#ddd00021) for why,
-and for the full list of what does and does not report.
-
-## The four rules of aggregate design
-
-Vaughn Vernon's *Effective Aggregate Design* gives four rules of thumb. They are the best short
-summary of the pattern anyone has written, and they are a fair way to ask what a toolkit is actually
-worth. Here is how this one scores against them.
-
-| Rule | What the toolkit does |
-|---|---|
-| 1. Model true invariants in consistency boundaries | Gives you the boundary, the token, and two places to state a rule, both run at every commit. You write the rules. |
-| 2. Design small aggregates | Nothing. Arguably it makes large ones easier to build. |
-| 3. Reference other aggregates by identity | Generates the identity and warns when you do not use it. |
-| 4. Use eventual consistency outside the boundary | Domain events, the outbox and the inbox. |
-
-### Rule 1: model true invariants in consistency boundaries
-
-Supported, as far as a library can go. The rules are still yours to write; where they run is not.
-
-`[AggregateRoot<TId>]` draws the boundary and `Version` makes it real: one save is one aggregate, and
-a second writer with a stale version is refused rather than merged. Child entities are owned, so they
-load and save with the root and cannot be written behind its back. Private setters and a generated
-protected constructor mean the only way into the state is through a method you wrote.
-
-On top of that, every entity and aggregate root gets somewhere to state its rules, either a generated
-`partial void CheckInvariants()` seam or a nested `IInvariant<T>` per rule, and `UseDDDToolkit`
-registers an interceptor that runs them before every `SaveChanges` that writes the entity. A broken
-rule stops the save:
-
-```csharp
-partial void CheckInvariants()
-{
-    if (Status != OrderStatus.Draft && Lines.Count == 0)
-    {
-        throw InvariantViolation("A placed order must have at least one line.");
-    }
-}
-```
-
-Asking the root asks the whole aggregate: its own rules and then every child entity it holds, which is
-Vernon's first rule stated in code rather than in prose. A boundary that answered only for the object
-at its centre would not be one.
-
-That is the whole of what a library can promise here: the place to write the rule, the guarantee that
-it runs at the commit rather than wherever somebody remembered, and one call that covers everything
-inside the boundary. [Invariants](invariants.md) has both shapes of rule, the second stage that asks
-instead of throwing, what one question covers, the interceptor order, and the limitation that matters,
-which is that an invariant spanning two aggregates cannot be checked this way and should not be.
-
-A guard clause in the method that makes the change is still right, and the two are not in
-competition. The guard refuses the command with a message the caller can act on; the seam is the net
-under every path into the state, including the ones you add next year:
-
-```csharp
-public void Ship(TrackingCode code)
-{
-    if (Status != OrderStatus.Paid)
-    {
-        throw new InvalidOperationException("Only a paid order can ship.");
-    }
-
-    Status = OrderStatus.Shipped;
-    RaiseDomainEvent(new OrderShipped(Id, code));
-}
-```
-
-Value objects are a different thing again: `[ValueObject]` and `[SingleValueObject<T>]` carry rules
-through `Validate` and the always-valid twin. See [Value objects](value-objects.md). That is
-validation of one value, not an invariant across a cluster, and the two are worth keeping apart in
-your head. [Invariants](invariants.md#why-here-and-not-in-a-validator) lays the two side by side.
-
-The word "true" in the rule is doing the work anyway, and no tool can check it. A true invariant is a
-rule that must hold at the end of every single transaction. A rule that may be a minute late is not
-one, and dragging it inside the boundary to be safe is how aggregates get big.
-
-### Rule 2: design small aggregates
-
-Not supported. This is the rule the toolkit is least help with, and on one reading it works against
-it.
-
-The mechanism is [read-only collections](#read-only-collections). Declaring one is a single line:
-
-```csharp
-public partial IReadOnlyList<OrderLine> Lines { get; }
-```
-
-and you get the backing field, the read-only view and the Entity Framework mapping. That is a good
-feature, and the cost of it is that the moment of friction is gone. Writing the field, the view and the
-`[BackingField]` by hand used to take a minute, and a minute is long enough to wonder whether the
-collection belongs there. A one-line declaration is not.
-
-Nothing downstream catches it either. `[BackingField]` maps whatever you declared.
-[DDD00021](diagnostics.md#ddd00021) checks the *type* in the collection, not the size of it: it stops
-`IReadOnlyList<Customer>` and says nothing at all about `IReadOnlyList<OrderLine>` holding a hundred
-thousand lines. There is no diagnostic for aggregate size, and there is not going to be a useful one,
-because "too big" is a question about your invariants and your write patterns and a compiler can see
-neither.
-
-So the check is yours. Before adding a collection to an aggregate, ask:
-
-**Does a rule in this aggregate read the whole collection?** Not one element, all of them. "The order
-total may not exceed the credit limit" reads every line, so the lines belong inside. If no rule needs
-the collection as a whole, it is not part of any invariant, and you are storing a query result in an
-object graph.
-
-**Can an element exist without this root?** If a `Customer` can outlive an `Order`, the collection is a
-reference to another aggregate wearing a collection's clothes. Typed as `IReadOnlyList<Customer>` the
-analyzer catches it. Typed as `IReadOnlyList<CustomerSummary>`, where `CustomerSummary` is a child
-entity you invented to get around it, nothing catches it and the boundary is just as broken.
-
-**Is it bounded by something the domain guarantees?** "An order has lines" is bounded by what one
-person will buy in one go. "A customer has orders" is bounded by nothing: it grows for as long as the
-customer stays. Unbounded collections are where aggregates go wrong, and they are obvious in the
-domain language long before they are obvious in a profiler.
-
-**How many people write to it at once?** Every write to any element takes the root's `Version`. Two
-users adding a line to the same order is fine. Two hundred warehouse scanners adding events to the same
-shipment is a queue of `ConcurrencyConflictException`, and the fix is a smaller aggregate, not a retry
-loop.
-
-**What would break if this were a list of ids?** Often the honest answer is "a few queries would get
-longer". That is the trade, and it is usually the right one.
-
-A large aggregate does not fail a build or a test. It fails in production, as lock contention and as
-`SaveChanges` calls that load more than they needed, and by then it is in your schema. The toolkit
-gives you no warning about it. This section is the warning.
-
-### Rule 3: reference other aggregates by identity
-
-Supported, and checked.
-
-`[EntityId<T>]` gives you the id type, `[AggregateRoot<Guid>("ORD")]` generates it for you, and
-[DDD00021](diagnostics.md#ddd00021) reports a field or property typed as another root. The analyzer
-knows which of your types are roots and which are ids because the attributes told it, so this is one of
-the few DDD rules a tool can genuinely check rather than lecture about.
-
-It is a warning, not an error, and it covers fields and properties only. A method that takes another
-root as a parameter is fine and is often the right shape:
-`order.PlaceFor(customer)` reads better than `order.PlaceFor(customer.Id)` and stores the id either
-way. [Reference other aggregates by id](#reference-other-aggregates-by-id) has the full reasoning and
-the one navigation that is allowed.
-
-### Rule 4: use eventual consistency outside the boundary
-
-Supported, and it is the part of the toolkit with the most machinery behind it.
-
-An aggregate raises a domain event. The event leaves the boundary, and whatever it touches catches up
-afterwards:
-
-- `RaiseDomainEvent` inside the aggregate, drained by the persistence layer. See
-  [Domain events](domain-events.md).
-- The [outbox](entity-framework.md#the-outbox) writes one row per event in the same transaction as the
-  aggregate, so the event cannot be lost when the save succeeds or survive when it fails.
-- [Integration events](integration-events.md) give the event a published contract and a sink, so the
-  thing catching up can be in another process.
-- The inbox makes the receiving side idempotent, which is what at-least-once delivery requires of it.
-
-What this does not do is make eventual consistency free. Delivery is at-least-once and ordering is
-best-effort, a handler can fail after other handlers succeeded, and a reader can see one aggregate
-updated and another not yet. Those are properties of the approach, not gaps in the implementation, and
-the pages above say where each one bites.
-
-The rule that matters here is the one about rule 1: if you find yourself wanting a transaction across
-two aggregates, the question is whether the rule forcing it is really a true invariant. If it is, the
-two aggregates are one. If it is not, an event is the answer.
 
 ## Requirements
 

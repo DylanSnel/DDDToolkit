@@ -6,9 +6,191 @@ order", "a tab may never total more than its limit", "exactly one address on a c
 billing address". Vernon's first rule of aggregate design is to model true invariants within one
 consistency boundary, and this is the place the toolkit gives you to write them down.
 
+Written as an `if` in the handler that changes the aggregate, such a rule holds for as long as every
+handler remembers it. The next handler that removes a line without checking stores an order the domain
+says cannot exist, and nothing notices until somebody reads the row. A rule stated on the aggregate is
+asked of the aggregate, whichever method changed it.
+
 The toolkit does not define any invariants for you. It cannot: yours are about your domain. What it
 supplies is somewhere to write them, two moments at which they are asked, and the guarantee that the
 second of those moments is never skipped.
+
+This page starts by writing a rule, then says how and when it is asked and how much one question
+covers. It ends with where the rules stop, and with the reasoning behind the design.
+
+## Stating a rule
+
+There are two shapes, and the difference between them is not a style preference.
+
+### The seam
+
+Every `[Entity<TId>]` and `[AggregateRoot<TId>]` gets a generated partial method. Implement it in
+your own part of the class:
+
+```csharp
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public partial IReadOnlyList<OrderLine> Lines { get; }
+
+    public OrderStatus Status { get; private set; }
+
+    partial void CheckInvariants()
+    {
+        if (Status != OrderStatus.Draft && Lines.Count == 0)
+        {
+            throw InvariantViolation("A placed order must have at least one line.");
+        }
+    }
+}
+```
+
+Write it exactly like that: `partial void`, no accessibility modifier, in a file of your own. The
+generator writes the other half.
+
+`InvariantViolation(...)` is a protected helper on `Entity<TId>`. It builds an
+`InvariantViolationException` that already knows this aggregate's type and id, so the message names
+the thing that is broken. There is an overload taking several messages, so one check can report
+everything it found:
+
+```csharp
+partial void CheckInvariants()
+{
+    var problems = new List<string>();
+
+    if (Lines.Count == 0) problems.Add("An order must have at least one line.");
+    if (Total > CreditLimit) problems.Add($"An order may not exceed the credit limit of {CreditLimit}.");
+
+    if (problems.Count > 0) throw InvariantViolation(problems);
+}
+```
+
+The seam reports by throwing, but an aggregate can also be asked without throwing, which is the first
+of the [two stages](#the-two-stages) below. Asked, it catches whatever the seam threw, unpacks it, and
+reports violations carrying `InvariantViolation.SeamCode`, which is the literal string
+`"CheckInvariants"`. The seam has nowhere to put a code of its own, so it gets one that says where it
+came from.
+
+### A named invariant
+
+The other shape is one rule, one type, implementing `IInvariant<T>`, nested inside the entity it is
+about:
+
+```csharp
+// Ordering/Invariants/MustHaveLines.cs
+public partial class Order
+{
+    public sealed class MustHaveLines : IInvariant<Order>
+    {
+        /// <summary>What a caller branches on, so nobody has to match on the message.</summary>
+        public const string ViolationCode = "ORDER_HAS_NO_LINES";
+
+        public string Code => ViolationCode;
+
+        public InvariantFailure? Check(Order order)
+            => order.Status != OrderStatus.Draft && order._lines.Count == 0
+                ? "A placed order must have at least one line."
+                : null;
+    }
+}
+```
+
+`Check` returns `null` when the rule holds, and otherwise what is wrong in the domain's own words. It
+returns an `InvariantFailure`, and a string converts to one, so a rule with nothing more to say returns
+its message. Not a violation object so that holding is free: this runs for every changed entity on
+every save, and the consistent path returns `null` and allocates nothing. The generated code pairs the
+failure with `Code`, so the code is written down once.
+
+A message that names values should hand them on as well, so it can be
+[phrased in another language](localization.md) without the number already baked into the sentence:
+
+```csharp
+public InvariantFailure? Check(Order order)
+    => order.Total <= order.CreditLimit
+        ? null
+        : new InvariantFailure($"An order may total at most {order.CreditLimit}.")
+            .With("CreditLimit", order.CreditLimit);
+```
+
+They arrive on the violation as `InvariantViolation.Arguments`.
+
+The generator finds these, builds one instance of each in a static array, and runs them before the
+seam. Both stages run the same array. For the `Order` above, with `MustHaveLines` and a seam, it writes
+the seam's declaration, the array, and the one routine that runs them:
+
+```csharp title="Order.g.cs, shortened"
+partial class Order : AggregateRoot<Shop.OrderId>
+{
+    // ...
+
+    partial void CheckInvariants();
+
+    private static readonly IInvariant<Shop.Order>[] __invariants =
+    [
+        new Shop.Order.MustHaveLines(),
+    ];
+
+    private void CollectInvariantViolations(
+        ref List<InvariantViolation>? violations,
+        out InvariantViolationException? seamFailure)
+    {
+        foreach (var invariant in __invariants)
+        {
+            // Null means the rule holds, and a rule that holds allocates nothing.
+            var failure = invariant.Check(this);
+            if (failure is not null)
+            {
+                violations ??= new List<InvariantViolation>();
+                violations.Add(new InvariantViolation(invariant.Code, failure.Message, typeof(Shop.Order), Id) { Arguments = failure.Arguments });
+            }
+        }
+
+        seamFailure = null;
+
+        try
+        {
+            CheckInvariants();
+        }
+        catch (InvariantViolationException failure)
+        {
+            // ... kept as seamFailure, and each message it carries becomes a violation with InvariantViolation.SeamCode
+        }
+    }
+```
+
+Nothing is looked up when the application runs: the rules are named in the array, and the list of
+violations is created on the first failure, so a consistent order allocates nothing here.
+
+### Which one to reach for
+
+The seam is less ceremony, and for a small rule that is the whole argument. One `if` inside the class
+it is about, no extra type, no extra file, no code to invent, no name to agree on. An aggregate with
+a single rule that fits on one line is not better off with a nested class, and a codebase that
+insists on one is paying for structure it does not use. Reach for the seam by default.
+
+An invariant object earns its keep when one of these is true:
+
+- **The rule deserves a name.** `MustShipSomewhereWeDeliver` says in the file tree what a condition
+  buried in an `if` says only to whoever reads the body.
+- **A caller needs to branch on which rule broke.** This is the big one. Violations from the seam all
+  carry `SeamCode`, so an application that wants to answer differently for "no lines" than for "over
+  the credit limit" cannot tell them apart without matching on the message, and a message is not an
+  API. A named rule has a code, and the nested type gives that code a home:
+  `Order.MustHaveLines.ViolationCode`.
+- **The rule deserves a test of its own.** `new Order.MustHaveLines().Check(order)` is a unit test
+  with no aggregate mutation, no exception to catch and no database. The seam can only be tested
+  through the entity.
+- **There are several rules and they keep arriving.** A seam with six `if` statements and a
+  hand-built list of problems has become a file of its own trying to get out. Six rules report
+  themselves without any of them knowing about the others.
+
+An entity can have both, and mixing them is normal: the rules that earned a name get one, and the
+one-liner that never will stays in the seam. That is what
+[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase) does, with a named rule on the order, a
+named rule on the line, and one seam left where it belongs.
+
+If you want to find the rules that should be promoted, branch on `InvariantViolation.SeamCode`: every
+violation carrying it came from a seam and has no code a caller can use.
 
 ## The two stages
 
@@ -35,29 +217,62 @@ order.EnsureInvariants();                      // stage 2: nothing is wrong, or 
 | Answers with | `IReadOnlyList<InvariantViolation>` | nothing, or an exception |
 | Consistent | an empty list | returns |
 | Broken | the violations, each with its code | `InvariantViolationException` |
-| Called by | your application, when it wants to know | `InvariantInterceptor`, before every save |
-| Both live on | `IHasInvariants`, so persistence needs no id type | the same |
+| Called by | your application, when it wants to know | the save, before every write ([At the save](#at-the-save)) |
 | Both answer for | the whole aggregate, children included | the same |
 
 That last row is the one people are surprised by, so it gets a section of its own below.
 
 ### Why one of them throws
 
-Because of who is holding it. The save-time call happens inside Entity Framework's `SaveChanges`
-pipeline, which has nowhere to put a list: there is no caller in the middle waiting to read one, and
-a return value nobody is positioned to read is a return value that gets dropped. An exception is the
-only answer that cannot be ignored by accident, and being unable to ignore it by accident is the
-entire guarantee. Turning it into a return value would make the strongest promise in the toolkit
-depend on every future caller remembering to check.
+Because of who is holding it. The save-time call happens in the middle of a save, which has nowhere to
+put a list: there is no caller in the middle waiting to read one, and a return value nobody is
+positioned to read is a return value that gets dropped. An exception is the only answer that cannot be
+ignored by accident, and being unable to ignore it by accident is the entire guarantee. Turning it into
+a return value would make the strongest promise in the toolkit depend on every future caller
+remembering to check.
 
 And because of what has already happened. By the save, the aggregate has been mutated by its own
 methods and the state is a fact, not a proposal. There is no question left to answer.
 
 What the two stages do *not* do is disagree. The generated code runs both through one routine that
 collects violations, and the two differ only in how they end: one returns the list, the other throws
-once with every message in it. Nothing in the toolkit uses exceptions as control flow to get there,
-either. An `IInvariant<T>` never throws at all, and the only throw on the way is the one out of your
-own seam, which is caught in one place so the asking stage can see what it found.
+once with every message in it:
+
+```csharp title="Order.g.cs, shortened"
+    public override IReadOnlyList<InvariantViolation> GetInvariantViolations()
+    {
+        List<InvariantViolation>? violations = null;
+        CollectInvariantViolations(ref violations, out _);
+        CollectChildInvariantViolations(ref violations);
+
+        if (violations is null)
+        {
+            return Array.Empty<InvariantViolation>();
+        }
+
+        return violations;
+    }
+
+    public override void EnsureInvariants()
+    {
+        List<InvariantViolation>? violations = null;
+        CollectInvariantViolations(ref violations, out var seamFailure);
+
+        CollectChildInvariantViolations(ref violations);
+
+        if (violations is null)
+        {
+            return;
+        }
+
+        ThrowInvariantViolations(violations, seamFailure);
+    }
+```
+
+`CollectChildInvariantViolations` is the part that asks the lines, and the next section is about it.
+Nothing in the toolkit uses exceptions as control flow to get there, either. An `IInvariant<T>` never
+throws at all, and the only throw on the way is the one out of your own seam, which is caught in one
+place so the asking stage can see what it found.
 
 ## What one question covers
 
@@ -71,13 +286,61 @@ boundary, it is a field check. A handler that adds a line, asks the order whethe
 and hears nothing about lines has been given an answer about half the aggregate, with no sign that the
 other half was skipped.
 
+A child entity states its own rules in the same two shapes. A line that names nothing is broken
+whatever order it is on, so that rule belongs to the line:
+
+```csharp
+public partial class OrderLine
+{
+    public sealed class MustNameASku : IInvariant<OrderLine>
+    {
+        public const string ViolationCode = "LINE_HAS_NO_SKU";
+
+        public string Code => ViolationCode;
+
+        public InvariantFailure? Check(OrderLine line)
+            => string.IsNullOrWhiteSpace(line.Sku) ? "A line must name the thing it is ordering." : null;
+    }
+}
+```
+
+`Order` never mentions it, and asking the order reports it:
+
 ```csharp
 var broken = order.GetInvariantViolations();   // the order's rules, and every line's
 order.EnsureInvariants();                      // the same, and throws instead of answering
 ```
 
 The walk is generated from the collections the entity declares, so it costs nothing to opt into and
-nothing to keep true. A child collection added next year is asked without anybody editing the root,
+nothing to keep true. For `Order` that is the field behind `Lines`:
+
+```csharp title="Order.g.cs, shortened"
+    private void CollectChildInvariantViolations(ref List<InvariantViolation>? violations)
+    {
+        foreach (var child in _lines)
+        {
+            if (child is null)
+            {
+                continue;
+            }
+
+            var broken = child.GetInvariantViolations();
+            if (broken.Count == 0)
+            {
+                continue;
+            }
+
+            violations ??= new List<InvariantViolation>();
+            for (var index = 0; index < broken.Count; index++)
+            {
+                violations.Add(broken[index]);
+            }
+        }
+    }
+```
+
+Each line answers with its own `GetInvariantViolations()`, so a child that held children of its own
+would ask them in turn. A child collection added next year is asked without anybody editing the root,
 and a rule added to `OrderLine` is reported by `Order` the day it compiles.
 
 ### A handler asks before it saves
@@ -145,254 +408,6 @@ That is one line, wrapped here. One `InvariantViolationException`, whatever the 
 inner exception, and `Violations` carrying the same messages for anyone who would rather read them
 than the text.
 
-### Collections, and not single references
-
-The walk covers the child entity collections a type declares, and it reads the generated backing
-field rather than the read-only property. It does not follow a single reference from one entity to
-another.
-
-That is a decision, not a missing line. A child holding a property back to its parent is an ordinary
-shape, and following single references would walk root, child, root, child until the stack ran out.
-Stopping that needs a visited set, and a visited set is an allocation on every call, including the
-overwhelming majority where nothing is broken at all. The consistent path through an invariant check
-allocates nothing today, and it runs for every changed entity on every save; paying for a `HashSet`
-there to support a shape an aggregate does not have is the wrong trade.
-
-What an aggregate does have is a root owning collections of children. Ruling cycles out by
-construction costs nothing and misses nothing real. A single reference to *another* aggregate is not a
-child at all, it is an id, and that aggregate's consistency is [its own
-problem](#the-limitation-you-should-know-about).
-
-### What the save asks, and why the two never disagree
-
-The domain walk and the save-time pass have different subjects, on purpose.
-
-| | The domain walk | The save |
-|---|---|---|
-| Asked of | an aggregate you are holding | a `DbContext` |
-| Reaches | every child in the graph | every tracked entity this save adds or modifies |
-| Finds them | through the generated `foreach` over `_lines` | through the change tracker |
-| Queries the database | never, and it cannot lazy load | never, and it reads no navigation |
-| Called by | your handler, when it wants to know | `InvariantInterceptor`, before every `SaveChanges` |
-| Calls | `EnsureInvariants` / `GetInvariantViolations` | `EnsureOwnInvariants` / `GetOwnInvariantViolations` |
-
-The domain walk asks more objects. The save asks the ones it is about to write, because a save deals
-in partial graphs: a root loaded without its collection, a child the unit of work never saw, an
-aggregate assembled from two queries. A generated `foreach` over `_lines` on a graph like that could
-trigger a lazy load, could issue a query and could fail, which is exactly why finding who to ask lives
-in the persistence layer rather than in the entity.
-
-Which is also why "the collection might not be loaded" does not get to shape this API. It is a fact
-about persistence, it is answered in persistence, and the aggregate a handler is working on is in
-memory and whole, because that is the only state an aggregate is ever in while a handler works on it.
-
-The consequence is the one worth having: **the domain answer is the stricter of the two**. Everything
-the save would ask is a subset of what the walk already asked, so an aggregate that answers clean is
-never contradicted at the commit. The reverse does not hold, and should not: the walk reports a broken
-line that the save would pass over because nothing about it changed. A rule broken by a row nobody
-touched is still a broken rule when you ask the domain, and is still not this save's problem.
-
-### When to ask about one object only
-
-`EnsureOwnInvariants()` and `GetOwnInvariantViolations()` answer for one object and say nothing about
-what it holds. There is one reason to want them, and it is narrow: **you are walking the graph
-yourself** and asking every object you find. Ask the walking pair from inside such a walk and every
-child is reported twice, once by itself and once by its root. The interceptor is that caller, which is
-why it asks the self-only pair, and a hand-written traversal of your own is the same situation.
-
-Anything holding an aggregate and wanting to know whether it is consistent wants
-`GetInvariantViolations()`. If you are reaching for the self-only pair to avoid a collection you are
-not sure is loaded, you are in the persistence case, and
-[`InvariantInterceptor`](#by-hand) already handles it from the change tracker.
-
-There is one more place the pair matters: an entity you write by hand rather than generate. State its
-rules in `EnsureOwnInvariants` / `GetOwnInvariantViolations`, because `Entity<TId>`'s walking pair
-delegates to the self-only one. Override only `GetInvariantViolations` and the object still answers
-for itself, but the save, which asks the self-only member, hears nothing at all.
-
-## Stating a rule
-
-There are two shapes, and the difference between them is not a style preference.
-
-### The seam
-
-Every `[Entity<TId>]` and `[AggregateRoot<TId>]` gets a generated partial method. Implement it in
-your own part of the class:
-
-```csharp
-[AggregateRoot<OrderId>]
-public partial class Order
-{
-    public partial IReadOnlyList<OrderLine> Lines { get; }
-
-    public OrderStatus Status { get; private set; }
-
-    partial void CheckInvariants()
-    {
-        if (Status != OrderStatus.Draft && Lines.Count == 0)
-        {
-            throw InvariantViolation("A placed order must have at least one line.");
-        }
-    }
-}
-```
-
-Write it exactly like that: `partial void`, no accessibility modifier, in a file of your own. The
-generator writes the other half.
-
-`InvariantViolation(...)` is a protected helper on `Entity<TId>`. It builds an
-`InvariantViolationException` that already knows this aggregate's type and id, so the message names
-the thing that is broken. There is an overload taking several messages, so one check can report
-everything it found:
-
-```csharp
-partial void CheckInvariants()
-{
-    var problems = new List<string>();
-
-    if (Lines.Count == 0) problems.Add("An order must have at least one line.");
-    if (Total > CreditLimit) problems.Add($"An order may not exceed the credit limit of {CreditLimit}.");
-
-    if (problems.Count > 0) throw InvariantViolation(problems);
-}
-```
-
-The check stage sees these too. Whatever the seam throws is caught, unpacked, and reported as
-violations carrying `InvariantViolation.SeamCode`, which is the literal string `"CheckInvariants"`.
-The seam has nowhere to put a code of its own, so it gets one that says where it came from.
-
-### A named invariant
-
-The other shape is one rule, one type, implementing `IInvariant<T>`, nested inside the entity it is
-about:
-
-```csharp
-// Ordering/Invariants/MustHaveLines.cs
-public partial class Order
-{
-    public sealed class MustHaveLines : IInvariant<Order>
-    {
-        /// <summary>What a caller branches on, so nobody has to match on the message.</summary>
-        public const string ViolationCode = "ORDER_HAS_NO_LINES";
-
-        public string Code => ViolationCode;
-
-        public InvariantFailure? Check(Order order)
-            => order.Status != OrderStatus.Draft && order._lines.Count == 0
-                ? "A placed order must have at least one line."
-                : null;
-    }
-}
-```
-
-`Check` returns `null` when the rule holds, and otherwise what is wrong in the domain's own words. It
-returns an `InvariantFailure`, and a string converts to one, so a rule with nothing more to say returns
-its message. Not a violation object so that holding is free: this runs for every changed entity on
-every save, and the consistent path returns `null` and allocates nothing. The generated code pairs the
-failure with `Code`, so the code is written down once.
-
-A message that names values should hand them on as well, so it can be
-[phrased in another language](localization.md) without the number already baked into the sentence:
-
-```csharp
-public InvariantFailure? Check(Order order)
-    => order.Total <= order.CreditLimit
-        ? null
-        : new InvariantFailure($"An order may total at most {order.CreditLimit}.")
-            .With("CreditLimit", order.CreditLimit);
-```
-
-They arrive on the violation as `InvariantViolation.Arguments`.
-
-The generator finds these, builds one instance of each in a static array, and runs them before the
-seam. Both stages run the same array.
-
-### Which one to reach for
-
-The seam is less ceremony, and for a small rule that is the whole argument. One `if` inside the class
-it is about, no extra type, no extra file, no code to invent, no name to agree on. An aggregate with
-a single rule that fits on one line is not better off with a nested class, and a codebase that
-insists on one is paying for structure it does not use. Reach for the seam by default.
-
-An invariant object earns its keep when one of these is true:
-
-- **The rule deserves a name.** `MustShipSomewhereWeDeliver` says in the file tree what a condition
-  buried in an `if` says only to whoever reads the body.
-- **A caller needs to branch on which rule broke.** This is the big one. Violations from the seam all
-  carry `SeamCode`, so an application that wants to answer differently for "no lines" than for "over
-  the credit limit" cannot tell them apart without matching on the message, and a message is not an
-  API. A named rule has a code, and the nested type gives that code a home:
-  `Order.MustHaveLines.ViolationCode`.
-- **The rule deserves a test of its own.** `new Order.MustHaveLines().Check(order)` is a unit test
-  with no aggregate mutation, no exception to catch and no database. The seam can only be tested
-  through the entity.
-- **There are several rules and they keep arriving.** A seam with six `if` statements and a
-  hand-built list of problems has become a file of its own trying to get out. Six rules report
-  themselves without any of them knowing about the others.
-
-An entity can have both, and mixing them is normal: the rules that earned a name get one, and the
-one-liner that never will stays in the seam. That is what
-[`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase) does, with a named rule on the order, a
-named rule on the line, and one seam left where it belongs.
-
-If you want to find the rules that should be promoted, branch on `InvariantViolation.SeamCode`: every
-violation carrying it came from a seam and has no code a caller can use.
-
-## Why a rule is a nested type
-
-Nesting is required, not encouraged, and there are two reasons.
-
-**It can read private state.** A nested type sees the enclosing type's private members, so
-`MustHaveLines` above reads `_lines` directly. A rule living anywhere else would have to be handed
-what it needs, which in practice means widening the aggregate's surface until the rule can see it.
-Encapsulation lost so that a rule about encapsulation can run is a bad trade.
-
-**It is free to discover.** The generator already holds the entity's symbol at the moment it writes
-the entity, and nested types hang off that symbol. Finding rules by scanning the compilation for
-implementations of `IInvariant<Order>` would make the generated output of every entity depend on
-every file in the project, which is exactly what stops an incremental generator from being
-incremental.
-
-A file per rule, as another part of the entity, keeps that from turning into one enormous class:
-
-```
-Ordering/
-  Order.cs                          the aggregate
-  Invariants/
-    MustHaveLines.cs                public partial class Order { public sealed class ... }
-    MustShipSomewhereWeDeliver.cs
-    MustStayWithinTheCreditLimit.cs
-```
-
-Two more requirements, both because the generator creates one instance per entity type and reuses it
-for every check: a rule must be **stateless**, the entity it judges being the argument and never a
-field, and it must have an **accessible parameterless constructor**.
-
-Getting any of this wrong is reported rather than silently ignored, which is the point of the whole
-design:
-
-| | |
-|---|---|
-| [DDD00024](diagnostics.md#ddd00024) | A rule that is not nested inside an entity, so nothing runs it |
-| [DDD00025](diagnostics.md#ddd00025) | A rule nested inside one type but written about another |
-| [DDD00026](diagnostics.md#ddd00026) | Two rules of one entity answering to the same code |
-| [DDD00027](diagnostics.md#ddd00027) | A rule the generated code cannot construct |
-
-A rule that compiles, reads well, has its own passing unit test and never runs is the failure this
-library exists to make impossible to ship unnoticed.
-
-### Why the seam returns nothing
-
-A seam that returned a list would read better than one that throws. It cannot work here. C# only
-erases a partial method that returns `void`; a partial method with any other return type must have an
-implementing declaration, so every entity in your solution would be forced to write an empty one.
-Because the seam is `partial void`, an aggregate that states no invariants at all is left with an
-`EnsureInvariants` whose compiled body is a single `ret` instruction. There is a test that reads the
-emitted IL and asserts exactly that, so the claim stays true.
-
-Named rules do not have that constraint, which is the other thing they buy: an `IInvariant<T>` is an
-ordinary type with an ordinary return value, and returning `null` for "fine" costs nothing.
-
 ## When it runs
 
 ### At the save
@@ -401,17 +416,18 @@ The consistency boundary is the transaction. An aggregate is allowed to be incon
 through one of its own methods; what it promises is that it is never *stored* broken. So that is
 where the toolkit checks.
 
-`UseDDDToolkit` registers an `InvariantInterceptor`. Before every `SaveChanges` it calls
-`EnsureInvariants()` on every tracked entity the save adds or modifies, child entities included, and
-on the aggregate root of each changed child. Anything that throws stops the save, and nothing is
-written.
+`UseDDDToolkit` registers an `InvariantInterceptor`. Before every `SaveChanges` it runs the throwing
+stage on every tracked entity the save adds or modifies, child entities included, and on the aggregate
+root of each changed child. Anything that throws stops the save, and nothing is written.
 
 ```csharp
-services.AddDDDToolkitEntityFramework(options => options.DispatchInProcess(...));
+services.AddDDDToolkitEntityFramework();
 services.AddDbContext<ShopContext>((sp, db) => db.UseSqlite(cs).UseDDDToolkit(sp));
 ```
 
-Nothing else to switch on. The interceptors run in this order:
+Nothing else to switch on. The argument `AddDDDToolkitEntityFramework` usually takes says how domain
+events are delivered, which is a separate matter; see
+[Domain event delivery](event-delivery.md). The interceptors run in this order:
 
 | Order | Interceptor | Why there |
 |---|---|---|
@@ -455,10 +471,9 @@ partial void CheckInvariants()
 }
 ```
 
-**Do not call `child.EnsureInvariants()` from the root's seam.** It used to be the way to get a whole
-graph checked from one hand-written call, and the root now does that itself, so a seam that does it
-again reports every broken line twice: once from the seam and once from the generated walk. Delete the
-loop; the rule about the children, like the one above, stays.
+**Do not call `child.EnsureInvariants()` from the root's seam.** The root already asks every child, so
+a seam that does it again reports every broken line twice: once from the seam and once from the
+generated walk. The rule about the children, like the one above, is what belongs in the seam.
 
 ### By hand
 
@@ -602,13 +617,157 @@ one aggregate, the rule is eventually consistent, and you have to say what happe
 
 - Raise a domain event (`OrderPlaced`), handle it, and have the handler check the rule and react:
   reject the order, flag the customer, open a task for a human. See
-  [Domain events](domain-events.md) and the [outbox](entity-framework.md#the-outbox).
+  [Domain events](domain-events.md) and the [outbox](event-delivery.md#the-outbox).
 - Or move the number that has to be exact inside one aggregate. A `CreditLine` aggregate that holds
   the reserved amount can guarantee its own total, and the order reserves against it first.
 
 Either way, the gap is in your design, and the honest thing is to name it rather than to let a
 framework pretend it closed it. What the toolkit checks is what it can actually guarantee: one
 aggregate, one transaction.
+
+## Why a rule is a nested type
+
+Nesting is required, not encouraged, and there are two reasons.
+
+**It can read private state.** A nested type sees the enclosing type's private members, so
+`MustHaveLines` above reads `_lines` directly. A rule living anywhere else would have to be handed
+what it needs, which in practice means widening the aggregate's surface until the rule can see it.
+Encapsulation lost so that a rule about encapsulation can run is a bad trade.
+
+**It is free to discover.** The generator already holds the entity's symbol at the moment it writes
+the entity, and nested types hang off that symbol. Finding rules by scanning the compilation for
+implementations of `IInvariant<Order>` would make the generated output of every entity depend on
+every file in the project, which is exactly what stops an incremental generator from being
+incremental.
+
+A file per rule, as another part of the entity, keeps that from turning into one enormous class:
+
+```
+Ordering/
+  Order.cs                          the aggregate
+  Invariants/
+    MustHaveLines.cs                public partial class Order { public sealed class ... }
+    MustShipSomewhereWeDeliver.cs
+    MustStayWithinTheCreditLimit.cs
+```
+
+Two more requirements, both because the generator creates one instance per entity type and reuses it
+for every check: a rule must be **stateless**, the entity it judges being the argument and never a
+field, and it must have an **accessible parameterless constructor**.
+
+Getting any of this wrong is reported rather than silently ignored, which is the point of the whole
+design:
+
+| | |
+|---|---|
+| [DDD00024](diagnostics.md#ddd00024) | A rule that is not nested inside an entity, so nothing runs it |
+| [DDD00025](diagnostics.md#ddd00025) | A rule nested inside one type but written about another |
+| [DDD00026](diagnostics.md#ddd00026) | Two rules of one entity answering to the same code |
+| [DDD00027](diagnostics.md#ddd00027) | A rule the generated code cannot construct |
+
+A rule that compiles, reads well, has its own passing unit test and never runs is the failure this
+library exists to make impossible to ship unnoticed.
+
+### Why the seam returns nothing
+
+A seam that returned a list would read better than one that throws. It cannot work here. C# only
+erases a partial method that returns `void`; a partial method with any other return type must have an
+implementing declaration, so every entity in your solution would be forced to write an empty one.
+Because the seam is `partial void`, an aggregate that states no invariants at all is left with an
+`EnsureInvariants` whose compiled body is a single `ret` instruction. There is a test that reads the
+emitted IL and asserts exactly that, so the claim stays true.
+
+For a `Customer` with no rules, no seam and no child collections, the throwing checks the generator
+writes consist of the call to the seam and nothing else, and the compiler removes that call:
+
+```csharp title="Customer.g.cs, shortened"
+    partial void CheckInvariants();
+
+    // ...
+
+    public override void EnsureOwnInvariants()
+    {
+        CheckInvariants();
+    }
+
+    public override IReadOnlyList<InvariantViolation> GetInvariantViolations() => GetOwnInvariantViolations();
+
+    public override void EnsureInvariants()
+    {
+        CheckInvariants();
+    }
+```
+
+Named rules do not have that constraint, which is the other thing they buy: an `IInvariant<T>` is an
+ordinary type with an ordinary return value, and returning `null` for "fine" costs nothing.
+
+## Collections, and not single references
+
+The walk covers the child entity collections a type declares, and it reads the generated backing
+field rather than the read-only property. It does not follow a single reference from one entity to
+another.
+
+That is a decision, not a missing line. A child holding a property back to its parent is an ordinary
+shape, and following single references would walk root, child, root, child until the stack ran out.
+Stopping that needs a visited set, and a visited set is an allocation on every call, including the
+overwhelming majority where nothing is broken at all. The consistent path through an invariant check
+allocates nothing today, and it runs for every changed entity on every save; paying for a `HashSet`
+there to support a shape an aggregate does not have is the wrong trade.
+
+What an aggregate does have is a root owning collections of children. Ruling cycles out by
+construction costs nothing and misses nothing real. A single reference to *another* aggregate is not a
+child at all, it is an id, and that aggregate's consistency is [its own
+problem](#the-limitation-you-should-know-about).
+
+## What the save asks, and why the two never disagree
+
+The domain walk and the save-time pass have different subjects, on purpose.
+
+| | The domain walk | The save |
+|---|---|---|
+| Asked of | an aggregate you are holding | a `DbContext` |
+| Reaches | every child in the graph | every tracked entity this save adds or modifies |
+| Finds them | through the generated `foreach` over `_lines` | through the change tracker |
+| Queries the database | never, and it cannot lazy load | never, and it reads no navigation |
+| Called by | your handler, when it wants to know | `InvariantInterceptor`, before every `SaveChanges` |
+| Calls | `EnsureInvariants` / `GetInvariantViolations` | `EnsureOwnInvariants` / `GetOwnInvariantViolations` |
+
+All four members live on `IHasInvariants`, so the persistence layer can ask any entity without knowing
+its id type.
+
+The domain walk asks more objects. The save asks the ones it is about to write, because a save deals
+in partial graphs: a root loaded without its collection, a child the unit of work never saw, an
+aggregate assembled from two queries. A generated `foreach` over `_lines` on a graph like that could
+trigger a lazy load, could issue a query and could fail, which is exactly why finding who to ask lives
+in the persistence layer rather than in the entity.
+
+Which is also why "the collection might not be loaded" does not get to shape this API. It is a fact
+about persistence, it is answered in persistence, and the aggregate a handler is working on is in
+memory and whole, because that is the only state an aggregate is ever in while a handler works on it.
+
+The consequence is the one worth having: **the domain answer is the stricter of the two**. Everything
+the save would ask is a subset of what the walk already asked, so an aggregate that answers clean is
+never contradicted at the commit. The reverse does not hold, and should not: the walk reports a broken
+line that the save would pass over because nothing about it changed. A rule broken by a row nobody
+touched is still a broken rule when you ask the domain, and is still not this save's problem.
+
+## When to ask about one object only
+
+`EnsureOwnInvariants()` and `GetOwnInvariantViolations()` answer for one object and say nothing about
+what it holds. There is one reason to want them, and it is narrow: **you are walking the graph
+yourself** and asking every object you find. Ask the walking pair from inside such a walk and every
+child is reported twice, once by itself and once by its root. The interceptor is that caller, which is
+why it asks the self-only pair, and a hand-written traversal of your own is the same situation.
+
+Anything holding an aggregate and wanting to know whether it is consistent wants
+`GetInvariantViolations()`. If you are reaching for the self-only pair to avoid a collection you are
+not sure is loaded, you are in the persistence case, and
+[`InvariantInterceptor`](#by-hand) already handles it from the change tracker.
+
+There is one more place the pair matters: an entity you write by hand rather than generate. State its
+rules in `EnsureOwnInvariants` / `GetOwnInvariantViolations`, because `Entity<TId>`'s walking pair
+delegates to the self-only one. Override only `GetInvariantViolations` and the object still answers
+for itself, but the save, which asks the self-only member, hears nothing at all.
 
 ## What this costs
 
@@ -639,5 +798,6 @@ all.
 - [Entities and aggregates](entities-and-aggregates.md) for what belongs inside the boundary.
 - [Value objects](value-objects.md) for validation of a single value, which is the other half.
 - [Entity Framework](entity-framework.md) for the interceptors and what each one guarantees.
+- [Testing aggregates](testing.md#testing-invariants) for asserting on invariants in a unit test.
 - [Diagnostics](diagnostics.md#ddd00024) for DDD00024 to DDD00027, the four ways a rule can be
   written so that it never runs.
