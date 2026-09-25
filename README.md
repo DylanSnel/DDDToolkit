@@ -70,6 +70,33 @@ public partial class Order { }
 | [Diagnostics](docs/diagnostics.md) | Every DDD000xx diagnostic and how to fix it |
 | [Migrating to 3.0](docs/migrating-to-3.md) | Every 2.x break, with the before and the after |
 
+## With an AI coding agent
+
+An agent that has never seen the toolkit writes the base class the generator already writes, a
+settable collection, a sealed value object. Three things teach it otherwise.
+
+**A skill.** [`skills/dddtoolkit`](skills/dddtoolkit) holds the declarations, the rules the generators
+enforce, the wiring for Entity Framework and modules, and the fix for every DDD diagnostic. It is an
+[Agent Skill](https://agentskills.io), the format Claude Code, Codex, Cursor and GitHub Copilot read.
+This repository is also a Claude Code plugin marketplace, so in Claude Code:
+
+```text
+/plugin marketplace add DylanSnel/DDDToolkit
+/plugin install dddtoolkit@dddtoolkit
+```
+
+For another agent, `npx skills add DylanSnel/DDDToolkit` installs it, or copy the folder into the
+agent's skills directory.
+
+**The docs as text.** The site serves [`llms.txt`](https://dylansnel.github.io/DDDToolkit/llms.txt), an
+index of the pages with what each covers, and
+[`llms-full.txt`](https://dylansnel.github.io/DDDToolkit/llms-full.txt), all of them in one file. Every
+page is also plain Markdown at its own address with `.md` added, such as
+[`docs/invariants.md`](https://dylansnel.github.io/DDDToolkit/docs/invariants.md).
+
+**The diagnostics.** Every DDD diagnostic carries a link to its entry in [Diagnostics](docs/diagnostics.md),
+so an IDE opens it from the error list and an agent that reads the build output can follow it.
+
 ## Packages
 
 Reference `DDDToolkit` and add the integrations you actually use. Each integration package brings its

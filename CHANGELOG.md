@@ -12,6 +12,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- An agent skill, [`skills/dddtoolkit`](skills/dddtoolkit), that teaches an AI coding agent the
+  declarations, the rules the generators enforce, the wiring for Entity Framework, event delivery and
+  modules, and the fix for every DDD diagnostic. The repository is a Claude Code plugin marketplace
+  for it (`/plugin marketplace add DylanSnel/DDDToolkit`), and `npx skills add DylanSnel/DDDToolkit`
+  installs it for other agents. A test fails when a diagnostic has no section in the skill.
+- The docs site writes the docs for language models: `llms.txt`, an index of every page with the
+  description from the README's table, `llms-full.txt` with every page in one file, and each page as
+  Markdown at its own address with `.md` added. Relative links in them are made absolute.
+- Every diagnostic carries a help link to its heading in [Diagnostics](docs/diagnostics.md) on the docs
+  site, so an IDE opens it from the error list and an agent reading the build output can follow it. A
+  test holds every id to a heading of its own on that page.
+
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
@@ -267,6 +279,9 @@ convention.
 
 ### Fixed
 
+- [Getting started](docs/getting-started.md) mapped the outbox with `modelBuilder.AddDomainEventOutbox()`,
+  which does not compile: the method takes the context's `Database`. It now shows the call the example
+  makes, `AddDomainEventOutbox(Database, schema: Schema)`.
 - A positional `[ValueObject]` record, such as `record Money(decimal Amount, string Currency)`, came
   back from System.Text.Json with every property at its default. The generated properties are
   `protected init`, which the serializer cannot reach by itself, so a value object inside a domain
