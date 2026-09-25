@@ -295,3 +295,131 @@ html[data-theme='dark'] .theme-code-block {
   height: 2px;
   background: var(--ddd-gradient);
 }
+
+/* ---------------------------------------------------------------- diagrams */
+
+/* Mermaid draws with its own inline styles; these give its diagrams the site's colours in both modes. */
+.docusaurus-mermaid-container {
+  margin: 1.5rem 0 2rem;
+  padding: 1.25rem 1rem;
+  border: 1px solid var(--ddd-border);
+  border-radius: 0.75rem;
+  background: var(--ddd-card);
+  overflow-x: auto;
+  text-align: center;
+}
+
+.docusaurus-mermaid-container svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.docusaurus-mermaid-container .actor,
+.docusaurus-mermaid-container .node rect,
+.docusaurus-mermaid-container .node polygon,
+.docusaurus-mermaid-container .node circle,
+.docusaurus-mermaid-container .node path {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 12%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ifm-color-primary) 55%, transparent) !important;
+}
+
+.docusaurus-mermaid-container text.actor > tspan,
+.docusaurus-mermaid-container text.actor,
+.docusaurus-mermaid-container .nodeLabel,
+.docusaurus-mermaid-container .label {
+  fill: var(--ifm-font-color-base) !important;
+  color: var(--ifm-font-color-base) !important;
+}
+
+/* Mermaid measures every label before this sheet applies, so nothing here may change a label's width:
+   no weight, no size, no font. Colours only. */
+.docusaurus-mermaid-container .edgeLabel,
+.docusaurus-mermaid-container .edgeLabel p,
+.docusaurus-mermaid-container .labelBkg {
+  background-color: var(--ddd-card) !important;
+}
+
+.docusaurus-mermaid-container .edgeLabel rect {
+  fill: var(--ddd-card) !important;
+  opacity: 1 !important;
+}
+
+.docusaurus-mermaid-container .actor-line {
+  stroke: var(--ddd-border) !important;
+}
+
+.docusaurus-mermaid-container .messageText,
+.docusaurus-mermaid-container .loopText,
+.docusaurus-mermaid-container .loopText > tspan,
+.docusaurus-mermaid-container .edgeLabel {
+  fill: var(--ddd-muted) !important;
+  color: var(--ddd-muted) !important;
+}
+
+.docusaurus-mermaid-container .messageLine0,
+.docusaurus-mermaid-container .messageLine1,
+.docusaurus-mermaid-container .flowchart-link {
+  stroke: var(--ddd-muted) !important;
+}
+
+.docusaurus-mermaid-container #arrowhead path,
+.docusaurus-mermaid-container marker path {
+  fill: var(--ddd-muted) !important;
+  stroke: var(--ddd-muted) !important;
+}
+
+.docusaurus-mermaid-container .note {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 7%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ifm-color-primary) 30%, transparent) !important;
+}
+
+.docusaurus-mermaid-container .noteText,
+.docusaurus-mermaid-container .noteText > tspan {
+  fill: var(--ifm-font-color-base) !important;
+}
+
+.docusaurus-mermaid-container .labelBox {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 22%, var(--ddd-card)) !important;
+  stroke: color-mix(in srgb, var(--ifm-color-primary) 45%, transparent) !important;
+}
+
+.docusaurus-mermaid-container .labelText,
+.docusaurus-mermaid-container .labelText > tspan {
+  fill: var(--ifm-font-color-base) !important;
+}
+
+.docusaurus-mermaid-container .loopLine {
+  stroke: color-mix(in srgb, var(--ifm-color-primary) 45%, transparent) !important;
+}
+
+.docusaurus-mermaid-container .cluster rect {
+  fill: color-mix(in srgb, var(--ifm-color-primary) 4%, var(--ddd-card)) !important;
+  stroke: var(--ddd-border) !important;
+}
+
+.docusaurus-mermaid-container .cluster-label .nodeLabel {
+  color: var(--ddd-muted) !important;
+}
+
+/* "Show the code" under a diagram: Docusaurus draws <details> as an info alert; this makes it the site's. */
+.markdown details.alert {
+  --ifm-alert-background-color: color-mix(in srgb, var(--ifm-color-primary) 5%, var(--ddd-card));
+  --ifm-alert-background-color-highlight: color-mix(in srgb, var(--ifm-color-primary) 12%, transparent);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: color-mix(in srgb, var(--ifm-color-primary) 45%, transparent);
+  --docusaurus-details-decoration-color: color-mix(in srgb, var(--ifm-color-primary) 55%, transparent);
+  margin: -1rem 0 2rem;
+  border: 1px solid color-mix(in srgb, var(--ifm-color-primary) 25%, var(--ddd-border));
+  border-left-width: 3px;
+  border-radius: 0 0 0.75rem 0.75rem;
+  box-shadow: none;
+}
+
+.markdown details.alert > summary {
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+}
+
+.markdown details.alert .theme-code-block {
+  box-shadow: none;
+}

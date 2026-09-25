@@ -217,6 +217,20 @@ public partial class Order
 
 Holding the `Customer` itself instead reports [DDD00021](diagnostics.md#ddd00021).
 
+```mermaid
+flowchart LR
+    subgraph aggregate ["the Order aggregate: one transaction, one Version"]
+        direction TB
+        Order["Order, the root"] --> Line1["OrderLine"]
+        Order --> Line2["OrderLine"]
+        Order --> Address(["Address, a value object"])
+    end
+    Order -. "CustomerId, an id and nothing more" .-> Customer["Customer, another aggregate"]
+```
+
+Everything inside the box is loaded and saved with the order and answers to its invariants. The
+customer is outside it: the order knows which customer, and nothing else about it.
+
 ### Why the id is what keeps the boundary
 
 An aggregate is two boundaries at once, and a direct reference breaks both.

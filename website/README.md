@@ -22,3 +22,9 @@ sample.
 In the docs, a code block with a title is generated code: ```` ```csharp title="Order.g.cs, shortened" ````
 renders with a "Generated" label (`src/css/custom.css`). Give a title to generated files only, and copy
 their content from a real build rather than writing it by hand.
+
+Diagrams are Mermaid, in ```` ```mermaid ```` blocks: GitHub draws them in `docs/` and the site draws them
+through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). A diagram gets a
+`<details><summary>Show the code: ...</summary>` directly under it with the registration or setup it
+shows; leave a blank line after `<summary>` and before `</details>`, or the Markdown inside is not read.
+Keep Mermaid labels free of `;`, which ends a statement.

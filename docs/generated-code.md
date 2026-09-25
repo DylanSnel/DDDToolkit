@@ -5,6 +5,38 @@ declaration while the project compiles and adds C# files to the same compilation
 library looking at your types, no reflection over them and nothing woven into the IL. What runs is the
 code on this page, and you can open it, read it and step through it like your own.
 
+```mermaid
+flowchart LR
+    You["your partial types, with an attribute"] --> Core["the DDDToolkit generator"]
+    You --> EF["the Entity Framework generator"]
+    You --> HC["the HotChocolate generator"]
+    Core --> CoreOut["base types, identifiers, equality, the always-valid twin, invariant checks"]
+    EF --> EFOut["value converters, ComplexType and Owned, the converter and integration event registrations"]
+    HC --> HCOut["type converters, Relay node id serializers, the GraphQL bindings"]
+```
+
+<details>
+<summary>Show the code: turning the generators on</summary>
+
+Each package carries its generator, so referencing it is all there is to it:
+
+```bash
+dotnet add package DDDToolkit                   # base types and the core generator
+dotnet add package DDDToolkit.EntityFramework   # its generator: the mapping
+dotnet add package DDDToolkit.HotChocolate      # its generator: the GraphQL bindings
+```
+
+The registration methods the generators write are named after the project. Choose the name with
+`DDD_Module`:
+
+```xml
+<PropertyGroup>
+  <DDD_Module>Shop</DDD_Module>   <!-- AddShopConverters, AddShopIntegrationEvents, AddShopGraphQlRuntimeBindings -->
+</PropertyGroup>
+```
+
+</details>
+
 This page walks through that output for one small aggregate. The code comes from
 [`website/sample`](../website/sample), which the docs site compiles to show the same files on its
 homepage, so it is the generators' real output. The only change is that `global::` prefixes have been

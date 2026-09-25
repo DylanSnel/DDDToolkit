@@ -553,6 +553,83 @@ In the example, Inventory and Payments pick up `OrderPlacedV1`, answer with cont
 Ordering confirms the order once both have said yes, or cancels it when either says no. That is the
 same mechanism in the other direction; `Shipping` waits for `OrderConfirmedV1`.
 
+The whole checkout, as the modules tell each other. Every contract goes to every module that handles
+it; the diagram shows where it matters:
+
+```mermaid
+sequenceDiagram
+    participant Ordering
+    participant Inventory
+    participant Payments
+    participant Shipping
+
+    Ordering->>Inventory: OrderPlacedV1
+    Ordering->>Payments: OrderPlacedV1
+    Note over Payments: a pending payment
+    alt there is stock
+        Inventory->>Ordering: StockReservedV1
+        Inventory->>Payments: StockReservedV1
+        alt the provider takes the money
+            Payments->>Ordering: PaymentSucceededV1
+            Note over Ordering: stock and money, so confirmed
+            Ordering->>Shipping: OrderConfirmedV1
+            Note over Shipping: a shipment is booked
+        else the provider refuses
+            Payments->>Ordering: PaymentFailedV1
+            Note over Ordering: cancelled
+            Ordering->>Inventory: OrderCancelledV1
+            Note over Inventory: the stock is released
+        end
+    else there is not enough stock
+        Inventory->>Ordering: StockReservationFailedV1
+        Note over Ordering: cancelled
+        Ordering->>Payments: OrderCancelledV1
+        Note over Payments: the pending payment is voided
+    end
+```
+
+No module calls another, and none waits for an answer: each reacts to what it hears and publishes what
+happened. The order is where the answers meet. It confirms itself when it has both the stock and the
+money, in whichever order they arrive.
+
+<details>
+<summary>Show the code: Ordering's side of the checkout</summary>
+
+One small class per contract Ordering reacts to. It loads the order and tells it what happened; the
+order decides what that means:
+
+```csharp
+[IntegrationEventConsumer("ordering.checkout.stock-reserved")]
+public sealed class RecordStockReservation(OrderingContext context) : IIntegrationEventHandler<StockReservedV1>
+{
+    public async Task HandleAsync(StockReservedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+        => (await Checkout.OrderAsync(context, contract.OrderId, cancellationToken)).RecordStockReserved(message.OccurredAt);
+}
+
+[IntegrationEventConsumer("ordering.checkout.payment-failed")]
+public sealed class CancelWithoutPayment(OrderingContext context) : IIntegrationEventHandler<PaymentFailedV1>
+{
+    public async Task HandleAsync(PaymentFailedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+        => (await Checkout.OrderAsync(context, contract.OrderId, cancellationToken)).Cancel(contract.Reason);
+}
+```
+
+*[`Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs)*
+
+None of them calls `SaveChanges`. The inbox saves the order together with the row that says the message
+was applied, and that save writes whatever the order raised, `OrderConfirmed` for instance, into
+Ordering's outbox in the same transaction. Ordering signs its handlers up in its module registration,
+with methods the generator writes:
+
+```csharp
+services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.AddOrderingIntegrationEvents()));
+services.AddModuleIntegrationEvents<OrderingContext>(module => module.AddOrderingIntegrationEvents());
+```
+
+*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs)*
+
+</details>
+
 The host only switches the modules on, and sets the one thing that is the host's: how domain events that
 stay inside a module are published.
 

@@ -160,6 +160,90 @@ Integration events exist so that another module can pick something up. In a modu
 is in the same process, which makes this the most valuable sink in the package and the one to reach for
 first.
 
+One message, from the save in Ordering to the handler in Billing:
+
+```mermaid
+sequenceDiagram
+    participant Save as Ordering's save
+    participant Outbox as Ordering's outbox
+    participant Processor as Outbox processor
+    participant Publish as PublishOrderPlaced
+    participant Sink as Module sink
+    participant Inbox as Billing's inbox
+    participant Handler as RaiseInvoice
+
+    Save->>Outbox: the order and an OrderPlaced row, one transaction
+    Processor->>Outbox: read the row, after the commit
+    Processor->>Publish: OrderPlaced, the domain event
+    Publish-->>Processor: OrderPlacedV2, the contract
+    Processor->>Sink: the contract, in its envelope
+    Sink->>Inbox: offered to every module that handles OrderPlacedV2
+    alt billing.invoicer applied this message before
+        Inbox-->>Sink: skipped
+    else the first time
+        Inbox->>Handler: HandleAsync(contract, message)
+        Handler-->>Inbox: an invoice, added to Billing's context
+        Inbox->>Inbox: the invoice and an inbox row, one transaction
+    end
+    Sink-->>Processor: delivered
+    Processor->>Outbox: set ProcessedAt
+```
+
+A handler that fails fails the delivery, and the processor tries again later. Every module is offered
+the message again, and the inboxes skip what they already applied, which is what makes at-least-once
+delivery safe.
+
+<details>
+<summary>Show the code: both modules' registration</summary>
+
+Ordering publishes, through its outbox, to the modules in this process:
+
+```csharp
+// inside AddOrderingModule
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+{
+    outbox.AddOrderingIntegrationEvents();   // generated: its domain events and its outbound classes
+    outbox.SendToModules();
+}));
+services.AddOutboxBackgroundService<OrderingContext>(TimeSpan.FromSeconds(2));
+```
+
+One class says what the domain event becomes for the others:
+
+```csharp
+public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, OrderPlacedV2>
+{
+    public ValueTask<OrderPlacedV2?> CreateAsync(OrderPlaced placed, CancellationToken cancellationToken)
+        => new(new OrderPlacedV2(placed.OrderId.Value, placed.Customer.Value, placed.Total.Amount, placed.Total.Currency));
+}
+```
+
+Billing handles the contract, and signs up with the contracts it reads and the handlers that run under
+its inbox:
+
+```csharp
+[IntegrationEventConsumer("billing.invoicer")]
+public sealed class RaiseInvoice(BillingContext context) : IIntegrationEventHandler<OrderPlacedV2>
+{
+    public Task HandleAsync(OrderPlacedV2 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        context.Invoices.Add(new Invoice(contract.OrderId, contract.Total));
+        return Task.CompletedTask;
+    }
+}
+
+// inside AddBillingModule
+services.AddDDDToolkitEntityFramework(options =>
+    options.MapIntegrationEvents(contracts => contracts.AddBillingIntegrationEvents()));   // generated
+services.AddModuleIntegrationEvents<BillingContext>(module => module.AddBillingIntegrationEvents());   // generated
+```
+
+Both contexts map their tables: `modelBuilder.AddDomainEventOutbox(Database)` in Ordering's,
+`modelBuilder.AddDomainEventInbox(Database)` in Billing's. The rest of this section goes through each
+part.
+
+</details>
+
 Each module registers its own half, next to its own context. The producing module says what it publishes
 and that it goes to the other modules:
 

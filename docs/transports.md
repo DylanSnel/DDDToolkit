@@ -20,6 +20,60 @@ them. The sending module publishes the same contract through the same outbox, wi
 receiving process registers its modules with `AddModuleIntegrationEvents`, exactly as a monolith does, and
 each handler runs inside its module's inbox. A handler cannot tell which way a message came.
 
+The roads a message can take, from the one that needs nothing to the ones that cross a network:
+
+```mermaid
+flowchart TB
+    subgraph inproc ["In process: the module sink"]
+        direction LR
+        A1["Ordering's outbox"] -->|"in memory"| B1["Shipping's inbox"]
+    end
+    subgraph onequeue ["In process, one pgmq queue: pgmq 1.5 and later"]
+        direction LR
+        A2["every module's outbox"] --> Q2[("queue shop")] --> B2["every module's inbox"]
+    end
+    subgraph topics ["Services, pgmq topics: pgmq 1.11 and later"]
+        direction LR
+        A3["Storefront's outbox"] -->|"send_topic"| Q3a[("queue payments")] --> B3a["Payments' inboxes"]
+        A3 -->|"send_topic"| Q3b[("queue fulfilment")] --> B3b["Fulfilment's inboxes"]
+    end
+    subgraph broker ["Services, RabbitMQ: Wolverine or MassTransit"]
+        direction LR
+        A4["a service's outbox"] --> R4[["RabbitMQ"]] --> B4["other services' inboxes"]
+    end
+    inproc ~~~ onequeue ~~~ topics ~~~ broker
+```
+
+<details>
+<summary>Show the code: choosing the road</summary>
+
+Only the sink on the outbox and, away from the module sink, what reads on the other side change. The
+modules and their handlers stay as they are:
+
+```csharp
+// one process: the module sink
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToModules());
+
+// one process, through one pgmq queue
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseQueue("shop"));
+builder.Services.AddPgmqConsumer(queues, "shop");
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToPgmq());
+
+// services over pgmq topics
+builder.Services.AddPgmqSink(queues, pgmq => pgmq.UseTopics());
+builder.Services.AddPgmqConsumer(queues, "fulfilment", consumer => consumer.BindTopics = true);
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToPgmq());
+
+// services over RabbitMQ
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToWolverine());     // and wolverine.ReceiveIntegrationEvents(...)
+options.UseOutbox<OrderingContext>(outbox => outbox.SendToMassTransit());   // and bus.AddIntegrationEventConsumers(...)
+```
+
+`queues` is an `NpgsqlDataSource` on the database the queues live in. Each section below has the whole
+registration for its road, and `Examples/` runs every one of them.
+
+</details>
+
 ## When a module becomes its own deployable: pgmq
 
 `DDDToolkit.Messaging.Postgres` sends published messages to a

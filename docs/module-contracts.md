@@ -110,6 +110,59 @@ Shipping/
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
 
+Every arrow is a project reference. The modules that react to orders reference Ordering's contracts,
+and nothing references Ordering itself:
+
+```mermaid
+flowchart LR
+    subgraph ordering ["module Ordering"]
+        direction TB
+        O["Ordering: aggregates, context, handlers"] --> OC["Ordering.Contracts: OrderId, integration events"]
+    end
+    Inventory["Inventory"] --> OC
+    Payments["Payments"] --> OC
+    Shipping["Shipping"] --> OC
+```
+
+<details>
+<summary>Show the code: two projects, one module</summary>
+
+Both projects say they are Ordering:
+
+```csharp
+// Ordering/Module.cs, and the first lines of Ordering.Contracts/OrderingContracts.cs
+[assembly: Module("Ordering")]
+```
+
+The contracts project publishes the identifier; its integration events are published by being
+integration events:
+
+```csharp
+[ModuleContract]
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
+```
+
+Shipping references the contracts and nothing else of Ordering's, and holds the analyzer's rules as
+errors:
+
+```xml
+<PropertyGroup>
+  <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
+</PropertyGroup>
+
+<ItemGroup>
+  <ProjectReference Include="..\..\Ordering\DDDToolkit.Examples.Ordering.Contracts\DDDToolkit.Examples.Ordering.Contracts.csproj" />
+</ItemGroup>
+```
+
+*[`DDDToolkit.Examples.Shipping.csproj`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/DDDToolkit.Examples.Shipping.csproj)*
+
+</details>
+
 Both projects carry `[assembly: Module("Ordering")]`, so they are one module in two assemblies. Why
 split them:
 

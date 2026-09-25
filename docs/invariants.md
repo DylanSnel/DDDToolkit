@@ -206,6 +206,60 @@ list means consistent.
 is about to be written broken has already gone wrong somewhere upstream. `EnsureInvariants()` throws
 `InvariantViolationException`, the save stops, and nothing reaches the database.
 
+```mermaid
+flowchart TD
+    Act["a handler acts on the order"] --> Ask{"order.GetInvariantViolations()"}
+    Ask -->|"violations"| Refuse["answer 422, naming each rule and the entity that broke it"]
+    Ask -->|"none"| Save["SaveChangesAsync()"]
+    Save --> Check{"the save asks every added or changed entity: EnsureOwnInvariants()"}
+    Check -->|"all hold"| Written["written"]
+    Check -->|"one is broken"| Throw["InvariantViolationException, and nothing is written"]
+```
+
+<details>
+<summary>Show the code: a rule, a handler that asks, and the save that checks</summary>
+
+A rule is a class nested in the entity it is about. The generator finds it; there is nothing to register:
+
+```csharp
+public partial class Order
+{
+    public sealed class MustHaveLines : IInvariant<Order>
+    {
+        public string Code => "ORDER_HAS_NO_LINES";
+
+        public InvariantFailure? Check(Order order)
+            => order.Lines.Count == 0 ? "An order must have at least one line." : null;
+    }
+}
+```
+
+A handler that wants to answer rather than fail asks before it saves:
+
+```csharp
+order.AddLine(command.Sku, command.Quantity);        // the domain acts
+
+var violations = order.GetInvariantViolations();     // and answers for its lines as well
+if (violations.Count > 0)
+{
+    return Results.UnprocessableEntity(violations.Select(v => new { v.Code, v.Message }));
+}
+
+await context.SaveChangesAsync(cancellationToken);   // still guarded, by the interceptor
+```
+
+The save checks because `UseDDDToolkit` puts the interceptor on the context:
+
+```csharp
+builder.Services.AddDbContext<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+```
+
+See [A handler asks before it saves](#a-handler-asks-before-it-saves) and [At the save](#at-the-save).
+
+</details>
+
 ```csharp
 var broken = order.GetInvariantViolations();   // stage 1: what is wrong, if anything
 order.EnsureInvariants();                      // stage 2: nothing is wrong, or nothing is written

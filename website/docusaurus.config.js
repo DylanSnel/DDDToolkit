@@ -30,6 +30,9 @@ const config = {
   markdown: {
     // The docs are plain Markdown, full of C# generics such as IInvariant<T>; read as MDX they would be JSX.
     format: 'detect',
+    // ```mermaid blocks become diagrams: here through the theme below, and on GitHub natively, so the
+    // docs folder shows the same diagrams wherever it is read.
+    mermaid: true,
     hooks: {
       onBrokenMarkdownLinks: 'throw',
     },
@@ -39,6 +42,8 @@ const config = {
     defaultLocale: 'en',
     locales: ['en'],
   },
+
+  themes: ['@docusaurus/theme-mermaid'],
 
   presets: [
     [
@@ -109,6 +114,12 @@ const config = {
           },
         ],
         copyright: `DDDToolkit, MIT licensed. Built with Docusaurus.`,
+      },
+      mermaid: {
+        theme: { light: 'neutral', dark: 'dark' },
+        options: {
+          fontFamily: 'Inter, system-ui, sans-serif',
+        },
       },
       prism: {
         theme: prismThemes.oneLight,

@@ -406,16 +406,17 @@ into what materialising a row costs anyway. See
 public readonly partial record struct Sku;
 ```
 
-`ColumnLength` flows into the generated Entity Framework configuration as `HaveMaxLength`, on the
-registration of the property and of the type mapping:
+`ColumnLength` is for Entity Framework only. Without the `DDDToolkit.EntityFramework` package it does
+nothing, and it never validates: a maximum length a value must respect is a rule you state yourself.
+With the package, it flows into the generated configuration as `HaveMaxLength`, on the registration of
+the property and of the type mapping:
 
 ```csharp title="ConverterExtensions.g.cs, shortened"
 modelConfigurationBuilder.Properties<Sku>().HaveConversion<Sku.SkuConverter>().HaveMaxLength(32);
 modelConfigurationBuilder.DefaultTypeMapping<Sku>().HasConversion<Sku.SkuConverter>().HasMaxLength(32);
 ```
 
-It has no effect on validation and none at all without the Entity Framework package. An entity that
-[declares its own id](#letting-the-entity-declare-the-id) takes it by name too:
+An entity that [declares its own id](#letting-the-entity-declare-the-id) takes it by name too:
 
 ```csharp
 [AggregateRoot<string>(Prefix: "SKU", ColumnLength: 32)]
