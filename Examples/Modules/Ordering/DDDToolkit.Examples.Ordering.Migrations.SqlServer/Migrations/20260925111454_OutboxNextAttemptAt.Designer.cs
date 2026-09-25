@@ -5,16 +5,19 @@ using DDDToolkit.Examples.Ordering.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer
+namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer.Migrations
 {
     [DbContext(typeof(OrderingContext))]
-    partial class OrderingContextModelSnapshot : ModelSnapshot
+    [Migration("20260925111454_OutboxNextAttemptAt")]
+    partial class OutboxNextAttemptAt
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
