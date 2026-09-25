@@ -16,6 +16,12 @@ namespace DDDToolkit.FluentValidation.Analyzers;
 /// partial class Validator { public Validator() { RuleFor(x => x.Value).EmailAddress(); } }
 /// </code>
 /// Struct ids are always valid by construction and get no validator.
+/// <para>
+/// A type that declares <c>Validate()</c> or <c>Validate(ValidationErrorBuilder)</c> itself, in any part, is
+/// left alone: no validator, no <c>Errors</c>, no overrides. The two generated overrides are one piece that
+/// shares <c>_errors</c>, so generating only the one the author did not write would pair the author's rules
+/// with an empty validator. This way one project can hold both kinds.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class ValueObjectGenerator : IIncrementalGenerator
@@ -23,15 +29,15 @@ public sealed class ValueObjectGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var valueObjects = context.ValueObjects()
-            .Where(static definition => definition.CanGenerate)
+            .Where(static definition => definition.CanGenerate && !definition.DeclaresValidate)
             .Select(static (definition, _) => definition.Type);
 
         var singleValueObjects = context.SingleValueObjects()
-            .Where(static definition => definition.CanGenerate)
+            .Where(static definition => definition.CanGenerate && !definition.DeclaresValidate)
             .Select(static (definition, _) => definition.Type);
 
         var entityIds = context.EntityIds()
-            .Where(static definition => definition.CanGenerate && definition.Type.Kind == DeclarationKind.RecordClass)
+            .Where(static definition => definition.CanGenerate && !definition.DeclaresValidate && definition.Type.Kind == DeclarationKind.RecordClass)
             .Select(static (definition, _) => definition.Type);
 
         context.RegisterSourceOutput(valueObjects, static (productionContext, type) => Execute(productionContext, type));

@@ -784,6 +784,10 @@ email.Errors[0].PropertyName;      // "Value"
 
 Struct identifiers get no validator, since they are well-formed by construction.
 
+A value object that writes its own `Validate()` or `Validate(ValidationErrorBuilder)`, in any part, is
+left alone: it gets no `Validator`, no `Errors` and no generated overrides, so one project can mix
+hand-validated value objects with ones validated by rules.
+
 A value object validates itself, which is not the same as taking part in the validator you write for a
 command or a request DTO. `MustBeValid()` folds it into one:
 

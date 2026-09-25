@@ -221,6 +221,103 @@ public class FluentValidationGeneratorTests
     }
 
     [Fact]
+    public void A_value_object_that_writes_its_own_Validate_is_left_alone()
+    {
+        // The generated part would declare Validate() a second time (CS0111). The author's rule is the rule.
+        var result = Run(
+            """
+            [SingleValueObject<string>]
+            public partial record Sku
+            {
+                public static Sku Create(string value) => new(value);
+
+                protected override bool Validate() => Value.Length == 8;
+            }
+            """);
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().NotContain(source => source.HintName == Hint.Of("Sample.Sku", ".FluentValidation"));
+
+        var emitted = result.Emit();
+        emitted.Property(emitted.CallStatic("Sample.Sku", "Create", "SKU-0001")!, "IsValid").Should().Be(true);
+        emitted.Property(emitted.CallStatic("Sample.Sku", "Create", "SKU-1")!, "IsValid").Should().Be(false);
+    }
+
+    [Fact]
+    public void A_value_object_that_gives_its_own_reasons_in_another_part_is_left_alone()
+    {
+        // Validate(ValidationErrorBuilder) counts too, whichever part of the type declares it.
+        var result = Run(
+            """
+            [ValueObject]
+            public partial record PersonName
+            {
+                public PersonName(string firstName, string lastName)
+                {
+                    FirstName = firstName;
+                    LastName = lastName;
+                }
+
+                public string FirstName { get; protected init; }
+
+                public string LastName { get; protected init; }
+            }
+
+            public partial record PersonName
+            {
+                protected override void Validate(DDDToolkit.Validation.ValidationErrorBuilder errors)
+                {
+                    if (FirstName.Length == 0)
+                    {
+                        errors.Add("A first name is required.", nameof(FirstName));
+                    }
+                }
+            }
+            """);
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().NotContain(source => source.HintName == Hint.Of("Sample.PersonName", ".FluentValidation"));
+
+        var emitted = result.Emit();
+        emitted.Property(emitted.New("Sample.PersonName", "Ada", "Lovelace"), "IsValid").Should().Be(true);
+        emitted.Property(emitted.New("Sample.PersonName", "", "Lovelace"), "IsValid").Should().Be(false);
+    }
+
+    [Fact]
+    public void One_project_can_mix_hand_validated_and_FluentValidation_value_objects()
+    {
+        var result = Run(
+            """
+            [SingleValueObject<string>]
+            public partial record Sku
+            {
+                public static Sku Create(string value) => new(value);
+
+                protected override bool Validate() => Value.Length == 8;
+            }
+
+            [SingleValueObject<string>]
+            public partial record EmailAddress
+            {
+                public static EmailAddress Create(string value) => new(value);
+
+                partial class Validator
+                {
+                    public Validator() => RuleFor(x => x.Value).EmailAddress();
+                }
+            }
+            """);
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().NotContain(source => source.HintName == Hint.Of("Sample.Sku", ".FluentValidation"));
+        result.ShouldContain(Hint.Of("Sample.EmailAddress", ".FluentValidation"), "partial class Validator : global::FluentValidation.AbstractValidator<global::Sample.EmailAddress>");
+
+        var emitted = result.Emit();
+        emitted.Property(emitted.CallStatic("Sample.EmailAddress", "Create", "nope")!, "IsValid").Should().Be(false);
+        emitted.Property(emitted.CallStatic("Sample.Sku", "Create", "SKU-1")!, "IsValid").Should().Be(false);
+    }
+
+    [Fact]
     public void A_type_the_core_generator_refused_gets_no_validator_either()
     {
         var result = Run(
