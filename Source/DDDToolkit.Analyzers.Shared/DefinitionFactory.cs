@@ -87,7 +87,10 @@ internal static class DefinitionFactory
             SystemTextJsonAvailable: HasType(compilation, KnownTypes.StjJsonConverterAttribute),
             IParsableAvailable: HasType(compilation, KnownTypes.IParsable),
             CanGenerate: canGenerate,
-            Diagnostics: diagnostics.ToEquatableArray());
+            Diagnostics: diagnostics.ToEquatableArray())
+        {
+            DeclaresValidate = DeclaresValidate(symbol),
+        };
     }
 
     // ------------------------------------------------------------------ single value objects
@@ -112,7 +115,10 @@ internal static class DefinitionFactory
             GraphQLSchemaType: GetGraphQLSchemaType(symbol),
             SystemTextJsonAvailable: HasType(compilation, KnownTypes.StjJsonConverterAttribute),
             CanGenerate: canGenerate,
-            Diagnostics: diagnostics.ToEquatableArray());
+            Diagnostics: diagnostics.ToEquatableArray())
+        {
+            DeclaresValidate = DeclaresValidate(symbol),
+        };
     }
 
     // ------------------------------------------------------------------ value objects
@@ -192,9 +198,25 @@ internal static class DefinitionFactory
                 .Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
                 .ToEquatableArray(),
             GenerateWith = symbol.GetMembers("With").IsEmpty,
+            DeclaresValidate = DeclaresValidate(symbol),
             GraphQLIgnoreAvailable = HasType(compilation, KnownTypes.GraphQLIgnoreAttribute),
         };
     }
+
+    /// <summary>
+    /// Whether the author declared a method with the signature of either <c>Validate</c> overload on the
+    /// value object base, in any part of the type. Only the signature matters: any such method, override or
+    /// not, would clash with the one DDDToolkit.FluentValidation generates. A <c>Validate</c> with other
+    /// parameters, such as a static check on the raw value, clashes with nothing and does not count.
+    /// </summary>
+    private static bool DeclaresValidate(INamedTypeSymbol symbol)
+        => symbol.GetMembers("Validate").OfType<IMethodSymbol>().Any(method => method.Parameters.Length switch
+        {
+            0 => true,
+            1 => method.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                 == KnownTypes.ValidationNamespace + ".ValidationErrorBuilder",
+            _ => false,
+        });
 
     /// <summary>
     /// The <c>property:</c> and <c>field:</c> attributes on a positional parameter, as source for the
