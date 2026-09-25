@@ -23,7 +23,9 @@ public sealed class PgmqSinkOptions
     /// topic exchange.
     /// <para>
     /// A message nobody is bound to reaches no queue, again as with a broker. The sends share the connection
-    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later.
+    /// and the transaction, so a message reaches all its queues or none. Needs pgmq 1.11 or later, which
+    /// <see cref="CheckExtensionOnStart"/> verifies at start-up; Supabase has 1.5.1, where
+    /// <see cref="UseQueue(string)"/> and <see cref="UseQueues"/> work instead.
     /// </para>
     /// </summary>
     public PgmqSinkOptions UseTopics()
@@ -102,6 +104,18 @@ public sealed class PgmqSinkOptions
     /// </para>
     /// </summary>
     public bool CreateQueueIfMissing { get; set; } = true;
+
+    /// <summary>
+    /// Checks at start-up, once per database, that the pgmq extension is installed, and with
+    /// <see cref="UseTopics"/> that it is 1.11 or later, so a database that cannot take the messages fails
+    /// the start by name instead of the first send. On by default; applies to a sink registered with
+    /// <c>AddPgmqSink</c>.
+    /// <para>
+    /// The check needs the database at start-up. Turn it off when the application has to start without it,
+    /// or when something in the application itself installs the extension later in its start.
+    /// </para>
+    /// </summary>
+    public bool CheckExtensionOnStart { get; set; } = true;
 
     /// <summary>
     /// Writes the envelope's routing fields into pgmq's <c>headers</c> column: the message id, the

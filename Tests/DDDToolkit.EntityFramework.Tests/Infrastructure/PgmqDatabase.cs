@@ -23,6 +23,12 @@ public sealed class PgmqDatabase : IAsyncDisposable
     /// </summary>
     public const string Image = "ghcr.io/pgmq/pg17-pgmq:v1.13.0";
 
+    /// <summary>
+    /// pgmq 1.5.1 on Postgres 17, what a Supabase project has: named queues and <c>read_with_poll</c>, no
+    /// topic routing. The version check and long polling are tested on it.
+    /// </summary>
+    public const string SupabaseImage = "ghcr.io/pgmq/pg17-pgmq:v1.5.1";
+
     private readonly PostgreSqlContainer _container;
 
     private PgmqDatabase(PostgreSqlContainer container) => _container = container;
@@ -34,9 +40,12 @@ public sealed class PgmqDatabase : IAsyncDisposable
     /// Starts the container, or returns <see langword="null"/> when Docker is not available here.
     /// Callers skip the test in that case rather than pretending to have covered it.
     /// </summary>
-    public static async Task<PgmqDatabase?> StartAsync(CancellationToken cancellationToken)
+    public static Task<PgmqDatabase?> StartAsync(CancellationToken cancellationToken) => StartAsync(Image, cancellationToken);
+
+    /// <summary>Starts <paramref name="image"/>, one of the pgmq images, or returns <see langword="null"/> without Docker.</summary>
+    public static async Task<PgmqDatabase?> StartAsync(string image, CancellationToken cancellationToken)
     {
-        var container = new PostgreSqlBuilder(Image)
+        var container = new PostgreSqlBuilder(image)
             .WithDatabase("ddd")
             .WithUsername("postgres")
             .WithPassword("postgres")

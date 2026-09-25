@@ -30,6 +30,10 @@ public static class DependencyInjection
     /// <summary>
     /// Registers <see cref="PgmqSink{TContext}"/> (scoped), which enqueues on the connection of
     /// <typeparamref name="TContext"/> and therefore inside whatever transaction that context has.
+    /// <para>
+    /// Also registers a start-up check that the context's database has the pgmq extension, and a version
+    /// with topic routing when the sink uses it; <see cref="PgmqSinkOptions.CheckExtensionOnStart"/> turns it off.
+    /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Which queue, and what rides alongside the payload.</param>
@@ -44,13 +48,20 @@ public static class DependencyInjection
         services.TryAddSingleton(options);
         // Scoped: it rides the scope's context, and therefore that context's transaction.
         services.TryAddScoped<PgmqSink<TContext>>();
+
+        if (options.CheckExtensionOnStart)
+        {
+            services.AddPgmqStartupCheck(PgmqRequirement.For<TContext>(options.Topics));
+        }
+
         return services;
     }
 
     /// <summary>
     /// Registers <see cref="PgmqSink"/> (singleton), which opens its own connections from
     /// <paramref name="dataSource"/>. For a queue in a database this process does not otherwise write
-    /// to; there is no shared transaction on this path.
+    /// to; there is no shared transaction on this path. Registers the same start-up check as the overload
+    /// for a context.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="dataSource"/> is null.</exception>
     public static IServiceCollection AddPgmqSink(this IServiceCollection services, NpgsqlDataSource dataSource, Action<PgmqSinkOptions>? configure = null)
@@ -63,6 +74,12 @@ public static class DependencyInjection
 
         services.TryAddSingleton(options);
         services.TryAddSingleton(_ => new PgmqSink(dataSource, options));
+
+        if (options.CheckExtensionOnStart)
+        {
+            services.AddPgmqStartupCheck(PgmqRequirement.For(dataSource, options.Topics));
+        }
+
         return services;
     }
 
@@ -103,6 +120,11 @@ public static class DependencyInjection
     /// producing side enqueueing each message on the queue of every service that wants it
     /// (<see cref="PgmqSinkOptions.UseQueues"/>), a queue does what a broker's topic would.
     /// </para>
+    /// <para>
+    /// Before any consumer starts, a start-up check makes sure the database has the pgmq extension, and a
+    /// version with topic routing when <see cref="PgmqConsumerOptions.BindTopics"/> is on;
+    /// <see cref="PgmqConsumerOptions.CheckExtensionOnStart"/> turns it off.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="dataSource"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="queue"/> is empty or white space.</exception>
@@ -115,6 +137,11 @@ public static class DependencyInjection
         var options = new PgmqConsumerOptions();
         configure?.Invoke(options);
 
+        if (options.CheckExtensionOnStart)
+        {
+            services.AddPgmqStartupCheck(PgmqRequirement.For(dataSource, options.BindTopics));
+        }
+
         services.TryAddSingleton<IntegrationEventReceiver>();
         services.AddSingleton<IHostedService>(provider => new PgmqConsumer(
             dataSource,
@@ -125,5 +152,15 @@ public static class DependencyInjection
             provider.GetService<IntegrationEventSubscriptions>()));
 
         return services;
+    }
+
+    /// <summary>
+    /// Adds what one registration needs to the start-up check, and the check itself the first time. One
+    /// check for the process, so a sink and a consumer on the same database cost one query between them.
+    /// </summary>
+    private static void AddPgmqStartupCheck(this IServiceCollection services, PgmqRequirement requirement)
+    {
+        services.AddSingleton(requirement);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PgmqStartupCheck>());
     }
 }

@@ -12,6 +12,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- The pgmq sink and consumer check the database when the application starts. `AddPgmqSink` and
+  `AddPgmqConsumer` register a lifecycle service that reads the installed pgmq version once per database
+  in `StartingAsync`, before any consumer or the outbox processor starts. Without the extension the start
+  fails with `PgmqNotInstalledException`. With `UseTopics` or `BindTopics` on a pgmq older than 1.11 it
+  fails with the new `PgmqTopicsNotSupportedException`, which names the installed version, says that
+  Supabase ships 1.5.1 and that `UseQueue` and `UseQueues` work there. Before, both failures came with the
+  first message sent, or when the consumer bound its queue. `PgmqQueue.InstalledVersionAsync` and
+  `PgmqQueue.EnsureTopicRoutingAsync` do the same for a check of your own, and
+  `CheckExtensionOnStart = false` on the sink's or the consumer's options turns it off. The topic
+  functions of `PgmqQueue` throw `PgmqTopicsNotSupportedException` as well, an
+  `InvalidOperationException` as before.
+  `Examples/Microservices.Pgmq` drops its hand-written check for this one. See
+  [Queues, creation and the missing extension](docs/transports.md#queues-creation-and-the-missing-extension).
+- Long polling in `PgmqConsumer`. While the host runs, an empty read waits inside Postgres with
+  `pgmq.read_with_poll` for up to `LongPollTimeout` (five seconds) instead of returning at once and
+  sleeping `PollingInterval`, so a message is picked up within `LongPollInterval` (100 milliseconds) of its
+  commit and a quiet queue costs one round trip per wait. It is on by default, and holds one connection per
+  consumer while it waits; `LongPollTimeout = TimeSpan.Zero` goes back to polling every `PollingInterval`.
+  `ConsumeOnceAsync` still reads once and does not wait. `PgmqQueue.ReadWithPollAsync` is the read on its
+  own. `read_with_poll` is in pgmq 1.5.1, so this works on Supabase too, and is tested there. See
+  [Reading the queue](docs/transports.md#reading-the-queue).
 - A documentation site, [dylansnel.github.io/DDDToolkit](https://dylansnel.github.io/DDDToolkit/): the
   `docs/` folder rendered by Docusaurus from `website/`, with a sidebar, a landing page and links
   to the examples on GitHub. The Docs workflow builds it on every pull request that touches the docs,
@@ -308,6 +329,9 @@ convention.
 
 ### Changed
 
+- `AddPgmqSink` needs the database when the application starts, for the pgmq check above; before, it did
+  not touch the database until the first send. Set `CheckExtensionOnStart = false` on the sink's options
+  to start without it.
 - The documentation builds up. Each page starts with the problem it solves and the simplest use, and
   leaves storage, GraphQL, modules and design rationale for later, so a first example no longer carries
   `ColumnLength`, `[ModuleContract]` or `DDD_Module` before they mean anything. Every building block
