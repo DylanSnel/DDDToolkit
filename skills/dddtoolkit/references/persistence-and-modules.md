@@ -115,8 +115,9 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 ```
 
 `Add{Module}IntegrationEvents()` is generated into the namespace `{AssemblyName}.IntegrationEvents`.
-Give every event that is stored a `[DomainEventName("module.something-happened")]`, so renaming the
-class does not orphan stored rows.
+Each row stores the event's name, which by convention is the module and the class name in kebab case.
+Renaming a stored event's class changes that name, so pin the old one with `[DomainEventName(...)]`,
+or the rows already written are orphaned.
 
 ## Modules
 
@@ -143,7 +144,7 @@ other modules deploy against, written in primitives and published ids. Full page
 The contract, in the publishing module's contracts project:
 
 ```csharp
-[IntegrationEvent("ordering.order-confirmed", Version = 1)]
+[IntegrationEvent]                    // published as "ordering.order-confirmed", version 1 from the V1 suffix
 public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 ```
 
@@ -189,7 +190,8 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 - Handler constructors take services from the container. The generated registration builds them with
   `new`; one it cannot build is DDD00033.
 - Delivery is at least once; the inbox makes a handler run once per message and consumer.
-- Never change a published contract. Breaking the payload means a new record and a new version
-  (`OrderConfirmedV2`, `Version = 2`), an upcaster from the old one, and keeping the old record.
+- Never change a published contract. Breaking the payload means a new record whose suffix is the new
+  version (`OrderConfirmedV2`, same name, version 2), an upcaster from the old one, and keeping the old
+  record.
 - Out of the process (pgmq, Wolverine, MassTransit, a custom sink): `transports.md`. To GraphQL
   subscribers: `graphql.md`.

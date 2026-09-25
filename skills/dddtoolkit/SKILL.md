@@ -263,12 +263,21 @@ public partial class Order                                     // e.g. Invariant
 ## Domain events
 
 ```csharp
-[DomainEventName("ordering.order-cancelled")]   // a stable stored name, for anything stored or published
-public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent;
+public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEvent;   // stored as "ordering.order-cancelled"
 ```
 
 - An ordinary `sealed record` deriving from `DomainEvent`, with no attribute required and no `partial`.
   `EventId` and `OccurredAt` come from the base.
+- Its stored and published name is a convention: the module from `[assembly: Module("Ordering")]` and
+  the class name, both in kebab case (`order-cancelled` without a module). A class name ending in `V`
+  and a number is that version: `OrderPlacedV2` is version 2 of `ordering.order-placed`. Do not write
+  names by hand.
+- Renaming a class changes its name, so pin the old one when the event has been stored or published:
+  `[DomainEventName("ordering.order-cancelled")]` on a domain event,
+  `[IntegrationEvent("ordering.order-cancelled")]` on a contract. The generated `{Module}EventNames`
+  class holds every name as a constant (`OrderingEventNames.OrderCancelled`) for topic bindings, tests
+  and logs, but not for the event's own attribute. Name clashes and bad version suffixes are
+  DDD00034 to DDD00037.
 - Only an aggregate root raises, with `RaiseDomainEvent(...)` from its own methods (it is protected).
   Children have no events; their root raises. Raise after the change, not before a check that can
   still throw.
@@ -339,6 +348,7 @@ this skill:
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
 | GraphQL with HotChocolate, Fusion across modules | `graphql` |
+| Value object rules as FluentValidation validators | `fluent-validation` |
 | Failures in the reader's language | `localization` |
 | Supabase migrations from Entity Framework | `supabase` |
 | Upgrading from 2.x | `migrating-to-3` |

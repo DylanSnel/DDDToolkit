@@ -17,6 +17,7 @@ How to work with them:
 - Most ids are reported by a generator: `#pragma warning disable` and `[SuppressMessage]` do not reach
   them, only `<NoWarn>` in the project file does, for the whole project. DDD00022, DDD00023, DDD00024
   and DDD00032 come from analyzers, so pragmas work on those.
+- DDD00012 and DDD00014 to DDD00019 have never been assigned; an id missing below does not exist.
 
 ## DDD00001
 
@@ -170,3 +171,42 @@ cannot be built with `new`: an outbound `IOutboundIntegrationEvent<,>` class or 
 `IIntegrationEventHandler<T>` whose constructor is inaccessible, ambiguous (two longest constructors of
 equal length), uses `ref`, `out` or `params`, or has parameter types the module cannot see. Give it one
 public constructor whose parameters are services from the container, or register it by hand.
+
+## DDD00034
+
+Warning. An event's class name ends in a version (`OrderPlacedV2`) and `[IntegrationEvent(Version = 3)]`
+states another; the stated one wins and the suffix is ignored. Rename the class to the version it is
+(`OrderPlacedV3`), or remove `Version` if the name was right. Code fixes do either.
+
+## DDD00035
+
+Error. An event's class name ends in `V0` or a version with a leading zero (`V01`), which cannot be a
+version. Rename it: `V1` for a first version, or a name that does not end in `V` and digits. Digits not
+after a `V`, as in `Level2Reached`, are fine.
+
+## DDD00036
+
+Error. Two domain events, or two contracts, of one module get the same name and version, usually two
+classes of one name in different namespaces. Rename one, or pin another name on one:
+`[DomainEventName("ordering.returns-order-placed")]` on a domain event, the name in
+`[IntegrationEvent("...")]` on a contract. A domain event and the contract it is published as may share
+a name, and so may the versions of one event.
+
+## DDD00037
+
+Error. Two event names that differ only in punctuation (`ordering.order-placed` and
+`ordering.order.placed`) would get the same constant in the generated `{Module}EventNames`. Pin one of
+them to a name that reads differently.
+
+## Not a diagnostic: the owned type must carry the key part
+
+An exception when the Entity Framework model is built, not at compile time: an aggregate with a
+`[KeyPart]` owns a child that has no property for that key part. Give the child a `[KeyPart]` property of
+the same name and type, get-only, and set it from the parent when the child is created. See
+`composite-keys.md` in the docs.
+
+## Nothing was generated and there is no diagnostic
+
+Check that the generator's package is referenced (Entity Framework, FluentValidation and HotChocolate
+each bring their own), that the type is `partial` and carries the generic attribute (`[EntityId<Guid>]`),
+and read the generated files with `EmitCompilerGeneratedFiles` turned on.
