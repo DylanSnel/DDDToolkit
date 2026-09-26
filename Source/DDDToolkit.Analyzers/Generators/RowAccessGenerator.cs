@@ -29,8 +29,9 @@ namespace DDDToolkit.Analyzers;
 /// <para>
 /// An <c>[AccessFunction]</c> is translated the same way, and may also ask the aggregate's entities:
 /// <c>project.Members.Any(member =&gt; ...)</c> is <c>{exists:Members:e1}...{/exists}</c>, the entity's
-/// properties inside it <c>{col:e1:Path}</c>. A rule asks the function with <c>{call:schema.name}</c>, which
-/// the export writes with the row's key.
+/// properties inside it <c>{col:e1:Path}</c>. A rule asks the function about its own row with
+/// <c>{call:schema.name}</c>, which the export writes with the row's key, and about a key it holds, from its
+/// definition or its contract, with <c>{fn:schema.name}(...)</c>.
 /// </para>
 /// <para>
 /// The translation keeps C#'s meaning rather than SQL's, so the method and the policy answer alike for the
@@ -54,14 +55,20 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is ClassDeclarationSyntax,
             transform: static (syntaxContext, cancellationToken) => Translate(syntaxContext, isFunction: true, cancellationToken));
 
+        var contracts = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.AccessFunctionContractAttribute,
+            predicate: static (node, _) => node is ClassDeclarationSyntax,
+            transform: static (syntaxContext, _) => Declare(syntaxContext));
+
         context.RegisterSourceOutput(rules, static (production, rule) => Produce(production, rule, ".RowAccess"));
         context.RegisterSourceOutput(functions, static (production, function) => Produce(production, function, ".AccessFunction"));
+        context.RegisterSourceOutput(contracts, static (production, contract) => Produce(production, contract, ".AccessFunctionContract"));
     }
 
     private static void Produce(SourceProductionContext production, RowAccessDefinition definition, string suffix)
     {
         definition.Diagnostics.ReportAll(production);
-        if (definition.Sql is not null)
+        if (definition.Sql is not null || definition.FunctionName is not null)
         {
             production.AddSource(definition.Type.HintName(suffix), SourceText.From(Emit(definition), Encoding.UTF8));
         }
@@ -125,10 +132,19 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         var model = attributed.SemanticModel.Compilation.GetSemanticModel(declaration.SyntaxTree);
         var sql = new Translator(model, method.Parameters[0], method.Parameters[1], isFunction, diagnostics).Translate(body);
 
+        if (diagnostics.HasErrorsIn())
+        {
+            return new RowAccessDefinition(type, null, new EquatableArray<DiagnosticInfo>(diagnostics));
+        }
+
+        var key = isFunction ? KeyOf(aggregate) : null;
         return new RowAccessDefinition(
             type,
-            diagnostics.HasErrorsIn() ? null : sql,
-            new EquatableArray<DiagnosticInfo>(diagnostics));
+            sql,
+            new EquatableArray<DiagnosticInfo>(diagnostics),
+            isFunction ? FunctionNameOf(attributed.Attributes[0]) : null,
+            key?.Type,
+            key?.Parameter);
     }
 
     private static bool IsAggregateRoot(INamedTypeSymbol type)
@@ -146,6 +162,12 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionAttribute`1" } function
             && function.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
 
+    /// <summary>The <c>[AccessFunctionContract&lt;TKey&gt;]</c> on <paramref name="type"/>, or null.</summary>
+    private static AttributeData? AccessFunctionContractOf(ITypeSymbol type)
+        => type.GetAttributes().FirstOrDefault(static attribute =>
+            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionContractAttribute`1" } contract
+            && contract.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
     /// <summary><c>schema.name</c>, both plain identifiers: what a function called with an empty search_path needs.</summary>
     private static bool IsQualifiedFunctionName(string? name)
         => name is not null
@@ -154,24 +176,112 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
     private static string Camel(string name) => name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name.Substring(1);
 
-    private static string Emit(RowAccessDefinition rule)
+    private static string Emit(RowAccessDefinition definition)
     {
         var writer = new CodeWriter().Header();
 
-        using (writer.TypeScope(rule.Type))
+        using (writer.TypeScope(definition.Type))
         {
-            using (writer.Block(rule.Type.PartialHeader))
+            using (writer.Block(definition.Type.PartialHeader))
             {
-                writer.Line("/// <summary>");
-                writer.Line("/// <c>Allows</c> as SQL, translated when this compiled. <c>{col:Path}</c> is a property, whose column");
-                writer.Line("/// the export takes from the Entity Framework model, and <c>{caller:...}</c> is the caller, as the");
-                writer.Line("/// database knows them.");
-                writer.Line("/// </summary>");
-                writer.Line("public const string " + KnownTypes.RowAccessSqlField + " = " + SymbolDisplay.FormatLiteral(rule.Sql!, quote: true) + ";");
+                if (definition.Sql is not null)
+                {
+                    writer.Line("/// <summary>");
+                    writer.Line("/// <c>Allows</c> as SQL, translated when this compiled. <c>{col:Path}</c> is a property, whose column");
+                    writer.Line("/// the export takes from the Entity Framework model, and <c>{caller:...}</c> is the caller, as the");
+                    writer.Line("/// database knows them.");
+                    writer.Line("/// </summary>");
+                    writer.Line("public const string " + KnownTypes.RowAccessSqlField + " = " + SymbolDisplay.FormatLiteral(definition.Sql, quote: true) + ";");
+                }
+
+                if (definition.FunctionName is { } name)
+                {
+                    writer.Line();
+                    writer.Line("/// <summary>The function's name in the database, with its schema.</summary>");
+                    writer.Line("public const string Name = " + SymbolDisplay.FormatLiteral(name, quote: true) + ";");
+                }
+
+                if (definition is { FunctionName: { } function, KeyType: { } key, KeyParameter: { } parameter })
+                {
+                    writer.Line();
+                    writer.Line("/// <summary>");
+                    writer.Line("/// This function asked about the aggregate with <paramref name=\"" + parameter + "\"/>, from a row access rule of any");
+                    writer.Line("/// aggregate that holds that key: <c>" + function + "(...)</c> in its policy. Only the database can answer it,");
+                    writer.Line("/// so called in C# it throws.");
+                    writer.Line("/// </summary>");
+                    writer.Line("/// <exception cref=\"global::DDDToolkit.Abstractions.Access.DatabaseOnlyException\">Always: the question is the database's.</exception>");
+                    writer.Line("public static bool Allows(" + key + " " + parameter + ") => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(" + SymbolDisplay.FormatLiteral(function + "(" + parameter + ")", quote: true) + ");");
+                }
             }
         }
 
         return writer.ToString();
+    }
+
+    /// <summary>
+    /// An <c>[AccessFunctionContract&lt;TKey&gt;]</c>: the published side of an access function, whose
+    /// <c>Name</c> and <c>Allows(TKey)</c> the generator writes so other modules' rules ask it typed.
+    /// </summary>
+    private static RowAccessDefinition Declare(GeneratorAttributeSyntaxContext attributed)
+    {
+        var symbol = (INamedTypeSymbol)attributed.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)attributed.TargetNode;
+        var type = DefinitionFactory.CreateTypeInfo(symbol, syntax);
+        var diagnostics = new List<DiagnosticInfo>();
+
+        var key = attributed.Attributes[0].AttributeClass?.TypeArguments.FirstOrDefault();
+        if (key is null || key.TypeKind == TypeKind.Error)
+        {
+            return new RowAccessDefinition(type, null, EquatableArray<DiagnosticInfo>.Empty);
+        }
+
+        if (!symbol.IsStatic || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, LocationInfo.From(syntax.Identifier), symbol.Name, "to be a static partial class, so the generator can add its Allows method"));
+        }
+
+        var name = FunctionNameOf(attributed.Attributes[0]);
+        if (!IsQualifiedFunctionName(name))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                LocationInfo.From(syntax.Identifier),
+                symbol.Name,
+                "a function name with its schema, such as \"projects.is_member\": the function runs with an empty search_path, and is created in that schema"));
+        }
+
+        return diagnostics.HasErrorsIn()
+            ? new RowAccessDefinition(type, null, new EquatableArray<DiagnosticInfo>(diagnostics))
+            : new RowAccessDefinition(type, null, new EquatableArray<DiagnosticInfo>(diagnostics), name, key.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), Camel(key.Name));
+    }
+
+    /// <summary>
+    /// The key an access function about <paramref name="aggregate"/> is asked with, as a type and a parameter
+    /// name, or null for an aggregate keyed on more than its id, whose function takes every key part.
+    /// </summary>
+    private static (string Type, string Parameter)? KeyOf(INamedTypeSymbol aggregate)
+    {
+        if (aggregate.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static attribute => attribute.AttributeClass?.ToDisplayString() == KnownTypes.KeyPartAttribute)))
+        {
+            return null;
+        }
+
+        var root = aggregate.GetAttributes().FirstOrDefault(static attribute =>
+            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AggregateRootAttribute`1" } candidate
+            && candidate.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+        if (root?.AttributeClass?.TypeArguments.FirstOrDefault() is not { } argument)
+        {
+            return null;
+        }
+
+        // [AggregateRoot<Guid>] names the raw value, and the generator writes the id beside the aggregate.
+        var isIdentifier = argument.GetAttributes().Any(static attribute => attribute.AttributeClass?.OriginalDefinition.MetadataName == "EntityIdAttribute`1")
+            || argument.AllInterfaces.Any(static contract => contract.ToDisplayString() == KnownTypes.EntityIdInterface);
+        var type = isIdentifier
+            ? argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            : "global::" + (aggregate.ContainingNamespace.IsGlobalNamespace ? "" : aggregate.ContainingNamespace.ToDisplayString() + ".") + Identifiers.IdNameFor(aggregate.Name);
+
+        return (type, Camel(Identifiers.IdNameFor(aggregate.Name)));
     }
 
     /// <summary>C# in, SQL out; anything it does not know is DDD00039 on that expression.</summary>
@@ -246,6 +356,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 && invocation.Expression is MemberAccessExpressionSyntax any)
             {
                 return Any(invocation, any.Expression);
+            }
+
+            if (ByKey(invocation, called) is { } asked)
+            {
+                return asked;
             }
 
             if (called is { Name: "Allows", IsStatic: true } allows && AccessFunctionOf(allows.ContainingType) is { } function)
@@ -329,6 +444,32 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 && IsParameter(arguments[1].Expression, caller)
                     ? "{call:" + name + "}"
                     : Fail(invocation);
+        }
+
+        /// <summary>
+        /// <c>ProjectMembership.Allows(task.ProjectId)</c>: an access function asked by key, from its definition or
+        /// from its contract, as <c>{fn:projects.is_member}(...)</c>. The method may be one this generator is
+        /// writing in this very compilation, which the compiler cannot place yet, so the class is enough.
+        /// Null when the call is not one.
+        /// </summary>
+        private string? ByKey(InvocationExpressionSyntax invocation, IMethodSymbol? called)
+        {
+            if (invocation.Expression is not MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Allows" } access
+                || invocation.ArgumentList.Arguments.Count != 1
+                || called is { IsStatic: false })
+            {
+                return null;
+            }
+
+            var owner = called?.ContainingType ?? model.GetSymbolInfo(access.Expression).Symbol as INamedTypeSymbol;
+            if (owner is null || (AccessFunctionOf(owner) ?? AccessFunctionContractOf(owner)) is not { } declared)
+            {
+                return null;
+            }
+
+            return FunctionNameOf(declared) is { } name && IsQualifiedFunctionName(name)
+                ? "{fn:" + name + "}(" + Translate(invocation.ArgumentList.Arguments[0].Expression) + ")"
+                : Fail(invocation);
         }
 
         /// <summary><c>Sql.Call&lt;T&gt;("schema.name", ...)</c>: the function, with its arguments translated like the rest of the rule.</summary>
@@ -499,7 +640,17 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 }
 
 /// <summary>One row access rule: the type to add the SQL to, and the SQL, or null when it has errors.</summary>
-internal sealed record RowAccessDefinition(TypeDeclarationInfo Type, string? Sql, EquatableArray<DiagnosticInfo> Diagnostics);
+/// <summary>
+/// A row access rule, an access function or an access function's contract: the type to add to, the SQL
+/// (null for a contract, or when there are errors), and for a function its name and the key it is asked with.
+/// </summary>
+internal sealed record RowAccessDefinition(
+    TypeDeclarationInfo Type,
+    string? Sql,
+    EquatableArray<DiagnosticInfo> Diagnostics,
+    string? FunctionName = null,
+    string? KeyType = null,
+    string? KeyParameter = null);
 
 internal static class RowAccessDiagnostics
 {

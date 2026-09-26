@@ -40,6 +40,9 @@ internal static class KnownTypes
     /// <summary>A question rules ask that reads an aggregate's entities, made one SQL function: <c>[AccessFunction&lt;TAggregate&gt;]</c>.</summary>
     public const string AccessFunctionAttribute = AttributesNamespace + ".AccessFunctionAttribute`1";
 
+    /// <summary>An access function published in a module's contracts, asked by key: <c>[AccessFunctionContract&lt;TKey&gt;]</c>.</summary>
+    public const string AccessFunctionContractAttribute = AttributesNamespace + ".AccessFunctionContractAttribute`1";
+
     /// <summary>Who is asking, as a row access rule sees them.</summary>
     public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
 

@@ -231,6 +231,61 @@ public class RowAccessGenerationTests
         result.Count("DDD00039").Should().Be(1);
     }
 
+    [Fact]
+    public void An_access_function_gets_its_name_and_an_Allows_that_takes_the_aggregates_key()
+    {
+        var result = GeneratorTestHost.Create(Shop + Membership).RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain("Membership.AccessFunction", "public const string Name = \"shop.is_member\";");
+        result.ShouldContain("Membership.AccessFunction", "public static bool Allows(global::Shop.OrderId orderId) => throw new global::DDDToolkit.Abstractions.Access.DatabaseOnlyException(\"shop.is_member(orderId)\");");
+    }
+
+    [Fact]
+    public void A_rule_asks_an_access_function_by_a_key_it_holds()
+    {
+        var result = GeneratorTestHost.Create(Shop + Membership +
+            """
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class MembersSeeTheirOrders
+            {
+                public static bool Allows(Order order, Caller caller) => Membership.Allows(order.Id);
+            }
+            """).RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        ConstantIn(result.Source("MembersSeeTheirOrders.RowAccess")).Should().Be("{fn:shop.is_member}({col:Id})");
+    }
+
+    [Fact]
+    public void A_contract_publishes_the_function_to_other_modules_by_its_key()
+    {
+        var result = GeneratorTestHost.Create(Shop +
+            """
+            [AccessFunctionContract<OrderId>("shop.is_member")]
+            public static partial class OrderMembers;
+
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class MembersSeeTheirOrders
+            {
+                public static bool Allows(Order order, Caller caller) => OrderMembers.Allows(order.Id);
+            }
+            """).RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        result.ShouldContain("OrderMembers.AccessFunctionContract", "public const string Name = \"shop.is_member\";");
+        result.ShouldContain("OrderMembers.AccessFunctionContract", "public static bool Allows(global::Shop.OrderId orderId)");
+        ConstantIn(result.Source("MembersSeeTheirOrders.RowAccess")).Should().Be("{fn:shop.is_member}({col:Id})");
+    }
+
+    [Fact]
+    public void A_contract_named_without_its_schema_is_an_error()
+        => GeneratorTestHost.Create(Shop +
+            """
+            [AccessFunctionContract<OrderId>("is_member")]
+            public static partial class OrderMembers;
+            """).RunCore().Count("DDD00038").Should().Be(1);
+
     [Theory]
     [InlineData("is_member")]
     [InlineData("shop.is-member")]

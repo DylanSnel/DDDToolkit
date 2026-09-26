@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
@@ -224,6 +225,39 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         var export = () => SupabaseMigrations.Export(context, _directory, options);
 
         export.Should().Throw<InvalidOperationException>().WithMessage("Two access functions are called desk.is_watcher*");
+    }
+
+    [Fact]
+    public void A_rule_asks_an_access_function_by_a_key_it_holds()
+    {
+        using var context = DeskContext.Create();
+        var options = Options(null, [RowAccessRule.For<Ticket>("Watched by key", RowOperations.Read, "{fn:desk.is_watcher}({col:Id})")]);
+        options.RowAccessFunctions.Add(DeskRules.IsWatcher);
+
+        SupabaseMigrations.Export(context, _directory, options);
+
+        File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single()).Should().Contain("FOR SELECT TO anon, authenticated\n    USING (desk.is_watcher(\"Id\"));");
+    }
+
+    [Fact]
+    public void A_rule_that_asks_a_function_no_module_defines_is_refused_when_its_file_is_written()
+    {
+        using var context = DeskContext.Create();
+
+        var export = () => SupabaseMigrations.Export(context, _directory, Options(null, [DeskRules.Watchers]));
+
+        export.Should().Throw<InvalidOperationException>()
+            .WithMessage("The rule 'Watchers read their tickets' asks the access function desk.is_watcher, which no [AccessFunction] in the modules this host references defines.*");
+    }
+
+    [Fact]
+    public void Asked_by_key_in_csharp_an_access_function_says_only_the_database_can_answer()
+    {
+        var ticket = new Ticket(TicketId.CreateSequential(), "Watched", owner: null, team: null, TicketStatus.Open, isPublic: false);
+
+        var ask = () => TicketWatchers.Allows(ticket.Id);
+
+        ask.Should().Throw<DatabaseOnlyException>().Which.SqlText.Should().Be("desk.is_watcher(ticketId)");
     }
 
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider

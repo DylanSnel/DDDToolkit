@@ -435,6 +435,8 @@ public static class SupabaseMigrations
             return null;
         }
 
+        EnsureDefined(rules.Select(rule => ($"The rule '{rule.Name}'", rule.Sql)).Concat(functions.Select(function => ($"The access function '{function.Name}'", function.Sql))), options);
+
         var sql = new StringBuilder()
             .Append("-- Written by DDDToolkit from the row access rules of ").Append(owner).Append('.').Append('\n')
             .Append("-- Written from those rules; change the rules, not this file. Every file like it says what the").Append('\n')
@@ -465,6 +467,25 @@ public static class SupabaseMigrations
         existing[version] = [path];
 
         return new($"{version}_access", SupabaseMigrationStatus.Created, path);
+    }
+
+    /// <summary>
+    /// Refuses SQL that asks an access function no module defines: a contract published without its
+    /// definition, or a definition whose name changed. Postgres would refuse the policy when Supabase applies
+    /// the file; this says so when the file is written, and names the rule.
+    /// </summary>
+    private static void EnsureDefined(IEnumerable<(string What, string Sql)> asking, SupabaseMigrationOptions options)
+    {
+        var defined = options.RowAccessFunctions.Select(function => function.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var (what, sql) in asking)
+        {
+            if (PostgresRowAccess.FunctionsAskedBy(sql).FirstOrDefault(name => !defined.Contains(name)) is { } missing)
+            {
+                throw new InvalidOperationException(
+                    $"{what} asks the access function {missing}, which no [AccessFunction] in the modules this host references defines. " +
+                    $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")].");
+            }
+        }
     }
 
     /// <summary>

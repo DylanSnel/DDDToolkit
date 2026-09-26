@@ -43,7 +43,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   policies, so a rule that calls it, `ProjectMembership.Allows(project, caller)`, does not make Postgres
   recurse; a rule that reads the entities itself is [DDD00041](docs/diagnostics.md#ddd00041). Only the
   context that maps the aggregate writes the function, before its policies, and replaces it in place
-  later so other modules' policies that call it by name keep working. See
+  later so other modules' policies that call it keep working. The generator adds `Name` and
+  `Allows(key)`, so a rule holding only an id asks it typed, `ProjectMembership.Allows(task.ProjectId)`;
+  `[AccessFunctionContract<ProjectId>("projects.is_member")]` in a module's contracts publishes the same
+  to other modules, and the Supabase build refuses a rule that asks a function no module defines. See
   [Access functions](docs/row-level-security.md#asking-the-aggregates-entities-access-functions).
 - The Supabase build writes the row access rules of every module a host references into
   `supabase/migrations`, a file per module, `{version}_access.{module}.ddd.sql`, asking `auth.uid()`. The

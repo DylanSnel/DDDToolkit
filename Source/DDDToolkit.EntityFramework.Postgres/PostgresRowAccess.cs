@@ -277,6 +277,42 @@ public static class PostgresRowAccess
         return statements.ToString();
     }
 
+    /// <summary>
+    /// The access functions a rule's or a function's SQL asks, by name: <c>projects.is_member</c> for
+    /// <c>ProjectMembership.Allows(project, caller)</c> and for <c>ProjectMembers.Allows(task.ProjectId)</c>.
+    /// Not those written with <c>Sql.Call</c>, which may be functions of your own.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="sql"/> is null.</exception>
+    public static IReadOnlyList<string> FunctionsAskedBy(string sql)
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+
+        var names = new List<string>();
+        for (var i = 0; i < sql.Length; i++)
+        {
+            if (sql[i] is '{' or '}' && i + 1 < sql.Length && sql[i + 1] == sql[i])
+            {
+                i++;
+                continue;
+            }
+
+            if (sql[i] != '{' || sql.IndexOf('}', i) is var end && end < 0)
+            {
+                continue;
+            }
+
+            var parts = sql[(i + 1)..end].Split(':');
+            if (parts is ["call" or "fn", var name])
+            {
+                names.Add(name);
+            }
+
+            i = end;
+        }
+
+        return names;
+    }
+
     /// <summary>The comment on every access function a context made, which is how its next script finds them.</summary>
     private static string FunctionComment(DbContext context) => "DDDToolkit access function of " + context.GetType().Name;
 
@@ -595,6 +631,9 @@ public static class PostgresRowAccess
                     return "))";
                 case "call" when parts.Length == 2:
                     return parts[1] + "(" + string.Join(", ", Key()) + ")";
+                case "fn" when parts.Length == 2:
+                    // Asked by a key the rule holds, whose argument the template writes itself.
+                    return parts[1];
                 default:
                     throw Unknown(token);
             }

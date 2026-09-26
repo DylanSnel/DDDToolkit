@@ -216,11 +216,44 @@ the class that declares it, and it writes it before the policies that call it. A
 in place, so the policies of other modules that call it keep working, and drops the functions the context
 no longer declares. Two access functions with one name are refused.
 
-**Other modules** call it by name, with the id they hold: `Sql.Call<bool>("projects.is_member", task.ProjectId)`.
-The Supabase build writes the access file of the module that owns a function before the files of the
-modules that call it. Such a rule is the database's only, because C# does not hold the project. Where C#
-does, `ProjectMembership.Allows(project, caller)` answers in memory: the members are loaded with the
-project.
+**Asked by a key.** The generator adds `Name` and an `Allows` that takes the aggregate's key, for a rule
+that holds a project's id rather than the project: `ProjectMembership.Allows(task.ProjectId)` becomes
+`projects.is_member("ProjectId")`. Only the database can answer that one; called in C#, it throws
+`DatabaseOnlyException`. Where C# holds the project, `ProjectMembership.Allows(project, caller)` answers in
+memory, because the members are loaded with the project.
+
+**Other modules** see only the Projects module's contracts, which cannot hold the definition, since it
+reads the module's own aggregate. So the contracts publish it by its key, and the definition takes its
+name from there:
+
+```csharp
+// Projects.Contracts
+[AccessFunctionContract<ProjectId>("projects.is_member")]
+public static partial class ProjectMembers;
+
+// Projects
+[AccessFunction<Project>(ProjectMembers.Name)]
+public static partial class ProjectMembership
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);
+}
+
+// Tasks
+[RowAccess<ProjectTask>(RowOperations.All)]
+public static partial class ProjectMembersWorkOnItsTasks
+{
+    public static bool Allows(ProjectTask task, Caller caller) => ProjectMembers.Allows(task.ProjectId);
+}
+```
+
+The function's name is written once, and the key is typed: a rule cannot pass a task's id where a
+project's is asked. The Supabase build writes the access file of the module that owns a function before
+the files of the modules that call it, and refuses a rule that asks a function no module defines.
+
+`Sql.Call` stays for functions defined outside C#, in a migration of your own: an existing
+`app.has_permission('project.update', "Id")`, say. The build does not look for those among the access
+functions; they are yours.
 
 `Any` is over the aggregate's own collections, with or without a condition; an entity's entities are not
 reachable from it.

@@ -24,8 +24,11 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// aggregate's table back, and Postgres stops with infinite recursion. The function runs as its owner,
 /// <c>SECURITY DEFINER</c>, so it reads them without their policies, and a rule calls it with the row's id.
 /// The context that maps <typeparamref name="TAggregate"/> writes it, once, however many modules see this
-/// class; another module calls it by name with <c>Sql.Call&lt;bool&gt;("projects.is_member", task.ProjectId)</c>.
-/// The method stays an ordinary method, so C# asks the same question of an aggregate it holds.
+/// class. The generator adds <c>Name</c>, and an <c>Allows(key)</c> a rule calls with a key rather than an
+/// aggregate, <c>ProjectMembership.Allows(task.ProjectId)</c>, which only the database can answer. Another
+/// module, which sees only this module's contracts, asks it through an
+/// <see cref="AccessFunctionContractAttribute{TKey}"/> there. <c>Allows(project, caller)</c> stays an
+/// ordinary method, so C# asks the same question of an aggregate it holds.
 /// </remarks>
 /// <typeparam name="TAggregate">The aggregate root the question is about.</typeparam>
 /// <param name="name">The function's name with its schema, <c>projects.is_member</c>.</param>
