@@ -76,7 +76,21 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
 
         var seen = await database.TicketsAsync(Caller.User(PostgresRowAccessDatabase.Carol), Cancellation);
 
-        seen.Select(ticket => ticket.Title).Should().BeEquivalentTo(["Carol's own", "Everyone's"], "the interceptor gives the database her id and role as the claims");
+        seen.Select(ticket => ticket.Title).Should().BeEquivalentTo(["Carol's own", "Everyone's", "Nobody's"], "the interceptor gives the database her id and role as the claims");
+    }
+
+    [Fact]
+    public async Task A_watcher_reads_the_ticket_through_the_access_function_that_reads_the_tickets_entities()
+    {
+        database.Require();
+
+        var carols = await database.TicketsAsync(Carol, Cancellation);
+        var bobs = await database.TicketsAsync(Bob, Cancellation);
+
+        carols.Select(ticket => ticket.Title).Should().Contain("Nobody's", "Carol watches it");
+        bobs.Select(ticket => ticket.Title).Should().NotContain("Nobody's", "nobody else does");
+        (await database.FunctionsAsync("is_watcher", Cancellation)).Should().ContainSingle()
+            .Which.Should().Be(("desk.is_watcher(uuid)", true), "it is made once, and runs as its owner, so the watchers' table answers without asking the tickets' policies back");
     }
 
     [Fact]
@@ -86,7 +100,7 @@ public sealed class PostgresRowAccessTests(PostgresRowAccessDatabase database) :
 
         var comments = await database.CommentsAsync(Carol, Cancellation);
 
-        comments.Should().BeEquivalentTo(["On Carol's own", "On everyone's"], "Carol sees her own ticket and the public one, and the comments of nothing else");
+        comments.Should().BeEquivalentTo(["On Carol's own", "On everyone's", "On nobody's"], "Carol sees her own ticket, the public one and the one she watches, and the comments of nothing else");
     }
 
     [Fact]

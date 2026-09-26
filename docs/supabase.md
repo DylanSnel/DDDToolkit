@@ -375,7 +375,10 @@ sees their own orders, and a guest's order stays anybody's with its id.
 [Row access rules written in C#](row-level-security.md#row-access-rules-written-in-c) go into
 `supabase/migrations` with the migrations. The build finds every `[RowAccess]` rule in the modules the
 host references and writes, for each module with rules, a file of its own,
-`{version}_access.{module}.ddd.sql`, whose policies ask `auth.uid()` and `auth.jwt()`:
+`{version}_access.{module}.ddd.sql`, whose policies ask `auth.uid()` and `auth.jwt()`. The
+[access functions](row-level-security.md#asking-the-aggregates-entities-access-functions) a module's
+rules call go into the file of the module that maps their aggregate, before its policies, and that file
+is written before the files of the modules that call them:
 
 ```sql
 -- Written by DDDToolkit from the row access rules of OrderingContext.

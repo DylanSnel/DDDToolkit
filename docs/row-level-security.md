@@ -168,15 +168,70 @@ aggregate is visible whole or not at all and Entity Framework never loads half o
 `[RowAccess<Order>(RowOperations.Read, To = new[] { "authenticated" })]`. Several rules on one aggregate add up:
 a row one of them allows is allowed.
 
-[DDD00038](diagnostics.md#ddd00038) to [DDD00040](diagnostics.md#ddd00040) are the rules the generator
-enforces: the class's shape, what it can translate, and that the type is an aggregate root.
+[DDD00038](diagnostics.md#ddd00038) to [DDD00041](diagnostics.md#ddd00041) are the rules the generator
+enforces: the class's shape, what it can translate, that the type is an aggregate root, and that a rule
+asks an access function about the aggregate's entities.
+
+### Asking the aggregate's entities: access functions
+
+Whether the caller is one of a project's members is a question about the project's entities, and a rule
+cannot ask it itself. The tables of the entities have policies that ask the aggregate's table whether
+their row is visible, so a policy on the aggregate's table that read them would ask itself, and Postgres
+stops the query with infinite recursion ([DDD00041](diagnostics.md#ddd00041)). Put the question in an
+access function, written the way a rule is, and let the rules call it:
+
+```csharp
+[AccessFunction<Project>("projects.is_member")]
+public static partial class ProjectMembership
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);
+}
+
+[RowAccess<Project>(RowOperations.Read | RowOperations.Change)]
+public static partial class MembersWorkOnTheirProjects
+{
+    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+}
+```
+
+The function becomes one SQL function. It runs as its owner, `SECURITY DEFINER`, so it reads the members
+without their policies, and with an empty search path, so nothing in the caller's session changes what it
+reads. The rule asks it about the row:
+
+```sql
+CREATE OR REPLACE FUNCTION projects.is_member(uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
+    SELECT EXISTS (SELECT 1 FROM projects."Projects" root
+                   WHERE root."Id" = $1 AND (EXISTS (SELECT 1 FROM projects."ProjectMember" e1
+                                                     WHERE e1."ProjectId" = root."Id" AND ((e1."UserId" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))))))
+$function$;
+
+CREATE POLICY "Members work on their projects (read)" ON projects."Projects" FOR SELECT TO anon, authenticated
+    USING (projects.is_member("Id"));
+```
+
+**It is made once.** Only the context that maps `Project` writes the function, however many modules see
+the class that declares it, and it writes it before the policies that call it. A later script replaces it
+in place, so the policies of other modules that call it keep working, and drops the functions the context
+no longer declares. Two access functions with one name are refused.
+
+**Other modules** call it by name, with the id they hold: `Sql.Call<bool>("projects.is_member", task.ProjectId)`.
+The Supabase build writes the access file of the module that owns a function before the files of the
+modules that call it. Such a rule is the database's only, because C# does not hold the project. Where C#
+does, `ProjectMembership.Allows(project, caller)` answers in memory: the members are loaded with the
+project.
+
+`Any` is over the aggregate's own collections, with or without a condition; an entity's entities are not
+reachable from it.
 
 ### Writing the policies
 
-`PostgresRowAccess.Script(context, rules)` returns the SQL for one context: it first drops every policy an
-earlier script made on the context's tables, found by the comment each one carries, and then makes the
-rules' policies again. So the latest script says what the rules are now, a rule taken out disappears
-with it, and a policy you wrote by hand is left alone.
+`PostgresRowAccess.Script(context, rules, accessFunctions)` returns the SQL for one context: it first drops
+every policy an earlier script made on the context's tables, found by the comment each one carries, then
+the access functions the context no longer declares, and then makes its access functions and the rules'
+policies again. So the latest script says what the rules are now, a rule taken out disappears with it, and
+a policy you wrote by hand is left alone.
 
 ```csharp
 var sql = PostgresRowAccess.Script(context,

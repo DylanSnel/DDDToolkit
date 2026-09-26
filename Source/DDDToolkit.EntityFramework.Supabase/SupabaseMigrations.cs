@@ -314,13 +314,40 @@ public static class SupabaseMigrations
         directory ??= FindDirectory();
 
         var reports = new List<SupabaseMigrationReport>();
-        foreach (var source in sources)
+        foreach (var source in OwnersOfFunctionsFirst(sources, options))
         {
             using var context = source.CreateDesignTimeContext();
             reports.Add(Run(context, source.Module, directory, options, write));
         }
 
         return reports;
+    }
+
+    /// <summary>
+    /// The sources, those whose context writes an access function first. A policy of another module that
+    /// calls one is refused while the function does not exist, and access files written in one run are
+    /// numbered in the order they are written.
+    /// </summary>
+    private static List<SupabaseMigrationSource> OwnersOfFunctionsFirst(IEnumerable<SupabaseMigrationSource> sources, SupabaseMigrationOptions? options)
+    {
+        var all = sources.ToList();
+        if (options is null || options.RowAccessFunctions.Count == 0)
+        {
+            return all;
+        }
+
+        var owners = new HashSet<SupabaseMigrationSource>();
+        foreach (var source in all)
+        {
+            using var context = source.CreateDesignTimeContext();
+            if (PostgresRowAccess.FunctionsOf(context, options.RowAccessFunctions).Count > 0)
+            {
+                owners.Add(source);
+            }
+        }
+
+        // OrderBy is stable, so the rest keep the order they came in.
+        return [.. all.OrderBy(source => owners.Contains(source) ? 0 : 1)];
     }
 
     private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write)
@@ -397,12 +424,13 @@ public static class SupabaseMigrations
     {
         var owner = context.GetType().Name;
         var rules = PostgresRowAccess.RulesOf(context, options.RowAccessRules);
+        var functions = PostgresRowAccess.FunctionsOf(context, options.RowAccessFunctions);
         var files = existing.Values.SelectMany(paths => paths)
             .Where(path => AccessOwner(path) == owner)
             .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
             .ToList();
 
-        if (rules.Count == 0 && files.Count == 0)
+        if (rules.Count == 0 && functions.Count == 0 && files.Count == 0)
         {
             return null;
         }
@@ -413,7 +441,7 @@ public static class SupabaseMigrations
             .Append("-- rules are now: it drops the policies the one before it made, and makes them again.").Append('\n')
             .Append('\n')
             .Append(PostgresRowAccess.DropStatement(context))
-            .Append(PostgresRowAccess.CreateStatements(context, rules, SupabaseRowLevelSecurity.CallerFunctions))
+            .Append(PostgresRowAccess.CreateStatements(context, rules, functions, SupabaseRowLevelSecurity.CallerFunctions))
             .ToString();
 
         var newestMigration = migrations.Count == 0 ? "" : migrations.Max(file => file.Version)!;

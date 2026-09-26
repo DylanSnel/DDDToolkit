@@ -68,7 +68,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
                 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA desk TO anon, authenticated;
                 """,
                 cancellation);
-            await RunAsOwnerAsync(PostgresRowAccess.Script(model, [DeskRules.Owners, DeskRules.Teammates, DeskRules.Public]), cancellation);
+            await RunAsOwnerAsync(PostgresRowAccess.Script(model, [DeskRules.Owners, DeskRules.Teammates, DeskRules.Public, DeskRules.Watchers], [DeskRules.IsWatcher]), cancellation);
         }
 
         // As the application itself, which owns the tables: the rules are for callers.
@@ -78,7 +78,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
             Ticket("Bob's own, closed", Bob, "north", TicketStatus.Closed, isPublic: false, "On Bob's"),
             Ticket("Carol's own", Carol, "south", TicketStatus.Open, isPublic: false, "On Carol's own"),
             Ticket("Everyone's", owner: null, team: null, TicketStatus.Open, isPublic: true, "On everyone's"),
-            Ticket("Nobody's", owner: null, team: null, TicketStatus.Closed, isPublic: false, "On nobody's"));
+            Ticket("Nobody's", owner: null, team: null, TicketStatus.Closed, isPublic: false, "On nobody's", watcher: Carol));
         await seed.SaveChangesAsync(cancellation);
     }
 
@@ -125,6 +125,25 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         return names;
     }
 
+    /// <summary>Each function named <paramref name="name"/> in the schema <c>desk</c>, with whether it runs as its owner.</summary>
+    public async Task<List<(string Signature, bool SecurityDefiner)>> FunctionsAsync(string name, CancellationToken cancellationToken)
+    {
+        await using var connection = await Database.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "SELECT p.oid::regprocedure::text, p.prosecdef FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'desk' AND p.proname = $1",
+            connection);
+        command.Parameters.Add(new NpgsqlParameter { Value = name });
+
+        var functions = new List<(string, bool)>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            functions.Add((reader.GetString(0), reader.GetBoolean(1)));
+        }
+
+        return functions;
+    }
+
     /// <summary>Runs <paramref name="sql"/> as the superuser.</summary>
     public async Task RunAsOwnerAsync(string sql, CancellationToken cancellationToken)
     {
@@ -145,10 +164,15 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         }
     }
 
-    private static Ticket Ticket(string title, Guid? owner, string? team, TicketStatus status, bool isPublic, string comment)
+    private static Ticket Ticket(string title, Guid? owner, string? team, TicketStatus status, bool isPublic, string comment, Guid? watcher = null)
     {
         var ticket = new Ticket(TicketId.CreateSequential(), title, owner, team, status, isPublic);
         ticket.Comment(comment);
+        if (watcher is { } user)
+        {
+            ticket.Watch(user);
+        }
+
         return ticket;
     }
 

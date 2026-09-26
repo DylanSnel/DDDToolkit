@@ -32,11 +32,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `static partial class` whose `static bool Allows(TAggregate, Caller)` is one expression: the generator
   translates it into SQL when it compiles, with C#'s equality and nulls, columns from the Entity
   Framework model and enum constants as the column stores them, and reports what it cannot translate
-  ([DDD00038](docs/diagnostics.md#ddd00038) to [DDD00040](docs/diagnostics.md#ddd00040)). `Sql.Call<T>`
+  ([DDD00038](docs/diagnostics.md#ddd00038) to [DDD00041](docs/diagnostics.md#ddd00041)). `Sql.Call<T>`
   and `Sql.Raw<T>` put SQL of your own in a rule, which then holds in the database only.
   `PostgresRowAccess.Script(context, rules)` writes the policies, the tables of an aggregate's entities
   following their root. The rule stays a method, so a handler asks the same rule in C#. See
   [Row access rules written in C#](docs/row-level-security.md#row-access-rules-written-in-c).
+- Access functions, for rules about an aggregate's entities: `[AccessFunction<Project>("projects.is_member")]`
+  on a class shaped like a rule, whose `Allows` may ask `project.Members.Any(member => ...)`. It becomes
+  one `SECURITY DEFINER` function with an empty search path, which reads the entities without their
+  policies, so a rule that calls it, `ProjectMembership.Allows(project, caller)`, does not make Postgres
+  recurse; a rule that reads the entities itself is [DDD00041](docs/diagnostics.md#ddd00041). Only the
+  context that maps the aggregate writes the function, before its policies, and replaces it in place
+  later so other modules' policies that call it by name keep working. See
+  [Access functions](docs/row-level-security.md#asking-the-aggregates-entities-access-functions).
 - The Supabase build writes the row access rules of every module a host references into
   `supabase/migrations`, a file per module, `{version}_access.{module}.ddd.sql`, asking `auth.uid()`. The
   file says what the rules are now: it drops the policies the previous one made and makes them again, so

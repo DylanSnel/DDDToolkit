@@ -307,7 +307,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor RowAccessRuleShape = Create(
         id: "DDD00038",
         title: "A row access rule is a static partial class with one Allows method",
-        messageFormat: "'{0}' is a [RowAccess] rule and needs {1}",
+        messageFormat: "'{0}' is a [RowAccess] rule or an [AccessFunction] and needs {1}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -316,7 +316,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor RowAccessRuleUntranslatable = Create(
         id: "DDD00039",
         title: "A row access rule can only say what the database can check",
-        messageFormat: "'{0}' cannot be part of a row access rule: a rule compares, and-s, or-s and negates properties of the aggregate, constants, the caller's UserId, IsSignedIn, Role and Claim(\"...\"), and SQL written with Sql.Call or Sql.Raw",
+        messageFormat: "'{0}' cannot be part of a row access rule: a rule compares, and-s, or-s and negates properties of the aggregate, constants, the caller's UserId, IsSignedIn, Role and Claim(\"...\"), SQL written with Sql.Call or Sql.Raw, and the Allows of an [AccessFunction] on the same aggregate",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -325,9 +325,18 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor RowAccessRuleNotOnAggregateRoot = Create(
         id: "DDD00040",
         title: "A row access rule guards an aggregate root",
-        messageFormat: "'{0}' is a [RowAccess] rule on '{1}', which is not an aggregate root; put the rule on the root, and its entities follow it",
+        messageFormat: "'{0}' is about '{1}', which is not an aggregate root; put the rule on the root, and its entities follow it",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "An aggregate is read and changed as a whole. A rule on one of its entities could hide some of an order's lines and not the order, and Entity Framework would load half an aggregate whose invariants then check half the data. So rules are written for the root, and the export gives every table of the aggregate's entities a policy that follows the root: a line is visible exactly when its order is.");
+
+    public static readonly DiagnosticDescriptor RowAccessRuleReadsEntities = Create(
+        id: "DDD00041",
+        title: "A row access rule reads the aggregate's entities through an access function",
+        messageFormat: "'{0}' reads the entities of '{1}', which a policy on its own table cannot do; put it in an [AccessFunction<{1}>] and call its Allows from the rule",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is visible. A policy on the aggregate's table that read those tables would therefore ask itself, and Postgres stops the query with infinite recursion. An [AccessFunction] runs as its owner, SECURITY DEFINER, so it reads the entities without their policies; the rule calls it with the row's id, and the question is written once however many rules ask it.");
 }

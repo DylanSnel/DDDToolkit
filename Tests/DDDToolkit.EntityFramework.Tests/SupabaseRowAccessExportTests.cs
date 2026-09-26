@@ -180,6 +180,52 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         sql.Should().Contain("FOR ALL TO anon, authenticated\n    USING (((SELECT auth.uid()) IS NOT NULL) AND (\"Owner\" IS NOT DISTINCT FROM (SELECT auth.uid())))\n    WITH CHECK");
     }
 
+    [Fact]
+    public void An_access_function_is_written_before_the_policies_that_call_it()
+    {
+        using var context = DeskContext.Create();
+        var options = Options(null, [DeskRules.Watchers]);
+        options.RowAccessFunctions.Add(DeskRules.IsWatcher);
+
+        SupabaseMigrations.Export(context, _directory, options);
+
+        var sql = File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single());
+        sql.Should().Contain(
+            "CREATE OR REPLACE FUNCTION desk.is_watcher(uuid) RETURNS boolean\n" +
+            "    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$\n" +
+            "    SELECT EXISTS (SELECT 1 FROM desk.\"Tickets\" root\n" +
+            "                   WHERE root.\"Id\" = $1 AND (EXISTS (SELECT 1 FROM desk.\"TicketWatcher\" e1 WHERE e1.\"TicketId\" = root.\"Id\" AND ((e1.\"User\" IS NOT DISTINCT FROM (SELECT auth.uid()))))))\n" +
+            "$function$;\n" +
+            "COMMENT ON FUNCTION desk.is_watcher(uuid) IS 'DDDToolkit access function of DeskContext';");
+        sql.Should().Contain("FOR SELECT TO anon, authenticated\n    USING (desk.is_watcher(\"Id\"));", "the rule asks the function about the row");
+        sql.IndexOf("CREATE OR REPLACE FUNCTION", StringComparison.Ordinal).Should().BeLessThan(sql.IndexOf("CREATE POLICY", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Only_the_context_that_maps_the_aggregate_writes_its_access_function()
+    {
+        var options = Options(null, [ShelvesByName]);
+        options.RowAccessFunctions.Add(DeskRules.IsWatcher);
+
+        using var context = SupabaseShelfContext.Create();
+        SupabaseMigrations.Export(context, _directory, options);
+
+        File.ReadAllText(Directory.GetFiles(_directory, "*_access.*").Single()).Should().NotContain("CREATE OR REPLACE FUNCTION", "shelves know no tickets");
+    }
+
+    [Fact]
+    public void Two_access_functions_with_one_name_are_refused()
+    {
+        var options = Options(null, [DeskRules.Watchers]);
+        options.RowAccessFunctions.Add(DeskRules.IsWatcher);
+        options.RowAccessFunctions.Add(RowAccessFunction.For<SupabaseShelf>("desk.is_watcher", "TRUE"));
+
+        using var context = DeskContext.Create();
+        var export = () => SupabaseMigrations.Export(context, _directory, options);
+
+        export.Should().Throw<InvalidOperationException>().WithMessage("Two access functions are called desk.is_watcher*");
+    }
+
     private sealed class FixedClock(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;

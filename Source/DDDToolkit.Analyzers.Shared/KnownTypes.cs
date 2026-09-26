@@ -37,6 +37,9 @@ internal static class KnownTypes
     /// <summary>A rule about who may do what with an aggregate's rows: <c>[RowAccess&lt;TAggregate&gt;]</c>.</summary>
     public const string RowAccessAttribute = AttributesNamespace + ".RowAccessAttribute`1";
 
+    /// <summary>A question rules ask that reads an aggregate's entities, made one SQL function: <c>[AccessFunction&lt;TAggregate&gt;]</c>.</summary>
+    public const string AccessFunctionAttribute = AttributesNamespace + ".AccessFunctionAttribute`1";
+
     /// <summary>Who is asking, as a row access rule sees them.</summary>
     public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
 

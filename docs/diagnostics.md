@@ -55,7 +55,7 @@ worth catching is a module whose migrations never reach Supabase. [DDD00032](#dd
 where it is an outbound class or a handler that is never registered.
 [DDD00034](#ddd00034) to [DDD00037](#ddd00037) are about [event names](domain-events.md#stable-names), where
 it is a stored row or a message read back as the wrong type, or as the wrong shape.
-[DDD00038](#ddd00038) to [DDD00040](#ddd00040) are about [row access rules](row-level-security.md#row-access-rules-written-in-c),
+[DDD00038](#ddd00038) to [DDD00041](#ddd00041) are about [row access rules](row-level-security.md#row-access-rules-written-in-c),
 where it is a rule the database enforces differently from the C# that states it, or not at all.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
@@ -1107,6 +1107,41 @@ An aggregate is read and changed as a whole. A rule on one of its entities could
 lines and not the order, and Entity Framework would load half an aggregate whose invariants then check half
 the data. Write the rule for the root. The export gives the tables of the aggregate's entities a policy
 that follows it: a line is visible exactly when its order is.
+
+---
+
+## DDD00041
+
+**A row access rule reads the aggregate's entities through an access function.**
+
+```csharp
+[RowAccess<Project>(RowOperations.Read)]
+public static partial class MembersSeeTheirProjects
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);   // DDD00041
+}
+```
+
+The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is
+visible. A policy on the aggregate's table that read those tables would ask itself, and Postgres stops the
+query with infinite recursion. Put the question in an [access function](row-level-security.md#asking-the-aggregates-entities-access-functions),
+which runs as its owner and reads the entities without their policies, and call it from the rule:
+
+```csharp
+[AccessFunction<Project>("projects.is_member")]
+public static partial class ProjectMembership
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);
+}
+
+[RowAccess<Project>(RowOperations.Read)]
+public static partial class MembersSeeTheirProjects
+{
+    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+}
+```
 
 ---
 

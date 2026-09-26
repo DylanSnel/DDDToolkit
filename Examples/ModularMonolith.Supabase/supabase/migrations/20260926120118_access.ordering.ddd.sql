@@ -20,6 +20,22 @@ BEGIN
 END
 $ddd$;
 
+DO $ddd$
+DECLARE
+    generated record;
+BEGIN
+    FOR generated IN
+        SELECT p.oid::regprocedure AS signature
+        FROM pg_catalog.pg_proc p
+        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.classoid = 'pg_catalog.pg_proc'::regclass
+        WHERE d.description = 'DDDToolkit access function of OrderingContext'
+    LOOP
+        EXECUTE format('DROP FUNCTION %s', generated.signature);
+    END LOOP;
+END
+$ddd$;
+
 ALTER TABLE ordering."Orders" ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "A customer has their orders (read)" ON ordering."Orders" FOR SELECT TO anon, authenticated

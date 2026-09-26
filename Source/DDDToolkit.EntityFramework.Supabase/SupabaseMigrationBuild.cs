@@ -40,9 +40,24 @@ public static class SupabaseMigrationBuild
     /// <param name="sources">Every source found at compile time; only evaluated when asked.</param>
     /// <param name="rules">Every rule found at compile time; only evaluated when asked.</param>
     public static void RunIfRequested(Func<IReadOnlyList<SupabaseMigrationSource>> sources, Func<IReadOnlyList<RowAccessRule>> rules)
+        => RunIfRequested(sources, rules, static () => []);
+
+    /// <summary>
+    /// Exports and ends the process when the build asked for it, and returns at once otherwise: the
+    /// migrations of every source, the <c>[RowAccess]</c> rules of their aggregates and the
+    /// <c>[AccessFunction]</c>s those call. Called by generated code only.
+    /// </summary>
+    /// <param name="sources">Every source found at compile time; only evaluated when asked.</param>
+    /// <param name="rules">Every rule found at compile time; only evaluated when asked.</param>
+    /// <param name="functions">Every access function found at compile time; only evaluated when asked.</param>
+    public static void RunIfRequested(
+        Func<IReadOnlyList<SupabaseMigrationSource>> sources,
+        Func<IReadOnlyList<RowAccessRule>> rules,
+        Func<IReadOnlyList<RowAccessFunction>> functions)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(functions);
 
         var mode = Environment.GetEnvironmentVariable(ModeVariable);
         if (string.IsNullOrWhiteSpace(mode))
@@ -54,6 +69,7 @@ public static class SupabaseMigrationBuild
             mode,
             sources(),
             rules(),
+            functions(),
             Environment.GetEnvironmentVariable(DirectoryVariable),
             Environment.GetEnvironmentVariable(StartVariable),
             Console.Out);
@@ -87,9 +103,32 @@ public static class SupabaseMigrationBuild
     /// <param name="output">Where to report.</param>
     /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
     public static int Run(string mode, IReadOnlyList<SupabaseMigrationSource> sources, IReadOnlyList<RowAccessRule> rules, string? directory, string? start, TextWriter output)
+        => Run(mode, sources, rules, [], directory, start, output);
+
+    /// <summary>
+    /// Runs the export, row access rules and the access functions they call included, and describes it on
+    /// <paramref name="output"/>, problems in the <c>error : message</c> form MSBuild shows as build errors.
+    /// </summary>
+    /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
+    /// <param name="sources">The contexts to export.</param>
+    /// <param name="rules">The rules to write as policies, each with the context that maps its aggregate.</param>
+    /// <param name="functions">The access functions to write, each with the context that maps its aggregate.</param>
+    /// <param name="directory">The migrations directory, or null or empty to find it.</param>
+    /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
+    /// <param name="output">Where to report.</param>
+    /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
+    public static int Run(
+        string mode,
+        IReadOnlyList<SupabaseMigrationSource> sources,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<RowAccessFunction> functions,
+        string? directory,
+        string? start,
+        TextWriter output)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(functions);
         ArgumentNullException.ThrowIfNull(output);
 
         var write = string.Equals(mode, "Write", StringComparison.OrdinalIgnoreCase);
@@ -115,6 +154,11 @@ public static class SupabaseMigrationBuild
             foreach (var rule in rules)
             {
                 options.RowAccessRules.Add(rule);
+            }
+
+            foreach (var function in functions)
+            {
+                options.RowAccessFunctions.Add(function);
             }
 
             var reports = write ? SupabaseMigrations.Export(sources, target, options) : SupabaseMigrations.Compare(sources, target, options);

@@ -27,6 +27,12 @@ namespace DDDToolkit.Analyzers;
 /// depends on the database, so it is <c>{caller:uid}</c>, <c>{caller:signedin}</c>, <c>{caller:role}</c> or
 /// <c>{caller:claim:path}</c>. Braces in a string constant are doubled.
 /// <para>
+/// An <c>[AccessFunction]</c> is translated the same way, and may also ask the aggregate's entities:
+/// <c>project.Members.Any(member =&gt; ...)</c> is <c>{exists:Members:e1}...{/exists}</c>, the entity's
+/// properties inside it <c>{col:e1:Path}</c>. A rule asks the function with <c>{call:schema.name}</c>, which
+/// the export writes with the row's key.
+/// </para>
+/// <para>
 /// The translation keeps C#'s meaning rather than SQL's, so the method and the policy answer alike for the
 /// same row and caller: <c>==</c> is <c>IS NOT DISTINCT FROM</c>, because in C# a null equals a null, and a
 /// comparison is <c>coalesce(..., FALSE)</c>, because a lifted comparison with a null is false in C#, never
@@ -41,19 +47,27 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         var rules = context.SyntaxProvider.ForAttributeWithMetadataName(
             KnownTypes.RowAccessAttribute,
             predicate: static (node, _) => node is ClassDeclarationSyntax,
-            transform: static (syntaxContext, cancellationToken) => Translate(syntaxContext, cancellationToken));
+            transform: static (syntaxContext, cancellationToken) => Translate(syntaxContext, isFunction: false, cancellationToken));
 
-        context.RegisterSourceOutput(rules, static (production, rule) =>
-        {
-            rule.Diagnostics.ReportAll(production);
-            if (rule.Sql is not null)
-            {
-                production.AddSource(rule.Type.HintName(".RowAccess"), SourceText.From(Emit(rule), Encoding.UTF8));
-            }
-        });
+        var functions = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.AccessFunctionAttribute,
+            predicate: static (node, _) => node is ClassDeclarationSyntax,
+            transform: static (syntaxContext, cancellationToken) => Translate(syntaxContext, isFunction: true, cancellationToken));
+
+        context.RegisterSourceOutput(rules, static (production, rule) => Produce(production, rule, ".RowAccess"));
+        context.RegisterSourceOutput(functions, static (production, function) => Produce(production, function, ".AccessFunction"));
     }
 
-    private static RowAccessDefinition Translate(GeneratorAttributeSyntaxContext attributed, CancellationToken cancellationToken)
+    private static void Produce(SourceProductionContext production, RowAccessDefinition definition, string suffix)
+    {
+        definition.Diagnostics.ReportAll(production);
+        if (definition.Sql is not null)
+        {
+            production.AddSource(definition.Type.HintName(suffix), SourceText.From(Emit(definition), Encoding.UTF8));
+        }
+    }
+
+    private static RowAccessDefinition Translate(GeneratorAttributeSyntaxContext attributed, bool isFunction, CancellationToken cancellationToken)
     {
         var symbol = (INamedTypeSymbol)attributed.TargetSymbol;
         var syntax = (TypeDeclarationSyntax)attributed.TargetNode;
@@ -74,6 +88,15 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         if (!symbol.IsStatic || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
         {
             diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, LocationInfo.From(syntax.Identifier), symbol.Name, "to be a static partial class, so the generator can add its SQL"));
+        }
+
+        if (isFunction && !IsQualifiedFunctionName(FunctionNameOf(attributed.Attributes[0])))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                LocationInfo.From(syntax.Identifier),
+                symbol.Name,
+                "a function name with its schema, such as \"projects.is_member\": the function runs with an empty search_path, and is created in that schema"));
         }
 
         var allows = symbol.GetMembers("Allows").OfType<IMethodSymbol>().ToList();
@@ -100,7 +123,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var model = attributed.SemanticModel.Compilation.GetSemanticModel(declaration.SyntaxTree);
-        var sql = new Translator(model, method.Parameters[0], method.Parameters[1], diagnostics).Translate(body);
+        var sql = new Translator(model, method.Parameters[0], method.Parameters[1], isFunction, diagnostics).Translate(body);
 
         return new RowAccessDefinition(
             type,
@@ -112,6 +135,22 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         => type.GetAttributes().Any(static attribute =>
             attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AggregateRootAttribute`1" } root
             && root.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+    /// <summary>The name an <c>[AccessFunction]</c> gives its function, <c>projects.is_member</c>, or null.</summary>
+    private static string? FunctionNameOf(AttributeData attribute)
+        => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is string name ? name : null;
+
+    /// <summary>The <c>[AccessFunction&lt;T&gt;]</c> on <paramref name="type"/>, or null.</summary>
+    private static AttributeData? AccessFunctionOf(ITypeSymbol type)
+        => type.GetAttributes().FirstOrDefault(static attribute =>
+            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionAttribute`1" } function
+            && function.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+    /// <summary><c>schema.name</c>, both plain identifiers: what a function called with an empty search_path needs.</summary>
+    private static bool IsQualifiedFunctionName(string? name)
+        => name is not null
+            && name.Split('.') is { Length: 2 } parts
+            && parts.All(static part => part.Length > 0 && (char.IsLetter(part[0]) || part[0] == '_') && part.All(static c => char.IsLetterOrDigit(c) || c == '_'));
 
     private static string Camel(string name) => name.Length == 0 ? name : char.ToLowerInvariant(name[0]) + name.Substring(1);
 
@@ -136,8 +175,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     }
 
     /// <summary>C# in, SQL out; anything it does not know is DDD00039 on that expression.</summary>
-    private sealed class Translator(SemanticModel model, IParameterSymbol aggregate, IParameterSymbol caller, List<DiagnosticInfo> diagnostics)
+    private sealed class Translator(SemanticModel model, IParameterSymbol aggregate, IParameterSymbol caller, bool isFunction, List<DiagnosticInfo> diagnostics)
     {
+        /// <summary>The entity an <c>Any</c> is looking at, by the lambda parameter that names it: its alias in the SQL.</summary>
+        private readonly Dictionary<ISymbol, string> _aliases = new(SymbolEqualityComparer.Default);
+
         public string Translate(ExpressionSyntax expression) => expression switch
         {
             ParenthesizedExpressionSyntax parenthesized => Translate(parenthesized.Expression),
@@ -192,10 +234,23 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
         private string Invocation(InvocationExpressionSyntax invocation)
         {
-            if (model.GetSymbolInfo(invocation).Symbol is IMethodSymbol { ContainingType: { } sql } method
+            var called = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+            if (called is { ContainingType: { } sql } method
                 && sql.ToDisplayString() == KnownTypes.SqlEscape)
             {
                 return method.Name == "Call" ? SqlCall(invocation) : SqlRaw(invocation);
+            }
+
+            if (called is { Name: "Any", ContainingType: { } linq }
+                && linq.ToDisplayString() == "System.Linq.Enumerable"
+                && invocation.Expression is MemberAccessExpressionSyntax any)
+            {
+                return Any(invocation, any.Expression);
+            }
+
+            if (called is { Name: "Allows", IsStatic: true } allows && AccessFunctionOf(allows.ContainingType) is { } function)
+            {
+                return AccessFunctionCall(invocation, function);
             }
 
             if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Claim" } claim
@@ -209,6 +264,71 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             return Fail(invocation);
+        }
+
+        /// <summary>
+        /// <c>project.Members.Any(member =&gt; ...)</c>: whether one of the aggregate's entities is so, as
+        /// <c>{exists:Members:e1}...{/exists}</c>, which the export writes as an <c>EXISTS</c> on the entities'
+        /// table. Only in an <c>[AccessFunction]</c>: a policy on the aggregate's table that read the tables
+        /// its entities' policies read back would ask itself (DDD00041).
+        /// </summary>
+        private string Any(InvocationExpressionSyntax invocation, ExpressionSyntax collection)
+        {
+            if (_aliases.Count > 0 || ColumnOf(collection) is not { } navigation || navigation.IndexOfAny(['.', ':']) >= 0)
+            {
+                // An entity of an entity, or a collection that is not the aggregate's own.
+                return Fail(invocation);
+            }
+
+            if (!isFunction)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleReadsEntities, LocationInfo.From(invocation), invocation.ToString(), aggregate.Type.Name));
+                return "?";
+            }
+
+            const string Alias = "e1";
+            var arguments = invocation.ArgumentList.Arguments;
+            if (arguments.Count == 0)
+            {
+                return "{exists:" + navigation + ":" + Alias + "}TRUE{/exists}";
+            }
+
+            if (arguments.Count != 1
+                || arguments[0].Expression is not LambdaExpressionSyntax { ExpressionBody: { } body } lambda
+                || model.GetSymbolInfo(lambda).Symbol is not IMethodSymbol { Parameters.Length: 1 } signature)
+            {
+                return Fail(arguments.Count == 1 ? arguments[0].Expression : invocation);
+            }
+
+            _aliases[signature.Parameters[0]] = Alias;
+            try
+            {
+                return "{exists:" + navigation + ":" + Alias + "}" + Translate(body) + "{/exists}";
+            }
+            finally
+            {
+                _aliases.Remove(signature.Parameters[0]);
+            }
+        }
+
+        /// <summary>
+        /// <c>ProjectMembership.Allows(project, caller)</c>, the question of an <c>[AccessFunction]</c> on the
+        /// same aggregate, asked of this row: <c>{call:projects.is_member}</c>, which the export writes as the
+        /// function called with the row's key.
+        /// </summary>
+        private string AccessFunctionCall(InvocationExpressionSyntax invocation, AttributeData function)
+        {
+            var arguments = invocation.ArgumentList.Arguments;
+            return _aliases.Count == 0
+                && FunctionNameOf(function) is { } name
+                && IsQualifiedFunctionName(name)
+                && function.AttributeClass?.TypeArguments.FirstOrDefault() is { } about
+                && SymbolEqualityComparer.Default.Equals(about.OriginalDefinition, aggregate.Type.OriginalDefinition)
+                && arguments.Count == 2
+                && IsParameter(arguments[0].Expression, aggregate)
+                && IsParameter(arguments[1].Expression, caller)
+                    ? "{call:" + name + "}"
+                    : Fail(invocation);
         }
 
         /// <summary><c>Sql.Call&lt;T&gt;("schema.name", ...)</c>: the function, with its arguments translated like the rest of the rule.</summary>
@@ -300,7 +420,20 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 break;
             }
 
-            return path.Count > 0 && IsParameter(current, aggregate) ? string.Join(".", path) : null;
+            if (path.Count == 0)
+            {
+                return null;
+            }
+
+            if (IsParameter(current, aggregate))
+            {
+                return string.Join(".", path);
+            }
+
+            // A property of the entity an Any is looking at: its alias, then its path.
+            return current is IdentifierNameSyntax && model.GetSymbolInfo(current).Symbol is { } entity && _aliases.TryGetValue(entity, out var alias)
+                ? alias + ":" + string.Join(".", path)
+                : null;
         }
 
         /// <summary>

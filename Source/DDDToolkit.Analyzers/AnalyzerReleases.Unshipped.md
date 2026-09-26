@@ -38,3 +38,4 @@ DDD00037 | DDDToolkit.Events | Error | Two event names give one constant name
 DDD00038 | DDDToolkit.Access | Error | A row access rule is a static partial class with one Allows method
 DDD00039 | DDDToolkit.Access | Error | A row access rule can only say what the database can check
 DDD00040 | DDDToolkit.Access | Error | A row access rule guards an aggregate root
+DDD00041 | DDDToolkit.Access | Error | A row access rule reads the aggregate's entities through an access function

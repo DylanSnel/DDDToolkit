@@ -12,6 +12,7 @@ public class RowAccessGenerationTests
     private const string Shop =
         """
         using System;
+        using System.Linq;
         using DDDToolkit.Abstractions.Access;
         using DDDToolkit.Abstractions.Attributes;
 
@@ -49,10 +50,63 @@ public class RowAccessGenerationTests
             public string? Team { get; private set; }
 
             public int Level { get; private set; }
+
+            public partial System.Collections.Generic.IReadOnlyList<Member> Members { get; }
+        }
+
+        [EntityId<Guid>]
+        public readonly partial record struct MemberId;
+
+        [Entity<MemberId>]
+        public partial class Member
+        {
+            public Member(MemberId id) : base(id) { }
+
+            public Guid UserId { get; private set; }
+
+            public bool IsAdmin { get; private set; }
         }
 
 
         """;
+
+    private const string Membership =
+        """
+        [AccessFunction<Order>("shop.is_member")]
+        public static partial class Membership
+        {
+            public static bool Allows(Order order, Caller caller) => order.Members.Any(member => member.UserId == caller.UserId);
+        }
+
+
+        """;
+
+    private static GeneratorRunOutcome Function(string body, string name = "shop.is_admin")
+        => GeneratorTestHost.Create(Shop +
+            $$"""
+            [AccessFunction<Order>("{{name}}")]
+            public static partial class TheFunction
+            {
+                {{body}}
+            }
+            """).RunCore();
+
+    /// <summary>The SQL the generator wrote into an access function.</summary>
+    private static string FunctionSqlOf(string expression)
+    {
+        var result = Function($"public static bool Allows(Order order, Caller caller) => {expression};");
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldNotHaveDiagnostic("DDD00041").ShouldCompile();
+        return ConstantIn(result.Source("TheFunction.AccessFunction"));
+    }
+
+    private static string ConstantIn(string source)
+    {
+        var literal = CSharpSyntaxTree.ParseText(source).GetRoot()
+            .DescendantNodes().OfType<VariableDeclaratorSyntax>().Single(variable => variable.Identifier.Text == "RowAccessSql")
+            .Initializer!.Value;
+
+        return ((LiteralExpressionSyntax)literal).Token.ValueText;
+    }
 
     private static GeneratorRunOutcome Rule(string body, string operations = "RowOperations.Read", string declaration = "public static partial class")
         => GeneratorTestHost.Create(Shop +
@@ -133,6 +187,65 @@ public class RowAccessGenerationTests
         var result = Rule("public static bool Allows(Order order, Caller caller) { return order.IsPublic; }");
 
         result.ShouldNotHaveDiagnostic("DDD00038").ShouldContain("TheRule.RowAccess", "{col:IsPublic}");
+    }
+
+    // ------------------------------------------------------------------ access functions
+
+    [Fact]
+    public void An_access_function_asks_the_aggregates_entities_with_an_exists()
+        => FunctionSqlOf("order.Members.Any(member => member.UserId == caller.UserId && member.IsAdmin)")
+            .Should().Be("{exists:Members:e1}(({col:e1:UserId} IS NOT DISTINCT FROM {caller:uid}) AND {col:e1:IsAdmin}){/exists}");
+
+    [Fact]
+    public void Any_without_a_condition_is_whether_there_is_one()
+        => FunctionSqlOf("order.Members.Any()").Should().Be("{exists:Members:e1}TRUE{/exists}");
+
+    [Fact]
+    public void A_rule_asks_an_access_function_about_its_row()
+    {
+        var result = GeneratorTestHost.Create(Shop + Membership +
+            """
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class MembersSeeTheirOrders
+            {
+                public static bool Allows(Order order, Caller caller) => order.IsPublic || Membership.Allows(order, caller);
+            }
+            """).RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        ConstantIn(result.Source("MembersSeeTheirOrders.RowAccess")).Should().Be("({col:IsPublic} OR {call:shop.is_member})");
+    }
+
+    [Fact]
+    public void An_access_function_is_asked_about_the_rules_own_row_and_caller()
+    {
+        var result = GeneratorTestHost.Create(Shop + Membership +
+            """
+            [RowAccess<Order>(RowOperations.Read)]
+            public static partial class TheRule
+            {
+                public static bool Allows(Order order, Caller caller) => Membership.Allows(order, Caller.Anonymous);
+            }
+            """).RunCore();
+
+        result.Count("DDD00039").Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("is_member")]
+    [InlineData("shop.is-member")]
+    public void An_access_function_named_without_its_schema_or_not_as_an_identifier_is_an_error(string name)
+        => Function("public static bool Allows(Order order, Caller caller) => order.IsPublic;", name).Count("DDD00038").Should().Be(1);
+
+    // ------------------------------------------------------------------ DDD00041
+
+    [Fact]
+    public void A_rule_that_reads_the_entities_itself_is_told_to_ask_an_access_function()
+    {
+        var result = Rule("public static bool Allows(Order order, Caller caller) => order.Members.Any(member => member.UserId == caller.UserId);");
+
+        result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00041").GetMessage().Should().Contain("[AccessFunction<Order>]");
+        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("TheRule.RowAccess"));
     }
 
     // ------------------------------------------------------------------ DDD00039

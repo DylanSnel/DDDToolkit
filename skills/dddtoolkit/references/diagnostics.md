@@ -217,6 +217,13 @@ of the aggregate, or read it from a claim in `app_metadata`.
 Error. The rule is on a type that is not an aggregate root. Put it on the root; the export makes the
 tables of the root's entities follow it.
 
+## DDD00041
+
+Error. A `[RowAccess]` rule reads the aggregate's entities itself, `project.Members.Any(...)`. A policy on
+the aggregate's table cannot: the entities' policies ask that table back, and Postgres stops with infinite
+recursion. Move the expression into an `[AccessFunction<Project>("schema.name")]` class with the same
+`Allows(Project, Caller)` shape, and have the rule call `ThatClass.Allows(project, caller)`.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

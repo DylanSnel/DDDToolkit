@@ -17,6 +17,9 @@ public readonly partial record struct TicketId;
 [EntityId<Guid>]
 public readonly partial record struct TicketCommentId;
 
+[EntityId<Guid>]
+public readonly partial record struct TicketWatcherId;
+
 public enum TicketStatus
 {
     Open,
@@ -48,6 +51,11 @@ public partial class Ticket
     public partial IReadOnlyList<TicketComment> Comments { get; }
 
     public void Comment(string text) => _comments.Add(new TicketComment(TicketCommentId.CreateSequential(), text));
+
+    /// <summary>The people who follow the ticket without owning it.</summary>
+    public partial IReadOnlyList<TicketWatcher> Watchers { get; }
+
+    public void Watch(Guid user) => _watchers.Add(new TicketWatcher(TicketWatcherId.CreateSequential(), user));
 }
 
 [Entity<TicketCommentId>]
@@ -56,6 +64,31 @@ public partial class TicketComment
     public TicketComment(TicketCommentId id, string text) : base(id) => Text = text;
 
     public string Text { get; private set; }
+}
+
+[Entity<TicketWatcherId>]
+public partial class TicketWatcher
+{
+    public TicketWatcher(TicketWatcherId id, Guid user) : base(id) => User = user;
+
+    public Guid User { get; private set; }
+}
+
+/// <summary>
+/// Whether the caller watches the ticket: a question about the ticket's entities, which a policy on the
+/// tickets table cannot ask itself, so it is a function the rules call.
+/// </summary>
+[AccessFunction<Ticket>("desk.is_watcher")]
+public static partial class TicketWatchers
+{
+    public static bool Allows(Ticket ticket, Caller caller) => ticket.Watchers.Any(watcher => watcher.User == caller.UserId);
+}
+
+/// <summary>A watcher reads the tickets they watch.</summary>
+[RowAccess<Ticket>(RowOperations.Read)]
+public static partial class WatchersReadTheirTickets
+{
+    public static bool Allows(Ticket ticket, Caller caller) => TicketWatchers.Allows(ticket, caller);
 }
 
 /// <summary>An owner does anything with their own tickets.</summary>
@@ -89,10 +122,15 @@ public static class DeskRules
 
     public static readonly RowAccessRule Public = RowAccessRule.For<Ticket>("Public tickets are everyones", RowOperations.Read, PublicTicketsAreEveryones.RowAccessSql);
 
+    public static readonly RowAccessRule Watchers = RowAccessRule.For<Ticket>("Watchers read their tickets", RowOperations.Read, WatchersReadTheirTickets.RowAccessSql);
+
+    public static readonly RowAccessFunction IsWatcher = RowAccessFunction.For<Ticket>("desk.is_watcher", TicketWatchers.RowAccessSql);
+
     /// <summary>Whether the rules that let a caller read let <paramref name="caller"/> read <paramref name="ticket"/>, in C#.</summary>
     public static bool Reads(Ticket ticket, Caller caller, bool withPublic = true)
         => OwnersHaveTheirTickets.Allows(ticket, caller)
             || TeammatesReadOpenTickets.Allows(ticket, caller)
+            || WatchersReadTheirTickets.Allows(ticket, caller)
             || (withPublic && PublicTicketsAreEveryones.Allows(ticket, caller));
 }
 

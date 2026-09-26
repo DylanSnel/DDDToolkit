@@ -43,6 +43,14 @@ public sealed class SupabaseMigrationOptions
     /// </summary>
     public IList<RowAccessRule> RowAccessRules { get; } = [];
 
+    /// <summary>
+    /// The <c>[AccessFunction]</c>s the rules call. Each goes into the access file of the context that maps
+    /// its aggregate, and nowhere else, before that file's policies; a context whose functions other modules
+    /// call is exported first, so its file comes before theirs. The build fills this in as it fills
+    /// <see cref="RowAccessRules"/>.
+    /// </summary>
+    public IList<RowAccessFunction> RowAccessFunctions { get; } = [];
+
     /// <summary>The clock a new access file takes its version from: the time it is written, in UTC.</summary>
     public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 }
