@@ -155,7 +155,8 @@ The file is what `dotnet ef migrations script` writes for that one step, with th
   grants the `anon` and `authenticated` roles access to it. Without row level security, a table
   Entity Framework creates there can be read and written by anyone who has the publishable key. With
   it on and no policy, those roles see nothing. Your application still works, because it connects as
-  the table's owner, and row level security does not apply to the owner. Change
+  the table's owner, and row level security does not apply to the owner, unless you
+  [run its queries as the caller](#row-level-security-for-your-own-queries). Change
   `SupabaseMigrationOptions.RowLevelSecuritySchemas` to cover other schemas, or clear it to turn this
   off. Putting your tables in a schema the Data API does not expose, with
   `modelBuilder.HasDefaultSchema("app")`, is even simpler. The toolkit's own `ddd` schema is not
@@ -256,6 +257,186 @@ registers the start-up check for each module. The host's project file turns the 
 locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
 [its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
 
+## Row level security for your own queries
+
+An application that connects as `postgres` is the owner of its tables, and row level security does not
+apply to the owner. So the policies you wrote for the Data API guard the Data API and nothing else: every
+query your application runs sees every row, and who may see what is the application's own code to get
+right. That is a fine design, and the default. If you would rather keep Supabase's policies as the
+authority, for the application as well as for supabase-js, run each request's queries as the user who
+sent it, the way PostgREST does.
+
+Row level security itself is Postgres's, and so is the package that does this,
+`DDDToolkit.EntityFramework.Postgres`, which this one brings; [Row level security](row-level-security.md)
+has all of it. What is Supabase's is the token, the roles and `auth.uid()`, and that is what this section
+is about.
+
+```bash
+dotnet add package DDDToolkit.Auth.Supabase.AspNetCore       # an ASP.NET Core application
+dotnet add package DDDToolkit.Auth.Supabase.AzureFunctions   # Azure Functions on the isolated worker
+```
+
+Both bring `DDDToolkit.Auth.Supabase`, which validates Supabase Auth's tokens without a web framework. One
+request, from the token supabase-js sends to the rows a module's query gets back:
+
+```mermaid
+sequenceDiagram
+    participant Client as supabase-js
+    participant Api as your application
+    participant Context as Ordering's context
+    participant Postgres
+    Client->>Api: GET /orders/42, token
+    Api->>Api: validate the token
+    Api->>Context: find order 42
+    Context->>Postgres: role and claims
+    Context->>Postgres: SELECT the order
+    Postgres-->>Context: rows the policies allow
+    Context-->>Api: none: not theirs
+    Api-->>Client: 404
+```
+
+<details>
+<summary>Show the code: switched on in the host, per context</summary>
+
+```csharp
+builder.Services.AddAuthentication().AddSupabaseJwtBearer("https://<ref>.supabase.co");
+builder.Services.AddSupabaseRowLevelSecurity();
+
+builder.Services.AddDbContext<OrderingContext>((provider, options) => options
+    .UseNpgsql(connectionString)
+    .UseSupabaseRowLevelSecurity(provider));
+
+// after Build()
+app.UseAuthentication();
+```
+
+</details>
+
+`AddSupabaseJwtBearer` validates the access tokens Supabase Auth issues, the ones supabase-js holds for
+a signed-in user: issued by `https://<ref>.supabase.co/auth/v1`, for the audience `authenticated`, and
+signed with a key the project publishes. A project still on the legacy JWT secret publishes none, and nor
+does the CLI's local stack unless you give it signing keys; for those, pass the secret:
+`AddSupabaseJwtBearer(url, jwt => jwt.UseSupabaseJwtSecret(secret))`.
+
+`AddSupabaseRowLevelSecurity` and `UseSupabaseRowLevelSecurity` are Postgres's row level security with the
+roles every Supabase project has. Every time a context opens a connection, the caller's role and the
+token's claims go on it, as PostgREST puts them on for each request:
+
+| The caller | Runs as | `auth.uid()` |
+|---|---|---|
+| A request with a valid Supabase access token | `authenticated`, with the token's claims exactly as signed | the user's id |
+| A request without one, or signed in some other way | `anon`, with the claims `{"role":"anon"}` | `null` |
+| No request at all: an outbox poller, a hosted service | `SystemRole`, or the role the application logged in as | `null` |
+| Code inside `using (Callers.Begin(caller))` | that caller, whatever the request says | the caller's |
+
+So `auth.uid()`, `auth.jwt()` and every policy on every table the context touches apply to its queries,
+and a policy you already test with pgTAP says what the application may see. Who is calling, work that
+leaves a request, and how the settings travel are the same on any Postgres; see
+[Running queries as the caller](row-level-security.md#running-queries-as-the-caller). Connect through the
+session pooler on port 5432, or directly: the transaction pooler on port 6543 hands each transaction
+whichever server connection is free, and is refused.
+
+**The database needs to know about the application's roles.** `anon` and `authenticated` have no
+privileges in a schema of yours until you grant them some, in a migration you write by hand:
+
+```sql
+grant usage on schema ordering to anon, authenticated;
+grant select, insert, update, delete on all tables in schema ordering to anon, authenticated;
+alter default privileges in schema ordering grant select, insert, update, delete on tables to anon, authenticated;
+```
+
+Keep such schemas out of the Data API's exposed schemas. Granted to `anon`, a table in an exposed schema
+is open to anyone holding the publishable key, as far as its policies let them; unexposed, only the
+application reaches it.
+
+Write policies for aggregates, not rows. A policy that hides some of an order's lines hands Entity
+Framework half an aggregate, and its invariants then check half the data. Put the rule on the root, and
+let the children follow it: `using (exists (select 1 from ordering."Orders" o where o."Id" = "OrderId"))`
+asks the orders table, which answers under its own policy, so an order is visible whole or not at all.
+Rules written in C# do this for you, as the next section shows.
+
+**Background work** runs as `SystemRole`, or, left unset, as the role the application logged in as.
+Logged in as `postgres`, that is the owner, as before. For an application that should not be able to see
+everything by accident, log in as a role of its own that may do nothing but switch roles, as PostgREST's
+`authenticator` does, and set `SystemRole = SupabaseRowLevelSecurity.ServiceRole`:
+
+```sql
+create role shop_app login noinherit password '...';
+grant anon, authenticated, service_role to shop_app;
+```
+
+`Examples/ModularMonolith.Supabase` turns this on with `Supabase:Url`. An order there is its customer's:
+it knows who placed it, and two rules written in C#, `ACustomerHasTheirOrders` and
+`NobodyOrdersForSomebodyElse`, become its policies, as the next section describes. A signed-in customer
+sees their own orders, and a guest's order stays anybody's with its id.
+
+### Row access rules in the build
+
+[Row access rules written in C#](row-level-security.md#row-access-rules-written-in-c) go into
+`supabase/migrations` with the migrations. The build finds every `[RowAccess]` rule in the modules the
+host references and writes, for each module with rules, a file of its own,
+`{version}_access.{module}.ddd.sql`, whose policies ask `auth.uid()` and `auth.jwt()`. The
+[access functions](row-level-security.md#asking-the-aggregates-entities-access-functions) a module's
+rules call go into the file of the module that maps their aggregate, before its policies, and that file
+is written before the files of the modules that call them:
+
+```sql
+-- Written by DDDToolkit from the row access rules of OrderingContext.
+DO $ddd$ ... $ddd$;   -- drops the policies the previous file made on the module's tables
+
+ALTER TABLE ordering."Orders" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "A customer has their orders (read)" ON ordering."Orders" FOR SELECT TO anon, authenticated
+    USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())));
+COMMENT ON POLICY "A customer has their orders (read)" ON ordering."Orders" IS 'DDDToolkit row access rule';
+
+-- OrderLine belongs to the aggregate, and is seen and changed with it.
+ALTER TABLE ordering."OrderLine" ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "OrderLine goes with its Orders" ON ordering."OrderLine" FOR ALL TO anon, authenticated
+    USING (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = "OrderLine"."OrderId"))
+    WITH CHECK (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = "OrderLine"."OrderId"));
+```
+
+The file says what the rules are now: it drops every policy an earlier one made, found by the comment each
+carries, and makes them all again, so a rule taken out disappears and a policy you wrote by hand is left
+alone. A file already written is never written again, because Supabase may have applied it. A rule that
+changes, or a migration of the module that comes after the last file, gets a new file, numbered after
+everything else in the directory, and `Check` in CI fails until it is there.
+
+A policy stands in the way of dropping a column it reads, so every migration of a module with rules
+starts by taking the module's generated policies off. The access file after it puts them back.
+
+### In Azure Functions
+
+The isolated worker runs no ASP.NET Core pipeline, not even with its ASP.NET Core integration, so there
+is no `UseAuthentication()` to hang a bearer scheme on. `DDDToolkit.Auth.Supabase.AzureFunctions` is a
+worker middleware instead: for every HTTP-triggered invocation it validates the token in the request's
+`Authorization` header and runs the function inside `Callers.Begin`, as that user, or as `anon` without a
+valid token.
+
+```csharp
+var builder = FunctionsApplication.CreateBuilder(args);
+builder.UseSupabaseAuth();
+
+builder.Services.AddSupabaseAuth("https://<ref>.supabase.co");
+builder.Services.AddSupabaseRowLevelSecurity();
+builder.Services.AddDbContext<OrderingContext>((provider, options) => options
+    .UseNpgsql(connectionString)
+    .UseSupabaseRowLevelSecurity(provider));
+```
+
+A queue, timer or Service Bus trigger has no request and runs as the system, unless the function begins a
+caller itself, say from the claims its message carries. `context.GetSupabaseCaller()` says who an
+invocation runs as, for a function that answers somebody without a user with a 401.
+
+### Anywhere else
+
+A worker service or a tool of your own needs no host package. `SupabaseTokenValidator`, from
+`DDDToolkit.Auth.Supabase`, checks a token against the project's published keys and returns its `Caller`;
+`Callers.Begin` makes it current; and `AddSupabaseRowLevelSecurity()` alone asks for exactly that caller,
+or the system outside any. Pass `Callers.FromClaims(claims)` only the claims of a token something
+validated.
+
 ## Exporting by hand
 
 Everything the build does is also an API, for a test, a tool of your own or a context without a
@@ -299,5 +480,6 @@ so the host does not reference the package itself unless it uses the start-up ch
 ## Where to look next
 
 - [Entity Framework](entity-framework.md#migrations) for migrations on any other database.
+- [Row level security](row-level-security.md) for callers, work outside a request, and rules written in C#.
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
 - [Diagnostics](diagnostics.md#ddd00031) for the build error about an unusable factory.

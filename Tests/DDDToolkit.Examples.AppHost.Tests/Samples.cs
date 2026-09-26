@@ -15,7 +15,7 @@ public sealed class SupabaseMonolith : ShopFixture<Projects.DDDToolkit_Examples_
 [Trait("Category", "Samples")]
 [Trait("Sample", "ModularMonolith.Supabase")]
 public sealed class ModularMonolithOnSupabase(SupabaseMonolith shop)
-    : ShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolith>;
+    : SupabaseShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolith>;
 
 public sealed class SupabaseMonolithOverQueues : ShopFixture<Projects.DDDToolkit_Examples_Supabase_AppHost>
 {
@@ -31,7 +31,7 @@ public sealed class SupabaseMonolithOverQueues : ShopFixture<Projects.DDDToolkit
 [Trait("Category", "Samples")]
 [Trait("Sample", "ModularMonolith.Supabase.Pgmq")]
 public sealed class ModularMonolithOverSupabaseQueues(SupabaseMonolithOverQueues shop)
-    : ShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolithOverQueues>;
+    : SupabaseShopScenarios<Projects.DDDToolkit_Examples_Supabase_AppHost>(shop), IClassFixture<SupabaseMonolithOverQueues>;
 
 public sealed class SqlServerMonolith : ShopFixture<Projects.DDDToolkit_Examples_SqlServer_AppHost>
 {

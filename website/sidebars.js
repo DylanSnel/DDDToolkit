@@ -20,7 +20,7 @@ const sidebars = {
       type: 'category',
       label: 'Persistence',
       collapsed: false,
-      items: ['entity-framework', 'composite-keys', 'event-delivery', 'supabase'],
+      items: ['entity-framework', 'composite-keys', 'event-delivery', 'row-level-security', 'supabase'],
     },
     {
       type: 'category',

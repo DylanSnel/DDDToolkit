@@ -37,7 +37,20 @@
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleApi\DDDToolkit.ExampleApi.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Messaging.Postgres\DDDToolkit.Messaging.Postgres.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <!--
+      Row level security from a caller: a request on Kestrel with a bearer token, an Azure Functions
+      invocation through the worker middleware, and the token validator on its own, all against the same
+      Postgres as the rest.
+    -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Auth.Supabase\DDDToolkit.Auth.Supabase.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Auth.Supabase.AzureFunctions\DDDToolkit.Auth.Supabase.AzureFunctions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

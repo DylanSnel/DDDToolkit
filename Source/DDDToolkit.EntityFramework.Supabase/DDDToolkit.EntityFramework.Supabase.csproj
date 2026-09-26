@@ -4,20 +4,25 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Title>Domain Driven Design Toolkit - Supabase</Title>
-    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase;postgres;postgresql</PackageTags>
-    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files as part of the build, so supabase db push, db reset and branching apply them, and fails a CI build when one was not exported.</Description>
+    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;migrations;supabase;postgres;postgresql;rls;row-level-security</PackageTags>
+    <Description>Supabase integration for the DDDToolkit: exports Entity Framework migrations as Supabase migration files as part of the build, so supabase db push, db reset and branching apply them, and fails a CI build when one was not exported. The [RowAccess] rules go along as Supabase policies, and DDDToolkit.EntityFramework.Postgres's row level security runs the application's own queries under Supabase's roles.</Description>
   </PropertyGroup>
 
   <!--
     Entity Framework's relational layer, and the DI abstractions for registering the contexts the
     start-up check covers. The export reads the migrations assembly and asks the migrator for SQL, both
     of which are relational services; it checks the provider by name rather than referencing Npgsql, so
-    the application brings whichever Npgsql provider it already uses. It needs none of the toolkit's
-    other packages either: any context with migrations can be exported.
+    the application brings whichever Npgsql provider it already uses. Row level security is Postgres's,
+    not Supabase's, so the policies and the interceptor are DDDToolkit.EntityFramework.Postgres's; this
+    package adds what is Supabase's about them: its roles, its auth functions and supabase/migrations.
   -->
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
   </ItemGroup>
 
   <!-- The generator that finds [SupabaseMigrations] factories, shipped the way the other integrations ship theirs. -->

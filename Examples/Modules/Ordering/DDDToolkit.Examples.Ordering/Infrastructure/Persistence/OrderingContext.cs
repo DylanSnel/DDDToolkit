@@ -41,6 +41,10 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
         // The read model is a plain class, so it is the one type here the conventions cannot key.
         modelBuilder.Entity<CatalogPrice>().HasKey(price => price.Sku);
 
+        // Where row level security is on, every query of a customer's is filtered on who placed the order,
+        // by the rules in Domain/Aggregates/Orders/Access.
+        modelBuilder.Entity<Order>().HasIndex(order => order.PlacedBy);
+
         // This module produces integration events, so it needs the outbox table: SaveChanges writes one
         // row per domain event in the same transaction as the order.
         // Database tells the toolkit which provider this is, so the timestamp columns get the

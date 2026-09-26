@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Examples.Ordering.Contracts;
 using HotChocolate;
@@ -31,7 +32,7 @@ public sealed class OrderingQueries
 [ExtendObjectType(OperationTypeNames.Mutation)]
 public sealed class OrderingMutations
 {
-    public async Task<Order> PlaceOrderAsync(PlaceOrderInput input, OrderingContext orders, CancellationToken cancellationToken)
+    public async Task<Order> PlaceOrderAsync(PlaceOrderInput input, ICallerAccessor callers, OrderingContext orders, CancellationToken cancellationToken)
     {
         var shipTo = new Address(input.Street, input.City, input.PostalCode).ToValid();
 
@@ -48,7 +49,7 @@ public sealed class OrderingMutations
                 .ToArray());
         }
 
-        var order = new Order(OrderId.CreateSequential(), shipTo, priced.Lines);
+        var order = new Order(OrderId.CreateSequential(), shipTo, priced.Lines, CustomerId.Of(callers.Current));
         order.EnsureInvariants();
 
         orders.Add(order);

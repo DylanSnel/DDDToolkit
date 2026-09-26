@@ -46,7 +46,7 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
             if (discovery.Enabled)
             {
-                production.AddSource("DDDToolkit.SupabaseMigrationSources.g.cs", Emit(discovery.Sources));
+                production.AddSource("DDDToolkit.SupabaseMigrationSources.g.cs", Emit(discovery.Sources, discovery.Rules, discovery.Functions));
             }
         });
     }
@@ -54,6 +54,8 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
     private static Discovery Discover(Compilation compilation, CancellationToken cancellationToken)
     {
         var sources = new List<Source>();
+        var rules = new List<Rule>();
+        var functions = new List<Function>();
         var diagnostics = new List<DiagnosticInfo>();
 
         foreach (var assembly in Searched(compilation))
@@ -61,6 +63,18 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             foreach (var type in TypesIn(assembly.GlobalNamespace))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (FunctionOf(type) is { } function)
+                {
+                    functions.Add(function);
+                    continue;
+                }
+
+                if (RuleOf(type) is { } rule)
+                {
+                    rules.Add(rule);
+                    continue;
+                }
 
                 if (!IsMarked(type))
                 {
@@ -93,10 +107,21 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             return byModule != 0 ? byModule : string.CompareOrdinal(left.Context, right.Context);
         });
 
-        return new Discovery(true, new EquatableArray<Source>(sources), new EquatableArray<DiagnosticInfo>(diagnostics));
+        rules.Sort(static (left, right) =>
+        {
+            var byAggregate = string.CompareOrdinal(left.Aggregate, right.Aggregate);
+            return byAggregate != 0 ? byAggregate : string.CompareOrdinal(left.Name, right.Name);
+        });
+
+        functions.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
+
+        return new Discovery(true, new EquatableArray<Source>(sources), new EquatableArray<Rule>(rules), new EquatableArray<Function>(functions), new EquatableArray<DiagnosticInfo>(diagnostics));
     }
 
-    /// <summary>This assembly, and every referenced assembly that references the Supabase package.</summary>
+    /// <summary>
+    /// This assembly, and every referenced assembly that references the Supabase package, where marked
+    /// factories live, or the toolkit's abstractions, where row access rules live.
+    /// </summary>
     private static IEnumerable<IAssemblySymbol> Searched(Compilation compilation)
     {
         yield return compilation.Assembly;
@@ -104,11 +129,88 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
         {
             if (referenced.Modules.Any(static module => module.ReferencedAssemblies.Any(static identity =>
-                    string.Equals(identity.Name, KnownTypes.SupabaseAssemblyName, StringComparison.Ordinal))))
+                    string.Equals(identity.Name, KnownTypes.SupabaseAssemblyName, StringComparison.Ordinal)
+                    || string.Equals(identity.Name, AbstractionsAssemblyName, StringComparison.Ordinal))))
             {
                 yield return referenced;
             }
         }
+    }
+
+    private const string AbstractionsAssemblyName = "DDDToolkit.Abstractions";
+
+    /// <summary>
+    /// An <c>[AccessFunction&lt;TAggregate&gt;]</c> whose SQL the core generator wrote into it as
+    /// <c>RowAccessSql</c>, or null, for the same reason as <see cref="RuleOf"/>.
+    /// </summary>
+    private static Function? FunctionOf(INamedTypeSymbol type)
+    {
+        var attribute = type.GetAttributes().FirstOrDefault(static candidate =>
+            candidate.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionAttribute`1" } function
+            && function.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+        return attribute?.AttributeClass?.TypeArguments.FirstOrDefault() is INamedTypeSymbol aggregate
+            && attribute.ConstructorArguments.Length == 1
+            && attribute.ConstructorArguments[0].Value is string name
+            && type.GetMembers(KnownTypes.RowAccessSqlField).OfType<IFieldSymbol>().FirstOrDefault() is { HasConstantValue: true, ConstantValue: string sql }
+                ? new Function(ClrName(aggregate), name, sql)
+                : null;
+    }
+
+    /// <summary>
+    /// A <c>[RowAccess&lt;TAggregate&gt;]</c> rule whose SQL the core generator wrote into it as the constant
+    /// <c>RowAccessSql</c>, or null. A rule without the constant did not translate, and its own project
+    /// already failed to build with the reason, so it is left out here.
+    /// </summary>
+    private static Rule? RuleOf(INamedTypeSymbol type)
+    {
+        var attribute = type.GetAttributes().FirstOrDefault(static candidate =>
+            candidate.AttributeClass?.OriginalDefinition is { MetadataName: "RowAccessAttribute`1" } rowAccess
+            && rowAccess.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+        if (attribute?.AttributeClass?.TypeArguments.FirstOrDefault() is not INamedTypeSymbol aggregate
+            || type.GetMembers(KnownTypes.RowAccessSqlField).OfType<IFieldSymbol>().FirstOrDefault() is not { HasConstantValue: true, ConstantValue: string sql })
+        {
+            return null;
+        }
+
+        var operations = attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is int value ? value : 0;
+        var roles = attribute.NamedArguments.FirstOrDefault(static argument => argument.Key == "To").Value is { Kind: TypedConstantKind.Array } to
+            ? to.Values.Select(static role => role.Value as string).Where(static role => !string.IsNullOrWhiteSpace(role)).Select(static role => role!).ToArray()
+            : [];
+
+        return new Rule(ClrName(aggregate), Humanize(type.Name), operations, new EquatableArray<string>(roles), sql);
+    }
+
+    /// <summary>The name <see cref="Type.FullName"/> gives the type: namespace, then outer types with <c>+</c>.</summary>
+    private static string ClrName(INamedTypeSymbol type)
+    {
+        var name = type.MetadataName;
+        for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            name = outer.MetadataName + "+" + name;
+        }
+
+        return type.ContainingNamespace.IsGlobalNamespace ? name : type.ContainingNamespace.ToDisplayString() + "." + name;
+    }
+
+    /// <summary><c>ACustomerSeesTheirOrders</c> as <c>A customer sees their orders</c>, the name Postgres shows.</summary>
+    private static string Humanize(string name)
+    {
+        var words = new System.Text.StringBuilder(name.Length + 8);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var character = name[i];
+            var startsWord = i > 0 && (char.IsUpper(character) || (char.IsDigit(character) && !char.IsDigit(name[i - 1])));
+            if (startsWord)
+            {
+                words.Append(' ');
+            }
+
+            words.Append(i > 0 && char.IsUpper(character) ? char.ToLowerInvariant(character) : character);
+        }
+
+        return words.ToString();
     }
 
     private static IEnumerable<INamedTypeSymbol> TypesIn(INamespaceSymbol @namespace)
@@ -200,9 +302,10 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static string Emit(EquatableArray<Source> sources)
+    private static string Emit(EquatableArray<Source> sources, EquatableArray<Rule> rules, EquatableArray<Function> functions)
     {
         const string Supabase = "global::" + KnownTypes.SupabaseNamespace;
+        const string Postgres = "global::" + KnownTypes.PostgresNamespace;
 
         var entries = sources.Count == 0
             ? string.Empty
@@ -210,6 +313,21 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                 "\n",
                 sources.Select(source =>
                     $"            {Supabase}.SupabaseMigrationSource.For<{source.Context}, {source.Factory}>({(source.Module is null ? "null" : Literal(source.Module))}),"));
+
+        var ruleEntries = rules.Count == 0
+            ? string.Empty
+            : string.Join(
+                "\n",
+                rules.Select(rule =>
+                    $"            {Postgres}.RowAccessRule.For({Literal(rule.Aggregate)}, {Literal(rule.Name)}, (global::{KnownTypes.AttributesNamespace}.RowOperations){rule.Operations}, {Literal(rule.Sql)}"
+                    + string.Concat(rule.Roles.Select(role => ", " + Literal(role))) + "),"));
+
+        var functionEntries = functions.Count == 0
+            ? string.Empty
+            : string.Join(
+                "\n",
+                functions.Select(function =>
+                    $"            {Postgres}.RowAccessFunction.For({Literal(function.Aggregate)}, {Literal(function.Name)}, {Literal(function.Sql)}),"));
 
         return $$"""
             // <auto-generated/>
@@ -230,13 +348,27 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             {{entries}}
                         };
 
+                    /// <summary>The [RowAccess] rules of the modules, which the export writes as policies.</summary>
+                    public static global::System.Collections.Generic.IReadOnlyList<{{Postgres}}.RowAccessRule> Rules()
+                        => new {{Postgres}}.RowAccessRule[]
+                        {
+            {{ruleEntries}}
+                        };
+
+                    /// <summary>The [AccessFunction]s of the modules, which the rules call and the export writes as functions.</summary>
+                    public static global::System.Collections.Generic.IReadOnlyList<{{Postgres}}.RowAccessFunction> Functions()
+                        => new {{Postgres}}.RowAccessFunction[]
+                        {
+            {{functionEntries}}
+                        };
+
                     /// <summary>
                     /// Runs before Main. Returns at once unless the build's export step started this process, in which
                     /// case it exports and ends the process before any of the application's own start-up runs.
                     /// </summary>
                     [global::System.Runtime.CompilerServices.ModuleInitializer]
                     internal static void ExportWhenTheBuildAsks()
-                        => {{Supabase}}.SupabaseMigrationBuild.RunIfRequested(All);
+                        => {{Supabase}}.SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions);
                 }
             }
 
@@ -244,13 +376,19 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
     }
 
     private static string Literal(string value)
-        => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        => Microsoft.CodeAnalysis.CSharp.SymbolDisplay.FormatLiteral(value, quote: true);
 
     /// <summary>One marked factory: its context, itself, and the module its assembly declares, if any.</summary>
     private sealed record Source(string Context, string Factory, string? Module);
 
-    private sealed record Discovery(bool Enabled, EquatableArray<Source> Sources, EquatableArray<DiagnosticInfo> Diagnostics)
+    /// <summary>One row access rule: the aggregate's CLR name, the policy's name, what it allows, for whom, and its SQL.</summary>
+    private sealed record Rule(string Aggregate, string Name, int Operations, EquatableArray<string> Roles, string Sql);
+
+    /// <summary>One access function: the aggregate's CLR name, the function's name, and its SQL.</summary>
+    private sealed record Function(string Aggregate, string Name, string Sql);
+
+    private sealed record Discovery(bool Enabled, EquatableArray<Source> Sources, EquatableArray<Rule> Rules, EquatableArray<Function> Functions, EquatableArray<DiagnosticInfo> Diagnostics)
     {
-        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<DiagnosticInfo>.Empty);
+        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<Rule>.Empty, EquatableArray<Function>.Empty, EquatableArray<DiagnosticInfo>.Empty);
     }
 }

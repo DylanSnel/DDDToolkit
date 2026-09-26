@@ -108,11 +108,12 @@ public static class ReferenceSets
         FromType(typeof(global::DDDToolkit.EntityFramework.Options.OutboxOptions)),
     ];
 
-    /// <summary>EF Core, with its design-time factory interface, and the Supabase package the marker lives in.</summary>
+    /// <summary>EF Core, with its design-time factory interface, the Supabase package the marker lives in, and the Postgres package of the rules.</summary>
     public static ImmutableArray<PortableExecutableReference> Supabase =>
     [
         .. EntityFramework,
         FromType(typeof(global::DDDToolkit.EntityFramework.Supabase.SupabaseMigrationsAttribute)),
+        FromType(typeof(global::DDDToolkit.EntityFramework.Postgres.RowAccessRule)),
     ];
 
     /// <summary>

@@ -465,21 +465,26 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
                  .Where(type => typeof(IAggregateRoot).IsAssignableFrom(type.ClrType)))
     {
         modelBuilder.Entity(entityType.ClrType).Property<DateTimeOffset>("CreatedAt");
-        modelBuilder.Entity(entityType.ClrType).Property<string?>("CreatedBy");
+        modelBuilder.Entity(entityType.ClrType).Property<Guid?>("CreatedBy");
         modelBuilder.Entity(entityType.ClrType).Property<DateTimeOffset?>("UpdatedAt");
-        modelBuilder.Entity(entityType.ClrType).Property<string?>("UpdatedBy");
+        modelBuilder.Entity(entityType.ClrType).Property<Guid?>("UpdatedBy");
     }
 }
 ```
 
-Fill them from an interceptor of your own, registered beside the toolkit's:
+Fill them from an interceptor of your own, registered beside the toolkit's. Who is calling is the
+toolkit's `ICallerAccessor`, the same one [row level security](row-level-security.md#running-queries-as-the-caller)
+asks, so the column names whoever the database thought was calling:
 
 ```csharp
-public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : SaveChangesInterceptor
+public sealed class AuditInterceptor(ICallerAccessor callers, TimeProvider clock) : SaveChangesInterceptor
 {
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
     {
+        // Caller.System for background work, which has no user: the columns stay null.
+        var caller = callers.Current;
+
         foreach (var entry in eventData.Context!.ChangeTracker.Entries())
         {
             if (entry.Metadata.FindProperty("CreatedAt") is null)
@@ -490,12 +495,12 @@ public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : Sa
             if (entry.State == EntityState.Added)
             {
                 entry.Property("CreatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("CreatedBy").CurrentValue = user.Name;
+                entry.Property("CreatedBy").CurrentValue = caller.UserId;
             }
             else if (entry.State == EntityState.Modified)
             {
                 entry.Property("UpdatedAt").CurrentValue = clock.GetUtcNow();
-                entry.Property("UpdatedBy").CurrentValue = user.Name;
+                entry.Property("UpdatedBy").CurrentValue = caller.UserId;
             }
         }
 
@@ -507,6 +512,38 @@ public sealed class AuditInterceptor(ICurrentUser user, TimeProvider clock) : Sa
 ```csharp
 db.UseDDDToolkit(serviceProvider)
   .AddInterceptors(serviceProvider.GetRequiredService<AuditInterceptor>());
+```
+
+**On Postgres, let the database fill them.** With [row level security](row-level-security.md) on, every
+connection a context opens already carries the caller, so a default and a trigger can fill the columns
+instead of the interceptor. Then they are right for every writer, the application, PostgREST and
+supabase-js alike, and none of them can forge them. The trigger goes in a migration of your own:
+
+```sql
+create function ordering.touch_row() returns trigger language plpgsql as $$
+begin
+    new."UpdatedAt" := now();
+    new."UpdatedBy" := ddd.caller_id();   -- auth.uid() on Supabase
+    new."CreatedAt" := old."CreatedAt";   -- where a row came from is never rewritten
+    new."CreatedBy" := old."CreatedBy";
+    return new;
+end $$;
+
+create trigger touch_row before update on ordering."Orders"
+    for each row execute function ordering.touch_row();
+```
+
+and the model says the database fills them, so Entity Framework neither sends them nor keeps a stale
+value after a save:
+
+```csharp
+modelBuilder.Entity<Order>(order =>
+{
+    order.Property<DateTimeOffset>("CreatedAt").HasDefaultValueSql("now()");
+    order.Property<Guid?>("CreatedBy").HasDefaultValueSql("ddd.caller_id()");
+    order.Property<DateTimeOffset?>("UpdatedAt").ValueGeneratedOnAddOrUpdate();
+    order.Property<Guid?>("UpdatedBy").ValueGeneratedOnAddOrUpdate();
+});
 ```
 
 Read a shadow property back with `context.Entry(order).Property<DateTimeOffset>("CreatedAt")`, or
@@ -523,6 +560,12 @@ meant. Turn on the [outbox](event-delivery.md#the-outbox) and keep the rows inst
 them, or write your own handler that appends them to an event table. An audit trail assembled from
 `UpdatedBy` columns tells you a row changed; a trail of `OrderCancelled` tells you what happened, and
 why.
+
+An audit trail people read, who did what and when across the whole application, is a supporting
+domain of its own rather than something every module carries: an Audit module that subscribes to the
+other modules' [integration events](integration-events.md) and keeps its own history, in its own
+schema, answering its own questions. The modules it audits do nothing for it beyond raising the events
+they already raise; an event the trail needs to attribute says who acted, as a field of its contract.
 
 **Soft delete** is the same answer. Entity Framework does it with a flag and a global query filter,
 and neither needs the toolkit:
