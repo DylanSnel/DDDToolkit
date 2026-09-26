@@ -138,6 +138,9 @@ namespace DDDToolkit.Examples.Ordering.Migrations
                     b.Property<bool>("Paid")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("PlacedBy")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -179,6 +182,8 @@ namespace DDDToolkit.Examples.Ordering.Migrations
                         });
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PlacedBy");
 
                     b.ToTable("Orders", "ordering");
                 });

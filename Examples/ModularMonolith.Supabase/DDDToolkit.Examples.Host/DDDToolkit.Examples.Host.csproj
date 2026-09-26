@@ -57,6 +57,8 @@
     <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
     <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+    <!-- Supabase Auth's tokens, and the modules' queries run as the user who sent one. -->
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
   </ItemGroup>
 
   <!--

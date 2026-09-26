@@ -61,7 +61,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   is no automatic retry: reload and reapply a repeatable command, or report the conflict.
 - Prefer `SaveChangesAsync`. Migrations are ordinary `dotnet ef migrations add`.
 - A primary key made of more than the id: `[KeyPart]`, see `composite-keys.md`. Migrations as Supabase
-  SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`.
+  SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`. Queries run as the caller, and
+  `[RowAccess]` rules as Postgres policies: `DDDToolkit.EntityFramework.Postgres`, see `row-level-security.md`.
 
 ## Delivering domain events
 

@@ -198,6 +198,25 @@ Error. Two event names that differ only in punctuation (`ordering.order-placed` 
 `ordering.order.placed`) would get the same constant in the generated `{Module}EventNames`. Pin one of
 them to a name that reads differently.
 
+## DDD00038
+
+Error. A `[RowAccess<TAggregate>]` rule has the wrong shape. Make the class `static partial` and give it
+exactly one `public static bool Allows(TAggregate x, Caller caller)` whose body is one expression (after
+`=>`, or a single `return`). `Caller` is `DDDToolkit.Abstractions.Access.Caller`.
+
+## DDD00039
+
+Error. Part of `Allows` cannot become SQL. A rule may use the aggregate's properties (including `.Value`
+of a typed id and properties of a value object), constants, `caller.UserId`, `caller.IsSignedIn`,
+`caller.Role` and `caller.Claim("path")`, compared with `==`, `!=`, `<`, `<=`, `>`, `>=` and combined with
+`&&`, `||`, `!`. Replace method calls, locals, other objects and the clock: store the value as a property
+of the aggregate, or read it from a claim in `app_metadata`.
+
+## DDD00040
+
+Error. The rule is on a type that is not an aggregate root. Put it on the root; the export makes the
+tables of the root's entities follow it.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

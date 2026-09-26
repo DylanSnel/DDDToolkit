@@ -12,6 +12,57 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Added
 
+- `DDDToolkit.EntityFramework.Postgres`: row level security for an application's own queries, on any
+  Postgres. An application that connects as the tables' owner is not subject to their policies, so they
+  used to guard everything but the application. `options.UsePostgresRowLevelSecurity(provider)` on a
+  context now sets the caller's role and token claims on every connection it opens, as PostgREST does for
+  each request, so every policy applies to the application's queries too: a signed-in user runs as
+  `authenticated`, a request without a token as `anon`, and background work as the login role or
+  `SystemRole`. It refuses `No Reset On Close`, `Multiplexing` and Supabase's transaction pooler, which
+  would hand one caller's settings to another. Registered with `services.AddPostgresRowLevelSecurity()`;
+  on Supabase, `AddSupabaseRowLevelSecurity()` and `UseSupabaseRowLevelSecurity(provider)` do the same
+  with Supabase's roles. `PostgresRowAccess.SetupScript()` makes the roles and the `ddd.caller_id()`,
+  `ddd.caller_role()` and `ddd.caller_claims()` functions on a Postgres that is not Supabase's. See
+  [Row level security](docs/row-level-security.md).
+- Who the application is acting for, in the toolkit itself: `Caller` (a user, somebody who has not signed
+  in, or the system), an `ICallerAccessor` that says which one it is now, and `Callers.Begin(caller)`,
+  which makes one current for a flow of work, so a queued job can keep the user it was queued for.
+  `Callers.FromClaims(claims)` makes a user of a validated token's claims.
+- Row access rules written in C#. `[RowAccess<TAggregate>(RowOperations.Read | ...)]` on a
+  `static partial class` whose `static bool Allows(TAggregate, Caller)` is one expression: the generator
+  translates it into SQL when it compiles, with C#'s equality and nulls, columns from the Entity
+  Framework model and enum constants as the column stores them, and reports what it cannot translate
+  ([DDD00038](docs/diagnostics.md#ddd00038) to [DDD00040](docs/diagnostics.md#ddd00040)). `Sql.Call<T>`
+  and `Sql.Raw<T>` put SQL of your own in a rule, which then holds in the database only.
+  `PostgresRowAccess.Script(context, rules)` writes the policies, the tables of an aggregate's entities
+  following their root. The rule stays a method, so a handler asks the same rule in C#. See
+  [Row access rules written in C#](docs/row-level-security.md#row-access-rules-written-in-c).
+- The Supabase build writes the row access rules of every module a host references into
+  `supabase/migrations`, a file per module, `{version}_access.{module}.ddd.sql`, asking `auth.uid()`. The
+  file says what the rules are now: it drops the policies the previous one made and makes them again, so
+  a rule taken out disappears and a hand-written policy is left alone. A new one is written when a rule
+  changes or a migration of the module comes after it, and `Check` fails in CI until it is there. Every
+  migration of a module with rules starts by taking its generated policies off, so a policy never stands
+  in the way of dropping a column. See [Row access rules in the build](docs/supabase.md#row-access-rules-in-the-build).
+- `DDDToolkit.Auth.Supabase`: Supabase Auth's access tokens validated without a web framework, against
+  the keys the project publishes (fetched from its discovery document, and again when a token names a new
+  one) or a JWT secret for the CLI's local stack. `SupabaseTokenValidator` turns a token into the caller,
+  with its claims exactly as signed; `services.AddSupabaseAuth(projectUrl)` registers it. It needs no
+  Entity Framework.
+- `DDDToolkit.Auth.Supabase.AspNetCore`: `AddSupabaseJwtBearer(projectUrl)`, a JWT bearer scheme for
+  Supabase Auth, so `[Authorize]` and `HttpContext.User` work as usual, and each request's user becomes the
+  caller. `UseSupabaseJwtSecret` for the local stack.
+- `DDDToolkit.Auth.Supabase.AzureFunctions`: `builder.UseSupabaseAuth()`, a worker middleware for the
+  isolated worker, which has no ASP.NET Core pipeline. It validates the token of each HTTP-triggered
+  invocation and runs the function as its user; other triggers run as the system unless they begin a
+  caller themselves. `context.GetSupabaseCaller()` says who it is.
+- The Supabase monolith with signed-in customers. With `Supabase:Url` set, an order is its customer's: an
+  order knows who placed it, and two row access rules in Ordering, `ACustomerHasTheirOrders` and
+  `NobodyOrdersForSomebodyElse`, become the policies the build writes to `supabase/migrations`, so each
+  caller sees their own orders while guests' orders work as before.
+  The AppHost's container gets Supabase's roles and `auth` functions, the Supabase samples gain two
+  scenarios with signed-in customers, and the Supabase Live workflow plays them with real users of the
+  project's Auth.
 - An agent skill, [`skills/dddtoolkit`](skills/dddtoolkit), that teaches an AI coding agent the
   declarations, the rules the generators enforce, the wiring for Entity Framework, event delivery and
   modules, and the fix for every DDD diagnostic. The repository is a Claude Code plugin marketplace

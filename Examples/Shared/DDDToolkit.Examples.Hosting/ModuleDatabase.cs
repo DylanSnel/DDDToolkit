@@ -17,7 +17,8 @@ namespace DDDToolkit.Examples.Hosting;
 /// <list type="bullet">
 /// <item><see cref="Sqlite"/>: a file per module, created from the model on start-up. No setup at all.</item>
 /// <item><see cref="Supabase"/>: Postgres, where Supabase applies the migrations from
-/// <c>supabase/migrations</c> and the application only checks that none is missing.</item>
+/// <c>supabase/migrations</c> and the application only checks that none is missing. With
+/// <see cref="WithRowLevelSecurity"/>, Supabase's policies apply to the modules' queries as well.</item>
 /// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
 /// <item><see cref="SqlServer"/>: SQL Server, likewise, from the module's
 /// <c>DDDToolkit.Examples.{Module}.Migrations.SqlServer</c> assembly.</item>
@@ -42,6 +43,18 @@ public abstract record ModuleDatabase
 
     /// <summary>SQL Server, where the application applies the migrations itself on start-up.</summary>
     public static ModuleDatabase SqlServer(string connectionString) => new SqlServerDatabase(connectionString);
+
+    /// <summary>
+    /// This Supabase database, with row level security applied to every module's own queries, not only
+    /// to the Data API's: each request's queries run as the user whose Supabase access token it carried,
+    /// or as <c>anon</c> without one, and work outside a request as the role the host logged in as. The
+    /// host registers the interceptor with <c>services.AddSupabaseRowLevelSecurity()</c>, and who is
+    /// calling with <c>AddSupabaseJwtBearer</c> from <c>DDDToolkit.Auth.Supabase.AspNetCore</c>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">This is not a Supabase database.</exception>
+    public ModuleDatabase WithRowLevelSecurity() => this is PostgresDatabase { AppliesMigrations: false } supabase
+        ? supabase with { RowLevelSecurity = true }
+        : throw new InvalidOperationException("Row level security for the modules' queries is Supabase's: its roles, its auth.uid(), its policies. Call it on ModuleDatabase.Supabase(...).");
 
     /// <summary>
     /// The usual host's choice: Supabase when the configuration has a <c>Supabase</c> connection string,
@@ -99,6 +112,12 @@ public abstract record ModuleDatabase
         {
             Configure(options, schema);
             options.UseDDDToolkit(provider);
+
+            // Every connection this context opens runs as the caller, so Supabase's policies apply to it.
+            if (this is PostgresDatabase { RowLevelSecurity: true })
+            {
+                options.UseSupabaseRowLevelSecurity(provider);
+            }
         });
 
         switch (this)
@@ -127,7 +146,7 @@ public abstract record ModuleDatabase
                 .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
     }
 
-    private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations) : ModuleDatabase
+    private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations, bool RowLevelSecurity = false) : ModuleDatabase
     {
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
             => UsePostgres(options, ConnectionString, schema);

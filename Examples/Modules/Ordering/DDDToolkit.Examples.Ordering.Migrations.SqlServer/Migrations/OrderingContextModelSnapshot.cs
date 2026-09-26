@@ -138,6 +138,9 @@ namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer
                     b.Property<bool>("Paid")
                         .HasColumnType("bit");
 
+                    b.Property<Guid?>("PlacedBy")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -179,6 +182,8 @@ namespace DDDToolkit.Examples.Ordering.Migrations.SqlServer
                         });
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PlacedBy");
 
                     b.ToTable("Orders", "ordering");
                 });

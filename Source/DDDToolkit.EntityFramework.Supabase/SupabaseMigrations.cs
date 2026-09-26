@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using DDDToolkit.EntityFramework.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -70,6 +71,18 @@ public static class SupabaseMigrations
     private static readonly Regex Header = new(
         @"^-- Exported by DDDToolkit from the Entity Framework migration (?<id>\S+) of (?<context>\S+)\.$",
         RegexOptions.CultureInvariant);
+
+    // The first line of every file of row access rules, naming the context whose rules it holds.
+    private static readonly Regex AccessHeader = new(
+        @"^-- Written by DDDToolkit from the row access rules of (?<context>\S+)\.$",
+        RegexOptions.CultureInvariant);
+
+    // What a migration of a module with rules starts with: its rules come off, and the next access file puts them back.
+    private const string AccessDropNote = "-- This module's row access rules come off before its schema changes, which a policy could stand in";
+
+    private static readonly Regex AccessDropBlock = new(
+        Regex.Escape(AccessDropNote) + @".*?\$ddd\$;\n\n",
+        RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
     private static readonly Regex MigrationIdPattern = new(@"^[0-9]{14}_.+$", RegexOptions.CultureInvariant);
 
@@ -176,6 +189,12 @@ public static class SupabaseMigrations
         var migrator = context.GetService<IMigrator>();
         var sql = context.GetService<ISqlGenerationHelper>();
 
+        // A module with rules starts every migration by taking its policies off, so no policy stops a column
+        // it reads from being dropped or changed; the access file after the migration makes them again.
+        var dropRules = PostgresRowAccess.RulesOf(context, options.RowAccessRules).Count > 0
+            ? AccessDropNote + "\n-- the way of, and the file of row access rules after this one makes them again.\n" + PostgresRowAccess.DropStatement(context) + "\n"
+            : string.Empty;
+
         var files = new List<SupabaseMigrationFile>(migrations.Migrations.Count);
         var previous = Migration.InitialDatabase;
 
@@ -192,7 +211,7 @@ public static class SupabaseMigrations
             var script = migrator.GenerateScript(previous, id, MigrationsSqlGenerationOptions.NoTransactions);
             var migration = migrations.CreateMigration(type, provider);
 
-            files.Add(new SupabaseMigrationFile(id, module, Compose(id, context.GetType().Name, script, RowLevelSecurity(migration, options, sql))));
+            files.Add(new SupabaseMigrationFile(id, module, Compose(id, context.GetType().Name, dropRules + script, RowLevelSecurity(migration, options, sql))));
             previous = id;
         }
 
@@ -334,9 +353,11 @@ public static class SupabaseMigrations
             }
             else
             {
+                // Rules added after a migration was exported do not make its file a changed one: the drop
+                // at its start is compared as though neither side had it.
                 var matches = string.Equals(
-                    WithoutProductVersion(Normalize(File.ReadAllText(path)), file.MigrationId),
-                    WithoutProductVersion(file.Sql, file.MigrationId),
+                    WithoutProductVersion(WithoutAccessDrop(Normalize(File.ReadAllText(path))), file.MigrationId),
+                    WithoutProductVersion(WithoutAccessDrop(file.Sql), file.MigrationId),
                     StringComparison.Ordinal);
                 entries.Add(new(file.MigrationId, matches ? SupabaseMigrationStatus.Unchanged : SupabaseMigrationStatus.Changed, path));
             }
@@ -351,8 +372,104 @@ public static class SupabaseMigrations
             }
         }
 
+        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options ?? new SupabaseMigrationOptions(), write) is { } access)
+        {
+            entries.Add(access);
+        }
+
         return new SupabaseMigrationReport(directory, entries);
     }
+
+    /// <summary>
+    /// The module's file of row access rules: unchanged when the newest one says what the rules say now
+    /// and no migration of the module came after it, and otherwise a new one, written after everything
+    /// else in the directory, so the Supabase CLI applies it last. Nothing for a module that has no rules
+    /// and never had any.
+    /// </summary>
+    private static SupabaseMigrationEntry? Access(
+        DbContext context,
+        string module,
+        string directory,
+        Dictionary<string, List<string>> existing,
+        List<SupabaseMigrationFile> migrations,
+        SupabaseMigrationOptions options,
+        bool write)
+    {
+        var owner = context.GetType().Name;
+        var rules = PostgresRowAccess.RulesOf(context, options.RowAccessRules);
+        var files = existing.Values.SelectMany(paths => paths)
+            .Where(path => AccessOwner(path) == owner)
+            .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
+            .ToList();
+
+        if (rules.Count == 0 && files.Count == 0)
+        {
+            return null;
+        }
+
+        var sql = new StringBuilder()
+            .Append("-- Written by DDDToolkit from the row access rules of ").Append(owner).Append('.').Append('\n')
+            .Append("-- Written from those rules; change the rules, not this file. Every file like it says what the").Append('\n')
+            .Append("-- rules are now: it drops the policies the one before it made, and makes them again.").Append('\n')
+            .Append('\n')
+            .Append(PostgresRowAccess.DropStatement(context))
+            .Append(PostgresRowAccess.CreateStatements(context, rules, SupabaseRowLevelSecurity.CallerFunctions))
+            .ToString();
+
+        var newestMigration = migrations.Count == 0 ? "" : migrations.Max(file => file.Version)!;
+        if (files.LastOrDefault() is { } latest
+            && string.CompareOrdinal(VersionOf(latest), newestMigration) > 0
+            && string.Equals(Normalize(File.ReadAllText(latest)), sql, StringComparison.Ordinal))
+        {
+            return new(Path.GetFileNameWithoutExtension(latest).Split('.')[0], SupabaseMigrationStatus.Unchanged, latest);
+        }
+
+        if (!write)
+        {
+            return new($"{module} row access rules", SupabaseMigrationStatus.Missing, Path.Combine(directory, $"_access.{module}.ddd.sql"));
+        }
+
+        var version = NextVersion(options.TimeProvider.GetUtcNow().UtcDateTime, existing.Keys.Concat(migrations.Select(file => file.Version)));
+        var path = Path.Combine(directory, $"{version}_access.{module}.ddd.sql");
+
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(path, sql, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        existing[version] = [path];
+
+        return new($"{version}_access", SupabaseMigrationStatus.Created, path);
+    }
+
+    /// <summary>
+    /// A version for a new file that sorts after every file in the directory, a second on from the newest
+    /// when the clock is behind it, so the CLI never finds it older than what it already applied.
+    /// </summary>
+    private static string NextVersion(DateTime now, IEnumerable<string> taken)
+    {
+        const string Format = "yyyyMMddHHmmss";
+
+        var candidate = new DateTime(now.Year, now.Month, now.Day, now.Hour, now.Minute, now.Second, DateTimeKind.Utc);
+        foreach (var version in taken)
+        {
+            if (DateTime.TryParseExact(version, Format, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal, out var used)
+                && used >= candidate)
+            {
+                candidate = used.AddSeconds(1);
+            }
+        }
+
+        return candidate.ToString(Format, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string VersionOf(string path) => MigrationFilePattern.Match(Path.GetFileName(path)) is { Success: true } match ? match.Groups[1].Value : "";
+
+    /// <summary>The context whose rules a file holds, or null for a file that is not a file of rules.</summary>
+    private static string? AccessOwner(string path)
+    {
+        using var reader = new StreamReader(path);
+        return AccessHeader.Match(reader.ReadLine() ?? "") is { Success: true } match ? match.Groups["context"].Value : null;
+    }
+
+    private static string WithoutAccessDrop(string sql) => AccessDropBlock.Replace(sql, string.Empty);
 
     /// <summary>The <c>.sql</c> files the Supabase CLI would pick up, grouped by version.</summary>
     private static Dictionary<string, List<string>> ExistingFiles(string directory)

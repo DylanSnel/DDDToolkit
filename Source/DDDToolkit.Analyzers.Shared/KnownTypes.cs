@@ -34,6 +34,18 @@ internal static class KnownTypes
     /// <summary>Type attribute that names a published message. A published message is part of the contract too.</summary>
     public const string IntegrationEventAttribute = AttributesNamespace + ".IntegrationEventAttribute";
 
+    /// <summary>A rule about who may do what with an aggregate's rows: <c>[RowAccess&lt;TAggregate&gt;]</c>.</summary>
+    public const string RowAccessAttribute = AttributesNamespace + ".RowAccessAttribute`1";
+
+    /// <summary>Who is asking, as a row access rule sees them.</summary>
+    public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
+
+    /// <summary>SQL written into a row access rule as it is: <c>Sql.Call</c> and <c>Sql.Raw</c>.</summary>
+    public const string SqlEscape = "DDDToolkit.Abstractions.Access.Sql";
+
+    /// <summary>The constant the core generator writes into a row access rule: its SQL, columns still to fill in.</summary>
+    public const string RowAccessSqlField = "RowAccessSql";
+
     /// <summary>Namespace of the invariant interface, matched by name like everything else here.</summary>
     public const string InvariantsNamespace = "DDDToolkit.Invariants";
 
@@ -52,6 +64,9 @@ internal static class KnownTypes
 
     /// <summary>The package a module references when it has a marked factory; only those assemblies are searched.</summary>
     public const string SupabaseAssemblyName = "DDDToolkit.EntityFramework.Supabase";
+
+    /// <summary>Where <c>RowAccessRule</c> lives, which the host's generated list of rules builds.</summary>
+    public const string PostgresNamespace = "DDDToolkit.EntityFramework.Postgres";
 
     /// <summary>Entity Framework's design-time factory (assembly Microsoft.EntityFrameworkCore).</summary>
     public const string DesignTimeDbContextFactory = "Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory`1";

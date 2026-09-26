@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Postgres</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;entity;framework;efcore;postgres;postgresql;rls;row-level-security;policies</PackageTags>
+    <Description>Postgres row level security for the DDDToolkit: every connection a context opens runs under the caller's role and token claims, and the [RowAccess] rules written in C# become the policies Postgres enforces, on any Postgres, Supabase's included.</Description>
+  </PropertyGroup>
+
+  <!--
+    Entity Framework's relational layer, for the connection interceptor and for the model the policies
+    are written from: which table an aggregate lives in and what its columns are called. It talks to
+    Postgres through DbConnection and DbCommand rather than referencing Npgsql, so the application brings
+    whichever Npgsql provider it already uses. The toolkit itself for the caller: who the application is
+    acting for is not a Postgres question, and the hosts that answer it, the Auth packages, need no
+    Entity Framework.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+</Project>

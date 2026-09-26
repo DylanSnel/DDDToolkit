@@ -29,7 +29,7 @@ Three consequences for how you work:
   integration is a package of its own that brings its own generator: `DDDToolkit` (core, always),
   `DDDToolkit.EntityFramework`, `DDDToolkit.Mediator`, `DDDToolkit.FluentValidation`,
   `DDDToolkit.HotChocolate`, `DDDToolkit.Localization`, `DDDToolkit.Testing`, `DDDToolkit.Messaging.*`,
-  `DDDToolkit.EntityFramework.Supabase`.
+  `DDDToolkit.EntityFramework.Postgres`, `DDDToolkit.EntityFramework.Supabase`, `DDDToolkit.Auth.Supabase.*`.
 - Follow the layout the solution already has for aggregates, invariants, events and handlers.
 - When unsure what the generator produced, read it: go to definition on a generated member, or set
   `<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>` and look under `obj/` after a build.
@@ -44,6 +44,8 @@ Namespaces:
 | `DDDToolkit.Invariants` | `IInvariant<T>`, `InvariantFailure`, `InvariantViolation` |
 | `DDDToolkit.Validation` | `ValidationErrorBuilder`, `ValidationError`, `TryToValid`, `Prefixed`, `ToErrorDictionary` |
 | `DDDToolkit.Exceptions` | `ConcurrencyConflictException`, `InvariantViolationException`, `InvalidValueObjectException` |
+| `DDDToolkit.Abstractions.Access` | `Caller`, the parameter of a `[RowAccess]` rule, and `Sql.Call`/`Sql.Raw` |
+| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for |
 
 ## Identifiers
 

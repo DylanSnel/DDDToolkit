@@ -17,6 +17,7 @@ internal static class DiagnosticDescriptors
     private const string GraphQL = "DDDToolkit.GraphQL";
     private const string IntegrationEvents = "DDDToolkit.IntegrationEvents";
     private const string Events = "DDDToolkit.Events";
+    private const string Access = "DDDToolkit.Access";
 
     /// <summary>
     /// The reference page of docs/diagnostics.md on the docs site, where every id is a heading of its own.
@@ -302,4 +303,31 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Every name the module's events are stored or published under gets a constant in the generated {Module}EventNames class, named after the name without its module: ordering.order-placed becomes OrderPlaced. Two names that differ only in punctuation, such as order-placed and order.placed, would give one constant. Whichever name it held, code that used it for the other event would bind a topic or a test to the wrong event without a word, so the build stops instead. It is reported on the events of both names, because neither is more wrong than the other.");
+
+    public static readonly DiagnosticDescriptor RowAccessRuleShape = Create(
+        id: "DDD00038",
+        title: "A row access rule is a static partial class with one Allows method",
+        messageFormat: "'{0}' is a [RowAccess] rule and needs {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The generator translates a rule's Allows method into SQL and writes the result into another part of the class. So the class is static and partial, and Allows is a static method that takes the aggregate the rule is about and a Caller, returns bool, and has a single expression for a body, either after => or as its only return statement. Nothing is generated for a rule until it has that shape, and a rule without SQL is never written into the database.");
+
+    public static readonly DiagnosticDescriptor RowAccessRuleUntranslatable = Create(
+        id: "DDD00039",
+        title: "A row access rule can only say what the database can check",
+        messageFormat: "'{0}' cannot be part of a row access rule: a rule compares, and-s, or-s and negates properties of the aggregate, constants, the caller's UserId, IsSignedIn, Role and Claim(\"...\"), and SQL written with Sql.Call or Sql.Raw",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Every row access rule becomes a condition the database evaluates for each row, so it can only use what the database knows: the aggregate's own columns, constants written in the rule, and the caller's claims. A method call, a local variable, a field of another object or the clock has no column and no claim to become, and a rule that quietly left it out would let the database answer differently from the C# method. The error is on the part that cannot be translated.");
+
+    public static readonly DiagnosticDescriptor RowAccessRuleNotOnAggregateRoot = Create(
+        id: "DDD00040",
+        title: "A row access rule guards an aggregate root",
+        messageFormat: "'{0}' is a [RowAccess] rule on '{1}', which is not an aggregate root; put the rule on the root, and its entities follow it",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "An aggregate is read and changed as a whole. A rule on one of its entities could hide some of an order's lines and not the order, and Entity Framework would load half an aggregate whose invariants then check half the data. So rules are written for the root, and the export gives every table of the aggregate's entities a policy that follows the root: a line is visible exactly when its order is.");
 }

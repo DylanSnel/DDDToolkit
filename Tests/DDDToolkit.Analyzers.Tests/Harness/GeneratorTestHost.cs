@@ -7,6 +7,7 @@ using DDDToolkit.Analyzers.Analyzers;
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
+using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
@@ -77,7 +78,7 @@ public sealed class GeneratorTestHost
     public static GeneratorTestHost Create(string source, string path = "Source.cs")
         => new GeneratorTestHost().WithSource(source, path);
 
-    /// <summary>The five generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
+    /// <summary>The six generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
     public static IIncrementalGenerator[] CoreGenerators() =>
     [
         new CoreEntityIdGenerator(),
@@ -85,6 +86,7 @@ public sealed class GeneratorTestHost
         new CoreValueObjectGenerator(),
         new CoreEntityGenerator(),
         new CoreEventNamesGenerator(),
+        new CoreRowAccessGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
