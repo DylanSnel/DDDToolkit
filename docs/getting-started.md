@@ -14,8 +14,12 @@ you can go and look at the rest of it.
 ## Install
 
 ```bash
-dotnet add package DDDToolkit
+dotnet add package Temp.DDDToolkit
 ```
+
+For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is still 2.0.22,
+which these pages do not describe. The namespaces are `DDDToolkit` either way. See
+[Packages](../README.md#packages).
 
 `DDDToolkit` brings the base types and the core generators. That is all the first steps need. Each
 integration comes with a package of its own, added in the step that uses it: Entity Framework when the
@@ -275,7 +279,7 @@ Nothing so far needs a database, and neither does testing it. `DDDToolkit.Testin
 aggregate and asserts on the domain events it raised:
 
 ```bash
-dotnet add package DDDToolkit.Testing
+dotnet add package Temp.DDDToolkit.Testing
 ```
 
 ```csharp
@@ -310,7 +314,7 @@ See [Testing](testing.md).
 ## Store it with Entity Framework
 
 ```bash
-dotnet add package DDDToolkit.EntityFramework
+dotnet add package Temp.DDDToolkit.EntityFramework
 ```
 
 The Entity Framework package brings a generator of its own. It writes a value converter for every

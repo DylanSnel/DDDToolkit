@@ -498,6 +498,12 @@ convention.
 
 ### Changed
 
+- **The packages are published as `Temp.DDDToolkit.*` for now.** The nuget.org account that owns the
+  `DDDToolkit.*` ids cannot publish at the moment, so every package ships under its old name with
+  `Temp.` in front, from a second account, through trusted publishing instead of a stored API key.
+  Assembly names and namespaces are unchanged; a consumer swaps the `PackageReference` and nothing else.
+  The prefix is one property, `DDDPackageIdPrefix` in `Directory.Build.props`. See
+  [Migrating to 3.0](docs/migrating-to-3.md#the-package-ids).
 - `AddPgmqSink` needs the database when the application starts, for the pgmq check above; before, it did
   not touch the database until the first send. Set `CheckExtensionOnStart = false` on the sink's options
   to start without it.

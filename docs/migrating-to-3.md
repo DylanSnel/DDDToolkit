@@ -24,6 +24,7 @@ in [section 6](#6-events-are-dispatched-before-the-save-on-both-paths).
 | Misapplied attributes now fail the build | [10](#10-misapplied-attributes-now-fail-the-build) |
 | `CheckInvariants`, `EnsureInvariants`, `GetInvariantViolations` and their `Own` pair are now generated member names | [11](#11-entities-gain-an-invariant-seam) |
 | A save now runs your aggregates' invariants | [11](#11-entities-gain-an-invariant-seam) |
+| The packages have new ids for now, `Temp.DDDToolkit.*` | [12](#the-package-ids) |
 | HotChocolate 16, Entity Framework 10, FluentValidation 12 | [12](#12-package-versions) |
 | MediatR is no longer referenced | [13](#13-mediatr-is-replaced-by-mediator-in-the-examples) |
 
@@ -493,6 +494,30 @@ running the rule over production data as a query before you deploy it. See
 
 ## 12. Package versions
 
+### The package ids
+
+3.x is published as `Temp.DDDToolkit`, `Temp.DDDToolkit.EntityFramework` and so on, for now.
+The nuget.org account that owns the `DDDToolkit.*` ids cannot publish at the moment, so updating
+`DDDToolkit` to the latest version still gets you 2.0.22. Swap each reference for the prefixed id
+instead:
+
+```xml
+<!-- 2.0.22 -->
+<PackageReference Include="DDDToolkit" Version="2.0.22" />
+<PackageReference Include="DDDToolkit.EntityFramework" Version="2.0.22" />
+
+<!-- 3.0.0 -->
+<PackageReference Include="Temp.DDDToolkit" Version="3.0.0" />
+<PackageReference Include="Temp.DDDToolkit.EntityFramework" Version="3.0.0" />
+```
+
+Only the ids changed. The assemblies and namespaces are still `DDDToolkit.*`, so no `using` has to
+move, and the analyzer packages still arrive on their own as dependencies. Keep no 2.0.22 reference
+beside a 3.0.0 one: they are different packages to NuGet, so it will not pick one of the two for you,
+and both would put an assembly named `DDDToolkit` in the build.
+
+### The dependencies
+
 | Package | 2.0.22 | 3.0.0 |
 |---|---|---|
 | Microsoft.EntityFrameworkCore | 8.0.8 | 10.0.12 |
@@ -736,7 +761,8 @@ you had a workaround for that, remove it.
 ## A checklist
 
 1. Retarget every project to `net10.0` and pin the SDK.
-2. Update the package references, including `HotChocolate.Execution` to `HotChocolate`.
+2. Update the package references: `DDDToolkit.*` to `Temp.DDDToolkit.*` 3.0.0, and
+   `HotChocolate.Execution` to `HotChocolate`.
 3. Build. Fix the `IDomainEvent` errors by deriving your events from `DomainEvent`.
 4. Fix the `AddDomainEvent` errors by renaming to `RaiseDomainEvent` inside aggregates, and by giving
    the aggregate a method where the call was outside one.

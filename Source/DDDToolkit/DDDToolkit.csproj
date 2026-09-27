@@ -12,8 +12,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
+  <!-- Named after the package, because that is the only build/*.props NuGet imports into a consumer. -->
   <ItemGroup>
-    <None Update="DDDToolkit.props" Pack="true" PackagePath="build" />
+    <None Update="DDDToolkit.props" Pack="true" PackagePath="build/$(PackageId).props" />
   </ItemGroup>
 
   <ItemGroup>

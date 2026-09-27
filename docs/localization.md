@@ -29,7 +29,7 @@ makes a response worse than it was.
 ## Setting it up
 
 ```bash
-dotnet add package DDDToolkit.Localization
+dotnet add package Temp.DDDToolkit.Localization
 ```
 
 `IFailureLocalizer` itself lives in the core `DDDToolkit` package, so an integration can ask for one

@@ -30,9 +30,12 @@
     <ProjectReference Include="..\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" PrivateAssets="contentfiles;build" />
   </ItemGroup>
 
-  <!-- The build step, in buildTransitive so a host gets it through the module that references this package. -->
+  <!--
+    The build step, in buildTransitive so a host gets it through the module that references this package.
+    Named after the package, because that is the only buildTransitive/*.targets NuGet imports.
+  -->
   <ItemGroup>
-    <None Include="buildTransitive\**" Pack="true" PackagePath="buildTransitive" />
+    <None Include="buildTransitive\DDDToolkit.EntityFramework.Supabase.targets" Pack="true" PackagePath="buildTransitive/$(PackageId).targets" />
   </ItemGroup>
 
 </Project>

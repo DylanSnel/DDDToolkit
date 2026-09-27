@@ -10,7 +10,7 @@ There is nothing to register. A value object's validator is created where it is 
 is involved, and the rest is extension methods.
 
 ```bash
-dotnet add package DDDToolkit.FluentValidation
+dotnet add package Temp.DDDToolkit.FluentValidation
 ```
 
 ## A value object's rules
