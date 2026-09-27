@@ -110,7 +110,7 @@ internal static class Check
     /// <summary>
     /// DDDToolkit.EntityFramework.Analyzers, and the whole point of this project: the registration is
     /// named from the DDD_Module property, which only reaches the generator through
-    /// build/DDDToolkit.props inside the DDDToolkit package. If that file stops shipping or stops
+    /// build/&lt;package id&gt;.props inside the DDDToolkit package. If that file stops shipping or stops
     /// applying, the generator falls back to the assembly name and this line stops compiling.
     /// </summary>
     public static ModelConfigurationBuilder ModuleNamedRegistration(ModelConfigurationBuilder builder)

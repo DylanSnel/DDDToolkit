@@ -24,6 +24,23 @@
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
+  <!--
+    The package ids. For now 3.x is published as Temp.DDDToolkit.*, from a second nuget.org
+    account, because the account that owns the DDDToolkit.* ids cannot publish at the moment. Only the
+    id changes: assembly names and namespaces stay DDDToolkit.*, so a consumer changes the
+    PackageReference and nothing else. Once the old ids can be published again, empty the prefix and
+    every package goes back to its own name, dependencies between them included, since NuGet takes
+    those from the referenced project's PackageId.
+
+    Anything that names a package by its id has to follow this: the build props file in the DDDToolkit
+    package and the buildTransitive targets in DDDToolkit.EntityFramework.Supabase, which NuGet only
+    imports when they are named after the package, and build/verify-package-consumption.sh.
+  -->
+  <PropertyGroup>
+    <DDDPackageIdPrefix>Temp.</DDDPackageIdPrefix>
+    <PackageId>$(DDDPackageIdPrefix)$(MSBuildProjectName)</PackageId>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)DDDToolkit-Icon.png" Pack="true" PackagePath="\" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
@@ -31,7 +48,7 @@
 
   <!--
     MSBuild properties the DDDToolkit generators read. NuGet consumers get these through
-    build/DDDToolkit.props inside the DDDToolkit package; projects in this repository reference
+    build/<package id>.props inside the DDDToolkit package; projects in this repository reference
     the generators directly, so expose them here.
   -->
   <ItemGroup>

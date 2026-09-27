@@ -4,7 +4,7 @@ namespace DDDToolkit.Analyzers.Common;
 
 /// <summary>
 /// MSBuild properties exposed to the generators through <c>CompilerVisibleProperty</c> items
-/// (see build/DDDToolkit.props in the DDDToolkit package).
+/// (see build/&lt;package id&gt;.props in the DDDToolkit package).
 /// </summary>
 internal sealed record DDDOptions(string ModuleName)
 {

@@ -14,7 +14,7 @@ has the same thing with Supabase's roles and `auth` functions, and its build wri
 ## Install
 
 ```bash
-dotnet add package DDDToolkit.EntityFramework.Postgres
+dotnet add package Temp.DDDToolkit.EntityFramework.Postgres
 ```
 
 ## Running queries as the caller

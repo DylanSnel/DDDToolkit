@@ -3,7 +3,7 @@
 # Builds Examples/DDDToolkit.NugetApi against the packed packages instead of the projects.
 #
 # Why this exists. A consumer gets the generators from analyzers/dotnet/cs and the DDD_Module property
-# from build/DDDToolkit.props. Neither path is used inside this repository, where every project
+# from build/<package id>.props. Neither path is used inside this repository, where every project
 # reference is a ProjectReference and DDD_Module comes from Directory.Build.props. So the whole of the
 # packaging contract is untested by a green solution build, and it has broken before.
 #
@@ -29,10 +29,18 @@ native_path() {
 feed_native="$(native_path "$feed")"
 packages_native="$(native_path "$packages")"
 
-echo "==> Verifying package consumption at version $version"
+# The ids the packages were packed under, asked of the build rather than written down here, so the
+# prefix in Directory.Build.props stays the one place that decides them. The tr drops the carriage
+# return the SDK ends the line with on Windows. NuGet lowercases the id for the folder it restores a
+# package into.
+core_id="$(dotnet msbuild "$root/Source/DDDToolkit/DDDToolkit.csproj" -getProperty:PackageId | tr -d '\r')"
+prefix="${core_id%DDDToolkit}"
+analyzers_id="${prefix}DDDToolkit.Analyzers"
 
-if ! compgen -G "$feed/DDDToolkit.$version.nupkg" > /dev/null; then
-  echo "No DDDToolkit.$version.nupkg in $feed. Pack first:" >&2
+echo "==> Verifying package consumption at version $version, package ids ${prefix}DDDToolkit.*"
+
+if ! compgen -G "$feed/$core_id.$version.nupkg" > /dev/null; then
+  echo "No $core_id.$version.nupkg in $feed. Pack first:" >&2
   echo "  for p in \$(find ./Source -name '*.csproj'); do dotnet pack \"\$p\" -c Release -o nupkgs -p:PackageVersion=$version; done" >&2
   exit 1
 fi
@@ -54,11 +62,11 @@ rm -rf "$work/consumer/obj" "$work/consumer/bin"
 # treats backslashes in a replacement as escapes. A heredoc does not, and it needs nothing installed.
 #
 # Overwriting means the copy no longer proves the shipped config clears the package sources, so assert
-# that separately. Without clear, a restore could satisfy DDDToolkit from nuget.org and verify the
-# published package instead of this build.
+# that separately. Without clear, a restore could satisfy the packages from nuget.org and verify the
+# published ones instead of this build.
 if ! grep -q '<clear />' "$consumer/NuGet.config"; then
   echo "FAILED: $consumer/NuGet.config no longer clears the package sources, so a restore could" >&2
-  echo "        satisfy DDDToolkit from nuget.org and verify the published package, not this build." >&2
+  echo "        satisfy $core_id from nuget.org and verify the published package, not this build." >&2
   exit 1
 fi
 
@@ -81,10 +89,10 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
 # assembly packed next to the generators rather than a package of their own. Nothing in a build uses
 # them, so nothing below would notice them missing; only the IDE would, silently.
-analyzers_folder="$packages/dddtoolkit.analyzers/$version/analyzers/dotnet/cs"
+analyzers_folder="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version/analyzers/dotnet/cs"
 for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
-    echo "FAILED: $assembly is missing from analyzers/dotnet/cs in the DDDToolkit.Analyzers package." >&2
+    echo "FAILED: $assembly is missing from analyzers/dotnet/cs in the $analyzers_id package." >&2
     exit 1
   fi
 done

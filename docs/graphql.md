@@ -13,7 +13,7 @@ pushing events to subscribed clients. How the generated bindings work is at the 
 ## Install
 
 ```bash
-dotnet add package DDDToolkit.HotChocolate
+dotnet add package Temp.DDDToolkit.HotChocolate
 ```
 
 The package brings its own source generator, so referencing it is the whole of the build-time setup.
@@ -514,7 +514,7 @@ Fusion gateway inside the application composes them into one schema and answers 
 them directly, in memory, with no HTTP.
 
 ```bash
-dotnet add package DDDToolkit.HotChocolate.Fusion.InMemory
+dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory
 ```
 
 **It needs HotChocolate Fusion 16.6.6 or later**, where the other HotChocolate integration asks for

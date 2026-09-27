@@ -21,8 +21,14 @@
     <DDDToolkitPackageVersion Condition="'$(DDDToolkitPackageVersion)' == ''">0.0.0-ci</DDDToolkitPackageVersion>
 
     <!--
+      The prefix the packages were packed under, the one in the repository's Directory.Build.props. The
+      script passes it; this default is only for a build by hand. A consumer writes the full id.
+    -->
+    <DDDPackageIdPrefix Condition="'$(DDDPackageIdPrefix)' == ''">Temp.</DDDPackageIdPrefix>
+
+    <!--
       The property under test. A consumer sets it in the project file or in their own
-      Directory.Build.props, and it only reaches the generator through build/DDDToolkit.props inside
+      Directory.Build.props, and it only reaches the generator through build/<package id>.props inside
       the DDDToolkit package. Check.cs names the method it is supposed to produce, so a build failure
       here means that path is broken.
     -->
@@ -34,9 +40,9 @@
       Only these three. The four analyzer packages are NOT referenced: each has to arrive as a
       dependency of the package above it, which is the other half of what this project verifies.
     -->
-    <PackageReference Include="DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
-    <PackageReference Include="DDDToolkit.EntityFramework" Version="$(DDDToolkitPackageVersion)" />
-    <PackageReference Include="DDDToolkit.FluentValidation" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.EntityFramework" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.FluentValidation" Version="$(DDDToolkitPackageVersion)" />
   </ItemGroup>
 
 </Project>

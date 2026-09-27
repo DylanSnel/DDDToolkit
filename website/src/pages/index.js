@@ -128,6 +128,10 @@ const blocks = [
   },
 ];
 
+// For now 3.x is published under Temp. ids (see Directory.Build.props). The names below are the
+// packages' own; the prefix goes on the install command and the NuGet links.
+const packageIdPrefix = 'Temp.';
+
 const packages = [
   ['DDDToolkit', 'Base types and the core generators.'],
   ['DDDToolkit.EntityFramework', 'Mapping, conventions, event dispatch, the outbox and the inbox.'],
@@ -215,7 +219,7 @@ function Hero() {
           </p>
           <div className={styles.install}>
             <span className={styles.prompt}>$</span>
-            <code>dotnet add package DDDToolkit</code>
+            <code>dotnet add package {packageIdPrefix}DDDToolkit</code>
           </div>
           <div className={styles.buttons}>
             <Link className={clsx('button button--lg', styles.primaryButton)} to="/docs/getting-started">
@@ -417,7 +421,7 @@ function Packages() {
         <p className={styles.sectionLead}>A core package and an integration per tool, each on NuGet.</p>
         <div className={styles.packageGrid}>
           {packages.map(([name, text]) => (
-            <a key={name} className={styles.package} href={`https://www.nuget.org/packages/${name}`}>
+            <a key={name} className={styles.package} href={`https://www.nuget.org/packages/${packageIdPrefix}${name}`}>
               <code>{name}</code>
               <span>{text}</span>
             </a>

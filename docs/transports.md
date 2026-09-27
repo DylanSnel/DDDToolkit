@@ -108,7 +108,7 @@ consumer read the installed version when the application starts, and refuse topi
 see [Queues, creation and the missing extension](#queues-creation-and-the-missing-extension).
 
 ```bash
-dotnet add package DDDToolkit.Messaging.Postgres
+dotnet add package Temp.DDDToolkit.Messaging.Postgres
 ```
 
 ```csharp

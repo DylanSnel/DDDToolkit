@@ -96,7 +96,7 @@ const config = {
         items: [
           { type: 'docSidebar', sidebarId: 'docs', position: 'left', label: 'Docs' },
           { href: 'https://github.com/DylanSnel/DDDToolkit/tree/main/Examples', label: 'Examples', position: 'left' },
-          { href: 'https://www.nuget.org/packages?q=DDDToolkit', label: 'NuGet', position: 'right' },
+          { href: 'https://www.nuget.org/packages?q=Temp.DDDToolkit', label: 'NuGet', position: 'right' },
           { href: 'https://github.com/DylanSnel/DDDToolkit', label: 'GitHub', position: 'right' },
         ],
       },

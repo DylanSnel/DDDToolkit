@@ -30,6 +30,9 @@ Three consequences for how you work:
   `DDDToolkit.EntityFramework`, `DDDToolkit.Mediator`, `DDDToolkit.FluentValidation`,
   `DDDToolkit.HotChocolate`, `DDDToolkit.Localization`, `DDDToolkit.Testing`, `DDDToolkit.Messaging.*`,
   `DDDToolkit.EntityFramework.Postgres`, `DDDToolkit.EntityFramework.Supabase`, `DDDToolkit.Auth.Supabase.*`.
+  For now 3.x is published under the same names with `Temp.` in front (`Temp.DDDToolkit`,
+  `Temp.DDDToolkit.EntityFramework`, ...); a plain `DDDToolkit` reference is 2.0.22, which these
+  instructions do not describe. Namespaces are `DDDToolkit.*` either way. Add packages by the prefixed id.
 - Follow the layout the solution already has for aggregates, invariants, events and handlers.
 - When unsure what the generator produced, read it: go to definition on a generated member, or set
   `<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>` and look under `obj/` after a build.

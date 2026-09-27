@@ -16,7 +16,7 @@ A test is the one place it gets in the way. This package writes it for you, and 
 that say what went wrong.
 
 ```bash
-dotnet add package DDDToolkit.Testing
+dotnet add package Temp.DDDToolkit.Testing
 ```
 
 The package references `DDDToolkit` and nothing else. It brings no test framework and no assertion

@@ -8,6 +8,12 @@ jobs:
   publish-nuget:
     runs-on: ubuntu-latest
 
+    # id-token lets the job ask GitHub for the token that trusted publishing trades for an API key.
+    # Naming one permission drops the defaults, so the checkout's read access is named too.
+    permissions:
+      contents: read
+      id-token: write
+
     env:
       # Build and Test and Provider Tests both set this, and the release path needs it most. Without
       # it a container-backed test skips itself when Docker is missing and the run reports green
@@ -73,5 +79,16 @@ jobs:
       - name: Verify package consumption
         run: ./build/verify-package-consumption.sh ${{ steps.get_version.outputs.VERSION }}
 
+      # Trusted publishing, so there is no API key in the repository's secrets to expire. nuget.org
+      # checks this job's token against a policy naming this repository and this workflow file, so
+      # renaming the file stops publishing until the policy follows. The key it hands back lives for an
+      # hour, which is why it is asked for here, after the tests, and not at the start of the job. The
+      # user is the nuget.org profile that owns the policy and the packages, not an email address.
+      - name: Log in to NuGet
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: DylanTheVillain
+
       - name: Publish to NuGet
-        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+        run: dotnet nuget push "./nupkgs/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} --skip-duplicate

@@ -104,6 +104,12 @@ so an IDE opens it from the error list and an agent that reads the build output 
 Reference `DDDToolkit` and add the integrations you actually use. Each integration package brings its
 own generator, so referencing it is all the configuration there is.
 
+**For now 3.x is published under `Temp.` ids:** `Temp.DDDToolkit`,
+`Temp.DDDToolkit.EntityFramework`, and so on, each package in the table below with `Temp.` in
+front of its name. The nuget.org account that owns the `DDDToolkit.*` ids cannot publish at the moment,
+so `DDDToolkit` there is still 2.0.22. Only the package id is different. The assemblies and namespaces
+are the ones this page names, so `using DDDToolkit;` stays as it is.
+
 | Package | Use it for |
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
@@ -126,7 +132,7 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
-dotnet add package DDDToolkit
+dotnet add package Temp.DDDToolkit
 ```
 
 There are five more packages you never reference directly: `DDDToolkit.Analyzers` and the
