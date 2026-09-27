@@ -59,6 +59,7 @@ public partial class Order { }
 | [Entity Framework](docs/entity-framework.md) | Wiring, the generated converters, mapping, concurrency and migrations |
 | [Composite keys](docs/composite-keys.md) | `[KeyPart]`: keying a table on more than the id, and carrying that into every owned table |
 | [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, and how to choose |
+| [Row level security](docs/row-level-security.md) | Running a context's queries as the caller, and row access rules written in C# as Postgres policies |
 | [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
 | [Modules](docs/modules.md) | `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
@@ -111,7 +112,11 @@ own generator, so referencing it is all the configuration there is.
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
 | `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |
 | `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
-| `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
+| `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the caller, as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
+| `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
+| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes, and turned into the caller row level security runs your queries as. No Entity Framework needed. |
+| `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the caller. |
+| `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the caller. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |

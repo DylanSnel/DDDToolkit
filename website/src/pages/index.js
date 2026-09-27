@@ -131,7 +131,11 @@ const blocks = [
 const packages = [
   ['DDDToolkit', 'Base types and the core generators.'],
   ['DDDToolkit.EntityFramework', 'Mapping, conventions, event dispatch, the outbox and the inbox.'],
-  ['DDDToolkit.EntityFramework.Supabase', 'Migrations exported for supabase db push and branching.'],
+  ['DDDToolkit.EntityFramework.Postgres', 'Row level security, and rules in C# as Postgres policies.'],
+  ['DDDToolkit.EntityFramework.Supabase', 'Migrations and policies exported for supabase db push and branching.'],
+  ['DDDToolkit.Auth.Supabase', 'Supabase Auth, and each token’s user as the caller.'],
+  ['DDDToolkit.Auth.Supabase.AspNetCore', 'The same for ASP.NET Core requests.'],
+  ['DDDToolkit.Auth.Supabase.AzureFunctions', 'The same for Azure Functions invocations.'],
   ['DDDToolkit.HotChocolate', 'GraphQL bindings, node ids, errors with codes, subscriptions.'],
   ['DDDToolkit.HotChocolate.Fusion.InMemory', 'One schema over a modular monolith, composed in process.'],
   ['DDDToolkit.Messaging.Postgres', 'pgmq: a queue in the database the outbox already writes to.'],

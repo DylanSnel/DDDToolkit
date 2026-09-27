@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supabase Auth for Azure Functions</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;azure;functions;isolated;supabase;auth;jwt;rls;row-level-security;postgres</PackageTags>
+    <Description>Supabase Auth in an Azure Functions app on the isolated worker, built on the DDDToolkit: a worker middleware that validates the Supabase Auth access token of each HTTP-triggered invocation and makes its user the caller whose role and claims row level security applies to the function's queries.</Description>
+  </PropertyGroup>
+
+  <!--
+    The worker's own middleware pipeline, because the isolated worker does not run ASP.NET Core's, not
+    even with its ASP.NET Core integration. Only the core of the worker: no HTTP extension, no ASP.NET
+    Core, so it fits either HTTP model.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Core" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Auth.Supabase\DDDToolkit.Auth.Supabase.csproj" />
+  </ItemGroup>
+
+</Project>

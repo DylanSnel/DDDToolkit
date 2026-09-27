@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supabase Auth</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supabase;auth;jwt;rls;row-level-security;postgres</PackageTags>
+    <Description>Supabase Auth for the DDDToolkit, in any host: validates the access tokens Supabase Auth issues against the keys the project publishes, and turns a valid one into the caller whose role and claims row level security applies to the application's queries. DDDToolkit.Auth.Supabase.AspNetCore and DDDToolkit.Auth.Supabase.AzureFunctions put it in front of a request.</Description>
+  </PropertyGroup>
+
+  <!--
+    No ASP.NET Core and no Functions SDK: a worker service, a function or a test can validate a token with
+    this alone. The two hosts have packages of their own, so neither drags the other in. No Entity
+    Framework either: what comes out is the toolkit's Caller, which row level security reads through an
+    ICallerAccessor, and a host that only checks tokens has no database to bring.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+</Project>

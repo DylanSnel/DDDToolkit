@@ -19,8 +19,12 @@
     <Project Path="Source/DDDToolkit.Messaging.Postgres/DDDToolkit.Messaging.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.Wolverine/DDDToolkit.Messaging.Wolverine.csproj" />
     <Project Path="Source/DDDToolkit.Messaging.MassTransit/DDDToolkit.Messaging.MassTransit.csproj" />
+    <Project Path="Source/DDDToolkit.EntityFramework.Postgres/DDDToolkit.EntityFramework.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase/DDDToolkit.EntityFramework.Supabase.csproj" />
     <Project Path="Source/DDDToolkit.EntityFramework.Supabase.Analyzers/DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
+    <Project Path="Source/DDDToolkit.Auth.Supabase/DDDToolkit.Auth.Supabase.csproj" />
+    <Project Path="Source/DDDToolkit.Auth.Supabase.AspNetCore/DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
+    <Project Path="Source/DDDToolkit.Auth.Supabase.AzureFunctions/DDDToolkit.Auth.Supabase.AzureFunctions.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation/DDDToolkit.FluentValidation.csproj" />
     <Project Path="Source/DDDToolkit.FluentValidation.Analyzers/DDDToolkit.FluentValidation.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.HotChocolate/DDDToolkit.HotChocolate.csproj" />

@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Examples.Ordering.Contracts;
 using DDDToolkit.Invariants;
@@ -21,7 +22,7 @@ public static class OrderingEndpoints
         // is unacceptable, and the caller gets a 400 it can read field by field. ToValid() would have
         // thrown, which is right when an invalid value is a bug and wrong when it is an ordinary answer
         // to an ordinary request.
-        app.MapPost("/orders", async (PlaceOrder body, OrderingContext orders, CancellationToken cancellationToken) =>
+        app.MapPost("/orders", async (PlaceOrder body, ICallerAccessor callers, OrderingContext orders, CancellationToken cancellationToken) =>
         {
             var errors = new List<ValidationError>();
 
@@ -55,7 +56,9 @@ public static class OrderingEndpoints
                 return Results.ValidationProblem(errors.ToErrorDictionary());
             }
 
-            var order = new Order(OrderId.CreateSequential(), shipTo!, priced.Lines);
+            // Placed in the name of whoever is asking, or as a guest's when nobody signed in. The rules in
+            // Domain/Aggregates/Orders/Access say who sees it afterwards; this only says whose it is.
+            var order = new Order(OrderId.CreateSequential(), shipTo!, priced.Lines, CustomerId.Of(callers.Current));
 
             // Nothing here validated a blank SKU, and OrderLine has a rule of its own about it. Ask the
             // order and it answers for its lines as well, before the order has been handed to a

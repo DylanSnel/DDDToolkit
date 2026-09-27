@@ -61,7 +61,72 @@ public sealed class SupabaseMigrationsGeneratorTests
         var result = HostReferencing(OrderingModule, export: "Check").Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldContain("SupabaseMigrationSources", "[global::System.Runtime.CompilerServices.ModuleInitializer]");
-        result.ShouldContain("SupabaseMigrationSources", "SupabaseMigrationBuild.RunIfRequested(All)");
+        result.ShouldContain("SupabaseMigrationSources", "SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions)");
+    }
+
+    [Fact]
+    public void The_row_access_rules_of_the_modules_are_listed_with_the_sql_the_core_generator_wrote_into_them()
+    {
+        // A real rule: the core generator translates it when the module compiles, and the host reads the result.
+        var module = OrderingModule + """
+
+
+            [DDDToolkit.Abstractions.Attributes.EntityId<System.Guid>]
+            public readonly partial record struct OrderId;
+
+            [DDDToolkit.Abstractions.Attributes.AggregateRoot<OrderId>]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+
+                public System.Guid? PlacedBy { get; private set; }
+            }
+
+            [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Read | DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = new[] { "authenticated" })]
+            public static partial class ACustomerSeesTheirOrders
+            {
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+            }
+            """;
+
+        var result = HostReferencing(module).Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "SupabaseMigrationSources",
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.For(\"Shop.Ordering.Order\", \"A customer sees their orders\", (global::DDDToolkit.Abstractions.Attributes.RowOperations)5, \"({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\", \"authenticated\"),");
+    }
+
+    [Fact]
+    public void The_access_functions_of_the_modules_are_listed_with_their_names_and_sql()
+    {
+        var module = OrderingModule + """
+
+
+            [DDDToolkit.Abstractions.Attributes.EntityId<System.Guid>]
+            public readonly partial record struct OrderId;
+
+            [DDDToolkit.Abstractions.Attributes.AggregateRoot<OrderId>]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+
+                public System.Guid? PlacedBy { get; private set; }
+            }
+
+            [DDDToolkit.Abstractions.Attributes.AccessFunction<Order>("ordering.placed_by_caller")]
+            public static partial class PlacedByTheCaller
+            {
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+            }
+            """;
+
+        var result = HostReferencing(module).Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "SupabaseMigrationSources",
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessFunction.For(\"Shop.Ordering.Order\", \"ordering.placed_by_caller\", \"({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\"),");
     }
 
     [Theory]

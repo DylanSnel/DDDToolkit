@@ -1,3 +1,5 @@
+using DDDToolkit.EntityFramework.Postgres;
+
 namespace DDDToolkit.EntityFramework.Supabase;
 
 /// <summary>
@@ -32,4 +34,23 @@ public sealed class SupabaseMigrationOptions
         get => _rowLevelSecuritySchemas;
         set => _rowLevelSecuritySchemas = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    /// <summary>
+    /// The <c>[RowAccess]</c> rules to write as policies. Each context gets the rules of the aggregates its
+    /// model maps, in a file of its module's own, <c>{version}_access.{module}.ddd.sql</c>, written again
+    /// whenever the rules change or a migration of the module comes after the last one. The build fills
+    /// this in with every rule the modules declare; set it yourself to export from a test or a tool.
+    /// </summary>
+    public IList<RowAccessRule> RowAccessRules { get; } = [];
+
+    /// <summary>
+    /// The <c>[AccessFunction]</c>s the rules call. Each goes into the access file of the context that maps
+    /// its aggregate, and nowhere else, before that file's policies; a context whose functions other modules
+    /// call is exported first, so its file comes before theirs. The build fills this in as it fills
+    /// <see cref="RowAccessRules"/>.
+    /// </summary>
+    public IList<RowAccessFunction> RowAccessFunctions { get; } = [];
+
+    /// <summary>The clock a new access file takes its version from: the time it is written, in UTC.</summary>
+    public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 }

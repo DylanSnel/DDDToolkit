@@ -43,12 +43,17 @@ public partial class Order
     /// below is the base type, because that is what comes back when Entity Framework reads the row.
     /// </param>
     /// <param name="lines">Priced lines. <c>Domain/Services/OrderPricer.cs</c> is what prices them.</param>
-    public Order(OrderId id, ValidAddress shipTo, IEnumerable<OrderLine> lines) : base(id)
+    /// <param name="placedBy">
+    /// The customer who placed it, or <see langword="null"/> for a guest. The handler takes it from the
+    /// caller, <c>CustomerId.Of(caller)</c>; the rules in <c>Access/</c> say who may see the order after.
+    /// </param>
+    public Order(OrderId id, ValidAddress shipTo, IEnumerable<OrderLine> lines, CustomerId? placedBy) : base(id)
     {
         ArgumentNullException.ThrowIfNull(shipTo);
         ArgumentNullException.ThrowIfNull(lines);
 
         ShipTo = shipTo;
+        PlacedBy = placedBy;
         _lines.AddRange(lines);
         Status = OrderStatus.Placed;
         Total = _lines.Aggregate(Money.Zero(), (total, line) => total.Plus(line.Subtotal));
@@ -61,6 +66,12 @@ public partial class Order
     }
 
     public Address ShipTo { get; private set; }
+
+    /// <summary>
+    /// The customer who placed the order, or <see langword="null"/> for a guest's. It never changes: an
+    /// order does not move to another customer.
+    /// </summary>
+    public CustomerId? PlacedBy { get; private set; }
 
     /// <summary>The lines of this order. Read-only outside the aggregate; the generated <c>_lines</c> field is what Entity Framework maps.</summary>
     public partial IReadOnlyList<OrderLine> Lines { get; }

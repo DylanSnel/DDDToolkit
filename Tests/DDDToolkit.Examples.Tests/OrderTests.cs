@@ -19,7 +19,7 @@ public class OrderTests
         => new Address("Oudegracht 1", "Utrecht", "3511 AA").ToValid();
 
     private static Order Place(params OrderLine[] lines)
-        => new(OrderId.CreateSequential(), ShipTo(), lines.Length > 0 ? lines : [Line("COFFEE-1KG", 2, 12.50m)]);
+        => new(OrderId.CreateSequential(), ShipTo(), lines.Length > 0 ? lines : [Line("COFFEE-1KG", 2, 12.50m)], placedBy: null);
 
     private static OrderLine Line(string sku, int quantity, decimal unitPrice = 1m)
         => new(OrderLineId.CreateSequential(), sku, quantity, new Money(unitPrice, Money.Euro));
@@ -76,7 +76,7 @@ public class OrderTests
         // The constructor allows it, because an aggregate is allowed to be inconsistent inside its own
         // methods. What it promises is never to be saved broken, and this is the check the interceptor
         // runs before every save.
-        var empty = new Order(OrderId.CreateSequential(), ShipTo(), []);
+        var empty = new Order(OrderId.CreateSequential(), ShipTo(), [], placedBy: null);
 
         var violation = Assert.Throws<InvariantViolationException>(empty.EnsureInvariants);
         violation.Message.Should().Contain("at least one line");

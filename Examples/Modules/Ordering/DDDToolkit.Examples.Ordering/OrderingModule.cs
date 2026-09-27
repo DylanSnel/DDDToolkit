@@ -1,7 +1,9 @@
+using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Hosting;
 using DDDToolkit.Examples.Ordering.IntegrationEvents;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DDDToolkit.Examples.Ordering;
 
@@ -28,6 +30,11 @@ public static class OrderingModule
         // export does not need this line: the build finds OrderingContextFactory by its
         // [SupabaseMigrations] marker.
         host.Database.AddContext<OrderingContext, OrderingContextFactory>(services, OrderingContext.Schema);
+
+        // Who is asking, for the customer an order is placed in the name of. A host that knows its callers,
+        // the Supabase monolith with signed-in customers, registers its own before this; everywhere else
+        // nobody signs in, the caller is the system, and every order is a guest's.
+        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
 
         // Ordering produces integration events, so it owns an outbox: what it publishes, as what, and
         // that it goes wherever the host sends it. It does not know which modules listen.

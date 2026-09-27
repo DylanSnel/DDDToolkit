@@ -1,3 +1,4 @@
+using DDDToolkit.Auth.Supabase.AspNetCore;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Examples.Catalog.Api;
@@ -45,6 +46,29 @@ var supabase = builder.Configuration.GetConnectionString("Supabase") is { Length
 
 var database = supabase is not null ? ModuleDatabase.Supabase(supabase) : ModuleDatabase.Sqlite();
 
+// Who is asking. With Supabase:Url set too, a request may carry the access token Supabase Auth gave a
+// signed-in user, the one supabase-js holds, and every module's queries for that request run as that user.
+// Supabase's policies then decide what each caller sees, as they would for the Data API: an order is its
+// customer's, by the rules in Ordering's Domain/Aggregates/Orders/Access, which the build writes into
+// supabase/migrations as ..._access.ordering.ddd.sql. A request without a token runs as anon, and can
+// still place and follow an order as a guest. Work outside a request, such as the outbox
+// pollers, runs as the role the host logged in as. Supabase:JwtSecret is for the CLI's local stack and
+// the AppHost's container, which sign tokens with a secret instead of keys the project publishes.
+var signedIn = supabase is not null && builder.Configuration["Supabase:Url"] is { Length: > 0 };
+if (signedIn)
+{
+    builder.Services.AddAuthentication().AddSupabaseJwtBearer(builder.Configuration["Supabase:Url"]!, jwt =>
+    {
+        if (builder.Configuration["Supabase:JwtSecret"] is { Length: > 0 } secret)
+        {
+            jwt.UseSupabaseJwtSecret(secret);
+        }
+    });
+
+    builder.Services.AddSupabaseRowLevelSecurity();
+    database = database.WithRowLevelSecurity();
+}
+
 // How the modules hear from each other. No module names another here or anywhere: each one says what it
 // publishes and what it listens to, and the host only chooses the road between them.
 var host = builder.Configuration["Messaging"] is "pgmq"
@@ -69,6 +93,11 @@ builder.Services.AddInMemoryFusionGateway();
 var app = builder.Build();
 
 app.UseWebSockets();
+
+if (signedIn)
+{
+    app.UseAuthentication();
+}
 
 // On Supabase the migrations are Supabase's to apply, from supabase/migrations. The application only
 // checks, over every module that registered its migrations, and refuses to start while one is missing.

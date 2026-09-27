@@ -38,6 +38,11 @@
     <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.0</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.0</EntityFrameworkCoreVersion>
+    <AspNetCoreVersion>10.0.0</AspNetCoreVersion>
+    <!-- What JwtBearer 10.0.0 itself depends on, so the two Supabase auth packages agree at the floor. -->
+    <IdentityModelVersion>8.0.1</IdentityModelVersion>
+    <!-- The first release of the isolated worker's 2.x line, which has the middleware API used here. -->
+    <AzureFunctionsWorkerVersion>2.0.0</AzureFunctionsWorkerVersion>
     <NpgsqlVersion>10.0.0</NpgsqlVersion>
     <HotChocolateVersion>16.0.0</HotChocolateVersion>
     <FluentValidationVersion>12.0.0</FluentValidationVersion>
@@ -54,6 +59,10 @@
     <MassTransitVersion>8.5.10</MassTransitVersion>
     <MicrosoftExtensionsVersion>10.0.12</MicrosoftExtensionsVersion>
     <EntityFrameworkCoreVersion>10.0.12</EntityFrameworkCoreVersion>
+    <AspNetCoreVersion>10.0.12</AspNetCoreVersion>
+    <!-- At least what JwtBearer 10.0.12 depends on: with transitive pinning on, anything lower is a downgrade. -->
+    <IdentityModelVersion>8.19.2</IdentityModelVersion>
+    <AzureFunctionsWorkerVersion>2.52.0</AzureFunctionsWorkerVersion>
     <NpgsqlVersion>10.0.3</NpgsqlVersion>
     <HotChocolateVersion>16.6.6</HotChocolateVersion>
     <FluentValidationVersion>12.1.1</FluentValidationVersion>
@@ -89,6 +98,11 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EntityFrameworkCoreVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EntityFrameworkCoreVersion)" />
+    <!-- Validating Supabase Auth's access tokens: DDDToolkit.Auth.Supabase and its two hosts. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="$(IdentityModelVersion)" />
+    <PackageVersion Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="$(IdentityModelVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(AspNetCoreVersion)" />
+    <PackageVersion Include="Microsoft.Azure.Functions.Worker.Core" Version="$(AzureFunctionsWorkerVersion)" />
     <PackageVersion Include="Npgsql" Version="$(NpgsqlVersion)" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="$(NpgsqlVersion)" />
     <PackageVersion Include="HotChocolate.AspNetCore" Version="$(HotChocolateVersion)" />

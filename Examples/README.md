@@ -229,6 +229,39 @@ files a new migration needs, and `Check` in CI, so a pull request that adds a mi
 fails. The files are committed, because Supabase branching reads them from the repository. See
 [Entity Framework → Supabase](../docs/supabase.md) for what the build writes and how.
 
+#### Signed-in customers and row level security
+
+With `Supabase:Url` set as well, a request may carry the access token Supabase Auth gives a signed-in
+user, and the host runs every module's queries for that request as that user, the way PostgREST runs the
+Data API's. Supabase's own policies then decide what each caller sees. Here an order is its customer's:
+an order knows who placed it, `Order.PlacedBy`, and two rules written in C# next to it,
+[`Domain/Aggregates/Orders/Access/OrderAccess.cs`](Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Access/OrderAccess.cs),
+say that a customer sees and changes their own orders and nobody places one for somebody else. The build
+writes them into `supabase/migrations` as `…_access.ordering.ddd.sql`, with a policy for the order lines
+that follows the order. A request without a token runs as `anon` and places a guest's order, which
+anybody with its id can follow, as every other scenario does. The outbox pollers run outside any request,
+as the role the host logged in as, so checkout goes on regardless. On SQLite and SQL Server nobody signs
+in, every order is a guest's, and nothing enforces the rules.
+
+The AppHost's container gets the roles and `auth` functions every Supabase project has from
+`DDDToolkit.Examples.Supabase.AppHost/database/`, and the host checks tokens with the CLI's local JWT
+secret, as the `supabase` launch profile does against `supabase start`. Against a project, set
+`Supabase:Url` on the AppHost next to the connection string, and the host checks tokens against the keys
+the project publishes:
+
+```bash
+dotnet user-secrets set Supabase:Url "https://<ref>.supabase.co" --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+```
+
+```http
+GET http://localhost:5080/orders/{id}
+Authorization: Bearer <access token from supabase.auth.getSession()>
+```
+
+`supabase/migrations/20260925150000_grant_modules_to_callers.sql` gives `anon` and `authenticated` the
+module schemas, which the Data API does not expose, so only the application reaches them. See
+[Row level security for your own queries](../docs/supabase.md#row-level-security-for-your-own-queries).
+
 #### Through Supabase Queues
 
 The same host, with its modules talking through Supabase Queues instead of in process. Every module's
@@ -427,10 +460,14 @@ dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMono
 dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.Supabase.Pgmq"   # through Supabase Queues
 ```
 
+The Supabase samples add two scenarios of their own, with signed-in customers: one customer's order is
+not another's to see or cancel, and a customer's order still goes through checkout.
+
 The Supabase monolith also runs against a real Supabase project, in the Supabase Live workflow, twice: in
 process and through Supabase Queues. It puts the exported `supabase/migrations` on with `supabase db push`,
 as a deploy would, and plays the same scenarios against the project, where the monolith checks on
-start-up that every migration was applied. The project exists for these tests alone: each run first
+start-up that every migration was applied. Its customers are real users of the project's Auth, made with
+its admin API for each run and deleted afterwards, so their tokens are the project's own. The project exists for these tests alone: each run first
 drops the module schemas and the shop's queue and forgets their migrations. With the repository variable `SUPABASE_BRANCHING` set to `true`, each run gets a preview
 branch of its own instead and deletes it afterwards; branching needs a Supabase Pro organisation. The
 workflow connects through Supabase's pooler, because the database's own host has no IPv4 address and

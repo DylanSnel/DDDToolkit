@@ -16,9 +16,14 @@ name: Supabase Live
 #   first drops the module schemas the migrations create and forgets those migrations, and then applies
 #   them again. Runs take turns, since they share one database.
 #
+# The scenarios include signed-in customers: two users made in the project's own Auth for each run, and
+# deleted again, whose tokens the monolith checks against the keys the project publishes and whose queries
+# run under the project's row level security. Making them takes a secret key, which the run reads through
+# the Management API, or from the secret SUPABASE_SECRET_KEY when the access token may not read keys.
+#
 # Needs the secrets SUPABASE_ACCESS_TOKEN (a personal access token; Development Branches read-write,
-# Project Settings read, Database read) and, without branching, SUPABASE_DB_PASSWORD, plus the variable
-# SUPABASE_PROJECT_REF.
+# Project Settings read, Database read, API keys read) and, without branching, SUPABASE_DB_PASSWORD, plus
+# the variable SUPABASE_PROJECT_REF.
 on:
   workflow_dispatch:
   push:
@@ -27,7 +32,10 @@ on:
     paths:
       - Examples/**
       - Source/DDDToolkit.EntityFramework/**
+      - Source/DDDToolkit.EntityFramework.Postgres/**
       - Source/DDDToolkit.EntityFramework.Supabase/**
+      - Source/DDDToolkit.Auth.Supabase/**
+      - Source/DDDToolkit.Auth.Supabase.AspNetCore/**
       - Source/DDDToolkit.Messaging.Postgres/**
       - .github/workflows/SupabaseLive.yml
 
@@ -59,6 +67,9 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      # Optional: only when SUPABASE_ACCESS_TOKEN may not read the project's API keys. The project's, so
+      # without branching only.
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       BRANCHING: ${{ vars.SUPABASE_BRANCHING == 'true' }}
       BRANCH_NAME: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
@@ -143,10 +154,25 @@ jobs:
           # Quoted, so a password with a ';' in it stays one value.
           echo "ConnectionStrings__Supabase=Host=$host;Port=5432;Database=postgres;Username=$user;Password=\"$password\";SSL Mode=Require" >> "$GITHUB_ENV"
 
-      # Only without branching, and only what the example's migrations create: its module schemas, their
-      # rows in the history Supabase keeps of applied migrations, and the queue the shop talks through. The
-      # pgmq extension stays, but its migration is forgotten with the rest: it is the latest file, and the
-      # CLI refuses to apply migrations older than the last one it remembers. Applying it again is harmless.
+          # Signed-in customers: the AppHost passes the project's URL to the monolith, which checks tokens
+          # against the keys published there, and the scenarios make their customers with a secret key.
+          echo "Supabase__Url=https://$ref.supabase.co" >> "$GITHUB_ENV"
+          secret=$(api "projects/$ref/api-keys?reveal=true" \
+            | jq -r '([.[] | select(.type == "secret")] + [.[] | select(.name == "service_role")])[0].api_key // empty' || true)
+          if [ -z "$secret" ] && [ "$BRANCHING" != "true" ]; then
+            secret="$SUPABASE_SECRET_KEY"
+          fi
+          if [ -z "$secret" ]; then
+            echo "::error::No secret key for $ref, so no customers can be made. Give SUPABASE_ACCESS_TOKEN 'API keys read', or, without branching, set the secret SUPABASE_SECRET_KEY."
+            exit 1
+          fi
+          echo "::add-mask::$secret"
+          echo "SUPABASE_SECRET_KEY=$secret" >> "$GITHUB_ENV"
+
+      # Only without branching, and only what the example's migrations create: its module schemas, with the
+      # grants and policies on them, their rows in the history Supabase keeps of applied migrations, and the
+      # queue the shop talks through. The pgmq extension stays, but its migration is forgotten with the rest:
+      # the CLI refuses to apply migrations older than the last one it remembers. Applying it again is harmless.
       - name: Start from an empty shop
         if: env.BRANCHING != 'true'
         run: |
@@ -155,7 +181,8 @@ jobs:
           DO $$
           BEGIN
             IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-              DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE '%.ddd' OR name = 'enable_queues';
+              DELETE FROM supabase_migrations.schema_migrations
+              WHERE name LIKE '%.ddd' OR name IN ('enable_queues', 'grant_modules_to_callers');
             END IF;
             IF to_regclass('pgmq.q_shop') IS NOT NULL THEN
               PERFORM pgmq.drop_queue('shop');

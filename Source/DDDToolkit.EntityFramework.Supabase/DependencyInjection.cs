@@ -14,8 +14,10 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// // in the host, after Build()
 /// await app.Services.EnsureSupabaseMigrationsAppliedAsync();
 /// </code>
+/// And, for applications that want Supabase's row level security to apply to their own queries, the
+/// registrations in <c>DependencyInjection.RowLevelSecurity.cs</c>.
 /// </summary>
-public static class DependencyInjection
+public static partial class DependencyInjection
 {
     /// <summary>
     /// Registers <paramref name="source"/> as a context whose migrations Supabase applies, so

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supabase Auth for ASP.NET Core</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;aspnetcore;supabase;auth;jwt;rls;row-level-security;postgres</PackageTags>
+    <Description>Supabase Auth in an ASP.NET Core application built on the DDDToolkit: a JWT bearer scheme for the access tokens Supabase Auth issues, and each request's user as the caller whose role and claims row level security applies to the application's queries.</Description>
+  </PropertyGroup>
+
+  <!--
+    ASP.NET Core's own authentication, so [Authorize], HttpContext.User and challenges work as usual; the
+    host-independent parts, the issuer, the audience and the claims as signed, come from
+    DDDToolkit.Auth.Supabase.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Auth.Supabase\DDDToolkit.Auth.Supabase.csproj" />
+  </ItemGroup>
+
+</Project>

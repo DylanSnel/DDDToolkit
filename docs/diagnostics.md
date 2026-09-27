@@ -35,6 +35,9 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00035](#ddd00035) | Error | An event's class name ends in something that is not a version |
 | [DDD00036](#ddd00036) | Error | Two events of one module share a name and version |
 | [DDD00037](#ddd00037) | Error | Two event names give one constant name |
+| [DDD00038](#ddd00038) | Error | A row access rule is a static partial class with one Allows method |
+| [DDD00039](#ddd00039) | Error | A row access rule can only say what the database can check |
+| [DDD00040](#ddd00040) | Error | A row access rule guards an aggregate root |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -52,6 +55,8 @@ worth catching is a module whose migrations never reach Supabase. [DDD00032](#dd
 where it is an outbound class or a handler that is never registered.
 [DDD00034](#ddd00034) to [DDD00037](#ddd00037) are about [event names](domain-events.md#stable-names), where
 it is a stored row or a message read back as the wrong type, or as the wrong shape.
+[DDD00038](#ddd00038) to [DDD00041](#ddd00041) are about [row access rules](row-level-security.md#row-access-rules-written-in-c),
+where it is a rule the database enforces differently from the C# that states it, or not at all.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -1054,6 +1059,89 @@ held, code that reached for it meaning the other event would bind a topic or a t
 never find out, so this is an error, on the events of both names. Pin one of the names to something that
 reads differently. Until then the first name in ordinal order keeps the constant, only so that code already
 using it does not add errors of its own to this one.
+
+## DDD00038
+
+**A row access rule is a static partial class with one Allows method.**
+
+```csharp
+[RowAccess<Order>(RowOperations.Read)]
+public static class ACustomerSeesTheirOrders                      // DDD00038: not partial
+{
+    public static bool Allows(Order order) => order.PlacedBy == null;   // DDD00038: no Caller
+}
+```
+
+The generator writes the rule's SQL into another part of the class, so the class is `static partial`. And it
+translates `Allows`, which is a static method taking the aggregate the rule is about and a `Caller`,
+returning `bool`, with a single expression for a body: after `=>`, or as its only `return` statement.
+Nothing is generated until the rule has that shape, and a rule without SQL never reaches the database.
+
+## DDD00039
+
+**A row access rule can only say what the database can check.**
+
+```csharp
+public static bool Allows(Order order, Caller caller)
+    => order.Team!.StartsWith("north");                           // DDD00039, on the call
+```
+
+A rule becomes a condition the database evaluates for every row, so it can use the aggregate's own
+properties, constants written in the rule, and the caller: `caller.UserId`, `caller.IsSignedIn`,
+`caller.Role` and `caller.Claim("app_metadata.team")`. It can compare them, with `==`, `!=`, `<`, `<=`,
+`>` and `>=`, and combine the comparisons with `&&`, `||` and `!`. A method call, a local variable, another
+object or the clock has no column and no claim to become, and leaving it out would make the database
+answer differently from the C# method, so it is an error on the part that cannot be translated. Store what
+the rule needs as a property of the aggregate, or put it in the caller's `app_metadata`.
+
+## DDD00040
+
+**A row access rule guards an aggregate root.**
+
+```csharp
+[RowAccess<OrderLine>(RowOperations.Read)]                       // DDD00040
+public static partial class LinesOfBigOrders { ... }
+```
+
+An aggregate is read and changed as a whole. A rule on one of its entities could hide some of an order's
+lines and not the order, and Entity Framework would load half an aggregate whose invariants then check half
+the data. Write the rule for the root. The export gives the tables of the aggregate's entities a policy
+that follows it: a line is visible exactly when its order is.
+
+---
+
+## DDD00041
+
+**A row access rule reads the aggregate's entities through an access function.**
+
+```csharp
+[RowAccess<Project>(RowOperations.Read)]
+public static partial class MembersSeeTheirProjects
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);   // DDD00041
+}
+```
+
+The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is
+visible. A policy on the aggregate's table that read those tables would ask itself, and Postgres stops the
+query with infinite recursion. Put the question in an [access function](row-level-security.md#asking-the-aggregates-entities-access-functions),
+which runs as its owner and reads the entities without their policies, and call it from the rule:
+
+```csharp
+[AccessFunction<Project>("projects.is_member")]
+public static partial class ProjectMembership
+{
+    public static bool Allows(Project project, Caller caller)
+        => project.Members.Any(member => member.UserId == caller.UserId);
+}
+
+[RowAccess<Project>(RowOperations.Read)]
+public static partial class MembersSeeTheirProjects
+{
+    public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+}
+```
 
 ---
 
