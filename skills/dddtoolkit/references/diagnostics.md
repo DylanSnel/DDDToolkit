@@ -215,7 +215,8 @@ of the aggregate, or read it from a claim in `app_metadata`.
 ## DDD00040
 
 Error. The rule is on a type that is not an aggregate root. Put it on the root; the export makes the
-tables of the root's entities follow it.
+tables of the root's entities follow it. A supporting domain's abstract parent counts as not a root: put
+the rule on the application's class declared with the parent's template.
 
 ## DDD00041
 
@@ -223,6 +224,55 @@ Error. A `[RowAccess]` rule reads the aggregate's entities itself, `project.Memb
 the aggregate's table cannot: the entities' policies ask that table back, and Postgres stops with infinite
 recursion. Move the expression into an `[AccessFunction<Project>("schema.name")]` class with the same
 `Allows(Project, Caller)` shape, and have the rule call `ThatClass.Allows(project, caller)`.
+
+## DDD00042
+
+Error. A class marked `[AggregateRootBase]` or `[EntityBase]` has the wrong shape. A parent is an
+`abstract partial class` with type parameters, the id first, constrained
+`where TId : IEntityId, IEquatable<TId>`, and not nested in a generic type. The message names what is
+missing; a parent that is not partial or not a class reports DDD00005 or DDD00002 instead. Classes
+declared with its template get nothing generated until it is fixed, and report nothing of their own.
+
+## DDD00043
+
+Error. The first type argument of a template attribute (`[Subscription<Guid>]`) is not an entity id.
+Templates never generate an id: declare `[EntityId<Guid>] public readonly partial record struct SubscriptionId;`
+(in the contracts project when other modules refer to it) and use `[Subscription<SubscriptionId>]`.
+
+## DDD00044
+
+Error. The template's parent takes a type argument from the class declared with another template, and
+neither this project nor the projects it references declare one. Add that class, with the attribute the
+message names, once, for example `[Subscription<SubscriptionId>] public sealed partial class ShopSubscription;`.
+A class in a referenced project counts, so do not add a second one here if another module already has it.
+
+## DDD00045
+
+Error. Two or more classes are declared with the template the message names, so the parent cannot tell
+which one to take its type argument from. Keep one.
+
+## DDD00046
+
+Error. The template attribute does not fit its parent: the marker names no parent, a parent of the wrong
+kind (`[AggregateRootTemplate]` needs an `[AggregateRootBase]` parent, `[EntityTemplate]` an
+`[EntityBase]` one), or its own type arguments plus its `[TemplateArgument]`s do not fill every parent type
+parameter exactly once. This is a bug in the package that declares the attribute; report it there rather
+than working around it.
+
+## DDD00047
+
+Error. The class is declared more than one way: two of `[AggregateRoot<T>]`, `[Entity<T>]`,
+`[AggregateRootBase]`, `[EntityBase]` and a package's template attributes (`[AggregateRoot<T>]` with
+`[Entity<T>]` is DDD00009 instead). Each gives the class a base class. Keep one; the template when the
+class extends what a package ships.
+
+## DDD00048
+
+Error. A class a template takes with `Take = TemplateArgumentKind.Type` does not meet a constraint of the
+parent's type parameter, usually an interface the parent creates it through
+(`IInvoiceLineFactory<ShopInvoiceLine, InvoiceLineId>`) or a public parameterless constructor. The message
+names the class and what it needs. Add it to that class; nothing is generated for the class that takes it
+until then.
 
 ## Not a diagnostic: the owned type must carry the key part
 

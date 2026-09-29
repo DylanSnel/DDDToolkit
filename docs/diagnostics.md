@@ -38,6 +38,14 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00038](#ddd00038) | Error | A row access rule is a static partial class with one Allows method |
 | [DDD00039](#ddd00039) | Error | A row access rule can only say what the database can check |
 | [DDD00040](#ddd00040) | Error | A row access rule guards an aggregate root |
+| [DDD00041](#ddd00041) | Error | A row access rule reads the aggregate's entities through an access function |
+| [DDD00042](#ddd00042) | Error | A parent for entities is an abstract generic class whose first type parameter is the id |
+| [DDD00043](#ddd00043) | Error | A template's first type argument is an entity id |
+| [DDD00044](#ddd00044) | Error | A template takes a type from a class nobody declares |
+| [DDD00045](#ddd00045) | Error | A template takes a type from a class declared more than once |
+| [DDD00046](#ddd00046) | Error | A template attribute fills exactly the type parameters of its parent |
+| [DDD00047](#ddd00047) | Error | A class is declared an entity or aggregate root once |
+| [DDD00048](#ddd00048) | Error | A class a template takes meets its parent's constraints |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -57,6 +65,8 @@ where it is an outbound class or a handler that is never registered.
 it is a stored row or a message read back as the wrong type, or as the wrong shape.
 [DDD00038](#ddd00038) to [DDD00041](#ddd00041) are about [row access rules](row-level-security.md#row-access-rules-written-in-c),
 where it is a rule the database enforces differently from the C# that states it, or not at all.
+[DDD00042](#ddd00042) to [DDD00048](#ddd00048) are about [supporting domains](writing-a-supporting-domain.md),
+where it is a class that extends a package's aggregate and does not become what it says it is.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
@@ -1108,6 +1118,10 @@ lines and not the order, and Entity Framework would load half an aggregate whose
 the data. Write the rule for the root. The export gives the tables of the aggregate's entities a policy
 that follows it: a line is visible exactly when its order is.
 
+A rule about a supporting domain's parent, `[RowAccess<SubscriptionAggregate<SubscriptionId>>]`, reports
+this too: the parent is abstract and has no table. Write the rule for the application's class declared
+with the parent's template; it reads the parent's properties like its own.
+
 ---
 
 ## DDD00041
@@ -1140,6 +1154,166 @@ public static partial class ProjectMembership
 public static partial class MembersSeeTheirProjects
 {
     public static bool Allows(Project project, Caller caller) => ProjectMembership.Allows(project, caller);
+}
+```
+
+---
+
+## DDD00042
+
+**A parent for entities is an abstract generic class whose first type parameter is the id.**
+
+```csharp
+[AggregateRootBase]
+public partial class SubscriptionAggregate<TSubscriptionId> { ... }   // DDD00042: not abstract, id unconstrained
+```
+
+A package ships a parent for the application's own classes to derive from, and the generator writes its
+base class the way it does for any aggregate root or entity: `AggregateRoot<TId>` or `Entity<TId>`, closed
+over the parent's first type parameter. So the parent is abstract, since only what derives from it is ever
+created; the id is its first type parameter; it is not nested in a generic type; and the id is constrained
+the way the toolkit's base classes require. Like every entity it is also a `partial class`, which
+[DDD00005](#ddd00005) and [DDD00002](#ddd00002) report:
+
+```csharp
+[AggregateRootBase]
+public abstract partial class SubscriptionAggregate<TSubscriptionId>
+    where TSubscriptionId : IEntityId, IEquatable<TSubscriptionId>
+{
+    public string Plan { get; private set; } = "";
+}
+```
+
+A class declared with the template of a parent that reports this gets nothing generated either, and no
+error of its own: the parent is the one to fix.
+
+---
+
+## DDD00043
+
+**A template's first type argument is an entity id.**
+
+```csharp
+[Subscription<Guid>]                                                  // DDD00043
+public sealed partial class ShopSubscription;
+```
+
+A template attribute names the id of the class it declares, and that class derives from a parent closed
+over the id. Unlike `[AggregateRoot<Guid>]`, a template never generates an id from a raw value: the id
+belongs to the application, which declares it where every module that refers to it can see it, usually a
+contracts project.
+
+```csharp
+[EntityId<Guid>]
+public readonly partial record struct SubscriptionId;                // in Shop.Contracts
+
+[Subscription<SubscriptionId>]
+public sealed partial class ShopSubscription;
+```
+
+---
+
+## DDD00044
+
+**A template takes a type from a class nobody declares.**
+
+```csharp
+[Invoice<InvoiceId>]                                                  // DDD00044: no [Subscription] class
+public sealed partial class ShopInvoice;
+```
+
+Some parents need more than the id of the class that derives from them: the parent of an invoice needs the
+subscription's id and the class of its lines. The template attribute takes those from the one class
+declared with the template it names, so each is declared once and every class agrees on it. It looks in
+the project first and, when the project declares none, in the projects it references. Declare the class
+the message names, with the attribute it names, in one of them.
+
+---
+
+## DDD00045
+
+**A template takes a type from a class declared more than once.**
+
+```csharp
+[Subscription<SubscriptionId>] public sealed partial class ShopSubscription;
+[Subscription<SubscriptionId>] public sealed partial class TrialSubscription;
+
+[Invoice<InvoiceId>]                                                  // DDD00045: which subscription?
+public sealed partial class ShopInvoice;
+```
+
+The parent takes a type argument from the one class declared with another template. With two there is no
+telling which one is meant, and picking one would bind the parent to it without a word. Keep one.
+
+---
+
+## DDD00046
+
+**A template attribute fills exactly the type parameters of its parent.**
+
+```csharp
+[AggregateRootTemplate(typeof(InvoiceAggregate<,,,>))]               // DDD00046 on every class that uses it:
+public sealed class InvoiceAttribute<TInvoiceId> : Attribute;        // nothing fills the other three
+```
+
+This is a mistake in the package that declares the template attribute, reported on the class that uses
+it because that is where the generator meets it. The marker names an open parent marked
+`[AggregateRootBase]` for `[AggregateRootTemplate]`, or `[EntityBase]` for `[EntityTemplate]`. The
+attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter
+after them is filled by exactly one `[TemplateArgument]`:
+
+```csharp
+[AggregateRootTemplate(typeof(InvoiceAggregate<,,,>))]
+[TemplateArgument(1, typeof(SubscriptionAttribute<>))]
+[TemplateArgument(2, typeof(InvoiceLineAttribute<>), Take = TemplateArgumentKind.Type)]
+[TemplateArgument(3, typeof(InvoiceLineAttribute<>))]
+public sealed class InvoiceAttribute<TInvoiceId> : Attribute;
+```
+
+---
+
+## DDD00047
+
+**A class is declared an entity or aggregate root once.**
+
+```csharp
+[AggregateRoot<SubscriptionId>]
+[Subscription<SubscriptionId>]                                        // DDD00047
+public sealed partial class ShopSubscription;
+```
+
+`[AggregateRoot<TId>]`, `[Entity<TId>]`, `[AggregateRootBase]`, `[EntityBase]` and a package's template
+attributes each give the class a base class, and a class has only one. Keep the one that describes it:
+the template, when the class is meant to extend what the package ships. `[AggregateRoot<TId>]` together
+with `[Entity<TId>]` is [DDD00009](#ddd00009).
+
+---
+
+## DDD00048
+
+**A class a template takes meets its parent's constraints.**
+
+```csharp
+[InvoiceLine<InvoiceLineId>]
+public sealed partial class ShopInvoiceLine;                          // no IInvoiceLineFactory
+
+[Invoice<InvoiceId>]                                                  // DDD00048
+public sealed partial class ShopInvoice;
+```
+
+A `[TemplateArgument]` with `Take = TemplateArgumentKind.Type` hands one of the application's own classes
+to the parent as a type argument, here the class of an invoice's lines. The parent may ask more of that
+class than being declared with the right template, such as an interface it creates the class through.
+Without it, the parent closed over the class would be a compile error inside generated code, so nothing
+is generated and the message names what the class is missing:
+
+```csharp
+[InvoiceLine<InvoiceLineId>]
+public sealed partial class ShopInvoiceLine : IInvoiceLineFactory<ShopInvoiceLine, InvoiceLineId>
+{
+    private ShopInvoiceLine(InvoiceLineId id, decimal amount) : base(id, amount) { }
+
+    public static ShopInvoiceLine Create(InvoiceLineId id, decimal amount) => new(id, amount);
 }
 ```
 

@@ -39,3 +39,10 @@ DDD00038 | DDDToolkit.Access | Error | A row access rule is a static partial cla
 DDD00039 | DDDToolkit.Access | Error | A row access rule can only say what the database can check
 DDD00040 | DDDToolkit.Access | Error | A row access rule guards an aggregate root
 DDD00041 | DDDToolkit.Access | Error | A row access rule reads the aggregate's entities through an access function
+DDD00042 | DDDToolkit.Entities | Error | A parent for entities is an abstract generic class whose first type parameter is the id
+DDD00043 | DDDToolkit.Entities | Error | A template's first type argument is an entity id
+DDD00044 | DDDToolkit.Entities | Error | A template takes a type from a class nobody declares
+DDD00045 | DDDToolkit.Entities | Error | A template takes a type from a class declared more than once
+DDD00046 | DDDToolkit.Entities | Error | A template attribute fills exactly the type parameters of its parent
+DDD00047 | DDDToolkit.Entities | Error | A class is declared an entity or aggregate root once
+DDD00048 | DDDToolkit.Entities | Error | A class a template takes meets its parent's constraints

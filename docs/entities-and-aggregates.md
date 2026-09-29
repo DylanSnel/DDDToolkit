@@ -410,6 +410,14 @@ rules of aggregate design are the best short guide to it. [Designing aggregates]
 says why each rule exists, what the toolkit does for it, and, for the rule it cannot help with, what to
 ask yourself instead.
 
+## Aggregates a supporting domain ships
+
+A [supporting domain](writing-a-supporting-domain.md) can ship an aggregate for you to extend. You declare
+your own class with the package's attribute instead of `[AggregateRoot<T>]`,
+`[Subscription<SubscriptionId>] partial class ShopSubscription`, and the generator derives it from the
+package's parent, whose rules then run with yours. See
+[What the application writes](writing-a-supporting-domain.md#what-the-application-writes).
+
 ## Persistence
 
 Nothing above needs a database. With `DDDToolkit.EntityFramework` referenced, the same declarations are

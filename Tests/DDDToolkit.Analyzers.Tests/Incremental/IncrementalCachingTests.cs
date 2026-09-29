@@ -96,6 +96,22 @@ public class IncrementalCachingTests
     }
 
     [Fact]
+    public void Classes_declared_with_a_template_cache_their_output_across_an_unrelated_comment()
+    {
+        // The template provider looks at every attributed type and collects the lot before it resolves
+        // one, the shape most likely to regenerate everything on every keystroke.
+        var first = GeneratorTestHost.Create(Generation.TemplateEntityTests.Package, "Package.cs")
+            .WithSource(Generation.TemplateEntityTests.Ids, "Ids.cs")
+            .WithSource(Generation.TemplateEntityTests.Application, "Application.cs")
+            .RunCore();
+        first.ShouldCompile();
+
+        var second = first.RunAgain(AppendComment);
+
+        AssertNothingRegenerated(first, second);
+    }
+
+    [Fact]
     public void The_entity_framework_generators_cache_their_output()
     {
         var first = Host().WithEntityFramework().WithModule("Sales")

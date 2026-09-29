@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -294,6 +295,895 @@ internal static class DefinitionFactory
 
         var type = CreateTypeInfo(symbol, syntax);
         var diagnostics = new List<DiagnosticInfo>();
+        var canGenerate = CheckEntityShape(type, attributeName, diagnostics);
+
+        if (type.IsGeneric)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, attributeName));
+            canGenerate = false;
+        }
+
+        // Both attributes on one class means two providers produce a definition for it, and both output
+        // steps then add a source with the same hint name, which throws inside the generator and leaves
+        // the author with nothing but a CS8785 about a crashed generator. Refuse from both paths so
+        // nothing is generated, but report from the aggregate-root path alone so the author sees the
+        // complaint exactly once. A class that also carries a parent's or a template's attribute is
+        // refused the same way, and reported by the path that reads that attribute.
+        var bothAttributes = HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute);
+        var conflictingAttributes = bothAttributes || OtherDeclarations(symbol).Count > 0;
+        if (bothAttributes && isAggregateRoot)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.ConflictingEntityAttributes, type.Location, type.Name));
+        }
+
+        canGenerate &= !conflictingAttributes;
+
+        var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
+        canGenerate &= id.Ok;
+
+        return CreateEntityDefinition(symbol, type, isAggregateRoot, id.IdType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken) with
+        {
+            ImplicitId = canGenerate ? id.ImplicitId : null,
+        };
+    }
+
+    /// <summary>
+    /// The definition of an abstract parent a package ships with <c>[AggregateRootBase]</c> or
+    /// <c>[EntityBase]</c>: the same as for any entity, closed over the parent's first type parameter,
+    /// with its type parameters repeated in the generated part.
+    /// </summary>
+    public static EntityDefinition CreateEntityBase(GeneratorAttributeSyntaxContext context, bool isAggregateRoot, CancellationToken cancellationToken)
+    {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)context.TargetNode;
+        var compilation = context.SemanticModel.Compilation;
+        var attributeName = isAggregateRoot ? "AggregateRootBase" : "EntityBase";
+
+        var type = CreateTypeInfo(symbol, syntax) with
+        {
+            TypeParameters = symbol.TypeParameters.Select(static parameter => parameter.Name).ToEquatableArray(),
+        };
+        var diagnostics = new List<DiagnosticInfo>();
+        var canGenerate = CheckEntityShape(type, attributeName, diagnostics);
+
+        var shape = BaseShapeProblem(symbol);
+        if (type.Kind == DeclarationKind.Class && shape is not null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.EntityBaseShape, type.Location, type.Name, attributeName, shape));
+            canGenerate = false;
+        }
+
+        // Reported once: by the template path when the class also carries a template attribute, which
+        // always reports, and otherwise by the aggregate-root parent's path, the way DDD00009 is. The
+        // toolkit's own attributes refuse the class silently when they meet one of these.
+        var others = OtherDeclarations(symbol, except: isAggregateRoot ? KnownTypes.AggregateRootBaseAttribute : KnownTypes.EntityBaseAttribute);
+        var conflictingAttributes = others.Count > 0;
+        if (conflictingAttributes)
+        {
+            var hasTemplate = symbol.GetAttributes().Any(static candidate =>
+                candidate.AttributeClass is { } attributeClass && EntityDeclarations.TemplateOf(attributeClass) is not null);
+            if (!hasTemplate && (isAggregateRoot || !HasAttribute(symbol, KnownTypes.AggregateRootBaseAttribute)))
+            {
+                others.Insert(0, "[" + attributeName + "]");
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.ConflictingEntityDeclarations, type.Location, type.Name, Listed(others)));
+            }
+
+            canGenerate = false;
+        }
+
+        var idType = symbol.TypeParameters.Length > 0 ? symbol.TypeParameters[0].Name : "global::System.Object";
+
+        return CreateEntityDefinition(symbol, type, isAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken) with
+        {
+            IsBase = true,
+        };
+    }
+
+    /// <summary>
+    /// What is wrong with a parent's shape beyond what every entity is checked for, phrased to finish
+    /// "needs ...", or null when nothing is.
+    /// </summary>
+    private static string? BaseShapeProblem(INamedTypeSymbol symbol)
+    {
+        if (!symbol.IsAbstract)
+        {
+            return "to be abstract: only the classes that derive from it are ever created";
+        }
+
+        for (var outer = symbol.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            if (outer.TypeParameters.Length > 0)
+            {
+                return "to be declared outside '" + outer.Name + "', whose type parameters the classes that derive from it cannot name";
+            }
+        }
+
+        if (symbol.TypeParameters.Length == 0)
+        {
+            return "type parameters, the id first, so the application chooses its own ids";
+        }
+
+        var id = symbol.TypeParameters[0];
+        var entityId = id.ConstraintTypes.Any(static constraint => constraint.ToDisplayString() == KnownTypes.EntityIdInterface);
+        var equatable = id.ConstraintTypes.Any(constraint =>
+            constraint is INamedTypeSymbol { Name: "IEquatable", TypeArguments.Length: 1 } equatableOf
+            && equatableOf.ContainingNamespace.ToDisplayString() == "System"
+            && SymbolEqualityComparer.Default.Equals(equatableOf.TypeArguments[0], id));
+
+        return entityId && equatable
+            ? null
+            : "its id parameter constrained with 'where " + id.Name + " : IEntityId, IEquatable<" + id.Name + ">', which the toolkit's base classes require";
+    }
+
+    /// <summary>
+    /// The definition of a class declared with a package's template attribute, such as
+    /// <c>[TenantAggregate&lt;TenantId&gt;]</c>, or null when <paramref name="context"/> is a declaration
+    /// that carries none. Its parent is not known yet: the parent may take type arguments from other
+    /// classes of the project, and <see cref="ResolveTemplates"/> fills them in once all are known.
+    /// <para>
+    /// A class has several declarations when it is partial, and each carries only its own attributes.
+    /// Only the declaration that carries the template attribute produces a definition, which is what
+    /// <c>ForAttributeWithMetadataName</c> does for the toolkit's own attributes: two definitions of one
+    /// class would add two sources with one hint name.
+    /// </para>
+    /// </summary>
+    public static EntityDefinition? CreateTemplateEntity(GeneratorSyntaxContext context, CancellationToken cancellationToken)
+    {
+        var syntax = (TypeDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(syntax, cancellationToken) is not INamedTypeSymbol symbol)
+        {
+            return null;
+        }
+
+        AttributeData? attribute = null;
+        TemplateMarker marker = default;
+        foreach (var candidate in symbol.GetAttributes())
+        {
+            if (candidate.AttributeClass is { } candidateClass && EntityDeclarations.TemplateOf(candidateClass) is { } found)
+            {
+                attribute = candidate;
+                marker = found;
+                break;
+            }
+        }
+
+        if (attribute?.AttributeClass is not { } attributeClass
+            || attribute.ApplicationSyntaxReference is not { } application
+            || application.SyntaxTree != syntax.SyntaxTree
+            || !syntax.Span.Contains(application.Span))
+        {
+            return null;
+        }
+
+        var compilation = context.SemanticModel.Compilation;
+        var attributeName = AttributeNameOf(attributeClass);
+
+        var type = CreateTypeInfo(symbol, syntax);
+        var diagnostics = new List<DiagnosticInfo>();
+        var canGenerate = CheckEntityShape(type, attributeName, diagnostics);
+
+        if (type.IsGeneric)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, attributeName));
+            canGenerate = false;
+        }
+
+        var others = OtherDeclarations(symbol, except: attributeClass.OriginalDefinition);
+        var conflictingAttributes = others.Count > 0;
+        if (conflictingAttributes)
+        {
+            others.Insert(0, "[" + attributeName + "]");
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.ConflictingEntityDeclarations, type.Location, type.Name, Listed(others)));
+            canGenerate = false;
+        }
+
+        var template = ReadTemplate(marker, attributeClass, attributeName, type, diagnostics, ref canGenerate);
+
+        // A parent in this same project that its own path refuses gets no generated part, and a class derived
+        // from it would only turn that one diagnostic into a page of errors in generated code.
+        if (template is not null && ParentIsRefused(marker.Parent!, marker.IsAggregateRoot, cancellationToken))
+        {
+            canGenerate = false;
+        }
+
+        var idType = "global::System.Object";
+        var idIsEntityId = false;
+        if (attributeClass.TypeArguments.Length > 0 && attributeClass.TypeArguments[0] is { TypeKind: not TypeKind.Error } id)
+        {
+            idType = id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            idIsEntityId = IsEntityId(id);
+            if (!idIsEntityId)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(
+                    DiagnosticDescriptors.TemplateIdIsNotAnEntityId, type.Location, type.Name, attributeName, id.ToDisplayString()));
+                canGenerate = false;
+            }
+        }
+        else
+        {
+            // Nothing the compiler could bind, which it reports, or an attribute without a type argument,
+            // which the template check has just reported: either way it has been said.
+            canGenerate = false;
+        }
+
+        return CreateEntityDefinition(
+            symbol, type, marker.IsAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken, IsTheParent(marker, attributeClass)) with
+        {
+            Template = template,
+            TemplateKey = attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            TemplateIdIsEntityId = idIsEntityId,
+            MetadataName = EntityDeclarations.MetadataNameOf(symbol),
+            ParentHasKeyParts = marker.Parent is { } keyed && HasKeyParts(keyed),
+        };
+    }
+
+    /// <summary>Whether a type declares <c>[KeyPart]</c> properties. The attribute survives metadata, so this answers for a referenced parent too.</summary>
+    internal static bool HasKeyParts(INamedTypeSymbol type)
+        => type.OriginalDefinition.GetMembers().OfType<IPropertySymbol>()
+            .Any(static property => !property.IsStatic && !property.IsIndexer && HasAttribute(property, KnownTypes.KeyPartAttribute));
+
+    /// <summary>
+    /// Whether a parent declared in this project is one its own path refuses, and so gets no generated part:
+    /// not a partial class, not the shape <see cref="BaseShapeProblem"/> asks for, or declared another way as
+    /// well. Its own path reports why. A parent from a referenced assembly was generated when that assembly
+    /// was built, or the assembly would not have built.
+    /// </summary>
+    private static bool ParentIsRefused(INamedTypeSymbol parent, bool isAggregateRoot, CancellationToken cancellationToken)
+    {
+        if (parent.DeclaringSyntaxReferences.IsEmpty)
+        {
+            return false;
+        }
+
+        return parent.TypeKind != TypeKind.Class
+               || parent.IsRecord
+               || parent.DeclaringSyntaxReferences.Any(reference =>
+                   reference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax declaration
+                   || !declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+               || BaseShapeProblem(parent) is not null
+               || OtherDeclarations(parent, except: isAggregateRoot ? KnownTypes.AggregateRootBaseAttribute : KnownTypes.EntityBaseAttribute).Count > 0;
+    }
+
+    /// <summary>
+    /// Whether a rule nested in a template class is about the parent the class will derive from, or about
+    /// something the parent is: one of its interfaces or base classes. The generator cannot see that base
+    /// class yet, because it writes it, so it takes the template's word for it.
+    /// <para>
+    /// The parent is closed over the type arguments the attribute supplies. The ones a
+    /// <c>[TemplateArgument]</c> fills are not known until every class of the project is, so any argument
+    /// passes there, and a rule about the wrong one is then a compile error rather than a rule quietly left out.
+    /// </para>
+    /// </summary>
+    private static Func<ITypeSymbol, bool>? IsTheParent(TemplateMarker marker, INamedTypeSymbol attributeClass)
+    {
+        if (marker.Parent is not { } parent || attributeClass.TypeArguments.Length > parent.TypeParameters.Length)
+        {
+            return null;
+        }
+
+        var arguments = attributeClass.TypeArguments;
+        var known = parent.TypeParameters.Select((parameter, position) => position < arguments.Length ? arguments[position] : parameter).ToImmutableArray();
+        var closed = parent.Construct(known, known.Select(static _ => NullableAnnotation.None).ToImmutableArray());
+
+        var above = new List<INamedTypeSymbol> { closed };
+        above.AddRange(closed.AllInterfaces);
+        for (var baseType = closed.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            above.Add(baseType);
+        }
+
+        return candidate => candidate is INamedTypeSymbol named && above.Any(expected => Fits(expected, named, parent));
+    }
+
+    /// <summary>
+    /// Whether <paramref name="candidate"/> is <paramref name="expected"/>, where a type argument that is still
+    /// one of the parent's own type parameters matches anything.
+    /// </summary>
+    private static bool Fits(INamedTypeSymbol expected, INamedTypeSymbol candidate, INamedTypeSymbol parent)
+    {
+        if (!SymbolEqualityComparer.Default.Equals(expected.OriginalDefinition, candidate.OriginalDefinition))
+        {
+            return false;
+        }
+
+        for (var position = 0; position < expected.TypeArguments.Length && position < candidate.TypeArguments.Length; position++)
+        {
+            var argument = expected.TypeArguments[position];
+            if (argument is ITypeParameterSymbol open && SymbolEqualityComparer.Default.Equals(open.ContainingSymbol, parent))
+            {
+                continue;
+            }
+
+            if (!SymbolEqualityComparer.Default.Equals(argument, candidate.TypeArguments[position]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// What the template attribute says about the parent, checked against the parent: the marker names a
+    /// parent of the right kind, and the attribute's type arguments plus its <c>[TemplateArgument]</c>s fill
+    /// each of the parent's type parameters exactly once. Anything else is the package's mistake, DDD00046.
+    /// </summary>
+    private static TemplateDeclaration? ReadTemplate(
+        TemplateMarker marker,
+        INamedTypeSymbol attributeClass,
+        string attributeName,
+        TypeDeclarationInfo type,
+        List<DiagnosticInfo> diagnostics,
+        ref bool canGenerate)
+    {
+        var problem = TemplateProblem(marker, attributeClass, out var bindings);
+        if (problem is not null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TemplateDoesNotFitItsParent, type.Location, attributeName, type.Name, problem));
+            canGenerate = false;
+            return null;
+        }
+
+        var parent = marker.Parent!;
+        return new TemplateDeclaration(
+            AttributeKey: attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            AttributeName: attributeName,
+            Parent: parent.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGenericsOptions(SymbolDisplayGenericsOptions.None)),
+            ParentMetadataName: EntityDeclarations.MetadataNameOf(parent),
+            ParentParameters: parent.TypeParameters.Select(static parameter => parameter.Name).ToEquatableArray(),
+            Arguments: attributeClass.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).ToEquatableArray(),
+            Bindings: bindings.OrderBy(static binding => binding.Position).ToEquatableArray());
+    }
+
+    /// <summary>What is wrong with a template, phrased to follow "cannot declare 'X': ", or null when nothing is.</summary>
+    private static string? TemplateProblem(TemplateMarker marker, INamedTypeSymbol attributeClass, out List<TemplateBinding> bindings)
+    {
+        bindings = [];
+
+        var expected = marker.IsAggregateRoot ? "AggregateRootBase" : "EntityBase";
+        if (marker.Parent is not { } parent)
+        {
+            return "its marker names no parent the compiler can find";
+        }
+
+        if (!HasAttribute(parent, marker.IsAggregateRoot ? KnownTypes.AggregateRootBaseAttribute : KnownTypes.EntityBaseAttribute))
+        {
+            return "its parent '" + parent.Name + "' is not marked [" + expected + "]";
+        }
+
+        var arity = parent.TypeParameters.Length;
+        var own = attributeClass.TypeArguments.Length;
+        if (own == 0 || own > arity)
+        {
+            return "it has " + own + " type arguments, and its parent '" + parent.Name + "' takes " + arity + ", the id first";
+        }
+
+        var filled = new bool[arity];
+        for (var position = 0; position < own; position++)
+        {
+            filled[position] = true;
+        }
+
+        foreach (var argument in marker.Attribute.GetAttributes())
+        {
+            if (argument.AttributeClass is not { } argumentClass || !EntityDeclarations.Is(argumentClass, KnownTypes.TemplateArgumentAttribute))
+            {
+                continue;
+            }
+
+            if (argument.ConstructorArguments.Length != 2
+                || argument.ConstructorArguments[0].Value is not int position
+                || argument.ConstructorArguments[1] is not { Kind: TypedConstantKind.Type, Value: INamedTypeSymbol source }
+                || source.TypeKind == TypeKind.Error)
+            {
+                continue;
+            }
+
+            if (position < 0 || position >= arity)
+            {
+                return "a [TemplateArgument] fills type parameter " + position + ", and its parent '" + parent.Name + "' has " + arity;
+            }
+
+            if (filled[position])
+            {
+                return "type parameter '" + parent.TypeParameters[position].Name + "' of '" + parent.Name + "' is filled twice";
+            }
+
+            if (EntityDeclarations.TemplateOf(source) is null)
+            {
+                return "a [TemplateArgument] takes '" + parent.TypeParameters[position].Name + "' from '" + source.Name + "', which is not a template attribute";
+            }
+
+            // TemplateArgumentKind.Type is 1; an enum argument arrives as its underlying value.
+            var takeType = argument.NamedArguments.Any(static named => named.Key == "Take" && named.Value.Value is 1);
+            filled[position] = true;
+            bindings.Add(new TemplateBinding(
+                position,
+                source.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                AttributeNameOf(source),
+                EntityDeclarations.MetadataNameOf(source),
+                takeType));
+        }
+
+        var missing = Enumerable.Range(0, arity).Where(position => !filled[position]).Select(position => "'" + parent.TypeParameters[position].Name + "'").ToList();
+        return missing.Count > 0
+            ? "nothing fills " + Listed(missing) + " of its parent '" + parent.Name + "'"
+            : null;
+    }
+
+    /// <summary>A class a <c>[TemplateArgument]</c> can take from: one of this project's template classes, or a referenced project's.</summary>
+    private sealed class TemplateSource
+    {
+        public TemplateSource(string name, string fullyQualifiedName, string idType, bool idIsEntityId, bool canGenerate, string? metadataName, INamedTypeSymbol? symbol)
+        {
+            Name = name;
+            FullyQualifiedName = fullyQualifiedName;
+            IdType = idType;
+            IdIsEntityId = idIsEntityId;
+            CanGenerate = canGenerate;
+            MetadataName = metadataName;
+            Symbol = symbol;
+        }
+
+        public string Name { get; }
+
+        public string FullyQualifiedName { get; }
+
+        public string IdType { get; }
+
+        public bool IdIsEntityId { get; }
+
+        /// <summary>False when the class gets no generated base class, so it cannot be a parent's type argument.</summary>
+        public bool CanGenerate { get; }
+
+        public string? MetadataName { get; }
+
+        public INamedTypeSymbol? Symbol { get; private set; }
+
+        public INamedTypeSymbol? SymbolIn(Compilation compilation)
+            => Symbol ??= MetadataName is null ? null : compilation.GetTypeByMetadataName(MetadataName);
+    }
+
+    /// <summary>
+    /// Closes the parent of every class declared with a template attribute, now that all of them are
+    /// known: a <c>[TemplateArgument]</c> takes the id of, or the class itself, from the one class declared
+    /// with the template it names, in this project or, when this project declares none, in the projects it
+    /// references. None is DDD00044, several is DDD00045, and an argument that does not meet the parent's
+    /// constraints is DDD00048; each leaves the class without a parent, so nothing is generated for it.
+    /// <para>
+    /// A class that cannot be generated still counts as declared: saying the class is missing when the
+    /// author can see it would be wrong. What it can still provide is its id, when that is an entity id.
+    /// A class that is itself refused cannot be a parent's type argument, and a class taking it is refused
+    /// silently, because the source's own diagnostic already says why.
+    /// </para>
+    /// </summary>
+    public static ImmutableArray<EntityDefinition> ResolveTemplates(
+        ImmutableArray<EntityDefinition> declared,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var byTemplate = new Dictionary<string, List<TemplateSource>>(StringComparer.Ordinal);
+        foreach (var definition in declared)
+        {
+            if (definition.TemplateKey is not { } key)
+            {
+                continue;
+            }
+
+            if (!byTemplate.TryGetValue(key, out var classes))
+            {
+                byTemplate.Add(key, classes = []);
+            }
+
+            classes.Add(new TemplateSource(
+                definition.Type.Name,
+                definition.Type.FullyQualifiedName,
+                definition.IdType,
+                definition.TemplateIdIsEntityId,
+                definition.CanGenerate,
+                definition.MetadataName,
+                symbol: null));
+        }
+
+        var resolved = ImmutableArray.CreateBuilder<EntityDefinition>(declared.Length);
+        foreach (var definition in declared)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (definition.Template is not { } template || !definition.CanGenerate)
+            {
+                resolved.Add(definition);
+                continue;
+            }
+
+            var arguments = new string[template.ParentParameters.Count];
+            var taken = new TemplateSource?[template.ParentParameters.Count];
+            for (var position = 0; position < template.Arguments.Count; position++)
+            {
+                arguments[position] = template.Arguments[position];
+            }
+
+            List<DiagnosticInfo>? diagnostics = null;
+            var refused = false;
+            foreach (var binding in template.Bindings)
+            {
+                var parameter = "'" + template.ParentParameters[binding.Position] + "'";
+                if (!byTemplate.TryGetValue(binding.SourceKey, out var sources))
+                {
+                    sources = ReferencedSources(compilation, binding.SourceMetadataName, cancellationToken);
+                    byTemplate.Add(binding.SourceKey, sources);
+                }
+
+                if (sources.Count == 0)
+                {
+                    diagnostics ??= new List<DiagnosticInfo>(definition.Diagnostics);
+                    diagnostics.Add(DiagnosticInfo.Create(
+                        DiagnosticDescriptors.TemplateArgumentSourceMissing,
+                        definition.Type.Location,
+                        definition.Type.Name,
+                        template.AttributeName,
+                        parameter,
+                        binding.SourceName));
+                    continue;
+                }
+
+                if (sources.Count > 1)
+                {
+                    diagnostics ??= new List<DiagnosticInfo>(definition.Diagnostics);
+                    diagnostics.Add(DiagnosticInfo.Create(
+                        DiagnosticDescriptors.TemplateArgumentSourceAmbiguous,
+                        definition.Type.Location,
+                        definition.Type.Name,
+                        template.AttributeName,
+                        parameter,
+                        binding.SourceName,
+                        Listed(sources.Select(static source => "'" + source.Name + "'"))));
+                    continue;
+                }
+
+                var source = sources[0];
+                if (binding.TakeType ? !source.CanGenerate : !source.IdIsEntityId)
+                {
+                    refused = true;
+                    continue;
+                }
+
+                arguments[binding.Position] = binding.TakeType ? source.FullyQualifiedName : source.IdType;
+                taken[binding.Position] = binding.TakeType ? source : null;
+            }
+
+            if (diagnostics is null && !refused
+                && UnmetConstraint(definition, template, taken, compilation) is { } unmet)
+            {
+                diagnostics = new List<DiagnosticInfo>(definition.Diagnostics)
+                {
+                    DiagnosticInfo.Create(
+                        DiagnosticDescriptors.TemplateArgumentMissesConstraint,
+                        definition.Type.Location,
+                        definition.Type.Name,
+                        template.AttributeName,
+                        unmet.Argument,
+                        unmet.Parameter,
+                        unmet.Requirement),
+                };
+            }
+
+            resolved.Add(diagnostics is not null
+                ? definition with { Diagnostics = diagnostics.ToEquatableArray(), CanGenerate = false }
+                : refused
+                    ? definition with { CanGenerate = false }
+                    : definition with { BaseType = template.Parent + "<" + string.Join(", ", arguments) + ">" });
+        }
+
+        return resolved.MoveToImmutable();
+    }
+
+    /// <summary>
+    /// The classes declared with a template in the projects this one references, for a
+    /// <c>[TemplateArgument]</c> this project has no class for. Only assemblies that reference the one
+    /// declaring the template attribute can use it, so only those are searched, and only for a binding this
+    /// project could not fill itself. A class that is not accessible from here cannot be a type argument.
+    /// </summary>
+    private static List<TemplateSource> ReferencedSources(Compilation compilation, string attributeMetadataName, CancellationToken cancellationToken)
+    {
+        var found = new List<TemplateSource>();
+        if (compilation.GetTypeByMetadataName(attributeMetadataName) is not { } attribute)
+        {
+            return found;
+        }
+
+        var package = attribute.ContainingAssembly;
+        foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!SymbolEqualityComparer.Default.Equals(assembly, package)
+                && !assembly.Modules.Any(module => module.ReferencedAssemblySymbols.Any(reference => reference.Identity.Name == package.Identity.Name)))
+            {
+                continue;
+            }
+
+            foreach (var type in TypesIn(assembly.GlobalNamespace, cancellationToken))
+            {
+                if (!type.GetAttributes().Any(candidate => SymbolEqualityComparer.Default.Equals(candidate.AttributeClass?.OriginalDefinition, attribute))
+                    || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+                {
+                    continue;
+                }
+
+                var id = EntityDeclarations.IdArgumentOf(type);
+                found.Add(new TemplateSource(
+                    type.Name,
+                    type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    id?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? "global::System.Object",
+                    id is not null && IsEntityId(id),
+                    canGenerate: true,
+                    metadataName: null,
+                    symbol: type));
+            }
+        }
+
+        return found;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> TypesIn(INamespaceOrTypeSymbol scope, CancellationToken cancellationToken)
+    {
+        foreach (var member in scope.GetMembers())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (member is INamespaceSymbol nested)
+            {
+                foreach (var type in TypesIn(nested, cancellationToken))
+                {
+                    yield return type;
+                }
+            }
+            else if (member is INamedTypeSymbol type)
+            {
+                yield return type;
+                foreach (var inner in TypesIn(type, cancellationToken))
+                {
+                    yield return inner;
+                }
+            }
+        }
+    }
+
+    /// <summary>A parent type parameter a class taken by a template cannot fill, and what it would need.</summary>
+    private readonly record struct Unmet(string Argument, string Parameter, string Requirement);
+
+    /// <summary>
+    /// The first constraint of the parent that a class a <c>[TemplateArgument]</c> takes with
+    /// <c>Take = Type</c> does not meet, or null when it meets all of them. Without this the parent closed
+    /// over it would be a compile error in generated code, <c>CS0311</c>, with nothing on the class to fix.
+    /// <para>
+    /// Only the classes a template takes are checked. Ids are the application's <c>[EntityId&lt;T&gt;]</c>s,
+    /// which the generator completes with the interfaces a parent asks of an id, and which this compilation
+    /// cannot show yet. For the same reason a class declared with a template is taken to be what its own
+    /// parent is and will implement, and any class to be what the toolkit's base classes are.
+    /// </para>
+    /// </summary>
+    private static Unmet? UnmetConstraint(EntityDefinition definition, TemplateDeclaration template, TemplateSource?[] taken, Compilation compilation)
+    {
+        if (!taken.Any(static source => source is not null)
+            || compilation.GetTypeByMetadataName(template.ParentMetadataName) is not { } parent
+            || definition.MetadataName is null
+            || compilation.GetTypeByMetadataName(definition.MetadataName) is not { } dependent)
+        {
+            return null;
+        }
+
+        // Every argument as a symbol, where it can be had: the attribute's own, the classes taken, and the
+        // ids taken from them. What cannot be had leaves the constraints that mention it unchecked.
+        var arguments = new ITypeSymbol?[parent.TypeParameters.Length];
+        var attributeArguments = dependent.GetAttributes()
+            .Select(static attribute => attribute.AttributeClass)
+            .FirstOrDefault(attributeClass => attributeClass is not null && EntityDeclarations.TemplateOf(attributeClass) is not null)?.TypeArguments ?? ImmutableArray<ITypeSymbol>.Empty;
+        for (var position = 0; position < attributeArguments.Length && position < arguments.Length; position++)
+        {
+            arguments[position] = attributeArguments[position];
+        }
+
+        foreach (var binding in template.Bindings)
+        {
+            if (binding.TakeType)
+            {
+                arguments[binding.Position] = taken[binding.Position]?.SymbolIn(compilation);
+            }
+        }
+
+        foreach (var binding in template.Bindings)
+        {
+            if (!binding.TakeType && arguments[binding.Position] is null)
+            {
+                arguments[binding.Position] = compilation.GetTypeByMetadataName(binding.SourceMetadataName) is { } sourceAttribute
+                    ? IdOfTheOneDeclaredWith(sourceAttribute, taken, compilation)
+                    : null;
+            }
+        }
+
+        foreach (var binding in template.Bindings)
+        {
+            if (!binding.TakeType || arguments[binding.Position] is not INamedTypeSymbol argument)
+            {
+                continue;
+            }
+
+            var parameter = parent.TypeParameters[binding.Position];
+            if (parameter.HasValueTypeConstraint && !argument.IsValueType)
+            {
+                return new Unmet(argument.Name, parameter.Name, "a struct");
+            }
+
+            if (parameter.HasConstructorConstraint
+                && !argument.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public))
+            {
+                return new Unmet(argument.Name, parameter.Name, "a public parameterless constructor");
+            }
+
+            foreach (var constraint in parameter.ConstraintTypes)
+            {
+                if (Substitute(constraint, parent.TypeParameters, arguments, compilation) is not { } expected || Satisfies(argument, expected, compilation))
+                {
+                    continue;
+                }
+
+                return new Unmet(argument.Name, parameter.Name, "'" + expected.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) + "'");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The id of the class declared with <paramref name="sourceAttribute"/> among those already taken, if one of them is.</summary>
+    private static ITypeSymbol? IdOfTheOneDeclaredWith(INamedTypeSymbol sourceAttribute, TemplateSource?[] taken, Compilation compilation)
+    {
+        foreach (var source in taken)
+        {
+            if (source?.SymbolIn(compilation) is { } symbol
+                && symbol.GetAttributes().Any(attribute => SymbolEqualityComparer.Default.Equals(attribute.AttributeClass?.OriginalDefinition, sourceAttribute)))
+            {
+                return EntityDeclarations.IdArgumentOf(symbol);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A constraint with the parent's type parameters replaced by the arguments, or null when one of them is not known.</summary>
+    private static ITypeSymbol? Substitute(ITypeSymbol type, ImmutableArray<ITypeParameterSymbol> parameters, ITypeSymbol?[] arguments, Compilation compilation)
+    {
+        switch (type)
+        {
+            case ITypeParameterSymbol parameter:
+                var position = parameters.IndexOf(parameter, SymbolEqualityComparer.Default);
+                return position < 0 ? type : arguments[position];
+            case IArrayTypeSymbol array:
+                return Substitute(array.ElementType, parameters, arguments, compilation) is { } element ? compilation.CreateArrayTypeSymbol(element, array.Rank) : null;
+            case INamedTypeSymbol { IsGenericType: true } generic:
+                var substituted = new ITypeSymbol[generic.TypeArguments.Length];
+                for (var index = 0; index < substituted.Length; index++)
+                {
+                    if (Substitute(generic.TypeArguments[index], parameters, arguments, compilation) is not { } argument)
+                    {
+                        return null;
+                    }
+
+                    substituted[index] = argument;
+                }
+
+                return generic.OriginalDefinition.Construct(substituted);
+            default:
+                return type;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="argument"/> meets a constraint, given what this compilation cannot show: the
+    /// base class and interfaces the generator writes for a class declared as an entity, and the parent a
+    /// template class will derive from.
+    /// </summary>
+    private static bool Satisfies(INamedTypeSymbol argument, ITypeSymbol expected, Compilation compilation)
+    {
+        if (compilation is CSharpCompilation csharp
+            && csharp.ClassifyConversion(argument, expected) is { IsImplicit: true } conversion
+            && (conversion.IsIdentity || conversion.IsReference || conversion.IsBoxing))
+        {
+            return true;
+        }
+
+        if (expected is not INamedTypeSymbol named)
+        {
+            return false;
+        }
+
+        var scope = named.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+        if (EntityDeclarations.IsEntityOrAggregateRoot(argument)
+            && (scope.StartsWith("DDDToolkit", StringComparison.Ordinal) || scope == "System"))
+        {
+            // What the generated base class makes every entity: Entity<TId>, IEntity<TId>, IEquatable<...>.
+            return true;
+        }
+
+        if (EntityDeclarations.TemplateParentOf(argument) is not { } argumentParent)
+        {
+            return false;
+        }
+
+        for (var type = (INamedTypeSymbol?)argumentParent; type is not null; type = type.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, named.OriginalDefinition))
+            {
+                return true;
+            }
+        }
+
+        return argumentParent.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, named.OriginalDefinition));
+    }
+
+    /// <summary>The attribute as the author writes it: <c>TenantAggregateAttribute&lt;T&gt;</c> is <c>TenantAggregate</c>.</summary>
+    private static string AttributeNameOf(INamedTypeSymbol attributeClass)
+        => attributeClass.Name.EndsWith("Attribute", StringComparison.Ordinal) && attributeClass.Name.Length > "Attribute".Length
+            ? attributeClass.Name.Substring(0, attributeClass.Name.Length - "Attribute".Length)
+            : attributeClass.Name;
+
+    /// <summary>
+    /// The parents' and templates' declarations on <paramref name="symbol"/>, which the toolkit's own
+    /// <c>[AggregateRoot]</c> and <c>[Entity]</c> cannot sit next to.
+    /// </summary>
+    private static List<string> OtherDeclarations(INamedTypeSymbol symbol)
+        => OtherDeclarations(symbol, static attributeClass =>
+            EntityDeclarations.Is(attributeClass, KnownTypes.AggregateRootAttribute) || EntityDeclarations.Is(attributeClass, KnownTypes.EntityAttribute));
+
+    /// <summary>The declarations on <paramref name="symbol"/> other than the parent's attribute being read.</summary>
+    private static List<string> OtherDeclarations(INamedTypeSymbol symbol, string except)
+        => OtherDeclarations(symbol, attributeClass => EntityDeclarations.Is(attributeClass, except));
+
+    /// <summary>The declarations on <paramref name="symbol"/> other than the template attribute being read.</summary>
+    private static List<string> OtherDeclarations(INamedTypeSymbol symbol, INamedTypeSymbol except)
+        => OtherDeclarations(symbol, attributeClass => SymbolEqualityComparer.Default.Equals(attributeClass.OriginalDefinition, except));
+
+    /// <summary>
+    /// The declarations on <paramref name="symbol"/> other than the one being read, as the author writes
+    /// them: <c>[AggregateRoot]</c>, <c>[EntityBase]</c>, <c>[TenantAggregate]</c>. Each gives the class a base
+    /// class, so any one of them next to another is DDD00047, or DDD00009 for the toolkit's own pair.
+    /// </summary>
+    private static List<string> OtherDeclarations(INamedTypeSymbol symbol, Func<INamedTypeSymbol, bool> isTheOneBeingRead)
+    {
+        var others = new List<string>();
+        foreach (var attribute in symbol.GetAttributes())
+        {
+            if (attribute.AttributeClass is not { } attributeClass || isTheOneBeingRead(attributeClass))
+            {
+                continue;
+            }
+
+            if (EntityDeclarations.Is(attributeClass, KnownTypes.AggregateRootAttribute)
+                || EntityDeclarations.Is(attributeClass, KnownTypes.EntityAttribute)
+                || EntityDeclarations.Is(attributeClass, KnownTypes.AggregateRootBaseAttribute)
+                || EntityDeclarations.Is(attributeClass, KnownTypes.EntityBaseAttribute)
+                || EntityDeclarations.TemplateOf(attributeClass) is not null)
+            {
+                others.Add("[" + AttributeNameOf(attributeClass) + "]");
+            }
+        }
+
+        return others;
+    }
+
+    /// <summary>"a", "a and b", "a, b and c".</summary>
+    private static string Listed(IEnumerable<string> items)
+    {
+        var list = items.ToList();
+        return list.Count <= 1
+            ? string.Concat(list)
+            : string.Join(", ", list.Take(list.Count - 1)) + " and " + list[list.Count - 1];
+    }
+
+    /// <summary>What every entity is checked for, whichever way it is declared: a partial class.</summary>
+    private static bool CheckEntityShape(TypeDeclarationInfo type, string attributeName, List<DiagnosticInfo> diagnostics)
+    {
         var canGenerate = true;
 
         if (type.Kind != DeclarationKind.Class)
@@ -308,42 +1198,40 @@ internal static class DefinitionFactory
             canGenerate = false;
         }
 
-        if (type.IsGeneric)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TypeCannotBeGeneric, type.Location, type.Name, attributeName));
-            canGenerate = false;
-        }
+        return canGenerate;
+    }
 
-        // Both attributes on one class means two providers produce a definition for it, and both output
-        // steps then add a source with the same hint name, which throws inside the generator and leaves
-        // the author with nothing but a CS8785 about a crashed generator. Refuse from both paths so
-        // nothing is generated, but report from the aggregate-root path alone so the author sees the
-        // complaint exactly once.
-        var conflictingAttributes = HasAttribute(symbol, KnownTypes.EntityAttribute) && HasAttribute(symbol, KnownTypes.AggregateRootAttribute);
+    /// <summary>
+    /// Everything about an entity that does not depend on how it was declared: the aggregate boundary,
+    /// its rules, its collections and its key parts.
+    /// </summary>
+    /// <param name="conflictingAttributes">
+    /// True when the class is declared more than one way. Nothing is generated for it and it has been
+    /// reported once already; the checks below are skipped because every path that reads it would report
+    /// the same members again.
+    /// </param>
+    private static EntityDefinition CreateEntityDefinition(
+        INamedTypeSymbol symbol,
+        TypeDeclarationInfo type,
+        bool isAggregateRoot,
+        string idType,
+        Compilation compilation,
+        bool conflictingAttributes,
+        List<DiagnosticInfo> diagnostics,
+        bool canGenerate,
+        CancellationToken cancellationToken,
+        Func<ITypeSymbol, bool>? parent = null)
+    {
         var invariants = EquatableArray<string>.Empty;
-        if (conflictingAttributes)
+        if (!conflictingAttributes)
         {
-            if (isAggregateRoot)
-            {
-                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.ConflictingEntityAttributes, type.Location, type.Name));
-            }
-
-            canGenerate = false;
-        }
-        else
-        {
-            // Both skipped for a class carrying both attributes: it is reported already, nothing is
-            // generated for it, and both providers would otherwise report over the same members twice.
             AggregateBoundary.Check(symbol, isAggregateRoot, diagnostics, cancellationToken);
 
             // A rule the generator cannot create is reported and left out, the way an unusable collection
             // property is: the entity itself is still generated, because its base class is what makes the
             // rest of the author's file compile at all.
-            invariants = Invariants.Collect(symbol, compilation, diagnostics, cancellationToken);
+            invariants = Invariants.Collect(symbol, compilation, diagnostics, cancellationToken, parent);
         }
-
-        var id = ResolveId(symbol, type, attribute, attributeName, compilation, diagnostics, cancellationToken);
-        canGenerate &= id.Ok;
 
         var collections = new List<CollectionPropertyInfo>();
         foreach (var property in symbol.GetMembers().OfType<IPropertySymbol>())
@@ -392,15 +1280,15 @@ internal static class DefinitionFactory
             collections.Add(info);
         }
 
-        // A class carrying both attributes generates nothing and is reported once already; checking
-        // its key parts from both providers would report every key-part warning twice.
+        // A class declared more than one way generates nothing and is reported once already; checking
+        // its key parts from every path would report every key-part warning more than once.
         var keyParts = conflictingAttributes ? [] : CollectKeyParts(symbol, type, diagnostics, ref canGenerate, cancellationToken);
 
         return new EntityDefinition(
             Type: type,
             IsAggregateRoot: isAggregateRoot,
-            IdType: id.IdType,
-            ImplicitId: canGenerate ? id.ImplicitId : null,
+            IdType: idType,
+            ImplicitId: null,
             Collections: collections.ToEquatableArray(),
             Invariants: invariants,
             KeyParts: keyParts.ToEquatableArray(),
@@ -418,14 +1306,27 @@ internal static class DefinitionFactory
     /// from a referenced assembly is recognised too.
     /// <para>
     /// A class is required because that is the only shape the entity generator produces a base class
-    /// for, and a non-generic one because a generic entity is refused outright. Either way the element
-    /// would have no <c>GetInvariantViolations</c> to call, and a walk emitted over it would turn one
-    /// diagnostic on the author's own declaration into a compile error in generated code.
+    /// for, and a non-generic one because a generic entity is refused outright. The exception is a parent
+    /// a package ships, which is generic by design. Anything else would have no
+    /// <c>GetInvariantViolations</c> to call, and a walk emitted over it would turn one diagnostic on the
+    /// author's own declaration into a compile error in generated code.
+    /// </para>
+    /// <para>
+    /// Inside a parent the element is often a type parameter: the application's own class, which the
+    /// parent holds without knowing it, as in <c>IReadOnlyList&lt;TUnit&gt;</c> where
+    /// <c>TUnit : OrganizationUnitEntity&lt;TUnitId&gt;</c>. It is a child entity when its constraint is one,
+    /// because the constraint is what gives the walk its <c>GetInvariantViolations</c>.
     /// </para>
     /// </summary>
-    private static bool IsChildEntity(ITypeSymbol element)
-        => element is INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false }
-           && (HasAttribute(element, KnownTypes.EntityAttribute) || HasAttribute(element, KnownTypes.AggregateRootAttribute));
+    private static bool IsChildEntity(ITypeSymbol element) => element switch
+    {
+        ITypeParameterSymbol parameter => parameter.ConstraintTypes.Any(static constraint =>
+            constraint is INamedTypeSymbol { TypeKind: TypeKind.Class } named && EntityDeclarations.IsEntityOrAggregateRoot(named)),
+        INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: false } named => EntityDeclarations.IsEntityOrAggregateRoot(named),
+        INamedTypeSymbol { TypeKind: TypeKind.Class, IsGenericType: true } named => EntityDeclarations.IsBase(named),
+        _ => false,
+    };
+
     // ------------------------------------------------------------------ key parts
 
     /// <summary>
@@ -497,9 +1398,7 @@ internal static class DefinitionFactory
     {
         var property = context.TargetSymbol;
         var containingType = property.ContainingType;
-        if (containingType is null
-            || HasAttribute(containingType, KnownTypes.EntityAttribute)
-            || HasAttribute(containingType, KnownTypes.AggregateRootAttribute))
+        if (containingType is null || EntityDeclarations.IsEntityOrAggregateRoot(containingType))
         {
             return null;
         }

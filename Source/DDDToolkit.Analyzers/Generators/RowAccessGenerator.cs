@@ -147,10 +147,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             key?.Parameter);
     }
 
+    /// <summary>
+    /// Whether the rule is about an aggregate root the export can find a table for. A package's parent is
+    /// declared a root, but it is abstract and never mapped: the export only knows the application's classes,
+    /// and a rule about the parent would be left out of it without a word. The rule belongs on the class
+    /// declared with the parent's template.
+    /// </summary>
     private static bool IsAggregateRoot(INamedTypeSymbol type)
-        => type.GetAttributes().Any(static attribute =>
-            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AggregateRootAttribute`1" } root
-            && root.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+        => EntityDeclarations.IsAggregateRoot(type) && !EntityDeclarations.IsBase(type);
 
     /// <summary>The name an <c>[AccessFunction]</c> gives its function, <c>projects.is_member</c>, or null.</summary>
     private static string? FunctionNameOf(AttributeData attribute)
@@ -261,15 +265,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// </summary>
     private static (string Type, string Parameter)? KeyOf(INamedTypeSymbol aggregate)
     {
-        if (aggregate.GetMembers().OfType<IPropertySymbol>().Any(static property => property.GetAttributes().Any(static attribute => attribute.AttributeClass?.ToDisplayString() == KnownTypes.KeyPartAttribute)))
+        // A template class's key parts may come from its parent, which this compilation cannot show as its base.
+        if (DefinitionFactory.HasKeyParts(aggregate) || (EntityDeclarations.TemplateParentOf(aggregate) is { } parent && DefinitionFactory.HasKeyParts(parent)))
         {
             return null;
         }
 
-        var root = aggregate.GetAttributes().FirstOrDefault(static attribute =>
-            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AggregateRootAttribute`1" } candidate
-            && candidate.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
-        if (root?.AttributeClass?.TypeArguments.FirstOrDefault() is not { } argument)
+        if (EntityDeclarations.IdArgumentOf(aggregate) is not { } argument)
         {
             return null;
         }
@@ -351,9 +353,9 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 return method.Name == "Call" ? SqlCall(invocation) : SqlRaw(invocation);
             }
 
-            if (called is { Name: "Any", ContainingType: { } linq }
-                && linq.ToDisplayString() == "System.Linq.Enumerable"
-                && invocation.Expression is MemberAccessExpressionSyntax any)
+            if (invocation.Expression is MemberAccessExpressionSyntax any
+                && ((called is { Name: "Any", ContainingType: { } linq } && linq.ToDisplayString() == "System.Linq.Enumerable")
+                    || (called is null && any.Name.Identifier.ValueText == "Any" && IsInheritedCollection(any.Expression))))
             {
                 return Any(invocation, any.Expression);
             }
@@ -410,19 +412,19 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
             if (arguments.Count != 1
                 || arguments[0].Expression is not LambdaExpressionSyntax { ExpressionBody: { } body } lambda
-                || model.GetSymbolInfo(lambda).Symbol is not IMethodSymbol { Parameters.Length: 1 } signature)
+                || LambdaParameterOf(lambda) is not { } entity)
             {
                 return Fail(arguments.Count == 1 ? arguments[0].Expression : invocation);
             }
 
-            _aliases[signature.Parameters[0]] = Alias;
+            _aliases[entity] = Alias;
             try
             {
                 return "{exists:" + navigation + ":" + Alias + "}" + Translate(body) + "{/exists}";
             }
             finally
             {
-                _aliases.Remove(signature.Parameters[0]);
+                _aliases.Remove(entity);
             }
         }
 
@@ -589,12 +591,80 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 return false;
             }
 
-            var receiver = model.GetTypeInfo(member.Expression).Type;
-            return receiver is null
+            // A type parameter is what a parent's id is, TTenantId, and an id keeps its value in its column.
+            var receiver = TypeOf(member.Expression);
+            return receiver is null or ITypeParameterSymbol
                 || receiver.TypeKind == TypeKind.Error
                 || receiver.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
                 || receiver.GetAttributes().Any(static attribute => attribute.AttributeClass?.OriginalDefinition.MetadataName is "EntityIdAttribute`1" or "SingleValueObjectAttribute`1")
                 || receiver.AllInterfaces.Any(static contract => contract.ToDisplayString() == "DDDToolkit.Abstractions.Interfaces.IEntityId");
+        }
+
+        /// <summary>
+        /// The one parameter of an <c>Any</c>'s lambda. Bound through the lambda when the call binds, and
+        /// through its declaration when it does not, as for a collection a template class inherits.
+        /// </summary>
+        private IParameterSymbol? LambdaParameterOf(LambdaExpressionSyntax lambda)
+        {
+            if (model.GetSymbolInfo(lambda).Symbol is IMethodSymbol { Parameters.Length: 1 } signature)
+            {
+                return signature.Parameters[0];
+            }
+
+            var declared = lambda switch
+            {
+                SimpleLambdaExpressionSyntax simple => simple.Parameter,
+                ParenthesizedLambdaExpressionSyntax { ParameterList.Parameters.Count: 1 } parenthesized => parenthesized.ParameterList.Parameters[0],
+                _ => null,
+            };
+
+            return declared is null ? null : model.GetDeclaredSymbol(declared);
+        }
+
+        /// <summary>
+        /// Whether an expression the compiler cannot bind is a collection a template class inherits from its
+        /// parent, <c>organization.Units</c>. Its base class is written by a generator, so in this compilation
+        /// the member is not there, and <c>Any</c> over it does not bind either.
+        /// </summary>
+        private bool IsInheritedCollection(ExpressionSyntax expression)
+            => model.GetTypeInfo(expression).Type is null or { TypeKind: TypeKind.Error }
+               && TypeOf(expression) is INamedTypeSymbol collection
+               && (collection.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T
+                   || collection.AllInterfaces.Any(static contract => contract.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T));
+
+        /// <summary>
+        /// The type of an expression, reading a member a template class inherits from its parent where the
+        /// compiler cannot: the class has no base class yet in this compilation, because a generator writes it.
+        /// </summary>
+        private ITypeSymbol? TypeOf(ExpressionSyntax expression)
+        {
+            if (model.GetTypeInfo(expression).Type is { TypeKind: not TypeKind.Error } bound)
+            {
+                return bound;
+            }
+
+            if (expression is not MemberAccessExpressionSyntax access
+                || TypeOf(access.Expression) is not INamedTypeSymbol owner
+                || EntityDeclarations.TemplateParentOf(owner) is not { } parent)
+            {
+                return null;
+            }
+
+            for (var type = (INamedTypeSymbol?)parent; type is not null; type = type.BaseType)
+            {
+                foreach (var member in type.GetMembers(access.Name.Identifier.ValueText))
+                {
+                    switch (member)
+                    {
+                        case IPropertySymbol property:
+                            return property.Type;
+                        case IFieldSymbol field:
+                            return field.Type;
+                    }
+                }
+            }
+
+            return null;
         }
 
         private string? EnumValueOf(ExpressionSyntax expression)

@@ -2,7 +2,8 @@
 
 [Identifiers](identifiers.md) tells you to prefer the struct form of an identifier, and argues it from
 memory layout. This page is the measurement behind that advice, including the two places where the
-measurement does not agree with it.
+measurement does not agree with it. The [last section](#tenancy-the-shape-of-the-access-data) measures
+something else: the database shapes behind the Tenancy supporting domain.
 
 The benchmarks live in `Benchmarks/DDDToolkit.Benchmarks` and use
 [BenchmarkDotNet](https://benchmarkdotnet.org). Run them yourself with:
@@ -282,10 +283,94 @@ A fourth is a difference rather than a cost: a primitive collection of converted
 `integer[]` on PostgreSQL and a JSON `nvarchar` on SQL Server. Both round trip, and a query that
 reaches inside one will not port.
 
+## Tenancy: the shape of the access data
+
+The [Tenancy](tenancy.md) supporting domain stores who holds what as facts, starts every question from the
+person asking, and keeps the organization as a closure table. These are the measurements those choices
+rest on. They compare it with the shape a permission model tends to grow into: a table of what every
+person may do on every project, kept up to date by triggers, a copy of the organization path on every
+project, and row level security policies that call a function for every row.
+
+### The data
+
+The same data both ways, and both give every person the same answer:
+
+- one large tenant: 3,111 units in five levels (a root, 10 regions, 100 branches, 1,000 teams and 2,000
+  sub-teams), 49,776 projects, 1,000 seats, and a team of three on every project, a lead, an inspector
+  and a viewer;
+- 20 regional managers who hold `project.update` at a branch, and a director who holds it at the root;
+- 49 small tenants of 111 units and 999 projects each, 98,727 projects in all.
+
+### Storage, and the list of my projects
+
+Measured on PostgreSQL 17 for two people: a regional manager, who sees 643 projects, and a field worker on
+a few teams, who sees 150.
+
+| | Per-person table, per-row policies | Per-person table, set-shaped policy | Facts, set-shaped |
+|---|---:|---:|---:|
+| Storage | 411 MB | 411 MB | 60 MB |
+| "My projects", regional manager | 10,900 ms | 185 ms | 5.2 ms |
+| "My projects", field worker | 10,364 ms | 155 ms | 4.6 ms |
+| Buffers read for the regional manager's list | 1,243,555 | 450,277 | 1,019 |
+| 50 projects opened one by one, total | 27 ms | 9,126 ms | 24 ms |
+| Growth of the connection's memory | +1.0 MB | +0.8 MB | +0.6 MB |
+| Cached plans in the connection | 293 KB | 49 KB | none |
+
+Three things account for the difference:
+
+- **Storing outcomes is what costs the space.** The table of what every person may do on every project,
+  one row per person, key and project, is 256 MB on its own. The facts it is computed from, the teams and
+  the keys of each role, are 39 MB.
+- **A policy that runs per row reads the whole tenant.** Asked for a list, it runs its function once for
+  each of the tenant's projects, whatever the person may see. Rewritten set-shaped, the policy computes
+  the set of permitted projects once per statement, which fixes the list and breaks the other case: a
+  single project now pays for the whole set, 9 seconds for 50 of them. Starting from the person is cheap
+  both ways, because the set is only as large as what that person may do.
+- **What a connection keeps is multiplied by the connections.** PostgreSQL gives every connection a
+  process of its own, and each keeps its cached plans and catalogue entries for as long as it lives. The
+  facts version's functions are plain SQL that the planner inlines, so it caches no plans at all. With
+  hundreds of connections, that difference is what decides the size of the database server.
+
+### The organization tree
+
+A regional manager sees the projects under two branches, 992 of them. On PostgreSQL, the median execution
+time of seven runs, per way to ask "which projects are under the units where I hold the key":
+
+| Who, and how many projects | `ltree` | Text path, a range | Closure table | Path copied on every project, per row |
+|---|---:|---:|---:|---:|
+| Regional manager, 992 | 0.80 ms | 0.67 ms | 0.64 ms | 22.80 ms |
+| Director at the root, 49,776 | 32.93 ms | 30.56 ms | 29.54 ms | 17.34 ms |
+| Team lead of one team, 48 | 0.29 ms | 0.26 ms | 0.19 ms | 16.82 ms |
+
+The three ways of storing the tree are equally fast; the copied path is what is slow, for everyone who
+sees part of the tree. It only wins for the director, who sees everything and for whom any filter is
+wasted work. Moving a branch with its 30 units under another region takes 0.7 ms with `ltree`, 1.8 ms
+with a text path and 3.0 ms with the closure table, and no project is touched in any of them.
+
+The closure table is the one that works everywhere. It is plain joins on ids: no extension, no collation
+that decides whether a range query is right, and no limit on the length of an index key. The same query
+on SQL Server 2022, against a text path with a binary collation, and on SQLite in memory:
+
+| Who | SQL Server, text path | SQL Server, closure table | SQLite, text path | SQLite, closure table |
+|---|---:|---:|---:|---:|
+| Regional manager | under 0.01 ms | under 0.01 ms | 0.04 ms | 0.04 ms |
+| Director at the root | 4.15 ms | 4.14 ms | 2.55 ms | 2.23 ms |
+| Team lead of one team | under 0.01 ms | under 0.01 ms | 0.01 ms | under 0.01 ms |
+
+Compare the columns of one database, not the databases: SQL Server's times are taken inside the server,
+and SQLite runs in the process, in memory.
+
+### How it was measured
+
+On the machine above, with PostgreSQL 17 and SQL Server 2022 in Docker, one session at a time, parallel
+workers off and a warm cache. This is not a load test: how the shapes behave with many people at once is
+measured when the Postgres layer is built. The tree comparison is in `Benchmarks/Tenancy`, with a
+`README.md` that says how to run it.
+
 ## Things this page does not measure
 
-- **Other providers.** Everything here is SQLite in memory. Mapping behaviour on PostgreSQL and SQL
-  Server is covered by the suite above, but nothing times it.
+- **Other providers.** Everything before the Tenancy section is SQLite in memory. Mapping behaviour on
+  PostgreSQL and SQL Server is covered by the suite above, but nothing times it.
 - **The generators.** Build-time cost of the source generators is not measured anywhere.
 - **The outbox.** Throughput of `OutboxProcessor` under load, and what the `ProcessedAt` index does as
   the table grows, are open questions.
