@@ -22,6 +22,10 @@ do $$ begin
 end $$;
 """)
 
+# the update above leaves a dead copy of every project row and clears the visibility map; without this the
+# index-only scans the set-based forms use go to the heap for every row, and they are measured slow for it
+psql("vacuum analyze project")
+
 GRANT = "g.tenant_id = 1 and g.actor = {a} and g.key = 'project.update'"
 QUERIES = {
     "ltree (units, set)": """select count(*) from project p where p.tenant_id = 1 and p.unit_id in (
@@ -58,3 +62,34 @@ for who, name, count, med, plan in rows:
     if who.startswith("regional"):
         print("=== plan:", who, "/", name)
         print(plan)
+
+# Moving branch 12, with its 10 teams and 20 sub-teams, under region 3, in each form. Every move runs inside
+# a transaction that is rolled back, so each run starts from the same tree; the time is the server's
+# execution time from EXPLAIN ANALYZE, the closure table's two statements added together.
+MOVES = {
+    "text path": ["""update unit set path_text = '/1/3/' || substr(path_text, length('/1/2/') + 1)
+        where tenant_id = 1 and path_text >= '/1/2/12/' and path_text < '/1/2/120'"""],
+    "ltree": ["""update unit set path_ltree = 'n1.n3'::ltree || subpath(path_ltree, 2)
+        where tenant_id = 1 and path_ltree <@ 'n1.n2.n12'"""],
+    "closure table": [
+        """delete from unit_ancestor ua
+            where ua.tenant_id = 1
+              and ua.unit_id in (select unit_id from unit_ancestor where tenant_id = 1 and ancestor_id = 12)
+              and ua.ancestor_id not in (select unit_id from unit_ancestor where tenant_id = 1 and ancestor_id = 12)""",
+        """insert into unit_ancestor
+            select 1, a.ancestor_id, s.unit_id
+              from (select unit_id from unit_ancestor where tenant_id = 1 and ancestor_id = 12) s
+             cross join (select ancestor_id from unit_ancestor where tenant_id = 1 and unit_id = 3) a""",
+    ],
+}
+print()
+for name, statements in MOVES.items():
+    times = []
+    for _ in range(8):
+        script = "begin;\n" + "\n".join("explain (analyze) " + s + ";" for s in statements) + "\nrollback;"
+        out = subprocess.run(["docker", "exec", "-i", "tenancy-bench-pg", "psql", "-U", "postgres", "-At"],
+                             input=script, capture_output=True, text=True)
+        if out.returncode != 0:
+            raise RuntimeError(out.stderr)
+        times.append(sum(float(t) for t in re.findall(r"Execution Time: ([\d.]+) ms", out.stdout)))
+    print(f"move {name:18} | median {statistics.median(times[1:]):6.2f} ms")

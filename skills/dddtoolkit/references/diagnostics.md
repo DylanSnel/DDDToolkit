@@ -231,7 +231,8 @@ Error. A class marked `[AggregateRootBase]` or `[EntityBase]` has the wrong shap
 `abstract partial class` with type parameters, the id first, constrained
 `where TId : IEntityId, IEquatable<TId>`, and not nested in a generic type. The message names what is
 missing; a parent that is not partial or not a class reports DDD00005 or DDD00002 instead. Classes
-declared with its template get nothing generated until it is fixed, and report nothing of their own.
+declared with its template get nothing generated until it is fixed, and report no diagnostic of their own; the
+compiler errors in them come from the missing base class and go away once the parent is fixed.
 
 ## DDD00043
 
@@ -256,8 +257,10 @@ which one to take its type argument from. Keep one.
 Error. The template attribute does not fit its parent: the marker names no parent, a parent of the wrong
 kind (`[AggregateRootTemplate]` needs an `[AggregateRootBase]` parent, `[EntityTemplate]` an
 `[EntityBase]` one), or its own type arguments plus its `[TemplateArgument]`s do not fill every parent type
-parameter exactly once. This is a bug in the package that declares the attribute; report it there rather
-than working around it.
+parameter exactly once, or a parameter that takes the application's class (`Take = TemplateArgumentKind.Type`)
+is constrained `new()`, which a generated entity never meets. It is reported on the attribute when the package
+is built. This is a bug in the package that declares the attribute; report it there rather than working
+around it.
 
 ## DDD00047
 
@@ -270,7 +273,7 @@ class extends what a package ships.
 
 Error. A class a template takes with `Take = TemplateArgumentKind.Type` does not meet a constraint of the
 parent's type parameter, usually an interface the parent creates it through
-(`IInvoiceLineFactory<ShopInvoiceLine, InvoiceLineId>`) or a public parameterless constructor. The message
+(`IInvoiceLineFactory<ShopInvoiceLine, InvoiceLineId>`). The message
 names the class and what it needs. Add it to that class; nothing is generated for the class that takes it
 until then.
 

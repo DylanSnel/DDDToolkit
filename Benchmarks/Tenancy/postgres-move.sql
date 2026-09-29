@@ -1,3 +1,5 @@
+-- Moving branch 12, with its 10 teams and 20 sub-teams, under region 3 in each form, once each and rolled
+-- back, to read by hand. run_postgres.py times the same moves.
 \timing on
 begin;
 -- move branch 12 (region 2) under region 3: text path

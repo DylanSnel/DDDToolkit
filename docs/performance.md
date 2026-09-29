@@ -2,7 +2,7 @@
 
 [Identifiers](identifiers.md) tells you to prefer the struct form of an identifier, and argues it from
 memory layout. This page is the measurement behind that advice, including the two places where the
-measurement does not agree with it. The [last section](#tenancy-the-shape-of-the-access-data) measures
+measurement does not agree with it. The [Tenancy section](#tenancy-the-shape-of-the-access-data) measures
 something else: the database shapes behind the Tenancy supporting domain.
 
 The benchmarks live in `Benchmarks/DDDToolkit.Benchmarks` and use
@@ -295,24 +295,26 @@ project, and row level security policies that call a function for every row.
 
 The same data both ways, and both give every person the same answer:
 
-- one large tenant: 3,111 units in five levels (a root, 10 regions, 100 branches, 1,000 teams and 2,000
-  sub-teams), 49,776 projects, 1,000 seats, and a team of three on every project, a lead, an inspector
-  and a viewer;
+- one large tenant: 3,111 units in five levels (a root, 10 regions, 100 branches, 1,000 team units and
+  2,000 sub-team units), 49,776 projects, 1,000 seats, and a project team of three on every project, a
+  lead, an inspector and a viewer;
 - 20 regional managers who hold `project.update` at a branch, and a director who holds it at the root;
 - 49 small tenants of 111 units and 999 projects each, 98,727 projects in all.
 
 ### Storage, and the list of my projects
 
-Measured on PostgreSQL 17 for two people: a regional manager, who sees 643 projects, and a field worker on
-a few teams, who sees 150.
+Measured on PostgreSQL 17 for two people: a regional manager, who holds the key at one branch and is on
+some project teams as well, and sees 643 projects; and a field worker, who holds no key in the
+organization and is on the project team of 150 projects.
 
 | | Per-person table, per-row policies | Per-person table, set-shaped policy | Facts, set-shaped |
 |---|---:|---:|---:|
 | Storage | 411 MB | 411 MB | 60 MB |
 | "My projects", regional manager | 10,900 ms | 185 ms | 5.2 ms |
 | "My projects", field worker | 10,364 ms | 155 ms | 4.6 ms |
-| Buffers read for the regional manager's list | 1,243,555 | 450,277 | 1,019 |
-| 50 projects opened one by one, total | 27 ms | 9,126 ms | 24 ms |
+| Buffers touched (shared hits and reads), regional manager's list | 1,243,555 | 450,277 | 1,019 |
+| 50 projects opened one by one, total, regional manager | 27 ms | 9,126 ms | 24 ms |
+| 50 projects opened one by one, total, field worker | 26 ms | 7,356 ms | 26 ms |
 | Growth of the connection's memory | +1.0 MB | +0.8 MB | +0.6 MB |
 | Cached plans in the connection | 293 KB | 49 KB | none |
 
@@ -328,24 +330,29 @@ Three things account for the difference:
   both ways, because the set is only as large as what that person may do.
 - **What a connection keeps is multiplied by the connections.** PostgreSQL gives every connection a
   process of its own, and each keeps its cached plans and catalogue entries for as long as it lives. The
-  facts version's functions are plain SQL that the planner inlines, so it caches no plans at all. With
-  hundreds of connections, that difference is what decides the size of the database server.
+  per-row policies call PL/pgSQL functions, whose plans are cached per connection. The facts version's
+  set functions are SQL functions that run once per statement, for which PostgreSQL 17 keeps no cached
+  plan. A connection grew by 0.6 MB instead of 1.0 to 1.1 MB: small per connection, and it adds up with
+  hundreds of them.
 
 ### The organization tree
 
-A regional manager sees the projects under two branches, 992 of them. On PostgreSQL, the median execution
-time of seven runs, per way to ask "which projects are under the units where I hold the key":
+The tree was measured on data of its own: the same tenants, units and projects, no seats or project teams,
+and three people who hold `project.update`: a regional manager at two branches, who sees 992 projects,
+the director at the root, and the lead of one team unit. On PostgreSQL, the median execution time of seven
+runs, per way to ask "which projects are under the units where I hold the key":
 
 | Who, and how many projects | `ltree` | Text path, a range | Closure table | Path copied on every project, per row |
 |---|---:|---:|---:|---:|
-| Regional manager, 992 | 0.80 ms | 0.67 ms | 0.64 ms | 22.80 ms |
-| Director at the root, 49,776 | 32.93 ms | 30.56 ms | 29.54 ms | 17.34 ms |
-| Team lead of one team, 48 | 0.29 ms | 0.26 ms | 0.19 ms | 16.82 ms |
+| Regional manager, 992 | 0.71 ms | 0.40 ms | 0.33 ms | 21.49 ms |
+| Director at the root, 49,776 | 10.41 ms | 10.23 ms | 10.31 ms | 16.15 ms |
+| Team lead of one team unit, 48 | 0.22 ms | 0.16 ms | 0.14 ms | 15.22 ms |
 
-The three ways of storing the tree are equally fast; the copied path is what is slow, for everyone who
-sees part of the tree. It only wins for the director, who sees everything and for whom any filter is
-wasted work. Moving a branch with its 30 units under another region takes 0.7 ms with `ltree`, 1.8 ms
-with a text path and 3.0 ms with the closure table, and no project is touched in any of them.
+The three ways of storing the tree are equally fast. The path copied onto every project is slower for
+everyone, the director included, because it checks every project of the tenant whatever the person may
+see. Moving a branch with its 30 units under another region takes 0.4 ms with a text path, 0.7 ms with
+`ltree` and 3.3 ms with the closure table, which replaces the 62 rows that link the moved units to the
+ancestors they leave and gain. No project is touched in any of them.
 
 The closure table is the one that works everywhere. It is plain joins on ids: no extension, no collation
 that decides whether a range query is right, and no limit on the length of an index key. The same query
@@ -353,19 +360,24 @@ on SQL Server 2022, against a text path with a binary collation, and on SQLite i
 
 | Who | SQL Server, text path | SQL Server, closure table | SQLite, text path | SQLite, closure table |
 |---|---:|---:|---:|---:|
-| Regional manager | under 0.01 ms | under 0.01 ms | 0.04 ms | 0.04 ms |
-| Director at the root | 4.15 ms | 4.14 ms | 2.55 ms | 2.23 ms |
-| Team lead of one team | under 0.01 ms | under 0.01 ms | 0.01 ms | under 0.01 ms |
+| Regional manager | 1.28 ms | 1.27 ms | 0.05 ms | 0.04 ms |
+| Director at the root | 4.00 ms | 4.01 ms | 2.52 ms | 1.88 ms |
+| Team lead of one team unit | 1.24 ms | 1.26 ms | 0.01 ms | 0.01 ms |
 
 Compare the columns of one database, not the databases: SQL Server's times are taken inside the server,
-and SQLite runs in the process, in memory.
+200 executions at a time because its clock moves in steps of about 4 ms, and SQLite runs in the process,
+in memory.
 
 ### How it was measured
 
-On the machine above, with PostgreSQL 17 and SQL Server 2022 in Docker, one session at a time, parallel
-workers off and a warm cache. This is not a load test: how the shapes behave with many people at once is
-measured when the Postgres layer is built. The tree comparison is in `Benchmarks/Tenancy`, with a
-`README.md` that says how to run it.
+On the machine above, with PostgreSQL 17 and SQL Server 2022 in Docker, one session at a time and a warm
+cache. This is not a load test: how the shapes behave with many people at once is measured when the
+Postgres layer is built.
+
+The tree comparison is in `Benchmarks/Tenancy`, with a `README.md` that says how to run it and how each
+number is taken. The storage and list comparison has no script in the repository: its per-person table
+reproduces a production schema that is not the toolkit's to publish, so its numbers are given as measured
+while Tenancy was designed.
 
 ## Things this page does not measure
 

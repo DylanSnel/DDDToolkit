@@ -27,7 +27,8 @@ It comes in three packages:
 | **Role** | A name and the **Permission** keys it grants | Only keys from the catalogue, with the keys they imply expanded. |
 | **Catalogue** | The permission keys, the **RolePacks** and the kinds of unit | One administrators' pack per shape. A key is retired, never deleted. |
 
-Each is an aggregate, and they refer to each other by id. Two rules span more than one aggregate, and so
+Tenant, Organization, Seat and Role are aggregates, and they refer to each other by id. The catalogue is
+data your application supplies, not a class you declare. Two rules span more than one aggregate, and so
 live in the use cases, guarded against concurrent changes: the last administrator of a tenant cannot be
 removed, and nobody grants a key they do not hold themselves.
 
@@ -85,6 +86,12 @@ public sealed class ShopTenancyContext(DbContextOptions<ShopTenancyContext> opti
         modelBuilder.AddTenancy();
         modelBuilder.AddDomainEventOutbox(Database, schema: "tenancy");
     }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.AddDDDToolkitConventions();
+        configurationBuilder.AddShopTenancyContractsConverters();
+    }
 }
 ```
 
@@ -125,7 +132,7 @@ flowchart LR
 <summary>Show the code: how Projects asks</summary>
 
 ```csharp
-// Every provider: Entity Framework makes this one query with two subqueries
+// Every provider: both answers are queries, combined with the projects the seat may see
 var mine = db.Projects.Where(project =>
     projectAccess.TeamProjectIds("project.update").Contains(project.Id)
     || tenancy.UnitsWhereIHold("project.update").Contains(project.UnitId));
@@ -155,7 +162,9 @@ Three choices keep the access data small and the questions fast:
 
 - **Facts, not outcomes.** Tenancy stores who is placed where and holds which role. It does not store what
   that adds up to per person per project, and neither does Projects: rights on a project are worked out
-  when they are asked for, from the team and the keys of each role.
+  when they are asked for, from the team and the keys of each role. For the organization it also keeps
+  the keys a seat holds at each unit, one row per seat, key and unit, written in the same transaction as
+  the change: the size of the fact, not its product with the projects.
 - **Start from the person.** A question starts from what the current seat holds and works outward, so its
   cost grows with what that person may do, not with the size of the tenant.
 - **One tree, no copies.** The organization is a closure table on ids. A project stores only the unit it

@@ -25,14 +25,16 @@ ACTORS = {1: "regional manager (2 branches)", 2: "director (root)", 3: "team lea
 for a, who in ACTORS.items():
     for name, q in QUERIES.items():
         query = q.format(a=a)
+        # sysdatetime() moves in steps of about 4 ms, so each of the nine samples is a batch of 200 executions
+        # timed together and divided: a single execution is shorter than the clock can see.
         timing = f"""
-declare @c int, @t0 datetime2, @i int = 0; declare @ms table (v float);
+declare @c int, @t0 datetime2, @i int, @r int = 0, @n int = 200; declare @ms table (v float);
 select @c = ({query});  -- warm
-while @i < 9 begin
-  set @t0 = sysdatetime();
-  select @c = ({query});
-  insert into @ms values (datediff(microsecond, @t0, sysdatetime()) / 1000.0);
-  set @i += 1;
+while @r < 9 begin
+  set @i = 0; set @t0 = sysdatetime();
+  while @i < @n begin select @c = ({query}); set @i += 1; end
+  insert into @ms values (datediff(microsecond, @t0, sysdatetime()) / 1000.0 / @n);
+  set @r += 1;
 end
 select cast(@c as varchar) + ' ' + (select string_agg(cast(v as varchar), ',') from @ms);"""
         count, times = sql(timing).split(" ")

@@ -94,13 +94,54 @@ internal static class Providers
     /// </summary>
     public static IncrementalValuesProvider<EntityDefinition> TemplateEntities(this IncrementalGeneratorInitializationContext context)
         => context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 },
+                predicate: static (node, _) => node is TypeDeclarationSyntax { AttributeLists.Count: > 0 } declaration && HasGenericAttribute(declaration),
                 transform: static (syntaxContext, cancellationToken) => DefinitionFactory.CreateTemplateEntity(syntaxContext, cancellationToken))
             .Where(static definition => definition is not null)
             .Select(static (definition, _) => definition!)
             .Collect()
             .Combine(context.CompilationProvider)
             .SelectMany(static (all, cancellationToken) => DefinitionFactory.ResolveTemplates(all.Left, all.Right, cancellationToken));
+
+    /// <summary>
+    /// Whether a declaration carries a generic attribute, which is what a template always is: its first
+    /// type argument is the id. A syntactic check, so the semantic model is asked only about declarations
+    /// that could be template classes, and a project full of other attributes pays nothing for templates.
+    /// </summary>
+    private static bool HasGenericAttribute(TypeDeclarationSyntax declaration)
+    {
+        foreach (var list in declaration.AttributeLists)
+        {
+            foreach (var attribute in list.Attributes)
+            {
+                if (attribute.Name is GenericNameSyntax
+                    or QualifiedNameSyntax { Right: GenericNameSyntax }
+                    or AliasQualifiedNameSyntax { Name: GenericNameSyntax })
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>DDD00046 on every template attribute this project declares that does not fit its parent.</summary>
+    public static IncrementalValuesProvider<DiagnosticInfo> TemplateAttributeProblems(this IncrementalGeneratorInitializationContext context)
+    {
+        var roots = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.AggregateRootTemplateAttribute,
+            predicate: static (node, _) => node is TypeDeclarationSyntax,
+            transform: static (syntaxContext, _) => DefinitionFactory.CheckTemplateAttribute(syntaxContext));
+        var entities = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.EntityTemplateAttribute,
+            predicate: static (node, _) => node is TypeDeclarationSyntax,
+            transform: static (syntaxContext, _) => DefinitionFactory.CheckTemplateAttribute(syntaxContext));
+
+        return roots.Collect().Combine(entities.Collect())
+            .SelectMany(static (all, _) => all.Left.AddRange(all.Right))
+            .Where(static diagnostic => diagnostic is not null)
+            .Select(static (diagnostic, _) => diagnostic!);
+    }
 
     /// <summary>
     /// DDD00028 for every <c>[KeyPart]</c> property on a type that is neither an entity nor an

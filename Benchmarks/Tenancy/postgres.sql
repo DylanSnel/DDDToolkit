@@ -1,9 +1,10 @@
 -- Tree containment benchmark: ltree vs text path (C collation, range) vs closure table.
--- Big tenant 1: root, 10 regions, 100 branches, 1000 teams, 2000 subteams = 3111 units, 50000 projects.
--- 49 small tenants: root, 10 regions, 100 branches = 111 units, 1000 projects each.
+-- Big tenant 1: root, 10 regions, 100 branches, 1000 teams, 2000 subteams = 3111 units, 16 projects each = 49,776 projects.
+-- 49 small tenants: root, 10 regions, 100 branches = 111 units, 9 projects each = 999 projects each.
 \timing off
 create extension if not exists ltree;
-set max_parallel_workers_per_gather = 0;
+-- for every session that measures, not only this one: the timings are of one plan, not of a parallel one
+alter database postgres set max_parallel_workers_per_gather = 0;
 
 create table unit (
   tenant_id int not null,
@@ -64,7 +65,6 @@ insert into project
 select u.tenant_id, row_number() over (partition by u.tenant_id order by u.id, g), u.id, 'p' || u.id || '-' || g
 from unit u
 cross join lateral generate_series(1, case when u.tenant_id = 1 then 16 else 9 end) g;
--- top up big tenant to ~50000 and small ones to ~1000 is not needed: counts reported below
 create index ix_project_unit on project (tenant_id, unit_id);
 
 -- closure table: (ancestor, descendant) including self

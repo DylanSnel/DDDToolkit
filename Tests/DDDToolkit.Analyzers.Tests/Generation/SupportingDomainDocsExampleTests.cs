@@ -138,6 +138,14 @@ public class SupportingDomainDocsExampleTests
                 public InvariantFailure? Check(ShopSubscription entity)
                     => !entity.IsTrial || entity.Plan == "free" ? null : "A trial is on the free plan.";
             }
+
+            public sealed class PlanIsKnown : IInvariant<SubscriptionAggregate<SubscriptionId>>
+            {
+                public string Code => "shop.subscription.plan-known";
+
+                public InvariantFailure? Check(SubscriptionAggregate<SubscriptionId> entity)
+                    => entity.Plan is "" or "free" or "pro" ? null : "A subscription is on a plan the shop sells.";
+            }
         }
 
         [InvoiceLine<InvoiceLineId>]
@@ -183,6 +191,15 @@ public class SupportingDomainDocsExampleTests
 
         subscription.GetInvariantViolations().Select(violation => (violation.Code, violation.EntityType!.Name))
             .Should().Equal([("subscription.plan", "ShopSubscription"), ("shop.subscription.trial", "ShopSubscription")]);
+    }
+
+    [Fact]
+    public void A_rule_of_the_application_about_the_parent_runs_too()
+    {
+        var emitted = Run().Emit();
+        var subscription = (IHasInvariants)emitted.New("Shop.Billing.ShopSubscription", emitted.New("Shop.Contracts.SubscriptionId", Guid.NewGuid()), "gold", false);
+
+        subscription.GetInvariantViolations().Should().ContainSingle().Which.Code.Should().Be("shop.subscription.plan-known");
     }
 
     [Fact]

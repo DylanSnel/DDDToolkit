@@ -182,7 +182,10 @@ The application declares each class once, and the rest follows:
 public sealed partial class ShopInvoiceLine : IInvoiceLineFactory<ShopInvoiceLine, InvoiceLineId> { ... }
 
 [Invoice<InvoiceId>]
-public sealed partial class ShopInvoice;
+public sealed partial class ShopInvoice
+{
+    public ShopInvoice(InvoiceId id, SubscriptionId subscriptionId) : base(id, subscriptionId) { }
+}
 ```
 
 `ShopInvoice` derives from `InvoiceAggregate<InvoiceId, SubscriptionId, ShopInvoiceLine, InvoiceLineId>`,
@@ -223,7 +226,8 @@ public abstract partial class InvoiceAggregate<TInvoiceId, TSubscriptionId, TLin
 
 An application class that does not implement the factory is reported,
 [DDD00048](diagnostics.md#ddd00048), on the class that takes it, rather than as a compile error in the
-generated code.
+generated code. A `new()` constraint is no way round the factory: the parameterless constructor the
+generator writes is never public.
 
 ## Stored with Entity Framework
 
@@ -246,11 +250,12 @@ itself is refused, [DDD00040](diagnostics.md#ddd00040): the parent has no table.
 - The template's first type argument, chosen by the application, is an entity id
   ([DDD00043](diagnostics.md#ddd00043)).
 - A template fills every type parameter of its parent exactly once, with its own type arguments and its
-  `[TemplateArgument]`s ([DDD00046](diagnostics.md#ddd00046)). That one is the package's mistake, reported
-  where the application meets it.
+  `[TemplateArgument]`s, and a parameter that takes the application's class is not constrained `new()`
+  ([DDD00046](diagnostics.md#ddd00046)). That one is reported on the attribute when the package is built.
 - A `[TemplateArgument]` finds exactly one class ([DDD00044](diagnostics.md#ddd00044),
   [DDD00045](diagnostics.md#ddd00045)), and a class it takes meets the parent's constraints
   ([DDD00048](diagnostics.md#ddd00048)).
-- A class is declared one way only: a template, or `[AggregateRoot<T>]`, or `[Entity<T>]`, never two
-  ([DDD00047](diagnostics.md#ddd00047)).
+- A class is declared one way only: a template, `[AggregateRoot<T>]`, `[Entity<T>]`, `[AggregateRootBase]`
+  or `[EntityBase]`, never two ([DDD00047](diagnostics.md#ddd00047); `[AggregateRoot<T>]` with `[Entity<T>]`
+  is [DDD00009](diagnostics.md#ddd00009)).
 - One level of parent: a parent does not derive from another parent.

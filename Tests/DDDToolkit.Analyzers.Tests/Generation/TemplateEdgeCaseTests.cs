@@ -32,6 +32,11 @@ public class TemplateEdgeCaseTests
 
         """;
 
+    /// <summary><see cref="Usings"/> for a test that declares its own package, whatever line endings the file has.</summary>
+    private static readonly string UsingsWithoutPackage = string.Join(
+        "\n",
+        Usings.Split('\n').Select(static line => line.TrimEnd('\r')).Where(static line => line != "using Sample.Tenancy;"));
+
     /// <summary>The test application without its usings and namespace, to add to <see cref="Usings"/>.</summary>
     private static readonly string ApplicationBody = string.Join(
         "\n",
@@ -61,7 +66,7 @@ public class TemplateEdgeCaseTests
     public void A_class_derived_from_a_parent_its_own_path_refuses_gets_nothing_and_no_errors(string parent, string reported)
     {
         var result = GeneratorTestHost.Create(
-            Usings.Replace("using Sample.Tenancy;\n", string.Empty) +
+            UsingsWithoutPackage +
             $$"""
             [EntityId<int>]
             public readonly partial record struct PlainId;
@@ -80,6 +85,77 @@ public class TemplateEdgeCaseTests
         Generated(result, "Thing").Should().BeFalse("the parent was refused, so there is nothing to derive from");
         ShouldHaveNoErrorsInGeneratedCode(result);
         result.ShouldNotCrash();
+    }
+
+    [Fact]
+    public void A_template_whose_parent_is_not_generic_is_reported_and_the_rest_of_the_project_still_generates()
+    {
+        var result = GeneratorTestHost.Create(
+            UsingsWithoutPackage +
+            """
+            [EntityId<int>]
+            public readonly partial record struct OrderId;
+
+            [AggregateRootBase]
+            public abstract partial class Plain;
+
+            [AggregateRootTemplate(typeof(Plain))]
+            public sealed class PlainAttribute : Attribute;
+
+            [Plain]
+            public partial class Thing;
+
+            [AggregateRoot<OrderId>]
+            public sealed partial class Order;
+            """).RunCore();
+
+        result.ShouldNotCrash();
+        result.ShouldHaveDiagnostic("DDD00042", at: "Plain");
+        result.ShouldHaveDiagnostic("DDD00046", at: "PlainAttribute");
+        Generated(result, "Order").Should().BeTrue("one broken template must not cost the rest of the project its generated code");
+    }
+
+    [Fact]
+    public void A_class_derived_from_a_parent_refused_for_its_key_parts_gets_nothing_and_no_errors()
+    {
+        var result = GeneratorTestHost.Create(
+                UsingsWithoutPackage +
+                """
+                [EntityId<int>]
+                public readonly partial record struct ThingId;
+
+                [AggregateRootBase]
+                public abstract partial class Spread<TId> where TId : IEntityId, IEquatable<TId>
+                {
+                    [KeyPart]
+                    public string A { get; private set; } = "";
+                }
+
+                [AggregateRootTemplate(typeof(Spread<>))]
+                public sealed class SpreadAttribute<TId> : Attribute;
+
+                [Spread<ThingId>]
+                public sealed partial class Thing;
+                """,
+                "Package.cs")
+            .WithSource(
+                """
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Sample;
+
+                public abstract partial class Spread<TId>
+                {
+                    [KeyPart]
+                    public string B { get; private set; } = "";
+                }
+                """,
+                "Package2.cs")
+            .RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00030", at: "Spread");
+        Generated(result, "Thing").Should().BeFalse();
+        ShouldHaveNoErrorsInGeneratedCode(result);
     }
 
     // ------------------------------------------------------------------ classes a template takes
@@ -142,7 +218,7 @@ public class TemplateEdgeCaseTests
             """,
             broken).RunCore();
 
-        result.ShouldHaveDiagnostic("DDD00046", at: "ShopTenant");
+        result.ShouldHaveDiagnostic("DDD00046", at: "TenantAggregateAttribute");
         result.ShouldNotHaveDiagnostic("DDD00044");
         result.ShouldContain("ShopOrganization.", "global::Sample.TenantId", "the tenant class is there, and its id is a good one");
     }
@@ -169,6 +245,129 @@ public class TemplateEdgeCaseTests
             .Should().Contain("'ShopUnit'").And.Contain("'TUnit'").And.Contain("IOrganizationUnitFactory<ShopUnit, UnitId>");
         Generated(result, "ShopOrganization").Should().BeFalse();
         ShouldHaveNoErrorsInGeneratedCode(result);
+    }
+
+    [Fact]
+    public void A_class_refused_while_resolving_cannot_be_taken_either()
+    {
+        var result = GeneratorTestHost.Create(
+            UsingsWithoutPackage +
+            """
+            [EntityId<int>] public readonly partial record struct UnitId;
+            [EntityId<int>] public readonly partial record struct OrgId;
+
+            public interface IUnit<TUnitId>;
+
+            [AggregateRootBase]
+            public abstract partial class RegionAggregate<TId> where TId : IEntityId, IEquatable<TId>;
+
+            [AggregateRootTemplate(typeof(RegionAggregate<>))]
+            public sealed class RegionAttribute<TId> : Attribute;
+
+            [EntityBase]
+            public abstract partial class UnitEntity<TUnitId, TRegionId> : IUnit<TUnitId>
+                where TUnitId : IEntityId, IEquatable<TUnitId>
+                where TRegionId : IEntityId, IEquatable<TRegionId>;
+
+            [EntityTemplate(typeof(UnitEntity<,>))]
+            [TemplateArgument(1, typeof(RegionAttribute<>))]
+            public sealed class UnitAttribute<TUnitId> : Attribute;
+
+            [AggregateRootBase]
+            public abstract partial class OrgAggregate<TId, TUnit, TUnitId>
+                where TId : IEntityId, IEquatable<TId>
+                where TUnit : class, IUnit<TUnitId>
+                where TUnitId : IEntityId, IEquatable<TUnitId>;
+
+            [AggregateRootTemplate(typeof(OrgAggregate<,,>))]
+            [TemplateArgument(1, typeof(UnitAttribute<>), Take = TemplateArgumentKind.Type)]
+            [TemplateArgument(2, typeof(UnitAttribute<>))]
+            public sealed class OrgAttribute<TId> : Attribute;
+
+            [Unit<UnitId>]
+            public sealed partial class ShopUnit;
+
+            [Org<OrgId>]
+            public sealed partial class ShopOrg;
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00044", at: "ShopUnit");
+        Generated(result, "ShopOrg").Should().BeFalse("the unit it takes got no base class, so the organization cannot be closed over it");
+        ShouldHaveNoErrorsInGeneratedCode(result);
+    }
+
+    [Theory]
+    [InlineData("where TPart : System.IDisposable", "IDisposable")]
+    [InlineData("where TPart : DDDToolkit.BaseTypes.AggregateRoot<PartId>", "AggregateRoot<PartId>")]
+    [InlineData("where TPart : PartEntity<OtherId>", "PartEntity<OtherId>")]
+    public void A_class_a_template_takes_is_checked_against_what_the_generator_will_make_it(string constraint, string missing)
+    {
+        var result = GeneratorTestHost.Create(
+            UsingsWithoutPackage +
+            $$"""
+            [EntityId<int>] public readonly partial record struct PartId;
+            [EntityId<int>] public readonly partial record struct OtherId;
+            [EntityId<int>] public readonly partial record struct HolderId;
+
+            [EntityBase]
+            public abstract partial class PartEntity<TId> where TId : IEntityId, IEquatable<TId>;
+
+            [EntityTemplate(typeof(PartEntity<>))]
+            public sealed class PartAttribute<TId> : Attribute;
+
+            [AggregateRootBase]
+            public abstract partial class Holder<TId, TPart> where TId : IEntityId, IEquatable<TId> {{constraint}};
+
+            [AggregateRootTemplate(typeof(Holder<,>))]
+            [TemplateArgument(1, typeof(PartAttribute<>), Take = TemplateArgumentKind.Type)]
+            public sealed class HolderAttribute<TId> : Attribute;
+
+            [Part<PartId>]
+            public sealed partial class ShopPart;
+
+            [Holder<HolderId>]
+            public sealed partial class ShopHolder;
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00048", at: "ShopHolder").GetMessage().Should().Contain(missing);
+        ShouldHaveNoErrorsInGeneratedCode(result);
+    }
+
+    [Fact]
+    public void What_the_generator_makes_a_class_meets_the_constraints_that_ask_for_it()
+    {
+        var result = GeneratorTestHost.Create(
+            UsingsWithoutPackage +
+            """
+            [EntityId<int>] public readonly partial record struct PartId;
+            [EntityId<int>] public readonly partial record struct HolderId;
+
+            [EntityBase]
+            public abstract partial class PartEntity<TId> where TId : IEntityId, IEquatable<TId>;
+
+            [EntityTemplate(typeof(PartEntity<>))]
+            public sealed class PartAttribute<TId> : Attribute;
+
+            [AggregateRootBase]
+            public abstract partial class Holder<TId, TPart, TPartId>
+                where TId : IEntityId, IEquatable<TId>
+                where TPart : PartEntity<TPartId>, DDDToolkit.Abstractions.Interfaces.IEntity<TPartId>, DDDToolkit.Interfaces.IHasInvariants
+                where TPartId : IEntityId, IEquatable<TPartId>;
+
+            [AggregateRootTemplate(typeof(Holder<,,>))]
+            [TemplateArgument(1, typeof(PartAttribute<>), Take = TemplateArgumentKind.Type)]
+            [TemplateArgument(2, typeof(PartAttribute<>))]
+            public sealed class HolderAttribute<TId> : Attribute;
+
+            [Part<PartId>]
+            public sealed partial class ShopPart;
+
+            [Holder<HolderId>]
+            public sealed partial class ShopHolder;
+            """).RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00048");
+        result.ShouldCompile();
     }
 
     [Fact]
@@ -506,6 +705,24 @@ public class TemplateEdgeCaseTests
         result.ShouldCompile();
         result.ShouldNotHaveDiagnostic("DDD00039");
         result.AllSources.Should().Contain("{exists:Units:e1}").And.Contain("{col:e1:Name}");
+    }
+
+    [Fact]
+    public void Value_on_an_entity_whose_type_cannot_be_known_is_refused_rather_than_guessed()
+    {
+        var result = WithPackage(
+            ApplicationBody +
+            """
+
+            [AccessFunction<ShopOrganization>("org.has_valued_unit")]
+            public static partial class HasValuedUnit
+            {
+                public static bool Allows(ShopOrganization organization, Caller caller) => organization.Units.Any(unit => unit.Id.Value > 10);
+            }
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00039", at: "unit.Id.Value");
+        result.AllSources.Should().NotContain("{col:e1:Id}", "a guess about what Value means would be a wrong column, not a refused rule");
     }
 
     [Fact]

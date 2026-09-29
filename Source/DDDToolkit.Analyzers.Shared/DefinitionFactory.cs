@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -507,7 +508,8 @@ internal static class DefinitionFactory
         }
 
         return CreateEntityDefinition(
-            symbol, type, marker.IsAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken, IsTheParent(marker, attributeClass)) with
+            symbol, type, marker.IsAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken,
+            template is null ? null : IsTheParent(marker, attributeClass)) with
         {
             Template = template,
             TemplateKey = attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -524,8 +526,8 @@ internal static class DefinitionFactory
 
     /// <summary>
     /// Whether a parent declared in this project is one its own path refuses, and so gets no generated part:
-    /// not a partial class, not the shape <see cref="BaseShapeProblem"/> asks for, or declared another way as
-    /// well. Its own path reports why. A parent from a referenced assembly was generated when that assembly
+    /// not a partial class, not the shape <see cref="BaseShapeProblem"/> asks for, declared another way as
+    /// well, or with its key parts spread over files. Its own path reports why. A parent from a referenced assembly was generated when that assembly
     /// was built, or the assembly would not have built.
     /// </summary>
     private static bool ParentIsRefused(INamedTypeSymbol parent, bool isAggregateRoot, CancellationToken cancellationToken)
@@ -541,8 +543,19 @@ internal static class DefinitionFactory
                    reference.GetSyntax(cancellationToken) is not TypeDeclarationSyntax declaration
                    || !declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
                || BaseShapeProblem(parent) is not null
-               || OtherDeclarations(parent, except: isAggregateRoot ? KnownTypes.AggregateRootBaseAttribute : KnownTypes.EntityBaseAttribute).Count > 0;
+               || OtherDeclarations(parent, except: isAggregateRoot ? KnownTypes.AggregateRootBaseAttribute : KnownTypes.EntityBaseAttribute).Count > 0
+               || KeyPartsSpreadOverFiles(parent);
     }
+
+    /// <summary>Whether the <c>[KeyPart]</c>s of a type are declared in more than one file, which DDD00030 refuses.</summary>
+    private static bool KeyPartsSpreadOverFiles(INamedTypeSymbol type)
+        => type.GetMembers().OfType<IPropertySymbol>()
+            .Where(static property => !property.IsStatic && !property.IsIndexer && HasAttribute(property, KnownTypes.KeyPartAttribute))
+            .Select(static property => property.Locations.FirstOrDefault(static location => location.IsInSource)?.SourceTree?.FilePath)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Skip(1)
+            .Any();
 
     /// <summary>
     /// Whether a rule nested in a template class is about the parent the class will derive from, or about
@@ -556,7 +569,9 @@ internal static class DefinitionFactory
     /// </summary>
     private static Func<ITypeSymbol, bool>? IsTheParent(TemplateMarker marker, INamedTypeSymbol attributeClass)
     {
-        if (marker.Parent is not { } parent || attributeClass.TypeArguments.Length > parent.TypeParameters.Length)
+        if (marker.Parent is not { } parent
+            || parent.TypeParameters.Length == 0
+            || attributeClass.TypeArguments.Length > parent.TypeParameters.Length)
         {
             return null;
         }
@@ -619,7 +634,13 @@ internal static class DefinitionFactory
         var problem = TemplateProblem(marker, attributeClass, out var bindings);
         if (problem is not null)
         {
-            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TemplateDoesNotFitItsParent, type.Location, attributeName, type.Name, problem));
+            // An attribute declared in this project is reported where it is declared, by CheckTemplateAttribute;
+            // one from a package is reported here, on the class that meets it.
+            if (attributeClass.OriginalDefinition.DeclaringSyntaxReferences.IsEmpty)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.TemplateDoesNotFitItsParent, type.Location, attributeName, "'" + type.Name + "'", problem));
+            }
+
             canGenerate = false;
             return null;
         }
@@ -633,6 +654,27 @@ internal static class DefinitionFactory
             ParentParameters: parent.TypeParameters.Select(static parameter => parameter.Name).ToEquatableArray(),
             Arguments: attributeClass.TypeArguments.Select(static argument => argument.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)).ToEquatableArray(),
             Bindings: bindings.OrderBy(static binding => binding.Position).ToEquatableArray());
+    }
+
+    /// <summary>
+    /// DDD00046 on a template attribute this project declares, where the package's author sees it when the
+    /// package is built, whether or not anything in the project uses the attribute yet. Null when it fits.
+    /// </summary>
+    public static DiagnosticInfo? CheckTemplateAttribute(GeneratorAttributeSyntaxContext context)
+    {
+        if (context.TargetSymbol is not INamedTypeSymbol attributeClass || EntityDeclarations.TemplateOf(attributeClass) is not { } marker)
+        {
+            return null;
+        }
+
+        return TemplateProblem(marker, attributeClass, out _) is { } problem
+            ? DiagnosticInfo.Create(
+                DiagnosticDescriptors.TemplateDoesNotFitItsParent,
+                context.TargetNode is TypeDeclarationSyntax declaration ? LocationInfo.From(declaration.Identifier) : LocationInfo.From(attributeClass),
+                AttributeNameOf(attributeClass),
+                "any class",
+                problem)
+            : null;
     }
 
     /// <summary>What is wrong with a template, phrased to follow "cannot declare 'X': ", or null when nothing is.</summary>
@@ -696,6 +738,12 @@ internal static class DefinitionFactory
 
             // TemplateArgumentKind.Type is 1; an enum argument arrives as its underlying value.
             var takeType = argument.NamedArguments.Any(static named => named.Key == "Take" && named.Value.Value is 1);
+            if (takeType && parent.TypeParameters[position].HasConstructorConstraint)
+            {
+                return "type parameter '" + parent.TypeParameters[position].Name + "' of '" + parent.Name
+                       + "' takes the application's class and is constrained new(), which that class never meets because its generated parameterless constructor is not public; create it through a static abstract factory instead";
+            }
+
             filled[position] = true;
             bindings.Add(new TemplateBinding(
                 position,
@@ -762,9 +810,38 @@ internal static class DefinitionFactory
         Compilation compilation,
         CancellationToken cancellationToken)
     {
-        var byTemplate = new Dictionary<string, List<TemplateSource>>(StringComparer.Ordinal);
-        foreach (var definition in declared)
+        // A class refused while resolving, for a source of its own that is missing, cannot be taken either,
+        // and whatever took it has to be resolved again. The set only grows, so this ends.
+        var refusedWhileResolving = new HashSet<int>();
+        while (true)
         {
+            var resolved = ResolveOnce(declared, refusedWhileResolving, compilation, cancellationToken);
+            var changed = false;
+            for (var index = 0; index < declared.Length; index++)
+            {
+                if (declared[index].CanGenerate && !resolved[index].CanGenerate && refusedWhileResolving.Add(index))
+                {
+                    changed = true;
+                }
+            }
+
+            if (!changed)
+            {
+                return resolved;
+            }
+        }
+    }
+
+    private static ImmutableArray<EntityDefinition> ResolveOnce(
+        ImmutableArray<EntityDefinition> declared,
+        HashSet<int> refusedWhileResolving,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var byTemplate = new Dictionary<string, List<TemplateSource>>(StringComparer.Ordinal);
+        for (var index = 0; index < declared.Length; index++)
+        {
+            var definition = declared[index];
             if (definition.TemplateKey is not { } key)
             {
                 continue;
@@ -780,7 +857,7 @@ internal static class DefinitionFactory
                 definition.Type.FullyQualifiedName,
                 definition.IdType,
                 definition.TemplateIdIsEntityId,
-                definition.CanGenerate,
+                definition.CanGenerate && !refusedWhileResolving.Contains(index),
                 definition.MetadataName,
                 symbol: null));
         }
@@ -893,6 +970,7 @@ internal static class DefinitionFactory
         }
 
         var package = attribute.ContainingAssembly;
+        var key = attribute.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -903,10 +981,14 @@ internal static class DefinitionFactory
                 continue;
             }
 
-            foreach (var type in TypesIn(assembly.GlobalNamespace, cancellationToken))
+            if (!TemplateClassesIn(assembly, cancellationToken).TryGetValue(key, out var classes))
             {
-                if (!type.GetAttributes().Any(candidate => SymbolEqualityComparer.Default.Equals(candidate.AttributeClass?.OriginalDefinition, attribute))
-                    || !compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+                continue;
+            }
+
+            foreach (var type in classes)
+            {
+                if (!compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
                 {
                     continue;
                 }
@@ -924,6 +1006,42 @@ internal static class DefinitionFactory
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// The classes of a referenced assembly declared with a template, by the template's open definition.
+    /// Walking every type of an assembly is the expensive part, and a referenced assembly does not change
+    /// while the project that references it is being edited: the compiler keeps the same symbol for it
+    /// across compilations, so the walk is done once per assembly and kept for as long as the symbol lives.
+    /// </summary>
+    private static readonly ConditionalWeakTable<IAssemblySymbol, Dictionary<string, List<INamedTypeSymbol>>> TemplateClassesByAssembly = new();
+
+    private static Dictionary<string, List<INamedTypeSymbol>> TemplateClassesIn(IAssemblySymbol assembly, CancellationToken cancellationToken)
+    {
+        if (TemplateClassesByAssembly.TryGetValue(assembly, out var known))
+        {
+            return known;
+        }
+
+        var found = new Dictionary<string, List<INamedTypeSymbol>>(StringComparer.Ordinal);
+        foreach (var type in TypesIn(assembly.GlobalNamespace, cancellationToken))
+        {
+            foreach (var attribute in type.GetAttributes())
+            {
+                if (attribute.AttributeClass is { } attributeClass && EntityDeclarations.TemplateOf(attributeClass) is not null)
+                {
+                    var key = attributeClass.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    if (!found.TryGetValue(key, out var classes))
+                    {
+                        found.Add(key, classes = []);
+                    }
+
+                    classes.Add(type);
+                }
+            }
+        }
+
+        return TemplateClassesByAssembly.GetValue(assembly, _ => found);
     }
 
     private static IEnumerable<INamedTypeSymbol> TypesIn(INamespaceOrTypeSymbol scope, CancellationToken cancellationToken)
@@ -1016,12 +1134,6 @@ internal static class DefinitionFactory
                 return new Unmet(argument.Name, parameter.Name, "a struct");
             }
 
-            if (parameter.HasConstructorConstraint
-                && !argument.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public))
-            {
-                return new Unmet(argument.Name, parameter.Name, "a public parameterless constructor");
-            }
-
             foreach (var constraint in parameter.ConstraintTypes)
             {
                 if (Substitute(constraint, parent.TypeParameters, arguments, compilation) is not { } expected || Satisfies(argument, expected, compilation))
@@ -1080,47 +1192,54 @@ internal static class DefinitionFactory
     }
 
     /// <summary>
-    /// Whether <paramref name="argument"/> meets a constraint, given what this compilation cannot show: the
-    /// base class and interfaces the generator writes for a class declared as an entity, and the parent a
-    /// template class will derive from.
+    /// Whether <paramref name="argument"/> meets a constraint, given what this compilation cannot show for a
+    /// class it declares: the toolkit base class the generator writes, closed over the class's own id, the
+    /// key-part list it implements, and the parent a template class will derive from, closed over the type
+    /// arguments of its attribute. A class from a referenced assembly shows all of that already.
     /// </summary>
     private static bool Satisfies(INamedTypeSymbol argument, ITypeSymbol expected, Compilation compilation)
     {
-        if (compilation is CSharpCompilation csharp
-            && csharp.ClassifyConversion(argument, expected) is { IsImplicit: true } conversion
-            && (conversion.IsIdentity || conversion.IsReference || conversion.IsBoxing))
+        if (ConvertsTo(argument, expected, compilation))
         {
             return true;
         }
 
-        if (expected is not INamedTypeSymbol named)
+        if (expected is not INamedTypeSymbol named || argument.DeclaringSyntaxReferences.IsEmpty)
         {
             return false;
         }
 
-        var scope = named.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-        if (EntityDeclarations.IsEntityOrAggregateRoot(argument)
-            && (scope.StartsWith("DDDToolkit", StringComparison.Ordinal) || scope == "System"))
+        var toolkitBase = EntityDeclarations.IsAggregateRoot(argument) ? "DDDToolkit.BaseTypes.AggregateRoot`1" : "DDDToolkit.BaseTypes.Entity`1";
+        if (EntityDeclarations.IdArgumentOf(argument) is { TypeKind: not TypeKind.Error } id
+            && compilation.GetTypeByMetadataName(toolkitBase) is { } baseDefinition
+            && ConvertsTo(baseDefinition.Construct(id), expected, compilation))
         {
-            // What the generated base class makes every entity: Entity<TId>, IEntity<TId>, IEquatable<...>.
             return true;
         }
 
-        if (EntityDeclarations.TemplateParentOf(argument) is not { } argumentParent)
+        if (named.ToDisplayString() == "DDDToolkit.Interfaces.IHasKeyParts"
+            && (HasKeyParts(argument) || EntityDeclarations.TemplateParentOf(argument) is { } keyed && HasKeyParts(keyed)))
         {
-            return false;
+            return true;
         }
 
-        for (var type = (INamedTypeSymbol?)argumentParent; type is not null; type = type.BaseType)
+        foreach (var attribute in argument.GetAttributes())
         {
-            if (SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, named.OriginalDefinition))
+            if (attribute.AttributeClass is { } attributeClass
+                && EntityDeclarations.TemplateOf(attributeClass) is { } marker
+                && IsTheParent(marker, attributeClass) is { } isTheParent)
             {
-                return true;
+                return isTheParent(named);
             }
         }
 
-        return argumentParent.AllInterfaces.Any(@interface => SymbolEqualityComparer.Default.Equals(@interface.OriginalDefinition, named.OriginalDefinition));
+        return false;
     }
+
+    private static bool ConvertsTo(ITypeSymbol from, ITypeSymbol to, Compilation compilation)
+        => compilation is CSharpCompilation csharp
+           && csharp.ClassifyConversion(from, to) is { IsImplicit: true } conversion
+           && (conversion.IsIdentity || conversion.IsReference || conversion.IsBoxing);
 
     /// <summary>The attribute as the author writes it: <c>TenantAggregateAttribute&lt;T&gt;</c> is <c>TenantAggregate</c>.</summary>
     private static string AttributeNameOf(INamedTypeSymbol attributeClass)

@@ -21,6 +21,11 @@ public class TemplateDiagnosticTests
 
         """;
 
+    /// <summary><see cref="Usings"/> for a test that declares its own package, whatever line endings the file has.</summary>
+    private static readonly string UsingsWithoutPackage = string.Join(
+        "\n",
+        Usings.Split('\n').Select(static line => line.TrimEnd('\r')).Where(static line => line != "using Sample.Tenancy;"));
+
     private static GeneratorTestHost WithPackage(string application)
         => GeneratorTestHost.Create(TemplateEntityTests.Package, "Package.cs")
             .WithSource(TemplateEntityTests.Ids, "Ids.cs")
@@ -173,8 +178,10 @@ public class TemplateDiagnosticTests
             public partial class ShopOrganization;
             """).RunCore();
 
-        result.ShouldHaveDiagnostic("DDD00046", at: "ShopOrganization").GetMessage()
+        result.ShouldHaveDiagnostic("DDD00046", at: "LooseOrganizationAttribute").GetMessage()
             .Should().Contain("'TTenantId', 'TUnit' and 'TUnitId'");
+        result.Count("DDD00046").Should().Be(1, "an attribute this project declares is reported where it is declared, and only there");
+        Generated(result, "ShopOrganization").Should().BeFalse();
         result.ShouldNotCrash();
     }
 
@@ -191,7 +198,7 @@ public class TemplateDiagnosticTests
             public partial class ShopTenant;
             """).RunCore();
 
-        result.ShouldHaveDiagnostic("DDD00046", at: "ShopTenant").GetMessage().Should().Contain("[EntityBase]");
+        result.ShouldHaveDiagnostic("DDD00046", at: "ConfusedAttribute").GetMessage().Should().Contain("[EntityBase]");
     }
 
     [Fact]
@@ -208,8 +215,50 @@ public class TemplateDiagnosticTests
             public partial class ShopTenant;
             """).RunCore();
 
-        result.ShouldHaveDiagnostic("DDD00046", at: "ShopTenant").GetMessage().Should().Contain("filled twice");
+        result.ShouldHaveDiagnostic("DDD00046", at: "TwiceAttribute").GetMessage().Should().Contain("filled twice");
     }
+
+    [Fact]
+    public void A_template_attribute_that_nothing_uses_yet_is_reported_where_it_is_declared()
+    {
+        var result = GeneratorTestHost.Create(UsingsWithoutPackage +
+            """
+            [AggregateRootBase]
+            public abstract partial class Plain<TId> where TId : IEntityId, IEquatable<TId>;
+
+            [AggregateRootTemplate(typeof(Plain<>))]
+            public sealed class PlainAttribute : Attribute;
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00046", at: "PlainAttribute").GetMessage()
+            .Should().Contain("any class").And.Contain("0 type arguments");
+    }
+
+    [Fact]
+    public void A_template_that_hands_the_applications_class_to_a_new_constraint_reports_DDD00046()
+    {
+        var result = WithPackage(
+            """
+            [EntityBase]
+            public abstract partial class PartEntity<TId> where TId : IEntityId, IEquatable<TId>;
+
+            [EntityTemplate(typeof(PartEntity<>))]
+            public sealed class PartAttribute<TId> : Attribute;
+
+            [AggregateRootBase]
+            public abstract partial class Holder<TId, TPart> where TId : IEntityId, IEquatable<TId> where TPart : class, new();
+
+            [AggregateRootTemplate(typeof(Holder<,>))]
+            [TemplateArgument(1, typeof(PartAttribute<>), Take = TemplateArgumentKind.Type)]
+            public sealed class HolderAttribute<TId> : Attribute;
+            """).RunCore();
+
+        result.ShouldHaveDiagnostic("DDD00046", at: "HolderAttribute").GetMessage()
+            .Should().Contain("new()").And.Contain("static abstract factory");
+    }
+
+    private static bool Generated(GeneratorRunOutcome result, string typeName)
+        => result.GeneratedSources.Any(source => source.HintName.StartsWith(typeName + ".", StringComparison.Ordinal));
 
     // ------------------------------------------------------------------ DDD00047
 

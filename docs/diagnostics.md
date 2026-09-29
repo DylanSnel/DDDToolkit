@@ -65,11 +65,11 @@ where it is an outbound class or a handler that is never registered.
 it is a stored row or a message read back as the wrong type, or as the wrong shape.
 [DDD00038](#ddd00038) to [DDD00041](#ddd00041) are about [row access rules](row-level-security.md#row-access-rules-written-in-c),
 where it is a rule the database enforces differently from the C# that states it, or not at all.
-[DDD00042](#ddd00042) to [DDD00048](#ddd00048) are about [supporting domains](writing-a-supporting-domain.md),
-where it is a class that extends a package's aggregate and does not become what it says it is.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
-not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
+not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
+[DDD00042](#ddd00042) to [DDD00048](#ddd00048), about [supporting domains](writing-a-supporting-domain.md),
+say what the generator could not do, and are numbered after the rest because they came later. Severity does not follow the
 split. [DDD00020](#ddd00020) and [DDD00027](#ddd00027) are errors even though they sit in the second
 group, because in both the generator drops the member rather than emitting something wrong, and a
 warning would leave you with a rule that silently never runs.
@@ -1165,7 +1165,7 @@ public static partial class MembersSeeTheirProjects
 
 ```csharp
 [AggregateRootBase]
-public partial class SubscriptionAggregate<TSubscriptionId> { ... }   // DDD00042: not abstract, id unconstrained
+public partial class SubscriptionAggregate<TSubscriptionId> { ... }   // DDD00042: not abstract
 ```
 
 A package ships a parent for the application's own classes to derive from, and the generator writes its
@@ -1184,8 +1184,11 @@ public abstract partial class SubscriptionAggregate<TSubscriptionId>
 }
 ```
 
-A class declared with the template of a parent that reports this gets nothing generated either, and no
-error of its own: the parent is the one to fix.
+A parent with more than one problem reports the first; the next is reported once that one is fixed. A
+class declared with the template of a parent that reports this gets nothing generated either, and no
+diagnostic of its own: the parent is the one to fix. The compiler errors in that class, such as a
+`base(...)` call it cannot make or a parent's property it cannot find, come from the missing base class
+and go away once the parent is fixed.
 
 ---
 
@@ -1252,12 +1255,13 @@ telling which one is meant, and picking one would bind the parent to it without 
 **A template attribute fills exactly the type parameters of its parent.**
 
 ```csharp
-[AggregateRootTemplate(typeof(InvoiceAggregate<,,,>))]               // DDD00046 on every class that uses it:
-public sealed class InvoiceAttribute<TInvoiceId> : Attribute;        // nothing fills the other three
+[AggregateRootTemplate(typeof(InvoiceAggregate<,,,>))]
+public sealed class InvoiceAttribute<TInvoiceId> : Attribute;        // DDD00046: nothing fills the other three
 ```
 
-This is a mistake in the package that declares the template attribute, reported on the class that uses
-it because that is where the generator meets it. The marker names an open parent marked
+This is a mistake in the package that declares the template attribute. It is reported on the attribute
+when the package is built, and on the class that uses it when the package was built without the
+generator, because that is where the generator then meets it. The marker names an open parent marked
 `[AggregateRootBase]` for `[AggregateRootTemplate]`, or `[EntityBase]` for `[EntityTemplate]`. The
 attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter
 after them is filled by exactly one `[TemplateArgument]`:
@@ -1269,6 +1273,12 @@ after them is filled by exactly one `[TemplateArgument]`:
 [TemplateArgument(3, typeof(InvoiceLineAttribute<>))]
 public sealed class InvoiceAttribute<TInvoiceId> : Attribute;
 ```
+
+A parameter that takes the application's class, with `Take = TemplateArgumentKind.Type`, is not
+constrained `new()`: the parameterless constructor the generator writes for that class is never public,
+so it could never meet it. A parent creates the application's class through a static abstract factory
+instead, as [Writing your own supporting domain](writing-a-supporting-domain.md#creating-the-applications-entities)
+shows.
 
 ---
 

@@ -379,11 +379,11 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor TemplateDoesNotFitItsParent = Create(
         id: "DDD00046",
         title: "A template attribute fills exactly the type parameters of its parent",
-        messageFormat: "[{0}] cannot declare '{1}': {2}",
+        messageFormat: "[{0}] cannot declare {1}: {2}",
         category: Entities,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "This is a mistake in the package that declares the template attribute, reported on the class that uses it because that is where the generator meets it. The marker names an open parent marked [AggregateRootBase] for [AggregateRootTemplate], or [EntityBase] for [EntityTemplate]. The attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter after them is filled by exactly one [TemplateArgument]. Nothing is generated for the class until the package is fixed.");
+        description: "This is a mistake in the package that declares the template attribute. It is reported on the attribute when the package is built, and on a class that uses an attribute from a package built without the generator. The marker names an open parent marked [AggregateRootBase] for [AggregateRootTemplate], or [EntityBase] for [EntityTemplate]. The attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter after them is filled by exactly one [TemplateArgument]. A parameter that takes the application's class (Take = TemplateArgumentKind.Type) is not constrained new(), because the parameterless constructor the generator writes is never public. Nothing is generated for a class declared with the attribute until the package is fixed.");
 
     public static readonly DiagnosticDescriptor ConflictingEntityDeclarations = Create(
         id: "DDD00047",
@@ -401,5 +401,5 @@ internal static class DiagnosticDescriptors
         category: Entities,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A [TemplateArgument] with Take = Type hands one of the application's own classes to the parent as a type argument, such as the class of an invoice's lines. The parent may ask more of that class than being declared with the right template: an interface it creates the class through, a constructor. A class that does not have it would make the parent closed over it a compile error inside generated code, where there is nothing to fix. Nothing is generated for the class until the class this message names meets the requirement.");
+        description: "A [TemplateArgument] with Take = Type hands one of the application's own classes to the parent as a type argument, such as the class of an invoice's lines. The parent may ask more of that class than being declared with the right template, such as an interface it creates the class through. A class that does not have it would make the parent closed over it a compile error inside generated code, where there is nothing to fix. Nothing is generated for the class until the class this message names meets the requirement.");
 }

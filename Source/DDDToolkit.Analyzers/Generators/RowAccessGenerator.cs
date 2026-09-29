@@ -292,6 +292,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         /// <summary>The entity an <c>Any</c> is looking at, by the lambda parameter that names it: its alias in the SQL.</summary>
         private readonly Dictionary<ISymbol, string> _aliases = new(SymbolEqualityComparer.Default);
 
+        /// <summary>
+        /// The lambda parameters whose type the compiler cannot give, as for the entities of a collection a
+        /// template class inherits: what <c>.Value</c> on one of their members means cannot be known, so a rule
+        /// that asks it is refused rather than translated by a guess.
+        /// </summary>
+        private readonly HashSet<ISymbol> _unbound = new(SymbolEqualityComparer.Default);
+
         public string Translate(ExpressionSyntax expression) => expression switch
         {
             ParenthesizedExpressionSyntax parenthesized => Translate(parenthesized.Expression),
@@ -418,6 +425,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             _aliases[entity] = Alias;
+            var unbound = entity.Type is null or { TypeKind: TypeKind.Error } && _unbound.Add(entity);
             try
             {
                 return "{exists:" + navigation + ":" + Alias + "}" + Translate(body) + "{/exists}";
@@ -425,6 +433,10 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             finally
             {
                 _aliases.Remove(entity);
+                if (unbound)
+                {
+                    _unbound.Remove(entity);
+                }
             }
         }
 
@@ -546,6 +558,10 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                         {
                             path.Insert(0, member.Name.Identifier.ValueText);
                         }
+                        else if (_unbound.Count > 0 && TypeOf(member.Expression) is null && IsUnboundElement(member.Expression))
+                        {
+                            return null;
+                        }
 
                         current = member.Expression;
                         continue;
@@ -598,6 +614,17 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
                 || receiver.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
                 || receiver.GetAttributes().Any(static attribute => attribute.AttributeClass?.OriginalDefinition.MetadataName is "EntityIdAttribute`1" or "SingleValueObjectAttribute`1")
                 || receiver.AllInterfaces.Any(static contract => contract.ToDisplayString() == "DDDToolkit.Abstractions.Interfaces.IEntityId");
+        }
+
+        /// <summary>Whether an expression reads a member of an entity whose type the compiler cannot give.</summary>
+        private bool IsUnboundElement(ExpressionSyntax expression)
+        {
+            while (expression is MemberAccessExpressionSyntax access)
+            {
+                expression = access.Expression;
+            }
+
+            return expression is IdentifierNameSyntax && model.GetSymbolInfo(expression).Symbol is { } symbol && _unbound.Contains(symbol);
         }
 
         /// <summary>

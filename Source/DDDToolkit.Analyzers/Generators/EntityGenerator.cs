@@ -26,6 +26,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(context.EntityBases(), static (productionContext, definition) => Execute(productionContext, definition));
         context.RegisterSourceOutput(context.AggregateRootBases(), static (productionContext, definition) => Execute(productionContext, definition));
         context.RegisterSourceOutput(context.TemplateEntities(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.TemplateAttributeProblems(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
         context.RegisterSourceOutput(context.MisplacedKeyParts(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
     }
 
