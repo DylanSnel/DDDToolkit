@@ -571,7 +571,7 @@ public sealed class InventoryProductLookup
 {
     [Lookup]
     [Internal]
-    public InventoryProduct GetProductBySku(string sku) => new(sku);
+    public InventoryProduct? GetProductBySku(string sku) => new(sku);
 }
 ```
 
