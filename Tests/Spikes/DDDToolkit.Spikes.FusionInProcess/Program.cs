@@ -121,7 +121,12 @@ switch (mode)
                 setup => setup.ClientConfigurationModifiers.Add(_ => new InMemorySourceSchemaClientConfiguration(name)));
         }
 
+        // ASP0000 warns against building a second copy of the application's services. This is not one:
+        // it is the gateway's own container, from a collection of its own, which is the case this spike
+        // tries (and what DDDToolkit.HotChocolate.Fusion.InMemory does).
+#pragma warning disable ASP0000
         gatewayProvider = gatewayServices.BuildServiceProvider();
+#pragma warning restore ASP0000
 
         // /graphql answered from the gateway's container.
         app.UseWhen(context => context.Request.Path.StartsWithSegments("/graphql"), branch =>

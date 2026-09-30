@@ -47,12 +47,16 @@ public sealed class InventoryProductType : ObjectType<InventoryProduct>
 }
 
 /// <summary>How the gateway fetches Inventory's part of a product. Internal: clients ask Catalog's.</summary>
+/// <remarks>
+/// A lookup returns a nullable type, as Fusion requires of every lookup; this one never returns null,
+/// since any SKU has Inventory's part, with or without stock.
+/// </remarks>
 [ExtendObjectType(OperationTypeNames.Query)]
 public sealed class InventoryProductLookup
 {
     [Lookup]
     [Internal]
-    public InventoryProduct GetProductBySku(string sku) => new(sku);
+    public InventoryProduct? GetProductBySku(string sku) => new(sku);
 }
 
 /// <summary>The stock of each SKU, batched.</summary>
