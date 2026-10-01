@@ -46,7 +46,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   or else the assembly name with the dots removed. A contracts project or shared kernel that declares
   identifiers has a method of its own, and the context calls each of them.
 - `DDD_Module` only names generated methods. What makes an assembly a module is
-  `[assembly: Module("Ordering")]`, below.
+  `[assembly: Module("Ordering")]`, below. The `DDDToolkit.Analyzers` package declares the property to
+  the compiler; a build that warns DDD00014 is ignoring it, see `diagnostics.md`.
 - Mapped with no configuration: identifiers and single value objects as their raw value (generated
   converters), `[Entity<T>]` children as owned types, `[ValueObject]` records inline as complex types,
   partial collections through their backing field, `Version` as the concurrency token. Do not write

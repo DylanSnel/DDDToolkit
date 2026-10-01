@@ -17,6 +17,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00010](#ddd00010) | Error | Value object properties must use protected setters |
 | [DDD00011](#ddd00011) | Error | Value object properties must use init setters |
 | [DDD00013](#ddd00013) | Error | Value objects cannot be sealed |
+| [DDD00014](#ddd00014) | Warning | The generators cannot read the project's MSBuild properties |
 | [DDD00020](#ddd00020) | Error | Generated collection properties must be get-only |
 | [DDD00021](#ddd00021) | Warning | Reference another aggregate by its id |
 | [DDD00022](#ddd00022) | Warning | Use only what another module publishes |
@@ -38,6 +39,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00038](#ddd00038) | Error | A row access rule is a static partial class with one Allows method |
 | [DDD00039](#ddd00039) | Error | A row access rule can only say what the database can check |
 | [DDD00040](#ddd00040) | Error | A row access rule guards an aggregate root |
+| [DDD00041](#ddd00041) | Error | A row access rule reads the aggregate's entities through an access function |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -62,9 +64,11 @@ That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "
 not do what you asked", and DDD00020 upwards for rules about the model. Severity does not follow the
 split. [DDD00020](#ddd00020) and [DDD00027](#ddd00027) are errors even though they sit in the second
 group, because in both the generator drops the member rather than emitting something wrong, and a
-warning would leave you with a rule that silently never runs.
+warning would leave you with a rule that silently never runs. [DDD00014](#ddd00014) is a warning in
+the first group: the generator could not read the name the project asked for, and what it generates
+under the assembly's name instead still compiles.
 
-The table above is the complete list: DDD00012 and DDD00014 to DDD00019 have never been assigned, and
+The table above is the complete list: DDD00012 and DDD00015 to DDD00019 have never been assigned, and
 the gaps are room to grow rather than something that was removed. Ids are stable and are never reused,
 so a number that is missing here is missing from the compiler too.
 
@@ -388,6 +392,55 @@ derived from, so the twin cannot exist. Remove `sealed`.
 
 Record structs are never affected: they are implicitly sealed but get no twin, since a struct cannot
 be derived from at all.
+
+---
+
+## DDD00014
+
+**The generators cannot read the project's MSBuild properties.**
+
+```xml
+<PropertyGroup>
+  <DDD_Module>Billing</DDD_Module>   <!-- ignored: the generators never see it -->
+</PropertyGroup>
+
+<ItemGroup>
+  <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.0.1"
+                    PrivateAssets="all" ExcludeAssets="build;buildTransitive" />   <!-- DDD00014 -->
+</ItemGroup>
+```
+
+A generator only sees an MSBuild property the project lists as a `CompilerVisibleProperty`. The
+`DDDToolkit.Analyzers` package lists the ones the toolkit's generators read, in a props file NuGet
+imports into every project the generators arrive in. Here the generators arrived and that file did
+not, so `DDD_Module` is ignored whatever the project sets, and `{Module}EventNames`,
+`Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` are
+named after the assembly. Before this warning existed that happened without a word.
+
+The generator can tell the two cases apart. A property that is listed and not set reaches it as an
+empty value, which means "use the assembly name" and is never reported. A property that is not listed
+does not reach it at all.
+
+Two ways it happens, and the fix for each:
+
+- **The reference leaves the package's build assets out**, with `ExcludeAssets`, or with an
+  `IncludeAssets` that names `analyzers` and not `build` and `buildTransitive`. Take the restriction
+  off. `PrivateAssets="all"` is fine: it decides what travels on to projects that reference yours, not
+  what yours gets.
+- **The generator is referenced as an assembly**, not as a package: an `<Analyzer Include="...dll" />`,
+  or a project reference with `OutputItemType="Analyzer"`. Nothing imports a props file then, so list
+  the property yourself, in the project or in `Directory.Build.props`:
+
+  ```xml
+  <ItemGroup>
+    <CompilerVisibleProperty Include="DDD_Module" />
+  </ItemGroup>
+  ```
+
+It is reported once per project and has no line to point at, since no line of your code is wrong. An
+assembly that declares `[assembly: Module]` is not reported: its `{Module}EventNames` is named after
+the module, with or without the property. See
+[DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
 
 ---
 

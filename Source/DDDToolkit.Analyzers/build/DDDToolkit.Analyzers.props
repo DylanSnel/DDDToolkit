@@ -1,0 +1,25 @@
+<Project>
+  <!--
+    The MSBuild properties the DDDToolkit generators read are declared here. A generator only sees a
+    property the project lists as a CompilerVisibleProperty, so the list ships in the package the
+    generators ship in: wherever they arrive, this file arrives with them. A new property a generator
+    reads goes in this file, not in the package of the integration that happens to use it.
+
+    Packed as build/<package id>.props for a project that references the package itself, and as
+    buildTransitive/<package id>.props for one that gets it through another package or project.
+    Directory.Build.props imports this same file for the projects in this repository, which reference
+    the generators as projects and so never restore the package.
+
+    A property that is declared and not set reaches the generator as an empty value. One that is not
+    declared does not reach it at all, which is how the generator tells that this file was not
+    imported (DDD00014).
+
+    The one property declared elsewhere is SupabaseMigrationsExport. It switches on a build step, and
+    DDDToolkit.EntityFramework.Supabase declares it in the targets file that holds that step, so the two
+    cannot arrive apart.
+  -->
+  <ItemGroup>
+    <!-- Names the generated {Module}EventNames, Add{Module}Converters, Add{Module}IntegrationEvents and Add{Module}GraphQlRuntimeBindings. -->
+    <CompilerVisibleProperty Include="DDD_Module" />
+  </ItemGroup>
+</Project>

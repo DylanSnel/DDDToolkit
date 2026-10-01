@@ -1,11 +1,22 @@
 #!/usr/bin/env bash
 #
-# Builds Examples/DDDToolkit.NugetApi against the packed packages instead of the projects.
+# Builds Examples/DDDToolkit.NugetApi and the projects in build/package-consumers against the packed
+# packages instead of the projects.
 #
-# Why this exists. A consumer gets the generators from analyzers/dotnet/cs and the DDD_Module property
-# from build/<package id>.props. Neither path is used inside this repository, where every project
-# reference is a ProjectReference and DDD_Module comes from Directory.Build.props. So the whole of the
-# packaging contract is untested by a green solution build, and it has broken before.
+# Why this exists. A consumer gets the generators from analyzers/dotnet/cs, and the MSBuild properties
+# they read, DDD_Module for one, from the props file inside the DDDToolkit.Analyzers package. Neither
+# path is used inside this repository, where every project reference is a ProjectReference and
+# Directory.Build.props imports that props file from Source. So the whole of the packaging contract is
+# untested by a green solution build, and it has broken before.
+#
+# What it proves, in order:
+#   1. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
+#      and produces what Check.cs names.
+#   2. build/package-consumers: DDD_Module reaches the generators wherever they run. With only
+#      Abstractions and Analyzers, with only the DDDToolkit package, and in a project that gets the
+#      toolkit through a project reference.
+#   3. DDD00014: a project that has the generators and not their props file is told so, and a project
+#      that has both and sets no DDD_Module is not.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -16,6 +27,7 @@ version="${1:-0.0.0-ci}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 feed="$root/nupkgs"
 consumer="$root/Examples/DDDToolkit.NugetApi"
+consumers="$root/build/package-consumers"
 packages="$root/artifacts/package-verification"
 
 # Under Git Bash the shell's own paths look like /c/Repos/..., and the .NET SDK is a Windows program
@@ -70,7 +82,8 @@ if ! grep -q '<clear />' "$consumer/NuGet.config"; then
   exit 1
 fi
 
-cat > "$work/consumer/NuGet.config" <<EOF
+write_nuget_config() {
+  cat > "$1/NuGet.config" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <packageSources>
@@ -80,6 +93,9 @@ cat > "$work/consumer/NuGet.config" <<EOF
   </packageSources>
 </configuration>
 EOF
+}
+
+write_nuget_config "$work/consumer"
 
 echo "==> Restoring from $feed_native"
 dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
@@ -89,10 +105,23 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
 # assembly packed next to the generators rather than a package of their own. Nothing in a build uses
 # them, so nothing below would notice them missing; only the IDE would, silently.
-analyzers_folder="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version/analyzers/dotnet/cs"
+analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version"
+analyzers_folder="$analyzers_package/analyzers/dotnet/cs"
 for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
     echo "FAILED: $assembly is missing from analyzers/dotnet/cs in the $analyzers_id package." >&2
+    exit 1
+  fi
+done
+
+# The props file that declares the properties the generators read, in the package that carries the
+# generators. Both folders, and under the package's id, because NuGet imports no other name: build/ for
+# a client that knows nothing of buildTransitive/, and buildTransitive/ for every project that does not
+# reference the package itself. The consumers below prove it is imported; this says which file was
+# missing or misnamed when they fail.
+for folder in build buildTransitive; do
+  if [ ! -f "$analyzers_package/$folder/$analyzers_id.props" ]; then
+    echo "FAILED: $folder/$analyzers_id.props is missing from the $analyzers_id package." >&2
     exit 1
   fi
 done
@@ -122,5 +151,109 @@ do
     exit 1
   fi
 done
+
+# ---------------------------------------------------------------------------------------------------
+# DDD_Module reaches the generators wherever they run.
+#
+# The project above references DDDToolkit itself and two packages that depend on it, which is one of
+# several ways the generators arrive. The projects in build/package-consumers are the others. Each sets
+# <DDD_Module>Billing</DDD_Module> and declares one event, so the generator writes {Module}EventNames:
+# BillingEventNames when the property reached it, and a class named after the assembly when it did not.
+# That fallback compiles, which is why it went unnoticed, and why this reads the generated file instead
+# of leaving it to the compiler.
+# ---------------------------------------------------------------------------------------------------
+
+cp -r "$consumers" "$work/package-consumers"
+find "$work/package-consumers" -type d \( -name obj -o -name bin \) -prune -exec rm -rf {} +
+write_nuget_config "$work/package-consumers"
+
+build_log="$work/build.log"
+
+# Restores and builds one consumer from nothing, with the output kept in $build_log. Every build
+# starts without obj/, because two of them build the same project with different properties.
+build_consumer() {
+  local project="$work/package-consumers/$1"
+  shift
+
+  rm -rf "$(dirname "$project")/obj" "$(dirname "$project")/bin"
+
+  dotnet build "$project" \
+    --packages "$packages_native" \
+    -c Release \
+    -p:DDDToolkitPackageVersion="$version" \
+    -p:DDDPackageIdPrefix="$prefix" \
+    -p:EmitCompilerGeneratedFiles=true \
+    -p:UseSharedCompilation=false \
+    -nodeReuse:false \
+    "$@" 2>&1 | tee "$build_log"
+}
+
+# The class the packaged generator named after the module must be $2, in the project folder $1.
+expect_event_names_class() {
+  local file
+  file="$(find "$work/package-consumers/$1/obj" -path '*generated*' -name 'EventNames.g.cs')"
+
+  if [ -z "$file" ]; then
+    echo "FAILED: $1: the generators wrote no EventNames.g.cs, so they did not run here." >&2
+    exit 1
+  fi
+
+  local actual
+  actual="$(sed -n 's/^public static class \([A-Za-z0-9_]*\).*/\1/p' "$file" | tr -d '\r')"
+
+  if [ "$actual" != "$2" ]; then
+    echo "FAILED: $1: the generated class is $actual, expected $2." >&2
+    exit 1
+  fi
+
+  echo "    $1: $actual"
+}
+
+expect_no_missing_properties_warning() {
+  if grep -q 'DDD00014' "$build_log"; then
+    echo "FAILED: $1: DDD00014 was reported, so the props file of $analyzers_id was not imported." >&2
+    exit 1
+  fi
+}
+
+echo "==> Only Abstractions and Analyzers, the way a contracts project references the toolkit"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj
+expect_no_missing_properties_warning ContractsOnly
+expect_event_names_class ContractsOnly BillingEventNames
+
+echo "==> Only the DDDToolkit package"
+build_consumer CoreOnly/Acme.Billing.csproj
+expect_no_missing_properties_warning CoreOnly
+expect_event_names_class CoreOnly BillingEventNames
+
+echo "==> The toolkit through a project reference, and no package reference of its own"
+build_consumer ThroughProjectReference/Billing/Acme.Billing.csproj
+expect_no_missing_properties_warning ThroughProjectReference/Billing
+expect_event_names_class ThroughProjectReference/Billing BillingEventNames
+
+# The other half: when the props file does not arrive, the build has to say so. This is the contracts
+# project again, with a reference that keeps the generators and excludes the package's build assets.
+# Before DDD00014 this built without a word and named the class after the assembly.
+echo "==> Without the props file: DDD00014"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:WithoutToolkitBuildAssets=true
+expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+
+if ! grep -q 'warning DDD00014' "$build_log"; then
+  echo "FAILED: the generators ran without their props file and DDD00014 was not reported." >&2
+  exit 1
+fi
+
+if ! grep -q 'docs/diagnostics#ddd00014' "$build_log"; then
+  echo "FAILED: DDD00014 was reported without the link to its entry in the docs." >&2
+  exit 1
+fi
+
+# And the case DDD00014 must stay out of: the props file is imported and the project sets no
+# DDD_Module. The property then reaches the generator as an empty value, which is not the same as not
+# reaching it. If the two were confused, every project that leaves the name to the assembly would warn.
+echo "==> With the props file and no DDD_Module: named after the assembly, and no warning"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_Module=
+expect_no_missing_properties_warning ContractsOnly
+expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
 
 echo "==> Package consumption verified"

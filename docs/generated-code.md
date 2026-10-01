@@ -35,6 +35,10 @@ The registration methods the generators write are named after the project. Choos
 </PropertyGroup>
 ```
 
+The generators' own package, `DDDToolkit.Analyzers`, is what lets them read that property, so it works
+wherever they run. [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
+has the detail, and the two ways of referencing the toolkit that are supported.
+
 </details>
 
 This page walks through that output for one small aggregate. The code comes from

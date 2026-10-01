@@ -11,7 +11,7 @@ before:
 | | Inside this repository | A consumer |
 |---|---|---|
 | Generators arrive as | `ProjectReference` with `OutputItemType="Analyzer"` | `analyzers/dotnet/cs` inside the package |
-| `DDD_Module` arrives from | `Directory.Build.props` | `build/<package id>.props` inside the `DDDToolkit` package |
+| `DDD_Module` arrives from | `Directory.Build.props`, which imports the props file from `Source` | that props file inside the `DDDToolkit.Analyzers` package, as `build/` and `buildTransitive/<package id>.props` |
 | Integration generators arrive | listed one by one in every project | transitively, as a dependency of the package above |
 
 A green solution build and eleven packages that pack prove the packages are well formed. They prove
@@ -28,8 +28,11 @@ something differently named, fails the build with a message that says which memb
 Two checks matter more than the rest:
 
 - **`AddNugetTestConverters`.** The name comes from `<DDD_Module>NugetTest</DDD_Module>`, which only
-  reaches the generator through `build/<package id>.props`. If that file stops shipping or stops
-  applying, the generator falls back to the assembly name and this stops compiling.
+  reaches the generator through the props file in the `DDDToolkit.Analyzers` package, here as a
+  dependency of `DDDToolkit`, so through `buildTransitive/`. If that file stops shipping or stops
+  applying, the generator falls back to the assembly name and this stops compiling. The projects in
+  [`build/package-consumers`](../../build/package-consumers) check the other ways the generators
+  arrive.
 - **The code fixes ship.** They sit in a separate assembly beside the generators in
   `DDDToolkit.Analyzers`, because they need a layer the compiler does not load. No build uses them, so
   the script checks the file is in the package. The build does check that the extra assembly does not

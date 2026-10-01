@@ -28,8 +28,9 @@
 
     <!--
       The property under test. A consumer sets it in the project file or in their own
-      Directory.Build.props, and it only reaches the generator through build/<package id>.props inside
-      the DDDToolkit package. Check.cs names the method it is supposed to produce, so a build failure
+      Directory.Build.props, and it only reaches the generator through the props file inside the
+      DDDToolkit.Analyzers package: buildTransitive/<package id>.props here, where that package is a
+      dependency of DDDToolkit. Check.cs names the method it is supposed to produce, so a build failure
       here means that path is broken.
     -->
     <DDD_Module>NugetTest</DDD_Module>
