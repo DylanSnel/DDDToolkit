@@ -445,9 +445,10 @@ It does not order anything. See [the guarantees](#the-guarantees-honestly).
 
 `DDDToolkit.EntityFramework.Analyzers` writes a module's integration event registration as code, one
 `Add{Module}IntegrationEvents()` for each of the three places that need it, in the namespace
-`{assembly}.IntegrationEvents`. `{Module}` is the project's `<DDD_Module>`, or its assembly name without
-the dots; [Store it with Entity Framework](getting-started.md#store-it-with-entity-framework) introduces
-the setting.
+`{assembly}.IntegrationEvents`. `{Module}` is the module the assembly declares with `[assembly: Module]`.
+A project that is no module takes it from its `<DDD_Module>`, or else from its assembly name without the
+dots; [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
+has the order.
 
 Ordering, in the example on this page, declares one domain event, `OrderPlaced`, and one outbound class,
 `PublishOrderPlaced`. Its build writes the registration for the outbox:

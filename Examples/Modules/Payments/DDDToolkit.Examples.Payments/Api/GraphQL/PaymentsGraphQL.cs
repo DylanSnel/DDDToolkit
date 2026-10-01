@@ -20,7 +20,7 @@ public static class PaymentsGraphQL
         return graphql
             .AddPaymentsGraphQlRuntimeBindings()
             // For OrderId: Payments publishes its order reference as an Order node id.
-            .AddOrderingContractsGraphQlRuntimeBindings()
+            .AddOrderingGraphQlRuntimeBindings()
             .AddType<PaymentType>()
             .AddTypeExtension<PaymentsQueries>()
             .AddDataLoader<PaymentByIdDataLoader>()

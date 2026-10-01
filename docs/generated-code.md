@@ -26,7 +26,8 @@ dotnet add package Temp.DDDToolkit.EntityFramework   # its generator: the mappin
 dotnet add package Temp.DDDToolkit.HotChocolate      # its generator: the GraphQL bindings
 ```
 
-The registration methods the generators write are named after the project. Choose the name with
+The registration methods the generators write are named after the module the project declares with
+`[assembly: Module]`. A project that is no module, like this sample, chooses the name with
 `DDD_Module`:
 
 ```xml
@@ -37,7 +38,7 @@ The registration methods the generators write are named after the project. Choos
 
 The generators' own package, `DDDToolkit.Analyzers`, is what lets them read that property, so it works
 wherever they run. [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
-has the detail, and the two ways of referencing the toolkit that are supported.
+has the order the two names are read in, and the two ways of referencing the toolkit that are supported.
 
 </details>
 
@@ -275,8 +276,9 @@ public readonly partial record struct OrderId
 }
 ```
 
-One method registers every converter in the project. It is named after the module, set with
-`<DDD_Module>Shop</DDD_Module>` in the project file, and you call it from `ConfigureConventions`:
+One method registers every converter in the project. It is named after
+`<DDD_Module>Shop</DDD_Module>` in the project file, because this sample declares no module, and you
+call it from `ConfigureConventions`:
 
 ```csharp title="ConverterExtensions.g.cs, shortened"
 public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopConverters(this Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)

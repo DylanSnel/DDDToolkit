@@ -36,10 +36,15 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(targets, static (productionContext, target) => EmitConverter(productionContext, target));
 
         var registration = targets.Collect()
-            .Combine(context.GetDDDOptions())
-            .Combine(context.AssemblyName());
+            .Combine(context.RegistrationName())
+            .Combine(context.AssemblyName())
+            .Combine(context.RegistrationsOfTheSameModule("Converters.ConverterExtensions", "Converters"));
 
-        context.RegisterSourceOutput(registration, static (productionContext, data) => EmitRegistration(productionContext, data.Left.Left, data.Left.Right, data.Right));
+        context.RegisterSourceOutput(registration, static (productionContext, data) =>
+        {
+            var (((targets, moduleName), assemblyName), sameModule) = data;
+            EmitRegistration(productionContext, targets, moduleName, assemblyName, sameModule);
+        });
     }
 
     private static void EmitConverter(SourceProductionContext context, ConverterTarget target)
@@ -75,14 +80,13 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         }
     }
 
-    private static void EmitRegistration(SourceProductionContext context, ImmutableArray<ConverterTarget> targets, DDDOptions options, string? assemblyName)
+    private static void EmitRegistration(SourceProductionContext context, ImmutableArray<ConverterTarget> targets, string moduleName, string? assemblyName, EquatableArray<string> sameModule)
     {
         if (targets.Length == 0)
         {
             return;
         }
 
-        var moduleName = options.ResolveModuleName(assemblyName);
         var writer = new CodeWriter().Header();
 
         writer.Line("namespace " + Identifiers.NamespaceFrom(assemblyName) + ".Converters;");
@@ -95,9 +99,21 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
             writer.Line("/// registered twice: <c>Properties&lt;T&gt;()</c> converts properties of the type, <c>DefaultTypeMapping&lt;T&gt;()</c>");
             writer.Line("/// converts the type where no property is involved (query parameters and constants, and the element type of");
             writer.Line("/// primitive collections such as a generated <c>IReadOnlyList&lt;T&gt;</c>, which <c>AddDDDToolkitConventions()</c> maps).");
+            if (sameModule.Count > 0)
+            {
+                writer.Line("/// It also calls the registrations of the module's other assemblies this one references, so one call covers the module.");
+            }
+
             writer.Line("/// </summary>");
             using (writer.Block("public static global::Microsoft.EntityFrameworkCore.ModelConfigurationBuilder Add" + moduleName + "Converters(this global::Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)"))
             {
+                // The other assemblies of this module name their method the same, so this one calls them: the
+                // context makes one call for the module and never imports two classes declaring one method.
+                foreach (var call in sameModule)
+                {
+                    writer.Line(call + "(modelConfigurationBuilder);");
+                }
+
                 foreach (var target in targets.OrderBy(t => t.Type.FullyQualifiedName, System.StringComparer.Ordinal))
                 {
                     EmitRegistrationLines(writer, target.Type.FullyQualifiedName, target.Type.FullyQualifiedName + "." + target.Type.Name + "Converter", target.ColumnLength);

@@ -36,7 +36,7 @@ public sealed class InventoryContext(DbContextOptions<InventoryContext> options)
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddOrderingContractsConverters();
+        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddInventoryConverters();
     }
 }

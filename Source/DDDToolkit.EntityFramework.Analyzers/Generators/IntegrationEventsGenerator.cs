@@ -54,12 +54,12 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
 
         var registration = found
             .Combine(enabled)
-            .Combine(context.GetDDDOptions())
+            .Combine(context.RegistrationName())
             .Combine(context.AssemblyName());
 
         context.RegisterSourceOutput(registration, static (production, data) =>
         {
-            var (((types, isEnabled), options), assemblyName) = data;
+            var (((types, isEnabled), moduleName), assemblyName) = data;
 
             if (!isEnabled || types.IsDefaultOrEmpty)
             {
@@ -73,7 +73,7 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
 
             production.AddSource(
                 "IntegrationEventExtensions.g.cs",
-                SourceText.From(Write(types, options.ResolveModuleName(assemblyName), assemblyName), Encoding.UTF8));
+                SourceText.From(Write(types, moduleName, assemblyName), Encoding.UTF8));
         });
     }
 

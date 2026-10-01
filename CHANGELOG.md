@@ -10,6 +10,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Changed
+
+- **The module names its generated code, and `DDD_Module` is the default beneath it.**
+  `Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` now
+  take their name from `[assembly: Module]` first, then from `DDD_Module`, then from the assembly name,
+  the order `{Module}EventNames` already had. A `Directory.Build.props` can set `DDD_Module` for a
+  whole folder, and an assembly that declares a module still gets the module's name. This renames
+  generated methods in a project that declares a module and either sets no `DDD_Module` or sets
+  another name; a project without the attribute is not affected.
+  [The names of generated registrations](docs/migrating-to-3.md#the-names-of-generated-registrations)
+  has the three cases and what to do in each.
+- Two assemblies of one module, such as a module and its contracts project, give their registrations
+  the same name. `Add{Module}Converters` and `Add{Module}GraphQlRuntimeBindings` therefore call the
+  ones of the module's other assemblies they reference, so a context or a schema makes one call for
+  the module. Another module that references only the contracts calls the contracts' method, under
+  that same name. See [Two assemblies, one module](docs/modules.md#two-assemblies-one-module).
+- The example modules no longer set `DDD_Module`. Ordering's context and schema make one generated
+  call where they made two, and the modules that store an `OrderId` call `AddOrderingConverters`.
+
 ## [3.0.1] - 2026-10-01
 
 `DDD_Module` now reaches the generators wherever they run. Nothing to change in a project that

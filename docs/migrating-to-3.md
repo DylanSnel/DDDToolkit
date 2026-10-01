@@ -675,14 +675,15 @@ An analyzer then reports where one module names another module's unpublished typ
 carry `[assembly: Module]`, so adding the attribute to one project changes nothing, and adding it to
 a second gives you a list rather than a build break.
 
-Do not confuse it with `DDD_Module`, which is unchanged and unrelated: that MSBuild property names
-the generated `Add{Module}Converters` method and describes no boundary to anybody. Adopt one project
-at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
+Do not confuse it with `DDD_Module`. That MSBuild property names the generated `Add{Module}Converters`
+method in a project that is no module, and describes no boundary to anybody. A project that does
+declare a module has its generated code named after the module, whatever the property says. Adopt one
+project at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
 
 ## From an earlier 3.0 build
 
 Skip this if you are coming from 2.0.22. Three things changed while 3.0 was being built, after some
-databases had already been created with it.
+databases had already been created with it. A fourth came after 3.0.1 and renames generated methods.
 
 ### Outbox and inbox timestamps
 
@@ -736,13 +737,34 @@ An outbox table that predates `NextAttemptAt` needs it added as a nullable colum
 which means due now, so no row has to change. See
 [Failures, retries and poison messages](event-delivery.md#failures-retries-and-poison-messages).
 
+### The names of generated registrations
+
+Up to 3.0.1, `Add{Module}Converters`, `Add{Module}IntegrationEvents` and
+`Add{Module}GraphQlRuntimeBindings` took their name from `DDD_Module` and never looked at
+`[assembly: Module]`. Now the attribute wins, as it always did for `{Module}EventNames`, and
+`DDD_Module` is the default beneath it. A project without the attribute sees no change. A project
+with it has three cases:
+
+| The project has | Before | Now | What to do |
+|---|---|---|---|
+| `[assembly: Module("Ordering")]` and `<DDD_Module>Ordering</DDD_Module>` | `AddOrderingConverters` | `AddOrderingConverters` | Nothing. The property can go. |
+| The attribute and no `DDD_Module` | `AddAcmeOrderingConverters`, after the assembly | `AddOrderingConverters` | Rename the calls. |
+| The attribute and another `DDD_Module`, such as `OrderingContracts` in a contracts project | `AddOrderingContractsConverters` | `AddOrderingConverters` | Rename the calls in other modules, and remove the call in the module itself. |
+
+The last row is the contracts project of a module. Its methods now have the same name as the
+module's, and the module's call the contracts' ones, so the module's context and schema make one call
+where they made two. Remove the `using` for the contracts' generated namespace along with the call, or
+the one that is left is ambiguous. The build points at every place: a call to a name that no longer
+exists is CS1061, and two imported classes that declare one method is CS0121.
+
 ## What did not change
 
 - `[ValueObject]` and `[SingleValueObject<T>]` keep their shape, their `Valid` twin, `ToValid()` and
   `InvalidValueObjectException`.
 - `[DontCompare]` and `[Internal]` mean what they always meant.
 - The `ColumnLength` argument of `[EntityId<T>]` still becomes `HaveMaxLength`.
-- The generated `Add{Module}Converters` keeps its name and its place, and `DDD_Module` still names it.
+- The generated `Add{Module}Converters` keeps its name and its place, and `DDD_Module` still names it
+  in every project that does not declare `[assembly: Module]`.
 - `Entity<TId>.Id` still has a `protected set`, so a 2.x constructor that wrote `Id = id` after
   `base()` still compiles. `base(id)` is the better form.
 - Validation still runs through `protected bool Validate()`, or a generated body when

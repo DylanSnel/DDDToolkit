@@ -333,7 +333,7 @@ The mistakes it prevents most often:
 - `UseDDDToolkit(services)` takes the provider from the `AddDbContext((services, options) => ...)`
   callback, not the root provider.
 - `ConfigureConventions` calls `AddDDDToolkitConventions()` and one generated `Add{Module}Converters()`
-  per assembly that declares identifiers or single value objects.
+  per module, plus one per assembly that is no module and declares identifiers or single value objects.
 - Child entities, value objects and collections need no mapping code, and child entities get no `DbSet`.
 - A module never holds another module's entity (DDD00023) or names what it does not publish (DDD00022).
 
