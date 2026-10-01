@@ -405,7 +405,7 @@ be derived from at all.
 </PropertyGroup>
 
 <ItemGroup>
-  <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.0.1"
+  <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.1.0"
                     PrivateAssets="all" ExcludeAssets="build;buildTransitive" />   <!-- DDD00014 -->
 </ItemGroup>
 ```

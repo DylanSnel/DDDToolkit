@@ -330,8 +330,8 @@ and domain events derive from base types in `DDDToolkit`, so the project that de
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.0.1" />
-    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.0.1" PrivateAssets="all" />
+    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.1.0" />
+    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.1.0" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

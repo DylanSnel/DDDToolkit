@@ -683,7 +683,7 @@ project at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) h
 ## From an earlier 3.0 build
 
 Skip this if you are coming from 2.0.22. Three things changed while 3.0 was being built, after some
-databases had already been created with it. A fourth came after 3.0.1 and renames generated methods.
+databases had already been created with it. A fourth came in 3.1.0 and renames generated methods.
 
 ### Outbox and inbox timestamps
 
