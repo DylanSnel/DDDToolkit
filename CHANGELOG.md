@@ -10,6 +10,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-01
+
+The module names its generated code. This renames generated methods in a project that declares
+`[assembly: Module]` and sets no `DDD_Module`, or sets another name;
+[The names of generated registrations](docs/migrating-to-3.md#the-names-of-generated-registrations)
+has the cases and what to do in each. A project without the attribute is not affected.
+
 ### Changed
 
 - **The module names its generated code, and `DDD_Module` is the default beneath it.**
