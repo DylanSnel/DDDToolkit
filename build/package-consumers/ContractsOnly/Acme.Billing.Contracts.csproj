@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A contracts project: the attributes and the generators, without the DDDToolkit package and its base
+    types. The generators run here, so DDD_Module has to reach them from the generators' own package.
+  -->
+  <PropertyGroup>
+    <DDD_Module>Billing</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Abstractions" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Analyzers" Version="$(DDDToolkitPackageVersion)" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    The reference that keeps the generators and leaves their props file behind, which is how a project
+    ends up with DDD_Module ignored. The script builds this once to see DDD00014 say so.
+  -->
+  <ItemGroup Condition="'$(WithoutToolkitBuildAssets)' == 'true'">
+    <PackageReference Update="$(DDDPackageIdPrefix)DDDToolkit.Analyzers" ExcludeAssets="build;buildTransitive" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    What the three consumers in this folder share. build/verify-package-consumption.sh builds them from
+    a copy outside the repository, so the repository's own Directory.Build.props, which declares
+    DDD_Module for every project below it, never reaches them: they get the property from the packages
+    or not at all.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
+    <!-- The version and the id prefix the packages were packed under. The script passes both. -->
+    <DDDToolkitPackageVersion Condition="'$(DDDToolkitPackageVersion)' == ''">0.0.0-ci</DDDToolkitPackageVersion>
+    <DDDPackageIdPrefix Condition="'$(DDDPackageIdPrefix)' == ''">Temp.</DDDPackageIdPrefix>
+  </PropertyGroup>
+</Project>

@@ -10,7 +10,7 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>DDDToolkit-Icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Version>3.0.0</Version>
+    <Version>3.0.1</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -32,9 +32,12 @@
     every package goes back to its own name, dependencies between them included, since NuGet takes
     those from the referenced project's PackageId.
 
-    Anything that names a package by its id has to follow this: the build props file in the DDDToolkit
-    package and the buildTransitive targets in DDDToolkit.EntityFramework.Supabase, which NuGet only
-    imports when they are named after the package, and build/verify-package-consumption.sh.
+    Anything that names a package by its id has to follow this:
+    - the build and buildTransitive props in DDDToolkit.Analyzers, which declare the MSBuild properties
+      the generators read;
+    - the buildTransitive targets in DDDToolkit.EntityFramework.Supabase, the export's build step;
+    - build/verify-package-consumption.sh and the consumers it builds.
+    NuGet only imports the first two when they are named after the package.
   -->
   <PropertyGroup>
     <DDDPackageIdPrefix>Temp.</DDDPackageIdPrefix>
@@ -47,11 +50,10 @@
   </ItemGroup>
 
   <!--
-    MSBuild properties the DDDToolkit generators read. NuGet consumers get these through
-    build/<package id>.props inside the DDDToolkit package; projects in this repository reference
-    the generators directly, so expose them here.
+    The MSBuild properties the DDDToolkit generators read. A NuGet consumer gets this file from the
+    DDDToolkit.Analyzers package, as build/ and buildTransitive/<package id>.props. The projects in
+    this repository reference the generators as projects and never restore that package, so the same
+    file is imported here. A property a generator reads is declared in that file, not here.
   -->
-  <ItemGroup>
-    <CompilerVisibleProperty Include="DDD_Module" />
-  </ItemGroup>
+  <Import Project="$(MSBuildThisFileDirectory)Source\DDDToolkit.Analyzers\build\DDDToolkit.Analyzers.props" />
 </Project>

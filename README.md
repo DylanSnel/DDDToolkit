@@ -113,7 +113,7 @@ are the ones this page names, so `using DDDToolkit;` stays as it is.
 | Package | Use it for |
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
-| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. |
+| `DDDToolkit.Abstractions` | The attributes and marker interfaces alone, for projects that must not reference the runtime. With `DDDToolkit.Analyzers` beside it the generators run there too, which is what a [contracts project](docs/modules.md#ddd_module-and-the-package-that-brings-it) wants. |
 | `DDDToolkit.EntityFramework` | Value converters, model conventions, domain event dispatch, invariant checks, optimistic concurrency, the outbox and the inbox. |
 | `DDDToolkit.Messaging.Postgres` | A [pgmq](https://github.com/pgmq/pgmq) sink, so the outbox enqueues inside the same Postgres transaction that writes the aggregate, and a consumer that reads a queue into the modules' inboxes. |
 | `DDDToolkit.Messaging.Wolverine` | [Wolverine](https://wolverinefx.net/) as the transport between one process's outbox and another's inbox. |

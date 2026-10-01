@@ -65,7 +65,16 @@ public sealed class GeneratorTestHost
 
     private readonly List<(string Path, string Text)> _sources = [];
     private readonly List<PortableExecutableReference> _extraReferences = [];
-    private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal);
+    /// <summary>
+    /// What the DDDToolkit.Analyzers package's props file gives every project: each property a generator
+    /// reads, declared, and empty until the project sets it. <see cref="WithoutBuildProperties"/> takes
+    /// them away again.
+    /// </summary>
+    private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal)
+    {
+        ["build_property.DDD_Module"] = string.Empty,
+    };
+
     private readonly List<string> _noWarn = [];
     private readonly List<DiagnosticAnalyzer> _analyzers = [];
     private string _assemblyName = DefaultAssemblyName;
@@ -160,6 +169,17 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithBuildProperty(string name, string value)
     {
         _globalOptions["build_property." + name] = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Compiles the way a project does when the package's props file was not imported: no
+    /// <c>build_property.*</c> key reaches the generators at all, which is not the same as a property
+    /// that is declared and left empty.
+    /// </summary>
+    public GeneratorTestHost WithoutBuildProperties()
+    {
+        _globalOptions.Clear();
         return this;
     }
 

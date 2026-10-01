@@ -29,6 +29,16 @@
     <ProjectReference Include="..\DDDToolkit.Analyzers.CodeFixes\DDDToolkit.Analyzers.CodeFixes.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
   </ItemGroup>
 
+  <!--
+    The MSBuild properties the generators read, declared in the package that carries the generators.
+    Named after the package, because that is the only build/*.props and buildTransitive/*.props NuGet
+    imports. build/ reaches a project that references this package itself; buildTransitive/ reaches one
+    that gets it through DDDToolkit, another package or a project reference.
+  -->
+  <ItemGroup>
+    <None Update="build\DDDToolkit.Analyzers.props" Pack="true" PackagePath="build/$(PackageId).props;buildTransitive/$(PackageId).props" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\DDDToolkit.Analyzers.CodeFixes\$(OutputPath)\DDDToolkit.Analyzers.CodeFixes.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />

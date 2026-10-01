@@ -10,6 +10,41 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-01
+
+`DDD_Module` now reaches the generators wherever they run. Nothing to change in a project that
+references `DDDToolkit`; a project that references only `DDDToolkit.Abstractions` and
+`DDDToolkit.Analyzers` gets the names it asked for after the update.
+
+### Fixed
+
+- `DDD_Module` was ignored in a project that had the generators without the `DDDToolkit` package. The
+  property was declared to the compiler by a props file in `DDDToolkit`, while the generators that
+  read it ship in `DDDToolkit.Analyzers`. A contracts project referencing `DDDToolkit.Abstractions`
+  and `DDDToolkit.Analyzers` therefore ran the generators without the property, and
+  `{Module}EventNames` was named after the assembly without a word. The same held for a project that
+  got the generators through another project, because the file was only in `build/`, which does not
+  travel past the project that references the package. `DDDToolkit.Analyzers` now carries the props
+  file itself, in `build/` and in `buildTransitive/`, and `DDDToolkit` no longer has one.
+  See [DDD_Module, and the package that brings it](docs/modules.md#ddd_module-and-the-package-that-brings-it).
+
+### Added
+
+- [DDD00014](docs/diagnostics.md#ddd00014), a warning for a project the generators run in while the
+  props file was not imported, for example because the reference excludes the package's build assets.
+  `DDD_Module` is ignored there, and the build now says so. A project that imports the file and sets
+  no `DDD_Module` is not reported, and neither is an assembly that declares `[assembly: Module]`.
+- `build/verify-package-consumption.sh` builds three more consumers against the packed packages: one
+  with only `DDDToolkit.Abstractions` and `DDDToolkit.Analyzers`, one with only `DDDToolkit`, and one
+  that gets the toolkit through a project reference. Each has to name its generated class after
+  `DDD_Module`. It also checks that DDD00014 appears without the props file and stays away with it.
+
+### Changed
+
+- The MSBuild properties the generators read are declared in the props file of `DDDToolkit.Analyzers`,
+  the package the generators ship in. Referencing `DDDToolkit.Abstractions` and
+  `DDDToolkit.Analyzers` without `DDDToolkit` is a supported setup.
+
 ## [3.0.0] - 2026-09-27
 
 A breaking release. Upgrading from 2.0.22 needs code changes in every project that raises a domain

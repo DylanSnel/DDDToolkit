@@ -26,6 +26,10 @@ namespace DDDToolkit.Analyzers;
 ///   <item><description>DDD00037: two different names would give one constant, which code could then use for the wrong event.</description></item>
 /// </list>
 /// <para>
+/// It is also the pass that reads <c>DDD_Module</c>, so it reports DDD00014 when the property was never
+/// declared to the compiler, and the name it would have given the class is ignored.
+/// </para>
+/// <para>
 /// Only this assembly's own events are named here. A contract another module publishes gets its constant
 /// in that module, and two assemblies of one module that do not reference each other are only compared at
 /// start-up, by the registries.
@@ -91,6 +95,25 @@ public sealed class EventNamesGenerator : IIncrementalGenerator
             {
                 production.AddSource("EventNames.g.cs", SourceText.From(source, Encoding.UTF8));
             }
+        });
+
+        // DDD00014. Outside a module the class above is named after DDD_Module. A property that never
+        // reached the compiler is not the same as one the project did not set: the props file that lists
+        // it was not imported, and whatever the project sets is ignored. Said once per compilation,
+        // events or no events, because the setup is what is wrong.
+        var declared = module
+            .Combine(context.GetDDDOptions())
+            .Combine(context.AssemblyName());
+
+        context.RegisterSourceOutput(declared, static (production, data) =>
+        {
+            var ((moduleName, options), assemblyName) = data;
+            if (options.PropertiesDeclared || moduleName is not null)
+            {
+                return;
+            }
+
+            DiagnosticInfo.Create(DiagnosticDescriptors.BuildPropertiesNotDeclared, location: null, assemblyName ?? "This assembly").Report(production);
         });
     }
 

@@ -12,14 +12,13 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </ItemGroup>
 
-  <!-- Named after the package, because that is the only build/*.props NuGet imports into a consumer. -->
-  <ItemGroup>
-    <None Update="DDDToolkit.props" Pack="true" PackagePath="build/$(PackageId).props" />
-  </ItemGroup>
-
   <ItemGroup>
     <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
-    <!-- Referenced so the NuGet package depends on the generator package; the assembly is not used at run time. -->
+    <!--
+      Referenced so the NuGet package depends on the generator package; the assembly is not used at run
+      time. The MSBuild properties the generators read are declared by that package, in its
+      buildTransitive props, so they reach a consumer of this one without a props file here.
+    -->
     <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" PrivateAssets="contentfiles;build" />
   </ItemGroup>
 

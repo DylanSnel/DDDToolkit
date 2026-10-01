@@ -109,9 +109,10 @@ internal static class Check
 
     /// <summary>
     /// DDDToolkit.EntityFramework.Analyzers, and the whole point of this project: the registration is
-    /// named from the DDD_Module property, which only reaches the generator through
-    /// build/&lt;package id&gt;.props inside the DDDToolkit package. If that file stops shipping or stops
-    /// applying, the generator falls back to the assembly name and this line stops compiling.
+    /// named from the DDD_Module property, which only reaches the generator through the props file in
+    /// the DDDToolkit.Analyzers package, buildTransitive/&lt;package id&gt;.props for this project. If that
+    /// file stops shipping or stops applying, the generator falls back to the assembly name and this
+    /// line stops compiling.
     /// </summary>
     public static ModelConfigurationBuilder ModuleNamedRegistration(ModelConfigurationBuilder builder)
         => Converters.ConverterExtensions.AddNugetTestConverters(builder);

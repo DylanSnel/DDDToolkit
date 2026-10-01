@@ -359,6 +359,10 @@ csharp_style_prefer_top_level_statements = true:silent
 # Advice rather than a refusal: the identifier is generated either way.
 # dotnet_diagnostic.DDD00004.severity = warning # entity id structs should be readonly
 
+# The generators run and DDD_Module never reached them, so what they generate is named after the
+# assembly whatever the project sets. A warning because that still compiles.
+# dotnet_diagnostic.DDD00014.severity = warning # the generators cannot read the project's MSBuild properties
+
 # Rules about the model, not the declaration. Warnings by default so adopting the toolkit does not
 # break an existing codebase on upgrade. A team that means these rules should raise them to error,
 # which is the point of them being here:

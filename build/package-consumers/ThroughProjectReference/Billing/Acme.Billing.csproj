@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    No package reference at all: the toolkit comes in through Acme.Shared. NuGet hands a project the
+    analyzers of the packages its project references depend on, so the generators run here too, and
+    DDD_Module has to have travelled just as far.
+  -->
+  <PropertyGroup>
+    <DDD_Module>Billing</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\Acme.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

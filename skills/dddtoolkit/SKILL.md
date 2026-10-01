@@ -33,6 +33,10 @@ Three consequences for how you work:
   For now 3.x is published under the same names with `Temp.` in front (`Temp.DDDToolkit`,
   `Temp.DDDToolkit.EntityFramework`, ...); a plain `DDDToolkit` reference is 2.0.22, which these
   instructions do not describe. Namespaces are `DDDToolkit.*` either way. Add packages by the prefixed id.
+- A contracts project that must carry no runtime references `DDDToolkit.Abstractions` and
+  `DDDToolkit.Analyzers` without `DDDToolkit`. That is supported: the generators run there, and the
+  Analyzers package is what makes `<DDD_Module>` visible to them. Do not restrict that reference with
+  `ExcludeAssets` or `IncludeAssets="analyzers"` (DDD00014).
 - Follow the layout the solution already has for aggregates, invariants, events and handlers.
 - When unsure what the generator produced, read it: go to definition on a generated member, or set
   `<EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>` and look under `obj/` after a build.

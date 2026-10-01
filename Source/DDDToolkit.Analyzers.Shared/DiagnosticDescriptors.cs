@@ -142,6 +142,15 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "The generator derives an always-valid twin from every value object record. Remove 'sealed'.");
 
+    public static readonly DiagnosticDescriptor BuildPropertiesNotDeclared = Create(
+        id: "DDD00014",
+        title: "The generators cannot read the project's MSBuild properties",
+        messageFormat: "'{0}' is compiled without the DDDToolkit build properties, so DDD_Module is ignored and generated names fall back to the assembly name; let the build assets of the DDDToolkit.Analyzers package through, or add <CompilerVisibleProperty Include=\"DDD_Module\" /> to the project",
+        category: Usage,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A source generator only sees an MSBuild property the project lists as a CompilerVisibleProperty. The DDDToolkit.Analyzers package lists them in its build and buildTransitive props, for every project its generators arrive in. A property that is listed and not set reaches the generator as an empty value; here it did not reach it at all, so that file was not imported: the reference excludes the package's build assets, or the generator was added as a bare analyzer assembly. Whatever the project sets is then ignored, and {Module}EventNames, Add{Module}Converters, Add{Module}IntegrationEvents and Add{Module}GraphQlRuntimeBindings are named after the assembly. Not reported for an assembly that declares [assembly: Module], whose {Module}EventNames is named after the module.");
+
     public static readonly DiagnosticDescriptor CollectionPropertyMustBeGetOnly = Create(
         id: "DDD00020",
         title: "Generated collection properties must be get-only",

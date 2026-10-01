@@ -17,6 +17,7 @@ DDD00009 | DDDToolkit.Entities | Error | A type is either an entity or an aggreg
 DDD00010 | DDDToolkit.ValueObjects | Error | Value object properties must use protected setters
 DDD00011 | DDDToolkit.ValueObjects | Error | Value object properties must use init setters
 DDD00013 | DDDToolkit.ValueObjects | Error | Value objects cannot be sealed
+DDD00014 | DDDToolkit.Usage | Warning | The generators cannot read the project's MSBuild properties
 DDD00020 | DDDToolkit.Entities | Error | Generated collection properties must be get-only
 DDD00021 | DDDToolkit.Entities | Warning | Reference another aggregate by its id
 DDD00022 | DDDToolkit.Modules | Warning | Use only what another module publishes

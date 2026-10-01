@@ -242,6 +242,98 @@ a service, so its GraphQL does not change on that day either. See
 [One schema over a modular monolith](graphql.md#one-schema-over-a-modular-monolith), and
 `Examples/ModularMonolith.*` for five modules doing it.
 
+## DDD_Module, and the package that brings it
+
+`[assembly: Module]` is the boundary. A project has a second name, `DDD_Module`, and it is only for
+the code the generators write: `{Module}EventNames`, `Add{Module}Converters`,
+`Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings`.
+
+```xml
+<PropertyGroup>
+  <DDD_Module>Ordering</DDD_Module>
+</PropertyGroup>
+```
+
+Without it they are named after the assembly, with the dots removed. One exception: in a project that
+declares `[assembly: Module]`, `{Module}EventNames` takes the module's name, whatever the property
+says.
+
+`DDD_Module` is an MSBuild property, and a generator can only read an MSBuild property the project
+declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declares it.** The package
+that holds the generators also holds a props file declaring the properties they read, and NuGet imports
+that file into each project the generators run in: one that references the package itself, one that
+gets it as a dependency of `DDDToolkit`, and one that gets it through a project reference. There is
+nothing to add to a project file.
+
+```mermaid
+flowchart LR
+    Host["a project referencing the module"] --> Module["the module's project"]
+    Module --> Core["DDDToolkit"]
+    Core --> Analyzers
+    Contracts["its contracts project"] --> Abstractions["DDDToolkit.Abstractions"]
+    Contracts --> Analyzers
+    subgraph Analyzers ["DDDToolkit.Analyzers"]
+        direction TB
+        Generators["the generators"] ~~~ Props["props: declares DDD_Module"]
+    end
+```
+
+So there are two supported ways to reference the toolkit, and a module with a
+[contracts project](module-contracts.md#a-project-of-its-own) uses both:
+
+| Project | References | Gets |
+|---|---|---|
+| The module | `DDDToolkit`, and the integrations it uses | The base types, and through them the attributes and the generators |
+| Its contracts | `DDDToolkit.Abstractions` and `DDDToolkit.Analyzers`, without `DDDToolkit` | The attributes and the generators, and nothing that runs |
+
+The second row is for a project that should carry no runtime. A record struct identifier, a read model
+and an integration event compile against the attributes alone. Entities, aggregate roots, value objects
+and domain events derive from base types in `DDDToolkit`, so the project that declares those references
+`DDDToolkit`.
+
+<details>
+<summary>Show the code: a contracts project without the runtime</summary>
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <DDD_Module>Billing</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.0.1" />
+    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.0.1" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
+```
+
+```csharp
+[EntityId<Guid>("INV")]
+public readonly partial record struct InvoiceId;
+
+public sealed record InvoiceSummary(InvoiceId Id, decimal Total);
+
+[IntegrationEvent]
+public sealed record InvoiceSent(InvoiceId InvoiceId);
+```
+
+*[`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/BillingContracts.cs)*
+
+The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module.
+
+</details>
+
+Both rows are built against the packed packages on every pull request, together with a project that
+gets the toolkit only through a project reference, and the build fails if `DDD_Module` did not name
+the generated class in any of them.
+
+If the generators do arrive and the props file does not, because a reference excludes the package's
+build assets, `DDD_Module` is ignored. The build says so with [DDD00014](diagnostics.md#ddd00014)
+rather than naming everything after the assembly without a word.
+
 ## Adopting this on an existing codebase
 
 1. Pick the module with the fewest things pointing at it and add `[assembly: Module]` to it. Nothing
@@ -276,7 +368,8 @@ not for you*.
 `Add{Module}Converters` and `Add{Module}GraphQlRuntimeBindings` methods, and it is an MSBuild property,
 which means it reaches the compiler of the project that sets it and travels no further. The compiler
 building `Ordering` cannot read what `Billing.csproj` set. Leave `DDD_Module` where it is; it is a
-naming knob, not a boundary.
+naming knob, not a boundary. What it names, and how it reaches the generators, is
+[above](#ddd_module-and-the-package-that-brings-it).
 
 ## Related
 

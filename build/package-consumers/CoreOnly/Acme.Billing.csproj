@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Only the DDDToolkit package. The generators are a dependency of it, so their props file is not a
+    direct reference's build/ folder here: it has to arrive through buildTransitive/.
+  -->
+  <PropertyGroup>
+    <DDD_Module>Billing</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit" Version="$(DDDToolkitPackageVersion)" />
+  </ItemGroup>
+
+</Project>

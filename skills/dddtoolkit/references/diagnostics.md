@@ -17,7 +17,7 @@ How to work with them:
 - Most ids are reported by a generator: `#pragma warning disable` and `[SuppressMessage]` do not reach
   them, only `<NoWarn>` in the project file does, for the whole project. DDD00022, DDD00023, DDD00024
   and DDD00032 come from analyzers, so pragmas work on those.
-- DDD00012 and DDD00014 to DDD00019 have never been assigned; an id missing below does not exist.
+- DDD00012 and DDD00015 to DDD00019 have never been assigned; an id missing below does not exist.
 
 ## DDD00001
 
@@ -83,6 +83,18 @@ Error. A property declared on a `[ValueObject]` with a `set` rather than an `ini
 
 Error. A `sealed` value object record, so its always-valid twin `Valid<Name>` cannot derive from it.
 Remove `sealed`. The same applies to a record class id.
+
+## DDD00014
+
+Warning, once per project and without a line number. The generators run here but the props file of the
+`DDDToolkit.Analyzers` package was not imported, so `<DDD_Module>` is ignored and `{Module}EventNames`,
+`Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings` are
+named after the assembly. Look at how the project references the generators. A `PackageReference` with
+`ExcludeAssets`, or with an `IncludeAssets` that leaves out `build` and `buildTransitive`: remove the
+restriction (`PrivateAssets="all"` is fine). An `<Analyzer Include="...dll" />` or a project reference
+with `OutputItemType="Analyzer"`: add `<ItemGroup><CompilerVisibleProperty Include="DDD_Module" /></ItemGroup>`
+to the project or to `Directory.Build.props`. Do not rename the call sites to the assembly-named
+methods. Not reported for an assembly with `[assembly: Module]`.
 
 ## DDD00020
 
