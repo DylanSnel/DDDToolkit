@@ -372,7 +372,11 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                 }
             }
 
-            """;
+            """
+            // The literal has the line endings this file was checked out with, which is CRLF on Windows with
+            // core.autocrlf, while the entries are joined with "\n". Everything is written with "\n", as the
+            // other generators do, so the generated file is the same whichever machine built the generator.
+            .Replace("\r\n", "\n");
     }
 
     private static string Literal(string value)

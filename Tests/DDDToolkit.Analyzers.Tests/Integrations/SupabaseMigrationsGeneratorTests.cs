@@ -196,4 +196,14 @@ public sealed class SupabaseMigrationsGeneratorTests
         reported.GetMessage().Should().Contain("Shop.Ordering.OrderingContextFactory").And.Contain("'Shop.Host' cannot see it; make it public");
         result.ShouldNotContain("SupabaseMigrationSources", "OrderingContextFactory");
     }
+
+    [Fact]
+    public void The_list_is_written_with_line_feeds_whatever_the_generators_own_source_was_checked_out_with()
+    {
+        var result = HostReferencing(OrderingModule).Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.Source("SupabaseMigrationSources").Should().NotContain(
+            "\r",
+            "a checkout with core.autocrlf gives the generator's source CRLF, and the file it writes must not differ from the one a Linux build writes");
+    }
 }
