@@ -339,4 +339,67 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is visible. A policy on the aggregate's table that read those tables would therefore ask itself, and Postgres stops the query with infinite recursion. An [AccessFunction] runs as its owner, SECURITY DEFINER, so it reads the entities without their policies; the rule calls it with the row's id, and the question is written once however many rules ask it.");
+
+    public static readonly DiagnosticDescriptor EntityBaseShape = Create(
+        id: "DDD00042",
+        title: "A parent for entities is an abstract generic class whose first type parameter is the id",
+        messageFormat: "'{0}' is marked [{1}] and needs {2}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A package ships a parent for the application's own classes to derive from, and the generator writes its base class the way it does for any aggregate root or entity: AggregateRoot<TId> or Entity<TId>, closed over the parent's first type parameter. So the parent is an abstract partial class, since only what derives from it is ever created; it has type parameters, the id first; it is not nested in a generic type; and its id parameter is constrained with where TId : IEntityId, IEquatable<TId>, which is what the toolkit's base classes require. Nothing is generated for the parent until it has that shape.");
+
+    public static readonly DiagnosticDescriptor TemplateIdIsNotAnEntityId = Create(
+        id: "DDD00043",
+        title: "A template's first type argument is an entity id",
+        messageFormat: "'{0}' is declared with [{1}<{2}>], but '{2}' is not an entity id; declare it with [EntityId<T>], in the contracts project when other modules refer to it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A template attribute such as [Subscription<SubscriptionId>] names the id of the class it declares, and that class derives from a parent closed over the id. Unlike [AggregateRoot<Guid>], a template never generates an id from a raw value: the id belongs to the application, which declares it where every module that refers to it can see it. Nothing is generated for the class until its id is an [EntityId<T>].");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentSourceMissing = Create(
+        id: "DDD00044",
+        title: "A template takes a type from a class nobody declares",
+        messageFormat: "'{0}' is declared with [{1}], whose parent takes {2} from the class declared with [{3}], and neither this project nor a project it references declares one; declare one, once",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Some parents need more than the id of the class that derives from them: the parent of an invoice needs the subscription's id and the class of its lines. The template attribute takes those from the one class declared with the template it names, in this project or, when this project declares none, in a project it references, so each is declared once and every class agrees on it. Nothing is generated for the class until one of them declares the class this message names.");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentSourceAmbiguous = Create(
+        id: "DDD00045",
+        title: "A template takes a type from a class declared more than once",
+        messageFormat: "'{0}' is declared with [{1}], whose parent takes {2} from the class declared with [{3}], and there are several: {4}; keep one",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The template attribute takes a type argument of its parent from the one class declared with another template, such as the subscription's id from the class declared with [Subscription<TId>]. With two such classes, in this project or in the projects it references when it declares none itself, there is no telling which one is meant, and picking one would bind the parent to it without a word. Nothing is generated for the class until one is left.");
+
+    public static readonly DiagnosticDescriptor TemplateDoesNotFitItsParent = Create(
+        id: "DDD00046",
+        title: "A template attribute fills exactly the type parameters of its parent",
+        messageFormat: "[{0}] cannot declare {1}: {2}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "This is a mistake in the package that declares the template attribute. It is reported on the attribute when the package is built, and on a class that uses an attribute from a package built without the generator. The marker names an open parent marked [AggregateRootBase] for [AggregateRootTemplate], or [EntityBase] for [EntityTemplate]. The attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter after them is filled by exactly one [TemplateArgument]. A parameter that takes the application's class (Take = TemplateArgumentKind.Type) is not constrained new(), because the parameterless constructor the generator writes is never public. Nothing is generated for a class declared with the attribute until the package is fixed.");
+
+    public static readonly DiagnosticDescriptor ConflictingEntityDeclarations = Create(
+        id: "DDD00047",
+        title: "A class is declared an entity or aggregate root once",
+        messageFormat: "'{0}' is declared with {1}; keep the one that describes it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[AggregateRoot<TId>], [Entity<TId>], [AggregateRootBase], [EntityBase] and a package's template attributes each give the class a base class, and a class has only one. Nothing is generated for the class until one of them is left. [AggregateRoot<TId>] together with [Entity<TId>] is DDD00009.");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentMissesConstraint = Create(
+        id: "DDD00048",
+        title: "A class a template takes meets its parent's constraints",
+        messageFormat: "'{0}' is declared with [{1}], whose parent takes '{2}' as '{3}', which requires {4}; '{2}' does not meet it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A [TemplateArgument] with Take = Type hands one of the application's own classes to the parent as a type argument, such as the class of an invoice's lines. The parent may ask more of that class than being declared with the right template, such as an interface it creates the class through. A class that does not have it would make the parent closed over it a compile error inside generated code, where there is nothing to fix. Nothing is generated for the class until the class this message names meets the requirement.");
 }

@@ -65,6 +65,8 @@ public partial class Order { }
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
+| [Tenancy](docs/tenancy.md) | The first supporting domain: tenants, the organization tree, seats and roles, and who may do what where |
+| [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |
 | [Localization](docs/localization.md) | Validation errors and invariant violations in the reader's language, looked up by code |

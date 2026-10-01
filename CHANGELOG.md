@@ -10,6 +10,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ## [Unreleased]
 
+### Added
+
+- **Supporting domains.** A package can ship an abstract generic parent for aggregate roots
+  (`[AggregateRootBase]`) or child entities (`[EntityBase]`), and an attribute of its own, marked
+  `[AggregateRootTemplate]` or `[EntityTemplate]`, that an application declares its class with:
+  `[Subscription<SubscriptionId>] partial class ShopSubscription`. The generator writes the base class,
+  closed over the application's own ids, and the parent's invariants, seam and child entities are checked
+  together with the class's own, parent first, so an application extends a package's aggregate without
+  losing its rules. `[TemplateArgument]` fills a further type parameter of the parent from the class
+  declared with another template, in the project or in one it references, such as the subscription's id
+  or the application's own invoice line class. A parent's `[KeyPart]`s join the key in front of the
+  class's own. See [Writing your own supporting domain](docs/writing-a-supporting-domain.md). The
+  toolkit's own supporting domains ship as `DDDToolkit.Supporting.*`, starting with
+  [Tenancy](docs/tenancy.md), which is being built.
+- DDD00042 to DDD00048 report a parent or a template that cannot be generated, a template over a raw
+  value instead of an id, a template argument no class or several classes provide, a class a template
+  takes that does not meet the parent's constraints, and a class declared more than one way.
+
+### Changed
+
+- The parameterless constructor generated for a `sealed` entity or aggregate root is `private` instead
+  of `protected`. A protected member of a sealed class is warning CS0628, in generated code, where a
+  project building with `TreatWarningsAsErrors` could not get rid of it. Entity Framework uses either.
+
 ## [3.0.0] - 2026-09-27
 
 A breaking release. Upgrading from 2.0.22 needs code changes in every project that raises a domain

@@ -352,6 +352,8 @@ this skill:
 | In-process dispatch versus the outbox | `event-delivery` |
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
+| Tenants, the organization tree, seats and roles | `tenancy` |
+| Extending a supporting domain's aggregate, or writing one (`[AggregateRootBase]`, templates) | `writing-a-supporting-domain` |
 | GraphQL with HotChocolate, Fusion across modules | `graphql` |
 | Value object rules as FluentValidation validators | `fluent-validation` |
 | Failures in the reader's language | `localization` |

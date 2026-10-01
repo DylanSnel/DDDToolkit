@@ -139,10 +139,9 @@ internal static class ModuleBoundary
         return false;
     }
 
-    /// <summary>Whether the type carries <c>[Entity&lt;T&gt;]</c> or <c>[AggregateRoot&lt;T&gt;]</c>.</summary>
+    /// <summary>Whether the type is declared an entity or an aggregate root, in any of the ways <see cref="EntityDeclarations"/> knows.</summary>
     public static bool IsEntity(INamedTypeSymbol type)
-        => DefinitionFactory.HasAttribute(type, KnownTypes.EntityAttribute)
-           || DefinitionFactory.HasAttribute(type, KnownTypes.AggregateRootAttribute);
+        => EntityDeclarations.IsEntityOrAggregateRoot(type);
 
     /// <summary>
     /// The first location of a symbol in code somebody wrote, or null when it is only declared in

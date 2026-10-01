@@ -25,6 +25,21 @@ internal static class KnownTypes
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
     public const string KeyPartAttribute = AttributesNamespace + ".KeyPartAttribute";
 
+    /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
+    public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";
+
+    /// <summary>An abstract generic parent a package ships for child entities declared elsewhere: <c>[EntityBase]</c>.</summary>
+    public const string EntityBaseAttribute = AttributesNamespace + ".EntityBaseAttribute";
+
+    /// <summary>On a package's attribute class: a class declared with it is an aggregate root deriving from the named parent.</summary>
+    public const string AggregateRootTemplateAttribute = AttributesNamespace + ".AggregateRootTemplateAttribute";
+
+    /// <summary>On a package's attribute class: a class declared with it is a child entity deriving from the named parent.</summary>
+    public const string EntityTemplateAttribute = AttributesNamespace + ".EntityTemplateAttribute";
+
+    /// <summary>On a template attribute class: fills one type parameter of the parent from another template class of the project.</summary>
+    public const string TemplateArgumentAttribute = AttributesNamespace + ".TemplateArgumentAttribute";
+
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
 
