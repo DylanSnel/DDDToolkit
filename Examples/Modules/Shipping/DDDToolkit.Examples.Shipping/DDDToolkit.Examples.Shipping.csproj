@@ -4,8 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- Names the generated AddShippingConverters method. See docs/getting-started.md. -->
-    <DDD_Module>Shipping</DDD_Module>
     <!--
       The boundary rules are warnings by default, so that a codebase adopting modules can see the list
       before it has to fix it. This example's list is empty, so it holds the line here instead.

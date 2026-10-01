@@ -438,8 +438,8 @@ Two ways it happens, and the fix for each:
   ```
 
 It is reported once per project and has no line to point at, since no line of your code is wrong. An
-assembly that declares `[assembly: Module]` is not reported: its `{Module}EventNames` is named after
-the module, with or without the property. See
+assembly that declares `[assembly: Module]` is not reported: the module names its generated code, and
+the property is not read. See
 [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
 
 ---

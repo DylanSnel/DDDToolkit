@@ -25,6 +25,11 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// module of an assembly it only sees through metadata. <c>DDD_Module</c> reaches the compiler of the
 /// project that sets it and no further, so it can name a generated method but it cannot describe a
 /// boundary to anybody else.
+/// <para>
+/// The module's name is also the name in the code the generators write for the assembly:
+/// <c>{Module}EventNames</c>, <c>Add{Module}Converters</c> and the other registrations. It wins over
+/// <c>DDD_Module</c>, which names them in a project that declares no module.
+/// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
 public sealed class ModuleAttribute : Attribute

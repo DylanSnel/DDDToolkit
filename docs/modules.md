@@ -244,22 +244,50 @@ a service, so its GraphQL does not change on that day either. See
 
 ## DDD_Module, and the package that brings it
 
-`[assembly: Module]` is the boundary. A project has a second name, `DDD_Module`, and it is only for
-the code the generators write: `{Module}EventNames`, `Add{Module}Converters`,
-`Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings`.
+A module's name is also the name in the code the generators write: `{Module}EventNames`,
+`Add{Module}Converters`, `Add{Module}IntegrationEvents` and `Add{Module}GraphQlRuntimeBindings`. The
+generators look for that name in three places, and the first one that answers wins:
+
+| Where | Who it is for |
+|---|---|
+| `[assembly: Module("Ordering")]` | A module. It always wins. |
+| `<DDD_Module>Shop</DDD_Module>` | A project that is no module: a shared kernel, an application without modules, a test project. |
+| The assembly name, with the dots removed | A project with neither. |
+
+`DDD_Module` is an MSBuild property, so a `Directory.Build.props` can set it for every project in a
+folder. The attribute is what one assembly says about itself, which is why it wins: a module below
+that folder still gets its own name.
 
 ```xml
 <PropertyGroup>
-  <DDD_Module>Ordering</DDD_Module>
+  <DDD_Module>Shop</DDD_Module>
 </PropertyGroup>
 ```
 
-Without it they are named after the assembly, with the dots removed. One exception: in a project that
-declares `[assembly: Module]`, `{Module}EventNames` takes the module's name, whatever the property
-says.
+### Two assemblies, one module
 
-`DDD_Module` is an MSBuild property, and a generator can only read an MSBuild property the project
-declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declares it.** The package
+Ordering and its contracts project both declare `[assembly: Module("Ordering")]`, so both generate
+`AddOrderingConverters` and `AddOrderingGraphQlRuntimeBindings`. They do not collide. An assembly's
+method calls the ones of the module's other assemblies it references, so one call registers the module:
+
+```csharp
+// in Ordering's context: OrderLineId from Ordering, and OrderId from Ordering.Contracts with it
+configurationBuilder.AddOrderingConverters();
+
+// in Shipping's context, which references only Ordering.Contracts and stores an OrderId
+configurationBuilder.AddOrderingConverters();
+configurationBuilder.AddShippingConverters();
+```
+
+Import the generated namespace of the assembly you are in, or of the one assembly of another module
+you reference, and the name is never ambiguous. `Add{Module}IntegrationEvents` is the one method that
+does not call the others. A contracts project has none to call; if two assemblies of one module both
+generate it, call the second as an ordinary static method.
+
+### How the property reaches the generators
+
+A generator can only read an MSBuild property the project
+declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declares `DDD_Module`.** The package
 that holds the generators also holds a props file declaring the properties they read, and NuGet imports
 that file into each project the generators run in: one that references the package itself, one that
 gets it as a dependency of `DDDToolkit`, and one that gets it through a project reference. There is
@@ -299,7 +327,6 @@ and domain events derive from base types in `DDDToolkit`, so the project that de
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <DDD_Module>Billing</DDD_Module>
   </PropertyGroup>
 
   <ItemGroup>
@@ -311,6 +338,8 @@ and domain events derive from base types in `DDDToolkit`, so the project that de
 ```
 
 ```csharp
+[assembly: Module("Billing")]
+
 [EntityId<Guid>("INV")]
 public readonly partial record struct InvoiceId;
 
@@ -320,9 +349,10 @@ public sealed record InvoiceSummary(InvoiceId Id, decimal Total);
 public sealed record InvoiceSent(InvoiceId InvoiceId);
 ```
 
-*[`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/BillingContracts.cs)*
-
 The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module.
+The attribute names the class; a contracts project that is no module would set `DDD_Module` for that,
+which is what [`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/Acme.Billing.Contracts.csproj)
+does to prove the property arrives.
 
 </details>
 
@@ -332,7 +362,8 @@ the generated class in any of them.
 
 If the generators do arrive and the props file does not, because a reference excludes the package's
 build assets, `DDD_Module` is ignored. The build says so with [DDD00014](diagnostics.md#ddd00014)
-rather than naming everything after the assembly without a word.
+rather than naming everything after the assembly without a word. A module is not affected: its name
+comes from the attribute, and the property is not read.
 
 ## Adopting this on an existing codebase
 
@@ -364,12 +395,12 @@ not for you*.
 
 ### Why not the DDD_Module MSBuild property
 
-`DDD_Module` already exists in this toolkit and it is not this. It names the generated
-`Add{Module}Converters` and `Add{Module}GraphQlRuntimeBindings` methods, and it is an MSBuild property,
-which means it reaches the compiler of the project that sets it and travels no further. The compiler
-building `Ordering` cannot read what `Billing.csproj` set. Leave `DDD_Module` where it is; it is a
-naming knob, not a boundary. What it names, and how it reaches the generators, is
-[above](#ddd_module-and-the-package-that-brings-it).
+`DDD_Module` already exists in this toolkit and it is not this. It is an MSBuild property, which means
+it reaches the compiler of the project that sets it and travels no further. The compiler building
+`Ordering` cannot read what `Billing.csproj` set. So it can name generated code in a project that is
+no module, and it cannot be a boundary. The traffic goes one way only: the attribute names a module's
+generated code as well, and wins over the property where a project has both. What the two name, and
+how the property reaches the generators, is [above](#ddd_module-and-the-package-that-brings-it).
 
 ## Related
 

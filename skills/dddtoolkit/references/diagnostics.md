@@ -94,7 +94,8 @@ named after the assembly. Look at how the project references the generators. A `
 restriction (`PrivateAssets="all"` is fine). An `<Analyzer Include="...dll" />` or a project reference
 with `OutputItemType="Analyzer"`: add `<ItemGroup><CompilerVisibleProperty Include="DDD_Module" /></ItemGroup>`
 to the project or to `Directory.Build.props`. Do not rename the call sites to the assembly-named
-methods. Not reported for an assembly with `[assembly: Module]`.
+methods. Not reported for an assembly with `[assembly: Module]`, whose generated code is named after
+the module.
 
 ## DDD00020
 

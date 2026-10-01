@@ -218,13 +218,15 @@ public sealed class GeneratorTestHost
     /// Compiles another snippet into an assembly of its own, generators and all, and references it. Use it
     /// to put a DDDToolkit type behind an assembly boundary, where the generators see it through metadata
     /// rather than through source: attributes survive that trip, declaration syntax does not.
+    /// <paramref name="generators"/> run over that assembly beside the core ones, for a referenced
+    /// assembly that has to carry an integration's generated code as well.
     /// </summary>
-    public GeneratorTestHost WithReferencedAssembly(string source, string assemblyName = "DDDToolkit.Sample.Referenced")
+    public GeneratorTestHost WithReferencedAssembly(string source, string assemblyName = "DDDToolkit.Sample.Referenced", params IIncrementalGenerator[] generators)
     {
         var other = Create(source, assemblyName + ".cs").WithAssemblyName(assemblyName);
         other._extraReferences.AddRange(_extraReferences);
 
-        var outcome = other.RunCore();
+        var outcome = other.RunCoreAnd(generators);
         outcome.ShouldCompile();
 
         using var stream = new MemoryStream();

@@ -19,7 +19,10 @@
     cannot arrive apart.
   -->
   <ItemGroup>
-    <!-- Names the generated {Module}EventNames, Add{Module}Converters, Add{Module}IntegrationEvents and Add{Module}GraphQlRuntimeBindings. -->
+    <!--
+      Names the generated {Module}EventNames, Add{Module}Converters, Add{Module}IntegrationEvents and
+      Add{Module}GraphQlRuntimeBindings in a project that declares no [assembly: Module]. The attribute wins.
+    -->
     <CompilerVisibleProperty Include="DDD_Module" />
   </ItemGroup>
 </Project>

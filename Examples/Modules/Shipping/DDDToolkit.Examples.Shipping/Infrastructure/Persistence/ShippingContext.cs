@@ -43,7 +43,7 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddOrderingContractsConverters();
+        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddShippingConverters();
     }
 }

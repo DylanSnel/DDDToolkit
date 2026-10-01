@@ -121,17 +121,23 @@ public static class ConverterExtensions
 ```
 
 The method lives in a `Converters` namespace under the assembly name, in a static class called
-`ConverterExtensions`. Its name comes from the `DDD_Module` property that
-[Getting started](getting-started.md#store-it-with-entity-framework) sets in the project file, so a
-project with `<DDD_Module>Ordering</DDD_Module>` gets `AddOrderingConverters`. Without it the
-generators use the assembly name with the dots removed.
+`ConverterExtensions`. Its name comes from the first of three places that has one:
 
-`DDD_Module` is only a name for generated methods. It is not what makes a project a module: that is
-`[assembly: Module("Ordering")]`, the boundary the analyzer checks, described in [Modules](modules.md).
+1. `[assembly: Module("Ordering")]`, the module the assembly declares. It always wins, and gives
+   `AddOrderingConverters`.
+2. The `DDD_Module` property that [Getting started](getting-started.md#store-it-with-entity-framework)
+   sets in the project file, for a project that is no module. A `Directory.Build.props` can set it for
+   a whole folder.
+3. The assembly name with the dots removed.
+
+The property is only a name for generated code. What makes a project a module is the attribute, the
+boundary the analyzer checks, described in [Modules](modules.md).
 [Why not the DDD_Module MSBuild property](modules.md#why-not-the-ddd_module-msbuild-property) explains
-why the two are separate.
+why the property cannot be that boundary.
 
-Call one per assembly. A solution with a shared kernel and two modules calls three:
+Call one per module, and one per assembly that is no module. Two assemblies of one module, such as a
+module and its contracts project, share a name, and each one's method calls the ones of the module's
+other assemblies it references. A solution with a shared kernel and two modules calls three:
 
 ```csharp
 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)

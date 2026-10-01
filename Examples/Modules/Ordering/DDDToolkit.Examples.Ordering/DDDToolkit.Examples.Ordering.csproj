@@ -4,8 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- Names the generated AddOrderingConverters method. See docs/getting-started.md. -->
-    <DDD_Module>Ordering</DDD_Module>
     <!-- Ordering now reads three other modules' contracts, so it holds the same line Shipping does. -->
     <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
   </PropertyGroup>

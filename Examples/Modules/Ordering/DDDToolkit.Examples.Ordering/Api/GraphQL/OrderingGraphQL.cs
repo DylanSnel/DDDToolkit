@@ -1,5 +1,4 @@
 using DDDToolkit.Examples.Ordering.Contracts;
-using DDDToolkit.Examples.Ordering.Contracts.GraphQl;
 using DDDToolkit.Examples.Ordering.GraphQl;
 using DDDToolkit.HotChocolate;
 using HotChocolate.Execution.Configuration;
@@ -24,8 +23,8 @@ public static class OrderingGraphQL
             .Publish<OrderCancelledV1>(message => message.Body is OrderCancelledV1 cancelled ? Topic(cancelled.OrderId) : null));
 
         return graphql
-            // OrderId lives in the contracts, OrderLineId in the module: one generated call each.
-            .AddOrderingContractsGraphQlRuntimeBindings()
+            // OrderId lives in the contracts, OrderLineId in the module. Both are Ordering, so the module's
+            // generated call makes the contracts' one as well.
             .AddOrderingGraphQlRuntimeBindings()
             .AddType<OrderType>()
             .AddType<OrderLineType>()

@@ -19,7 +19,7 @@ public static class ShippingGraphQL
 
         return graphql
             .AddShippingGraphQlRuntimeBindings()
-            .AddOrderingContractsGraphQlRuntimeBindings()
+            .AddOrderingGraphQlRuntimeBindings()
             .AddType<ShipmentType>()
             .AddTypeExtension<ShippingQueries>()
             .AddDataLoader<ShipmentByIdDataLoader>()

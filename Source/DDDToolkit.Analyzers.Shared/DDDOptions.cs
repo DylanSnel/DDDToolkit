@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 
 namespace DDDToolkit.Analyzers.Common;
@@ -27,9 +30,33 @@ internal static class DDDOptionsProvider
             return new DDDOptions(ModuleName: moduleName?.Trim() ?? string.Empty, PropertiesDeclared: declared);
         });
 
+    /// <summary>
+    /// The name in the generated registration methods, <c>Add{Module}Converters</c> and the others, as a
+    /// cacheable value. See <see cref="ResolveModuleName(DDDOptions, string?, string?)"/> for where it
+    /// comes from.
+    /// </summary>
+    public static IncrementalValueProvider<string> RegistrationName(this IncrementalGeneratorInitializationContext context)
+        => context.GetDDDOptions()
+            .Combine(context.CompilationProvider.Select(static (compilation, _) => (Module: ModuleBoundary.ModuleOf(compilation.Assembly), compilation.AssemblyName)))
+            .Select(static (pair, _) => pair.Left.ResolveModuleName(pair.Right.Module, pair.Right.AssemblyName));
+
     /// <summary>The module name from MSBuild, or a name derived from the assembly name.</summary>
     public static string ResolveModuleName(this DDDOptions options, string? assemblyName)
+        => options.ResolveModuleName(module: null, assemblyName);
+
+    /// <summary>
+    /// The name generated code is given. The module the assembly declares with <c>[assembly: Module]</c>
+    /// always wins. <c>DDD_Module</c> is the default beneath it, which a <c>Directory.Build.props</c> can
+    /// set for a whole folder, and the assembly name is what is left when a project has neither.
+    /// </summary>
+    public static string ResolveModuleName(this DDDOptions options, string? module, string? assemblyName)
     {
+        // A module's name is free text, "order-management" for one; the same spelling {Module}EventNames uses.
+        if (module is not null && EventNaming.Pascal(module) is { Length: > 0 } identifier)
+        {
+            return char.IsDigit(identifier[0]) ? "_" + identifier : identifier;
+        }
+
         if (!string.IsNullOrEmpty(options.ModuleName))
         {
             return options.ModuleName;
@@ -37,4 +64,57 @@ internal static class DDDOptionsProvider
 
         return assemblyName is null ? "AssemblyTypes" : assemblyName.Replace(".", string.Empty);
     }
+
+    /// <summary>
+    /// The registration methods the other assemblies of this module generated, as calls ready to write:
+    /// <c>global::Ordering.Contracts.Converters.ConverterExtensions.AddOrderingConverters</c>.
+    /// <para>
+    /// Two assemblies that declare the same <c>[assembly: Module]</c> are one module, and both name
+    /// their registration after it. An assembly's own method therefore calls the ones of the module's
+    /// assemblies it references, so one call registers the whole module and code never has to import
+    /// two classes that declare the same extension method.
+    /// </para>
+    /// </summary>
+    /// <param name="className">The generated class, under the assembly's namespace: <c>Converters.ConverterExtensions</c>.</param>
+    /// <param name="methodSuffix">What the method's name ends in: <c>Converters</c>.</param>
+    public static IncrementalValueProvider<EquatableArray<string>> RegistrationsOfTheSameModule(
+        this IncrementalGeneratorInitializationContext context,
+        string className,
+        string methodSuffix)
+        => context.CompilationProvider.Select((compilation, _) =>
+        {
+            var module = ModuleBoundary.ModuleOf(compilation.Assembly);
+            if (module is null)
+            {
+                return EquatableArray<string>.Empty;
+            }
+
+            var calls = new List<string>();
+
+            foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
+            {
+                if (!string.Equals(ModuleBoundary.ModuleOf(referenced), module, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var type = referenced.GetTypeByMetadataName(Identifiers.NamespaceFrom(referenced.Name) + "." + className);
+                if (type is not { IsStatic: true, DeclaredAccessibility: Accessibility.Public })
+                {
+                    continue;
+                }
+
+                // Found by its shape rather than by the name this assembly would give it: an assembly built
+                // by an earlier version named its method after DDD_Module.
+                calls.AddRange(type.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .Where(method => method is { IsExtensionMethod: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 1 }
+                        && method.Name.StartsWith("Add", StringComparison.Ordinal)
+                        && method.Name.EndsWith(methodSuffix, StringComparison.Ordinal))
+                    .Select(method => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + method.Name));
+            }
+
+            calls.Sort(StringComparer.Ordinal);
+            return new EquatableArray<string>(calls.ToArray());
+        });
 }

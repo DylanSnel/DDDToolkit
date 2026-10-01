@@ -1,7 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
-using DDDToolkit.Examples.Ordering.Contracts.Converters;
 using DDDToolkit.Examples.Ordering.Converters;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Examples.Hosting;
@@ -72,8 +71,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
         // (18,2) and warns, and Postgres stores numbers of any length.
         configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
 
-        // One generated call per assembly that declares identifiers or single value objects.
-        configurationBuilder.AddOrderingContractsConverters();
+        // One generated call for the module. Ordering.Contracts declares OrderId and is Ordering too, so
+        // this call makes the contracts' one as well.
         configurationBuilder.AddOrderingConverters();
     }
 }

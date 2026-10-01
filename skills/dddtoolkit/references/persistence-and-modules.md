@@ -37,15 +37,20 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddOrderingConverters();    // one per assembly that declares ids or single value objects
+        configurationBuilder.AddOrderingConverters();    // one per module, and one per assembly that is no module
     }
 }
 ```
 
-- `Add{Module}Converters` takes its name from `<DDD_Module>Ordering</DDD_Module>` in the project file,
-  or else the assembly name with the dots removed. A contracts project or shared kernel that declares
-  identifiers has a method of its own, and the context calls each of them.
-- `DDD_Module` only names generated methods. What makes an assembly a module is
+- `Add{Module}Converters` takes its name from `[assembly: Module("Ordering")]` when the project declares
+  one, which always wins; otherwise from `<DDD_Module>Shop</DDD_Module>` in the project file or a
+  `Directory.Build.props`; otherwise from the assembly name with the dots removed. The same goes for
+  `Add{Module}IntegrationEvents`, `Add{Module}GraphQlRuntimeBindings` and `{Module}EventNames`.
+- A module and its contracts project share the name, and the module's method calls the contracts'
+  one: the module's context calls `AddOrderingConverters()` once, and another module that references
+  only the contracts calls the contracts' `AddOrderingConverters()`. Never import both generated
+  namespaces in one file. A shared kernel has a method of its own, and the context calls it too.
+- `DDD_Module` only names generated code, in a project that is no module. What makes an assembly a module is
   `[assembly: Module("Ordering")]`, below. The `DDDToolkit.Analyzers` package declares the property to
   the compiler; a build that warns DDD00014 is ignoring it, see `diagnostics.md`.
 - Mapped with no configuration: identifiers and single value objects as their raw value (generated

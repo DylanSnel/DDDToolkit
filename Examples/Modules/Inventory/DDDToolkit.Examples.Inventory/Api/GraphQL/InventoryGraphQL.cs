@@ -18,7 +18,7 @@ public static class InventoryGraphQL
 
         return graphql
             .AddInventoryGraphQlRuntimeBindings()
-            .AddOrderingContractsGraphQlRuntimeBindings()
+            .AddOrderingGraphQlRuntimeBindings()
             .AddType<StockItemType>()
             .AddType<StockReservationType>()
             .AddTypeExtension<InventoryQueries>()

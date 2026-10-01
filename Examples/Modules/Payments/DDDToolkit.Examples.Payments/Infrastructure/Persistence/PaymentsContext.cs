@@ -35,7 +35,7 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
         // Amounts of money: two decimals, up to a trillion. Without a precision SQL Server guesses
         // (18,2) and warns, and Postgres stores numbers of any length.
         configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
-        configurationBuilder.AddOrderingContractsConverters();
+        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddPaymentsConverters();
     }
 }

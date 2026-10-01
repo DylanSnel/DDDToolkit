@@ -52,10 +52,15 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(targets, static (productionContext, target) => EmitChangeTypeProvider(productionContext, target));
 
         var registration = targets.Collect()
-            .Combine(context.GetDDDOptions())
-            .Combine(context.AssemblyName());
+            .Combine(context.RegistrationName())
+            .Combine(context.AssemblyName())
+            .Combine(context.RegistrationsOfTheSameModule("GraphQl.HotChocolateExtensions", "GraphQlRuntimeBindings"));
 
-        context.RegisterSourceOutput(registration, static (productionContext, data) => EmitBindings(productionContext, data.Left.Left, data.Left.Right, data.Right));
+        context.RegisterSourceOutput(registration, static (productionContext, data) =>
+        {
+            var (((targets, moduleName), assemblyName), sameModule) = data;
+            EmitBindings(productionContext, targets, moduleName, assemblyName, sameModule);
+        });
     }
 
     private static void EmitChangeTypeProvider(SourceProductionContext context, BindingTarget target)
@@ -158,14 +163,13 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         writer.Line("}");
     }
 
-    private static void EmitBindings(SourceProductionContext context, ImmutableArray<BindingTarget> targets, DDDOptions options, string? assemblyName)
+    private static void EmitBindings(SourceProductionContext context, ImmutableArray<BindingTarget> targets, string moduleName, string? assemblyName, EquatableArray<string> sameModule)
     {
         if (targets.Length == 0)
         {
             return;
         }
 
-        var moduleName = options.ResolveModuleName(assemblyName);
         var writer = new CodeWriter().Header();
 
         // BindRuntimeType / AddTypeConverter are extension methods; extension lookup needs these namespaces in scope.
@@ -180,6 +184,13 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         {
             using (writer.Block("public static global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder Add" + moduleName + "GraphQlRuntimeBindings(this global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder)"))
             {
+                // The other assemblies of this module name their method the same, so this one calls them: a
+                // schema makes one call for the module and never imports two classes declaring one method.
+                foreach (var call in sameModule)
+                {
+                    writer.Line(call + "(builder);");
+                }
+
                 foreach (var target in targets.OrderBy(t => t.Type.FullyQualifiedName, StringComparer.Ordinal))
                 {
                     var scalar = target.GraphQLSchemaType;

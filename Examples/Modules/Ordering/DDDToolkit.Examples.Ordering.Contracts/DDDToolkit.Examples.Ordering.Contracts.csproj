@@ -4,8 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- Names the generated AddOrderingContractsConverters method. See docs/getting-started.md. -->
-    <DDD_Module>OrderingContracts</DDD_Module>
   </PropertyGroup>
 
   <!--

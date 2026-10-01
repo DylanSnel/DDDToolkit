@@ -55,11 +55,13 @@ down:
 `Add{Module}GraphQlRuntimeBindings()` registers the scalar bindings, the type converters and the Relay
 node id serializers, and there is one call per assembly that declares identifiers or single value
 objects. The method is generated into the namespace `{AssemblyName}.GraphQl`, on a static class named
-`HotChocolateExtensions`. The `{Module}` part comes from the `DDD_Module` MSBuild property, so a project
-that sets `<DDD_Module>Ordering</DDD_Module>` gets `AddOrderingGraphQlRuntimeBindings`. See
-[Store it with Entity Framework](getting-started.md#store-it-with-entity-framework), where the same
-property names the converter method. An assembly that declares neither an identifier nor a single
-value object gets no method at all.
+`HotChocolateExtensions`. The `{Module}` part is the module the assembly declares, so a project with
+`[assembly: Module("Ordering")]` gets `AddOrderingGraphQlRuntimeBindings`. A project that is no module
+takes it from the `DDD_Module` MSBuild property, and otherwise from its assembly name; see
+[DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
+Two assemblies of one module share the name, and an assembly's method calls the ones of the module's
+other assemblies it references, so a schema makes one call for the module. An assembly that declares
+neither an identifier nor a single value object gets no method at all.
 
 The order of the two is not significant: the calls only record configuration, and the schema is built
 afterwards. The order above reads in the direction of the dependency, from conventions to your types.
@@ -405,7 +407,7 @@ builder.Services
     .AddGraphQLServer()
     .AddGlobalObjectIdentification()
     .AddDDDToolkitTypes()
-    .AddOrderingContractsGraphQlRuntimeBindings()
+    .AddOrderingGraphQlRuntimeBindings()
     .AddType<OrderType>();
 
 public sealed class OrderType : ObjectType<Order>
@@ -419,8 +421,9 @@ public sealed class OrderType : ObjectType<Order>
 ```
 
 The bindings method is generated once per project that declares identifiers, and in the example shop
-`OrderId` is declared in Ordering's contracts project, so it is that project's
-`AddOrderingContractsGraphQlRuntimeBindings()` that registers it. Why the example gives a module's
+`OrderId` is declared in Ordering's contracts project. Both projects are Ordering, so both methods are
+`AddOrderingGraphQlRuntimeBindings()`, and the module's calls the contracts' one: the single call above
+registers `OrderId` whichever of the two projects the schema is built in. Why the example gives a module's
 contract a project of its own is explained in [Module contracts](module-contracts.md#a-project-of-its-own).
 
 `id` prints as `ID!` and carries a node id such as `T3JkZXI6ERER…`, `node(id:)` finds the order again,

@@ -341,7 +341,8 @@ it the generators use the assembly name with the dots removed, which works but r
 ```
 
 It is only a name. Saying that a project is a *module*, with a boundary something checks, is a separate
-declaration that comes up [further down](#draw-the-module-boundary).
+declaration that comes up [further down](#draw-the-module-boundary). Once a project makes it, the
+module's name is the one the generators use, and the property is no longer needed.
 
 The context calls that method and the conventions every context shares:
 
@@ -469,12 +470,18 @@ public readonly partial record struct OrderId;
 
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
 
-`[ModuleContract]` is what publishes it. The contracts project gets converters of its own, so
-Ordering's context now calls both methods, one per project that declares identifiers:
+`[ModuleContract]` is what publishes it. The contracts project gets converters of its own, under the
+same name, because it declares `[assembly: Module("Ordering")]` too. Ordering's method calls the
+contracts' one, so its context still makes one call. Shipping, which references only the contracts,
+calls the contracts' method by that name:
 
 ```csharp
-configurationBuilder.AddOrderingContractsConverters();
+// Ordering's context: its own identifiers, and OrderId from the contracts
 configurationBuilder.AddOrderingConverters();
+
+// Shipping's context: OrderId from Ordering's contracts, then its own
+configurationBuilder.AddOrderingConverters();
+configurationBuilder.AddShippingConverters();
 ```
 
 Why a module publishes anything at all, what belongs in a contract and why it gets a project of its

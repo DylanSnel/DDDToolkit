@@ -4,7 +4,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <DDD_Module>InventoryContracts</DDD_Module>
   </PropertyGroup>
 
   <!--
