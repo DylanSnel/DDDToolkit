@@ -1619,6 +1619,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Fixed
 
+- **The Supabase export given for a whole build.** `SupabaseMigrationsExport` given on the command line, in a
+  `Directory.Build.props` or by CI reached every project that references `DDDToolkit.EntityFramework.Supabase`,
+  or a project that does, because the package's build step and generator arrive through `buildTransitive`.
+  Each module wrote the export's list into itself, reported DDD00054 for what only the host lists, and then the
+  step started the module's library, which failed with `MissingMethodException` and MSB3073. The step and the
+  generator now run only in an application that is not a test project: an `OutputType` of `Exe` or `WinExe`,
+  and neither `IsTestProject` nor `IsTestingPlatformApplication` set to `true`. A value given for the whole
+  build reaches the host, and every library and test project ignores it, without a warning. Another
+  application in the same build that references the modules still exports, so a solution with more than
+  one keeps the property in the host's project file.
 - **`DDDToolkit.HotChocolate.Fusion.InMemory`: two lookups of one module in one answer, each for several
   keys.** A query that named, say, the seats and the roles of a list of crews answered "Unexpected Execution
   Error" for every field their owner was to fill. HotChocolate's in-memory client (16.6.6 and 16.6.7) writes

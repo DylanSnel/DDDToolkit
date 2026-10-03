@@ -13,6 +13,13 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// build step asks. Only in the project that sets <c>SupabaseMigrationsExport</c>; everywhere else it
 /// writes nothing.
 /// <para>
+/// And only in an application that is not a test project, the projects the build step runs in. The step
+/// starts the program the project built, so a library has nothing it could start, and a test project is not
+/// the host. The property may be given for a whole build, which hands it to every project; there every
+/// library and test project reports nothing and writes nothing, as if it were not set. Another application
+/// in that build is a host as far as anything here can tell, and exports.
+/// </para>
+/// <para>
 /// The factories normally live in the module projects and the export is switched on in the host, so the
 /// search covers the referenced assemblies, not just this one. It only opens assemblies that reference
 /// the Supabase package, which is the only way one of them can carry the marker, so a host with a large
@@ -39,13 +46,27 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 {
     private const string ExportProperty = "build_property.SupabaseMigrationsExport";
 
+    /// <summary>What Microsoft.NET.Test.Sdk sets in a test project, and what a project may set to say it is one.</summary>
+    private const string TestProjectProperty = "build_property.IsTestProject";
+
+    /// <summary>What Microsoft.Testing.Platform sets in a test application, which may lack the other.</summary>
+    private const string TestingPlatformProperty = "build_property.IsTestingPlatformApplication";
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var enabled = context.AnalyzerConfigOptionsProvider.Select(static (options, _) =>
+        var turnedOn = context.AnalyzerConfigOptionsProvider.Select(static (options, _) =>
             options.GlobalOptions.TryGetValue(ExportProperty, out var mode)
             && (string.Equals(mode?.Trim(), "Write", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mode?.Trim(), "Check", StringComparison.OrdinalIgnoreCase)));
+                || string.Equals(mode?.Trim(), "Check", StringComparison.OrdinalIgnoreCase))
+            && !IsSet(options.GlobalOptions, TestProjectProperty)
+            && !IsSet(options.GlobalOptions, TestingPlatformProperty));
+
+        // The compiler's own word for what the build step can start: an OutputType of Exe or WinExe.
+        var application = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication);
+
+        var enabled = turnedOn.Combine(application).Select(static (pair, _) => pair.Left && pair.Right);
 
         var found = context.CompilationProvider
             .Combine(enabled)
@@ -167,6 +188,10 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             new EquatableArray<string>(contributions),
             new EquatableArray<DiagnosticInfo>(diagnostics));
     }
+
+    /// <summary>Whether the build property <paramref name="key"/> is <c>true</c>, as MSBuild reads a condition: without regard to case.</summary>
+    private static bool IsSet(Microsoft.CodeAnalysis.Diagnostics.AnalyzerConfigOptions options, string key)
+        => options.TryGetValue(key, out var value) && string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The name the export gives the files of a context whose assemblies declare no module, as the export itself

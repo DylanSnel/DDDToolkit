@@ -82,6 +82,7 @@ public sealed class GeneratorTestHost
     private readonly List<string> _noWarn = [];
     private readonly List<DiagnosticAnalyzer> _analyzers = [];
     private string _assemblyName = DefaultAssemblyName;
+    private OutputKind _outputKind = OutputKind.DynamicallyLinkedLibrary;
 
     private GeneratorTestHost()
     {
@@ -142,6 +143,17 @@ public sealed class GeneratorTestHost
     {
         _assemblyName = assemblyName;
         return this;
+    }
+
+    /// <summary>
+    /// Compiles the snippet as an application, what an <c>OutputType</c> of <c>Exe</c> gives the compiler, or of
+    /// <c>WinExe</c> for <see cref="OutputKind.WindowsApplication"/>, with an entry point of its own in a file
+    /// beside the snippet. Without it the snippet is a library, as every project is that does not say otherwise.
+    /// </summary>
+    public GeneratorTestHost AsApplication(OutputKind kind = OutputKind.ConsoleApplication)
+    {
+        _outputKind = kind;
+        return WithSource("internal static class EntryPoint { private static void Main() { } }", "EntryPoint.cs");
     }
 
     /// <summary>
@@ -372,7 +384,7 @@ public sealed class GeneratorTestHost
             .Select(source => CSharpSyntaxTree.ParseText(SourceText.From(source.Text, System.Text.Encoding.UTF8), parseOptions, source.Path))
             .ToImmutableArray();
 
-        var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable);
+        var options = new CSharpCompilationOptions(_outputKind, nullableContextOptions: NullableContextOptions.Enable);
         if (_noWarn.Count > 0)
         {
             options = options.WithSpecificDiagnosticOptions(

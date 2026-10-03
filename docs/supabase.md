@@ -104,6 +104,13 @@ That is all. Nothing in `Program.cs`, no command to remember, no list of modules
   each one. In CI that catches the migration somebody added without building locally.
 - **Unset** does nothing, which is every project but the one you turned it on in.
 
+The property may also be given for a whole build, as `-p:SupabaseMigrationsExport=Check` on the command
+line, in a `Directory.Build.props` or by CI: only an application that is not a test project runs the
+export, so the value reaches the host and every module and test project ignores it. Every application
+in that build runs it, though. When more than one references the modules, an API beside a program that
+only exports, say, keep the property in the exporting project's file, or give it to a build of that
+project alone: `dotnet build src/Exporter -p:SupabaseMigrationsExport=Check`.
+
 The list of modules you do not keep is kept by the compiler. In the project that turned the export on,
 the package's generator finds every marked factory in the assemblies it references and writes them down
 as ordinary code:

@@ -37,9 +37,10 @@ public sealed class SupabaseMigrationsGeneratorTests
 
     private const string Host = "namespace Shop.Host; public static class Program { }";
 
+    /// <summary>The host: an application, the only kind of project the build step can start.</summary>
     private static GeneratorTestHost HostReferencing(string module, string? export = "Write")
     {
-        var host = GeneratorTestHost.Create(Host).WithAssemblyName("Shop.Host").WithSupabase().WithReferencedAssembly(module, "Shop.Ordering");
+        var host = GeneratorTestHost.Create(Host).WithAssemblyName("Shop.Host").AsApplication().WithSupabase().WithReferencedAssembly(module, "Shop.Ordering");
         return export is null ? host : host.WithBuildProperty("SupabaseMigrationsExport", export);
     }
 
@@ -97,6 +98,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
             .WithReferencedAssembly(OfferingModule, "Shop.Ordering")
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Write")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -119,6 +121,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
             .WithReferencedAssembly(OfferingModule, "Shop.Ordering")
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Check")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -182,6 +185,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
             .WithReferencedAssembly(OfferingForTheHostModule, "Shop.Ordering")
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Check")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -254,6 +258,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
             .WithReferencedAssembly(OfferingWithRulesModule, "Shop.Ordering")
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Check")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -439,7 +444,98 @@ public sealed class SupabaseMigrationsGeneratorTests
         var result = HostReferencing(OrderingModule, export).Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldCompile();
-        result.GeneratedSources.Should().BeEmpty("modules, test projects and every other project referencing the package are left alone");
+        result.GeneratedSources.Should().BeEmpty("an application that does not turn the export on is left alone");
+    }
+
+    /// <summary>
+    /// A module that would give every diagnostic the generator has where the export runs: a contribution it offers
+    /// and nobody lists (DDD00054), a factory whose assembly declares no module (DDD00055), and a factory the
+    /// build could not create (DDD00031).
+    /// </summary>
+    private static readonly string ModuleWithEverythingToSay = OfferingModule
+        .Replace("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]", "", StringComparison.Ordinal) + """
+
+
+        [SupabaseMigrations]
+        public sealed class NeedsOptions(string connectionString) : IDesignTimeDbContextFactory<OrderingContext>
+        {
+            public OrderingContext CreateDbContext(string[] args) => new(new DbContextOptionsBuilder<OrderingContext>().Options);
+        }
+        """;
+
+    [Theory]
+    [InlineData("Write")]
+    [InlineData("Check")]
+    public void A_library_with_the_export_turned_on_writes_nothing_and_reports_nothing(string export)
+    {
+        // A module the property reached because it was given for the whole build: the build step cannot start a
+        // library, so the generator stays out of it, and says nothing of what only the host could answer.
+        var referencing = GeneratorTestHost.Create(Host)
+            .WithAssemblyName("Shop.Ordering.Api")
+            .WithSupabase()
+            .WithReferencedAssembly(ModuleWithEverythingToSay, "Shop.Ordering")
+            .WithBuildProperty("SupabaseMigrationsExport", export)
+            .Run(GeneratorTestHost.SupabaseGenerators());
+
+        referencing.ShouldCompile();
+        referencing.GeneratedSources.Should().BeEmpty("the build step does not run in a library, so there is nothing to hand it");
+        referencing.ReportedDiagnostics.Should().BeEmpty("a module hears nothing of an export that is the host's");
+
+        // The module itself, where its own factories are.
+        var itself = GeneratorTestHost.Create(ModuleWithEverythingToSay)
+            .WithAssemblyName("Shop.Ordering")
+            .WithSupabase()
+            .WithBuildProperty("SupabaseMigrationsExport", export)
+            .Run(GeneratorTestHost.SupabaseGenerators());
+
+        itself.GeneratedSources.Should().BeEmpty();
+        itself.ReportedDiagnostics.Should().BeEmpty();
+
+        // And the same module referenced by the host, which hears all of it.
+        HostReferencing(ModuleWithEverythingToSay, export).Run(GeneratorTestHost.SupabaseGenerators())
+            .ReportedDiagnostics.Select(diagnostic => diagnostic.Id).Should().BeEquivalentTo(["DDD00054", "DDD00054", "DDD00055", "DDD00031"]);
+    }
+
+    [Theory]
+    [InlineData("IsTestProject", "true")]
+    [InlineData("IsTestProject", "True")]
+    [InlineData("IsTestingPlatformApplication", "true")]
+    public void A_test_project_with_the_export_turned_on_writes_nothing_and_reports_nothing(string property, string value)
+    {
+        // A test project is an application, and references the host or its modules; it is still not the host.
+        var result = HostReferencing(ModuleWithEverythingToSay, export: "Check")
+            .WithBuildProperty(property, value)
+            .Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().BeEmpty("the build step does not run in a test project");
+        result.ReportedDiagnostics.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_project_that_says_it_is_no_test_project_is_an_application_like_any_other()
+    {
+        var result = HostReferencing(OrderingModule)
+            .WithBuildProperty("IsTestProject", "false")
+            .WithBuildProperty("IsTestingPlatformApplication", "")
+            .Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldContain("SupabaseMigrationSources", "global::Shop.Ordering.OrderingContextFactory>(\"Ordering\")");
+    }
+
+    [Fact]
+    public void A_windows_application_exports_as_a_console_application_does()
+    {
+        var result = GeneratorTestHost.Create(Host)
+            .WithAssemblyName("Shop.Host")
+            .AsApplication(Microsoft.CodeAnalysis.OutputKind.WindowsApplication)
+            .WithSupabase()
+            .WithReferencedAssembly(OrderingModule, "Shop.Ordering")
+            .WithBuildProperty("SupabaseMigrationsExport", "Write")
+            .Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("SupabaseMigrationSources", "[global::System.Runtime.CompilerServices.ModuleInitializer]");
     }
 
     [Fact]
@@ -447,6 +543,7 @@ public sealed class SupabaseMigrationsGeneratorTests
     {
         var result = GeneratorTestHost.Create(OrderingModule.Replace("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]", ""))
             .WithSupabase()
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Write")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -472,6 +569,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         // In the host itself, where the warning points at the factory.
         var inTheHost = GeneratorTestHost.Create(unnamed)
             .WithSupabase()
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Check")
             .Run(GeneratorTestHost.SupabaseGenerators());
         inTheHost.ShouldHaveDiagnostic("DDD00055", at: "OrderingContextFactory");
@@ -516,6 +614,7 @@ public sealed class SupabaseMigrationsGeneratorTests
             .WithSupabase()
             .WithReferencedAssembly(contextProject, "Shop.Ordering")
             .WithReferencedAssembly(migrationsProject, "Shop.Ordering.Migrations")
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Write")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -553,6 +652,7 @@ public sealed class SupabaseMigrationsGeneratorTests
 
         var result = GeneratorTestHost.Create(source)
             .WithSupabase()
+            .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Write")
             .Run(GeneratorTestHost.SupabaseGenerators());
 

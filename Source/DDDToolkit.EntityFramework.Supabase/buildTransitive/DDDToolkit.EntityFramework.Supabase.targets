@@ -48,15 +48,29 @@
 
     It shipped here, in buildTransitive, so the host gets it through the module that references this
     package; the host does not have to reference the package itself.
+
+    The same goes for every other project that references this package, or a project that does: each
+    imports this file. So the step runs only in a project that can be the host: an application, whose
+    program the step can start, and not a test project, which is an application too. In any other
+    project the property is left alone, so it may be given for a whole build, on the command line, in a
+    Directory.Build.props or by CI: it reaches the host, and the modules and the tests ignore it. Every
+    other application the build reaches runs the step as well, so a solution with more than one keeps
+    the property in the host's project file.
   -->
   <ItemGroup>
-    <!-- The generator only writes the list of sources and the module initializer where this is set. -->
+    <!--
+      The generator writes the list of sources and the module initializer only where this is Write or Check,
+      in an application that is not a test project: the projects this step runs in, and no others. The two
+      properties that tell a test project are declared here, beside the step, so the two always decide alike.
+    -->
     <CompilerVisibleProperty Include="SupabaseMigrationsExport" />
+    <CompilerVisibleProperty Include="IsTestProject" />
+    <CompilerVisibleProperty Include="IsTestingPlatformApplication" />
   </ItemGroup>
 
   <Target Name="DDDToolkitSupabaseMigrations"
           AfterTargets="Build"
-          Condition="('$(SupabaseMigrationsExport)' == 'Write' Or '$(SupabaseMigrationsExport)' == 'Check') And '$(DesignTimeBuild)' != 'true' And '$(BuildingForLiveUnitTesting)' != 'true'">
+          Condition="('$(SupabaseMigrationsExport)' == 'Write' Or '$(SupabaseMigrationsExport)' == 'Check') And ('$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe') And '$(IsTestProject)' != 'true' And '$(IsTestingPlatformApplication)' != 'true' And '$(DesignTimeBuild)' != 'true' And '$(BuildingForLiveUnitTesting)' != 'true'">
     <PropertyGroup>
       <_DDDToolkitDotnet>$(DOTNET_HOST_PATH)</_DDDToolkitDotnet>
       <_DDDToolkitDotnet Condition="'$(_DDDToolkitDotnet)' == ''">dotnet</_DDDToolkitDotnet>

@@ -14,9 +14,10 @@
     declared does not reach it at all, which is how the generator tells that this file was not
     imported (DDD00014).
 
-    The one property declared elsewhere is SupabaseMigrationsExport. It switches on a build step, and
-    DDDToolkit.EntityFramework.Supabase declares it in the targets file that holds that step, so the two
-    cannot arrive apart.
+    The properties declared elsewhere are SupabaseMigrationsExport, which switches on a build step, and
+    IsTestProject and IsTestingPlatformApplication, which keep that step out of test projects.
+    DDDToolkit.EntityFramework.Supabase declares them in the targets file that holds the step, so the step
+    and its generator cannot arrive apart, nor decide apart where the step runs.
   -->
   <ItemGroup>
     <!--

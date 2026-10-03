@@ -19,7 +19,8 @@ dotnet add package Temp.DDDToolkit
 
 For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is still 2.0.22,
 which these pages do not describe. The namespaces are `DDDToolkit` either way. See
-[Packages](../README.md#packages).
+[Packages](../README.md#packages). The supporting domains' packages, `Temp.DDDToolkit.Supporting.*`, are
+only published as prereleases for now, so `dotnet add package` needs `--prerelease` or a `--version` for them.
 
 `DDDToolkit` brings the base types and the core generators. That is all the first steps need. Each
 integration comes with a package of its own, added in the step that uses it: Entity Framework when the

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 
@@ -9,6 +10,10 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// export's properties, and builds, so the target's own <c>Exec</c> starts this test assembly with the
 /// variables it passes, and <see cref="BuildStepExport"/> exports what it was handed. What reaches the
 /// access file is what reached the export.
+/// <para>
+/// The project is an application, as a host is. As a library or a test project it shows where the step does
+/// not run: since this assembly exports whenever it is started, a file written or a check failed would say it did.
+/// </para>
 /// </summary>
 public sealed class SupabaseMigrationBuildTargetTests : IDisposable
 {
@@ -82,12 +87,136 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
         Directory.Exists(Migrations).Should().BeFalse("the export never ran");
     }
 
+    [Theory]
+    [InlineData("Exe")]
+    [InlineData("WinExe")]
+    public async Task An_application_exports_when_the_mode_is_given_for_the_whole_build(string outputType)
+    {
+        // Given on the command line, the way a CI script gives it, and not in the project: it still reaches the host.
+        var written = await BuildProjectAsync(Project(outputType), "-p:SupabaseMigrationsExport=Write");
+
+        written.ExitCode.Should().Be(0, written.Output);
+        Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle();
+
+        var checkedOnly = await BuildProjectAsync(Project(outputType), "-p:SupabaseMigrationsExport=Check");
+
+        checkedOnly.ExitCode.Should().Be(0, checkedOnly.Output);
+        checkedOnly.Output.Should().Contain("Supabase migrations: Unchanged");
+    }
+
+    [Fact]
+    public async Task A_mode_given_for_the_whole_build_wins_over_the_hosts_own()
+    {
+        // The host writes locally; a CI script that asks for Check gets Check, and a file that is missing fails it.
+        var properties = Project("Exe");
+        properties["SupabaseMigrationsExport"] = "Write";
+
+        var (exitCode, output) = await BuildProjectAsync(properties, "-p:SupabaseMigrationsExport=Check");
+
+        exitCode.Should().NotBe(0);
+        output.Should().Contain("Supabase migrations: Missing").And.Contain("This build only checks.");
+        Directory.Exists(Migrations).Should().BeFalse("a build that only checks writes nothing");
+    }
+
+    [Theory]
+    [InlineData("Library", "Write", true)]
+    [InlineData("Library", "Check", true)]
+    [InlineData("Library", "Write", false)]
+    [InlineData("Library", "Check", false)]
+    [InlineData("", "Write", true)]
+    [InlineData("", "Check", false)]
+    public async Task A_project_that_is_no_application_leaves_the_export_alone_however_it_was_given(string outputType, string mode, bool onTheCommandLine)
+    {
+        // On the command line, or in the project the way a Directory.Build.props sets it for every project: the
+        // step would start this test assembly, which exports, so a file or a failed check would show it ran.
+        var properties = Project(outputType);
+        if (!onTheCommandLine)
+        {
+            properties["SupabaseMigrationsExport"] = mode;
+        }
+
+        var (exitCode, output) = await BuildProjectAsync(properties, onTheCommandLine ? [$"-p:SupabaseMigrationsExport={mode}"] : []);
+
+        exitCode.Should().Be(0, output);
+        output.Should().NotContain("Supabase migrations").And.NotContain("warning").And.NotContain("error");
+        Directory.Exists(Migrations).Should().BeFalse("the step never started a program");
+    }
+
+    [Theory]
+    [InlineData("IsTestProject")]
+    [InlineData("IsTestingPlatformApplication")]
+    public async Task A_test_project_leaves_the_export_alone_although_it_is_an_application(string marker)
+    {
+        var properties = Project("Exe");
+        properties[marker] = "true";
+
+        var (exitCode, output) = await BuildProjectAsync(properties, "-p:SupabaseMigrationsExport=Write");
+
+        exitCode.Should().Be(0, output);
+        output.Should().NotContain("Supabase migrations").And.NotContain("warning").And.NotContain("error");
+        Directory.Exists(Migrations).Should().BeFalse("the step never started the test assembly");
+    }
+
+    [Fact]
+    public async Task The_generator_is_handed_every_property_the_step_decides_by()
+    {
+        // The generator writes the module initializer only where the step runs, deciding by the same mode and the
+        // same two marks of a test project. A property reaches it only when the targets declare it compiler
+        // visible, so a mark left out here would have it write into a test project the step stays out of. The
+        // output type needs no declaring: it reaches the generator as the compilation's own kind.
+        var (exitCode, output) = await BuildProjectAsync(Project("Exe"), "-getItem:CompilerVisibleProperty");
+
+        exitCode.Should().Be(0, output);
+        JsonDocument.Parse(output).RootElement.GetProperty("Items").GetProperty("CompilerVisibleProperty")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("Identity").GetString())
+            .Should().BeEquivalentTo(["SupabaseMigrationsExport", "IsTestProject", "IsTestingPlatformApplication"]);
+    }
+
     /// <summary>
-    /// Builds a project that imports the targets file with the export on, writing into
-    /// <see cref="Migrations"/>, and <paramref name="roles"/>, <paramref name="callerFunctions"/>,
+    /// A project of the <paramref name="outputType"/> given that maps the token role one of the rules this assembly
+    /// exports is for, so wherever the step runs, it exports, and a file shows it did. The export is not on.
+    /// </summary>
+    private static Dictionary<string, string> Project(string outputType) => new()
+    {
+        ["OutputType"] = outputType,
+        ["SupabaseRowAccessRoles"] = "token:analyst=desk_analyst",
+    };
+
+    /// <summary>
+    /// Builds a project that imports the targets file as a host does, an application with the export on, writing
+    /// into <see cref="Migrations"/>, and <paramref name="roles"/>, <paramref name="callerFunctions"/>,
     /// <paramref name="grants"/> and <paramref name="force"/> as the project would set them.
     /// </summary>
-    private async Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? callerFunctions, string? grants = null, string? force = null)
+    private Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? callerFunctions, string? grants = null, string? force = null)
+    {
+        var properties = new Dictionary<string, string>
+        {
+            ["OutputType"] = "Exe",
+            ["SupabaseMigrationsExport"] = "Write",
+        };
+
+        foreach (var (name, value) in (IEnumerable<(string, string?)>)[
+            ("SupabaseRowAccessRoles", roles),
+            ("SupabaseCallerFunctions", callerFunctions),
+            ("SupabaseRowAccessGrants", grants),
+            ("SupabaseForceRowLevelSecurity", force)])
+        {
+            if (value is not null)
+            {
+                properties[name] = value;
+            }
+        }
+
+        return BuildProjectAsync(properties);
+    }
+
+    /// <summary>
+    /// Builds a project that imports the targets file, writes into <see cref="Migrations"/> when the step runs, and
+    /// sets <paramref name="properties"/> as the project would; <paramref name="commandLine"/> is added to the
+    /// command line, where <c>-p:</c> gives a property for the whole build.
+    /// </summary>
+    private async Task<(int ExitCode, string Output)> BuildProjectAsync(Dictionary<string, string> properties, params string[] commandLine)
     {
         var targets = Path.Combine(AppContext.BaseDirectory, "BuildStep", "DDDToolkit.EntityFramework.Supabase.targets");
         var project = Path.Combine(_project, "Host.proj");
@@ -97,13 +226,9 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
             $"""
             <Project>
               <PropertyGroup>
-                <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
                 <SupabaseMigrationsDirectory>{Escaped(Migrations)}</SupabaseMigrationsDirectory>
                 <TargetPath>{Escaped(typeof(BuildStepExport).Assembly.Location)}</TargetPath>
-                {(roles is null ? "" : $"<SupabaseRowAccessRoles>{Escaped(roles)}</SupabaseRowAccessRoles>")}
-                {(callerFunctions is null ? "" : $"<SupabaseCallerFunctions>{Escaped(callerFunctions)}</SupabaseCallerFunctions>")}
-                {(grants is null ? "" : $"<SupabaseRowAccessGrants>{Escaped(grants)}</SupabaseRowAccessGrants>")}
-                {(force is null ? "" : $"<SupabaseForceRowLevelSecurity>{Escaped(force)}</SupabaseForceRowLevelSecurity>")}
+                {string.Concat(properties.Select(property => $"<{property.Key}>{Escaped(property.Value)}</{property.Key}>"))}
               </PropertyGroup>
               <Import Project="{Escaped(targets)}" />
               <Target Name="Build" />
@@ -118,7 +243,7 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
             UseShellExecute = false,
         };
 
-        foreach (var argument in (string[])["msbuild", project, "-t:Build", "-nologo", "-nodeReuse:false", "-noAutoResponse", "-v:m"])
+        foreach (var argument in (string[])["msbuild", project, "-t:Build", "-nologo", "-nodeReuse:false", "-noAutoResponse", "-v:m", .. commandLine])
         {
             start.ArgumentList.Add(argument);
         }
