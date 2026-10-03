@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- The composition root, not a module: no <DDD_Module>, no [assembly: Module]. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mediator generates into the composition root; see the Supabase host for the long version. -->
+    <!-- The transport of the subscriptions the modules declare; this host keeps them in memory. -->
+    <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Modules\Catalog\Examples.Webshop.Catalog\Examples.Webshop.Catalog.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\Examples.Webshop.Ordering\Examples.Webshop.Ordering.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\Examples.Webshop.Inventory\Examples.Webshop.Inventory.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\Examples.Webshop.Payments\Examples.Webshop.Payments.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\Examples.Webshop.Shipping\Examples.Webshop.Shipping.csproj" />
+    <!--
+      The SQL Server migrations. Nothing in Program.cs names a type from it: ModuleDatabase.UseSqlServer
+      points each context at the assembly by name, and this reference is what puts it next to the binary.
+    -->
+    <ProjectReference Include="..\..\Modules\Catalog\Examples.Webshop.Catalog.Migrations.SqlServer\Examples.Webshop.Catalog.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Ordering\Examples.Webshop.Ordering.Migrations.SqlServer\Examples.Webshop.Ordering.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Inventory\Examples.Webshop.Inventory.Migrations.SqlServer\Examples.Webshop.Inventory.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Payments\Examples.Webshop.Payments.Migrations.SqlServer\Examples.Webshop.Payments.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Modules\Shipping\Examples.Webshop.Shipping.Migrations.SqlServer\Examples.Webshop.Shipping.Migrations.SqlServer.csproj" />
+    <ProjectReference Include="..\..\Shared\Examples.Hosting\Examples.Hosting.csproj" />
+    <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Mediator\DDDToolkit.Mediator.csproj" />
+  </ItemGroup>
+
+</Project>

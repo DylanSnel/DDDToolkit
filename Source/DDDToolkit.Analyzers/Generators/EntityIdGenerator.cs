@@ -18,6 +18,11 @@ namespace DDDToolkit.Analyzers;
 /// shared provider yields alongside the declared ones. Those take the struct form and go through the
 /// same emitter, so an implicit id has exactly the surface an explicit one has.
 /// </para>
+/// <para>
+/// Every id, and a record id's twin, implements <c>ISingleValue&lt;TSelf, TValue&gt;</c> when the project can see it,
+/// its <c>FromValue</c> explicitly, so a project that does not declare the id can store it through one generic
+/// converter.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class EntityIdGenerator : IIncrementalGenerator
@@ -54,8 +59,11 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
+            var singleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(name, value.FullyQualifiedName)
+                : string.Empty;
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".EntityId<" + value.FullyQualifiedName + ">, "
-                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">" + singleValue))
             {
                 writer.Line(PrefixDocComment(value.CanParse));
                 writer.Line("public const string IdPrefix = \"" + Escape(definition.Prefix) + "\";");
@@ -93,11 +101,20 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 writer.Line();
                 writer.Line("/// <summary>The always-valid twin. Throws when the id is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line("public " + validName + " ToValid() => new(this);");
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, name, value.FullyQualifiedName);
+                }
             }
 
             writer.Line();
 
-            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
+            var twinSingleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(validName, value.FullyQualifiedName)
+                : string.Empty;
+            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid" + twinSingleValue))
             {
                 // The record's copy constructor, not a property-by-property copy. It copies every field,
                 // protected, private and get-only ones included; a copy of the settable properties alone
@@ -116,6 +133,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
 
                 writer.Line();
                 Emit.SingleValueEqualityMembers(writer, validName, value.FullyQualifiedName, value.IsValueType);
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, validName, value.FullyQualifiedName);
+                }
             }
         }
 
@@ -148,6 +171,11 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
             if (implementParsable)
             {
                 interfaces.Add("global::System.IParsable<" + name + ">");
+            }
+
+            if (definition.SingleValueAvailable)
+            {
+                interfaces.Add(Emit.SingleValueInterface(name, value.FullyQualifiedName));
             }
 
             using (writer.Block(type.PartialHeader + " : " + string.Join(", ", interfaces)))
@@ -184,6 +212,12 @@ public sealed class EntityIdGenerator : IIncrementalGenerator
                 writer.Line("public static explicit operator " + value.FullyQualifiedName + "(" + name + " id) => id.Value;");
                 writer.Line();
                 writer.Line("public static explicit operator " + name + "(" + value.FullyQualifiedName + " value) => new(value);");
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, name, value.FullyQualifiedName);
+                }
 
                 if (value.CanParse)
                 {

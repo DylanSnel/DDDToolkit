@@ -56,6 +56,12 @@ public static class ReferenceSets
 
     private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyHotChocolate = new(() =>
     [
+        .. HotChocolateAlone,
+        FromType(typeof(global::DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute<>)),
+    ]);
+
+    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyHotChocolateAlone = new(() =>
+    [
         FromOutputDirectory("HotChocolate.dll"),
         FromOutputDirectory("HotChocolate.Abstractions.dll"),
         FromOutputDirectory("HotChocolate.Primitives.dll"),
@@ -68,7 +74,6 @@ public static class ReferenceSets
         FromOutputDirectory("HotChocolate.Language.Utf8.dll"),
         FromOutputDirectory("HotChocolate.Features.dll"),
         DependencyInjectionAbstractions,
-        FromType(typeof(global::DDDToolkit.HotChocolate.Attributes.GraphQLTypeAttribute<>)),
     ]);
 
     /// <summary>
@@ -101,12 +106,58 @@ public static class ReferenceSets
     /// <summary>Everything the generated HotChocolate change-type providers and bindings need.</summary>
     public static ImmutableArray<PortableExecutableReference> HotChocolate => LazyHotChocolate.Value;
 
+    /// <summary>
+    /// HotChocolate's own assemblies, without DDDToolkit.HotChocolate: enough for the providers nested in a project's
+    /// own ids, and not for the package's generic one.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> HotChocolateAlone => LazyHotChocolateAlone.Value;
+
     /// <summary>EF Core plus DDDToolkit.EntityFramework: the outbox, the contract registry and the module consumers.</summary>
     public static ImmutableArray<PortableExecutableReference> EntityFrameworkRuntime =>
     [
         .. EntityFramework,
         FromType(typeof(global::DDDToolkit.EntityFramework.Options.OutboxOptions)),
     ];
+
+    /// <summary>DDDToolkit.Supporting.Tenancy: a real package of templates and parents, for what a made-up one would not show.</summary>
+    public static ImmutableArray<PortableExecutableReference> Tenancy =>
+    [
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.TenantAggregateAttribute<>)),
+    ];
+
+    /// <summary>
+    /// DDDToolkit.Supporting.Tenancy with its Entity Framework package: the questions and answers, the catalogue,
+    /// and the way the questions are asked over a context.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> TenancyOnEntityFramework =>
+    [
+        .. EntityFrameworkRuntime,
+        .. Tenancy,
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyAnswersEntityFrameworkExtensions)),
+    ];
+
+    /// <summary>
+    /// DDDToolkit.Supporting.Membership with its Entity Framework package, and what that registers against: a
+    /// real package whose template names more than its parent takes, and whose registration is named after it.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> Membership =>
+    [
+        .. EntityFrameworkRuntime,
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
+    ];
+
+    /// <summary>DDDToolkit.Supporting.Membership alone: the member template and the rules, and nothing that stores them.</summary>
+    public static PortableExecutableReference MembershipAlone => FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>));
+
+    /// <summary>The Mediator library's abstractions alone: its messages, handlers and pipeline behavior.</summary>
+    public static PortableExecutableReference MediatorAlone => FromType(typeof(global::Mediator.IPipelineBehavior<,>));
+
+    /// <summary>The service collection, which the toolkit's own package brings to every project that references it.</summary>
+    public static PortableExecutableReference DependencyInjection => DependencyInjectionAbstractions;
+
+    /// <summary>The Mediator library's abstractions and the service collection: what a generated behavior and its registration compile against.</summary>
+    public static ImmutableArray<PortableExecutableReference> Mediator => [MediatorAlone, DependencyInjectionAbstractions];
 
     /// <summary>EF Core, with its design-time factory interface, the Supabase package the marker lives in, and the Postgres package of the rules.</summary>
     public static ImmutableArray<PortableExecutableReference> Supabase =>

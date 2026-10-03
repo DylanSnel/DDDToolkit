@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.Mediator.Tests.Domain;
 using DDDToolkit.Mediator.Tests.Infrastructure;
@@ -136,6 +137,26 @@ public sealed class MediatorDispatchTests
         });
 
         host.Log.ContextSeenByHandler.Should().BeSameAs(saving, "Mediator is registered scoped, so the handler resolves the scope's own context");
+    }
+
+    [Fact]
+    public async Task Handlers_get_the_saving_context_when_it_comes_from_a_pool()
+    {
+        using var host = new TestHost(pooled: true);
+        var basket = NewBasket();
+        basket.Empty();
+
+        var saving = await host.InScopeAsync(async (context, _) =>
+        {
+            context.IsPooled().Should().BeTrue();
+            context.Baskets.Add(basket);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            return context;
+        });
+
+        host.Log.ContextSeenByHandler.Should().BeSameAs(saving, "the publisher comes from the scope that rented the context, so a handler that injects the context gets the one being saved");
+        host.Log.CountOf<BasketEmptied>().Should().Be(1);
+        host.CountRows("Baskets").Should().Be(1);
     }
 
     [Fact]

@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="tenancy.not-seated" xml:space="preserve">
+    <value>The tenant you asked for has no seat of yours.</value>
+  </data>
+  <data name="tenancy.tenant-required" xml:space="preserve">
+    <value>This request names no tenant.</value>
+  </data>
+  <data name="tenancy.seat-suspended" xml:space="preserve">
+    <value>Your seat in this tenant has been suspended.</value>
+  </data>
+  <data name="tenancy.tenant-inactive" xml:space="preserve">
+    <value>This tenant is not in use right now.</value>
+  </data>
+  <data name="tenancy.not-permitted" xml:space="preserve">
+    <value>You lack the permission {Key}.</value>
+  </data>
+  <data name="tenancy.grant-exceeds-own" xml:space="preserve">
+    <value>That reaches past what you hold yourself, there or for that long: {Missing}.</value>
+  </data>
+  <data name="tenancy.self-assignment" xml:space="preserve">
+    <value>Someone else must place you.</value>
+  </data>
+  <data name="tenancy.self-appointment" xml:space="preserve">
+    <value>Someone else must give you a role that manages access.</value>
+  </data>
+  <data name="tenancy.other-tenant" xml:space="preserve">
+    <value>That row belongs to a tenant you are not working in.</value>
+  </data>
+  <data name="tenancy.system-only" xml:space="preserve">
+    <value>Provisioning, suspending, reactivating and closing a tenant is system work.</value>
+  </data>
+  <data name="tenancy.start-system-only" xml:space="preserve">
+    <value>A grant you make starts now; only system work picks another start.</value>
+  </data>
+  <data name="tenancy.unit-not-found" xml:space="preserve">
+    <value>The unit was not found in this tenant.</value>
+  </data>
+  <data name="tenancy.seat-not-found" xml:space="preserve">
+    <value>The seat was not found in this tenant.</value>
+  </data>
+  <data name="tenancy.role-not-found" xml:space="preserve">
+    <value>The role was not found in this tenant.</value>
+  </data>
+  <data name="tenancy.placement-not-found" xml:space="preserve">
+    <value>The seat has no placement at that unit.</value>
+  </data>
+  <data name="tenancy.grant-not-found" xml:space="preserve">
+    <value>The seat does not hold that role at that unit.</value>
+  </data>
+  <data name="tenancy.last-admin" xml:space="preserve">
+    <value>The tenant must keep at least one administrator.</value>
+  </data>
+  <data name="tenancy.slug-taken" xml:space="preserve">
+    <value>The slug {Slug} is in use by another tenant.</value>
+  </data>
+  <data name="tenancy.identity-has-seat" xml:space="preserve">
+    <value>This person has a seat in the tenant already.</value>
+  </data>
+  <data name="tenancy.role-name-taken" xml:space="preserve">
+    <value>The tenant has a role named {Name} already.</value>
+  </data>
+  <data name="tenancy.tenant-state" xml:space="preserve">
+    <value>The tenant's current status does not allow this.</value>
+  </data>
+  <data name="tenancy.seat-state" xml:space="preserve">
+    <value>The seat's current status does not allow this.</value>
+  </data>
+  <data name="tenancy.unit-not-active" xml:space="preserve">
+    <value>Unit {Unit} is archived: nothing new goes there.</value>
+  </data>
+  <data name="tenancy.root-immovable" xml:space="preserve">
+    <value>The root has no parent, so it does not move.</value>
+  </data>
+  <data name="tenancy.root-not-archivable" xml:space="preserve">
+    <value>The root is never archived.</value>
+  </data>
+  <data name="tenancy.one-root" xml:space="preserve">
+    <value>The tree has one root, no more and no fewer.</value>
+  </data>
+  <data name="tenancy.cycle" xml:space="preserve">
+    <value>A unit cannot hang below itself.</value>
+  </data>
+  <data name="tenancy.same-parent" xml:space="preserve">
+    <value>The unit already hangs there.</value>
+  </data>
+  <data name="tenancy.depth-exceeded" xml:space="preserve">
+    <value>The tree may have at most {Max} levels.</value>
+  </data>
+  <data name="tenancy.unit-has-active-children" xml:space="preserve">
+    <value>Archive the active units below it first.</value>
+  </data>
+  <data name="tenancy.unit-archived" xml:space="preserve">
+    <value>That unit is archived.</value>
+  </data>
+  <data name="tenancy.flat-tenant" xml:space="preserve">
+    <value>A flat tenant has its root alone; make it hierarchical first.</value>
+  </data>
+  <data name="tenancy.shape-change" xml:space="preserve">
+    <value>A tenant only goes from flat to hierarchical.</value>
+  </data>
+  <data name="tenancy.duplicate-placement" xml:space="preserve">
+    <value>That seat has a placement at this unit already.</value>
+  </data>
+  <data name="tenancy.second-primary" xml:space="preserve">
+    <value>Only one of a seat's placements can be primary.</value>
+  </data>
+  <data name="tenancy.duplicate-grant" xml:space="preserve">
+    <value>That role is already granted at this placement.</value>
+  </data>
+  <data name="tenancy.role-not-active" xml:space="preserve">
+    <value>An archived role cannot be granted.</value>
+  </data>
+  <data name="tenancy.role-archived" xml:space="preserve">
+    <value>That role is archived.</value>
+  </data>
+  <data name="tenancy.name-invalid" xml:space="preserve">
+    <value>Enter {Min} to {Max} characters.</value>
+  </data>
+  <data name="tenancy.kind-invalid" xml:space="preserve">
+    <value>A unit kind takes 1 to {Max} characters.</value>
+  </data>
+  <data name="tenancy.invalid-slug" xml:space="preserve">
+    <value>A slug has 2 to 63 characters, each a lowercase letter, a digit or a dash, and does not begin with a dash.</value>
+  </data>
+  <data name="tenancy.invalid-period" xml:space="preserve">
+    <value>A grant's end must come after its start.</value>
+  </data>
+  <data name="tenancy.reason-required" xml:space="preserve">
+    <value>Give a reason to suspend or close a tenant.</value>
+  </data>
+  <data name="tenancy.unknown-permission" xml:space="preserve">
+    <value>These keys are unknown or retired: {Keys}.</value>
+  </data>
+  <data name="tenancy.unknown-unit-kind" xml:space="preserve">
+    <value>The application has no unit kind {Kind}.</value>
+  </data>
+  <data name="tenancy.identity-required" xml:space="preserve">
+    <value>A seat needs the verified identity of the person it belongs to.</value>
+  </data>
+  <data name="tenancy.keys-not-normalized" xml:space="preserve">
+    <value>A role's keys must be expanded, without duplicates, in ordinal order.</value>
+  </data>
+  <data name="tenancy.too-many-ids" xml:space="preserve">
+    <value>Ask for at most {Max} ids at a time.</value>
+  </data>
+  <data name="tenancy.operators-only" xml:space="preserve">
+    <value>Only an operator can do this.</value>
+  </data>
+  <data name="tenancy.page-size-invalid" xml:space="preserve">
+    <value>A page holds 1 to {Max} tenants.</value>
+  </data>
+  <data name="tenancy.cursor-invalid" xml:space="preserve">
+    <value>That page marker does not belong to this list. Start again from the first page.</value>
+  </data>
+  <data name="tenancy.invitation-not-found" xml:space="preserve">
+    <value>No invitation was found for this link.</value>
+  </data>
+  <data name="tenancy.invitation-lapsed" xml:space="preserve">
+    <value>This invitation has run out. Ask for a new one.</value>
+  </data>
+  <data name="tenancy.invitation-used" xml:space="preserve">
+    <value>Someone else has accepted this invitation.</value>
+  </data>
+  <data name="tenancy.invitation-cancelled" xml:space="preserve">
+    <value>This invitation was cancelled.</value>
+  </data>
+  <data name="tenancy.invitation-state" xml:space="preserve">
+    <value>The invitation's current state does not allow this.</value>
+  </data>
+  <data name="tenancy.invitation-unbacked" xml:space="preserve">
+    <value>Whoever sent this invitation may no longer give what it offers. Ask for a new one.</value>
+  </data>
+  <data name="tenancy.address-mismatch" xml:space="preserve">
+    <value>This invitation was sent to another address than this account's.</value>
+  </data>
+  <data name="tenancy.address-invalid" xml:space="preserve">
+    <value>Enter one e-mail address of at most {Max} characters.</value>
+  </data>
+  <data name="tenancy.invitation-lifetime" xml:space="preserve">
+    <value>An invitation stays open for {Min} to {Max} minutes.</value>
+  </data>
+  <data name="tenancy.invitation-grant-ends-first" xml:space="preserve">
+    <value>The role would end before the invitation does. Pick a later end for the role.</value>
+  </data>
+</root>

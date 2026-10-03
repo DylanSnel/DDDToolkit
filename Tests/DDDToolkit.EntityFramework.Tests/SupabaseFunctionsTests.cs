@@ -8,6 +8,7 @@ using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using static DDDToolkit.EntityFramework.Tests.Infrastructure.SupabaseRowLevelSecurityDatabase;
 using static DDDToolkit.EntityFramework.Tests.Infrastructure.SupabaseTestTokens;
 
@@ -91,6 +92,28 @@ public sealed class SupabaseFunctionsTests(SupabaseRowLevelSecurityDatabase data
         });
 
         asBob.Should().Equal("Bob's");
+    }
+
+    [Fact]
+    public void Outside_an_http_trigger_with_explicit_callers_required_GetSupabaseCaller_throws()
+    {
+        using var strict = new ServiceCollection().RequireExplicitCallers().BuildServiceProvider();
+        using var plain = new ServiceCollection().BuildServiceProvider();
+
+        var queued = WorkerInvocation.Queue();
+        queued.InstanceServices = strict;
+
+        ((Func<Caller>)(() => queued.GetSupabaseCaller())).Should().Throw<NoCallerException>()
+            .WithMessage("*not an HTTP request and began no caller*RequireExplicitCallers*");
+
+        using (Callers.Begin(Caller.System))
+        {
+            queued.GetSupabaseCaller().Should().BeSameAs(Caller.System, "a function that begins a caller runs as it");
+        }
+
+        var unstrict = WorkerInvocation.Queue();
+        unstrict.InstanceServices = plain;
+        unstrict.GetSupabaseCaller().Should().BeSameAs(Caller.System, "without the option it answers the system, as it always did");
     }
 
     /// <summary>Runs a function that reads the notes through a context on <see cref="AmbientCallerAccessor"/>.</summary>

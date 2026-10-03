@@ -25,4 +25,14 @@
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
   </ItemGroup>
 
+  <!--
+    How a model marks a table that only grows, an event log for one, and which entity types are the outbox's
+    and the inbox's. DDDToolkit.EntityFramework writes the marks; this package reads them, to write such a
+    table's guard and privileges, and references that package no more than it references Npgsql. So the one
+    file that spells the marks is compiled into both assemblies, as internal types.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework\Storage\KeptRows.cs" Link="Storage\KeptRows.cs" />
+  </ItemGroup>
+
 </Project>

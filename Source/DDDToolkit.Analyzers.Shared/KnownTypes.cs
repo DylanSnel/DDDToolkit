@@ -25,6 +25,30 @@ internal static class KnownTypes
     public const string DontCompareAttribute = AttributesNamespace + ".DontCompareAttribute";
     public const string KeyPartAttribute = AttributesNamespace + ".KeyPartAttribute";
 
+    /// <summary>An abstract generic parent a package ships for aggregate roots declared elsewhere: <c>[AggregateRootBase]</c>.</summary>
+    public const string AggregateRootBaseAttribute = AttributesNamespace + ".AggregateRootBaseAttribute";
+
+    /// <summary>An abstract generic parent a package ships for child entities declared elsewhere: <c>[EntityBase]</c>.</summary>
+    public const string EntityBaseAttribute = AttributesNamespace + ".EntityBaseAttribute";
+
+    /// <summary>On a package's attribute class: a class declared with it is an aggregate root deriving from the named parent.</summary>
+    public const string AggregateRootTemplateAttribute = AttributesNamespace + ".AggregateRootTemplateAttribute";
+
+    /// <summary>On a package's attribute class: a class declared with it is a child entity deriving from the named parent.</summary>
+    public const string EntityTemplateAttribute = AttributesNamespace + ".EntityTemplateAttribute";
+
+    /// <summary>On a template attribute class: fills one type parameter of the parent from another template class of the project.</summary>
+    public const string TemplateArgumentAttribute = AttributesNamespace + ".TemplateArgumentAttribute";
+
+    /// <summary>On a package's generic registration method: the application gets it closed over its template classes.</summary>
+    public const string TemplateRegistrationAttribute = AttributesNamespace + ".TemplateRegistrationAttribute";
+
+    /// <summary>On a type parameter of a registration method: filled from the class declared with a template.</summary>
+    public const string TemplateTypeAttribute = AttributesNamespace + ".TemplateTypeAttribute";
+
+    /// <summary>Assembly attribute naming a type that declares registration methods, so a referencing project finds them cheaply.</summary>
+    public const string TemplateRegistrationsAttribute = AttributesNamespace + ".TemplateRegistrationsAttribute";
+
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
 
@@ -43,6 +67,18 @@ internal static class KnownTypes
     /// <summary>An access function published in a module's contracts, asked by key: <c>[AccessFunctionContract&lt;TKey&gt;]</c>.</summary>
     public const string AccessFunctionContractAttribute = AttributesNamespace + ".AccessFunctionContractAttribute`1";
 
+    /// <summary>A class of questions only the database answers, and the owner of the functions it names: <c>[AccessFunctions]</c>.</summary>
+    public const string AccessFunctionsAttribute = AttributesNamespace + ".AccessFunctionsAttribute";
+
+    /// <summary>A set-shaped question of an <c>[AccessFunctions]</c> class: <c>[AccessSet("name")]</c>.</summary>
+    public const string AccessSetAttribute = AttributesNamespace + ".AccessSetAttribute";
+
+    /// <summary>A question of an <c>[AccessFunctions]</c> class answered with one value: <c>[AccessScalar("name")]</c>.</summary>
+    public const string AccessScalarAttribute = AttributesNamespace + ".AccessScalarAttribute";
+
+    /// <summary>What a set-shaped question answers with, which a rule asks <c>Contains</c> of.</summary>
+    public const string AccessSet = "DDDToolkit.Abstractions.Access.AccessSet`1";
+
     /// <summary>Who is asking, as a row access rule sees them.</summary>
     public const string Caller = "DDDToolkit.Abstractions.Access.Caller";
 
@@ -51,6 +87,43 @@ internal static class KnownTypes
 
     /// <summary>The constant the core generator writes into a row access rule: its SQL, columns still to fill in.</summary>
     public const string RowAccessSqlField = "RowAccessSql";
+
+    /// <summary>On a module's request interface: the generator writes the pipeline behavior that holds its requests to what they declare.</summary>
+    public const string AccessRequestsAttribute = AttributesNamespace + ".AccessRequestsAttribute";
+
+    /// <summary>What a request implements to say what it requires of its caller; a module's request interface derives from it.</summary>
+    public const string RequireAccessInterface = "DDDToolkit.Access.IRequireAccess";
+
+    /// <summary>The access checks of one module, closed over its request interface: what a generated behavior asks.</summary>
+    public const string AccessChecksUsage = "global::DDDToolkit.Access.AccessChecks";
+
+    /// <summary>Where the set of a module's access checks is registered, which a generated behavior's registration calls.</summary>
+    public const string AccessCheckRegistration = "DDDToolkit.Access.AccessCheckServiceCollectionExtensions";
+
+    /// <summary>
+    /// The pipeline behavior of the Mediator library (assembly Mediator.Abstractions). A project that can see it
+    /// uses the library, and gets a behavior written for each of its <c>[AccessRequests]</c> interfaces.
+    /// </summary>
+    public const string MediatorPipelineBehavior = "Mediator.IPipelineBehavior`2";
+
+    /// <summary>
+    /// The Mediator library's pipeline behavior for the messages that are answered with a stream, which pass no
+    /// <see cref="MediatorPipelineBehavior"/>. Where the library has it, an <c>[AccessRequests]</c> interface
+    /// gets a second behavior, so a stream query of the module is held to what it declares as well.
+    /// </summary>
+    public const string MediatorStreamPipelineBehavior = "Mediator.IStreamPipelineBehavior`2";
+
+    /// <summary>
+    /// The Mediator library's notification, which is published to its handlers through neither pipeline: a
+    /// notification that implements an <c>[AccessRequests]</c> interface is asked about by nothing.
+    /// </summary>
+    public const string MediatorNotification = "Mediator.INotification";
+
+    /// <summary>The service collection a generated registration extends (assembly Microsoft.Extensions.DependencyInjection.Abstractions).</summary>
+    public const string ServiceCollection = "Microsoft.Extensions.DependencyInjection.IServiceCollection";
+
+    /// <summary>Where <c>TryAddEnumerable</c> lives, which a generated registration adds a behavior with.</summary>
+    public const string ServiceCollectionDescriptorExtensions = "Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions";
 
     /// <summary>Namespace of the invariant interface, matched by name like everything else here.</summary>
     public const string InvariantsNamespace = "DDDToolkit.Invariants";
@@ -74,6 +147,12 @@ internal static class KnownTypes
     /// <summary>Where <c>RowAccessRule</c> lives, which the host's generated list of rules builds.</summary>
     public const string PostgresNamespace = "DDDToolkit.EntityFramework.Postgres";
 
+    /// <summary>An assembly's offer of a class that writes row level security of its own: <c>[assembly: RowAccessContribution(typeof(X))]</c>.</summary>
+    public const string RowAccessContributionAttribute = AttributesNamespace + ".RowAccessContributionAttribute";
+
+    /// <summary>A host's choice to write an offered contribution into its migrations: <c>[assembly: UseRowAccessContribution(typeof(X))]</c>.</summary>
+    public const string UseRowAccessContributionAttribute = AttributesNamespace + ".UseRowAccessContributionAttribute";
+
     /// <summary>Entity Framework's design-time factory (assembly Microsoft.EntityFrameworkCore).</summary>
     public const string DesignTimeDbContextFactory = "Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory`1";
 
@@ -83,12 +162,20 @@ internal static class KnownTypes
     public const string GraphQLIgnoreAttribute = "HotChocolate.GraphQLIgnoreAttribute";
     public const string StjJsonConstructorAttribute = "System.Text.Json.Serialization.JsonConstructorAttribute";
     public const string IParsable = "System.IParsable`1";
+
+    /// <summary>
+    /// What every generated id, single value object and always-valid twin implements when the project can see it:
+    /// <c>DDDToolkit.Interfaces.ISingleValue&lt;TSelf, TValue&gt;</c>, the way back from a stored value that needs no
+    /// Entity Framework in the declaring project.
+    /// </summary>
+    public const string SingleValueInterface = "DDDToolkit.Interfaces.ISingleValue`2";
     public const string ReadOnlySet = "System.Collections.ObjectModel.ReadOnlySet`1";
 
     // Fully qualified names used in generated code.
     public const string BaseTypesNamespace = "global::DDDToolkit.BaseTypes";
     public const string InterfacesNamespace = "global::DDDToolkit.Abstractions.Interfaces";
     public const string HasKeyPartsInterface = "global::DDDToolkit.Interfaces.IHasKeyParts";
+    public const string SingleValueInterfaceUsage = "global::DDDToolkit.Interfaces.ISingleValue";
     public const string ValidationNamespace = "global::DDDToolkit.Validation";
     public const string InvariantInterface = "global::DDDToolkit.Invariants.IInvariant";
     public const string InvariantViolation = "global::DDDToolkit.Invariants.InvariantViolation";

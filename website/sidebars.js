@@ -2,7 +2,8 @@
 
 /**
  * The order is the order a reader needs things in: the building blocks with no database, then storing
- * them, then modules and messages between them, then the other integrations, then reference.
+ * them, then modules and messages between them, then the domains the toolkit ships as packages, then the
+ * other integrations, then reference.
  *
  * @type {import('@docusaurus/plugin-content-docs').SidebarsConfig}
  */
@@ -26,7 +27,13 @@ const sidebars = {
       type: 'category',
       label: 'Modules and messaging',
       collapsed: false,
-      items: ['modules', 'module-contracts', 'integration-events', 'transports'],
+      items: ['modules', 'module-contracts', 'access-requirements', 'integration-events', 'transports'],
+    },
+    {
+      type: 'category',
+      label: 'Supporting domains',
+      collapsed: false,
+      items: ['tenancy', 'membership', 'writing-a-supporting-domain'],
     },
     {
       type: 'category',

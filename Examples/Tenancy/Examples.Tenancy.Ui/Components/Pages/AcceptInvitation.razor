@@ -1,0 +1,235 @@
+@page "/invitations/accept"
+@implements IDisposable
+@inject SampleApi Api
+@inject SupabaseLoginClient SupabaseLogin
+@inject LinkSignIn LinkSignIn
+@inject UiSession Session
+@inject NavigationManager Navigation
+
+<PageTitle>@T["nav.accept"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.accept"]</h1>
+
+@if (_linkRefused is not null)
+{
+    <div class="alert alert-warning" role="alert">@_linkRefused</div>
+}
+
+@if (_tokenRefused is not null)
+{
+    <p class="small">@T["login.password.token-refused"]</p>
+    <ApiOutcomeView Answer="_tokenRefused" />
+}
+
+@if (_asksToSignInAs is not null)
+{
+    @* A link's sign-in replaces nobody without their say: anybody can make a link that carries the sign-in of an account of their own. *@
+    <div class="alert alert-warning" role="alert">
+        <p>@T.Html("accept.link.asks", _asksToSignInAs, Session.PersonName)</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary me-2" @onclick="KeepSession">@T["accept.link.keep", Session.PersonName]</button>
+        <button type="button" class="btn btn-sm btn-warning" disabled="@_arriving" @onclick="TakeLinkAsync">@T["accept.link.take", _asksToSignInAs]</button>
+    </div>
+}
+
+@if (_arriving)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else if (!Session.IsSignedIn)
+{
+    @* The one page besides the login that opens signed out: a mail's link leads here and signs its person in. *@
+    <div class="alert alert-info" role="status">@T.Html("accept.sign-in-first")</div>
+}
+else if (_choosesPassword)
+{
+    @* Whoever a mail's link signed in has no password yet, and the link works once: without one there is no way back in. *@
+    <h2 class="h5">@T["accept.password.title"]</h2>
+    <p class="text-body-secondary">@T.Html("accept.password.intro", Session.PersonName)</p>
+    <form class="actions" @onsubmit="ChoosePasswordAsync">
+        <div class="action">
+            <label class="form-label small" for="new-password">@T["accept.password.label"]</label>
+            <input id="new-password" type="password" class="form-control form-control-sm" autocomplete="new-password" @bind="_password" />
+            <input type="password" class="form-control form-control-sm" autocomplete="new-password" placeholder="@T["accept.password.again"]" @bind="_repeated" />
+            <button type="submit" class="btn btn-primary btn-sm" disabled="@_settingPassword">@T["accept.password.set"]</button>
+        </div>
+    </form>
+
+    @if (_passwordRefused is not null)
+    {
+        <div class="alert alert-danger mt-3" role="alert">@_passwordRefused</div>
+    }
+}
+else
+{
+    @if (_passwordSet)
+    {
+        <div class="alert alert-success" role="status">@T["accept.password.done"]</div>
+    }
+
+    <p class="text-body-secondary">@T.Html("accept.intro", Session.PersonName)</p>
+
+    <div class="actions">
+        <div class="action">
+            <label class="form-label small" for="token-to-accept">@T["accept.token"]</label>
+            @* Not kept by the browser: a token is a key, and whoever holds it and the address may use it. *@
+            <input id="token-to-accept" class="form-control form-control-sm" autocomplete="off" spellcheck="false" @bind="_token" />
+            <input class="form-control form-control-sm" placeholder="@T["accept.name"]" @bind="_name" />
+            <ActionButton Label="@T["accept.send"]" Allowed="true" Send="AcceptAsync" />
+            <div class="form-text">@T["accept.help"]</div>
+        </div>
+    </div>
+
+    @if (_tenant is not null)
+    {
+        <div class="alert alert-success mt-3" role="status">@T.Html("accept.done", _tenant)</div>
+    }
+}
+
+@code {
+    private string? _token;
+    private string? _name;
+    private string? _tenant;
+    private string? _password;
+    private string? _repeated;
+    private string? _linkRefused;
+    private string? _passwordRefused;
+    private ApiOutcome? _tokenRefused;
+    private string? _asksToSignInAs;
+    private bool _arriving;
+    private bool _choosesPassword;
+    private bool _settingPassword;
+    private bool _passwordSet;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The page opens signed out too, so it shows by itself who is signed in: after a log-out it says so.
+        Session.Changed += OnSessionChanged;
+
+        // A link opened while the page is on screen changes the address and loads nothing, so the page is told.
+        Navigation.LocationChanged += OnLocationChanged;
+        await ArriveAsync();
+    }
+
+    // A link to this page carries what it brings after the '#', which a browser sends to no server: the
+    // invitation's token, and behind it the sign-in when the link came from Supabase Auth's mail. It is read here,
+    // from the address the browser itself reported to the circuit, and taken off that address at once, so it
+    // stays in no address bar, no history and no bookmark.
+    private async Task ArriveAsync()
+    {
+        var link = OnThisPage ? AuthLink.Read(Navigation.Uri) : null;
+        if (link is null || link.IsEmpty)
+        {
+            return;
+        }
+
+        Navigation.NavigateTo(Navigation.ToAbsoluteUri(Navigation.Uri).GetLeftPart(UriPartial.Path), replace: true);
+        (_token, _tenant, _linkRefused, _tokenRefused, _asksToSignInAs) = (link.Token, null, null, null, null);
+
+        if (link.Refusal is not null)
+        {
+            _linkRefused = T["accept.link.refused"];
+        }
+        else if (link.AccessToken is not null)
+        {
+            _arriving = true;
+            try
+            {
+                Show(await LinkSignIn.ArriveAsync(link));
+            }
+            finally
+            {
+                _arriving = false;
+            }
+        }
+    }
+
+    // What the address said starts no session by itself: Auth says whose the sign-in is, and a tab that is signed
+    // in as somebody else keeps its session until its person says otherwise (LinkSignIn).
+    private void Show(LinkSignInOutcome outcome)
+    {
+        (_linkRefused, _tokenRefused, _asksToSignInAs) = (outcome.Refusal, outcome.TokenRefused, outcome.AsksToSignInAs);
+        if (outcome.SignedIn)
+        {
+            _choosesPassword = outcome.ChoosesPassword;
+        }
+    }
+
+    // Yes: the link's person takes the tab's session over.
+    private async Task TakeLinkAsync()
+    {
+        _arriving = true;
+        try
+        {
+            Show(await LinkSignIn.ConfirmAsync());
+        }
+        finally
+        {
+            _arriving = false;
+        }
+    }
+
+    // No: the tab stays as it is, and the link's sign-in is dropped. The token the link brought is no session's,
+    // so it stays in its field for whoever is signed in to accept or to clear.
+    private void KeepSession()
+    {
+        LinkSignIn.Decline();
+        _asksToSignInAs = null;
+    }
+
+    // The password goes to Auth with the person's own sign-in and is forgotten here, whatever the answer.
+    private async Task ChoosePasswordAsync()
+    {
+        if (_settingPassword)
+        {
+            return;
+        }
+
+        _settingPassword = true;
+        try
+        {
+            _passwordRefused = _password == _repeated
+                ? await SupabaseLogin.ChoosePasswordAsync(Session.AccessToken, _password)
+                : T["accept.password.differ"];
+            (_password, _repeated) = (null, null);
+            _passwordSet = _passwordRefused is null;
+            _choosesPassword = !_passwordSet;
+        }
+        finally
+        {
+            _settingPassword = false;
+        }
+    }
+
+    // The seat is answered by its id; which tenant it is in is read from the seats the person has. The session then works
+    // there, so the next page shows what the seat gives.
+    private async Task<ApiOutcome> AcceptAsync()
+    {
+        var accepted = await Api.AcceptInvitationAsync(_token, _name);
+        if (accepted.Value is { } answer)
+        {
+            _token = null;
+            var seats = await Api.SeatsOfMineAsync();
+            _tenant = seats.Value?.FirstOrDefault(mine => mine.Seat.Id == answer.SeatId)?.Tenant.Slug;
+            Session.SeatAdded(_tenant);
+        }
+
+        return accepted;
+    }
+
+    private bool OnThisPage => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("invitations/accept", StringComparison.OrdinalIgnoreCase);
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs change)
+        => _ = InvokeAsync(async () =>
+        {
+            await ArriveAsync();
+            StateHasChanged();
+        });
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

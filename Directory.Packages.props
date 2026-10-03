@@ -5,9 +5,8 @@
     Floor: what a published package declares as its dependency. NuGet writes Version="X" into the
     nuspec as ">= X", so this is the oldest version a consumer is allowed to have, not the version
     they get. Keeping it at the oldest release that works means installing DDDToolkit never drags a
-    consumer's Entity Framework, HotChocolate or FluentValidation forward to whatever patch this
-    repository happened to be on. Raise a floor only when the code needs something newer, and say why
-    next to it.
+    consumer's Entity Framework or FluentValidation forward to whatever patch this repository happened
+    to be on. Raise a floor only when the code needs something newer, and say why next to it.
 
     Latest: what the tests, examples and benchmarks build and run against, so day-to-day development
     and the main test run use current releases. Transitive pinning is on in this mode, so a test project
@@ -44,7 +43,14 @@
     <!-- The first release of the isolated worker's 2.x line, which has the middleware API used here. -->
     <AzureFunctionsWorkerVersion>2.0.0</AzureFunctionsWorkerVersion>
     <NpgsqlVersion>10.0.0</NpgsqlVersion>
-    <HotChocolateVersion>16.0.0</HotChocolateVersion>
+    <!--
+      Not older than this, and the same in both sets. HotChocolate asks that all of its packages in one
+      application are the same version, and DDDToolkit.HotChocolate.Fusion.InMemory is written against the
+      Fusion packages of 16.6.6: the interfaces of Fusion it implements have another shape at 16.0.0. So
+      every HotChocolate, GreenDonut and Fusion package takes this one property, and the floor and the
+      latest are raised together.
+    -->
+    <HotChocolateVersion>16.6.6</HotChocolateVersion>
     <FluentValidationVersion>12.0.0</FluentValidationVersion>
     <!-- 13.0.1 is the first release without the stack-overflow advisory GHSA-5crp-9r3c-p9vr. -->
     <NewtonsoftJsonVersion>13.0.1</NewtonsoftJsonVersion>
@@ -64,6 +70,7 @@
     <IdentityModelVersion>8.19.2</IdentityModelVersion>
     <AzureFunctionsWorkerVersion>2.52.0</AzureFunctionsWorkerVersion>
     <NpgsqlVersion>10.0.3</NpgsqlVersion>
+    <!-- The floor's, always: the repository has one HotChocolate. See there. -->
     <HotChocolateVersion>16.6.6</HotChocolateVersion>
     <FluentValidationVersion>12.1.1</FluentValidationVersion>
     <NewtonsoftJsonVersion>13.0.4</NewtonsoftJsonVersion>
@@ -120,6 +127,29 @@
     -->
     <PackageVersion Include="HotChocolate.Subscriptions.InMemory" Version="$(HotChocolateVersion)" />
     <PackageVersion Include="HotChocolate.Types.Scalars" Version="$(HotChocolateVersion)" />
+    <!--
+      RegisterDbContextFactory: how a schema is told that a context comes from a pooled factory. Only the tests of
+      DDDToolkit.HotChocolate use it; nothing in Source does.
+    -->
+    <PackageVersion Include="HotChocolate.Data.EntityFramework" Version="$(HotChocolateVersion)" />
+    <!--
+      PagingArguments and Page<T>: what a paged query of the Tenancy sample takes and answers, in its application
+      projects. The package has no dependencies and is not HotChocolate. ToPageAsync, which reads such a page over
+      Entity Framework, comes to the infrastructure projects with GreenDonut.Data.EntityFramework, and the reading
+      of a cursor with GreenDonut.Data: the paging library, released with HotChocolate and without a reference to it.
+    -->
+    <PackageVersion Include="GreenDonut.Data.Primitives" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="GreenDonut.Data" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="GreenDonut.Data.EntityFramework" Version="$(HotChocolateVersion)" />
+    <!--
+      Fusion. DDDToolkit.HotChocolate.Fusion.InMemory builds on the gateway and on the in-memory connector,
+      which Tests/Spikes/DDDToolkit.Spikes.FusionInProcess tries too; the microservices samples have a gateway
+      of their own, and their AppHosts compose its schema with the Aspire package. The same version as every
+      other HotChocolate package, as HotChocolate asks.
+    -->
+    <PackageVersion Include="HotChocolate.Fusion.AspNetCore" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Fusion.Aspire" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Fusion.Connectors.InMemory" Version="$(HotChocolateVersion)" />
     <PackageVersion Include="FluentValidation" Version="$(FluentValidationVersion)" />
     <PackageVersion Include="Newtonsoft.Json" Version="$(NewtonsoftJsonVersion)" />
     <PackageVersion Include="Mediator.Abstractions" Version="$(MediatorVersion)" />
@@ -167,15 +197,6 @@
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.10.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery.Yarp" Version="10.10.0" />
     <PackageVersion Include="Yarp.ReverseProxy" Version="2.3.0" />
-    <!--
-      Fusion: the gateway of the microservices samples and the AppHost side that composes its schema, and
-      the in-memory connector Tests/Spikes/DDDToolkit.Spikes.FusionInProcess tries.
-      Pinned rather than $(HotChocolateVersion): only the examples use them, and Fusion's Aspire
-      integration is newer than the floor the packages are built against.
-    -->
-    <PackageVersion Include="HotChocolate.Fusion.AspNetCore" Version="16.6.6" />
-    <PackageVersion Include="HotChocolate.Fusion.Aspire" Version="16.6.6" />
-    <PackageVersion Include="HotChocolate.Fusion.Connectors.InMemory" Version="16.6.6" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="$(OpenTelemetryVersion)" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="$(OpenTelemetryInstrumentationVersion)" />
@@ -195,6 +216,8 @@
     <!-- FluentAssertions 8+ is commercially licensed; 7.x is the last Apache-2.0 line. -->
     <PackageVersion Include="FluentAssertions" Version="7.2.2" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.11" />
+    <!-- Runs a sample's web host in the test process (WebApplicationFactory), as the Tenancy sample's tests do. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="$(AspNetCoreVersion)" />
     <!--
       Real databases in throw-away containers: the provider suite runs the mapping tests on Postgres and
       SQL Server, and the pgmq sink needs a Postgres with that extension. Both suites skip themselves
@@ -202,5 +225,12 @@
     -->
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <!--
+      Names tables and columns in snake_case. Tests only: the Tenancy suite on Postgres runs a second time
+      under it, which is what proves that Tenancy's SQL follows the names of the model it is given. It needs
+      Entity Framework 10.0.1, a patch above the floor, so the one project that uses it leaves it out of a
+      floor run and says there what it does instead.
+    -->
+    <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
   </ItemGroup>
 </Project>

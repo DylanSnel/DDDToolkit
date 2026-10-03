@@ -14,6 +14,20 @@ namespace DDDToolkit.HotChocolate.Analyzers;
 /// the GraphQL runtime can convert between the object and its underlying scalar value, plus one
 /// <c>Add{Module}GraphQlRuntimeBindings(this IRequestExecutorBuilder)</c> extension that binds each
 /// type to a scalar (from <c>[GraphQLType&lt;T&gt;]</c> or a default mapping) and registers the converters.
+/// <para>
+/// A module's domain and contracts projects need not reference HotChocolate, which would bring ASP.NET Core into
+/// them. Their ids and single value objects then have no nested provider, so the project that builds the module's
+/// schema binds them in its own <c>Add{Module}GraphQlRuntimeBindings()</c>, with
+/// <c>SingleValueChangeTypeProvider&lt;T, TValue&gt;</c> and, for an identifier, <c>SingleValueNodeIdSerializer&lt;T, TValue&gt;</c>:
+/// every one of the module's other projects, and the published ones of other modules. <see cref="ModuleSingleValues"/>
+/// says which; a project that declares no ids of its own, such as a module's API project, still gets the method
+/// for them.
+/// </para>
+/// <para>
+/// The same method registers every struct id it binds as a key HotChocolate's paging can order a list by, with
+/// <c>SingleValueCursorKeySerializer&lt;T, TValue&gt;</c>, so <c>OrderBy(x =&gt; x.Id)</c> works in front of
+/// <c>ToPageAsync</c> without a line per id in the application.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
@@ -51,15 +65,26 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(targets, static (productionContext, target) => EmitChangeTypeProvider(productionContext, target));
 
+        // Read off the compilation, so it runs again on every edit; the walk of each referenced assembly is cached,
+        // and what comes out compares equal when nothing it names changed, so the output step stays cached.
+        var referenced = context.CompilationProvider.Select(static (compilation, cancellationToken) =>
+            ModuleSingleValues.Of(compilation, DefaultScalarTypes, NodeIdValueTypes, CursorKeyValueTypes, cancellationToken));
+
+        // Whether this project can name the serializer at all: a DDDToolkit.HotChocolate from before it existed cannot.
+        var registersCursorKeys = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.GetTypeByMetadataName(ModuleSingleValues.CursorKeySerializerMetadataName) is not null);
+
         var registration = targets.Collect()
+            .Combine(referenced)
+            .Combine(registersCursorKeys)
             .Combine(context.RegistrationName())
             .Combine(context.AssemblyName())
-            .Combine(context.RegistrationsOfTheSameModule("GraphQl.HotChocolateExtensions", "GraphQlRuntimeBindings"));
+            .Combine(context.RegistrationsOfTheSameModule(ModuleSingleValues.RegistrationClass, ModuleSingleValues.RegistrationSuffix));
 
         context.RegisterSourceOutput(registration, static (productionContext, data) =>
         {
-            var (((targets, moduleName), assemblyName), sameModule) = data;
-            EmitBindings(productionContext, targets, moduleName, assemblyName, sameModule);
+            var (((((targets, referenced), registersCursorKeys), moduleName), assemblyName), sameModule) = data;
+            EmitBindings(productionContext, targets, referenced, registersCursorKeys, moduleName, assemblyName, sameModule);
         });
     }
 
@@ -163,9 +188,18 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         writer.Line("}");
     }
 
-    private static void EmitBindings(SourceProductionContext context, ImmutableArray<BindingTarget> targets, string moduleName, string? assemblyName, EquatableArray<string> sameModule)
+    private static void EmitBindings(
+        SourceProductionContext context,
+        ImmutableArray<BindingTarget> targets,
+        EquatableArray<ReferencedBinding> referenced,
+        bool registersCursorKeys,
+        string moduleName,
+        string? assemblyName,
+        EquatableArray<string> sameModule)
     {
-        if (targets.Length == 0)
+        // A project with nothing of its own to bind gets no method, also when the module has bindings it could
+        // call: its schema calls theirs, which has the same name, and there is only one to import.
+        if (targets.Length == 0 && referenced.Count == 0)
         {
             return;
         }
@@ -182,6 +216,14 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         writer.Line("/// <summary>Registers the GraphQL scalar bindings and converters for the DDDToolkit types of this assembly.</summary>");
         using (writer.Block("public static class HotChocolateExtensions"))
         {
+            if (referenced.Count > 0)
+            {
+                writer.Line("/// <summary>");
+                writer.Line("/// The ids and single value objects of this module's projects without DDDToolkit.HotChocolate, and the published");
+                writer.Line("/// ones of other modules, have no converter of their own and are bound here with <c>SingleValueChangeTypeProvider</c>.");
+                writer.Line("/// </summary>");
+            }
+
             using (writer.Block("public static global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder Add" + moduleName + "GraphQlRuntimeBindings(this global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder)"))
             {
                 // The other assemblies of this module name their method the same, so this one calls them: a
@@ -190,6 +232,8 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
                 {
                     writer.Line(call + "(builder);");
                 }
+
+                var cursorKeys = new List<string>();
 
                 foreach (var target in targets.OrderBy(t => t.Type.FullyQualifiedName, StringComparer.Ordinal))
                 {
@@ -214,6 +258,47 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
                     {
                         writer.Line("builder.AddNodeIdValueSerializer<" + target.Type.FullyQualifiedName + ".NodeIdValueSerializer>();");
                     }
+
+                    if (registersCursorKeys && target.HasCursorKeySerializer)
+                    {
+                        cursorKeys.Add(ModuleSingleValues.CursorKeySerializer + "<" + target.Type.FullyQualifiedName + ", " + target.Value.FullyQualifiedName + ">");
+                    }
+                }
+
+                // A twin of another project's type is a type of its own here, with a binding and a provider of its
+                // own: nothing nested in its parent converts it.
+                foreach (var other in referenced)
+                {
+                    if (other.Scalar is not null)
+                    {
+                        writer.Line("builder.BindRuntimeType<" + other.Type + ", " + other.Scalar + ">();");
+                    }
+
+                    writer.Line("builder.AddTypeConverter<" + other.Provider + ">();");
+
+                    if (other.NodeIdSerializer is not null)
+                    {
+                        writer.Line("builder.AddNodeIdValueSerializer<" + other.NodeIdSerializer + ">();");
+                    }
+
+                    if (other.CursorKeySerializer is not null)
+                    {
+                        cursorKeys.Add(other.CursorKeySerializer);
+                    }
+                }
+
+                // Not something the schema is told: HotChocolate keeps its paging keys in one list for the process, so
+                // they are registered when this method is called, once each, whichever schema or route pages first.
+                if (cursorKeys.Count > 0)
+                {
+                    writer.Line();
+                    writer.Line("// The struct ids, as keys HotChocolate's paging can order a list by: OrderBy(x => x.Id) in front of ToPageAsync.");
+                    foreach (var cursorKey in cursorKeys)
+                    {
+                        writer.Line(cursorKey + ".Register();");
+                    }
+
+                    writer.Line();
                 }
 
                 writer.Line("return builder;");
@@ -226,6 +311,18 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
     /// <summary>The raw values HotChocolate can write into a Relay node id, by CLR type name.</summary>
     private static readonly HashSet<string> NodeIdValueTypes = new(StringComparer.Ordinal) { "Guid", "String", "Int16", "Int32", "Int64" };
 
+    /// <summary>
+    /// The raw values HotChocolate's paging has a cursor key serializer for, by CLR type name, at the oldest
+    /// HotChocolate this package supports. An id over anything else is not registered as a paging key: registering
+    /// it would fail when the bindings are added.
+    /// </summary>
+    private static readonly HashSet<string> CursorKeyValueTypes = new(StringComparer.Ordinal)
+    {
+        "Guid", "String", "Int16", "Int32", "Int64", "UInt16", "UInt32", "UInt64",
+        "Decimal", "Double", "Single", "Boolean",
+        "DateTime", "DateTimeOffset", "DateOnly", "TimeOnly",
+    };
+
     private sealed record BindingTarget(TypeDeclarationInfo Type, ValueTypeInfo Value, string? GraphQLSchemaType, bool IsEntityId)
     {
         /// <summary>
@@ -233,5 +330,11 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         /// into a node id. A single value object is not an identity, so it never gets one.
         /// </summary>
         public bool HasNodeIdSerializer => IsEntityId && NodeIdValueTypes.Contains(Value.Name);
+
+        /// <summary>
+        /// Whether HotChocolate's paging can order by this type: an identifier declared as a struct, which is
+        /// the one the core generator makes comparable, over a value the paging can write into a cursor.
+        /// </summary>
+        public bool HasCursorKeySerializer => IsEntityId && Type.IsStruct && CursorKeyValueTypes.Contains(Value.Name);
     }
 }

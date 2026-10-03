@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Text.RegularExpressions;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 
 namespace DDDToolkit.EntityFramework.Supabase;
@@ -11,9 +13,20 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// <para>
 /// Without the variable nothing happens, which is every start of the application outside that build step.
 /// </para>
+/// <para>
+/// Because the export runs before <c>Main</c>, the host's configuration reaches it only through the
+/// environment the build sets: the roles and the caller functions the policies are written with come from
+/// <see cref="RolesVariable"/> and <see cref="CallerFunctionsVariable"/>, which the build fills from the
+/// project's <c>SupabaseRowAccessRoles</c> and <c>SupabaseCallerFunctions</c> properties. The roles of the
+/// token roles the host mapped come the same way, as <c>token:&lt;role&gt;</c> pairs of the first, and so does
+/// the role its own bookkeeping runs as, <c>system=&lt;role&gt;</c>. Whether the access files write the tables'
+/// privileges and force row level security comes from <see cref="GrantsVariable"/> and
+/// <see cref="ForceVariable"/>, the project's <c>SupabaseRowAccessGrants</c> and
+/// <c>SupabaseForceRowLevelSecurity</c>.
+/// </para>
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
-public static class SupabaseMigrationBuild
+public static partial class SupabaseMigrationBuild
 {
     /// <summary><c>Write</c> writes missing files; <c>Check</c> only compares. Unset means do nothing.</summary>
     public const string ModeVariable = "DDDTOOLKIT_SUPABASE_EXPORT";
@@ -23,6 +36,52 @@ public static class SupabaseMigrationBuild
 
     /// <summary>Where to start looking for <c>supabase/config.toml</c>: the project directory.</summary>
     public const string StartVariable = "DDDTOOLKIT_SUPABASE_START";
+
+    /// <summary>
+    /// The roles the rules' symbolic roles become, from the <c>SupabaseRowAccessRoles</c> property:
+    /// <c>user=authenticated|anonymous=anon|system-in=ddd_system_in</c>, each pair optional, and a pair
+    /// <c>token:analyst=desk_analyst</c> for each token role the host mapped, which is what a rule for
+    /// <c>RowAccessRoles.Token("analyst")</c> is written for, and a pair <c>system=ddd_system</c> for the role
+    /// the application's own bookkeeping runs as, <c>RowAccessRoles.System</c>. Unset means
+    /// <see cref="RowAccessRoleNames.Default"/>, with no token role mapped and no bookkeeping role.
+    /// </summary>
+    public const string RolesVariable = "DDDTOOLKIT_SUPABASE_ROLES";
+
+    /// <summary>
+    /// How a policy asks about the caller, from the <c>SupabaseCallerFunctions</c> property:
+    /// <c>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</c>, each pair optional and each value a function
+    /// called without arguments. Unset means <see cref="SupabaseRowLevelSecurity.CallerFunctions"/>.
+    /// </summary>
+    public const string CallerFunctionsVariable = "DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS";
+
+    /// <summary>
+    /// Whether the access files write the tables' privileges from the policies, from the
+    /// <c>SupabaseRowAccessGrants</c> property: <c>Write</c> writes them, <c>None</c> or unset leaves them to
+    /// the host. See <see cref="SupabaseMigrationOptions.WriteGrants"/>.
+    /// </summary>
+    public const string GrantsVariable = "DDDTOOLKIT_SUPABASE_GRANTS";
+
+    /// <summary>
+    /// Whether the access files force row level security on every table they turn it on for, from the
+    /// <c>SupabaseForceRowLevelSecurity</c> property: <c>true</c> forces it, <c>false</c> or unset does not. See
+    /// <see cref="SupabaseMigrationOptions.ForceRowLevelSecurity"/>.
+    /// </summary>
+    public const string ForceVariable = "DDDTOOLKIT_SUPABASE_FORCE";
+
+    /// <summary>The project property <see cref="RolesVariable"/> comes from, as an error names it.</summary>
+    private const string RolesProperty = "SupabaseRowAccessRoles";
+
+    /// <summary>The project property <see cref="CallerFunctionsVariable"/> comes from, as an error names it.</summary>
+    private const string CallerFunctionsProperty = "SupabaseCallerFunctions";
+
+    /// <summary>The project property <see cref="GrantsVariable"/> comes from, as an error names it.</summary>
+    private const string GrantsProperty = "SupabaseRowAccessGrants";
+
+    /// <summary>The project property <see cref="ForceVariable"/> comes from, as an error names it.</summary>
+    private const string ForceProperty = "SupabaseForceRowLevelSecurity";
+
+    /// <summary>What the key of a pair that maps a token role starts with, before the token role: <c>token:analyst=desk_analyst</c>.</summary>
+    private const string TokenKey = "token:";
 
     /// <summary>
     /// Exports and ends the process when the build asked for it, and returns at once otherwise. Called
@@ -54,10 +113,31 @@ public static class SupabaseMigrationBuild
         Func<IReadOnlyList<SupabaseMigrationSource>> sources,
         Func<IReadOnlyList<RowAccessRule>> rules,
         Func<IReadOnlyList<RowAccessFunction>> functions)
+        => RunIfRequested(sources, rules, functions, static () => []);
+
+    /// <summary>
+    /// Exports and ends the process when the build asked for it, and returns at once otherwise: the
+    /// migrations of every source, the <c>[RowAccess]</c> rules of their aggregates, the
+    /// <c>[AccessFunction]</c>s those call, and what the row access contributions the host uses write. Called
+    /// by generated code only.
+    /// </summary>
+    /// <param name="sources">Every source found at compile time; only evaluated when asked.</param>
+    /// <param name="rules">Every rule found at compile time; only evaluated when asked.</param>
+    /// <param name="functions">Every access function found at compile time; only evaluated when asked.</param>
+    /// <param name="contributions">
+    /// The contributions the host lists with <c>[assembly: UseRowAccessContribution]</c>, created only when
+    /// asked.
+    /// </param>
+    public static void RunIfRequested(
+        Func<IReadOnlyList<SupabaseMigrationSource>> sources,
+        Func<IReadOnlyList<RowAccessRule>> rules,
+        Func<IReadOnlyList<RowAccessFunction>> functions,
+        Func<IReadOnlyList<IRowAccessContribution>> contributions)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(functions);
+        ArgumentNullException.ThrowIfNull(contributions);
 
         var mode = Environment.GetEnvironmentVariable(ModeVariable);
         if (string.IsNullOrWhiteSpace(mode))
@@ -70,8 +150,13 @@ public static class SupabaseMigrationBuild
             sources(),
             rules(),
             functions(),
+            contributions(),
             Environment.GetEnvironmentVariable(DirectoryVariable),
             Environment.GetEnvironmentVariable(StartVariable),
+            Environment.GetEnvironmentVariable(RolesVariable),
+            Environment.GetEnvironmentVariable(CallerFunctionsVariable),
+            Environment.GetEnvironmentVariable(GrantsVariable),
+            Environment.GetEnvironmentVariable(ForceVariable),
             Console.Out);
 
         Console.Out.Flush();
@@ -125,16 +210,113 @@ public static class SupabaseMigrationBuild
         string? directory,
         string? start,
         TextWriter output)
+        => Run(mode, sources, rules, functions, directory, start, roles: null, callerFunctions: null, output);
+
+    /// <summary>
+    /// Runs the export with the roles and the caller functions the build passed, and describes it on
+    /// <paramref name="output"/>, problems in the <c>error : message</c> form MSBuild shows as build errors.
+    /// </summary>
+    /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
+    /// <param name="sources">The contexts to export.</param>
+    /// <param name="rules">The rules to write as policies, each with the context that maps its aggregate.</param>
+    /// <param name="functions">The access functions to write, each with the context that maps its aggregate.</param>
+    /// <param name="directory">The migrations directory, or null or empty to find it.</param>
+    /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
+    /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="output">Where to report.</param>
+    /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
+    public static int Run(
+        string mode,
+        IReadOnlyList<SupabaseMigrationSource> sources,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<RowAccessFunction> functions,
+        string? directory,
+        string? start,
+        string? roles,
+        string? callerFunctions,
+        TextWriter output)
+        => Run(mode, sources, rules, functions, [], directory, start, roles, callerFunctions, output);
+
+    /// <summary>
+    /// Runs the export with the row access contributions the host uses and the roles and the caller functions
+    /// the build passed, and describes it on <paramref name="output"/>, problems in the <c>error : message</c>
+    /// form MSBuild shows as build errors.
+    /// </summary>
+    /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
+    /// <param name="sources">The contexts to export.</param>
+    /// <param name="rules">The rules to write as policies, each with the context that maps its aggregate.</param>
+    /// <param name="functions">The access functions to write, each with the context that maps its aggregate.</param>
+    /// <param name="contributions">The row access contributions to ask what they write for each context.</param>
+    /// <param name="directory">The migrations directory, or null or empty to find it.</param>
+    /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
+    /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="output">Where to report.</param>
+    /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
+    public static int Run(
+        string mode,
+        IReadOnlyList<SupabaseMigrationSource> sources,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<RowAccessFunction> functions,
+        IReadOnlyList<IRowAccessContribution> contributions,
+        string? directory,
+        string? start,
+        string? roles,
+        string? callerFunctions,
+        TextWriter output)
+        => Run(mode, sources, rules, functions, contributions, directory, start, roles, callerFunctions, grants: null, force: null, output);
+
+    /// <summary>
+    /// Runs the export with everything the build passed: the row access contributions the host uses, the roles
+    /// and the caller functions, and whether the access files write the tables' privileges and force row level
+    /// security. It describes the run on <paramref name="output"/>, problems in the <c>error : message</c> form
+    /// MSBuild shows as build errors.
+    /// </summary>
+    /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
+    /// <param name="sources">The contexts to export.</param>
+    /// <param name="rules">The rules to write as policies, each with the context that maps its aggregate.</param>
+    /// <param name="functions">The access functions to write, each with the context that maps its aggregate.</param>
+    /// <param name="contributions">The row access contributions to ask what they write for each context.</param>
+    /// <param name="directory">The migrations directory, or null or empty to find it.</param>
+    /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
+    /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, or <c>None</c>, null or empty to write no privileges.</param>
+    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, or <c>false</c>, null or empty not to force row level security.</param>
+    /// <param name="output">Where to report.</param>
+    /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
+    public static int Run(
+        string mode,
+        IReadOnlyList<SupabaseMigrationSource> sources,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<RowAccessFunction> functions,
+        IReadOnlyList<IRowAccessContribution> contributions,
+        string? directory,
+        string? start,
+        string? roles,
+        string? callerFunctions,
+        string? grants,
+        string? force,
+        TextWriter output)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(rules);
         ArgumentNullException.ThrowIfNull(functions);
+        ArgumentNullException.ThrowIfNull(contributions);
         ArgumentNullException.ThrowIfNull(output);
 
         var write = string.Equals(mode, "Write", StringComparison.OrdinalIgnoreCase);
         if (!write && !string.Equals(mode, "Check", StringComparison.OrdinalIgnoreCase))
         {
             output.WriteLine($"error : SupabaseMigrationsExport is '{mode}'. Use Write to write missing files, or Check to only compare them.");
+            return 2;
+        }
+
+        var options = new SupabaseMigrationOptions();
+        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var problem))
+        {
+            output.WriteLine($"error : {problem}");
             return 2;
         }
 
@@ -150,7 +332,6 @@ public static class SupabaseMigrationBuild
                 ? SupabaseMigrations.FindDirectory(string.IsNullOrWhiteSpace(start) ? null : start)
                 : directory;
 
-            var options = new SupabaseMigrationOptions();
             foreach (var rule in rules)
             {
                 options.RowAccessRules.Add(rule);
@@ -159,6 +340,11 @@ public static class SupabaseMigrationBuild
             foreach (var function in functions)
             {
                 options.RowAccessFunctions.Add(function);
+            }
+
+            foreach (var contribution in contributions)
+            {
+                options.RowAccessContributions.Add(contribution);
             }
 
             var reports = write ? SupabaseMigrations.Export(sources, target, options) : SupabaseMigrations.Compare(sources, target, options);
@@ -191,5 +377,237 @@ public static class SupabaseMigrationBuild
             output.WriteLine($"error : The Supabase migrations could not be exported: {exception.Message}");
             return 2;
         }
+    }
+
+    /// <summary>
+    /// Sets <paramref name="options"/>' roles and caller functions, and whether the access files write
+    /// privileges and force row level security, from the build's properties, or says what is wrong with them.
+    /// </summary>
+    private static bool TryConfigure(SupabaseMigrationOptions options, string? roles, string? callerFunctions, string? grants, string? force, out string problem)
+    {
+        problem = "";
+
+        if (!TryReadPairs(RolesProperty, roles, ["user", "anonymous", "system-in", "system"], "user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system", TokenKey, out var role, out var tokenRoles, out problem)
+            || !TryReadPairs(CallerFunctionsProperty, callerFunctions, ["uid", "role", "claims"], "uid=auth.uid()|role=auth.role()|claims=auth.jwt()", prefix: null, out var caller, out _, out problem))
+        {
+            return false;
+        }
+
+        switch (grants?.Trim())
+        {
+            case null or "":
+                break;
+            case var none when string.Equals(none, "None", StringComparison.OrdinalIgnoreCase):
+                break;
+            case var written when string.Equals(written, "Write", StringComparison.OrdinalIgnoreCase):
+                options.WriteGrants = true;
+                break;
+            default:
+                problem = $"{GrantsProperty} is '{grants}'. Use Write to have the access files write the tables' privileges from the policies, or None to grant them yourself.";
+                return false;
+        }
+
+        switch (force?.Trim())
+        {
+            case null or "":
+                break;
+            case var off when string.Equals(off, "false", StringComparison.OrdinalIgnoreCase):
+                break;
+            case var on when string.Equals(on, "true", StringComparison.OrdinalIgnoreCase):
+                options.ForceRowLevelSecurity = true;
+                break;
+            default:
+                problem = $"{ForceProperty} is '{force}'. Use true to force row level security on every table an access file turns it on for, or false to leave the tables' owner outside the policies.";
+                return false;
+        }
+
+        try
+        {
+            options.Roles = new RowAccessRoleNames(
+                role.GetValueOrDefault("user") ?? options.Roles.User,
+                role.GetValueOrDefault("anonymous") ?? options.Roles.Anonymous,
+                role.GetValueOrDefault("system-in") ?? options.Roles.SystemIn);
+        }
+        catch (ArgumentException exception)
+        {
+            // The parameter the exception names is the key the property set; where the property left that key
+            // out, its default clashes with a role the property did set, which is the one to name.
+            var key = exception.ParamName switch
+            {
+                nameof(RowAccessRoleNames.User) => "user",
+                nameof(RowAccessRoleNames.Anonymous) => "anonymous",
+                _ => "system-in",
+            };
+            if (!role.ContainsKey(key))
+            {
+                key = role.First(pair => !string.Equals(pair.Key, "system", StringComparison.OrdinalIgnoreCase) && string.Equals(pair.Value, options.Roles.SystemIn, StringComparison.Ordinal)).Key;
+            }
+
+            var example = key.ToLowerInvariant() switch
+            {
+                "user" => PostgresRowLevelSecurityOptions.AuthenticatedRole,
+                "anonymous" => PostgresRowLevelSecurityOptions.AnonRole,
+                _ => PostgresRowLevelSecurityOptions.DefaultSystemInRole,
+            };
+
+            problem = $"{RolesProperty} has '{key}={role[key]}'. {Reason(exception)} Use a role such as {example}.";
+            return false;
+        }
+
+        try
+        {
+            // Resolving a role checks the token roles against the others: none is mapped to the scoped system
+            // role or to the anonymous caller's.
+            options.Roles = options.Roles with { TokenRoles = tokenRoles };
+            options.Roles.Resolve(RowAccessRoles.User);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            problem = $"{RolesProperty} has a token role it cannot map. {(exception is ArgumentException argument ? Reason(argument) : exception.Message)}";
+            return false;
+        }
+
+        if (role.TryGetValue("system", out var system))
+        {
+            // The bookkeeping role is one of its own, which the other roles are known to tell by now.
+            try
+            {
+                options.Roles = options.Roles with { System = system };
+            }
+            catch (ArgumentException exception)
+            {
+                problem = $"{RolesProperty} has 'system={system}'. {Reason(exception)} Use a role such as ddd_system.";
+                return false;
+            }
+
+            try
+            {
+                options.Roles.Resolve(RowAccessRoles.System);
+            }
+            catch (ArgumentException exception)
+            {
+                problem = $"{RolesProperty} has 'system={system}'. {Reason(exception)}";
+                return false;
+            }
+        }
+
+        foreach (var (key, function) in caller)
+        {
+            if (!CallWithoutArguments().IsMatch(function))
+            {
+                problem = $"{CallerFunctionsProperty} has '{key}={function}', which is not a function called without arguments. Each value is one, with its schema or without, such as auth.uid(), and the policies call it as it is written.";
+                return false;
+            }
+        }
+
+        options.CallerFunctions = new PostgresCallerFunctions(
+            caller.GetValueOrDefault("uid") ?? options.CallerFunctions.UserId,
+            caller.GetValueOrDefault("role") ?? options.CallerFunctions.Role,
+            caller.GetValueOrDefault("claims") ?? options.CallerFunctions.Claims);
+
+        return true;
+    }
+
+    /// <summary>
+    /// The message of <paramref name="exception"/> without the name of the parameter .NET appends to it,
+    /// which means nothing in a build's error line.
+    /// </summary>
+    private static string Reason(ArgumentException exception)
+    {
+        // The suffix is whatever the runtime appends for that parameter, in whatever language it speaks.
+        var suffix = new ArgumentException("", exception.ParamName).Message;
+        return exception.Message.EndsWith(suffix, StringComparison.Ordinal) ? exception.Message[..^suffix.Length] : exception.Message;
+    }
+
+    /// <summary>
+    /// A function called without arguments, with its schema or without: <c>auth.uid()</c>. A policy writes a
+    /// caller function into its condition as it is, so anything else could change what the condition says.
+    /// </summary>
+    [GeneratedRegex(@"^(?:[A-Za-z_][A-Za-z0-9_]*\.)?[A-Za-z_][A-Za-z0-9_]*\(\)$", RegexOptions.CultureInvariant)]
+    private static partial Regex CallWithoutArguments();
+
+    /// <summary>
+    /// The <c>key=value</c> pairs of a build property, separated by <c>|</c>, because MSBuild splits the
+    /// variables it passes at every <c>;</c>, so no value can hold a <c>|</c>. Empty means none; an unknown or
+    /// repeated key, or a pair without a key or a value, is a problem that names the property and what it
+    /// takes.
+    /// </summary>
+    /// <param name="property">The property, as a problem names it.</param>
+    /// <param name="value">Its value.</param>
+    /// <param name="keys">The keys it takes, matched without regard to case.</param>
+    /// <param name="example">A value that sets every key, for a problem to show.</param>
+    /// <param name="prefix">
+    /// What the key of a pair with a name of its own starts with, <c>token:</c>, or null when the property has
+    /// none. What follows it is the name, kept as it is spelled.
+    /// </param>
+    /// <param name="pairs">The pairs of <paramref name="keys"/>.</param>
+    /// <param name="prefixed">The pairs whose key starts with <paramref name="prefix"/>, by the name after it.</param>
+    /// <param name="problem">What is wrong, when something is.</param>
+    private static bool TryReadPairs(
+        string property,
+        string? value,
+        string[] keys,
+        string example,
+        string? prefix,
+        out Dictionary<string, string> pairs,
+        out Dictionary<string, string> prefixed,
+        out string problem)
+    {
+        pairs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        prefixed = new Dictionary<string, string>(StringComparer.Ordinal);
+        problem = "";
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var takes = $"It takes {string.Join(", ", keys.Take(keys.Length - 1))} and {keys[^1]}, each at most once and separated by '|', as in {example}"
+            + (prefix is null ? "." : $", and {prefix}<role> for each token role the host mapped, as in {prefix}analyst=desk_analyst.");
+        foreach (var pair in value.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            var equals = pair.IndexOf('=', StringComparison.Ordinal);
+            var key = equals < 0 ? pair : pair[..equals].Trim();
+            var setting = equals < 0 ? "" : pair[(equals + 1)..].Trim();
+
+            if (equals <= 0 || setting.Length == 0)
+            {
+                problem = $"{property} has '{pair}', which is not a key=value pair. {takes}";
+                return false;
+            }
+
+            if (prefix is not null && key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                // The name after the prefix is a token's own spelling of its role, so its case is kept.
+                var name = key[prefix.Length..].Trim();
+                if (name.Length == 0)
+                {
+                    problem = $"{property} has '{pair}', which names no token role after '{prefix}'. {takes}";
+                    return false;
+                }
+
+                if (!prefixed.TryAdd(name, setting))
+                {
+                    problem = $"{property} has the key '{key}' twice. {takes}";
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (!keys.Contains(key, StringComparer.OrdinalIgnoreCase))
+            {
+                problem = $"{property} has the key '{key}', which it does not know. {takes}";
+                return false;
+            }
+
+            if (!pairs.TryAdd(key, setting))
+            {
+                problem = $"{property} has the key '{key}' twice. {takes}";
+                return false;
+            }
+        }
+
+        return true;
     }
 }

@@ -17,6 +17,14 @@
 #      toolkit through a project reference.
 #   3. DDD00014: a project that has the generators and not their props file is told so, and a project
 #      that has both and sets no DDD_Module is not.
+#   4. The supporting domains: an application with Tenancy and Membership, in a domain project on their
+#      domain packages, an infrastructure project on their Postgres packages and a host, builds with
+#      everything it needs arriving as a dependency, Membership's two generators among it, which ship
+#      inside Membership's packages and write nothing in the host; and the packages carry their Dutch
+#      texts.
+#   5. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
+#      given for the whole build, on the command line: every other project ignores it, with no crash and
+#      no warning.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -48,6 +56,11 @@ packages_native="$(native_path "$packages")"
 core_id="$(dotnet msbuild "$root/Source/DDDToolkit/DDDToolkit.csproj" -getProperty:PackageId | tr -d '\r')"
 prefix="${core_id%DDDToolkit}"
 analyzers_id="${prefix}DDDToolkit.Analyzers"
+
+# NuGet lowercases the version for that folder as well. A release tag may carry a prerelease suffix in
+# capitals, v3.2.0-RC.1, and the folder is then 3.2.0-rc.1: Windows finds it either way, the release
+# job runs on Linux.
+version_folder="$(tr '[:upper:]' '[:lower:]' <<< "$version")"
 
 echo "==> Verifying package consumption at version $version, package ids ${prefix}DDDToolkit.*"
 
@@ -105,7 +118,7 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
 # assembly packed next to the generators rather than a package of their own. Nothing in a build uses
 # them, so nothing below would notice them missing; only the IDE would, silently.
-analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version"
+analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version_folder"
 analyzers_folder="$analyzers_package/analyzers/dotnet/cs"
 for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
@@ -255,5 +268,216 @@ echo "==> With the props file and no DDD_Module: named after the assembly, and n
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_Module=
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+
+# ---------------------------------------------------------------------------------------------------
+# The supporting domains, Tenancy and Membership, three packages each.
+#
+# SupportingDomains is an application with both, in the layers an application has. Its domain project
+# declares Tenancy's classes with the package's templates, and a resource with members and a role it
+# keeps for that resource with Membership's, and references the two domain packages alone. Its
+# infrastructure project maps and registers them and references only the two Postgres packages of the
+# supporting domains, beside the Supabase export and the provider it needs, so the Entity Framework
+# packages, the toolkit's own and every generator it needs have to arrive as a dependency, at the version
+# given. Its host references the infrastructure project and nothing else.
+#
+# Membership's two generators are no packages of their own: they ship inside Membership's packages, in
+# analyzers/dotnet/cs, so a package packed without one would still restore, and only a build that needs
+# what it writes would notice. This one does, since each project calls what its generators write, and
+# treats a generator the compiler could not load, which is a warning, as an error. A generator also
+# reaches every project above the one it is meant for, so the host is checked to have been handed both
+# of them and to have been written nothing by either.
+# ---------------------------------------------------------------------------------------------------
+
+# The file $2 must be in the restored package $1.
+expect_in_package() {
+  local folder
+  folder="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$1")/$version_folder"
+
+  if [ ! -f "$folder/$2" ]; then
+    echo "FAILED: $2 is missing from the $1 package." >&2
+    exit 1
+  fi
+}
+
+# The generators that wrote a file in the project folder $1, one per line.
+generators_that_wrote() {
+  find "$work/package-consumers/$1/obj" -path '*generated*' -name '*.g.cs' | sed "s#.*/generated/##" | cut -d/ -f1 | sort -u
+}
+
+# Each generator named after $1 wrote a file in the project folder $1.
+expect_generators_wrote() {
+  local project="$1" written expected
+  shift
+  written="$(generators_that_wrote "$project")"
+
+  for expected in "$@"; do
+    if ! grep -qxF "$expected" <<< "$written"; then
+      echo "FAILED: $project: $expected produced nothing. It should have arrived with the package that carries it." >&2
+      exit 1
+    fi
+
+    echo "    $project: $expected"
+  done
+}
+
+echo "==> The supporting domains, in a domain, an infrastructure and a host project"
+build_consumer SupportingDomains/Host/Acme.Press.Host.csproj
+expect_no_missing_properties_warning SupportingDomains
+
+expect_generators_wrote SupportingDomains/Domain \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.Supporting.Membership.Analyzers"
+
+expect_generators_wrote SupportingDomains/Infrastructure \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.EntityFramework.Analyzers" \
+  "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers"
+
+# The host is handed Membership's generators too, as a dependency of a dependency, and has nothing of
+# theirs to be written: the classes and the contexts are below it. A second member list or a second
+# registration there would be a generator that writes for what a project only references.
+host_assets="$work/package-consumers/SupportingDomains/Host/obj/project.assets.json"
+host_written="$(generators_that_wrote SupportingDomains/Host)"
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+  if ! grep -qF "analyzers/dotnet/cs/$generator.dll" "$host_assets"; then
+    echo "FAILED: SupportingDomains/Host: $generator was not handed to the host, so finding nothing written by it proves nothing." >&2
+    exit 1
+  fi
+
+  if grep -qxF "$generator" <<< "$host_written"; then
+    echo "FAILED: SupportingDomains/Host: $generator wrote a file in the host, which declares nothing of its own." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: handed both of Membership's generators, and written nothing by either"
+
+# Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership.EntityFramework" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" lib/net10.0/nl/DDDToolkit.Supporting.Tenancy.resources.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" lib/net10.0/nl/DDDToolkit.Supporting.Membership.resources.dll
+
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+  if [ -f "$feed/$prefix$generator.$version.nupkg" ]; then
+    echo "FAILED: $prefix$generator was packed as a package of its own. It ships inside the package that needs it." >&2
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------------------------------
+# The Supabase export of the same application.
+#
+# The infrastructure project references the Supabase package, where its contexts and their marked factories
+# are, and the host turns the export on in its project file, as docs/supabase.md says; the host lists the
+# row access SQL of both packages, so the build above wrote the two contexts' access files. The package's
+# build step and generator reach both projects through buildTransitive, so both import them; through
+# project references only the host did, which is how a property that reached the others went unnoticed.
+#
+# A CI script may give the property on the command line instead, and a Directory.Build.props sets it for
+# every project: either way it reaches every project the build reaches. The step starts the program the
+# project built, and in the infrastructure project, a library, it started the library: MissingMethodException,
+# "Entry point not found", and MSB3073. So each value the property takes is given here for the whole build:
+# Write and Check reach the host, which exports, and no other project, which hears nothing of it, not even
+# DDD00054 about what only the host lists; an empty value turns the export off in the host as well.
+# ---------------------------------------------------------------------------------------------------
+
+supabase_generator="DDDToolkit.EntityFramework.Supabase.Analyzers"
+supabase_migrations="$work/package-consumers/SupportingDomains/supabase/migrations"
+
+# What the export said, one line per file: "<status> <file>".
+export_lines() {
+  { grep -E 'Supabase migrations: ' "$build_log" || true; } | sed 's/.*Supabase migrations: *//' | tr -d '\r' | sort -u
+}
+
+# The export ran in the host and in no other project, and said $1 of every file.
+expect_exported_by_the_host_only() {
+  local status="$1" project lines
+
+  if ! grep -qxF "$supabase_generator" <<< "$(generators_that_wrote SupportingDomains/Host)"; then
+    echo "FAILED: SupportingDomains/Host: the Supabase generator wrote no list of sources in the host that turned the export on." >&2
+    exit 1
+  fi
+
+  for project in Domain Infrastructure; do
+    if grep -qxF "$supabase_generator" <<< "$(generators_that_wrote "SupportingDomains/$project")"; then
+      echo "FAILED: SupportingDomains/$project: the Supabase generator wrote its export hook into a project that is not the host." >&2
+      exit 1
+    fi
+  done
+
+  lines="$(export_lines)"
+  if grep -vqE "^$status " <<< "$lines"; then
+    echo "FAILED: the export said something other than $status:" >&2
+    echo "$lines" >&2
+    exit 1
+  fi
+
+  if [ "$(grep -cE '_access\.press\.ddd\.sql$' <<< "$lines")" != 2 ]; then
+    echo "FAILED: the export did not report the access files of both contexts:" >&2
+    echo "$lines" >&2
+    exit 1
+  fi
+
+  echo "    SupportingDomains/Host: exported"
+  echo "$lines" | sed 's/^/      /'
+}
+
+# Nothing in the log is a warning: not DDD00054 in a project that is not the host, and not the step's own.
+expect_no_warning() {
+  if grep -q 'DDD00054' "$build_log"; then
+    echo "FAILED: $1: DDD00054 was reported. Only the host lists row access contributions, and no other project may run the generator that asks for them." >&2
+    exit 1
+  fi
+
+  if grep -qE ': warning [A-Z]+[0-9]+:|warning : ' "$build_log"; then
+    echo "FAILED: $1: the build warned:" >&2
+    grep -E ': warning [A-Z]+[0-9]+:|warning : ' "$build_log" | sort -u >&2
+    exit 1
+  fi
+}
+
+# Starts the three projects from nothing, so what a build writes in obj/ is its own.
+clean_supporting_domains() {
+  local project
+  for project in Domain Infrastructure Host; do
+    rm -rf "$work/package-consumers/SupportingDomains/$project/obj" "$work/package-consumers/SupportingDomains/$project/bin"
+  done
+}
+
+echo "==> The Supabase export, turned on in the host's project file"
+expect_exported_by_the_host_only Created
+expect_no_warning SupportingDomains
+
+if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr -d ' ')" != 2 ]; then
+  echo "FAILED: the export did not write the access files of both contexts into $supabase_migrations." >&2
+  exit 1
+fi
+
+for mode in Check Write ""; do
+  echo "==> SupabaseMigrationsExport='$mode' for the whole build, on the command line"
+  clean_supporting_domains
+
+  if ! build_consumer SupportingDomains/Host/Acme.Press.Host.csproj "-p:SupabaseMigrationsExport=$mode"; then
+    if grep -qE 'MissingMethodException|MSB3073' "$build_log"; then
+      echo "FAILED: SupabaseMigrationsExport=$mode for the whole build ran the export's step in a project that is not the host, and the program it started has no entry point." >&2
+    else
+      echo "FAILED: the build with SupabaseMigrationsExport=$mode for the whole build failed." >&2
+    fi
+    exit 1
+  fi
+
+  expect_no_warning "SupabaseMigrationsExport=$mode"
+
+  if [ -n "$mode" ]; then
+    # The files the first build wrote are what the model and the rules give, so Write writes none and Check finds them so.
+    expect_exported_by_the_host_only Unchanged
+  elif [ -n "$(export_lines)" ] || grep -qxF "$supabase_generator" <<< "$(generators_that_wrote SupportingDomains/Host)"; then
+    echo "FAILED: an empty SupabaseMigrationsExport for the whole build did not turn the export off in the host." >&2
+    exit 1
+  else
+    echo "    SupportingDomains/Host: no export"
+  fi
+done
 
 echo "==> Package consumption verified"

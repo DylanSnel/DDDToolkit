@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.Pgmq.Storefront": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65123;http://localhost:65124"
+    }
+  }
+}

@@ -1,0 +1,665 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  "Fetches an object given its ID."
+  node("ID of the object." id: ID!): Node @lookup @shareable @cost(weight: "10")
+  "Lookup nodes by a list of IDs."
+  nodes("The list of node IDs." ids: [ID!]!): [Node]!
+    @shareable
+    @cost(weight: "10")
+  projects(
+    "Returns the first _n_ elements from the list."
+    first: Int
+    "Returns the elements in the list that come after the specified cursor."
+    after: String
+    "Returns the last _n_ elements from the list."
+    last: Int
+    "Returns the elements in the list that come before the specified cursor."
+    before: String
+    state: ProjectState
+    unit: UUID
+    text: String
+  ): ProjectConnection!
+    @listSize(
+      assumedSize: 50
+      slicingArguments: ["first", "last"]
+      slicingArgumentDefaultValue: 10
+      sizedFields: ["edges", "nodes"]
+      requireOneSlicingArgument: false
+    )
+    @cost(weight: "10")
+  keySets(keys: [String!]!, projects: [ID!]!): ProjectKeySets!
+    @cost(weight: "10")
+  tenantProjects(tenant: UUID!): [TenantProject!]! @cost(weight: "10")
+  project(id: ID!): Project @lookup
+  projectRoles: [ProjectRole!]! @cost(weight: "10")
+}
+
+type Mutation {
+  crewMemberAdd(input: CrewMemberAddInput!): CrewMemberAddPayload!
+    @cost(weight: "10")
+  crewRoleGive(input: CrewRoleGiveInput!): CrewRoleGivePayload!
+    @cost(weight: "10")
+  crewRoleTake(input: CrewRoleTakeInput!): CrewRoleTakePayload!
+    @cost(weight: "10")
+  crewMemberRemove(input: CrewMemberRemoveInput!): CrewMemberRemovePayload!
+    @cost(weight: "10")
+  projectOpenAtUnit(input: ProjectOpenAtUnitInput!): ProjectOpenAtUnitPayload!
+    @cost(weight: "10")
+  projectRename(input: ProjectRenameInput!): ProjectRenamePayload!
+    @cost(weight: "10")
+  projectPlan(input: ProjectPlanInput!): ProjectPlanPayload! @cost(weight: "10")
+  projectMove(input: ProjectMoveInput!): ProjectMovePayload! @cost(weight: "10")
+  projectClose(input: ProjectCloseInput!): ProjectClosePayload!
+    @cost(weight: "10")
+  projectReopen(input: ProjectReopenInput!): ProjectReopenPayload!
+    @cost(weight: "10")
+  projectOwnerChange(input: ProjectOwnerChangeInput!): ProjectOwnerChangePayload!
+    @cost(weight: "10")
+  projectRoleCreate(input: ProjectRoleCreateInput!): ProjectRoleCreatePayload!
+    @cost(weight: "10")
+  projectRoleRename(input: ProjectRoleRenameInput!): ProjectRoleRenamePayload!
+    @cost(weight: "10")
+  projectRoleKeysSet(input: ProjectRoleKeysSetInput!): ProjectRoleKeysSetPayload!
+    @cost(weight: "10")
+  projectRoleArchive(input: ProjectRoleArchiveInput!): ProjectRoleArchivePayload!
+    @cost(weight: "10")
+}
+
+type BrokenRulesError implements CodedError @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  arguments: [FailureArgument!]!
+  violations: [RuleViolation!]!
+}
+
+type ChangedBy @shareable {
+  kind: String!
+  seat: UUID
+}
+
+type ConcurrencyConflictError implements CodedError @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  arguments: [FailureArgument!]!
+}
+
+type CrewMember {
+  seat: Seat
+  roles: [CrewRoleHold!] @authorize(policy: "projects.crew.manage")
+  isOwner: Boolean!
+  startsAt: DateTime!
+  endsAt: DateTime
+  appliesNow: Boolean!
+}
+
+type CrewMemberAddPayload {
+  project: Project
+  errors: [CrewMemberAddError!]
+}
+
+type CrewMemberRemovePayload {
+  project: Project
+  errors: [CrewMemberRemoveError!]
+}
+
+type CrewRoleGivePayload {
+  project: Project
+  errors: [CrewRoleGiveError!]
+}
+
+type CrewRoleHold {
+  role: ProjectRole
+  startsAt: DateTime!
+  endsAt: DateTime
+  appliesNow: Boolean!
+}
+
+type CrewRoleTakePayload {
+  project: Project
+  errors: [CrewRoleTakeError!]
+}
+
+type DateRange @shareable {
+  from: LocalDate!
+  until: LocalDate!
+}
+
+type FailureArgument @shareable {
+  name: String!
+  value: String
+}
+
+type InvalidValuesError implements CodedError @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  arguments: [FailureArgument!]!
+  failures: [ValueFailure!]!
+}
+
+type OrganizationUnit @key(fields: "id") {
+  id: UUID!
+}
+
+"A cursor that points to a specific page."
+type PageCursor @shareable {
+  "The page number."
+  page: Int!
+  "The cursor."
+  cursor: String!
+}
+
+"Information about pagination in a connection."
+type PageInfo @shareable {
+  "Indicates whether more edges exist following the set defined by the clients arguments."
+  hasNextPage: Boolean!
+  "Indicates whether more edges exist prior the set defined by the clients arguments."
+  hasPreviousPage: Boolean!
+  "When paginating backwards, the cursor to continue."
+  startCursor: String
+  "When paginating forwards, the cursor to continue."
+  endCursor: String
+  "A list of cursors to continue paginating forwards."
+  forwardCursors: [PageCursor!]!
+  "A list of cursors to continue paginating backwards."
+  backwardCursors: [PageCursor!]!
+}
+
+type Project implements Node @key(fields: "id") {
+  id: ID!
+  unit: OrganizationUnit
+  owner: Seat
+  crew: [CrewMember!]
+  myRoles: [ProjectRole!]
+  can: ProjectAbilities
+  version: Long
+  name: String
+  number: String
+  state: ProjectState
+  planned: DateRange
+  via: ProjectVia
+  changedBy: ChangedBy
+}
+
+type ProjectAbilities {
+  rename: Boolean!
+  plan: Boolean!
+  move: Boolean!
+  close: Boolean!
+  reopen: Boolean!
+  manageCrew: Boolean!
+  changeOwner: Boolean!
+}
+
+type ProjectClosePayload {
+  project: Project
+  errors: [ProjectCloseError!]
+}
+
+"A connection to a list of items."
+type ProjectConnection @shareable {
+  "A list of edges."
+  edges: [ProjectEdge!]
+  "A flattened list of the nodes"
+  nodes: [Project!]
+  "Information to aid in pagination."
+  pageInfo: PageInfo!
+  "Identifies the total count of items in the connection."
+  totalCount: Int! @cost(weight: "10")
+}
+
+type ProjectEdge @shareable {
+  "The item at the end of the edge."
+  node: Project!
+  "A cursor for use in pagination."
+  cursor: String!
+}
+
+type ProjectKeySet {
+  project: ID!
+  keys: [String!]!
+}
+
+type ProjectKeySets {
+  heldAtRoot: [String!]!
+  onProjects: [ProjectKeySet!]!
+}
+
+type ProjectMovePayload {
+  project: Project
+  errors: [ProjectMoveError!]
+}
+
+type ProjectOpenAtUnitPayload {
+  project: Project
+  errors: [ProjectOpenAtUnitError!]
+}
+
+type ProjectOwnerChangePayload {
+  project: Project
+  errors: [ProjectOwnerChangeError!]
+}
+
+type ProjectPlanPayload {
+  project: Project
+  errors: [ProjectPlanError!]
+}
+
+type ProjectRenamePayload {
+  project: Project
+  errors: [ProjectRenameError!]
+}
+
+type ProjectReopenPayload {
+  project: Project
+  errors: [ProjectReopenError!]
+}
+
+type ProjectRole {
+  id: UUID!
+  name: String!
+  description: String!
+  madeFrom: String
+  status: ProjectRoleStatus!
+  keys: [String!] @authorize(policy: "tenancy.roles.manage")
+}
+
+type ProjectRoleArchivePayload {
+  projectRole: ProjectRole
+  errors: [ProjectRoleArchiveError!]
+}
+
+type ProjectRoleCreatePayload {
+  projectRole: ProjectRole
+  errors: [ProjectRoleCreateError!]
+}
+
+type ProjectRoleKeysSetPayload {
+  projectRole: ProjectRole
+  errors: [ProjectRoleKeysSetError!]
+}
+
+type ProjectRoleRenamePayload {
+  projectRole: ProjectRole
+  errors: [ProjectRoleRenameError!]
+}
+
+type RefusalError implements CodedError @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  kind: RefusalKind!
+  field: String
+  arguments: [FailureArgument!]!
+}
+
+type RuleViolation @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  entity: String
+  entityId: String
+  arguments: [FailureArgument!]!
+}
+
+type Seat @key(fields: "id") {
+  id: UUID!
+}
+
+type TenantProject {
+  id: ID!
+  number: String!
+  name: String!
+  unitId: UUID!
+  state: ProjectState!
+  ownerSeat: UUID!
+  planned: DateRange
+  changedBy: ChangedBy!
+}
+
+type ValueFailure @shareable {
+  message: String! @cost(weight: "10")
+  code: String!
+  field: String
+  arguments: [FailureArgument!]!
+}
+
+interface CodedError {
+  message: String!
+  code: String!
+  arguments: [FailureArgument!]!
+}
+
+"Something that happened in the domain."
+interface DomainEvent {
+  "Unique, stable identifier of this occurrence. Use it for idempotent handling."
+  eventId: UUID!
+  "When the event occurred (UTC)."
+  occurredAt: DateTime!
+  "The runtime type name of the event."
+  eventType: String!
+}
+
+"The node interface is implemented by entities that have a global unique identifier."
+interface Node {
+  id: ID!
+}
+
+union CrewMemberAddError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union CrewMemberRemoveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union CrewRoleGiveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union CrewRoleTakeError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectCloseError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectMoveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectOpenAtUnitError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectOwnerChangeError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectPlanError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectReopenError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectRoleArchiveError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectRoleCreateError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectRoleKeysSetError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+union ProjectRoleRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+input CrewMemberAddInput {
+  id: ID!
+  seatId: UUID!
+  roleId: UUID
+  until: DateTime
+  expectedVersion: Long
+}
+
+input CrewMemberRemoveInput {
+  id: ID!
+  seatId: UUID!
+  expectedVersion: Long
+}
+
+input CrewRoleGiveInput {
+  id: ID!
+  seatId: UUID!
+  roleId: UUID!
+  until: DateTime
+  expectedVersion: Long
+}
+
+input CrewRoleTakeInput {
+  id: ID!
+  seatId: UUID!
+  roleId: UUID!
+  expectedVersion: Long
+}
+
+input DateRangeInput {
+  from: LocalDate!
+  until: LocalDate!
+}
+
+input ProjectCloseInput {
+  id: ID!
+  expectedVersion: Long
+}
+
+input ProjectMoveInput {
+  id: ID!
+  unitId: UUID!
+  expectedVersion: Long
+}
+
+input ProjectOpenAtUnitInput {
+  number: String!
+  name: String!
+  unitId: UUID!
+  ownerSeat: UUID
+  planned: DateRangeInput
+}
+
+input ProjectOwnerChangeInput {
+  id: ID!
+  seatId: UUID!
+  expectedVersion: Long
+}
+
+input ProjectPlanInput {
+  id: ID!
+  planned: DateRangeInput
+  expectedVersion: Long
+}
+
+input ProjectRenameInput {
+  id: ID!
+  name: String!
+  expectedVersion: Long
+}
+
+input ProjectReopenInput {
+  id: ID!
+  expectedVersion: Long
+}
+
+input ProjectRoleArchiveInput {
+  id: UUID!
+}
+
+input ProjectRoleCreateInput {
+  name: String!
+  description: String
+  keys: [String!]
+}
+
+input ProjectRoleKeysSetInput {
+  id: UUID!
+  keys: [String!]!
+}
+
+input ProjectRoleRenameInput {
+  id: UUID!
+  name: String!
+  description: String
+}
+
+"Defines when a policy shall be executed."
+enum ApplyPolicy {
+  "Before the resolver was executed."
+  BEFORE_RESOLVER
+  "After the resolver was executed."
+  AFTER_RESOLVER
+  "The policy is applied in the validation step before the execution."
+  VALIDATION
+}
+
+enum ProjectRoleStatus {
+  active
+  archived
+}
+
+enum ProjectState {
+  open
+  closed
+}
+
+enum ProjectVia {
+  crew
+  organization
+  system
+}
+
+enum RefusalKind {
+  invalid
+  not_permitted
+  not_found
+  conflict
+}
+
+enum ScalarSerializationType {
+  STRING
+  BOOLEAN
+  INT
+  FLOAT
+  OBJECT
+  LIST
+}
+
+"The `DateTime` scalar type represents a date and time with time zone offset information."
+scalar DateTime
+  @serializeAs(
+    type: STRING
+    pattern: "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:[Zz]|[+-]\\d{2}:\\d{2})$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
+
+scalar FieldSelectionSet
+
+"The `LocalDate` scalar type represents a date without time or time zone information."
+scalar LocalDate
+  @serializeAs(type: STRING, pattern: "^\\d{4}-\\d{2}-\\d{2}$")
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/local-date.html")
+
+"The `Long` scalar type represents a signed 64-bit integer."
+scalar Long
+  @serializeAs(type: INT)
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/long.html")
+
+"The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562."
+scalar UUID
+  @serializeAs(
+    type: STRING
+    pattern: "^[\\da-fA-F]{8}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{12}$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/uuid.html")
+
+"The authorize directive."
+directive @authorize(
+  "The name of the authorization policy that determines access to the annotated resource."
+  policy: String
+  "Roles that are allowed to access the annotated resource."
+  roles: [String!]
+  "Defines when the authorize directive shall be applied. By default the authorize directive is applied before the resolver is executed."
+  apply: ApplyPolicy! = BEFORE_RESOLVER
+) repeatable on OBJECT | FIELD_DEFINITION
+
+"The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
+directive @cost(
+  "The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc."
+  weight: String!
+) on
+  | SCALAR
+  | OBJECT
+  | FIELD_DEFINITION
+  | ARGUMENT_DEFINITION
+  | ENUM
+  | INPUT_FIELD_DEFINITION
+
+"""
+The @key directive is used to designate an entity's unique key,
+which identifies how to uniquely reference an instance of
+an entity across different source schemas.
+"""
+directive @key("The field selection set syntax." fields: FieldSelectionSet!) repeatable on
+  | OBJECT
+  | INTERFACE
+
+"The purpose of the `@listSize` directive is to either inform the static analysis about the size of returned lists (if that information is statically available), or to point the analysis to where to find that information."
+directive @listSize(
+  "The `assumedSize` argument can be used to statically define the maximum length of a list returned by a field."
+  assumedSize: Int
+  "The `slicingArguments` argument can be used to define which of the field's arguments with numeric type are slicing arguments, so that their value determines the size of the list returned by that field. It may specify a list of multiple slicing arguments."
+  slicingArguments: [String!]
+  "The `slicingArgumentDefaultValue` argument can be used to define a default value for a slicing argument, which is used if the argument is not present in a query."
+  slicingArgumentDefaultValue: Int
+  "The `sizedFields` argument can be used to define that the value of the `assumedSize` argument or of a slicing argument does not affect the size of a list returned by a field itself, but that of a list returned by one of its sub-fields."
+  sizedFields: [String!]
+  "The `requireOneSlicingArgument` argument can be used to inform the static analysis that it should expect that exactly one of the defined slicing arguments is present in a query. If that is not the case (i.e., if none or multiple slicing arguments are present), the static analysis may throw an error."
+  requireOneSlicingArgument: Boolean = true
+) on FIELD_DEFINITION
+
+"""
+The @lookup directive is used within a source schema to specify output fields
+that can be used by the distributed GraphQL executor to resolve an entity by
+a stable key.
+"""
+directive @lookup on FIELD_DEFINITION
+
+directive @serializeAs(
+  "The primitive type a scalar is serialized to."
+  type: [ScalarSerializationType!]!
+  "The ECMA-262 regex pattern that the serialized scalar value conforms to."
+  pattern: String
+) on SCALAR
+
+directive @shareable repeatable on OBJECT | FIELD_DEFINITION

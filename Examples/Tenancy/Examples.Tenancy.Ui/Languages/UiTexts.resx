@@ -1,0 +1,915 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="common.loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="common.yes" xml:space="preserve">
+    <value>yes</value>
+  </data>
+  <data name="common.no" xml:space="preserve">
+    <value>no</value>
+  </data>
+  <data name="common.open-ended" xml:space="preserve">
+    <value>open-ended</value>
+  </data>
+  <data name="common.no-tenant" xml:space="preserve">
+    <value>no tenant</value>
+  </data>
+  <data name="common.days" xml:space="preserve">
+    <value>{0} to {1}</value>
+  </data>
+  <data name="common.as" xml:space="preserve">
+    <value>as {0}</value>
+  </data>
+  <data name="common.in" xml:space="preserve">
+    <value>in {0}</value>
+  </data>
+  <data name="common.no-header" xml:space="preserve">
+    <value>no header</value>
+  </data>
+  <data name="common.no-token" xml:space="preserve">
+    <value>no token</value>
+  </data>
+  <data name="common.tenant" xml:space="preserve">
+    <value>Tenant</value>
+  </data>
+  <data name="common.status" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="common.role" xml:space="preserve">
+    <value>Role</value>
+  </data>
+  <data name="common.name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="common.from" xml:space="preserve">
+    <value>From</value>
+  </data>
+  <data name="common.until" xml:space="preserve">
+    <value>Until</value>
+  </data>
+  <data name="common.answer" xml:space="preserve">
+    <value>Answer</value>
+  </data>
+  <data name="common.verdict" xml:space="preserve">
+    <value>Verdict</value>
+  </data>
+  <data name="common.manages-access" xml:space="preserve">
+    <value>manages access</value>
+  </data>
+  <data name="common.more" xml:space="preserve">
+    <value>More</value>
+  </data>
+  <data name="via.crew" xml:space="preserve">
+    <value>crew</value>
+  </data>
+  <data name="via.organization" xml:space="preserve">
+    <value>organization</value>
+  </data>
+  <data name="layout.signed-in-as" xml:space="preserve">
+    <value>Signed in as &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="layout.log-out" xml:space="preserve">
+    <value>Log out</value>
+  </data>
+  <data name="layout.not-signed-in" xml:space="preserve">
+    <value>Not signed in</value>
+  </data>
+  <data name="layout.last-response" xml:space="preserve">
+    <value>Last response</value>
+  </data>
+  <data name="layout.error" xml:space="preserve">
+    <value>An unhandled error has occurred.</value>
+  </data>
+  <data name="layout.reload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="layout.language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="nav.menu" xml:space="preserve">
+    <value>Navigation menu</value>
+  </data>
+  <data name="nav.who-am-i" xml:space="preserve">
+    <value>Who am I</value>
+  </data>
+  <data name="nav.projects" xml:space="preserve">
+    <value>My projects</value>
+  </data>
+  <data name="nav.try" xml:space="preserve">
+    <value>Try it</value>
+  </data>
+  <data name="not-found.title" xml:space="preserve">
+    <value>Not found</value>
+  </data>
+  <data name="not-found.text" xml:space="preserve">
+    <value>There is no page here. &lt;a href=""&gt;Who am I&lt;/a&gt; is where to start.</value>
+  </data>
+  <data name="api.token-refused" xml:space="preserve">
+    <value>The API no longer accepts your token (401). Sign in again.</value>
+  </data>
+  <data name="api.no-answer" xml:space="preserve">
+    <value>The API did not answer. Is it running, and does Api:BaseUrl (or service discovery) point at it?</value>
+  </data>
+  <data name="api.unreadable" xml:space="preserve">
+    <value>The answer could not be read.</value>
+  </data>
+  <data name="answer.no-tenant-header" xml:space="preserve">
+    <value>no Tenant header</value>
+  </data>
+  <data name="answer.tenant" xml:space="preserve">
+    <value>Tenant: {0}</value>
+  </data>
+  <data name="answer.done" xml:space="preserve">
+    <value>Done.</value>
+  </data>
+  <data name="answer.whole-tenant" xml:space="preserve">
+    <value>The key is needed for the whole tenant: holding it at a unit is not enough.</value>
+  </data>
+  <data name="answer.raw" xml:space="preserve">
+    <value>Raw JSON</value>
+  </data>
+  <data name="status.no-answer" xml:space="preserve">
+    <value>no answer</value>
+  </data>
+  <data name="status.no-answer.title" xml:space="preserve">
+    <value>The API did not answer</value>
+  </data>
+  <data name="verdict.expected" xml:space="preserve">
+    <value>as expected</value>
+  </data>
+  <data name="verdict.unexpected" xml:space="preserve">
+    <value>unexpected</value>
+  </data>
+  <data name="allowed.yes" xml:space="preserve">
+    <value>Allowed</value>
+  </data>
+  <data name="allowed.no" xml:space="preserve">
+    <value>Not allowed</value>
+  </data>
+  <data name="action.try-anyway" xml:space="preserve">
+    <value> · not allowed, try anyway</value>
+  </data>
+  <data name="picker.nothing" xml:space="preserve">
+    <value>(nothing listed: type an id)</value>
+  </data>
+  <data name="picker.pick" xml:space="preserve">
+    <value>(pick, or type below)</value>
+  </data>
+  <data name="picker.id" xml:space="preserve">
+    <value>{0} id</value>
+  </data>
+  <data name="tenant-picker.none" xml:space="preserve">
+    <value>(none)</value>
+  </data>
+  <data name="tenant-picker.seat-status" xml:space="preserve">
+    <value> ({0} seat)</value>
+  </data>
+  <data name="tenant-picker.no-seat" xml:space="preserve">
+    <value> (no seat here)</value>
+  </data>
+  <data name="login.title" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  <data name="login.dev-only" xml:space="preserve">
+    <value>&lt;strong&gt;Development only.&lt;/strong&gt; The Host's dev login signs you in as one of the demonstration people, with no password. It hands out the same kind of access token Supabase Auth would, and the API checks it exactly as it would check a real one: what each person may see and do below is what a real sign-in would get.</value>
+  </data>
+  <data name="login.asking" xml:space="preserve">
+    <value>Asking the API who can sign in…</value>
+  </data>
+  <data name="login.none" xml:space="preserve">
+    <value>The API has no dev login to offer. It exists only when the Host runs in Development with &lt;code&gt;DevLogin:Enabled&lt;/code&gt; on.</value>
+  </data>
+  <data name="login.signing-in" xml:space="preserve">
+    <value>Signing in…</value>
+  </data>
+  <data name="login.sign-in-as" xml:space="preserve">
+    <value>Sign in as {0}</value>
+  </data>
+  <data name="login.failed" xml:space="preserve">
+    <value>The sign-in did not work</value>
+  </data>
+  <data name="login.password.title" xml:space="preserve">
+    <value>With a password, at Supabase Auth</value>
+  </data>
+  <data name="login.password.intro" xml:space="preserve">
+    <value>The demonstration people are users there, under the addresses on their cards (&lt;code&gt;rhea@example.test&lt;/code&gt;), all with one password: the AppHost's &lt;code&gt;demo-password&lt;/code&gt; parameter, which its dashboard shows, or &lt;code&gt;Sample:DemoPassword&lt;/code&gt; when the Host is started by hand.</value>
+  </data>
+  <data name="login.password.email" xml:space="preserve">
+    <value>E-mail address</value>
+  </data>
+  <data name="login.password.password" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="login.password.sign-in" xml:space="preserve">
+    <value>Sign in</value>
+  </data>
+  <data name="login.password.token-refused" xml:space="preserve">
+    <value>Supabase Auth signed you in, and the API did not take its token:</value>
+  </data>
+  <data name="login.password.or-dev-login" xml:space="preserve">
+    <value>Or as one of the demonstration people, with the dev login</value>
+  </data>
+  <data name="login.password.not-offered" xml:space="preserve">
+    <value>This UI was not told where Supabase Auth is.</value>
+  </data>
+  <data name="login.password.incomplete" xml:space="preserve">
+    <value>Fill in an e-mail address and a password.</value>
+  </data>
+  <data name="login.password.refused" xml:space="preserve">
+    <value>That e-mail address and password do not sign anyone in.</value>
+  </data>
+  <data name="login.password.answered" xml:space="preserve">
+    <value>Supabase Auth answered {0}.</value>
+  </data>
+  <data name="login.password.no-token" xml:space="preserve">
+    <value>Supabase Auth answered without a token.</value>
+  </data>
+  <data name="login.password.no-answer" xml:space="preserve">
+    <value>Supabase Auth did not answer. Is it running, and does {0} point at it?</value>
+  </data>
+  <data name="whoami.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /me&lt;/code&gt;, as {0} in {1}: the seat the API resolved from your token and the &lt;code&gt;Tenant&lt;/code&gt; header, where it is placed, the roles it holds there for which period, and every key it holds now with the units each one reaches.</value>
+  </data>
+  <data name="whoami.no-answer" xml:space="preserve">
+    <value>The API did not say who you are in this tenant. This is its answer:</value>
+  </data>
+  <data name="whoami.shape-status" xml:space="preserve">
+    <value>Shape: {0} · Status: {1}</value>
+  </data>
+  <data name="whoami.seat" xml:space="preserve">
+    <value>Seat</value>
+  </data>
+  <data name="whoami.seat-status" xml:space="preserve">
+    <value>Status: {0}</value>
+  </data>
+  <data name="whoami.placements" xml:space="preserve">
+    <value>Placements and the roles held there</value>
+  </data>
+  <data name="whoami.placed-at" xml:space="preserve">
+    <value>Placed at</value>
+  </data>
+  <data name="whoami.applies-now" xml:space="preserve">
+    <value>Applies now</value>
+  </data>
+  <data name="whoami.no-role-here" xml:space="preserve">
+    <value>no organization role here</value>
+  </data>
+  <data name="whoami.primary" xml:space="preserve">
+    <value>primary</value>
+  </data>
+  <data name="whoami.ended" xml:space="preserve">
+    <value>no, it has ended</value>
+  </data>
+  <data name="whoami.not-started" xml:space="preserve">
+    <value>no, it has not started</value>
+  </data>
+  <data name="whoami.roles" xml:space="preserve">
+    <value>Roles</value>
+  </data>
+  <data name="whoami.roles.none" xml:space="preserve">
+    <value>No organization roles. Crew roles on projects are shown with each project.</value>
+  </data>
+  <data name="whoami.from-pack" xml:space="preserve">
+    <value>From pack</value>
+  </data>
+  <data name="whoami.manages-access" xml:space="preserve">
+    <value>Manages access</value>
+  </data>
+  <data name="whoami.keys" xml:space="preserve">
+    <value>Keys</value>
+  </data>
+  <data name="whoami.grants-manage" xml:space="preserve">
+    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; you give any role that manages no access to anyone placed there or below, yourself included, without holding its keys: to others for as long as you choose, to yourself for no longer than you hold &lt;code&gt;{0}&lt;/code&gt;. A role that manages access needs each of its keys that manage access, held by you there for at least as long, and is never yours to give yourself.</value>
+  </data>
+  <data name="whoami.seats-manage" xml:space="preserve">
+    <value>Holding &lt;code&gt;{0}&lt;/code&gt; for the whole tenant you suspend, reactivate and deactivate seats, and may suspend or deactivate your own. A seat whose grants include a role that manages access needs, for each of those grants, the role's keys that manage access, held by you at that grant's unit until at least its end: stopping or restarting the seat takes the role away or gives it back.</value>
+  </data>
+  <data name="whoami.units-manage" xml:space="preserve">
+    <value>Where you hold &lt;code&gt;{0}&lt;/code&gt; at a unit's parent and at another unit, you move the unit there. A move gives you no key you do not hold at the unit already, for as long, and gives or takes away a key that manages access, from anyone, only when you hold it at the unit for at least as long as their grant runs.</value>
+  </data>
+  <data name="whoami.keys-now" xml:space="preserve">
+    <value>Keys held now</value>
+  </data>
+  <data name="whoami.keys-now.none" xml:space="preserve">
+    <value>None. A grant that has expired, a suspended seat or an archived role gives no key.</value>
+  </data>
+  <data name="whoami.key" xml:space="preserve">
+    <value>Key</value>
+  </data>
+  <data name="whoami.granted-at" xml:space="preserve">
+    <value>Granted at</value>
+  </data>
+  <data name="whoami.reaches" xml:space="preserve">
+    <value>Reaches</value>
+  </data>
+  <data name="whoami.whole-tenant" xml:space="preserve">
+    <value>whole tenant</value>
+  </data>
+  <data name="projects.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /projects&lt;/code&gt;: every project you may see in {0}, and how. &lt;em&gt;Crew&lt;/em&gt; means you are on its crew, with a role or without, and is what the list says when a role of yours reaches the project as well; &lt;em&gt;organization&lt;/em&gt; means through a role you hold at its unit or above. A project you may not see is not listed, in this tenant or any other. The answer names units, seats and project roles by their ids; the names shown here come from the directory, &lt;code&gt;POST /tenancy/directory/&amp;hellip;&lt;/code&gt;, asked with those ids, and from &lt;code&gt;GET /project-roles&lt;/code&gt;. The list comes a page at a time, by number: &lt;em&gt;More&lt;/em&gt; asks the next page with the marker the last one gave.</value>
+  </data>
+  <data name="projects.filter.any-state" xml:space="preserve">
+    <value>open and closed</value>
+  </data>
+  <data name="projects.filter.open" xml:space="preserve">
+    <value>open</value>
+  </data>
+  <data name="projects.filter.closed" xml:space="preserve">
+    <value>closed</value>
+  </data>
+  <data name="projects.filter.text" xml:space="preserve">
+    <value>Number starts with, or name contains</value>
+  </data>
+  <data name="projects.filter" xml:space="preserve">
+    <value>Filter</value>
+  </data>
+  <data name="projects.none" xml:space="preserve">
+    <value>There is no project you may see here.</value>
+  </data>
+  <data name="projects.number" xml:space="preserve">
+    <value>Number</value>
+  </data>
+  <data name="projects.unit" xml:space="preserve">
+    <value>Unit</value>
+  </data>
+  <data name="projects.state" xml:space="preserve">
+    <value>State</value>
+  </data>
+  <data name="projects.my-roles" xml:space="preserve">
+    <value>My crew roles</value>
+  </data>
+  <data name="projects.via" xml:space="preserve">
+    <value>Via</value>
+  </data>
+  <data name="projects.crew" xml:space="preserve">
+    <value>Crew</value>
+  </data>
+  <data name="projects.no-role" xml:space="preserve">
+    <value>no role</value>
+  </data>
+  <data name="projects.owner" xml:space="preserve">
+    <value>owner</value>
+  </data>
+  <data name="project.back" xml:space="preserve">
+    <value>← My projects</value>
+  </data>
+  <data name="project.title" xml:space="preserve">
+    <value>Project</value>
+  </data>
+  <data name="project.not-shown" xml:space="preserve">
+    <value>The API did not show this project. A project in another tenant, or one you may not see, is not found, exactly as one that does not exist.</value>
+  </data>
+  <data name="project.at" xml:space="preserve">
+    <value>at &lt;strong&gt;{0}&lt;/strong&gt;.</value>
+  </data>
+  <data name="project.seen-via" xml:space="preserve">
+    <value>You see it via &lt;strong&gt;{0}&lt;/strong&gt;</value>
+  </data>
+  <data name="project.seen-as" xml:space="preserve">
+    <value>, as {0} on its crew</value>
+  </data>
+  <data name="project.seen-no-role" xml:space="preserve">
+    <value>, on its crew with no role</value>
+  </data>
+  <data name="project.planned" xml:space="preserve">
+    <value>Planned for &lt;strong&gt;{0}&lt;/strong&gt;.</value>
+  </data>
+  <data name="project.not-planned" xml:space="preserve">
+    <value>Not planned for any days yet.</value>
+  </data>
+  <data name="project.can" xml:space="preserve">
+    <value>What the API says you may do:</value>
+  </data>
+  <data name="project.can.rename" xml:space="preserve">
+    <value>rename</value>
+  </data>
+  <data name="project.can.plan" xml:space="preserve">
+    <value>plan</value>
+  </data>
+  <data name="project.can.move" xml:space="preserve">
+    <value>move</value>
+  </data>
+  <data name="project.can.reopen" xml:space="preserve">
+    <value>reopen</value>
+  </data>
+  <data name="project.can.close" xml:space="preserve">
+    <value>close</value>
+  </data>
+  <data name="project.can.crew" xml:space="preserve">
+    <value>manage the crew</value>
+  </data>
+  <data name="project.can.owner" xml:space="preserve">
+    <value>change the owner</value>
+  </data>
+  <data name="project.can.inspect" xml:space="preserve">
+    <value>record an inspection</value>
+  </data>
+  <data name="project.crew.intro" xml:space="preserve">
+    <value>Being on the crew and holding a role on it are two things, each with its own dates. A seat on the crew sees the project. What else it may do comes from the roles it holds there, each for a period of its own, and only while it is on the crew.</value>
+  </data>
+  <data name="project.crew.roles-not-shown" xml:space="preserve">
+    <value>Which roles each member holds, and until when, is shown to whoever manages the crew.</value>
+  </data>
+  <data name="project.crew.as" xml:space="preserve">
+    <value>On the crew, and as</value>
+  </data>
+  <data name="project.crew.counts" xml:space="preserve">
+    <value>Counts now</value>
+  </data>
+  <data name="project.crew.no-role" xml:space="preserve">
+    <value>on the crew, with no role</value>
+  </data>
+  <data name="project.crew.member" xml:space="preserve">
+    <value>on the crew</value>
+  </data>
+  <data name="project.crew.remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="project.crew.take" xml:space="preserve">
+    <value>Take</value>
+  </data>
+  <data name="project.actions" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="project.rename.label" xml:space="preserve">
+    <value>Rename to</value>
+  </data>
+  <data name="project.rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="project.plan.label" xml:space="preserve">
+    <value>Plan for</value>
+  </data>
+  <data name="project.plan.first" xml:space="preserve">
+    <value>The first day</value>
+  </data>
+  <data name="project.plan.last" xml:space="preserve">
+    <value>The last day</value>
+  </data>
+  <data name="project.plan" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="project.plan.help" xml:space="preserve">
+    <value>The days the work is planned for, first and last; both blank takes the plan away. An inspection then covers days within them.</value>
+  </data>
+  <data name="project.add.label" xml:space="preserve">
+    <value>Put a seat on the crew</value>
+  </data>
+  <data name="project.pick-seat" xml:space="preserve">
+    <value>(pick a seat)</value>
+  </data>
+  <data name="project.add.no-role" xml:space="preserve">
+    <value>(no role: sees the project, nothing more)</value>
+  </data>
+  <data name="project.until" xml:space="preserve">
+    <value>Until; blank for good</value>
+  </data>
+  <data name="project.add" xml:space="preserve">
+    <value>Add to the crew</value>
+  </data>
+  <data name="project.add.help" xml:space="preserve">
+    <value>Any active seat of the tenant, your own included, until the day picked or for good. A role picked here is given for the same period.</value>
+  </data>
+  <data name="project.give.label" xml:space="preserve">
+    <value>Give a crew role</value>
+  </data>
+  <data name="project.pick-member" xml:space="preserve">
+    <value>(pick a crew member)</value>
+  </data>
+  <data name="project.pick-role" xml:space="preserve">
+    <value>(pick a role)</value>
+  </data>
+  <data name="project.give" xml:space="preserve">
+    <value>Give the role</value>
+  </data>
+  <data name="project.give.help" xml:space="preserve">
+    <value>Next to the roles the member holds, until the day picked or for good; take one away in the crew table. You need not hold the role's keys yourself, and may give one to yourself. On a crew a role gives only what acts on this project; opening projects and naming the owner come from the organization. The list holds the tenant's project roles in use: a role of the organization is refused on a crew, which the try-it page shows.</value>
+  </data>
+  <data name="project.move.label" xml:space="preserve">
+    <value>Move to</value>
+  </data>
+  <data name="project.pick-unit" xml:space="preserve">
+    <value>(pick a unit)</value>
+  </data>
+  <data name="project.move" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="project.owner.label" xml:space="preserve">
+    <value>Change the owner to</value>
+  </data>
+  <data name="project.owner" xml:space="preserve">
+    <value>Change owner</value>
+  </data>
+  <data name="project.reopen.label" xml:space="preserve">
+    <value>Reopen the project</value>
+  </data>
+  <data name="project.reopen" xml:space="preserve">
+    <value>Reopen</value>
+  </data>
+  <data name="project.reopen.help" xml:space="preserve">
+    <value>Whoever may close a project may reopen it.</value>
+  </data>
+  <data name="project.close.label" xml:space="preserve">
+    <value>Close the project</value>
+  </data>
+  <data name="project.close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="project.inspections" xml:space="preserve">
+    <value>Inspections</value>
+  </data>
+  <data name="project.inspections.none" xml:space="preserve">
+    <value>None recorded yet.</value>
+  </data>
+  <data name="project.inspections.title" xml:space="preserve">
+    <value>Title</value>
+  </data>
+  <data name="project.inspections.days" xml:space="preserve">
+    <value>Days</value>
+  </data>
+  <data name="project.inspections.by" xml:space="preserve">
+    <value>Recorded by</value>
+  </data>
+  <data name="project.inspections.at" xml:space="preserve">
+    <value>At</value>
+  </data>
+  <data name="project.inspect.label" xml:space="preserve">
+    <value>Add an inspection</value>
+  </data>
+  <data name="project.inspect.what" xml:space="preserve">
+    <value>What was found</value>
+  </data>
+  <data name="project.inspect.first" xml:space="preserve">
+    <value>The first day it covers</value>
+  </data>
+  <data name="project.inspect.last" xml:space="preserve">
+    <value>The last day it covers</value>
+  </data>
+  <data name="project.inspect" xml:space="preserve">
+    <value>Record</value>
+  </data>
+  <data name="project.inspect.help" xml:space="preserve">
+    <value>The days it covers, first and last; both blank is the day it is recorded, by the clock in UTC, which east or west of it may be another day than today. On a planned project they lie within its planned days, or the API refuses.</value>
+  </data>
+  <data name="try.intro" xml:space="preserve">
+    <value>Send any call the API has, as yourself, as nobody, or in any tenant, and see what it decides: the status and, for a refusal, its code. The presets below do on purpose what their person may not.</value>
+  </data>
+  <data name="try.free" xml:space="preserve">
+    <value>Free form</value>
+  </data>
+  <data name="try.action" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="try.action.open-project" xml:space="preserve">
+    <value>Open project</value>
+  </data>
+  <data name="try.action.check-key" xml:space="preserve">
+    <value>Check a key on a project</value>
+  </data>
+  <data name="try.action.units-with-key" xml:space="preserve">
+    <value>Units where I hold a key</value>
+  </data>
+  <data name="try.action.seat-name" xml:space="preserve">
+    <value>Name of a seat</value>
+  </data>
+  <data name="try.action.unit-path" xml:space="preserve">
+    <value>Path of a unit</value>
+  </data>
+  <data name="try.action.role-name" xml:space="preserve">
+    <value>Name of a role</value>
+  </data>
+  <data name="try.action.rename-project" xml:space="preserve">
+    <value>Rename project</value>
+  </data>
+  <data name="try.action.move-project" xml:space="preserve">
+    <value>Move project</value>
+  </data>
+  <data name="try.action.close-project" xml:space="preserve">
+    <value>Close project</value>
+  </data>
+  <data name="try.action.reopen-project" xml:space="preserve">
+    <value>Reopen project</value>
+  </data>
+  <data name="try.action.record-inspection" xml:space="preserve">
+    <value>Record an inspection</value>
+  </data>
+  <data name="try.action.add-to-crew" xml:space="preserve">
+    <value>Add to crew</value>
+  </data>
+  <data name="try.action.give-crew-role" xml:space="preserve">
+    <value>Give a crew role</value>
+  </data>
+  <data name="try.action.take-crew-role" xml:space="preserve">
+    <value>Take a crew role</value>
+  </data>
+  <data name="try.action.remove-from-crew" xml:space="preserve">
+    <value>Remove from crew</value>
+  </data>
+  <data name="try.action.change-owner" xml:space="preserve">
+    <value>Change owner</value>
+  </data>
+  <data name="try.action.grant-org-role" xml:space="preserve">
+    <value>Grant an org role</value>
+  </data>
+  <data name="try.action.revoke-org-role" xml:space="preserve">
+    <value>Revoke an org role</value>
+  </data>
+  <data name="try.action.suspend-seat" xml:space="preserve">
+    <value>Suspend a seat</value>
+  </data>
+  <data name="try.action.withdraw-placement" xml:space="preserve">
+    <value>Withdraw a placement</value>
+  </data>
+  <data name="try.field.project" xml:space="preserve">
+    <value>Project</value>
+  </data>
+  <data name="try.field.key" xml:space="preserve">
+    <value>Key</value>
+  </data>
+  <data name="try.field.name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="try.field.unit" xml:space="preserve">
+    <value>Unit</value>
+  </data>
+  <data name="try.field.title" xml:space="preserve">
+    <value>Title</value>
+  </data>
+  <data name="try.field.seat" xml:space="preserve">
+    <value>Seat</value>
+  </data>
+  <data name="try.field.role" xml:space="preserve">
+    <value>Role</value>
+  </data>
+  <data name="try.field.until" xml:space="preserve">
+    <value>Until</value>
+  </data>
+  <data name="try.field.reason" xml:space="preserve">
+    <value>Reason</value>
+  </data>
+  <data name="try.tenant.blank" xml:space="preserve">
+    <value>blank: no Tenant header</value>
+  </data>
+  <data name="try.no-token" xml:space="preserve">
+    <value>No token: call anonymously (never signs you out)</value>
+  </data>
+  <data name="try.send" xml:space="preserve">
+    <value>Send</value>
+  </data>
+  <data name="try.presets" xml:space="preserve">
+    <value>Presets</value>
+  </data>
+  <data name="try.presets.intro" xml:space="preserve">
+    <value>Each runs as its person, with that person's token from the dev login, and leaves your own sign-in alone. Every one is a refusal of the demonstration as it is seeded, or a read that is allowed beside the same read refused, so running them changes nothing. A role you give from this UI first can make one succeed.</value>
+  </data>
+  <data name="try.run-all" xml:space="preserve">
+    <value>Run all</value>
+  </data>
+  <data name="try.run" xml:space="preserve">
+    <value>Run</value>
+  </data>
+  <data name="try.attempt" xml:space="preserve">
+    <value>Attempt</value>
+  </data>
+  <data name="try.as" xml:space="preserve">
+    <value>As</value>
+  </data>
+  <data name="try.expected" xml:space="preserve">
+    <value>Expected</value>
+  </data>
+  <data name="try.history" xml:space="preserve">
+    <value>History</value>
+  </data>
+  <data name="try.history.none" xml:space="preserve">
+    <value>Nothing sent yet in this session.</value>
+  </data>
+  <data name="try.history.at" xml:space="preserve">
+    <value>At</value>
+  </data>
+  <data name="try.history.what" xml:space="preserve">
+    <value>What</value>
+  </data>
+  <data name="try.history.request" xml:space="preserve">
+    <value>Request</value>
+  </data>
+  <data name="nav.history" xml:space="preserve">
+    <value>Access history</value>
+  </data>
+  <data name="history.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /tenancy/history&lt;/code&gt;: every change to who may do what in {0}, newest first, each with who made it. Reading it takes the key &lt;code&gt;tenancy.history.view&lt;/code&gt; for the whole tenant; without it the API refuses, and the refusal is shown here. A row names seats, units and roles by their ids, and never says why a role was given; the name shown for who acted comes from the directory. The list comes a page at a time: &lt;em&gt;More&lt;/em&gt; asks the next page with the marker the last one gave.</value>
+  </data>
+  <data name="history.none" xml:space="preserve">
+    <value>Nothing has changed anyone's access yet.</value>
+  </data>
+  <data name="history.when" xml:space="preserve">
+    <value>When</value>
+  </data>
+  <data name="history.what" xml:space="preserve">
+    <value>What</value>
+  </data>
+  <data name="history.by" xml:space="preserve">
+    <value>By</value>
+  </data>
+  <data name="history.details" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="actor.system" xml:space="preserve">
+    <value>the application</value>
+  </data>
+  <data name="actor.operator" xml:space="preserve">
+    <value>an operator</value>
+  </data>
+  <data name="actor.token" xml:space="preserve">
+    <value>a link's token</value>
+  </data>
+  <data name="project.changed-by" xml:space="preserve">
+    <value>Last changed by</value>
+  </data>
+  <data name="nav.invitations" xml:space="preserve">
+    <value>Invitations</value>
+  </data>
+  <data name="nav.accept" xml:space="preserve">
+    <value>Accept an invitation</value>
+  </data>
+  <data name="invitations.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /tenancy/invitations&lt;/code&gt;: the invitations into {0} that can still be accepted, for whoever manages seats at their unit. Inviting takes the keys &lt;code&gt;tenancy.seats.manage&lt;/code&gt; for the whole tenant and &lt;code&gt;tenancy.grants.manage&lt;/code&gt; at the unit, and the role is held to the rule every grant is held to; without them the API refuses, and the refusal is shown here. No seat is made until the person accepts.</value>
+  </data>
+  <data name="invitations.none" xml:space="preserve">
+    <value>No invitation is open.</value>
+  </data>
+  <data name="invitations.address" xml:space="preserve">
+    <value>Address</value>
+  </data>
+  <data name="invitations.unit" xml:space="preserve">
+    <value>Unit</value>
+  </data>
+  <data name="invitations.role-until" xml:space="preserve">
+    <value>until {0}</value>
+  </data>
+  <data name="invitations.open-until" xml:space="preserve">
+    <value>Open until</value>
+  </data>
+  <data name="invitations.by" xml:space="preserve">
+    <value>Invited by</value>
+  </data>
+  <data name="invitations.revoke" xml:space="preserve">
+    <value>Revoke</value>
+  </data>
+  <data name="invitations.invite.title" xml:space="preserve">
+    <value>Invite a person</value>
+  </data>
+  <data name="invitations.invite.label" xml:space="preserve">
+    <value>A seat in a unit, with a role there, for the person at an address</value>
+  </data>
+  <data name="invitations.invite.address" xml:space="preserve">
+    <value>E-mail address</value>
+  </data>
+  <data name="invitations.invite.name" xml:space="preserve">
+    <value>Name for the seat; left empty, the person gives one when accepting</value>
+  </data>
+  <data name="invitations.invite" xml:space="preserve">
+    <value>Invite</value>
+  </data>
+  <data name="invitations.invite.help" xml:space="preserve">
+    <value>The invitation stays open for a week. A role with an end must end after that week. The answer says nothing of whether the address has an account already.</value>
+  </data>
+  <data name="invitations.issued.title" xml:space="preserve">
+    <value>Invited. What follows is shown this once.</value>
+  </data>
+  <data name="invitations.issued.text" xml:space="preserve">
+    <value>Hand this link to the person, unless a mail from Supabase Auth brings it: a new account gets it by mail where the Host knows this UI's address. It carries the invitation's token, of which the API keeps only a digest, so nobody can show it again. It works until {0}, for the account with the invited address, once signed in.</value>
+  </data>
+  <data name="invitations.issued.token" xml:space="preserve">
+    <value>Or the token alone, to paste on the page "Accept an invitation":</value>
+  </data>
+  <data name="accept.intro" xml:space="preserve">
+    <value>&lt;code&gt;POST /invitations/accept&lt;/code&gt;: {0} accepts the invitation a token is for, and has a seat, its placement and its role from that one call on. The call names no tenant: the token says which. The API refuses a token that was revoked, that somebody else used or whose week ran out, and one sent to another address than this account's.</value>
+  </data>
+  <data name="accept.token" xml:space="preserve">
+    <value>The invitation's token</value>
+  </data>
+  <data name="accept.name" xml:space="preserve">
+    <value>Name for the seat: needed when the invitation suggests none</value>
+  </data>
+  <data name="accept.send" xml:space="preserve">
+    <value>Accept</value>
+  </data>
+  <data name="accept.help" xml:space="preserve">
+    <value>A link to this page carries the token after the #. Open it signed in, or paste the token here.</value>
+  </data>
+  <data name="accept.done" xml:space="preserve">
+    <value>Accepted: a seat in &lt;strong&gt;{0}&lt;/strong&gt;, where this session now works.</value>
+  </data>
+  <data name="accept.sign-in-first" xml:space="preserve">
+    <value>Accepting takes a sign-in with the invited address: &lt;a href="login"&gt;sign in&lt;/a&gt;, then open the link again or paste its token here. The link in a mail from Supabase Auth signs its person in by itself.</value>
+  </data>
+  <data name="accept.link.refused" xml:space="preserve">
+    <value>Supabase Auth did not take the link in the mail: it works once, and for a limited time. Whoever chose a password with it signs in on the login page; otherwise a new invitation is needed.</value>
+  </data>
+  <data name="accept.link.asks" xml:space="preserve">
+    <value>This link signs in &lt;strong&gt;{0}&lt;/strong&gt;, and this tab is signed in as &lt;strong&gt;{1}&lt;/strong&gt;. Nothing has changed. Take the link only when it came from a mail that was sent to you: anybody can make a link that signs in an account of their own.</value>
+  </data>
+  <data name="accept.link.keep" xml:space="preserve">
+    <value>Stay signed in as {0}</value>
+  </data>
+  <data name="accept.link.take" xml:space="preserve">
+    <value>Sign in as {0}</value>
+  </data>
+  <data name="accept.password.title" xml:space="preserve">
+    <value>Choose a password</value>
+  </data>
+  <data name="accept.password.intro" xml:space="preserve">
+    <value>The link in the mail signed {0} in, this once. With a password the next sign-in is on the login page. It goes to Supabase Auth (&lt;code&gt;PUT user&lt;/code&gt;) and is kept nowhere here. The invitation is next.</value>
+  </data>
+  <data name="accept.password.label" xml:space="preserve">
+    <value>New password</value>
+  </data>
+  <data name="accept.password.again" xml:space="preserve">
+    <value>The same password again</value>
+  </data>
+  <data name="accept.password.set" xml:space="preserve">
+    <value>Set the password</value>
+  </data>
+  <data name="accept.password.differ" xml:space="preserve">
+    <value>The two passwords differ.</value>
+  </data>
+  <data name="accept.password.done" xml:space="preserve">
+    <value>The password is set: the next sign-in is on the login page, with the address and that password.</value>
+  </data>
+  <data name="login.link.refused" xml:space="preserve">
+    <value>Supabase Auth does not know the sign-in this link carries.</value>
+  </data>
+  <data name="login.password.not-taken" xml:space="preserve">
+    <value>Supabase Auth did not take that password: it asks for a longer or a less common one.</value>
+  </data>
+  <data name="login.password.session-over" xml:space="preserve">
+    <value>The sign-in the link gave has ended, so no password was set.</value>
+  </data>
+  <data name="nav.project-roles" xml:space="preserve">
+    <value>Crew roles</value>
+  </data>
+  <data name="try.field.project-role" xml:space="preserve">
+    <value>Crew role</value>
+  </data>
+  <data name="project-roles.intro" xml:space="preserve">
+    <value>&lt;code&gt;GET /project-roles&lt;/code&gt;: the roles {0} keeps for its crews, archived ones too. A crew member holds one on one project, and it gives only what acts on that project. The starter roles were made when the tenant was set up; the tenant renames, re-keys and archives them, and makes its own. Anybody who works in the tenant reads their names. Their keys, and making and changing a role, are for whoever holds &lt;code&gt;tenancy.roles.manage&lt;/code&gt; for the whole tenant; the API refuses anybody else, and the refusal is shown here.</value>
+  </data>
+  <data name="project-roles.none" xml:space="preserve">
+    <value>The tenant has no crew roles.</value>
+  </data>
+  <data name="project-roles.description" xml:space="preserve">
+    <value>What it is for</value>
+  </data>
+  <data name="project-roles.made-from" xml:space="preserve">
+    <value>Made from</value>
+  </data>
+  <data name="project-roles.made-by-tenant" xml:space="preserve">
+    <value>made by the tenant</value>
+  </data>
+  <data name="project-roles.keys" xml:space="preserve">
+    <value>Keys</value>
+  </data>
+  <data name="project-roles.archive" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="project-roles.make.title" xml:space="preserve">
+    <value>Make a crew role</value>
+  </data>
+  <data name="project-roles.make.label" xml:space="preserve">
+    <value>A name, what it is for, and the keys it gives on a crew</value>
+  </data>
+  <data name="project-roles.make" xml:space="preserve">
+    <value>Make the role</value>
+  </data>
+  <data name="project-roles.make.help" xml:space="preserve">
+    <value>Only keys that act on a project go on a crew role: a key of the organization is refused, which shows here.</value>
+  </data>
+  <data name="project-roles.change.title" xml:space="preserve">
+    <value>Change a crew role</value>
+  </data>
+  <data name="project-roles.pick" xml:space="preserve">
+    <value>(pick a crew role)</value>
+  </data>
+  <data name="project-roles.rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="project-roles.set-keys" xml:space="preserve">
+    <value>Set the keys</value>
+  </data>
+  <data name="project-roles.change.help" xml:space="preserve">
+    <value>Renaming sets the name and what it is for together: a description left empty is cleared. The keys become exactly the ones picked, none taking them all off. An archived role changes no more, and the crew lead's role is not archived: every project's owner holds it.</value>
+  </data>
+</root>

@@ -28,8 +28,13 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
 #pragma warning restore S2326
 {
     /// <summary>
-    /// The database roles the rule is for. Left empty, it is for every caller the application runs
-    /// queries as: on Supabase, <c>anon</c> and <c>authenticated</c>.
+    /// The roles the rule is for, each getting policies of its own: <see cref="RowAccessRoles.User"/>,
+    /// <see cref="RowAccessRoles.Anonymous"/>, <see cref="RowAccessRoles.SystemIn"/> and a token role the host
+    /// mapped (<see cref="RowAccessRoles.TokenPrefix"/> and its name), which become the
+    /// roles the host configured when the policies are written, or a role's own name, written as it is
+    /// spelled. Left empty, it is for <see cref="RowAccessRoles.User"/> and
+    /// <see cref="RowAccessRoles.Anonymous"/>: on Supabase, <c>authenticated</c> and <c>anon</c>.
+    /// <c>PUBLIC</c> is refused when the policies are written.
     /// </summary>
     public string[] To { get; set; } = [];
 }

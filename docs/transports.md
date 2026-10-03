@@ -252,7 +252,7 @@ services.AddPgmqConsumer(queues, "shop");
 var host = new ModuleHost(database, outbox => outbox.SendToPgmq());
 ```
 
-*[`ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+*[`ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)*
 
 No module sink is involved, so nothing reaches a module except through the queue. That makes it the
 step before a module moves out: its messages already travel through the database rather than a method

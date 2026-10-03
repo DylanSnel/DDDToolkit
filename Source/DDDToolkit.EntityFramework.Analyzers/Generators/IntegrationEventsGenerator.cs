@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using DDDToolkit.Analyzers.Common;
@@ -28,6 +29,17 @@ namespace DDDToolkit.EntityFramework.Analyzers;
 /// with <c>new</c>, each constructor parameter taken from the scope the message is delivered in. Nothing
 /// is found, read or created by reflection when the application runs.
 /// </para>
+/// <para>
+/// A module's domain project need not reference Entity Framework, and then writes no registration of its own.
+/// Its domain events are registered by the module's projects that do: every concrete, non-generic domain event
+/// of a referenced assembly with the same <c>[Module]</c> that does not reference DDDToolkit.EntityFramework,
+/// under the name and version its own registration would have given it, which the declaring assembly's module
+/// decides. Such an event this project cannot see is DDD00033 on the <c>[assembly: Module]</c> attribute, rather
+/// than an event found out at run time: the outbox would still store it when it is raised, under the same name,
+/// and the processor would never deliver it, recording the missing registration on its row at every attempt. An
+/// assembly that references Entity Framework writes its own registration, so its events are not registered twice,
+/// and one that declares no module is a package's.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class IntegrationEventsGenerator : IIncrementalGenerator
@@ -35,6 +47,7 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
     private const string IntegrationNamespace = "DDDToolkit.EntityFramework.Integration";
     private const string OutboxOptionsMetadataName = "DDDToolkit.EntityFramework.Options.OutboxOptions";
     private const string ConsumerAttribute = IntegrationNamespace + ".IntegrationEventConsumerAttribute";
+    private const string EntityFrameworkAssembly = "DDDToolkit.EntityFramework";
 
     private const string Services = "global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions";
 
@@ -52,29 +65,131 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
             .Select(static (type, _) => type!)
             .Collect();
 
+        // Read off the compilation, so it runs again on every edit; the walk of each referenced assembly is cached,
+        // and what comes out compares equal when nothing it names changed.
+        var referenced = context.CompilationProvider.Select(static (compilation, cancellationToken) => ModuleEvents(compilation, cancellationToken));
+
         var registration = found
+            .Combine(referenced)
             .Combine(enabled)
             .Combine(context.RegistrationName())
             .Combine(context.AssemblyName());
 
         context.RegisterSourceOutput(registration, static (production, data) =>
         {
-            var (((types, isEnabled), moduleName), assemblyName) = data;
+            var ((((types, others), isEnabled), moduleName), assemblyName) = data;
 
-            if (!isEnabled || types.IsDefaultOrEmpty)
+            if (!isEnabled)
             {
                 return;
             }
 
-            foreach (var type in types)
+            others.Problems.ReportAll(production);
+
+            var own = types.IsDefault ? ImmutableArray<FoundType>.Empty : types;
+            if (own.IsEmpty && others.Events.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var type in own)
             {
                 type.Problem?.Report(production);
             }
 
             production.AddSource(
                 "IntegrationEventExtensions.g.cs",
-                SourceText.From(Write(types, moduleName, assemblyName), Encoding.UTF8));
+                SourceText.From(Write(own.AddRange(others.Events), moduleName, assemblyName), Encoding.UTF8));
         });
+    }
+
+    // ------------------------------------------------------------------ the module's other projects
+
+    /// <summary>
+    /// The domain events of this module's referenced projects that have no registration of their own, and DDD00033
+    /// for each one this project cannot see. Nothing when this project declares no module.
+    /// </summary>
+    private static ReferencedEvents ModuleEvents(Compilation compilation, CancellationToken cancellationToken)
+    {
+        if (ModuleBoundary.ModuleOf(compilation.Assembly) is not { } module)
+        {
+            return ReferencedEvents.None;
+        }
+
+        var events = new List<FoundType>();
+        var problems = new List<DiagnosticInfo>();
+        LocationInfo? moduleAttribute = null;
+        foreach (var assembly in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!string.Equals(ModuleBoundary.ModuleOf(assembly), module, StringComparison.Ordinal) || RegistersItsOwn(assembly))
+            {
+                continue;
+            }
+
+            foreach (var type in DomainEventsOf(assembly, cancellationToken))
+            {
+                if (compilation.IsSymbolAccessibleWithin(type, compilation.Assembly))
+                {
+                    var (name, version) = EventNaming.DomainEventOf(type);
+                    events.Add(new FoundType(Name(type), name, version, EquatableArray<Outbound>.Empty, EquatableArray<Handler>.Empty, EquatableArray<string>.Empty, null));
+                    continue;
+                }
+
+                moduleAttribute ??= ModuleAttributeOf(compilation, cancellationToken);
+                problems.Add(DiagnosticInfo.Create(
+                    DiagnosticDescriptors.IntegrationEventClassNotConstructible,
+                    moduleAttribute,
+                    type.ToDisplayString(),
+                    "a domain event of " + assembly.Identity.Name + ", a project of this module, that this project cannot see; make it public"));
+            }
+        }
+
+        return new ReferencedEvents(events.ToEquatableArray(), problems.ToEquatableArray());
+    }
+
+    /// <summary>
+    /// Whether an assembly references DDDToolkit.EntityFramework, and so wrote a registration of its own when it was
+    /// built. The compiler records only the references an assembly uses, and a written registration uses this one.
+    /// </summary>
+    private static bool RegistersItsOwn(IAssemblySymbol assembly)
+        => assembly.Modules.Any(static part => part.ReferencedAssemblies.Any(static reference => reference.Name == EntityFrameworkAssembly));
+
+    /// <summary>
+    /// The concrete, non-generic domain events of a referenced assembly, public or not: whether this project can see
+    /// one is a question for each compilation. Walked once per assembly symbol, which the compiler keeps for as long
+    /// as the reference does not change.
+    /// </summary>
+    private static INamedTypeSymbol[] DomainEventsOf(IAssemblySymbol assembly, CancellationToken cancellationToken)
+    {
+        if (DomainEventsByAssembly.TryGetValue(assembly, out var known))
+        {
+            return known;
+        }
+
+        var found = DefinitionFactory.TypesIn(assembly.GlobalNamespace, cancellationToken)
+            .Where(static type => type.TypeKind == TypeKind.Class && !type.IsAbstract && !type.IsStatic && !IsGeneric(type) && EventNaming.IsDomainEvent(type))
+            .ToArray();
+
+        return DomainEventsByAssembly.GetValue(assembly, _ => found);
+    }
+
+    private static readonly ConditionalWeakTable<IAssemblySymbol, INamedTypeSymbol[]> DomainEventsByAssembly = new();
+
+    /// <summary>Where a problem with another project of the module is reported: this project's <c>[assembly: Module]</c>.</summary>
+    private static LocationInfo? ModuleAttributeOf(Compilation compilation, CancellationToken cancellationToken)
+    {
+        foreach (var attribute in compilation.Assembly.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() == KnownTypes.ModuleAttribute
+                && attribute.ApplicationSyntaxReference is { } reference)
+            {
+                return LocationInfo.From(reference.GetSyntax(cancellationToken));
+            }
+        }
+
+        return null;
     }
 
     private static FoundType? Describe(GeneratorSyntaxContext syntaxContext, CancellationToken cancellationToken)
@@ -366,4 +481,10 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
     private sealed record Outbound(string DomainEvent, string Contract, string ContractName, int ContractVersion);
 
     private sealed record Handler(string Contract, string ContractName, int ContractVersion, string Consumer);
+
+    /// <summary>What the module's other projects add: their domain events, and why any were left out.</summary>
+    private sealed record ReferencedEvents(EquatableArray<FoundType> Events, EquatableArray<DiagnosticInfo> Problems)
+    {
+        public static readonly ReferencedEvents None = new(EquatableArray<FoundType>.Empty, EquatableArray<DiagnosticInfo>.Empty);
+    }
 }

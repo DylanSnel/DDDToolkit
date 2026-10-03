@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Membership on Entity Framework</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;membership;members;access;entity;framework;ef;efcore</PackageTags>
+    <Description>Stores Membership with Entity Framework Core: the two member tables of a resource in the application's own context, under the application's names, the role class of a resource whose roles are kept, and the access questions of each kind of resource answered inside that context's own statements.</Description>
+  </PropertyGroup>
+
+  <!--
+    It declares no entities, ids or value objects of its own, so no generator runs on it: the application's
+    classes are declared in the application, which the generators already run on.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!--
+    The generator that joins a resource to an organization of the Tenancy packages, in an application that
+    has both. It runs in the application, and references nothing of the other package: neither does this one.
+    It ships inside this package, in analyzers/dotnet/cs, as the member list's generator ships inside
+    DDDToolkit.Supporting.Membership: no package of its own.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers\bin\$(Configuration)\netstandard2.0\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -15,6 +15,14 @@ namespace DDDToolkit.EntityFramework.Analyzers;
 /// property (query parameters, constants and the element type of primitive collections). EF Core does
 /// not apply the property configuration to collection elements; the DDDToolkit
 /// <c>ReadOnlyCollectionConvention</c> reads the default type mapping instead.
+/// <para>
+/// A module's domain and contracts projects need not reference Entity Framework. Their ids and single value objects
+/// then have no nested converter, so the project that holds the module's context registers them in its own
+/// <c>Add{Module}Converters()</c>, with <c>SingleValueConverter&lt;T, TValue&gt;</c>: every one of the module's other
+/// projects, and the published ones of other modules, which it registers with their own nested converter where
+/// their project references Entity Framework. <see cref="ModuleSingleValues"/> says which; a project that declares no
+/// ids of its own, such as a module's infrastructure project, still gets the method for them.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
@@ -35,15 +43,20 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(targets, static (productionContext, target) => EmitConverter(productionContext, target));
 
+        // Read off the compilation, so it runs again on every edit; the walk of each referenced assembly is cached,
+        // and what comes out compares equal when nothing it names changed, so the output step stays cached.
+        var referenced = context.CompilationProvider.Select(static (compilation, cancellationToken) => ModuleSingleValues.Of(compilation, cancellationToken));
+
         var registration = targets.Collect()
+            .Combine(referenced)
             .Combine(context.RegistrationName())
             .Combine(context.AssemblyName())
-            .Combine(context.RegistrationsOfTheSameModule("Converters.ConverterExtensions", "Converters"));
+            .Combine(context.RegistrationsOfTheSameModule(ModuleSingleValues.RegistrationClass, ModuleSingleValues.RegistrationSuffix));
 
         context.RegisterSourceOutput(registration, static (productionContext, data) =>
         {
-            var (((targets, moduleName), assemblyName), sameModule) = data;
-            EmitRegistration(productionContext, targets, moduleName, assemblyName, sameModule);
+            var ((((targets, referenced), moduleName), assemblyName), sameModule) = data;
+            EmitRegistration(productionContext, targets, referenced, moduleName, assemblyName, sameModule);
         });
     }
 
@@ -80,9 +93,17 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         }
     }
 
-    private static void EmitRegistration(SourceProductionContext context, ImmutableArray<ConverterTarget> targets, string moduleName, string? assemblyName, EquatableArray<string> sameModule)
+    private static void EmitRegistration(
+        SourceProductionContext context,
+        ImmutableArray<ConverterTarget> targets,
+        EquatableArray<ReferencedConverter> referenced,
+        string moduleName,
+        string? assemblyName,
+        EquatableArray<string> sameModule)
     {
-        if (targets.Length == 0)
+        // A project with nothing of its own to register gets no method, also when the module has registrations it
+        // could call: its context calls theirs, which has the same name, and there is only one to import.
+        if (targets.Length == 0 && referenced.Count == 0)
         {
             return;
         }
@@ -99,6 +120,13 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
             writer.Line("/// registered twice: <c>Properties&lt;T&gt;()</c> converts properties of the type, <c>DefaultTypeMapping&lt;T&gt;()</c>");
             writer.Line("/// converts the type where no property is involved (query parameters and constants, and the element type of");
             writer.Line("/// primitive collections such as a generated <c>IReadOnlyList&lt;T&gt;</c>, which <c>AddDDDToolkitConventions()</c> maps).");
+            if (referenced.Count > 0)
+            {
+                writer.Line("/// The ids and single value objects of this module's projects without Entity Framework have no converter of their");
+                writer.Line("/// own and are registered here with <c>SingleValueConverter</c>; the published ones of other modules are registered");
+                writer.Line("/// here as well, with their own converter where they have one.");
+            }
+
             if (sameModule.Count > 0)
             {
                 writer.Line("/// It also calls the registrations of the module's other assemblies this one references, so one call covers the module.");
@@ -122,6 +150,11 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
                     {
                         EmitRegistrationLines(writer, target.Type.ValidTwinFullyQualifiedName, target.Type.ValidTwinFullyQualifiedName + "." + target.Type.ValidTwinName + "Converter", target.ColumnLength);
                     }
+                }
+
+                foreach (var other in referenced)
+                {
+                    EmitRegistrationLines(writer, other.Type, other.Converter, other.ColumnLength);
                 }
 
                 writer.Line("return modelConfigurationBuilder;");

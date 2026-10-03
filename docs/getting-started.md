@@ -19,7 +19,8 @@ dotnet add package Temp.DDDToolkit
 
 For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is still 2.0.22,
 which these pages do not describe. The namespaces are `DDDToolkit` either way. See
-[Packages](../README.md#packages).
+[Packages](../README.md#packages). The supporting domains' packages, `Temp.DDDToolkit.Supporting.*`, are
+only published as prereleases for now, so `dotnet add package` needs `--prerelease` or a `--version` for them.
 
 `DDDToolkit` brings the base types and the core generators. That is all the first steps need. Each
 integration comes with a package of its own, added in the step that uses it: Entity Framework when the
@@ -38,7 +39,7 @@ meant and the compiler cannot tell. An identifier type makes that a compile erro
 public readonly partial record struct OrderId;
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 Two rules: the type must be `partial` so the generator can add to it, and it must be a record. Use
 `readonly partial record struct` unless you have a reason not to; it costs no allocation. The generator
@@ -74,7 +75,7 @@ generates the identifier with it:
 public partial class OrderLine    // also generates OrderLineId
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Entities/OrderLine.cs)*
 
 Use the short form for the identifier nobody outside the aggregate mentions, and the explicit form for
 the identifier everybody does. `OrderId` is written out because it is stored, parsed from URLs and sent
@@ -108,7 +109,7 @@ public partial record Address
 }
 ```
 
-*[`Ordering/Domain/ValueObjects/Address.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/ValueObjects/Address.cs)*
+*[`Ordering/Domain/ValueObjects/Address.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/ValueObjects/Address.cs)*
 
 Setters are `protected init`: an address is set when it is made and never changed afterwards
 ([DDD00010](diagnostics.md#ddd00010), [DDD00011](diagnostics.md#ddd00011)). The generator writes the
@@ -188,7 +189,7 @@ public partial class Order
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
 
 The constructor takes a `ValidAddress`, so the order never re-validates an address. `Money` is a value
 object like `Address`, from the shop's shared kernel.
@@ -231,7 +232,7 @@ partial void CheckInvariants()
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
 
 A rule that deserves a name, or a code a caller can branch on, becomes a type of its own, nested
 inside the entity it is about so that it can read private state and so the generator can find it:
@@ -249,7 +250,7 @@ public partial class Order
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Invariants/MustHaveLines.cs)*
 
 The generator finds the nested rules and writes the check that runs them all, then the seam, then
 asks every line:
@@ -307,7 +308,7 @@ var order = Place();
 order.PendingEvents().Should().OnlyContain(raised => raised.OccurredAt == moment);
 ```
 
-*[`Tests/DDDToolkit.Examples.Tests/OrderTests.cs`](../Tests/DDDToolkit.Examples.Tests/OrderTests.cs)*
+*[`Tests/Examples.Webshop.Tests/OrderTests.cs`](../Tests/Examples.Webshop.Tests/OrderTests.cs)*
 
 See [Testing](testing.md).
 
@@ -316,6 +317,12 @@ See [Testing](testing.md).
 ```bash
 dotnet add package Temp.DDDToolkit.EntityFramework
 ```
+
+A project whose provider asks for an older Entity Framework than one of its tools brings, such as
+`Npgsql.EntityFrameworkCore.PostgreSQL` next to a newer `Microsoft.EntityFrameworkCore.Design` with
+`PrivateAssets="all"`, leaves the projects above it on the older one, and they fail with CS1705: name the
+version once, `<PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />`,
+the one this repository builds with.
 
 The Entity Framework package brings a generator of its own. It writes a value converter for every
 identifier, so an `OrderId` is stored as a plain `uuid` column, and one method per project that
@@ -359,7 +366,7 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 }
 ```
 
-*[`Ordering/Infrastructure/Persistence/OrderingContext.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs)*
+*[`Ordering/Infrastructure/Persistence/OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)*
 
 There is no configuration for the domain model itself. `OrderLine` is owned because `[Entity]`
 generated `[Owned]`, `Lines` is discovered through the generated backing field, `Address` is stored
@@ -383,9 +390,11 @@ the same process, which is what `DDDToolkit.Mediator` adds; the outbox, further 
 way. An aggregate that raised events refuses to save until one of the two is configured, rather than
 dropping them. See [Domain event delivery](event-delivery.md).
 
-Pass the provider the `AddDbContext` callback gives you, not the root provider: it belongs to the same
-scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
-saving. See [Entity Framework](entity-framework.md).
+Pass the provider the `AddDbContext` callback gives you, not one you built or kept yourself: it belongs to
+the same scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
+saving. A [context pool](entity-framework.md#contexts-from-a-pool) hands its callback the application's root
+provider, and takes the same call: there the scope is the one that rents the context. See
+[Entity Framework](entity-framework.md).
 
 ## Refuse bad input without throwing
 
@@ -411,7 +420,7 @@ app.MapPost("/orders", async (PlaceOrder body, OrderingContext orders, Cancellat
 });
 ```
 
-*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)*
+*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)*
 
 The caller gets a 400 it can read field by field, with `shipTo.Street` and `shipTo.PostalCode` naming
 the fields they filled in. Nothing was thrown, and `shipTo` is the `ValidAddress` the order's
@@ -433,7 +442,7 @@ catch (ConcurrencyConflictException conflict)
 }
 ```
 
-*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)*
+*[`Ordering/Api/OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)*
 
 There is no safe generic answer for that catch block, which is why the toolkit does not retry for you.
 In the example the conflict is a real one: a customer cancelling an order at the same moment Payments
@@ -451,7 +460,7 @@ One assembly, one module:
 [assembly: Module("Ordering")]
 ```
 
-*[`Ordering/Module.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Module.cs)*
+*[`Ordering/Module.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Module.cs)*
 
 Nothing happens until a second assembly says it is a module too. From then on, everything an assembly
 declares is its own business unless it publishes it, and the analyzer reports another module naming an
@@ -468,7 +477,7 @@ is the only Ordering project the other modules reference:
 public readonly partial record struct OrderId;
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 `[ModuleContract]` is what publishes it. The contracts project gets converters of its own, under the
 same name, because it declares `[assembly: Module("Ordering")]` too. Ordering's method calls the
@@ -494,7 +503,7 @@ Once the list is empty, hold it:
 <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
 ```
 
-*[`DDDToolkit.Examples.Shipping.csproj`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/DDDToolkit.Examples.Shipping.csproj)*
+*[`Examples.Webshop.Shipping.csproj`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj)*
 
 See [Modules](modules.md).
 
@@ -514,7 +523,7 @@ public sealed record OrderPlacedV1(
 public sealed record OrderConfirmedV1(OrderId OrderId, string City, string PostalCode);
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 Nothing names them: they are published as `ordering.order-placed` and `ordering.order-confirmed`, the
 module and the class name in kebab case, and the `V1` is their version. The build also writes those names
@@ -531,7 +540,7 @@ public sealed class PublishOrderConfirmed : IOutboundIntegrationEvent<OrderConfi
 }
 ```
 
-*[`Ordering/Application/Orders/IntegrationEvents/Outbound/`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/)*
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Outbound/)*
 
 The message must not be lost if the process stops right after the order is saved, and it must not be
 sent for an order whose save failed. So it goes through an outbox: a table in Ordering's own database,
@@ -556,7 +565,7 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingConte
 services.AddOutboxBackgroundService<OrderingContext>(pollingInterval: TimeSpan.FromSeconds(1));
 ```
 
-*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs)*
+*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)*
 
 `AddOrderingIntegrationEvents()` is generated: it registers every domain event of the module under the
 name the outbox stores it as, and every publishing class with the contract it makes, so nothing is
@@ -606,10 +615,6 @@ sequenceDiagram
     end
 ```
 
-No module calls another, and none waits for an answer: each reacts to what it hears and publishes what
-happened. The order is where the answers meet. It confirms itself when it has both the stock and the
-money, in whichever order they arrive.
-
 <details>
 <summary>Show the code: Ordering's side of the checkout</summary>
 
@@ -632,7 +637,7 @@ public sealed class CancelWithoutPayment(OrderingContext context) : IIntegration
 }
 ```
 
-*[`Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs)*
+*[`Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Inbound/Checkout.cs)*
 
 None of them calls `SaveChanges`. The inbox saves the order together with the row that says the message
 was applied, and that save writes whatever the order raised, `OrderConfirmed` for instance, into
@@ -644,9 +649,13 @@ services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(co
 services.AddModuleIntegrationEvents<OrderingContext>(module => module.AddOrderingIntegrationEvents());
 ```
 
-*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs)*
+*[`Ordering/OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs)*
 
 </details>
+
+No module calls another, and none waits for an answer: each reacts to what it hears and publishes what
+happened. The order is where the answers meet. It confirms itself when it has both the stock and the
+money, in whichever order they arrive.
 
 The order's side of the checkout is a small state machine. It does not care in which order the answers
 arrive, and an answer that comes too late changes nothing:
@@ -704,7 +713,7 @@ private void ConfirmWhenReady(DateTimeOffset at)
 }
 ```
 
-*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Order.cs)*
+*[`Ordering/Domain/Aggregates/Orders/Order.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Order.cs)*
 
 </details>
 
@@ -721,7 +730,7 @@ builder.Services.AddPaymentsModule(supabase);
 builder.Services.AddShippingModule(supabase);
 ```
 
-*[`Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+*[`Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)*
 
 ## Consume it once
 
@@ -739,7 +748,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 }
 ```
 
-*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
+*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
 
 Three things there are the point. It is typed on the contract, never on Ordering's domain event, which
 is what keeps Shipping free of a reference to Ordering's domain. It does not call `SaveChanges`: the
@@ -757,7 +766,7 @@ services.AddDDDToolkitEntityFramework(options =>
 services.AddModuleIntegrationEvents<ShippingContext>(module => module.Handle<OrderConfirmedV1, BookShipment>());
 ```
 
-*[`Shipping/ShippingModule.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/ShippingModule.cs)*
+*[`Shipping/ShippingModule.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/ShippingModule.cs)*
 
 and maps the inbox table in its context:
 
@@ -766,7 +775,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     => modelBuilder.AddDomainEventInbox(Database, schema: Schema);
 ```
 
-*[`Shipping/Infrastructure/Persistence/ShippingContext.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Infrastructure/Persistence/ShippingContext.cs)*
+*[`Shipping/Infrastructure/Persistence/ShippingContext.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Infrastructure/Persistence/ShippingContext.cs)*
 
 `schema: Schema` puts the table in the module's own schema instead of the toolkit's default `ddd`. It
 matters as soon as modules share a database, as they do on one Supabase project: every module that
@@ -806,10 +815,10 @@ code, check the build output first: the generator tells you what is wrong and wh
 ## Run the example
 
 ```bash
-dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host
+dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Host
 ```
 
 Then work through
-[`DDDToolkit.Examples.Host.http`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/DDDToolkit.Examples.Host.http)
+[`Examples.Webshop.Host.http`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Examples.Webshop.Host.http)
 from the top. [`Examples/README.md`](../Examples/README.md) is the map of the folder and says which
 file shows what, and how to run the same host on a local Supabase instead of SQLite.

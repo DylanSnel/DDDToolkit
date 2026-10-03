@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Every project of the sample's modules declares [assembly: Module], so the boundary analyzer is live and these prove something. -->
+    <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    What the other modules may know of Tenancy: its four ids, what a tenant uses a role for, with the one
+    question about it, and who changed a row as every module answers it (ChangedBy, a value object declared once
+    for all of them). Projects and Inspections store a tenant, a unit, a seat and a role, and the project of each
+    module that holds its context registers a converter for them: the generated Add{Module}Converters() also
+    registers the published ids of other modules. So this project references neither Entity Framework nor the
+    Tenancy packages; a module that reads these ids does not thereby depend on how Tenancy works, nor on how
+    anything is stored.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the package above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

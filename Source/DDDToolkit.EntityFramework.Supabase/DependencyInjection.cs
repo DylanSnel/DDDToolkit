@@ -1,3 +1,5 @@
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,7 +67,9 @@ public static partial class DependencyInjection
     /// and an application that applied them as well would make the CLI apply them a second time.
     /// <para>
     /// It asks each context's own migration history, so it opens one connection per context. That is the
-    /// only database work it does.
+    /// only database work it does, and it does it as the application itself, <see cref="Caller.System"/>,
+    /// whatever caller is current: the history is the application's to read, also on a context with row
+    /// level security in a host that requires explicit callers.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
@@ -75,6 +79,7 @@ public static partial class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
 
         await using var scope = services.CreateAsyncScope();
+        using var system = Callers.Begin(Caller.System);
         var pending = new List<(string Context, IReadOnlyList<string> Migrations)>();
 
         foreach (var source in services.GetSupabaseMigrationSources())

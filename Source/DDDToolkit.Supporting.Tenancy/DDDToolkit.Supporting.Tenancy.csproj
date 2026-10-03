@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Names the helpers the generators write into this assembly. The package declares no [assembly: Module]:
+      it is a module of whichever application references it, and its domain events carry names of their own.
+    -->
+    <DDD_Module>SupportingTenancy</DDD_Module>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;organization;roles;permissions;access</PackageTags>
+    <Description>Tenants, their organization tree, seats with placements and role grants, roles over a permission catalogue, and the access questions, database-agnostic.</Description>
+    <!-- The refusal texts are written in English; Dutch ships as a satellite assembly. -->
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!--
+    This package declares [AggregateRootBase] and [EntityBase] parents and a value object, so the generator
+    runs on it: it writes the parents' base classes, invariant plumbing and the slug's always-valid twin.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

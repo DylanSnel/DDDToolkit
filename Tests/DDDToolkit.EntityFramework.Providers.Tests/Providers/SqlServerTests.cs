@@ -55,3 +55,12 @@ public sealed class SqlServerContainerTests(SqlServerFixture fixture) : Provider
     /// <inheritdoc />
     protected override string ExpectedImage => ContainerImages.SqlServer;
 }
+
+/// <summary>What a unique index refuses with, against SQL Server.</summary>
+[Collection(SqlServerCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.SqlServer)]
+public sealed class SqlServerRefusalTests(SqlServerFixture fixture) : ProviderRefusalTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string DefaultSchema => "dbo";
+}

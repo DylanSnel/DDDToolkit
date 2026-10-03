@@ -87,6 +87,16 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         _app.MapGet("/claims", async (NotesContext notes, CancellationToken cancellationToken)
             => Results.Text(await notes.Database.SqlQueryRaw<string>("""SELECT coalesce(auth.jwt()::text, 'null') AS "Value" """).SingleAsync(cancellationToken)));
 
+        // Who the request is, asked while the system is the ambient caller: the request's own caller does not
+        // change with it, what the accessor answers does.
+        _app.MapGet("/who-under-the-system", (HttpContext context, ICallerAccessor callers) =>
+        {
+            using (Callers.Begin(Caller.System))
+            {
+                return Results.Text($"{context.SupabaseCaller()}|{callers.Current}");
+            }
+        });
+
         // A step a request takes on the application's behalf, on purpose: a caller begun in code wins.
         _app.MapGet("/notes/count-as-the-system", async (NotesContext notes, CancellationToken cancellationToken) =>
         {
@@ -201,6 +211,27 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         using var response = await SendAsync(HttpMethod.Get, "/notes/count-as-the-system", Token(Alice));
 
         (await response.Content.ReadFromJsonAsync<int>(Cancellation)).Should().Be(2, "Alice's request counted as the system, which it began on purpose");
+    }
+
+    [Fact]
+    public async Task SupabaseCaller_is_the_tokens_user_even_under_an_ambient_caller()
+    {
+        database.Require();
+
+        using (var asAlice = await SendAsync(HttpMethod.Get, "/who-under-the-system", Token(Alice)))
+        {
+            (await asAlice.Content.ReadAsStringAsync(Cancellation)).Should().Be($"authenticated {Alice}|system");
+        }
+
+        using (var asNobody = await SendAsync(HttpMethod.Get, "/who-under-the-system", token: null))
+        {
+            (await asNobody.Content.ReadAsStringAsync(Cancellation)).Should().Be("anon|system");
+        }
+
+        using (var forged = await SendAsync(HttpMethod.Get, "/who-under-the-system", Token(Alice, secret: "somebody-else's-secret-that-is-also-32-characters-long")))
+        {
+            (await forged.Content.ReadAsStringAsync(Cancellation)).Should().Be("anon|system", "a token that did not validate makes nobody a user");
+        }
     }
 
     private async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, string? token, object? body = null)

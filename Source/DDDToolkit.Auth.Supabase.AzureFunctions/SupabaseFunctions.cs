@@ -1,6 +1,7 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace DDDToolkit.Auth.Supabase.AzureFunctions;
@@ -35,13 +36,32 @@ public static class SupabaseFunctions
     /// HTTP request without one, and otherwise the caller made current with <see cref="Callers.Begin"/>,
     /// or <see cref="Caller.System"/>. For a function that answers a caller without a user with a 401.
     /// </summary>
+    /// <remarks>
+    /// Where the host requires explicit callers (<see cref="CallerOptions"/> in the invocation's services,
+    /// registered by <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>), an invocation
+    /// that is not an HTTP request and began no caller throws instead of answering the system.
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+    /// <exception cref="NoCallerException">Nobody is calling, and the host requires every invocation to say who it runs as.</exception>
     public static Caller GetSupabaseCaller(this FunctionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return context.Items.TryGetValue(SupabaseAuthMiddleware.CallerKey, out var kept) && kept is Caller caller
-            ? caller
-            : Callers.Ambient ?? Caller.System;
+        if (context.Items.TryGetValue(SupabaseAuthMiddleware.CallerKey, out var kept) && kept is Caller caller)
+        {
+            return caller;
+        }
+
+        if (Callers.Ambient is { } ambient)
+        {
+            return ambient;
+        }
+
+        // The worker hands every invocation its services; a context built by hand may have none.
+        return context.InstanceServices?.GetService<CallerOptions>() is { RequireExplicitCallers: true }
+            ? throw new NoCallerException(
+                "This invocation is not an HTTP request and began no caller, and this host requires one (RequireExplicitCallers). " +
+                "Begin a caller in the function: Callers.Begin(Caller.System) for the application's own work, or the user a queued message names.")
+            : Caller.System;
     }
 }

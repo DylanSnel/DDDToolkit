@@ -1,0 +1,177 @@
+@page "/invitations"
+@inherits SessionPage
+@inject NavigationManager Navigation
+
+<PageTitle>@T["nav.invitations"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.invitations"]</h1>
+<p class="text-body-secondary">@T.Html("invitations.intro", Session.Tenant ?? T["common.no-tenant"])</p>
+
+@if (_open is null || _names is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else
+{
+    <CascadingValue Value="_names">
+    <CascadingValue Value="_latest" IsFixed="true">
+        @if (_open.Value is not { } open)
+        {
+            <ApiOutcomeView Answer="_open" />
+        }
+        else if (open.Count == 0)
+        {
+            <p>@T["invitations.none"]</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>@T["invitations.address"]</th><th>@T["invitations.unit"]</th><th>@T["common.role"]</th>
+                            <th>@T["invitations.open-until"]</th><th>@T["invitations.by"]</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var invitation in open)
+                        {
+                            <tr>
+                                <td>@invitation.Address</td>
+                                <td>@_names.OfUnit(invitation.UnitId)</td>
+                                <td>@_names.OfRole(invitation.RoleId) <span class="small text-body-secondary">@(invitation.RoleEndsAt is { } ends ? T["invitations.role-until", UntilDay.Shown(ends)] : T["common.open-ended"])</span></td>
+                                <td class="small text-nowrap">@Day(invitation.ExpiresAt)</td>
+                                <td>@(invitation.IssuedBy is { } seat ? _names.OfSeat(seat) : "–")</td>
+                                <td><ActionButton Label="@T["invitations.revoke"]" Allowed="true" ShowsAnswer="false" Send="() => Wrap(Api.CancelInvitationAsync(invitation.Id))" Answered="RevokedAsync" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (_revoked is not null && _latest.IsOf(this))
+        {
+            <ApiOutcomeView Answer="_revoked" />
+        }
+
+        <h2 class="h5 mt-4">@T["invitations.invite.title"]</h2>
+        <div class="actions">
+            <div class="action">
+                <label class="form-label small">@T["invitations.invite.label"]</label>
+                <input class="form-control form-control-sm" type="email" placeholder="@T["invitations.invite.address"]" @bind="_address" />
+                <input class="form-control form-control-sm" placeholder="@T["invitations.invite.name"]" @bind="_name" />
+                <select class="form-select form-select-sm" @bind="_unit">
+                    <option value="">@T["project.pick-unit"]</option>
+                    @foreach (var unit in _units.Where(candidate => candidate.IsActive))
+                    {
+                        <option value="@unit.Id">@unit.Path</option>
+                    }
+                </select>
+                <select class="form-select form-select-sm" @bind="_role">
+                    <option value="">@T["project.pick-role"]</option>
+                    @foreach (var role in _roles.Where(candidate => candidate.IsActive))
+                    {
+                        <option value="@role.Id">@role.Name</option>
+                    }
+                </select>
+                <input class="form-control form-control-sm" type="date" title="@T["project.until"]" @bind="_until" />
+                <ActionButton Label="@T["invitations.invite"]" Allowed="true" Send="InvitePersonAsync" Answered="InvitedAsync" />
+                <div class="form-text">@T["invitations.invite.help"]</div>
+            </div>
+        </div>
+
+        @if (_issued is not null)
+        {
+            @* Shown this once: the token is kept in this page's memory alone, until the page loads anything again. *@
+            <div class="alert alert-success mt-3" role="status">
+                <strong>@T["invitations.issued.title"]</strong>
+                <p class="mb-1">@T["invitations.issued.text", Day(_issued.ExpiresAt)]</p>
+                <code class="user-select-all">@Navigation.ToAbsoluteUri("invitations/accept")#@_issued.Token</code>
+                <p class="mb-1 mt-2">@T["invitations.issued.token"]</p>
+                <code class="user-select-all">@_issued.Token</code>
+            </div>
+        }
+    </CascadingValue>
+    </CascadingValue>
+}
+
+@code {
+    private ApiOutcome<IReadOnlyList<InvitationInfo>>? _open;
+    private ApiOutcome? _revoked;
+
+    // The page shows the answer of its last action only: an older one is about the invitations as they were.
+    private readonly LatestAnswer _latest = new();
+    private IssuedInvitationInfo? _issued;
+    private IReadOnlyList<UnitInfo> _units = [];
+    private IReadOnlyList<RoleInfo> _roles = [];
+    private DirectoryNames? _names;
+    private string? _address;
+    private string? _name;
+    private string? _unit;
+    private string? _role;
+    private DateOnly? _until;
+
+    protected override async Task LoadAsync()
+    {
+        // Whatever loads the page again, another tenant picked or an invitation revoked, takes the token off the screen.
+        _issued = null;
+
+        // The pickers first and the list last, so that when it is refused, its refusal is the last response.
+        var units = (await Api.TenantUnitsAsync()).Value ?? [];
+        var roles = (await Api.TenantRolesAsync()).Value ?? [];
+        var open = await Api.OpenInvitationsAsync();
+
+        // An invitation names its unit, its role and who issued it by id. What the pickers listed is known
+        // already; the directory is asked for the rest.
+        var names = new DirectoryNames(Api);
+        names.Include(units);
+        names.Include(roles);
+        if (open.Value is { } listed)
+        {
+            await names.EnsureAsync(
+                seats: listed.Select(invitation => invitation.IssuedBy).OfType<Guid>(),
+                units: listed.Select(invitation => invitation.UnitId),
+                roles: listed.Select(invitation => invitation.RoleId));
+        }
+
+        (_units, _roles, _open, _names) = (units, roles, open, names);
+    }
+
+    // The answer with the token goes to this page and nowhere else. What the button shows is the same answer
+    // with the token blanked.
+    private async Task<ApiOutcome> InvitePersonAsync()
+    {
+        var answer = await Api.InvitePersonAsync(_address, _unit, _role, UntilDay.Instant(_until), _name);
+        _issued = answer.Value;
+        return answer;
+    }
+
+    private async Task InvitedAsync(ApiOutcome outcome)
+    {
+        if (outcome.Succeeded)
+        {
+            // The list is read again with the new invitation in it, and the token stays for this one look.
+            var issued = _issued;
+            (_address, _name, _until) = (null, null, null);
+            await ReloadAsync();
+            _issued = issued;
+        }
+    }
+
+    private async Task RevokedAsync(ApiOutcome outcome)
+    {
+        // A button in the table leaves its answer to the page, so the page is where the latest answer is: what
+        // inviting answered before is no longer shown under its button.
+        _revoked = outcome;
+        _latest.IsFrom(this);
+        if (outcome.Succeeded)
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private static async Task<ApiOutcome> Wrap<T>(Task<ApiOutcome<T>> call) => await call;
+
+    private static string Day(DateTimeOffset moment) => moment.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+}

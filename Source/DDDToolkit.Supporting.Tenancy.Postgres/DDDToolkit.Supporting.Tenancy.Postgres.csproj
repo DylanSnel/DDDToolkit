@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy on Postgres</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;postgres;postgresql;rls;row-level-security</PackageTags>
+    <Description>Tenancy on Postgres with row level security: the tenant of the current Tenancy caller on every connection, next to the caller's role and claims, fail-closed callers, the SQL functions, policies and triggers of Tenancy's tables as a row access contribution, and the start-up checks.</Description>
+  </PropertyGroup>
+
+  <!--
+    Npgsql itself, at its floor, for the errors Postgres reports: a failed save is read by its SQLSTATE and the
+    constraint it names, which only Npgsql's PostgresException carries. An application's newer Npgsql provider
+    brings a newer Npgsql, which this takes.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <!--
+    Everything of Tenancy's that only Postgres understands. It declares no entities and needs no analyzer: the
+    application's classes and context are the application's, and this works from the model they build.
+    DDDToolkit.Abstractions is referenced directly, not only through the others, so the Supabase export searches
+    this assembly and finds the row access contribution it offers.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
+  </ItemGroup>
+
+</Project>

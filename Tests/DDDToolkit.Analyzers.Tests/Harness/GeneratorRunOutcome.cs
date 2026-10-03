@@ -256,10 +256,15 @@ public sealed class GeneratorRunOutcome
     }
 
     /// <summary>Asserts the generated source for <paramref name="hintNameFragment"/> contains this text.</summary>
+    /// <remarks>
+    /// Line endings are left out of the comparison. A generator writes its templates with the line endings its own
+    /// source file has, and those follow the checkout: a text of several lines would otherwise be found on one
+    /// machine and not on the next.
+    /// </remarks>
     public GeneratorRunOutcome ShouldContain(string hintNameFragment, string expected, string? because = null)
     {
         var source = Source(hintNameFragment);
-        if (!source.Contains(expected, StringComparison.Ordinal))
+        if (!source.ReplaceLineEndings("\n").Contains(expected.ReplaceLineEndings("\n"), StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"'{hintNameFragment}' does not contain:\n{expected}\n{Because(because)}\nActual:\n{source}");
@@ -272,7 +277,7 @@ public sealed class GeneratorRunOutcome
     public GeneratorRunOutcome ShouldNotContain(string hintNameFragment, string unexpected, string? because = null)
     {
         var source = Source(hintNameFragment);
-        if (source.Contains(unexpected, StringComparison.Ordinal))
+        if (source.ReplaceLineEndings("\n").Contains(unexpected.ReplaceLineEndings("\n"), StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"'{hintNameFragment}' unexpectedly contains:\n{unexpected}\n{Because(because)}\nActual:\n{source}");

@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <!--
+      Supabase's own images in throw-away containers, for SupabaseIdentityAccountsOnAuthTests and for nothing
+      else here. The containers are Supabase's builds, started as they are, so this takes the general
+      container builder that the PostgreSQL module brings with it, not the module's own builder: that one
+      starts Postgres with a command of its own, which would leave Supabase's settings file out.
+    -->
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+
+  <!--
+    The admin client against a handler that stands in for Auth, and the two kinds of token against keys the
+    tests publish themselves: no Docker, no network and no project, so these run everywhere the core suite
+    runs. The exceptions are SupabaseIdentityAccountsOnAuthTests and SupabaseBearerOnAuthTests, which ask
+    Supabase's own Auth server what no stand-in can answer, such as which of two invitations for one address
+    it lets through, and how it signs a token once it has a signing key: they start their containers the
+    first time one of their tests runs, and skip without Docker unless DDDTOOLKIT_REQUIRE_CONTAINERS says a
+    skip is a failure. The tests of a token on its way to a policy stay in DDDToolkit.EntityFramework.Tests,
+    where they share a Postgres with the row level security they feed.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Auth.Supabase\DDDToolkit.Auth.Supabase.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
+  </ItemGroup>
+
+  <!--
+    The bearer scheme is tested in an application of the test's own, on Kestrel. The framework also brings the
+    service container the registrations are tested with.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!--
+    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, one list of
+    Supabase's images, the tags the Tenancy sample pins, which Supabase's own local stack starts together,
+    and one way of giving the Auth server a signing key.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\SupabaseImages.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\AuthSigningKeys.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

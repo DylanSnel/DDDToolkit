@@ -404,6 +404,45 @@ larger than the difference between them. The struct form saves one object per ro
 into what materialising a row costs anyway. See
 [Performance](performance.md#the-entity-framework-round-trip).
 
+### Stored by a project that does not declare it
+
+The nested converter is written into the project that declares the identifier, and only when that project
+references Entity Framework. A module split into projects by layer declares its identifiers in a domain or
+contracts project that does not, so the project that holds the context stores them instead. Every
+identifier, single value object and always-valid twin implements `ISingleValue<TSelf, TValue>`, from
+`DDDToolkit.Interfaces`, which names the value and the way back from it:
+
+```csharp title="OrderId.g.cs, shortened"
+readonly partial record struct OrderId : IEntityId<Guid>, ..., ISingleValue<OrderId, Guid>
+{
+    public Guid Value { get; }
+
+    static OrderId ISingleValue<OrderId, Guid>.FromValue(Guid value) => new(value);
+}
+```
+
+and `DDDToolkit.EntityFramework` has one converter for all of them, `SingleValueConverter<T, TValue>`. The
+generated `Add{Module}Converters()` of the project that holds the context registers it for every identifier
+of its module's other projects that has no converter of its own, and for the published
+(`[ModuleContract]`) ones of other modules, so the context still calls one method for all of them:
+
+```csharp title="ConverterExtensions.g.cs of Ordering.Infrastructure, shortened"
+modelConfigurationBuilder.Properties<OrderId>().HaveConversion<SingleValueConverter<OrderId, Guid>>();
+modelConfigurationBuilder.DefaultTypeMapping<OrderId>().HasConversion<SingleValueConverter<OrderId, Guid>>();
+```
+
+Which projects are of the module is what `[assembly: Module]` says; see [Modules](modules.md#a-module-in-layers).
+A project that references Entity Framework itself keeps its nested converters and its own registration,
+which the registration of a project of the same module that references it calls, without registering
+again what that one registered. A published identifier of another module whose project references Entity
+Framework is registered all the same, with its own nested converter: the other module's registration has
+another name, and the one call of your context covers every identifier it may store.
+
+`FromValue` is implemented explicitly, so it adds nothing to the members a caller sees, and it is for
+reading back what was stored, nothing else. A generic constraint makes it callable by anyone, which is
+harmless by design: for the plain type it builds a value that is not yet checked, as reading a column
+always did, and for the always-valid twin it goes through the twin's public constructor, which validates.
+
 ### Column length
 
 ```csharp

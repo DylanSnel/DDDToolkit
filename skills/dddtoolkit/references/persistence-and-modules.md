@@ -50,6 +50,24 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   one: the module's context calls `AddOrderingConverters()` once, and another module that references
   only the contracts calls the contracts' `AddOrderingConverters()`. Never import both generated
   namespaces in one file. A shared kernel has a method of its own, and the context calls it too.
+- A project without Entity Framework, such as a module's domain or contracts project, has no converters of
+  its own. The generated `Add{Module}Converters()` of a project of the same `[assembly: Module]` that does
+  reference it registers them with `SingleValueConverter<T, TValue>`, through `ISingleValue<TSelf, TValue>`,
+  which every generated id and single value object implements; it also registers the `[ModuleContract]`
+  ids of other modules that have no converter of their own. So a layered module's domain and contracts
+  projects need no Entity Framework, and its infrastructure project gets the method even when it declares
+  no ids. A project without a module registers only its own.
+- A registration a package closes over the application's classes, such as `modelBuilder.AddTenancy()` and
+  `services.AddTenancy<TContext>()`, is written into the project that declares the classes, or, in a layered
+  module, into the project of the same `[assembly: Module]` that references the package's registrations and
+  declares none: the infrastructure project. A project of the module above that one, such as an API project
+  that composes the module, gets none: call the infrastructure project's own public registration from it.
+- A module that asks Tenancy inside its own queries maps Tenancy's read model (`AddTenancyReadModel`, or
+  `AddTenancyReadFunctions` on Postgres) and nothing else of Tenancy's. Its rows carry access facts: ids,
+  keys, periods and statuses, and no name. So the module answers ids (`unitId`, `seatId`, `roleId`), and what
+  a seat, a unit or a role is called is asked of Tenancy's directory by id (`SeatsByIdAsync`,
+  `UnitsByIdAsync`, `RolesByIdAsync`), by whoever shows it. Never map a type of the module's own onto one of
+  Tenancy's tables to read a name; `TenancyModel.ReadsBeyondAccessFacts(model)` in a test finds it.
 - `DDD_Module` only names generated code, in a project that is no module. What makes an assembly a module is
   `[assembly: Module("Ordering")]`, below. The `DDDToolkit.Analyzers` package declares the property to
   the compiler; a build that warns DDD00014 is ignoring it, see `diagnostics.md`.
@@ -65,10 +83,26 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   save writes (`InvariantViolationException` stops it), the version of each touched aggregate goes up.
   A stale version throws `ConcurrencyConflictException` with `AggregateType` and `AggregateId`. There
   is no automatic retry: reload and reapply a repeatable command, or report the conflict.
+- A client that sends the version it read (`If-Match`, or a field of a mutation's input): after the load
+  and before the change, `context.ExpectVersion(aggregate, version)`. Another loaded version throws
+  `ConcurrencyConflictException` before anything changes; the same version leaves the save to compare.
 - Prefer `SaveChangesAsync`. Migrations are ordinary `dotnet ef migrations add`.
+- A context pool, for reads that run side by side: `AddPooledDbContextFactory<OrderingContext>(...)`
+  (or `AddDbContextPool`) with the same `UseDDDToolkit(services)` in its callback, then
+  `services.AddScopedFromPool<OrderingContext>()`. Commands take the scope's context; a read rents one
+  per query from `IDbContextFactory<OrderingContext>`. The callback runs once, so it reads no caller,
+  request or scope. A context rented from the factory dispatches in process only after
+  `context.BindToScope(scope.ServiceProvider)`; the outbox needs no scope.
 - A primary key made of more than the id: `[KeyPart]`, see `composite-keys.md`. Migrations as Supabase
   SQL files: `DDDToolkit.EntityFramework.Supabase`, see `supabase.md`. Queries run as the caller, and
   `[RowAccess]` rules as Postgres policies: `DDDToolkit.EntityFramework.Postgres`, see `row-level-security.md`.
+- A property that never changes once its row is saved: `builder.Property(order => order.CustomerId).IsFixedAfterInsert()`.
+  Entity Framework throws when a save would change it, and a policy script written with
+  `RowAccessExport.WriteGrants` leaves its column out of the `UPDATE` privilege. Write the tables'
+  privileges from the policies that way rather than by hand; see `row-level-security.md`.
+- At start-up, `EntityFrameworkChecks.EnsureToolkitWired(context)` for every type in
+  `EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider)` throws for a context built without
+  `UseDDDToolkit`, which would otherwise save without invariants, versions or events.
 
 ## Delivering domain events
 
@@ -122,9 +156,18 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 ```
 
 `Add{Module}IntegrationEvents()` is generated into the namespace `{AssemblyName}.IntegrationEvents`.
+It also registers the domain events of the module's projects that do not reference Entity Framework, such
+as the domain project, under the names they would have had; those events must be `public` (DDD00033).
 Each row stores the event's name, which by convention is the module and the class name in kebab case.
 Renaming a stored event's class changes that name, so pin the old one with `[DomainEventName(...)]`,
 or the rows already written are orphaned.
+
+An event that is also a record, of what happened and who did it, is kept in an event log:
+`outbox.KeepEventLog(log => log.Keep<OrderPlaced>())` with `modelBuilder.AddEventLog(Database, keepFor: ...)`
+in the context. The row is written with the outbox row in the same save and never updated; on Postgres the
+policy scripts guard the table against updates and early deletes. An `IEventLogFields`, or an
+`IActedByAccessor` of your own, is a singleton that reads ambient state when asked and takes no scoped
+service. See `entity-framework.md`.
 
 ## Modules
 
@@ -141,6 +184,49 @@ with the same name, such as `Ordering` and `Ordering.Contracts`, are one module.
   `<WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>`.
 - A common layout is a `*.Contracts` project per module holding the published ids and integration
   events; other modules reference only that project.
+- A module in layers is a project per layer, every one with the same `[assembly: Module]`: Contracts,
+  Domain, Application, Infrastructure (the context, the migrations, the adapters, and the generated
+  registrations) and Api (the routes and the module's entry, which the host references alone). Inside a
+  project the thing comes first and the kind second, and a root holds only `Module.cs`, `GlobalUsings.cs`
+  and the class that registers the project:
+
+  ```
+  Projects.Domain/
+    Aggregates/Projects/            Project.cs, ProjectRefusals.cs, ProjectFailures.cs + .resx, .nl.resx (their texts)
+      Entities/  Events/  Invariants/  ValueObjects/     a type per file
+  Projects.Application/
+    Access/                         the access check and what it asks
+    Crew/
+      Commands/AddCrewMember.cs     the request, its handler and what only it answers with: one file
+      Queries/AllCrewMembers.cs
+    StoredProjects/                 the ports several features share, in a folder named for what it holds:
+                                    never a layer's name, and never Persistence, which is the infrastructure's
+  Projects.Api/
+    Crew/Rest/CrewEndpoints.cs      the same feature names as the application project
+  Projects.Infrastructure/
+    Persistence/                    by adapter: the context, Migrations/, the adapters of the ports
+  ```
+
+  - Domain: a folder per aggregate under `Aggregates`, named in the plural; an event and an invariant
+    each in a file of its own, an invariant as a partial of the class it is nested in. What several
+    aggregates share goes in `ValueObjects` and `Services` at the root.
+  - Shared by several modules: a domain type two or more modules use and none owns goes in a project of
+    its own, `Shared.Domain/ValueObjects`, with no `[assembly: Module]` and no reference to a module; a
+    module's domain and contracts projects reference it. A type one module owns stays in its contracts.
+  - Application: a folder per feature, named by a noun of the domain, with `Commands` and `Queries` in
+    it. Never a folder named `Commands`, `Queries`, `Handlers`,
+    `Validators`, `Ports` or `Dtos` at a project's root. A port one feature uses lives in that feature's
+    folder.
+  - Api: the application project's feature names, a feature's routes in `Rest` (its GraphQL types in
+    `GraphQL`), composed by the entry.
+  - Tests: a folder per module and feature, mirroring what they test.
+  - Namespaces: the namespace of a type is its folder, in every project, the domain included
+    (`Projects.Domain.Aggregates.Projects.Events`); `GlobalUsings.cs` carries what most files need. An
+    invariant's file is the exception, since a partial has its class's namespace. After moving an entity
+    class, replace its full name in the EF snapshot and the migrations' designer files by hand (no new
+    migration: the tables did not change), and never derive a stored or sent name from a namespace.
+
+  Full page: `modules.md`, "Folders inside the layers".
 
 ## Integration events
 

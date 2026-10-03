@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Aspire.Hosting.Testing" />
+  </ItemGroup>
+
+  <!--
+    The samples, whole: each AppHost starts its databases in Docker and its hosts as processes, and the
+    tests talk to the shop over HTTP the way the .http files do. Nothing here references a module; what
+    is under test is what a customer of the shop can see.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Examples\ModularMonolith.Supabase\Examples.Webshop.Supabase.AppHost\Examples.Webshop.Supabase.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\ModularMonolith.SqlServer\Examples.Webshop.SqlServer.AppHost\Examples.Webshop.SqlServer.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\Microservices.Pgmq\Examples.Webshop.Pgmq.AppHost\Examples.Webshop.Pgmq.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\Microservices.Wolverine\Examples.Webshop.Wolverine.AppHost\Examples.Webshop.Wolverine.AppHost.csproj" />
+    <ProjectReference Include="..\..\Examples\Microservices.MassTransit\Examples.Webshop.MassTransit.AppHost\Examples.Webshop.MassTransit.AppHost.csproj" />
+    <!-- The second application, the Tenancy sample, on Supabase's own images: its API and UI with the containers its AppHost starts. -->
+    <ProjectReference Include="..\..\Examples\Tenancy\Examples.Tenancy.AppHost\Examples.Tenancy.AppHost.csproj" />
+  </ItemGroup>
+
+  <!-- One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container. -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

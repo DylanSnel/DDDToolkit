@@ -16,6 +16,13 @@ internal static class Identifiers
     public static string IdNameFor(string entityName) => entityName + "Id";
 
     /// <summary>
+    /// The name of the field the entity generator keeps a partial collection property in: <c>Lines</c> gets
+    /// <c>_lines</c>. The one place it is derived, for the generator that declares the field and for a package's
+    /// own generator that writes code over it.
+    /// </summary>
+    public static string CollectionFieldNameFor(string propertyName) => "_" + char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1);
+
+    /// <summary>
     /// The prefix a generated id gets when the attribute names none: no prefix, exactly like
     /// <c>[EntityId&lt;Guid&gt;]</c> without one.
     /// <para>

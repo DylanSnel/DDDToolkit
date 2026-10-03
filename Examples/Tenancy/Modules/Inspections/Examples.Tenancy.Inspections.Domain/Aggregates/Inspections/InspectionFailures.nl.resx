@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="inspections.title-invalid" xml:space="preserve">
+    <value>De titel van een inspectie telt 1 tot {Max} tekens.</value>
+  </data>
+  <data name="inspections.days-invalid" xml:space="preserve">
+    <value>De dagen van een inspectie hebben een eerste en een laatste dag, en de laatste ligt niet voor de eerste.</value>
+  </data>
+  <data name="inspections.outside-planned-range" xml:space="preserve">
+    <value>Het project is gepland van {From} tot en met {Until}; een inspectie gaat over dagen daarbinnen. Zonder dagen gaat ze over de dag van vastleggen, volgens de klok in UTC.</value>
+  </data>
+  <data name="inspections.cursor-invalid" xml:space="preserve">
+    <value>Die paginamarkering hoort niet bij deze lijst. Begin opnieuw bij de eerste pagina.</value>
+  </data>
+  <data name="inspections.page-size-invalid" xml:space="preserve">
+    <value>Een pagina bevat 1 tot {Max} inspecties.</value>
+  </data>
+  <data name="inspections.page-from-both-ends" xml:space="preserve">
+    <value>Een pagina is het begin van een lijst of het einde ervan. Vraag met first of met last, niet met allebei.</value>
+  </data>
+</root>

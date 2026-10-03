@@ -1,0 +1,178 @@
+@page "/"
+@inherits SessionPage
+
+<PageTitle>@T["nav.who-am-i"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.who-am-i"]</h1>
+<p class="text-body-secondary">@T.Html("whoami.intro", Session.PersonName, Session.Tenant ?? T["common.no-tenant"])</p>
+
+@if (_me is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else if (_me.Value is not { } me)
+{
+    <p>@T["whoami.no-answer"]</p>
+    <ApiOutcomeView Answer="_me" />
+}
+else
+{
+    <div class="facts">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">@T["common.tenant"]</h2>
+                <div><strong>@me.Tenant.Name</strong> <code>@me.Tenant.Slug</code></div>
+                <div class="small">@T["whoami.shape-status", me.Tenant.Shape, me.Tenant.Status]</div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h6 card-title">@T["whoami.seat"]</h2>
+                <div><strong>@me.Seat.DisplayName</strong></div>
+                <div class="small">@T["whoami.seat-status", me.Seat.Status]</div>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="h5 mt-4">@T["whoami.placements"]</h2>
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead>
+                <tr><th>@T["whoami.placed-at"]</th><th>@T["common.role"]</th><th>@T["common.from"]</th><th>@T["common.until"]</th><th>@T["whoami.applies-now"]</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var placement in me.Placements)
+                {
+                    if (placement.Grants.Count == 0)
+                    {
+                        <tr>
+                            <td>@PlacedAt(placement)</td>
+                            <td colspan="4" class="text-body-secondary">@T["whoami.no-role-here"]</td>
+                        </tr>
+                    }
+
+                    for (var index = 0; index < placement.Grants.Count; index++)
+                    {
+                        var grant = placement.Grants[index];
+                        var struck = grant.AppliesNow ? null : "not-applying";
+                        <tr>
+                            <td>
+                                @if (index == 0)
+                                {
+                                    @PlacedAt(placement)
+                                }
+                            </td>
+                            <td class="@struck">@grant.Role</td>
+                            <td class="@struck">@Day(grant.StartsAt)</td>
+                            <td class="@struck">@(grant.EndsAt is { } ends ? UntilDay.Shown(ends) : T["common.open-ended"])</td>
+                            <td>@Applies(grant)</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="h5 mt-4">@T["whoami.roles"]</h2>
+    @if (me.Roles.Count == 0)
+    {
+        <p class="text-body-secondary">@T["whoami.roles.none"]</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead><tr><th>@T["common.role"]</th><th>@T["whoami.from-pack"]</th><th>@T["common.status"]</th><th>@T["whoami.manages-access"]</th><th>@T["whoami.keys"]</th></tr></thead>
+                <tbody>
+                    @foreach (var role in me.Roles)
+                    {
+                        <tr>
+                            <td>@role.Name</td>
+                            <td><code>@role.FromPack</code></td>
+                            <td>@role.Status</td>
+                            <td>@(role.ManagesAccess ? T["common.yes"] : T["common.no"])</td>
+                            <td><div class="keys">@foreach (var key in role.KeysShown) { <code>@key</code> }</div></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (me.Keys.Any(key => key.Key == GrantsManage))
+    {
+        <p class="small text-body-secondary">@T.Html("whoami.grants-manage", GrantsManage)</p>
+    }
+
+    @if (me.Keys.Any(key => key.Key == SeatsManage && key.WholeTenant))
+    {
+        <p class="small text-body-secondary">@T.Html("whoami.seats-manage", SeatsManage)</p>
+    }
+
+    @if (me.Keys.Any(key => key.Key == UnitsManage))
+    {
+        <p class="small text-body-secondary">@T.Html("whoami.units-manage", UnitsManage)</p>
+    }
+
+    <h2 class="h5 mt-4">@T["whoami.keys-now"]</h2>
+    @if (me.Keys.Count == 0)
+    {
+        <p class="text-body-secondary">@T["whoami.keys-now.none"]</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead><tr><th>@T["whoami.key"]</th><th>@T["whoami.granted-at"]</th><th>@T["whoami.reaches"]</th></tr></thead>
+                <tbody>
+                    @foreach (var key in me.Keys)
+                    {
+                        <tr>
+                            <td><code>@key.Key</code></td>
+                            <td>@string.Join("; ", key.GrantedAt.Select(unit => unit.Path))</td>
+                            <td>
+                                @if (key.WholeTenant)
+                                {
+                                    <span class="badge text-bg-info">@T["whoami.whole-tenant"]</span>
+                                }
+                                else
+                                {
+                                    <ul class="paths">@foreach (var unit in key.Reaches) { <li>@unit.Path</li> }</ul>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    // Tenancy's keys for giving roles, managing seats and moving units. The UI knows the API by its wire, so the
+    // keys are written out here.
+    private const string GrantsManage = "tenancy.grants.manage";
+    private const string SeatsManage = "tenancy.seats.manage";
+    private const string UnitsManage = "tenancy.units.manage";
+
+    private ApiOutcome<WhoAmIAnswer>? _me;
+
+    protected override async Task LoadAsync() => _me = await Api.WhoAmIAsync();
+
+    private RenderFragment PlacedAt(PlacementInfo placement) =>
+        @<span>
+            @placement.Unit.Path
+            @if (placement.IsPrimary)
+            {
+                <span class="badge text-bg-light">@T["whoami.primary"]</span>
+            }
+        </span>;
+
+    // An expired grant is the demonstration's point: say why it does not apply, not only that it does not.
+    private string Applies(GrantInfo grant)
+        => grant.AppliesNow ? T["common.yes"]
+            : grant.EndsAt is { } ends && ends <= DateTimeOffset.UtcNow ? T["whoami.ended"]
+            : T["whoami.not-started"];
+
+    private static string Day(DateTimeOffset moment) => moment.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -36,17 +36,28 @@ public sealed class RowAccessRule
     /// <summary>The SQL template the generator wrote: <c>{col:...}</c>, <c>{val:...}</c> and <c>{caller:...}</c> still to fill in.</summary>
     public string Sql { get; }
 
-    /// <summary>The roles the rule is for; empty for every caller the application runs queries as.</summary>
+    /// <summary>
+    /// The roles the rule is for, each getting policies of its own: <c>RowAccessRoles.User</c>,
+    /// <c>Anonymous</c> and <c>SystemIn</c>, which a script writes as the roles its
+    /// <see cref="RowAccessExport"/> names, or a role's own name, written as it is spelled. Empty means
+    /// <c>RowAccessRoles.User</c> and <c>RowAccessRoles.Anonymous</c>. A script refuses a rule for
+    /// <c>PUBLIC</c>.
+    /// </summary>
     public IReadOnlyList<string> Roles { get; }
 
-    /// <summary>A rule on <typeparamref name="TAggregate"/>.</summary>
+    /// <summary>
+    /// A rule on <typeparamref name="TAggregate"/>, for <paramref name="roles"/>: symbolic ones, such as
+    /// <c>RowAccessRoles.User</c>, or roles' own names; none for <c>RowAccessRoles.User</c> and
+    /// <c>RowAccessRoles.Anonymous</c>. See <see cref="Roles"/>.
+    /// </summary>
     /// <exception cref="ArgumentException">A name or the SQL is empty, or no operation is given.</exception>
     public static RowAccessRule For<TAggregate>(string name, RowOperations operations, string sql, params string[] roles)
         => For(typeof(TAggregate).FullName!, name, operations, sql, roles);
 
     /// <summary>
     /// A rule on the aggregate named <paramref name="aggregateTypeName"/>, which is how generated code names
-    /// it, so a rule works whether or not the host can see the aggregate's type.
+    /// it, so a rule works whether or not the host can see the aggregate's type. <paramref name="roles"/> are
+    /// as for <see cref="For{TAggregate}"/>.
     /// </summary>
     /// <exception cref="ArgumentException">A name or the SQL is empty, or no operation is given.</exception>
     public static RowAccessRule For(string aggregateTypeName, string name, RowOperations operations, string sql, params string[] roles)

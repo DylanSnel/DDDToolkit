@@ -13,6 +13,13 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// build step asks. Only in the project that sets <c>SupabaseMigrationsExport</c>; everywhere else it
 /// writes nothing.
 /// <para>
+/// And only in an application that is not a test project, the projects the build step runs in. The step
+/// starts the program the project built, so a library has nothing it could start, and a test project is not
+/// the host. The property may be given for a whole build, which hands it to every project; there every
+/// library and test project reports nothing and writes nothing, as if it were not set. Another application
+/// in that build is a host as far as anything here can tell, and exports.
+/// </para>
+/// <para>
 /// The factories normally live in the module projects and the export is switched on in the host, so the
 /// search covers the referenced assemblies, not just this one. It only opens assemblies that reference
 /// the Supabase package, which is the only way one of them can carry the marker, so a host with a large
@@ -22,19 +29,44 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// What it writes is plain generic code, <c>SupabaseMigrationSource.For&lt;TContext, TFactory&gt;()</c>
 /// per factory. Nothing is found or created by reflection when the export runs.
 /// </para>
+/// <para>
+/// It hands the export the row access contributions this project lists with
+/// <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, as <c>new X()</c>, and no others: SQL a package offers
+/// with <c>[assembly: RowAccessContribution]</c> reaches the migrations only by the host's choice. An offer in
+/// the searched assemblies that the host lists neither itself, nor as a class derived from it, nor closed with
+/// its own types, is DDD00054.
+/// </para>
+/// <para>
+/// A marked factory whose assembly and whose context's assembly both declare no <c>[assembly: Module]</c> is
+/// DDD00055: its files would be named after the context's class, and a rename would orphan them all.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 {
     private const string ExportProperty = "build_property.SupabaseMigrationsExport";
 
+    /// <summary>What Microsoft.NET.Test.Sdk sets in a test project, and what a project may set to say it is one.</summary>
+    private const string TestProjectProperty = "build_property.IsTestProject";
+
+    /// <summary>What Microsoft.Testing.Platform sets in a test application, which may lack the other.</summary>
+    private const string TestingPlatformProperty = "build_property.IsTestingPlatformApplication";
+
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var enabled = context.AnalyzerConfigOptionsProvider.Select(static (options, _) =>
+        var turnedOn = context.AnalyzerConfigOptionsProvider.Select(static (options, _) =>
             options.GlobalOptions.TryGetValue(ExportProperty, out var mode)
             && (string.Equals(mode?.Trim(), "Write", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mode?.Trim(), "Check", StringComparison.OrdinalIgnoreCase)));
+                || string.Equals(mode?.Trim(), "Check", StringComparison.OrdinalIgnoreCase))
+            && !IsSet(options.GlobalOptions, TestProjectProperty)
+            && !IsSet(options.GlobalOptions, TestingPlatformProperty));
+
+        // The compiler's own word for what the build step can start: an OutputType of Exe or WinExe.
+        var application = context.CompilationProvider.Select(static (compilation, _) =>
+            compilation.Options.OutputKind is OutputKind.ConsoleApplication or OutputKind.WindowsApplication);
+
+        var enabled = turnedOn.Combine(application).Select(static (pair, _) => pair.Left && pair.Right);
 
         var found = context.CompilationProvider
             .Combine(enabled)
@@ -46,7 +78,7 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
             if (discovery.Enabled)
             {
-                production.AddSource("DDDToolkit.SupabaseMigrationSources.g.cs", Emit(discovery.Sources, discovery.Rules, discovery.Functions));
+                production.AddSource("DDDToolkit.SupabaseMigrationSources.g.cs", Emit(discovery.Sources, discovery.Rules, discovery.Functions, discovery.Contributions));
             }
         });
     }
@@ -57,9 +89,23 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         var rules = new List<Rule>();
         var functions = new List<Function>();
         var diagnostics = new List<DiagnosticInfo>();
+        var used = ContributionsIn(compilation.Assembly, KnownTypes.UseRowAccessContributionAttribute).ToList();
 
         foreach (var assembly in Searched(compilation))
         {
+            foreach (var offered in ContributionsIn(assembly, KnownTypes.RowAccessContributionAttribute))
+            {
+                if (!used.Any(type => Covers(type, offered)))
+                {
+                    diagnostics.Add(DiagnosticInfo.Create(
+                        DiagnosticDescriptors.RowAccessContributionNotUsed,
+                        null,
+                        assembly.Name,
+                        offered.OriginalDefinition.ToDisplayString(),
+                        HowToList(offered.OriginalDefinition)));
+                }
+            }
+
             foreach (var type in TypesIn(assembly.GlobalNamespace))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -92,10 +138,23 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                 }
 
                 var contextType = ContextOf(type)!;
+                var module = ModuleBoundary.ModuleOf(type.ContainingAssembly);
+
+                // Without a module here, the export asks the context's own assembly when it runs, and names the
+                // files after the context's class when that declares none either: a name that a rename changes.
+                if (module is null && ModuleBoundary.ModuleOf(contextType.ContainingAssembly) is null)
+                {
+                    diagnostics.Add(DiagnosticInfo.Create(
+                        DiagnosticDescriptors.SupabaseMigrationsWithoutModule,
+                        LocationInfo.From(type),
+                        contextType.ToDisplayString(),
+                        NameInFiles(contextType.Name)));
+                }
+
                 sources.Add(new Source(
                     contextType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    ModuleBoundary.ModuleOf(type.ContainingAssembly)));
+                    module));
             }
         }
 
@@ -115,7 +174,117 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
         functions.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
 
-        return new Discovery(true, new EquatableArray<Source>(sources), new EquatableArray<Rule>(rules), new EquatableArray<Function>(functions), new EquatableArray<DiagnosticInfo>(diagnostics));
+        var contributions = used
+            .Select(static type => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        contributions.Sort(StringComparer.Ordinal);
+
+        return new Discovery(
+            true,
+            new EquatableArray<Source>(sources),
+            new EquatableArray<Rule>(rules),
+            new EquatableArray<Function>(functions),
+            new EquatableArray<string>(contributions),
+            new EquatableArray<DiagnosticInfo>(diagnostics));
+    }
+
+    /// <summary>Whether the build property <paramref name="key"/> is <c>true</c>, as MSBuild reads a condition: without regard to case.</summary>
+    private static bool IsSet(Microsoft.CodeAnalysis.Diagnostics.AnalyzerConfigOptions options, string key)
+        => options.TryGetValue(key, out var value) && string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The name the export gives the files of a context whose assemblies declare no module, as the export itself
+    /// works it out when it runs: the class name without a trailing <c>Context</c>, in lower case, with anything
+    /// but letters and digits turned into a dash.
+    /// </summary>
+    private static string NameInFiles(string contextName)
+    {
+        const string Suffix = "Context";
+        var name = contextName.EndsWith(Suffix, StringComparison.Ordinal) && contextName.Length > Suffix.Length
+            ? contextName.Substring(0, contextName.Length - Suffix.Length)
+            : contextName;
+
+        var normalized = new System.Text.StringBuilder(name.Length);
+        foreach (var character in name.Trim().ToLowerInvariant())
+        {
+            normalized.Append((character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ? character : '-');
+        }
+
+        var result = normalized.ToString().Trim('-');
+        return result.Length > 0 ? result : "module";
+    }
+
+    /// <summary>
+    /// The types the assembly attributes named <paramref name="attributeName"/> of <paramref name="assembly"/>
+    /// name: the contributions a project lists with <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, or
+    /// those an assembly offers with <c>[assembly: RowAccessContribution(typeof(X))]</c>.
+    /// </summary>
+    private static IEnumerable<INamedTypeSymbol> ContributionsIn(IAssemblySymbol assembly, string attributeName)
+        => assembly.GetAttributes()
+            .Where(attribute => attribute.AttributeClass?.ToDisplayString() == attributeName)
+            .Select(static attribute => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is INamedTypeSymbol type ? type : null)
+            .Where(static type => type is not null)
+            .Select(static type => type!)
+            .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+
+    /// <summary>
+    /// What DDD00054 tells the host to write for an offer it does not use, as code that compiles once the host's
+    /// own types are put in. The export creates every contribution it is handed with <c>new X()</c>, in the
+    /// generated list, so what is listed closes every type parameter and takes nothing. An offer that does both
+    /// is listed as it is. A generic one that takes nothing is closed in the attribute. One whose constructor
+    /// takes an argument, the rules of the application's resource say, is listed through a class of the host's
+    /// that derives from it and hands that over; a type parameter of such a class is closed in that line.
+    /// </summary>
+    private static string HowToList(INamedTypeSymbol offered)
+    {
+        var takesNothing = offered.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public);
+        var closedWithYours = offered.TypeParameters.Length == 0
+            ? offered.Name
+            : offered.Name + "<" + string.Join(", ", offered.TypeParameters.Select(static parameter => "Your" + Unprefixed(parameter.Name))) + ">";
+        var forEach = offered.TypeParameters.Length == 0
+            ? string.Empty
+            : ", with a type of yours for " + string.Join(" and ", offered.TypeParameters.Select(static parameter => parameter.Name));
+        var qualified = (offered.ContainingType is { } outer ? outer.ToDisplayString() + "."
+                            : offered.ContainingNamespace is { IsGlobalNamespace: false } space ? space.ToDisplayString() + "."
+                            : string.Empty) + closedWithYours;
+
+        if (takesNothing && offered.TypeParameters.Length == 0)
+        {
+            return "Add [assembly: UseRowAccessContribution(typeof(" + offered.ToDisplayString() + "))], or list a class of yours that derives from it";
+        }
+
+        if (takesNothing)
+        {
+            return "Add [assembly: UseRowAccessContribution(typeof(" + qualified + "))]" + forEach + ", or list a class of yours that derives from it";
+        }
+
+        return "Its constructor takes what only your application can give it, so declare a class of yours that derives from it and hands that over, "
+               + "public sealed class YourRowAccess() : " + qualified + "(...)" + forEach + ", and add [assembly: UseRowAccessContribution(typeof(YourRowAccess))]";
+    }
+
+    /// <summary>A type parameter's name without its leading <c>T</c>: <c>Member</c> of <c>TMember</c>, and a name that has none as it is.</summary>
+    private static string Unprefixed(string name)
+        => name.Length > 1 && name[0] == 'T' && char.IsUpper(name[1]) ? name.Substring(1) : name;
+
+    /// <summary>
+    /// Whether the host's <paramref name="used"/> contribution is the <paramref name="offered"/> one: the same
+    /// class, a class of the host's derived from it, or, for a generic one, the host's own closing of it. A
+    /// package whose SQL depends on what only the host knows, such as its catalogue, offers a class the host
+    /// derives from or closes with its own types.
+    /// </summary>
+    private static bool Covers(INamedTypeSymbol used, INamedTypeSymbol offered)
+    {
+        for (INamedTypeSymbol? type = used; type is not null; type = type.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(type, offered)
+                || (offered.IsGenericType && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, offered.OriginalDefinition)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -141,7 +310,9 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
     /// <summary>
     /// An <c>[AccessFunction&lt;TAggregate&gt;]</c> whose SQL the core generator wrote into it as
-    /// <c>RowAccessSql</c>, or null, for the same reason as <see cref="RuleOf"/>.
+    /// <c>RowAccessSql</c>, or null, for the same reason as <see cref="RuleOf"/>. Its name is the one the core
+    /// generator wrote as <c>Name</c>, which is the logical <c>owner/name</c> for a name without a schema, and
+    /// with it come the SQL types of the parameters it takes after the key and its shape.
     /// </summary>
     private static Function? FunctionOf(INamedTypeSymbol type)
     {
@@ -149,13 +320,23 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             candidate.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionAttribute`1" } function
             && function.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
 
-        return attribute?.AttributeClass?.TypeArguments.FirstOrDefault() is INamedTypeSymbol aggregate
-            && attribute.ConstructorArguments.Length == 1
-            && attribute.ConstructorArguments[0].Value is string name
-            && type.GetMembers(KnownTypes.RowAccessSqlField).OfType<IFieldSymbol>().FirstOrDefault() is { HasConstantValue: true, ConstantValue: string sql }
-                ? new Function(ClrName(aggregate), name, sql)
-                : null;
+        if (attribute?.AttributeClass?.TypeArguments.FirstOrDefault() is not INamedTypeSymbol aggregate
+            || attribute.ConstructorArguments.Length != 1
+            || attribute.ConstructorArguments[0].Value is not string written
+            || Constant(type, KnownTypes.RowAccessSqlField) is not string sql)
+        {
+            return null;
+        }
+
+        var name = Constant(type, "Name") as string ?? written;
+        var parameters = Constant(type, "RowAccessParameters") as string ?? "";
+        var shape = Constant(type, "RowAccessShape") is int value ? value : 0;
+        return new Function(ClrName(aggregate), name, sql, parameters, shape);
     }
+
+    /// <summary>The value of the constant <paramref name="name"/> the core generator wrote into <paramref name="type"/>, or null.</summary>
+    private static object? Constant(INamedTypeSymbol type, string name)
+        => type.GetMembers(name).OfType<IFieldSymbol>().FirstOrDefault() is { HasConstantValue: true } field ? field.ConstantValue : null;
 
     /// <summary>
     /// A <c>[RowAccess&lt;TAggregate&gt;]</c> rule whose SQL the core generator wrote into it as the constant
@@ -302,7 +483,7 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static string Emit(EquatableArray<Source> sources, EquatableArray<Rule> rules, EquatableArray<Function> functions)
+    private static string Emit(EquatableArray<Source> sources, EquatableArray<Rule> rules, EquatableArray<Function> functions, EquatableArray<string> contributions)
     {
         const string Supabase = "global::" + KnownTypes.SupabaseNamespace;
         const string Postgres = "global::" + KnownTypes.PostgresNamespace;
@@ -327,7 +508,15 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             : string.Join(
                 "\n",
                 functions.Select(function =>
-                    $"            {Postgres}.RowAccessFunction.For({Literal(function.Aggregate)}, {Literal(function.Name)}, {Literal(function.Sql)}),"));
+                    $"            {Postgres}.RowAccessFunction.For({Literal(function.Aggregate)}, {Literal(function.Name)}, {Literal(function.Sql)}"
+                    + (function.Parameters.Length == 0 && function.Shape == 0
+                        ? ""
+                        : $", owner: null, parameters: {Literal(function.Parameters)}, shape: (global::{KnownTypes.AttributesNamespace}.AccessFunctionShape){function.Shape}")
+                    + "),"));
+
+        var contributionEntries = contributions.Count == 0
+            ? string.Empty
+            : string.Join("\n", contributions.Select(contribution => $"            new {contribution}(),"));
 
         return $$"""
             // <auto-generated/>
@@ -363,12 +552,22 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                         };
 
                     /// <summary>
+                    /// The row access contributions this project lists with [assembly: UseRowAccessContribution], which the
+                    /// export asks what they write for each context.
+                    /// </summary>
+                    public static global::System.Collections.Generic.IReadOnlyList<{{Postgres}}.IRowAccessContribution> Contributions()
+                        => new {{Postgres}}.IRowAccessContribution[]
+                        {
+            {{contributionEntries}}
+                        };
+
+                    /// <summary>
                     /// Runs before Main. Returns at once unless the build's export step started this process, in which
                     /// case it exports and ends the process before any of the application's own start-up runs.
                     /// </summary>
                     [global::System.Runtime.CompilerServices.ModuleInitializer]
                     internal static void ExportWhenTheBuildAsks()
-                        => {{Supabase}}.SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions);
+                        => {{Supabase}}.SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions, Contributions);
                 }
             }
 
@@ -388,11 +587,24 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
     /// <summary>One row access rule: the aggregate's CLR name, the policy's name, what it allows, for whom, and its SQL.</summary>
     private sealed record Rule(string Aggregate, string Name, int Operations, EquatableArray<string> Roles, string Sql);
 
-    /// <summary>One access function: the aggregate's CLR name, the function's name, and its SQL.</summary>
-    private sealed record Function(string Aggregate, string Name, string Sql);
+    /// <summary>
+    /// One access function: the aggregate's CLR name, the function's name, its SQL, the SQL types of the
+    /// parameters it takes after the key, and its shape, as <c>AccessFunctionShape</c> numbers it.
+    /// </summary>
+    private sealed record Function(string Aggregate, string Name, string Sql, string Parameters, int Shape);
 
-    private sealed record Discovery(bool Enabled, EquatableArray<Source> Sources, EquatableArray<Rule> Rules, EquatableArray<Function> Functions, EquatableArray<DiagnosticInfo> Diagnostics)
+    /// <summary>
+    /// What the generator found: the sources, rules and access functions to export, the contributions the host
+    /// uses, by their fully qualified names, and the diagnostics to report.
+    /// </summary>
+    private sealed record Discovery(
+        bool Enabled,
+        EquatableArray<Source> Sources,
+        EquatableArray<Rule> Rules,
+        EquatableArray<Function> Functions,
+        EquatableArray<string> Contributions,
+        EquatableArray<DiagnosticInfo> Diagnostics)
     {
-        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<Rule>.Empty, EquatableArray<Function>.Empty, EquatableArray<DiagnosticInfo>.Empty);
+        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<Rule>.Empty, EquatableArray<Function>.Empty, EquatableArray<string>.Empty, EquatableArray<DiagnosticInfo>.Empty);
     }
 }

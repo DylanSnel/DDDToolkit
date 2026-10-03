@@ -33,11 +33,17 @@ internal static class Invariants
     /// </summary>
     /// <param name="entity">The type carrying <c>[Entity&lt;T&gt;]</c> or <c>[AggregateRoot&lt;T&gt;]</c>.</param>
     /// <param name="compilation">Used to resolve constants and to answer what the entity can reach.</param>
+    /// <param name="parent">
+    /// The parent a class declared with a template will derive from, which the compilation cannot show
+    /// yet: its base class is written by this generator. A rule about the parent applies to the class all
+    /// the same. Null for every other declaration.
+    /// </param>
     public static EquatableArray<string> Collect(
         INamedTypeSymbol entity,
         Compilation compilation,
         List<DiagnosticInfo> diagnostics,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<ITypeSymbol, bool>? parent = null)
     {
         List<string>? rules = null;
         Dictionary<string, string>? codes = null;
@@ -52,7 +58,7 @@ internal static class Invariants
                 continue;
             }
 
-            if (!IsAbout(entity, nested))
+            if (!IsAbout(entity, nested) && !(parent is not null && IsAboutParent(nested, parent)))
             {
                 diagnostics.Add(DiagnosticInfo.Create(
                     DiagnosticDescriptors.InvariantIsAboutAnotherType,
@@ -128,6 +134,20 @@ internal static class Invariants
         foreach (var @interface in rule.AllInterfaces)
         {
             if (IsTheInvariantInterface(@interface) && Accepts(entity, @interface.TypeArguments[0]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether the rule is about the parent a template class will derive from.</summary>
+    private static bool IsAboutParent(INamedTypeSymbol rule, Func<ITypeSymbol, bool> parent)
+    {
+        foreach (var @interface in rule.AllInterfaces)
+        {
+            if (IsTheInvariantInterface(@interface) && parent(@interface.TypeArguments[0]))
             {
                 return true;
             }

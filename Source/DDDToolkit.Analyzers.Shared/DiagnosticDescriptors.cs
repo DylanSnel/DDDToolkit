@@ -18,6 +18,7 @@ internal static class DiagnosticDescriptors
     private const string IntegrationEvents = "DDDToolkit.IntegrationEvents";
     private const string Events = "DDDToolkit.Events";
     private const string Access = "DDDToolkit.Access";
+    private const string Membership = "DDDToolkit.Membership";
 
     /// <summary>
     /// The reference page of docs/diagnostics.md on the docs site, where every id is a heading of its own.
@@ -275,7 +276,7 @@ internal static class DiagnosticDescriptors
         category: IntegrationEvents,
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "The generated Add{Module}IntegrationEvents() constructs every outbound class and every handler with new, taking each constructor parameter from the scope the message is delivered in. It needs one accessible constructor with the most parameters, parameters it can resolve (no ref, out or params), and parameter types this assembly can see. A class it cannot construct is left out of the registration, so its events are not published or its contract is not handled; register it by hand or give it a constructor the registration can call.");
+        description: "The generated Add{Module}IntegrationEvents() constructs every outbound class and every handler with new, taking each constructor parameter from the scope the message is delivered in. It needs one accessible constructor with the most parameters, parameters it can resolve (no ref, out or params), and parameter types this assembly can see. A class it cannot construct is left out of the registration, so its events are not published or its contract is not handled; register it by hand or give it a constructor the registration can call. The registration also names the domain events of the module's projects that do not reference Entity Framework, such as its domain project, and a domain event of one of those that this project cannot see is reported on its [assembly: Module] attribute: make the event public.");
 
     public static readonly DiagnosticDescriptor EventVersionDisagreesWithItsName = Create(
         id: "DDD00034",
@@ -315,21 +316,21 @@ internal static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor RowAccessRuleShape = Create(
         id: "DDD00038",
-        title: "A row access rule is a static partial class with one Allows method",
-        messageFormat: "'{0}' is a [RowAccess] rule or an [AccessFunction] and needs {1}",
+        title: "A row access rule, an access function or a database question has the shape the generator reads",
+        messageFormat: "'{0}' is a [RowAccess] rule, an [AccessFunction], an access function's contract or a database question, and needs {1}",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The generator translates a rule's Allows method into SQL and writes the result into another part of the class. So the class is static and partial, and Allows is a static method that takes the aggregate the rule is about and a Caller, returns bool, and has a single expression for a body, either after => or as its only return statement. Nothing is generated for a rule until it has that shape, and a rule without SQL is never written into the database.");
+        description: "The generator translates a rule's Allows method into SQL and writes the result into another part of the class. So the class is static and partial, and Allows is a static method that takes the aggregate the rule is about and a Caller, returns bool, and has a single expression for a body, either after => or as its only return statement. An [AccessFunction] has the same shape, and may take strings, numbers, flags, Guids and ids after the caller, which become the SQL function's parameters. A contract declares nothing, or one static partial Allows that takes the key first, or one static partial Ids that returns AccessSet of the key. A question of an [AccessFunctions] class is a static partial method: an [AccessSet] one returns AccessSet<T>, an [AccessScalar] one returns a value, and their parameters are strings, numbers, flags, Guids, ids or a type parameter constrained to IEntityId. A function's name is schema.name, owner/name, or a name relative to its owner, each part letters, digits and underscores. A set-shaped function answers with the keys of the rows it allows, so its aggregate's key is one column. Nothing is generated until the class has its shape, and a rule without SQL is never written into the database.");
 
     public static readonly DiagnosticDescriptor RowAccessRuleUntranslatable = Create(
         id: "DDD00039",
         title: "A row access rule can only say what the database can check",
-        messageFormat: "'{0}' cannot be part of a row access rule: a rule compares, and-s, or-s and negates properties of the aggregate, constants, the caller's UserId, IsSignedIn, Role and Claim(\"...\"), SQL written with Sql.Call or Sql.Raw, and the Allows of an [AccessFunction] on the same aggregate",
+        messageFormat: "'{0}' cannot be part of a row access rule: a rule compares, and-s, or-s and negates properties of the aggregate, constants, the caller's UserId, IsSignedIn, Role and Claim(\"...\"), the time as DateTimeOffset.UtcNow or DateTime.UtcNow, SQL written with Sql.Call or Sql.Raw, the Allows or Ids of an [AccessFunction] or its contract, and the questions of an [AccessFunctions] class",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Every row access rule becomes a condition the database evaluates for each row, so it can only use what the database knows: the aggregate's own columns, constants written in the rule, and the caller's claims. A method call, a local variable, a field of another object or the clock has no column and no claim to become, and a rule that quietly left it out would let the database answer differently from the C# method. The error is on the part that cannot be translated.");
+        description: "Every row access rule becomes a condition the database evaluates for each row, so it can only use what the database knows: the aggregate's own columns, constants written in the rule, and the caller's claims. A method call, a local variable or a field of another object has no column and no claim to become, and a rule that quietly left it out would let the database answer differently from the C# method. The clock is the database's now(), and a question only the database can answer is asked through an [AccessFunction] or an [AccessFunctions] class, whose SQL function the export writes or knows. A set-shaped question is asked with Contains, and nothing else. The error is on the part that cannot be translated.");
 
     public static readonly DiagnosticDescriptor RowAccessRuleNotOnAggregateRoot = Create(
         id: "DDD00040",
@@ -348,4 +349,175 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The tables of an aggregate's entities have policies that ask the aggregate's table whether their row is visible. A policy on the aggregate's table that read those tables would therefore ask itself, and Postgres stops the query with infinite recursion. An [AccessFunction] runs as its owner, SECURITY DEFINER, so it reads the entities without their policies; the rule calls it with the row's id, and the question is written once however many rules ask it.");
+
+    public static readonly DiagnosticDescriptor EntityBaseShape = Create(
+        id: "DDD00042",
+        title: "A parent for entities is an abstract generic class whose first type parameter is the id",
+        messageFormat: "'{0}' is marked [{1}] and needs {2}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A package ships a parent for the application's own classes to derive from, and the generator writes its base class the way it does for any aggregate root or entity: AggregateRoot<TId> or Entity<TId>, closed over the parent's first type parameter. So the parent is an abstract partial class, since only what derives from it is ever created; it has type parameters, the id first; it is not nested in a generic type; and its id parameter is constrained with where TId : IEntityId, IEquatable<TId>, which is what the toolkit's base classes require. Nothing is generated for the parent until it has that shape.");
+
+    public static readonly DiagnosticDescriptor TemplateIdIsNotAnEntityId = Create(
+        id: "DDD00043",
+        title: "A template's first type argument is an entity id",
+        messageFormat: "'{0}' is declared with [{1}<{2}>], but '{2}' is not an entity id; declare it with [EntityId<T>], in the contracts project when other modules refer to it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A template attribute such as [Subscription<SubscriptionId>] names the id of the class it declares, and that class derives from a parent closed over the id. Unlike [AggregateRoot<Guid>], a template never generates an id from a raw value: the id belongs to the application, which declares it where every module that refers to it can see it. Nothing is generated for the class until its id is an [EntityId<T>].");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentSourceMissing = Create(
+        id: "DDD00044",
+        title: "A template takes a type from a class nobody declares",
+        messageFormat: "'{0}' is declared with [{1}], whose parent takes {2} from the class declared with [{3}], and neither this project nor a project it references declares one; declare one, once",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Some parents need more than the id of the class that derives from them: the parent of an invoice needs the subscription's id and the class of its lines. The template attribute takes those from the one class declared with the template it names, in this project or, when this project declares none, in a project it references, so each is declared once and every class agrees on it. Nothing is generated for the class until one of them declares the class this message names.");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentSourceAmbiguous = Create(
+        id: "DDD00045",
+        title: "A template takes a type from a class declared more than once",
+        messageFormat: "'{0}' is declared with [{1}], which takes {2} from the class declared with [{3}], and there are several: {4}; {5}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The template attribute takes a type argument of its parent from the one class declared with another template, such as the subscription's id from the class declared with [Subscription<TId>], and a [TemplateRegistration] method takes its type arguments the same way. With two such classes, in this project or in the projects it references when it declares none itself (only those of its own module, when it is a module's project that takes the registration's classes from the module's others), there is no telling which one is meant, and picking one would bind the parent, or the registration, to it without a word. Nothing is generated for the class, or no registration is written, until one is left. A template whose marker says AllowSeveral = true is declared once per thing an application has, and several classes are then no mistake for a registration: it is written once per class, each named after its class. It is still refused when two of the method's templates each have several classes, because there is no telling which class of the one goes with which of the other, and when two of the classes share a name, because the registrations are named after them. A method that says what its registration is called, with [TemplateRegistration(Name = ...)], names each after what its class fills the name with, and classes whose registrations would be called the same are refused for the same reason: a call could not tell them apart. That is reported once for the classes, however many of the package's registrations it stops, on the class to fix: where the type the registrations are named after holds one of the classes in a property or field of its own, as a resource holds its members, on another of them, and otherwise on the one declared last.");
+
+    public static readonly DiagnosticDescriptor TemplateDoesNotFitItsParent = Create(
+        id: "DDD00046",
+        title: "A template attribute fills exactly the type parameters of its parent",
+        messageFormat: "[{0}] cannot declare {1}: {2}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "This is a mistake in the package that declares the template attribute. It is reported on the attribute when the package is built, and on a class that uses an attribute from a package built without the generator. The marker names an open parent marked [AggregateRootBase] for [AggregateRootTemplate], or [EntityBase] for [EntityTemplate]. The attribute's own type arguments fill the parent's first type parameters, the id first, and every parameter after them is filled by exactly one [TemplateArgument]. Type arguments the attribute has beyond what the parent takes are no mistake: they are the template's own, and a registration takes them by position. A parameter that takes the application's class (Take = TemplateArgumentKind.Type) is not constrained new(), because the parameterless constructor the generator writes is never public. Nothing is generated for a class declared with the attribute until the package is fixed.");
+
+    public static readonly DiagnosticDescriptor ConflictingEntityDeclarations = Create(
+        id: "DDD00047",
+        title: "A class is declared an entity or aggregate root once",
+        messageFormat: "'{0}' is declared with {1}; keep the one that describes it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[AggregateRoot<TId>], [Entity<TId>], [AggregateRootBase], [EntityBase] and a package's template attributes each give the class a base class, and a class has only one. Nothing is generated for the class until one of them is left. [AggregateRoot<TId>] together with [Entity<TId>] is DDD00009.");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentMissesConstraint = Create(
+        id: "DDD00048",
+        title: "A class a template takes meets its parent's constraints",
+        messageFormat: "'{0}' is declared with [{1}], whose parent takes '{2}' as '{3}', which requires {4}; '{2}' does not meet it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A [TemplateArgument] with Take = Type hands one of the application's own classes to the parent as a type argument, such as the class of an invoice's lines. The parent may ask more of that class than being declared with the right template, such as an interface it creates the class through. A class that does not have it would make the parent closed over it a compile error inside generated code, where there is nothing to fix. Nothing is generated for the class until the class this message names meets the requirement.");
+
+    public static readonly DiagnosticDescriptor TemplateRegistrationSourceMissing = Create(
+        id: "DDD00049",
+        title: "A template registration needs a class declared with each of its templates",
+        messageFormat: "A class declared with [{1}] is needed by {0}, and neither this project nor a project it references declares one; declare one, once",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A package's [TemplateRegistration] method, such as a modelBuilder.AddTenancy(), is written into every project that declares a class with one of its templates, closed over that project's classes: each of its [TemplateType] type parameters takes the class declared with a template, or that class's id. The project declares a class with one of the method's templates, so it is meant to get the registration, and one of the other templates has no class, in this project or in the projects it references. It is reported once for the template, naming every registration that needs it, on the first class of the project declared with one of the methods' templates, and no registration is written until the class this message names is declared. Where a class of the project derives from a parent that takes a type from that template, DDD00044 says it on that class, with the same fix, and this one is not reported. A project of a module that declares none of the classes itself, such as a module's infrastructure project next to its domain project, gets the registration built from the classes the module's other projects declare, and only those: then one of the method's templates has a class there and another has none, and it is reported on the project's [assembly: Module] attribute. The class belongs in the project that declares the others.");
+
+    public static readonly DiagnosticDescriptor TemplateRegistrationMissesConstraint = Create(
+        id: "DDD00050",
+        title: "A type a template registration takes meets the method's constraints",
+        messageFormat: "'{1}' takes '{0}' as '{2}', which requires {3}; '{0}' does not meet it",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A [TemplateType] with Take = Type hands one of the application's own classes to a package's [TemplateRegistration] method as a type argument. The method may ask more of that class than being declared with the template, such as an interface. A class that does not have it would make the registration written for the project a compile error inside generated code, where there is nothing to fix. A [TemplateType] that takes an id is held to the same rule as far as a struct or a class goes: an id declared as a record class where the method asks for a struct is reported too. A later type argument of the template, taken with Argument = n, is whatever type the application wrote there, and is judged the way DDD00053 judges it against the parent: a struct or a class always, and the method's other constraints when the type is one no generator will still complete. A later type argument whose id the method takes, with IdOfArgument = true, is a class declared an entity or an aggregate root, since that is where its id is read from; a later type argument that names an entity or an aggregate root of this project is judged by what the generator will make of that class, as a class the method takes is, so a child entity where the method asks for an aggregate root is reported rather than left to fail inside the registration; and a type the registration is named after, with [TemplateRegistration(Name = ...)], has a name of its own, which an array has not. No registration is written until the type this message names meets the requirement.");
+
+    public static readonly DiagnosticDescriptor SetQuestionArgumentReadsTheRow = Create(
+        id: "DDD00051",
+        title: "A set-shaped question is asked once per statement, so its arguments do not read the row",
+        messageFormat: "An argument of '{0}' reads the row, so the database would ask it once per row. Pass constants, the caller, or the function's own parameters.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A set-shaped question, an [AccessSet] method or the Ids of a set-shaped access function, becomes column = ANY (ARRAY(SELECT f(arguments))) in the policy. Postgres works the set out once, before it reads the table, and then finds the rows through the column's index. An argument that reads the row, a column of it or a question about it, would make the set different for every row, so Postgres would call the function once per row instead, which is what the set-shaped form exists to avoid. The value compared with the set, the argument of Contains, is what reads the row. Ask a question about one row through an access function's Allows instead. Nothing is generated for the rule until its arguments are constants, the caller, or the parameters of the access function the rule is part of.");
+
+    public static readonly DiagnosticDescriptor FunctionNameWithoutOwner = Create(
+        id: "DDD00052",
+        title: "A function named without its schema belongs to a module",
+        messageFormat: "'{0}' is named without its schema, and nothing says which module it belongs to. Add [assembly: Module(...)], give the class [AccessFunctions(Owner = ...)], or write schema.name.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A function name without a schema is relative to the module that owns it: is_member in the Projects module is projects/is_member, and the export writes it as the function of that name in the schema of the context that defines it, whatever the host calls that schema. The owner is the name of the module the declaring assembly declares with [assembly: Module], or the Owner of the class's [AccessFunctions], which a package that declares no module uses. With neither there is no owner to make the name relative to, and a function of the same name in another module could not be told from it. Nothing is generated for the class until it has an owner or the name has its schema.");
+
+    public static readonly DiagnosticDescriptor TemplateArgumentFailsConstraint = Create(
+        id: "DDD00053",
+        title: "A type argument of a template meets its parent's constraints",
+        messageFormat: "'{0}' is declared with [{1}], but '{2}' does not meet the parent's constraint on '{3}', which requires {4}",
+        category: Entities,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A class declared with a template derives from the package's parent, closed over the type arguments the template supplies: the attribute's own, the id first, and the ids a [TemplateArgument] takes from other classes. The parent may ask more of an id than being an entity id, most often a struct, because it holds ids by value. An id declared as a record class would make the parent closed over it a compile error inside generated code, where there is nothing to fix. Whether the type is a struct or a class is always judged. The parent's other constraints, an interface for instance, are judged of a type from a referenced project and of one written out in full; a partial type declared in this project may still be completed by a generator, as an [EntityId<T>] is, so what it does not show yet is left to the compiler. An [EntityId<T>] with an error of its own is not completed and is judged as it stands. Nothing is generated for the class until the type this message names meets the requirement: declare the id as a readonly partial record struct, or give the type what the message names.");
+
+    public static readonly DiagnosticDescriptor RowAccessContributionNotUsed = Create(
+        id: "DDD00054",
+        title: "Use the row access contributions your references offer",
+        messageFormat: "'{0}' offers the row access contribution '{1}', which this application does not use. {2}, to write its SQL into your migrations.",
+        category: Supabase,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A package or a module offers a class that writes row level security of its own, SQL functions, policies and statements, with [assembly: RowAccessContribution]. The Supabase export writes it into this application's migrations only when the project that runs the export lists it with [assembly: UseRowAccessContribution], because the migrations run it as the role that owns the tables: nothing a reference offers gets there without the application's say. Without it, the package's tables may have no policies at all, and its rules' functions may be missing. List it, a class of yours derived from it, or, for a generic one, the class closed with your own types, to use it; if leaving it out is deliberate, suppress this warning for the project with <NoWarn>. The export creates what is listed with new X(), so a contribution that is generic, or whose constructor takes what only the application knows, its rules say, is listed through a class of yours: closed over your types, with a constructor that takes nothing and hands the base what it needs. The message says which of these the offer needs.");
+
+    public static readonly DiagnosticDescriptor SupabaseMigrationsWithoutModule = Create(
+        id: "DDD00055",
+        title: "A context's migration files are named after its module",
+        messageFormat: "'{0}' is in an assembly that declares no [assembly: Module], so its Supabase migration files are named after the context, '{1}'. Declare the module, and the file names stay the same when the context is renamed.",
+        category: Supabase,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The Supabase export names every file it writes after the module the context belongs to, as in 20260922120000_AddOrders.ordering.ddd.sql, and finds a module's files again by that name. The module is the one the assembly of the factory or of the context declares with [assembly: Module]. With neither, the name is taken from the context's class instead, so renaming the class changes the name every file is expected under: the export then recognizes none of the files it wrote, reports every migration as VersionTaken, because the file under the old name holds its timestamp, and writes the module's access file once more. Add [assembly: Module(\"...\")] to the project that holds the context.");
+
+    public static readonly DiagnosticDescriptor AccessRequestsShape = Create(
+        id: "DDD00056",
+        title: "A request interface is one a behavior can be written for",
+        messageFormat: "'{0}' is marked [AccessRequests] and {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[AccessRequests] marks the interface a module's commands and queries implement to say what they require of their caller, and in a project that uses the Mediator library the generator writes the pipeline behavior that holds them to it, named after the interface and declared beside it. So the interface derives from IRequireAccess, which is where a request's requirement is read from; it has no type parameters, since the behavior and the module's set of checks are closed over it; it is not declared inside another type and is not file-local, since the behavior is written beside it, in a file of its own, and has to name it; and no other marked interface of the same namespace gives the behavior the same name. No behavior is written for the interface until it has that shape, so nothing checks its requests: put it right, or call AccessChecks<TRequests>.RequireAsync in front of the handlers yourself.");
+
+    public static readonly DiagnosticDescriptor PipelineBehaviorShapeUnknown = Create(
+        id: "DDD00057",
+        title: "The Mediator library's pipeline behavior has the shape the generator writes a behavior for",
+        messageFormat: "No access behavior is written for '{0}': the Mediator library this project references declares {2} otherwise than the generator knows it, {1}. Write the behavior yourself: it calls AccessChecks<{0}>.RequireAsync(message, cancellationToken) and then the next step.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "For an interface marked [AccessRequests] the generator writes a class that implements the Mediator library's IPipelineBehavior<TMessage, TResponse>. It reads how from the library itself: one method, Handle, that takes the message, a cancellation token and the delegate that runs the next step, in whatever order the referenced version declares them, and answers a ValueTask or a Task of the response; the delegate takes the message and the token. Where the library has IStreamPipelineBehavior<TMessage, TResponse>, the pipeline of the messages that are answered with a stream, a second class is written for it the same way, whose Handle answers an IAsyncEnumerable of the response. A version of the library that declares either interface otherwise is one the generator does not know, and it writes nothing rather than guess: a behavior that did not compile, or one that never ran the check, would be worse than none, and so would one of the two without the other. It is an error because without the behavior the requests of the interface reach their handlers unchecked. Write the behavior by hand against the version you use, and remove [AccessRequests] from the interface, which then still names the module's checks.");
+
+    public static readonly DiagnosticDescriptor NotificationRequiresAccess = Create(
+        id: "DDD00058",
+        title: "A notification implements no request interface",
+        messageFormat: "'{0}' implements '{1}', which is marked [AccessRequests], and is a notification of the Mediator library. A notification is published to its handlers through no pipeline, so nothing asks what it requires. Send what needs a check as a command or a query, or take '{1}' off the notification and call AccessChecks<{1}>.RequireAsync where it is published.",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The behavior written for an [AccessRequests] interface is part of the Mediator library's pipeline for commands and queries, and of its pipeline for the messages that are answered with a stream. The library publishes a notification to its handlers through neither, so a notification that implements the interface declares a requirement that no behavior ever asks: every handler of it runs for whoever published it, while the declaration reads as if it were checked. It is an error for that reason. What needs a check before it is handled is sent as a command or a query. A notification says that something happened, and whoever publishes it has passed its own check already; where a notification's handlers must not run for every publisher, ask the checks yourself, AccessChecks<TRequests>.RequireAsync, before publishing.");
+
+    public static readonly DiagnosticDescriptor MemberClassOfNoResource = Create(
+        id: "DDD00060",
+        title: "A member class names an aggregate root whose members it is",
+        messageFormat: "'{0}' is declared a member of '{1}', and {2}",
+        category: Membership,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], names the resource its members are of: an aggregate root of the application's, which keeps them in a collection of the member class and gets the member list written over it. Two things make that impossible, and this says which, on the member class, where the mistake is. The resource is not declared an aggregate root: a child entity, the member class itself, or a class that is no entity, whose members could not be kept with an aggregate. Or the resource keeps its members as another member class already, in a collection of that class: a resource has one member class, and the list is written for the one it keeps. A project that also gets the package's registrations hears the same from them, DDD00050 or DDD00045, which are errors there, and this one is not reported beside them. It is a warning otherwise, because nothing else is wrong with the class, and nothing is written for it.");
+
+    public static readonly DiagnosticDescriptor MemberListNotWritten = Create(
+        id: "DDD00059",
+        title: "The member list of a resource is written from what the resource declares",
+        messageFormat: "'{0}' has no member list, and the toolkit cannot write one over its '{1}': {2}. Put that right, or write the list yourself: private MemberList<{3}> Members => new(members, owner, newId, codes);.",
+        category: Membership,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes the member list on the resource the template names: a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. It is written from four things the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: exactly one property of TMemberId on the resource. New rows: TId is an [EntityId<Guid>], and a new one is made in time order. The codes: exactly one static property or field of MembershipCodes on the resource, the codes its member rules refuse under. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape, a resource with two properties of the member's id, a member row keyed by something else than a Guid, or codes kept elsewhere. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
 }

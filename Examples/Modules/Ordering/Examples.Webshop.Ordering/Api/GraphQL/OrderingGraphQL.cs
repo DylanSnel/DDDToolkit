@@ -1,0 +1,60 @@
+using DDDToolkit.HotChocolate;
+using Examples.Webshop.Ordering.Contracts;
+using Examples.Webshop.Ordering.GraphQl;
+using HotChocolate.Execution.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Examples.Webshop.Ordering.Api.GraphQL;
+
+/// <summary>Ordering's part of a GraphQL schema. The host builds the schema and calls this.</summary>
+public static class OrderingGraphQL
+{
+    /// <summary>The topic an order's updates are pushed to.</summary>
+    public static string Topic(OrderId id) => $"order:{id}";
+
+    public static IRequestExecutorBuilder AddOrderingGraphQL(this IRequestExecutorBuilder graphql)
+    {
+        ArgumentNullException.ThrowIfNull(graphql);
+
+        // Which of Ordering's contracts reach subscribed clients, and on which topic. The host still has
+        // to send Ordering's outbox to GraphQlSubscriptionSink; this only says what that sink pushes.
+        graphql.Services.AddIntegrationEventSubscriptions(map => map
+            .Publish<OrderConfirmedV1>(message => message.Body is OrderConfirmedV1 confirmed ? Topic(confirmed.OrderId) : null)
+            .Publish<OrderCancelledV1>(message => message.Body is OrderCancelledV1 cancelled ? Topic(cancelled.OrderId) : null));
+
+        return graphql
+            // OrderId lives in the contracts, OrderLineId in the module. Both are Ordering, so the module's
+            // generated call makes the contracts' one as well.
+            .AddOrderingGraphQlRuntimeBindings()
+            // HotChocolate's generated registration, named in Module.cs: the methods marked [Query], [Mutation]
+            // and [Subscription] as fields, the three types they are fields of, OrderType, OrderLineType and
+            // the loader.
+            .AddOrderingTypes();
+    }
+
+    /// <summary>The name of Ordering's source schema.</summary>
+    public const string SourceSchemaName = "ordering";
+
+    /// <summary>
+    /// Ordering's source schema: a GraphQL schema of its own, named <see cref="SourceSchemaName"/>, for a
+    /// Fusion gateway to compose with the other modules', in the same process or across services. It holds
+    /// its orders, and a line's product as the Product with that SKU, for Catalog to fill in. Its
+    /// subscriptions need a transport, which is the host's to choose: <c>AddInMemorySubscriptions()</c> on the
+    /// builder this returns, for a single process.
+    /// </summary>
+    public static IRequestExecutorBuilder AddOrderingSourceSchema(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services
+            .AddGraphQLServer(SourceSchemaName)
+            // A schema a gateway composes: lookups inferred as keys, node fields shareable.
+            .AddSourceSchemaDefaults()
+            // Relay, with node(id:) as the lookup a gateway fetches this module's part of a type through.
+            .AddGlobalObjectIdentification(options => options.MarkNodeFieldAsLookup = true)
+            .AddDDDToolkitTypes()
+            .AddDDDToolkitErrors()
+            .AddOrderingGraphQL()
+            .AddOrderingProductStub();
+    }
+}

@@ -11,21 +11,80 @@
     where the files go; by default the supabase/config.toml nearest above the project decides, the way the
     Supabase CLI finds its project.
 
+    Two more properties say what the policies are written with, for a project whose roles or caller
+    functions are not Supabase's own. Each is key=value pairs separated by '|', every pair optional, so no
+    value can hold a '|'; each caller function is one called without arguments:
+
+      <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in</SupabaseRowAccessRoles>
+      <SupabaseCallerFunctions>uid=auth.uid()|role=auth.role()|claims=auth.jwt()</SupabaseCallerFunctions>
+
+    The export runs before the application's Main, so its configuration cannot reach it; these properties
+    are how it does. They must name the roles the application's row level security options configure, or
+    the policies are for roles no query runs as.
+
+    A token role the application maps to a database role of its own, TokenRoles in those options, is one
+    more pair of the first property, token:<role>=<database role>, the token role spelled as the token
+    spells it:
+
+      <SupabaseRowAccessRoles>token:analyst=desk_analyst</SupabaseRowAccessRoles>
+
+    A rule for RowAccessRoles.Token("analyst") is then written for desk_analyst; without the pair the export
+    refuses the rule.
+
+    The role the application's own bookkeeping runs as, SystemRole in those options, where the role it logs
+    in as holds nothing, is one more pair as well, system=<database role>:
+
+      <SupabaseRowAccessRoles>system=ddd_system</SupabaseRowAccessRoles>
+
+    Two switches say what the access files write besides the policies. Both are off unless set, and then
+    every access file is what it was:
+
+      <SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>
+      <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
+
+    The first writes each table's privileges from its policies, and those of the outbox, the inbox and an
+    event log; None, the default, leaves them to hand-written migrations. The second writes FORCE ROW LEVEL
+    SECURITY after every ENABLE, so a table's owner is held to its policies too.
+
     It shipped here, in buildTransitive, so the host gets it through the module that references this
     package; the host does not have to reference the package itself.
+
+    The same goes for every other project that references this package, or a project that does: each
+    imports this file. So the step runs only in a project that can be the host: an application, whose
+    program the step can start, and not a test project, which is an application too. In any other
+    project the property is left alone, so it may be given for a whole build, on the command line, in a
+    Directory.Build.props or by CI: it reaches the host, and the modules and the tests ignore it. Every
+    other application the build reaches runs the step as well, so a solution with more than one keeps
+    the property in the host's project file.
   -->
   <ItemGroup>
-    <!-- The generator only writes the list of sources and the module initializer where this is set. -->
+    <!--
+      The generator writes the list of sources and the module initializer only where this is Write or Check,
+      in an application that is not a test project: the projects this step runs in, and no others. The two
+      properties that tell a test project are declared here, beside the step, so the two always decide alike.
+    -->
     <CompilerVisibleProperty Include="SupabaseMigrationsExport" />
+    <CompilerVisibleProperty Include="IsTestProject" />
+    <CompilerVisibleProperty Include="IsTestingPlatformApplication" />
   </ItemGroup>
 
   <Target Name="DDDToolkitSupabaseMigrations"
           AfterTargets="Build"
-          Condition="('$(SupabaseMigrationsExport)' == 'Write' Or '$(SupabaseMigrationsExport)' == 'Check') And '$(DesignTimeBuild)' != 'true' And '$(BuildingForLiveUnitTesting)' != 'true'">
+          Condition="('$(SupabaseMigrationsExport)' == 'Write' Or '$(SupabaseMigrationsExport)' == 'Check') And ('$(OutputType)' == 'Exe' Or '$(OutputType)' == 'WinExe') And '$(IsTestProject)' != 'true' And '$(IsTestingPlatformApplication)' != 'true' And '$(DesignTimeBuild)' != 'true' And '$(BuildingForLiveUnitTesting)' != 'true'">
     <PropertyGroup>
       <_DDDToolkitDotnet>$(DOTNET_HOST_PATH)</_DDDToolkitDotnet>
       <_DDDToolkitDotnet Condition="'$(_DDDToolkitDotnet)' == ''">dotnet</_DDDToolkitDotnet>
     </PropertyGroup>
+
+    <!--
+      The variables below are passed as one list that MSBuild splits at every ';', so a ';' in either
+      property would cut it short, and the rest would become variables of their own. Refused, naming the
+      separator that works.
+    -->
+    <Error Condition="$(SupabaseRowAccessRoles.Contains(';'))"
+           Text="SupabaseRowAccessRoles is '$(SupabaseRowAccessRoles)', with a ';'. Separate its pairs with '|' instead, as in user=authenticated|anonymous=anon|system-in=ddd_system_in: MSBuild splits the export's variables at every ';'." />
+    <Error Condition="$(SupabaseCallerFunctions.Contains(';'))"
+           Text="SupabaseCallerFunctions is '$(SupabaseCallerFunctions)', with a ';'. Separate its pairs with '|' instead, as in uid=auth.uid()|role=auth.role()|claims=auth.jwt(): MSBuild splits the export's variables at every ';'." />
 
     <!--
       Runs the application that was just built. The generated module initializer sees the variable before
@@ -34,6 +93,6 @@
     -->
     <Exec Command="&quot;$(_DDDToolkitDotnet)&quot; &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory)" />
+          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory);DDDTOOLKIT_SUPABASE_ROLES=$(SupabaseRowAccessRoles);DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS=$(SupabaseCallerFunctions);DDDTOOLKIT_SUPABASE_GRANTS=$(SupabaseRowAccessGrants);DDDTOOLKIT_SUPABASE_FORCE=$(SupabaseForceRowLevelSecurity)" />
   </Target>
 </Project>

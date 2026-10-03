@@ -1,0 +1,383 @@
+@page "/projects/{Id}"
+@inherits SessionPage
+
+<PageTitle>@(_project?.Value?.Name ?? T["project.title"]) · Tenancy sample</PageTitle>
+
+<p><a href="projects">@T["project.back"]</a></p>
+
+<CascadingValue Value="_names">
+<CascadingValue Value="_latest" IsFixed="true">
+@if (_project is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else if (_project.Value is not { } project)
+{
+    <h1>@T["project.title"]</h1>
+    @* Not found is all the API says of a project that is there and may not be seen, so the page says what that
+       can mean. Any other refusal, such as a suspended seat's, says itself why, and is shown alone. *@
+    @if (_project.NotFound)
+    {
+        <p>@T["project.not-shown"]</p>
+    }
+    <ApiOutcomeView Answer="_project" />
+}
+else
+{
+    var can = project.Can ?? new ProjectAbilitiesInfo(false, false, false, false, false, false, false);
+
+    <h1>@project.Name <small class="text-body-secondary"><code>@project.Number</code></small></h1>
+    <p>
+        <span class="badge @(project.IsClosed ? "text-bg-secondary" : "text-bg-success")">@project.State</span>
+        @T.Html("project.at", _names.OfUnit(project.UnitId))
+        @T.Html("project.seen-via", Via(project.Via))@(_names.OfProjectRoles(project.MyRoles) is { } mine
+            ? T["project.seen-as", mine]
+            : project.IsSeenViaCrew ? T["project.seen-no-role"] : null).
+        @if (project.PlannedFrom is { } plannedFrom && project.PlannedUntil is { } plannedUntil)
+        {
+            @T.Html("project.planned", Days(plannedFrom, plannedUntil))
+        }
+        else
+        {
+            @T["project.not-planned"]
+        }
+        @(" ")@T["project.changed-by"] <strong><ActorName Actor="project.ChangedBy" Names="_names" /></strong>.
+    </p>
+
+    <div class="can small">
+        <span class="text-body-secondary">@T["project.can"]</span>
+        <AllowedMark Label="@T["project.can.rename"]" Allowed="can.Rename" />
+        <AllowedMark Label="@T["project.can.plan"]" Allowed="can.Plan" />
+        <AllowedMark Label="@T["project.can.move"]" Allowed="can.Move" />
+        @if (project.IsClosed)
+        {
+            <AllowedMark Label="@T["project.can.reopen"]" Allowed="can.Reopen" />
+        }
+        else
+        {
+            <AllowedMark Label="@T["project.can.close"]" Allowed="can.Close" />
+        }
+        <AllowedMark Label="@T["project.can.crew"]" Allowed="can.ManageCrew" />
+        <AllowedMark Label="@T["project.can.owner"]" Allowed="can.ChangeOwner" />
+        <AllowedMark Label="@T["project.can.inspect"]" Allowed="_inspections?.Value?.CanRecord == true" />
+    </div>
+
+    <h2 class="h5 mt-4">@T["projects.crew"]</h2>
+    <p class="small text-body-secondary">@T["project.crew.intro"] @(can.ManageCrew ? null : T["project.crew.roles-not-shown"])</p>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle crew">
+            <thead><tr><th>@T["common.name"]</th><th>@T["project.crew.as"]</th><th>@T["common.from"]</th><th>@T["common.until"]</th><th>@T["project.crew.counts"]</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var member in _names.CrewByName(project.Crew))
+                {
+                    <tr class="crew-member @(member.AppliesNow ? null : "not-applying")">
+                        <td>@_names.OfSeat(member.SeatId) @if (member.IsOwner) { <span class="badge text-bg-dark ms-1">@T["projects.owner"]</span> }</td>
+                        <td class="text-body-secondary">@(!member.RolesAreShown || member.RolesHeld.Count > 0 ? T["project.crew.member"] : T["project.crew.no-role"])</td>
+                        <td class="small">@Day(member.StartsAt)</td>
+                        <td class="small">@(member.EndsAt is { } ends ? UntilDay.Shown(ends) : T["common.open-ended"])</td>
+                        <td>@(member.AppliesNow ? T["common.yes"] : T["common.no"])</td>
+                        <td>
+                            <ActionButton Label="@T["project.crew.remove"]" Allowed="can.ManageCrew && !member.IsOwner" ShowsAnswer="false" Send="() => Wrap(Api.RemoveFromCrewAsync(Id, member.SeatId.ToString()))" Answered="CrewAnsweredAsync" />
+                        </td>
+                    </tr>
+                    @foreach (var held in _names.RolesByName(member))
+                    {
+                        <tr class="crew-role @(held.AppliesNow ? null : "not-applying")">
+                            <td></td>
+                            <td>@_names.OfProjectRole(held.RoleId)</td>
+                            <td class="small">@Day(held.StartsAt)</td>
+                            <td class="small">@(held.EndsAt is { } roleEnds ? UntilDay.Shown(roleEnds) : T["common.open-ended"])</td>
+                            <td>@(held.AppliesNow ? T["common.yes"] : T["common.no"])</td>
+                            <td>
+                                <ActionButton Label="@T["project.crew.take"]" Allowed="can.ManageCrew" ShowsAnswer="false" Send="() => Wrap(Api.TakeCrewRoleAsync(Id, member.SeatId.ToString(), held.RoleId.ToString()))" Answered="CrewAnsweredAsync" />
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_crewAnswer is not null && _latest.IsOf(this))
+    {
+        <ApiOutcomeView Answer="_crewAnswer" />
+    }
+
+    <h2 class="h5 mt-4">@T["project.actions"]</h2>
+    <div class="actions">
+        <div class="action">
+            <label class="form-label small">@T["project.rename.label"]</label>
+            <input class="form-control form-control-sm" @bind="_newName" />
+            <ActionButton Label="@T["project.rename"]" Allowed="can.Rename" Send="() => Wrap(Api.RenameAsync(Id, _newName))" Answered="ReloadOnSuccessAsync" />
+        </div>
+
+        <div class="action">
+            <label class="form-label small">@T["project.plan.label"]</label>
+            <input class="form-control form-control-sm" type="date" title="@T["project.plan.first"]" @bind="_plannedFrom" />
+            <input class="form-control form-control-sm" type="date" title="@T["project.plan.last"]" @bind="_plannedUntil" />
+            <ActionButton Label="@T["project.plan"]" Allowed="can.Plan" Send="() => Wrap(Api.PlanAsync(Id, _plannedFrom, _plannedUntil))" Answered="ReloadOnSuccessAsync" />
+            <div class="form-text">@T["project.plan.help"]</div>
+        </div>
+
+        <div class="action">
+            <label class="form-label small">@T["project.add.label"]</label>
+            <select class="form-select form-select-sm" @bind="_newMember">
+                <option value="">@T["project.pick-seat"]</option>
+                @foreach (var seat in _seats.Where(candidate => project.Crew.All(member => member.SeatId != candidate.Id)))
+                {
+                    <option value="@seat.Id">@seat.Label</option>
+                }
+            </select>
+            <select class="form-select form-select-sm" @bind="_newMemberRole">
+                <option value="">@T["project.add.no-role"]</option>
+                @foreach (var crewRole in _projectRoles.Where(candidate => candidate.IsActive))
+                {
+                    <option value="@crewRole.Id">@crewRole.Name</option>
+                }
+            </select>
+            <input class="form-control form-control-sm" type="date" title="@T["project.until"]" @bind="_newMemberUntil" />
+            <ActionButton Label="@T["project.add"]" Allowed="can.ManageCrew" Send="() => Wrap(Api.AddToCrewAsync(Id, _newMember, _newMemberRole, Instant(_newMemberUntil)))" Answered="ReloadOnSuccessAsync" />
+            <div class="form-text">@T["project.add.help"]</div>
+        </div>
+
+        <div class="action">
+            <label class="form-label small">@T["project.give.label"]</label>
+            <select class="form-select form-select-sm" @bind="_crewSeat">
+                <option value="">@T["project.pick-member"]</option>
+                @foreach (var member in _names.CrewByName(project.Crew))
+                {
+                    <option value="@member.SeatId">@_names.OfSeat(member.SeatId)</option>
+                }
+            </select>
+            <select class="form-select form-select-sm" @bind="_crewRole">
+                <option value="">@T["project.pick-role"]</option>
+                @foreach (var crewRole in _projectRoles.Where(candidate => candidate.IsActive))
+                {
+                    <option value="@crewRole.Id">@crewRole.Name</option>
+                }
+            </select>
+            <input class="form-control form-control-sm" type="date" title="@T["project.until"]" @bind="_crewRoleUntil" />
+            <ActionButton Label="@T["project.give"]" Allowed="can.ManageCrew" Send="() => Wrap(Api.GiveCrewRoleAsync(Id, _crewSeat, _crewRole, Instant(_crewRoleUntil)))" Answered="ReloadOnSuccessAsync" />
+            <div class="form-text">@T["project.give.help"]</div>
+        </div>
+
+        <div class="action">
+            <label class="form-label small">@T["project.move.label"]</label>
+            <select class="form-select form-select-sm" @bind="_moveTo">
+                <option value="">@T["project.pick-unit"]</option>
+                @foreach (var unit in _units)
+                {
+                    <option value="@unit.Id">@unit.Path@(unit.IsActive ? null : " (" + unit.Status + ")")</option>
+                }
+            </select>
+            <ActionButton Label="@T["project.move"]" Allowed="can.Move" Send="() => Wrap(Api.MoveToUnitAsync(Id, _moveTo))" Answered="ReloadOnSuccessAsync" />
+        </div>
+
+        <div class="action">
+            <label class="form-label small">@T["project.owner.label"]</label>
+            <select class="form-select form-select-sm" @bind="_newOwner">
+                <option value="">@T["project.pick-seat"]</option>
+                @foreach (var seat in _seats)
+                {
+                    <option value="@seat.Id">@seat.Label</option>
+                }
+            </select>
+            <ActionButton Label="@T["project.owner"]" Allowed="can.ChangeOwner" Send="() => Wrap(Api.ChangeOwnerAsync(Id, _newOwner))" Answered="ReloadOnSuccessAsync" />
+        </div>
+
+        @* One button for closing and reopening, so its answer stays under it when the project's state turns. *@
+        <div class="action">
+            <label class="form-label small">@(project.IsClosed ? T["project.reopen.label"] : T["project.close.label"])</label>
+            <ActionButton Label="@(project.IsClosed ? T["project.reopen"] : T["project.close"])"
+                          Allowed="project.IsClosed ? can.Reopen : can.Close"
+                          Send="() => Wrap(project.IsClosed ? Api.ReopenAsync(Id) : Api.CloseAsync(Id))"
+                          Answered="ReloadOnSuccessAsync" />
+            @if (project.IsClosed)
+            {
+                <div class="form-text">@T["project.reopen.help"]</div>
+            }
+        </div>
+    </div>
+
+    <h2 class="h5 mt-4">@T["project.inspections"]</h2>
+    @if (_inspections is { Value: { } inspections })
+    {
+        @if (inspections.Items.Count == 0)
+        {
+            <p class="text-body-secondary">@T["project.inspections.none"]</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead><tr><th>@T["project.inspections.title"]</th><th>@T["project.inspections.days"]</th><th>@T["project.inspections.by"]</th><th>@T["project.inspections.at"]</th></tr></thead>
+                    <tbody>
+                        @foreach (var inspection in inspections.Items)
+                        {
+                            <tr>
+                                <td>@inspection.Title</td>
+                                <td class="small">@Days(inspection.From, inspection.Until)</td>
+                                <td>@_names.OfSeat(inspection.RecordedBy)</td>
+                                <td class="small">@Day(inspection.RecordedAt)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (inspections.Next is { } olderInspections)
+        {
+            <button type="button" class="btn btn-sm btn-outline-primary mb-2" @onclick="() => MoreInspectionsAsync(olderInspections)">@T["common.more"]</button>
+        }
+
+        <div class="action">
+            <label class="form-label small">@T["project.inspect.label"]</label>
+            <input class="form-control form-control-sm" placeholder="@T["project.inspect.what"]" @bind="_inspectionTitle" />
+            <input class="form-control form-control-sm" type="date" title="@T["project.inspect.first"]" @bind="_inspectionFrom" />
+            <input class="form-control form-control-sm" type="date" title="@T["project.inspect.last"]" @bind="_inspectionUntil" />
+            <ActionButton Label="@T["project.inspect"]" Allowed="inspections.CanRecord" Send="() => Wrap(Api.RecordInspectionAsync(Id, _inspectionTitle, _inspectionFrom, _inspectionUntil))" Answered="ReloadOnSuccessAsync" />
+            <div class="form-text">@T["project.inspect.help"]</div>
+        </div>
+    }
+    else if (_inspections is not null)
+    {
+        <ApiOutcomeView Answer="_inspections" />
+    }
+}
+</CascadingValue>
+</CascadingValue>
+
+@code {
+    private ApiOutcome<ProjectInfo>? _project;
+    private ApiOutcome<InspectionsInfo>? _inspections;
+    private ApiOutcome? _crewAnswer;
+
+    // The page shows the answer of its last action only: an older one is about the project as it was.
+    private readonly LatestAnswer _latest = new();
+    private IReadOnlyList<SeatInfo> _seats = [];
+    private IReadOnlyList<ProjectRoleInfo> _projectRoles = [];
+    private IReadOnlyList<UnitInfo> _units = [];
+    private DirectoryNames _names = default!;
+    private string? _loadedId;
+    private string? _newName;
+    private string? _newMember;
+    private string? _newMemberRole;
+    private DateOnly? _newMemberUntil;
+    private string? _crewSeat;
+    private string? _crewRole;
+    private DateOnly? _crewRoleUntil;
+    private string? _moveTo;
+    private string? _newOwner;
+    private string? _inspectionTitle;
+    private DateOnly? _inspectionFrom;
+    private DateOnly? _inspectionUntil;
+    private DateOnly? _plannedFrom;
+    private DateOnly? _plannedUntil;
+
+    /// <summary>The project's id, as it is in the address: any text, so a wrong one shows the API's refusal.</summary>
+    [Parameter]
+    public string Id { get; set; } = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Another project in the same component: load it. The first load is the base page's.
+        if (_loadedId is not null && _loadedId != Id)
+        {
+            // No answer on the page is about this project: the page's own, which is none, is the latest.
+            (_newName, _crewAnswer) = (null, null);
+            _latest.IsFrom(this);
+            await ReloadAsync();
+        }
+    }
+
+    protected override async Task LoadAsync()
+    {
+        _loadedId = Id;
+
+        // The pickers first and the project last, so that when it is refused, its refusal is the last response.
+        var seats = (await Api.TenantSeatsAsync()).Value ?? [];
+        var projectRoles = (await Api.ProjectRolesAsync()).Value ?? [];
+        var units = (await Api.TenantUnitsAsync()).Value ?? [];
+        var inspections = await Api.InspectionsAsync(Id);
+        var project = await Api.ProjectDetailAsync(Id);
+
+        // The project and its inspections name seats, project roles and a unit by id. What the pickers listed is
+        // known already; the directory is asked for the rest, such as the project's unit when you are not placed
+        // under it. Its answers are not the last response: that stays the project's.
+        var names = new DirectoryNames(Api);
+        names.Include(seats);
+        names.Include(projectRoles);
+        names.Include(units);
+        if (project.Value is { } shown)
+        {
+            await names.EnsureAsync(
+                seats: shown.Crew.Select(member => member.SeatId)
+                    .Concat(inspections.Value?.Items.Select(inspection => inspection.RecordedBy) ?? [])
+                    .Concat(shown.ChangedBy?.SeatId is { } changedBy ? [changedBy] : []),
+                units: [shown.UnitId],
+                projectRoles: shown.RoleIds);
+        }
+
+        // Shown together, so a reload never shows ids for a moment.
+        (_seats, _projectRoles, _units, _inspections, _project, _names) = (seats, projectRoles, units, inspections, project, names);
+        _newName ??= _project.Value?.Name;
+
+        // The plan's pickers show the plan as it is, after every load.
+        (_plannedFrom, _plannedUntil) = (_project.Value?.PlannedFrom, _project.Value?.PlannedUntil);
+    }
+
+    // A day picked as an end is sent as the first moment after it, so the day itself still counts. Blank is no end.
+    private static DateTimeOffset? Instant(DateOnly? day) => UntilDay.Instant(day);
+
+    // The next page of inspections, older ones, goes under the ones shown.
+    private async Task MoreInspectionsAsync(string after)
+    {
+        var more = await Api.InspectionsAsync(Id, after);
+        if (more.Value is { } page && _inspections?.Value is { } shown)
+        {
+            await _names.EnsureAsync(seats: page.Items.Select(inspection => inspection.RecordedBy));
+            _inspections = more with { Value = page with { Items = [.. shown.Items, .. page.Items] } };
+        }
+        else
+        {
+            _inspections = more;
+        }
+    }
+
+    private async Task CrewAnsweredAsync(ApiOutcome outcome)
+    {
+        // A button in the crew's table leaves its answer to the page, so the page is where the latest answer is.
+        _crewAnswer = outcome;
+        _latest.IsFrom(this);
+        await ReloadOnSuccessAsync(outcome);
+    }
+
+    private async Task ReloadOnSuccessAsync(ApiOutcome outcome)
+    {
+        if (outcome.Succeeded)
+        {
+            // What was picked has been done: the crew's pickers start empty again, since who is on the crew changed.
+            (_inspectionTitle, _inspectionFrom, _inspectionUntil) = (null, null, null);
+            (_newMember, _newMemberRole, _newMemberUntil) = (null, null, null);
+            (_crewRole, _crewRoleUntil) = (null, null);
+            await ReloadAsync();
+        }
+    }
+
+    private static async Task<ApiOutcome> Wrap<T>(Task<ApiOutcome<T>> call) => await call;
+
+    // A range of calendar days, each as the API writes it: one day, or the first and the last.
+    private string Days(DateOnly from, DateOnly until)
+        => from == until ? IsoDay(from) : T["common.days", IsoDay(from), IsoDay(until)];
+
+    private static string IsoDay(DateOnly day) => day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
+    // How the project is seen is one of two words of the API's; the page says them in its own language.
+    private string Via(string? via) => via switch
+    {
+        "crew" => T["via.crew"],
+        "organization" => T["via.organization"],
+        _ => via ?? "–",
+    };
+
+    private static string Day(DateTimeOffset moment) => moment.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+}

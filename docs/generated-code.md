@@ -174,7 +174,7 @@ No `OrderId.cs` exists anywhere. It is a `readonly record struct` around the `Gu
 
 ```csharp title="OrderId.g.cs, shortened"
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>
+public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>
 {
     public const string IdPrefix = "ORD";
 
@@ -189,13 +189,16 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
     public static OrderId Parse(string input) { /* the prefix is optional */ }
     public static bool TryParse(string? input, out OrderId result) { /* ... */ }
 
+    static OrderId DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>.FromValue(System.Guid value) => new(value);
+
     public sealed class SystemTextJsonConverter : System.Text.Json.Serialization.JsonConverter<OrderId> { /* ... */ }
 }
 ```
 
 `CreateSequential()` makes a version 7 `Guid`, which is ordered by time and friendlier to a database
-index than a random one. [Identifiers](identifiers.md) covers the other value types, the record form
-and the prefix.
+index than a random one. `ISingleValue` names the value and the way back from it, for a project that stores
+the id without declaring it. [Identifiers](identifiers.md) covers the other value types, the record form,
+the prefix and `ISingleValue`.
 
 ## `[ValueObject]`
 
@@ -259,6 +262,63 @@ public static class ShopEventNames
 name in kebab case; [Stable names](domain-events.md#stable-names) has the rule, and the checks the same
 pass runs on it.
 
+## The access behavior
+
+One thing the core generator writes only where another library is used. In a project that references
+[Mediator](https://github.com/martinothamar/Mediator), an interface marked `[AccessRequests]` gets the
+pipeline behavior that holds its requests to [what they require of their caller](access-requirements.md),
+and the call that registers it:
+
+```csharp
+[AccessRequests]
+public interface IShopRequest : IRequireAccess;
+```
+
+```csharp title="ShopAccessBehavior.g.cs, shortened"
+public sealed class ShopAccessBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
+    where TMessage : notnull, IShopRequest, IMessage
+{
+    private readonly AccessChecks<IShopRequest> _checks;
+
+    public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+    {
+        await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
+        return await next(message, cancellationToken).ConfigureAwait(false);
+    }
+}
+
+public static class ShopAccessBehaviorRegistration
+{
+    public static IServiceCollection AddShopAccessBehavior(this IServiceCollection services)
+    {
+        services.AddAccessChecks<IShopRequest>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IPipelineBehavior<,>), typeof(ShopAccessBehavior<,>)));
+        return services;
+    }
+}
+```
+
+A message that is answered with a stream passes a pipeline of its own in Mediator, so the same file holds a
+second class for it, which `AddShopAccessBehavior()` registers too:
+
+```csharp title="ShopAccessBehavior.g.cs, shortened"
+public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipelineBehavior<TMessage, TResponse>
+    where TMessage : IShopRequest, IStreamMessage
+{
+    public async IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
+        await foreach (var item in next(message, cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
+    }
+}
+```
+
+The toolkit references no dispatcher: the library is noticed by its type, and how its behaviors are implemented
+is read from the version the project references. A project that does not reference it gets none of the classes.
+
 ## `DDDToolkit.EntityFramework`
 
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value
@@ -303,6 +363,15 @@ outbox.RegisterEvent<Shop.OrderPlaced>("shop.order-placed", 1);
 The name is what the outbox stores, so renaming the class does not orphan rows already written. See
 [Entity Framework](entity-framework.md) and [Integration events](integration-events.md).
 
+A project without the Entity Framework package, such as a module's domain project, gets none of this. The
+core generator still makes every id and single value object implement `ISingleValue<TSelf, TValue>`, and the
+module's project that references Entity Framework writes the rest for it: its `Add{Module}Converters()`
+registers those ids with `SingleValueConverter<T, TValue>`, and its `Add{Module}IntegrationEvents()` names
+the domain project's events, which must be `public`. A registration a package closes over the module's
+classes, such as `modelBuilder.AddTenancy()`, is written into that project as well, and into no project of
+the module above it: an API project that references it calls its own public registration. See
+[A module in layers](modules.md#a-module-in-layers).
+
 ## `DDDToolkit.HotChocolate`
 
 With the HotChocolate package referenced, each id gets a type converter and a Relay node id
@@ -315,12 +384,17 @@ public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddSh
     builder.AddTypeConverter<Shop.OrderId.ChangeTypeProvider>();
     builder.AddNodeIdValueSerializer<Shop.OrderId.NodeIdValueSerializer>();
     // the same for OrderLineId
+
+    // The struct ids, as keys HotChocolate's paging can order a list by: OrderBy(x => x.Id) in front of ToPageAsync.
+    DDDToolkit.HotChocolate.Paging.SingleValueCursorKeySerializer<Shop.OrderId, System.Guid>.Register();
+    // and for OrderLineId
+
     return builder;
 }
 ```
 
-An `OrderId` is a `UUID` in the schema and can be the key inside a Relay node id. See
-[GraphQL](graphql.md).
+An `OrderId` is a `UUID` in the schema, can be the key inside a Relay node id, and can be the key a paged
+list is ordered by. See [GraphQL](graphql.md).
 
 ## See it in your own project
 

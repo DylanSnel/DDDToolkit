@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Every project of the sample's modules declares [assembly: Module], so the boundary analyzer is live and these prove something. -->
+    <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    The application's tenancy classes: the five classes the Tenancy package's templates are closed over, with the
+    fields and rules the application adds. The package brings the rules; this project brings nothing that stores
+    them. It references neither Entity Framework nor ASP.NET Core: the context and its migrations are the
+    infrastructure project's, which gets modelBuilder.AddTenancy() closed over these classes because it declares
+    the same module.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the packages above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

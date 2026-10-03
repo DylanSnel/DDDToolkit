@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Examples.Tenancy.Exporter</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    The program that writes Examples/Tenancy/supabase/migrations, and nothing else. It is not the host: the host
+    serves requests as a role that owns nothing, and has no reason to carry the design-time factories, the
+    exporting generator or a build step that writes files. So the export lives here, in a program without routes,
+    which references what it writes from: each module's infrastructure project, which holds its migrations, the
+    design-time factory they are found through and its row access rules, and the application's catalogue with
+    Tenancy's contribution. Nothing references this project.
+
+    Every build writes the file of any migration that has none, and the access files when the rules, the
+    catalogue or the model changed; in CI the build only compares, and fails when a file is missing or stale.
+  -->
+  <PropertyGroup>
+    <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+
+    <!--
+      The database roles the policies are written for, which are the roles the host's row level security options
+      name: a signed-in user, an anonymous caller, system work in a tenant, the toolkit's own bookkeeping, and
+      the token role of the application's operators. The export runs before any configuration is read, so they
+      are said here; a host configured otherwise stops at start-up, where the database is compared with it.
+    -->
+    <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system|token:tenancy_operator=tenancy_operator</SupabaseRowAccessRoles>
+
+    <!-- The privileges of every table are written from its policies: nothing is granted by hand, so nothing drifts. -->
+    <SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>
+
+    <!-- The tables' owner is held to the policies too: the only way past them is a role that may bypass them. -->
+    <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Each module's infrastructure project: its migrations, with the [SupabaseMigrations] factory the export builds
+      its context with, and its row access rules, each of which becomes a policy, a function or a trigger.
+    -->
+    <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Infrastructure\Examples.Tenancy.Tenants.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Infrastructure\Examples.Tenancy.Inspections.Infrastructure.csproj" />
+    <!-- The catalogue Tenancy's policies are written from, and the contribution that writes them. -->
+    <ProjectReference Include="..\Examples.Tenancy.Catalogue\Examples.Tenancy.Catalogue.csproj" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+  </ItemGroup>
+
+  <!--
+    What the DDDToolkit.EntityFramework.Supabase package brings a consumer by itself, the generator and the build
+    step, spelled out because this repository references the package as a project.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Import Project="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\buildTransitive\DDDToolkit.EntityFramework.Supabase.targets" />
+
+</Project>

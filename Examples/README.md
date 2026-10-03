@@ -24,38 +24,42 @@ way to run it. Each sample is a different way, over the very same modules:
 | `Microservices.Wolverine/` | three services and a gateway | a database per service: SQL Server and Postgres | RabbitMQ, through Wolverine |
 | `Microservices.MassTransit/` | three services and a gateway | a SQL Server database per service | RabbitMQ, through MassTransit 8 |
 
+`Tenancy/` is not one of them: it is a second, smaller application with modules of its own, on the Tenancy
+supporting domain. See [The Tenancy sample](#the-tenancy-sample).
+
 ```
 Modules/
   SharedKernel/        Money: the one type every module means the same thing by. Not a module.
   Catalog/
-    DDDToolkit.Examples.Catalog.Contracts    what Catalog publishes
-    DDDToolkit.Examples.Catalog              the module, with its Postgres migrations
-    DDDToolkit.Examples.Catalog.Migrations.SqlServer   its SQL Server migrations, for hosts on SQL Server
+    Examples.Webshop.Catalog.Contracts    what Catalog publishes
+    Examples.Webshop.Catalog              the module, with its Postgres migrations
+    Examples.Webshop.Catalog.Migrations.SqlServer   its SQL Server migrations, for hosts on SQL Server
   Ordering/ Inventory/ Payments/ Shipping/   the same shape
 Shared/
-  DDDToolkit.Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
-  DDDToolkit.Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
+  Examples.Hosting                ModuleDatabase and ModuleHost: the host's two decisions
+  Examples.ServiceDefaults        Aspire's service defaults: telemetry, health, discovery
 ModularMonolith.Supabase/
-  DDDToolkit.Examples.Host                   all five modules in one process; its build exports
-  DDDToolkit.Examples.Supabase.AppHost       Aspire: Postgres seeded from supabase/migrations, or a live project
+  Examples.Webshop.Host                      all five modules in one process; its build exports
+  Examples.Webshop.Supabase.AppHost          Aspire: Postgres seeded from supabase/migrations, or a live project
   supabase/
     config.toml                              a local Supabase project, from supabase init
     migrations/                              every module's migrations, written by the host's build
 ModularMonolith.SqlServer/
-  DDDToolkit.Examples.SqlServer.Host         the same five modules on SQL Server, migrating on start-up
-  DDDToolkit.Examples.SqlServer.AppHost      Aspire: SQL Server in Docker
+  Examples.Webshop.SqlServer.Host            the same five modules on SQL Server, migrating on start-up
+  Examples.Webshop.SqlServer.AppHost         Aspire: SQL Server in Docker
+Tenancy/                                     the second application, on Tenancy: its own modules, API, UI and AppHost
 ```
 
 A host makes exactly two decisions for a module, and hands them over as a `ModuleHost`: where its
-tables live (`ModuleDatabase.Sqlite`, `.Supabase`, `.Postgres`, `.SqlServer`), and where what it
-publishes goes (`ModuleHost.InProcess` sends it to the other modules in the process). Everything else,
-its context, its outbox, what it publishes as what, the policies it follows, the module registers
+tables live (`ModuleDatabase.Sqlite`, `.Supabase`, `.Postgres`, `.SqlServer`), and where
+what it publishes goes (`ModuleHost.InProcess` sends it to the other modules in the process). Everything
+else, its context, its outbox, what it publishes as what, the policies it follows, the module registers
 itself in its `Add{Module}Module`.
 
 Inside a module the folders say what kind of thing a file is:
 
 ```
-DDDToolkit.Examples.Ordering/
+Examples.Webshop.Ordering/
   Domain/
     Aggregates/Orders/       Order.cs and everything that belongs to it:
       Entities/                child entities (OrderLine)
@@ -80,8 +84,8 @@ DDDToolkit.Examples.Ordering/
 ```
 
 Namespaces follow the folders and stop at the aggregate: everything under `Aggregates/Orders/` is
-`DDDToolkit.Examples.Ordering.Domain.Orders`, and everything under `Application/Orders/` is
-`DDDToolkit.Examples.Ordering.Application.Orders`. The building-block folders (`Aggregates/`,
+`Examples.Webshop.Ordering.Domain.Orders`, and everything under `Application/Orders/` is
+`Examples.Webshop.Ordering.Application.Orders`. The building-block folders (`Aggregates/`,
 `ReadModels/`) and the kind-and-direction folders below a slice are for the reader, not the namespace. A named invariant is a nested part of its entity, so it has
 to share the entity's namespace wherever its file lives. Each module's `GlobalUsings.cs` imports its
 own namespaces, so the `using` lines above the code name what comes from outside the module.
@@ -127,7 +131,9 @@ SKU (`ProductStub.cs`), Payments and Shipping say what they add to the `Order` w
 (`OrderStub.cs`), Inventory adds a product's stock (`ProductStock.cs`), and Catalog marks
 `productBySku` as the lookup a `Product` is fetched by. So `lines { product { name stock { available } } }`
 is answered by three modules, the name by Catalog and the stock by Inventory, merged on the SKU. No module
-knows another's classes; they agree on a type's name and its key.
+knows another's classes; they agree on a type's name and its key. The shop's types, data loaders and errors
+are still written by hand, so for how to declare a schema, read the
+[Tenancy sample](../docs/tenancy.md#graphql-in-the-sample), which is the reference for GraphQL.
 
 A Fusion gateway inside the monolith composes the five into the one schema at start-up and answers each
 query by calling the modules' schemas directly, in the process, with no HTTP between them. It is the same
@@ -165,7 +171,7 @@ outbox sends Ordering's contracts to `GraphQlSubscriptionSink` as well as to the
 ### Running it
 
 ```bash
-dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host
+dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Host
 ```
 
 In Visual Studio or Rider, start one of two kinds of project. A monolith's `Host` runs on its own, on
@@ -175,7 +181,7 @@ included, and opens the Aspire dashboard, from which every resource's endpoint a
 away. The microservices' services and gateways are not meant to be started on their own: they get their
 databases and brokers from their AppHost.
 
-Then work through `DDDToolkit.Examples.Host.http` from the top. It lists the products and the stock,
+Then work through `Examples.Webshop.Host.http` from the top. It lists the products and the stock,
 refuses a bad address, an unknown SKU, a blank SKU and a duplicate SKU, places an order that is
 confirmed and shipped, refuses to cancel it, and then places one the payment provider declines and
 one there are not enough mugs for, and shows how each module undid its part. Every refusal by a rule
@@ -197,16 +203,16 @@ Three ways to give it one:
 
 ```bash
 # Aspire: a Postgres container seeded from supabase/migrations, the host, and the dashboard.
-dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost
 
 # The same against a real Supabase project or one of its branches: set the connection string on the
 # AppHost once, and it starts no container.
-dotnet user-secrets set ConnectionStrings:Supabase "Host=...;Database=postgres;..." --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+dotnet user-secrets set ConnectionStrings:Supabase "Host=...;Database=postgres;..." --project Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost
 
 # The Supabase CLI's local stack, without Aspire.
 cd Examples/ModularMonolith.Supabase
 supabase start          # a local Supabase in Docker; applies supabase/migrations
-dotnet run --project DDDToolkit.Examples.Host --launch-profile supabase
+dotnet run --project Examples.Webshop.Host --launch-profile supabase
 ```
 
 The AppHost's container is Postgres 17 with pgmq 1.5.1, the versions a Supabase project has. It runs
@@ -218,8 +224,8 @@ After changing a model,
 scaffold the migration in the module that owns it, and build:
 
 ```bash
-dotnet ef migrations add AddGiftWrap --project ../Modules/Ordering/DDDToolkit.Examples.Ordering --startup-project DDDToolkit.Examples.Host --output-dir Infrastructure/Persistence/Migrations
-dotnet build DDDToolkit.Examples.Host   # writes 2026…_AddGiftWrap.ordering.ddd.sql
+dotnet ef migrations add AddGiftWrap --project ../Modules/Ordering/Examples.Webshop.Ordering --startup-project Examples.Webshop.Host --output-dir Infrastructure/Persistence/Migrations
+dotnet build Examples.Webshop.Host   # writes 2026…_AddGiftWrap.ordering.ddd.sql
 supabase migration up                   # or: supabase db reset, to start over
 ```
 
@@ -235,22 +241,24 @@ With `Supabase:Url` set as well, a request may carry the access token Supabase A
 user, and the host runs every module's queries for that request as that user, the way PostgREST runs the
 Data API's. Supabase's own policies then decide what each caller sees. Here an order is its customer's:
 an order knows who placed it, `Order.PlacedBy`, and two rules written in C# next to it,
-[`Domain/Aggregates/Orders/Access/OrderAccess.cs`](Modules/Ordering/DDDToolkit.Examples.Ordering/Domain/Aggregates/Orders/Access/OrderAccess.cs),
+[`Domain/Aggregates/Orders/Access/OrderAccess.cs`](Modules/Ordering/Examples.Webshop.Ordering/Domain/Aggregates/Orders/Access/OrderAccess.cs),
 say that a customer sees and changes their own orders and nobody places one for somebody else. The build
-writes them into `supabase/migrations` as `…_access.ordering.ddd.sql`, with a policy for the order lines
-that follows the order. A request without a token runs as `anon` and places a guest's order, which
-anybody with its id can follow, as every other scenario does. The outbox pollers run outside any request,
-as the role the host logged in as, so checkout goes on regardless. On SQLite and SQL Server nobody signs
-in, every order is a guest's, and nothing enforces the rules.
+writes them into `supabase/migrations` as `…_access.ordering.ddd.sql`, with policies for the order lines
+that follow the order: read with it, and written as its rules allow. A request without a token runs as
+`anon` and places a guest's order, which anybody with its id can follow, as every other scenario does.
+The outbox pollers run outside any request, as the role the host logged in as, so checkout goes on
+regardless. On SQLite and SQL Server nobody signs in, every order is a guest's, and nothing enforces the
+rules.
 
 The AppHost's container gets the roles and `auth` functions every Supabase project has from
-`DDDToolkit.Examples.Supabase.AppHost/database/`, and the host checks tokens with the CLI's local JWT
-secret, as the `supabase` launch profile does against `supabase start`. Against a project, set
-`Supabase:Url` on the AppHost next to the connection string, and the host checks tokens against the keys
-the project publishes:
+`Examples.Webshop.Supabase.AppHost/database/`, and the host is given the CLI's local JWT secret, as the
+`supabase` launch profile gives it against `supabase start`. With it the host takes two kinds of token: one
+signed with that secret, and one signed with a key Auth publishes, which is how the Auth server of
+`supabase start` signs a user's. Against a project, set `Supabase:Url` on the AppHost next to the
+connection string, and the host checks tokens against the keys the project publishes:
 
 ```bash
-dotnet user-secrets set Supabase:Url "https://<ref>.supabase.co" --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+dotnet user-secrets set Supabase:Url "https://<ref>.supabase.co" --project Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost
 ```
 
 ```http
@@ -271,10 +279,10 @@ the bottom of the host's `Program.cs` is the whole difference.
 
 ```bash
 # Aspire: the same container, the host with Messaging=pgmq
-dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost --launch-profile pgmq
+dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost --launch-profile pgmq
 
 # Against the Supabase CLI's local stack
-dotnet run --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host --launch-profile supabase-pgmq
+dotnet run --project Examples/ModularMonolith.Supabase/Examples.Webshop.Host --launch-profile supabase-pgmq
 ```
 
 One queue rather than one per module, because Supabase ships pgmq 1.5.1, and the topic routing
@@ -288,7 +296,7 @@ version supports.
 ### On SQL Server
 
 ```bash
-dotnet run --project Examples/ModularMonolith.SqlServer/DDDToolkit.Examples.SqlServer.AppHost
+dotnet run --project Examples/ModularMonolith.SqlServer/Examples.Webshop.SqlServer.AppHost
 ```
 
 The same five modules, the same endpoints and the same `.http` walk-through (on port 5090 when the
@@ -298,13 +306,13 @@ that differs in substance is `ModuleDatabase.SqlServer(...)` for `ModuleDatabase
 One thing follows from that line. On Supabase somebody else applies the migrations and the application
 only checks; on SQL Server nobody else will, so each module migrates its own schema on start-up, before
 its outbox poller starts. Each module's SQL Server migrations live in a project next to it,
-`DDDToolkit.Examples.{Module}.Migrations.SqlServer`, apart from its Postgres ones: Entity Framework keeps
+`Examples.Webshop.{Module}.Migrations.SqlServer`, apart from its Postgres ones: Entity Framework keeps
 one model snapshot per context per assembly, and the two providers disagree on every column type. A host
 on SQL Server references the migrations of the modules it runs, and `ModuleDatabase.SqlServer` finds them
 by name. Scaffold one with:
 
 ```bash
-dotnet ef migrations add AddGiftWrap --project Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Migrations.SqlServer --output-dir Migrations
+dotnet ef migrations add AddGiftWrap --project Examples/Modules/Ordering/Examples.Webshop.Ordering.Migrations.SqlServer --output-dir Migrations
 ```
 
 ### As services
@@ -318,7 +326,7 @@ shop at one address:
 | `payments` | Payments | orders placed or cancelled, stock reserved |
 | `fulfilment` | Inventory, Shipping | orders placed, cancelled or confirmed |
 
-Every sample has a project per service, `DDDToolkit.Examples.{Sample}.Storefront`, `.Payments` and
+Every sample has a project per service, `Examples.Webshop.{Sample}.Storefront`, `.Payments` and
 `.Fulfilment`, each with its own `Program.cs`, and each referencing only the modules it runs. Payments
 cannot call into Ordering: it does not reference it. What it knows of Ordering is `OrderPlacedV1`, from
 Ordering's contracts, the way a service in another repository would. Nothing shared knows the whole
@@ -328,7 +336,7 @@ A service is not a module, though: Storefront runs Catalog and Ordering in one p
 publishes still reaches Ordering through the module sink, next door, and only a message another service
 consumes leaves the process.
 
-Each sample has a gateway of its own, `DDDToolkit.Examples.{Sample}.Gateway`, and a client talks to
+Each sample has a gateway of its own, `Examples.Webshop.{Sample}.Gateway`, and a client talks to
 nothing else: REST through YARP, with the route table in the gateway's `appsettings.json`, and GraphQL
 through Fusion.
 
@@ -343,13 +351,14 @@ the monoliths' queries to the gateway.
 ```
 
 Storefront answers `status` and `lines { product }`: Catalog and Ordering run there, so the join from a
-line's SKU to the product is made in-process, as in the monolith. Payments and Fulfilment each declare
+line's SKU to the product is made in-process, as in the monolith: a field the service adds to Ordering's
+`OrderLine`, in a static partial class with `[ObjectType<OrderLine>]`, `GraphQL/OrderLineProduct.cs` in each
+storefront project. Payments and Fulfilment each declare
 an `Order` of their own that holds nothing but the order's id, and add the one field they know about,
 `payment` or `shipment`. The gateway merges the three `Order` types on the id, asks Storefront for the
 order, then asks Payments and Fulfilment for their fields with the id it got back. Those stubs are in
 the modules, as `OrderStub.cs` in Payments' and Shipping's `Api/GraphQL`: they are the module's part of
-the order's API, and a module that runs in a monolith leaves them out, because there Ordering's `Order`
-is in the same schema.
+the order's API, in every schema the module is part of.
 
 Two things make that work that are not obvious:
 
@@ -391,7 +400,7 @@ there.
 `OrderConfirmedV1` came through `pgmq.q_fulfilment` rather than from the module next door.
 
 ```bash
-dotnet run --project Examples/Microservices.Pgmq/DDDToolkit.Examples.Pgmq.AppHost
+dotnet run --project Examples/Microservices.Pgmq/Examples.Webshop.Pgmq.AppHost
 ```
 
 **`Microservices.Wolverine/`** gives every service a database of its own, and not of one kind: Storefront
@@ -419,7 +428,7 @@ builder.UseWolverine(wolverine =>
 ```
 
 ```bash
-dotnet run --project Examples/Microservices.Wolverine/DDDToolkit.Examples.Wolverine.AppHost
+dotnet run --project Examples/Microservices.Wolverine/Examples.Webshop.Wolverine.AppHost
 ```
 
 **`Microservices.MassTransit/`** is the same topology with MassTransit, every service on a SQL Server
@@ -443,12 +452,12 @@ bus.UsingRabbitMq((context, rabbit) =>
 MassTransit 8 is the last version under the Apache 2.0 licence; the package's README says more.
 
 ```bash
-dotnet run --project Examples/Microservices.MassTransit/DDDToolkit.Examples.MassTransit.AppHost
+dotnet run --project Examples/Microservices.MassTransit/Examples.Webshop.MassTransit.AppHost
 ```
 
 ### Testing the samples end to end
 
-`Tests/DDDToolkit.Examples.AppHost.Tests` starts each sample's AppHost, containers and all, and plays
+`Tests/Examples.AppHost.Tests` starts each sample's AppHost, containers and all, and plays
 the same scenarios against every one of them over HTTP: an order confirmed and shipped, a payment
 refused and the stock put back, an order there is no stock for and its payment voided, a confirmed
 order that cannot be cancelled. The answers must not depend on how the shop is hosted, and these tests
@@ -456,8 +465,8 @@ are what says so. They need Docker, skip themselves without it, and run in CI in
 workflow, one job per sample:
 
 ```bash
-dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.SqlServer"
-dotnet test Tests/DDDToolkit.Examples.AppHost.Tests --filter "Sample=ModularMonolith.Supabase.Pgmq"   # through Supabase Queues
+dotnet test Tests/Examples.AppHost.Tests --filter "Sample=ModularMonolith.SqlServer"
+dotnet test Tests/Examples.AppHost.Tests --filter "Sample=ModularMonolith.Supabase.Pgmq"   # through Supabase Queues
 ```
 
 The Supabase samples add two scenarios of their own, with signed-in customers: one customer's order is
@@ -476,7 +485,7 @@ GitHub's runners have no IPv6.
 Locally, point the AppHost at a project the same way the workflow does:
 
 ```bash
-dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=5432;Database=postgres;Username=postgres.<ref>;Password=<password>;SSL Mode=Require" --project Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Supabase.AppHost
+dotnet user-secrets set "ConnectionStrings:Supabase" "Host=<pooler host>;Port=5432;Database=postgres;Username=postgres.<ref>;Password=<password>;SSL Mode=Require" --project Examples/ModularMonolith.Supabase/Examples.Webshop.Supabase.AppHost
 ```
 
 ### Which building block is where
@@ -506,9 +515,9 @@ Paths are under `Modules/`.
 | A read model of another module's data | `Ordering/.../Application/ReadModels/CatalogPrices/` |
 | Optimistic concurrency as a 409 | `Api/OrderingEndpoints.cs` (cancel), `Catalog/.../Api/CatalogEndpoints.cs` (reprice) |
 | A module registering itself, a host that only switches modules on | each `*Module.cs`, each sample's `Program.cs` |
-| The same modules on another database, and who applies the migrations | `Shared/DDDToolkit.Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
+| The same modules on another database, and who applies the migrations | `Shared/Examples.Hosting/ModuleDatabase.cs`, the two monoliths' `Program.cs` |
 | Migrations per provider in separate assemblies | each module's `Infrastructure/Persistence/Migrations` and its `*.Migrations.SqlServer` project |
-| The whole system under test, containers included | `Tests/DDDToolkit.Examples.AppHost.Tests` |
+| The whole system under test, containers included | `Tests/Examples.AppHost.Tests` |
 | One GraphQL schema over modules that do not know each other: Fusion in the monolith | each module's `Api/GraphQL` (`Add{Module}SourceSchema`, `ProductStub.cs`, `ProductStock.cs`, `OrderStub.cs`), `DDDToolkit.HotChocolate.Fusion.InMemory` |
 | The same schema composed across services by a Fusion gateway | each `Microservices.*` AppHost and gateway, `OrderStub.cs` in Payments and Shipping |
 | Relay node ids from the toolkit's identifiers, and references to another module's node | each `Api/GraphQL/*Type.cs`, `.ID("Order")` in Payments, Inventory and Shipping |
@@ -516,14 +525,426 @@ Paths are under `Modules/`.
 | Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
 | Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
-| Modules talking through Supabase Queues | `OverSupabaseQueues` in `ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`, `supabase/migrations/20260925090000_enable_queues.sql` |
-| The testing kit and `DomainEventClock` | `Tests/DDDToolkit.Examples.Tests` |
+| Modules talking through Supabase Queues | `OverSupabaseQueues` in `ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs`, `supabase/migrations/20260925090000_enable_queues.sql` |
+| The testing kit and `DomainEventClock` | `Tests/Examples.Webshop.Tests` |
 
-There are no repositories. A module's `DbContext` is its repository and unit of work, used directly by
-the endpoints and the policies. The toolkit has no repository abstraction to show, and a wrapper
-around a `DbContext` in a sample would only hide what the toolkit does to it.
+The shop has no repositories. Each of its modules' `DbContext` is its repository and unit of work, used
+directly by the endpoints and the policies. The toolkit has no repository abstraction to show, and a
+wrapper around a `DbContext` would only hide what the toolkit does to it. The Tenancy sample, below, does put its
+storage behind ports, to show a module whose use cases know no Entity Framework, and says why there.
 
 What it does not show: Newtonsoft, FluentValidation validators, and upcasting an older payload. Those have runnable coverage in `Tests/` and a page each in [docs](../docs).
+
+## The Tenancy sample
+
+A second application, smaller than the shop and apart from it: crews, the people who work on a project,
+in two tenants, on the [Tenancy](../docs/tenancy.md) supporting domain, and on the
+[Membership](../docs/membership.md) one for the crews. It is there to show who may see and do what, and to let
+you try it: a dev login with seeded people, a UI that calls the API with each person's token and tenant, and
+calls that deliberately break a rule and show the refusal. How the access works is explained on the Tenancy
+page, in [Who may do what, in the sample](../docs/tenancy.md#who-may-do-what-in-the-sample) and
+[Try it](../docs/tenancy.md#try-it).
+
+A crew is the Membership package's: its members are seats, and the roles they hold are project roles, which
+each tenant keeps for its crews, starting from three starter roles made when the tenant is set up, and makes,
+renames, re-keys and archives on the UI's Crew roles page. A role of the organization goes on no crew, and
+the Tenants module says nothing of crews any more. The four functions the database asks about a crew keep
+their names, and the package writes them, with the lock that holds a crew's rows and a project's owner to the
+keys their commands ask.
+
+| Module | Owns | Asks | Layers |
+|---|---|---|---|
+| **Tenants** | the application's tenant, organization, unit, seat and role classes, on the package; its context and migrations | nothing: it is what the others ask | Contracts, Domain, Application, Infrastructure, Api |
+| **Projects** | projects, their crews and the tenants' project roles, on the Membership package, and who may see and change a project | Tenancy: where the caller holds a key, and whether a seat is active | Contracts, Domain, Application, Infrastructure, Api |
+| **Inspections** | inspections recorded on a project | Projects, through `IProjectGate`: may the caller do this to that project | Domain, Application, Infrastructure, Api |
+
+| Project | What it is |
+|---|---|
+| `Examples.Tenancy.Host` | the API: the three modules, the dev login, the tenant a request works in, refusals as problem+json, and the demonstration data |
+| `Examples.Tenancy.Catalogue` | the application's permission catalogue, which the host runs with and the exported policies are written from |
+| `Examples.Tenancy.Exporter` | a program without routes whose build writes `Tenancy/supabase/migrations` |
+| `Examples.Tenancy.Ui` | a Blazor Web App, interactive on the server, that knows the API only over HTTP |
+| `Examples.Tenancy.AppHost` | Aspire: Supabase's own Postgres and Auth images and a mail catcher as containers, the files of `Tenancy/supabase/migrations` applied to that database, and the API and the UI as processes |
+
+```
+Tenancy/
+  Modules/
+    Tenants/
+      Examples.Tenancy.Tenants.Contracts           the ids, and the operators' token role
+      Examples.Tenancy.Tenants.Domain              the application's classes on the package, a folder per aggregate
+      Examples.Tenancy.Tenants.Application         a command or query per use case, in a folder per feature; the request interface its access behavior is generated from; the port ITenancyReads
+      Examples.Tenancy.Tenants.Infrastructure      the context, its migrations and the [SupabaseMigrations] factory the export builds it with, EfTenancyReads, the start-up checks, AddTenantsInfrastructure
+      Examples.Tenancy.Tenants.Api                 the module's entry, TenantsModule, and per feature the routes (Rest) and the GraphQL fields and types (GraphQL)
+    Projects/
+      Examples.Tenancy.Projects.Contracts          ProjectId, the keys and IProjectGate: all Inspections may name
+      Examples.Tenancy.Projects.Domain             a project and its crew, and a tenant's project roles, on the Membership package's templates; their rules, events and refusals
+        Aggregates/Projects/                                Project.cs and ProjectRefusals.cs, with Entities/, Events/, Invariants/ and ValueObjects/ beside them
+        Aggregates/ProjectRoles/                            ProjectRole.cs, with Events/ and ValueObjects/
+      Examples.Tenancy.Projects.Application        a command or query per use case, the access rules and check, the ports IProjectStore and IProjectReads
+        Access/                                             the check, the rules, the keys; Queries/KeyOnProject.cs
+        Crew/                                               Commands/ to change a crew, Queries/AllCrewMembers.cs to read one
+        Lifecycle/                                          Commands/ to open, rename, plan, move, close and reopen a project
+        Operators/                                          Queries/TenantProjects.cs, for the application's own staff; each module has the feature
+        Overview/                                           Queries/VisibleProjects.cs and ProjectDetail.cs
+        Ownership/                                          Commands/ChangeProjectOwner.cs
+        ProjectRoles/                                       Commands/ to make, rename, re-key and archive a project role, and to set a tenant up; Queries/
+        StoredProjects/                                     the ports the features read and save projects through
+      Examples.Tenancy.Projects.Infrastructure     the context with Tenancy's read model, its migrations and their factory, EfProjectStore, EfProjectReads, the row rules in Access/, AddProjectsInfrastructure
+      Examples.Tenancy.Projects.Api                the module's entry, ProjectsModule, the routes and the GraphQL schema
+        Access/Rest/, Crew/Rest/, Lifecycle/Rest/, ...      a feature's routes, under the name the application project gives the feature
+    Inspections/                                            no contracts, since no module names its types
+      Examples.Tenancy.Inspections.Domain          an inspection, its id, event and refusals
+      Examples.Tenancy.Inspections.Application     a command and its queries in the one feature Recording, with the ports IInspectionStore and IInspectionReads beside them; the access check that asks Projects' gate
+      Examples.Tenancy.Inspections.Infrastructure  the context, its migrations and their factory, EfInspectionStore, EfInspectionReads, the row rules in Access/, AddInspectionsInfrastructure
+      Examples.Tenancy.Inspections.Api             the module's entry, InspectionsModule, the routes and the GraphQL schema
+  Shared/
+    Examples.Tenancy.Shared.Application            what the modules' application projects do the same way: PageSizes, which holds a paged query to one end of its list and to the list's own sizes
+    Examples.Tenancy.Shared.Domain                 what several modules share and none owns: DateRange, a project's planned range and the days an inspection covers
+    Examples.Tenancy.Shared.Infrastructure         what the modules' infrastructure projects do the same way: ListCursors, which holds a paged read to the cursors of its own list
+  Examples.Tenancy.Host                            the API, REST and GraphQL at /graphql, and Examples.Tenancy.Host.http to walk through it
+  Examples.Tenancy.Catalogue                       SampleCatalogue, and what Tenancy writes into the exported access files for it
+  Examples.Tenancy.Exporter                        the export, as a build step of a program of its own
+  supabase/                                                 config.toml and migrations/: what the export wrote, and the login role's file, by hand
+  Examples.Tenancy.Ui                              the UI
+  Examples.Tenancy.AppHost                         Aspire: the containers of Supabase's own images, the migrations applied to them, and api and ui
+```
+
+### Running it
+
+1. Start Docker. The sample runs on Supabase's own images and on no other database.
+2. From the repository's root, run `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`.
+3. Open the dashboard with the login link the terminal prints, `http://localhost:15105/login?t=...`. It lists
+   `db`, `roles`, `mail`, `auth`, `migrate`, `api` and `ui`.
+4. Open `ui` from there, `http://localhost:5091`, and sign in: with a card of the dev login, or with
+   `<name>@example.test` and the password the dashboard shows under Parameters, as `demo-password`, masked
+   until its eye is clicked.
+5. Read a mail Auth sends in `mail`, from the dashboard: it is empty until somebody is invited by address on
+   the UI's Invitations page. The link in the mail opens as it is written.
+
+Nothing is configured. The API (`api`, on `http://localhost:5090`) and the UI (`ui`) run as processes, on
+containers of Supabase's own Postgres and Auth images (the tags in `SupabaseImages.cs`, the set the Supabase
+CLI starts) and a mail catcher. They are Supabase's builds and not a plain Postgres made to look like one,
+because the roles the image ships and what each may do is exactly what the sample leans on. Storage and
+Realtime are not started. `roles` and `migrate` run once and exit.
+
+- **`migrate`** applies every file of `Tenancy/supabase/migrations` as `postgres`, which on this image is no
+  superuser, and then turns `tenancy_api`'s login on with a password of this run. The API gets a connection
+  string for `tenancy_api` and nothing else.
+- **`auth`** is Supabase's Auth server, with no gateway in front of it: `Supabase:AuthUrl` tells the API
+  and the UI where it answers. With `Sample:SeedAuthUsers` the API makes the nine people users there, through
+  the Auth admin client, each under the fixed id their seats are found by (`Host/Seeding/DemoAuthUsers.cs`,
+  Development only). Auth is given a signing key made up for the run (`AuthSigningKeys.cs`), as the Auth
+  server of the stack the Supabase CLI starts has one: it signs a person's token with it, and the API checks
+  that token with the public half Auth publishes, fetched from `Supabase:AuthUrl`.
+- **The login page shows both logins**: an e-mail address and a password, checked by Auth
+  (`rhea@example.test`, and the password of `demo-password`), and the dev login's cards below it. The API
+  takes either token, and finds the same seat by its subject. The form and what it tells a person who is
+  refused read in the UI's language, as the headings, labels and explanations of every page do, and the
+  actions of the try-it form. What the API answers as data is shown as it came, in English: the description
+  on each card of the dev login, the titles of the presets on Try it, and every status, key and name of a
+  tenant, a unit or a role. A refusal's text is the API's as well, in the language the UI asked for.
+- **The mail of an invitation leads to the UI's page that accepts it.** The AppHost tells the API where the
+  page is (`Sample:Invitations:AcceptPage`, the UI's endpoint and `/invitations/accept`) and gives Auth the UI
+  as its site, both under `localhost`, the one host name Auth takes for its site here. The link in the mail
+  names Auth's own address on this machine and the path Auth answers itself, `/verify`, so it needs no
+  gateway.
+
+The demonstration has nine people: an administrator who also runs the work (ada), an area manager (rhea), a
+project's owner (leo), two crew members (juno, vic), a suspended seat (seth), someone seated in both tenants
+(tove), someone who only gives people their roles (hana) and an access admin, who runs who may do what and
+does none of the work (maud). A tenth, orla, is an operator, one of the application's own staff with no seat:
+the UI has no card for her and no page for the operators' lists, which are reached with a token from the dev
+login, as `Examples.Tenancy.Host.http` shows.
+
+The three modules share one database, each in a schema of its own: `tenancy`, `projects` and `inspections`.
+They have to share it: Projects asks Tenancy inside its own queries, through Tenancy's read functions, and
+that needs both in one database. Each module has migrations of its own, in its infrastructure project, and
+keeps its history table in its schema. The API seeds Harbor Works and Meadow Gardens on its first start. The
+containers are new every run, so to start over, stop the AppHost and start it again. Ctrl+C in its terminal
+stops it, with the API and the UI, and removes its containers; an AppHost whose process is killed leaves
+them behind, to be removed by hand.
+
+Without Aspire, the way to run the sample is [the stack the Supabase CLI starts](#on-the-stack-the-supabase-cli-starts).
+The host has no other database to fall back on: started without `ConnectionStrings:Supabase`, it stops and
+says how to get one.
+
+### On Postgres
+
+The host runs on Postgres, as Supabase runs it, at the connection string it is given in
+`ConnectionStrings:Supabase`, and it runs there the strict way:
+
+- **The host logs in as `tenancy_api`, a role that owns nothing** and holds no privilege on any table. Every
+  command runs as its caller: a signed-in user, system work in a tenant, or the toolkit's bookkeeping, each a
+  database role with exactly the privileges written from its policies. Every table forces its policies on
+  its owner as well.
+- **The database is made by whoever owns it**, from the files under `Tenancy/supabase/migrations`. There
+  are three kinds: a file for each migration of a module, with its tables; a module's access file, with the
+  policies, functions, triggers and privileges, written again under a later name whenever a rule, the
+  catalogue or the model changed; and `*_tenancy_login_role.sql`, the one file written by hand. They are
+  applied in the order of their names, each of which begins with a timestamp. The login role's file needs
+  an access file to have come before it, whichever module's: each makes, where they are missing, three of
+  the roles that file gives the login role (`ddd_system_in`, `ddd_system` and `tenancy_operator`). Files
+  exported since sort after it, and none of them names the login role. The host applies none of them. It
+  checks at start-up that none is missing and that the database is set up as the policies rely on, and does
+  not start otherwise.
+- **The files are written by a build**, of `Examples.Tenancy.Exporter`: every migration of the
+  modules' infrastructure projects, and the access files whenever a rule, the catalogue or the model
+  changed. In CI the same build only compares. An access file names the project a row access contribution is
+  in with its version, and is written anew when that version changes, so the two projects that hold one,
+  `Examples.Tenancy.Catalogue` and `Examples.Tenancy.Projects.Infrastructure`, have a version of their own
+  and do not follow the toolkit's.
+- **A module has one set of migrations**, beside its context in its infrastructure project, with the
+  `[SupabaseMigrations]` factory that `dotnet ef`, the export and the host's start-up check all build the
+  context with. After a change to a model, `dotnet ef migrations add` in that project and a build of the
+  exporter write the new file; the factory's summary has both commands.
+- **Connections are budgeted per purpose**: one data source for requests and one for background work, each
+  with its own maximum (`Sample:Pools:Requests`, 16, and `Sample:Pools:Background`, 4).
+- **GraphQL answers as the routes do.** A field only sends, so what it reads goes through the same
+  contexts, on the connections for requests, as its caller: `SampleOnPostgresTests` adds a policy the
+  application knows nothing of, and a query is withheld the rows by the database.
+- **One save is the application's work for a seat.** A seat that takes its own role on a crew, or itself off
+  it, gives up the right the change was allowed by, and the database, which judges each statement of a save
+  by the rows as they are then, would refuse the seat the rest of that save
+  (`Crew/OwnPlaceOnTheCrew.cs` in the Projects application project).
+
+`SampleOnPostgresTests` proves it on Supabase's Postgres image: it applies the files in order as the role that
+owns the database, turns the login on and starts the host. The next section runs it by hand, on the stack the
+Supabase CLI starts.
+
+### On the stack the Supabase CLI starts
+
+`Examples/Tenancy` is a Supabase project as the CLI reads one: `supabase/config.toml`, and the files under
+`supabase/migrations`. It needs Docker and the Supabase CLI, installed or through `npx`: every `supabase`
+below is `npx --yes supabase@2.119.0` just as well, which is the release these steps were run with.
+
+```bash
+cd Examples/Tenancy
+supabase start                         # or: npx --yes supabase@2.119.0 start
+```
+
+The CLI starts the database on port 54322, the gateway with Auth behind it on 54321, Studio on 54323 and a
+mail catcher on 54324, and applies every file of `supabase/migrations` in the order of their names. It does
+so as `postgres`, the role that owns the database and on Supabase's image no superuser, which is the role
+the tests apply them as:
+
+```
+Applying migration 20261001215449_Initial.tenants.ddd.sql...
+...
+Applying migration 20261002081257_access.tenants.ddd.sql...
+Started supabase local development setup.
+```
+
+Then, once, as the database's owner, the login role gets a password. No file gives it one: a migration is
+kept in a repository, and a password is not.
+
+```bash
+docker exec supabase_db_examples-tenancy psql -U postgres -c "alter role tenancy_api with login password '<a password>'"
+```
+
+It answers `ALTER ROLE`. The host is then started with that role's connection string, and nothing else of
+the database:
+
+```bash
+dotnet run --project Examples.Tenancy.Host -- --ConnectionStrings:Supabase "Host=127.0.0.1;Port=54322;Database=postgres;Username=tenancy_api;Password=<a password>"
+```
+
+```
+info: Examples.Tenancy.Host.Seeding.DemoSeeder[0]
+      Seeded the demonstration: harbor and meadow.
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5090
+```
+
+A host that listens passed every start-up check: each file was found applied, `tenancy_api` owns nothing and
+holds no privilege in a module's schema, the functions that run as their owner are let through the forced
+policies, and Tenancy's second lock is in place. The dev login works here as under the AppHost, so
+`Examples.Tenancy.Host.http` walks through it from here. The Data API the stack serves beside the
+host reaches no module's schema: `config.toml` exposes none of them, and Supabase's own roles hold nothing
+there.
+
+**The real login** takes four more settings, and the UI told where the project is:
+
+```bash
+dotnet run --project Examples.Tenancy.Host -- --ConnectionStrings:Supabase "Host=127.0.0.1;Port=54322;Database=postgres;Username=tenancy_api;Password=<a password>" --Sample:SeedAuthUsers true --Supabase:SecretKey "<the Secret key>" --Sample:DemoPassword "<twelve characters or more>" --Sample:Invitations:AcceptPage http://localhost:5091/invitations/accept
+dotnet run --project Examples.Tenancy.Ui -- --Supabase:Url http://127.0.0.1:54321
+```
+
+The Secret key is under Authentication Keys in what `supabase status` shows. The host makes the nine people
+users of the stack's Auth, through the Auth admin client, each under the fixed id their seats are found by,
+and says so:
+
+```
+info: Examples.Tenancy.Host.Seeding.DemoAuthUsers[0]
+      The demonstration people can sign in at Supabase Auth with the password of Sample:DemoPassword; made just now: ada, rhea, leo, juno, vic, seth, tove, hana, maud.
+```
+
+The login page, on `http://localhost:5091`, then shows an e-mail address and a password above the dev login's
+cards. `rhea@example.test` with the demonstration password signs in at Auth, and the header reads "Signed in
+as rhea@example.test". The API answers her token with the two projects of the north, Pier 7 and Inland depot,
+through the routes and through GraphQL alike, and refuses it in meadow, where she has no seat. Three things
+about this stack are worth knowing:
+
+- **Auth signs a person's token with a key it publishes**, where the dev login signs with the local stack's
+  secret. The host takes both, through the toolkit's bearer scheme (`Host/Auth/SampleAuthentication.cs`): a
+  token signed with the secret is checked with the secret, and one signed with a key with the keys Auth
+  publishes, fetched when the first one arrives. The Auth server the AppHost starts signs the same way.
+- **`[auth.email] enable_signup` is on in `config.toml`**, though nobody signs up: in the local stack that
+  setting is what lets a person sign in with a password at all, and `[auth] enable_signup = false` is what
+  closes signing up.
+- **The mail of an invitation leads to the UI's page that accepts it**, with the last setting above. The
+  mail is in the catcher on port 54324. Auth sends a browser on only to an address of its site, which
+  `config.toml` says is the UI (`site_url`), and it tells the site by host name: `localhost` is not
+  `127.0.0.1`. A page given under the other name is not refused. Auth sends the person to the site's own
+  address instead, without the invitation's token
+  ([Inviting a person by address](../docs/tenancy.md#inviting-a-person-by-address)).
+
+`supabase stop` keeps the data for the next `supabase start`, and `supabase stop --no-backup` removes it.
+`supabase db reset` applies the files again to an empty database: the login role is there again with no
+password and Auth has no users, so the password and the host's first start come again.
+
+```bash
+DDDTOOLKIT_REQUIRE_SUPABASE_CLI=1 dotnet test Tests/Examples.Tenancy.Tests --filter "Sample=Tenancy.SupabaseCli"
+```
+
+`SampleOnTheCliStackTests` takes these steps against a stack that is running, from the repository's root: the
+files the CLI recorded and who owns what they made, the host started as the login role, a person signing in
+at the stack's Auth and reading her projects and nothing of the other tenant, a stranger who is refused an
+account, and a change the database refuses with its own code. It starts no container, and it runs only where
+`DDDTOOLKIT_REQUIRE_SUPABASE_CLI=1` says it is meant, where a stack that is not running fails it: without the
+variable its tests are skipped and touch no stack, so a run of every test leaves a stack you have up alone. The
+Sample Tests workflow starts the stack and runs it as `Tenancy.SupabaseCli`. It
+works in the stack's own database and changes two passwords there unless its environment holds them:
+`tenancy_api` gets one of its own unless `ConnectionStrings__Supabase` is set, and the nine people get one
+unless `Sample__DemoPassword` is set. A host started before it is given the role's password again
+afterwards, and gives the people theirs again when it starts.
+
+### How it is built, and what is where
+
+The Tenancy page explains the sample, with diagrams and the code beside them, and this page does not say it
+again:
+
+- [Who may do what, in the sample](../docs/tenancy.md#who-may-do-what-in-the-sample): a module's layers and
+  its entry, which registers the module and maps its routes for callers with a seat and for operators (Tenants
+  also for a signed-in person who has no seat yet); what every request declares and the pipeline it passes;
+  the ports; the routes of a crew, the paged lists and a project's version; and how a module answers ids and
+  a screen asks the directory what they are called.
+- [GraphQL in the sample](../docs/tenancy.md#graphql-in-the-sample): one schema over the three modules, as
+  types over the application's own records with generated data loaders. A token is needed as for every route,
+  and a seat for every field but `seatsOfMine` and `invitationAccept`, which need none, and the operators'
+  four, which ask for an operator.
+- [Inviting a person by address](../docs/tenancy.md#inviting-a-person-by-address) and
+  [An operator, who changed a row, and the history as a list](../docs/tenancy.md#an-operator-who-changed-a-row-and-the-history-as-a-list).
+- [Design choices and where to see them](../docs/tenancy.md#design-choices-and-where-to-see-them): every choice
+  the sample makes, with its code, something to try and its test.
+- [Folders inside the layers](../docs/modules.md#folders-inside-the-layers): the tree of one module and the
+  reason for each folder. `FeatureFolderTests` and `SourceTreeTests` hold the sample to it, and
+  `LayerReferenceTests` to which project references which.
+
+A browser application on another origin is let in only when the host's `Sample:Cors:Origins` lists its
+origin; with none listed there is no CORS at all. Such a client sends the token and the tenant itself:
+
+```js
+const response = await fetch(`${api}/projects?size=20`, {
+  headers: {
+    Authorization: `Bearer ${session.access_token}`,
+    Tenant: 'harbor',
+  },
+});
+const { items, next } = await response.json();   // next: send it as ?after= for the page after this one
+```
+
+`Tests/Examples.Tenancy.Tests` has a class per scenario: for every rule the demonstration shows, for every
+preset of the try-it page, and for the UI's client against the real API. A class that needs the host with a
+database never makes one. It takes its hosts from one fixture, `SampleHosts`, which starts Supabase's own
+images through Testcontainers, once for the run, and gives every host a database of its own there: made by
+the exported files, seeded once and copied, with the host logged in as `tenancy_api`. So every answer a
+scenario reads went through the exported policies and privileges as well as the application's own checks.
+With Docker running:
+
+```bash
+DDDTOOLKIT_REQUIRE_CONTAINERS=1 dotnet test Tests/Examples.Tenancy.Tests --filter "Sample=Tenancy.Supabase"
+```
+
+The first run pulls the images; the containers stop with the run, and nothing is installed. Without the
+variable the tests skip on a machine that has no Docker. These classes carry the samples' traits, and CI
+runs them in the Sample Tests workflow: as `Tenancy.Supabase`, and as `Tenancy.Supabase.Floor` against the
+oldest dependency versions the packages allow. A scenario in which a period has to run out
+(`CrewMembershipOverTimeScenarios`) gives it an end a few seconds ahead and waits for it: the database
+compares periods with its own clock, which no test moves.
+
+In the same run, `SampleOnPostgresTests` and `SampleOnSupabaseTests` ask the database beside the host: every
+table forces its policies, the login role reads no row it has no seat for, and a person signs in at the Auth
+server with a password and reads her projects and nothing of the other tenant.
+`InvitationWithSupabaseAuthTests` invites an address Auth has never seen: Auth's mail arrives in the mail
+catcher, its link signs the person in, and they accept the invitation with its token. `InvitedByMailTests`
+does it as the UI does: with `Sample:Invitations:AcceptPage` set, the mail's link lands on the UI's page with
+the token and the sign-in after the `#`, the person chooses a password, accepts, and signs in again with it.
+`TenancyOnSupabase`, in the samples' AppHost tests, starts the AppHost itself, signs in through it and
+follows the mail of an invitation, as it is written, to the UI's page; it runs as `Tenancy.AppHost`.
+
+What starts no database has no trait and stays in the main build: the architecture tests, which read the
+host's registrations and its GraphQL schemas from a host that connects to nothing (`SampleWithoutDatabase`),
+`MigrationTests`, which builds each context with its design-time factory, and the UI's classes over a stub.
+`ContainerTraitTests` keeps the two apart: a class that takes a fixture on containers carries the traits,
+and only the fixtures make a host on a database.
+
+Four classes hold the modules to answering ids: `ModuleModelTests` (no module's model maps more of Tenancy's
+than the read model), `StrictAnswersTests` (no answer of Projects or Inspections carries a name of
+Tenancy's), `DirectoryScenarios` (the directory by id, over HTTP) and `DirectoryNamesTests` (the UI's names,
+over a stub).
+
+| What | Where |
+|---|---|
+| A supporting domain extended by the application | `Tenancy/Modules/Tenants/...Tenants.Domain/Aggregates/`: the unit's own rule, the seat's job title |
+| A second supporting domain beside Tenancy: a resource's members and the roles a customer keeps for them | `Entities/CrewMember.cs` on `[Member]` and `...Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs` on `[KeptRole]`, the rules in `...Projects.Application/Access/ProjectMembership.cs` with the starter roles in `Catalogue/SampleCatalogue.cs`, `AddProjectMembershipWithTenancy` and `AddProjectMemberAccess` in `...Projects.Infrastructure/ProjectsInfrastructure.cs`; `CrewMembershipScenarios`, `ProjectRoleScenarios` |
+| An entity with entities of its own: crew members, each with dated roles | `...Projects.Domain/Aggregates/Projects/Project.cs`, with `Entities/CrewMember.cs` beside it, the nested `OwnsMany` that `HasMembers` maps in `...Projects.Infrastructure/Persistence/ProjectsContext.cs`; `ProjectCrewTests`, `CrewMembershipScenarios` |
+| Row rules that ask a resource's members, for a database that checks rows | `...Projects.Infrastructure/Access/SeatsSeeTheProjectsTheyReach.cs`, which asks the functions the Membership package writes from the projects' rules (`Catalogue/ProjectMembershipFunctions.cs`); `ProjectRowRulesTests`, `SampleOnPostgresTests` |
+| A rule of one module asking another's, through a contract | `ProjectsISee` and `ProjectsWhereIHold` in `...Projects.Contracts/RowAccess/`, defined in `...Projects.Infrastructure/Access/`, asked by `...Inspections.Infrastructure/Access/`; `SampleOnPostgresTests` |
+| A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_tenancy_login_role.sql`, the three properties in `Examples.Tenancy.Exporter.csproj`, `Host/Storage/SampleStorage.cs`, `...Tenants.Infrastructure/Persistence/PostgresStartupCheck.cs`; `SampleOnPostgresTests`, `PostgresCompositionTests` |
+| The export as a build step of a program of its own | `Tenancy/Examples.Tenancy.Exporter`, which references each module's infrastructure project and the catalogue; `PostgresCompositionTests` |
+| A module's migrations beside its context, and one factory that `dotnet ef`, the export and the host's start-up check build the context with | `...Tenants.Infrastructure/Persistence/Migrations/` and `TenantsContextFactory.cs`, marked `[SupabaseMigrations]`; the same in Projects and Inspections; `MigrationTests` |
+| A rule Postgres holds beyond a module's policies: a project's unit changes only with its keys, by a trigger of the module's own, and its owner and its crew's rows with theirs, by the Membership package's lock | `UnitChangesWithItsKeys` in `...Projects.Infrastructure/Access/` and `Catalogue/ProjectMembershipFunctions.cs`, used by `Tenancy/Examples.Tenancy.Exporter/Program.cs`; `SampleOnPostgresTests` |
+| Connections per purpose: requests and background | `PostgresPools`, `PostgresPoolBudget` and `ContextsByPurpose` in `Shared/Examples.Hosting`, `ModuleHost.OnPostgres` in `Host/Storage/SampleStorage.cs`, and `host.RequirePostgres()` in each `Add{Module}Infrastructure`; `SampleOnPostgresTests`, `PostgresCompositionTests` |
+| Who wrote a row and who changed it, and an access history that only grows | `RecordsWhoChanged` in `ProjectsContext.cs` and `InspectionsContext.cs`, `AddTenancyEventLogTable` in `TenantsContext.cs` with `KeepEventLog(log => log.AddTenancyEventLog<...>())` in `TenantsInfrastructure.cs`, which keeps what changes access with who made the change; `PeopleOfficeScenarios`, `SampleOnPostgresTests`, `MigrationTests` |
+| Who changed a row, in an answer | `changedBy` on a project and an inspection: the value object `ChangedBy` in `...Tenants.Contracts/ValueObjects/`, declared once for both modules, read in `EfProjectReads.cs` and `EfInspectionReads.cs`, and one GraphQL type in both schemas, shareable because it is a value object; `WhoChangedScenarios` |
+| An operator, who reads across tenants and changes nothing | `Host/Access/OperatorRequirement.cs` and `OperatorRequirementHandler.cs`, `Host/DevLogin/DevOperators.cs`, the feature `Operators` in each module's application and API project, with a route and a GraphQL field for each read, `OperatorsSeeEveryProject.cs` and `OperatorsSeeEveryInspection.cs` in the infrastructure projects' `Access/`; `OperatorScenarios`, `OperatorFieldScenarios`, `TenantProjectsFieldScenarios`, `TenantProjectInspectionsFieldScenarios`, `SampleOnPostgresTests` |
+| The access history as a list, paged with `PagingArguments` and `ToPageAsync` | `...Tenants.Application/History/Queries/AccessHistory.cs`, `HistoryAsync` in `...Tenants.Infrastructure/Persistence/EfTenancyReads.cs`, `...Tenants.Api/History/Rest/HistoryEndpoints.cs` and `History/GraphQL/HistoryPagedQueries.cs`, `Ui/Components/Pages/History.razor`; `AccessHistoryScenarios`, `AccessHistoryFieldScenarios` |
+| Inviting a person by address: the package's invitations, an account through the identity port, whose id the invitation keeps so it can be mailed again or deleted unused, a seat when they accept | `Invitation` in `...Tenants.Domain/Aggregates/Invitations/`, the feature `Invitations` in `...Tenants.Application` and `...Tenants.Api`, with a route and a GraphQL field for each use case, `AddTenancyInvitations` in `TenantsContext.cs` and `TenantsInfrastructure.cs`, `Host/Auth/SampleIdentityAccounts.cs` and `Host/DevLogin/DevIdentityAccounts.cs`, `Ui/Components/Pages/Invitations.razor` and `AcceptInvitation.razor`, and for the link in Auth's mail `InvitationPage.cs` in the feature, `Sample:Invitations:AcceptPage`, `Ui/Auth/AuthLink.cs` and `Ui/Auth/LinkSignIn.cs`, which asks before a link's sign-in replaces a tab's; `InvitationScenarios`, `LinkSignInTests`, `InvitationFieldScenarios`, `InvitationOverTimeScenarios`, `InvitationWithSupabaseAuthTests`, `InvitedByMailTests` |
+| A column that never changes once its row is saved | `IsFixedAfterInsert()` on a project's number in `ProjectsContext.cs` and on an inspection's project in `InspectionsContext.cs`; `MigrationTests` |
+| An administrators' pack that lists its keys, and the marks pinned by a test | `Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs`; `AccessAdminScenarios`, `ApplicationRuleScenarios` |
+| Asking Tenancy inside a module's own query | `...Projects.Application/Access/ProjectAccess.cs`, which asks the projects' rules for a reach, `...Projects.Infrastructure/Persistence/EfProjectReads.cs`, and `AddTenancyReadFunctions` and `ScopeToTenant` in `ProjectsContext.cs` next to it; `AccessStatementTests` counts the statements |
+| A write port and a read port in the application, implemented by the infrastructure | `...Projects.Application/StoredProjects/IProjectStore.cs` and `IProjectReads.cs`, `...Projects.Infrastructure/Persistence/EfProjectStore.cs` and `EfProjectReads.cs` |
+| A module asking another through a contract | `IProjectGate` in `...Projects.Contracts/Gate/`, asked by `...Inspections.Application/Access/InspectionsAccessCheck.cs` before a handler runs, and by `Recording/Queries/ProjectInspections.cs` for what the caller may do |
+| The tenant of a request, from a header and the caller's own seats | `Host/Access/TenantHeader.cs` |
+| A seat in that tenant as an authorization policy, answered with the refusal's code | `Host/Access/SamplePolicies.cs`, `SeatRequirement.cs`, `SeatRequirementHandler.cs` and `SeatRefusalResults.cs`; `SeatPolicyScenarios` |
+| A paged list that asks Tenancy, paged by GreenDonut's `PagingArguments` and `Page<T>` under REST and GraphQL alike | `...Projects.Application/Overview/Queries/VisibleProjects.cs`, `PageAsync` in `...Projects.Infrastructure/Persistence/EfProjectReads.cs`; `ProjectListScenarios`, `GraphQLProjectScenarios` |
+| A marker that is not a cursor of the list it is sent to, refused by one check under every paged read | `ListCursors` in `Tenancy/Shared/Examples.Tenancy.Shared.Infrastructure/Paging/`, called in `EfProjectReads.cs`, `EfInspectionReads.cs` and `EfTenancyReads.cs`; `ListCursorsTests`, `ProjectListScenarios`, `InspectionListScenarios`, `AccessHistoryScenarios` |
+| A page asked for from both ends, or in a size that is none of the list's, refused by one check in front of every paged query | `PageSizes` in `Tenancy/Shared/Examples.Tenancy.Shared.Application/Paging/`, called in `VisibleProjects.cs`, `InspectionPages.cs` and `HistoryRefusals.cs`; `PageSizesTests`, `ProjectListScenarios`, `InspectionListScenarios`, `AccessHistoryFieldScenarios` |
+| GraphQL types over the application's records, generated data loaders and a permission key on a field, whose rule the query holds so the route answers what the field answers | `...Projects.Api/Overview/GraphQL/ProjectType.cs` and `OverviewDataLoaders.cs`, `Crew/GraphQL/CrewMemberType.cs` and `CrewFieldKeys.cs`, `...Projects.Application/Crew/CrewOverviews.cs`, `...Tenants.Application/Roles/RoleListing.cs`; `GraphQLProjectScenarios`, `CrewRoleScenarios`, `RoleKeysScenarios`, and `GraphQLDeclarationTests` for all three modules |
+| A page within what a request may cost: HotChocolate's page sizes, and a weight on a field behind a data loader | `[UseConnection]` and `[Cost]` in `...Projects.Api/Overview/GraphQL/OverviewPagedQueries.cs`, `OverviewQueries.cs` and `ProjectType.cs`, `...Inspections.Api/Recording/GraphQL/ProjectType.cs` and `InspectionsConnection.cs`, `...Tenants.Api/Directory/GraphQL/DirectoryQueries.cs`; `GraphQLProjectScenarios`, `GraphQLDeclarationTests` |
+| The keys a caller holds on a page of projects, in one statement | `...Projects.Application/Access/Queries/KeysOnProjects.cs` and `KeysHeldAtRoot.cs`; `KeySetScenarios` |
+| A version a client sends back with a change | `ETag` and `If-Match` in `...Projects.Api/Rest/ProjectVersions.cs`, compared by the Membership package's check, `MemberAccessCheck`; `VersionScenarios` |
+| A browser client on another origin | `Host/Requests/BrowserCors.cs`; `CorsTests` |
+| Coded refusals as problem+json | `Host/Requests/RefusalProblems.cs` |
+| Refusals and pages in English and Dutch, by the request's `Accept-Language` | `...Projects.Domain/Aggregates/Projects/ProjectFailures.resx` and `.nl.resx` beside the refusals, added to the localizer with the module (`...Projects.Application/ProjectsApplicationServices.cs`); `Host/Languages/RequestLanguages.cs`; `Ui/Languages/UiTexts.cs`, and the `en` and `nl` switch in the UI's top bar; `LanguageScenarios`, `TranslationTests` |
+| Start-up checks: the catalogue, the wiring of every context, the migrations, the login role and the second lock | `...Tenants.Infrastructure/Persistence/TenancyStartupCheck.cs` and `PostgresStartupCheck.cs`; `StartupTests`, `SampleOnPostgresTests` |
+| A module's entry in its API project, and its registration in the infrastructure project | `...Tenants.Api/TenantsModule.cs`, `...Tenants.Infrastructure/TenantsInfrastructure.cs` |
+| A command or a query per use case, with its feature, and routes that only send | `...Projects.Application/Crew/Commands/` and `Crew/Queries/`, `...Projects.Api/Crew/Rest/CrewEndpoints.cs`; the same for every feature, in Inspections, and in Tenants, wrapping the package's use cases; `FeatureFolderTests` |
+| What a request requires of its caller, checked in the pipeline by a behavior the toolkit generates | `[AccessRequests]` on `...Projects.Application/Access/IProjectsRequest.cs`, the module's own case and its check in `ProjectsRequirement.cs` and `ProjectsAccessCheck.cs`, `AddAccessCheck` and `AddProjectsAccessBehavior` in `ProjectsApplicationServices.cs`, `AddTenancyAccess` and `AddProjectMemberAccess` in `...Projects.Infrastructure/ProjectsInfrastructure.cs`; the same in `...Tenants.Application/Access/` and `...Inspections.Application/Access/`; `AccessDeclarationTests` |
+| A handler that acts on exactly what its request's access check read | `Checked<MemberHold<ProjectId>>` in `...Projects.Application/Lifecycle/Commands/CloseProject.cs`, kept by the Membership package's `MemberAccessCheck`, `IProjectStore.LoadAsync`, `...Inspections.Application/Access/GatedProject.cs`; `RequestPipelineTests` |
+| A query on a context of its own, so queries can run side by side | `...Projects.Application/StoredProjects/IProjectReads.cs`, `...Tenants.Application/StoredTenancy/ITenancyReads.cs`, `...Inspections.Application/Recording/IInspectionReads.cs` and their adapters; `RequestPipelineTests` |
+| Contexts from a pool: a read's for its one query, and the request's own | `PostgresPools.AddContext` in `Shared/Examples.Hosting`, called by each module's infrastructure registration; `StartupTests`, `PooledContextScenarios` |
+| A domain laid out per aggregate, and one type per file | `...Projects.Domain/Aggregates/Projects/` with `Entities/`, `Events/`, `Invariants/` and `ValueObjects/`; `SourceTreeTests` |
+| The mediator and the first step of every request's pipeline | `Host/Program.cs`, `Host/Requests/RequestTracingBehavior.cs`, registered by `RequestTracingServices.cs` |
+| A dev login that issues Supabase access tokens, and the guard that keeps it local | `Host/DevLogin/`, `Host/Auth/DevLoginGuard.cs` |
+| The real login beside the dev login: Supabase Auth's own sign-in, and the demonstration people as its users | `Tenancy/Examples.Tenancy.Ui/Auth/SupabaseLoginClient.cs` and `Components/Shared/PasswordLogin.razor`, `Host/Seeding/DemoAuthUsers.cs`, `Tenancy/Examples.Tenancy.AppHost/Program.cs`; `SupabaseLoginClientTests`, `DemoAuthUsersTests`, `SampleOnSupabaseTests` |
+| Two kinds of token under one issuer: the dev login's, signed with the secret, and Auth's, signed with a key it publishes | The toolkit's bearer scheme, registered in `Host/Auth/SampleAuthentication.cs`; the signing key the images' Auth is given, `Tenancy/Examples.Tenancy.AppHost/AuthSigningKeys.cs`; `PublishedKeyTokenTests`, `SupabaseStackTests`, `SampleOnSupabaseTests`, `SampleOnTheCliStackTests` |
+| The sample on the stack the Supabase CLI starts | `Tenancy/supabase/config.toml`; `SampleOnTheCliStackTests` on its fixture `SupabaseCliStack`, and `Tenancy.SupabaseCli` in `.github/workflows/SampleTests.yml` |
+| Seeding as system work in a tenant | `Host/Seeding/DemoSeeder.cs` |
+| A UI that only speaks HTTP, and never retries | `Tenancy/Examples.Tenancy.Ui/Api/SampleApi.cs` |
+| Answers that carry ids, and names asked of their owner by id | `...Projects.Application/Overview/ProjectOverview.cs`, `...Tenants.Application/Directory/Queries/SeatsById.cs`, `OrganizationUnitsById.cs` and `RolesById.cs`, `...Tenants.Api/Directory/Rest/DirectoryEndpoints.cs`; `StrictAnswersTests`, `DirectoryScenarios` |
+| A model check: a module maps no more of Tenancy than access facts | `TenancyModel.ReadsBeyondAccessFacts`; `ModuleModelTests` |
+| A screen that resolves the names of the ids it was answered | `Tenancy/Examples.Tenancy.Ui/Api/DirectoryNames.cs`, `Components/Pages/MyProjects.razor` and `ProjectDetail.razor`; `DirectoryNamesTests` |
 
 ## `DDDToolkit.ExampleApi` and `DDDToolkit.ExampleLibrary`
 

@@ -12,6 +12,14 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="access.refused" xml:space="preserve">
+    <value>The database refused this change.</value>
+    <comment>ToolkitRefusals.Refused: a row level security policy denied a save the application's own checks let through. No arguments.</comment>
+  </data>
+  <data name="access.role-not-allowed" xml:space="preserve">
+    <value>The role this sign-in carries gives no access here: {Role}.</value>
+    <comment>ToolkitRefusals.RoleNotAllowed: a signed-in user's token carries a role the host gave no database role, so nothing ran for it. {Role} is the role the token carries.</comment>
+  </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is not valid.</value>
     <comment>ValidationError.UnspecifiedCode: a Validate() override refused without saying why. {ValueObject} is the type name.</comment>
