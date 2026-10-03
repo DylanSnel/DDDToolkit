@@ -39,6 +39,13 @@ internal sealed record TypeDeclarationInfo(
     /// </summary>
     public bool IsImplicit { get; init; }
 
+    /// <summary>
+    /// The type parameters of the type itself, in order, which its generated part has to repeat. Empty for
+    /// everything but the abstract parents a package declares with <c>[AggregateRootBase]</c> or
+    /// <c>[EntityBase]</c>: every other generic type is refused before anything is generated for it.
+    /// </summary>
+    public EquatableArray<string> TypeParameters { get; init; } = EquatableArray<string>.Empty;
+
     public bool IsRecord => Kind is DeclarationKind.RecordClass or DeclarationKind.RecordStruct;
 
     public bool IsStruct => Kind is DeclarationKind.RecordStruct or DeclarationKind.Struct;
@@ -70,7 +77,8 @@ internal sealed record TypeDeclarationInfo(
     public string PartialHeader
         => (IsImplicit ? Accessibility + " " : string.Empty)
            + (IsReadOnly && IsStruct ? "readonly " : string.Empty)
-           + "partial " + Keyword + " " + Name;
+           + "partial " + Keyword + " " + Name
+           + (TypeParameters.Count == 0 ? string.Empty : "<" + string.Join(", ", TypeParameters) + ">");
 
     /// <summary>
     /// File name of the generated part: the type's own name, the suffix, and eight hex digits of a
@@ -90,11 +98,17 @@ internal sealed record TypeDeclarationInfo(
     /// Characters a file name cannot hold become underscores.
     /// </para>
     /// </summary>
-    public string HintName(string suffix = "")
+    public string HintName(string suffix = "") => HintNameFor(Name, FullyQualifiedName, suffix);
+
+    /// <summary>
+    /// <see cref="HintName"/> for a type the generator did not start from a declaration of, such as a type
+    /// in a referenced assembly whose generated counterpart is written into this one.
+    /// </summary>
+    public static string HintNameFor(string name, string fullyQualifiedName, string suffix)
     {
-        var qualified = FullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
-            ? FullyQualifiedName.Substring("global::".Length)
-            : FullyQualifiedName;
+        var qualified = fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
+            ? fullyQualifiedName.Substring("global::".Length)
+            : fullyQualifiedName;
 
         var hash = 2166136261u;
         foreach (var character in qualified)
@@ -102,8 +116,8 @@ internal sealed record TypeDeclarationInfo(
             hash = unchecked((hash ^ character) * 16777619u);
         }
 
-        var builder = new StringBuilder(Name.Length + suffix.Length + 20);
-        foreach (var character in Name)
+        var builder = new StringBuilder(name.Length + suffix.Length + 20);
+        foreach (var character in name)
         {
             builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '_');
         }
@@ -194,6 +208,12 @@ internal sealed record EntityIdDefinition(
 {
     /// <summary>True when the author wrote a <c>Validate</c> of their own; see <see cref="ValueObjectDefinition.DeclaresValidate"/>.</summary>
     public bool DeclaresValidate { get; init; }
+
+    /// <summary>
+    /// True when the project can see <c>DDDToolkit.Interfaces.ISingleValue&lt;TSelf, TValue&gt;</c>, so the id (and a
+    /// record id's twin) implements it. Read off the compilation, like <see cref="IParsableAvailable"/>.
+    /// </summary>
+    public bool SingleValueAvailable { get; init; }
 }
 
 internal sealed record SingleValueObjectDefinition(
@@ -207,6 +227,12 @@ internal sealed record SingleValueObjectDefinition(
 {
     /// <summary>True when the author wrote a <c>Validate</c> of their own; see <see cref="ValueObjectDefinition.DeclaresValidate"/>.</summary>
     public bool DeclaresValidate { get; init; }
+
+    /// <summary>
+    /// True when the project can see <c>DDDToolkit.Interfaces.ISingleValue&lt;TSelf, TValue&gt;</c>, so the value object
+    /// and its twin implement it. See <see cref="EntityIdDefinition.SingleValueAvailable"/>.
+    /// </summary>
+    public bool SingleValueAvailable { get; init; }
 }
 
 internal sealed record ValueObjectDefinition(
@@ -262,4 +288,80 @@ internal sealed record EntityDefinition(
     bool EfBackingFieldAttributeAvailable,
     bool ReadOnlySetAvailable,
     bool CanGenerate,
-    EquatableArray<DiagnosticInfo> Diagnostics);
+    EquatableArray<DiagnosticInfo> Diagnostics)
+{
+    /// <summary>
+    /// True for an abstract generic parent a package declares with <c>[AggregateRootBase]</c> or
+    /// <c>[EntityBase]</c>. It gets the base class and the collections every entity gets, and instead of
+    /// the public invariant methods it offers the two its descendant chains to, so the parent's rules run
+    /// wherever the descendant's do.
+    /// </summary>
+    public bool IsBase { get; init; }
+
+    /// <summary>
+    /// How a class declared with a package's template attribute was declared, until the parent it derives
+    /// from is known. Null for every other declaration.
+    /// </summary>
+    public TemplateDeclaration? Template { get; init; }
+
+    /// <summary>
+    /// The closed parent a class declared with a template attribute derives from, such as
+    /// <c>global::Tenancy.TenantAggregate&lt;global::Shop.Contracts.TenantId&gt;</c>, or null for a class that
+    /// derives from the toolkit's own <c>AggregateRoot&lt;TId&gt;</c> or <c>Entity&lt;TId&gt;</c>.
+    /// </summary>
+    public string? BaseType { get; init; }
+
+    /// <summary>Whether this class runs its parent's rules and walks its parent's children before its own.</summary>
+    public bool ChainsToParent => BaseType is not null;
+
+    /// <summary>
+    /// The open definition of the template attribute the class is declared with, fully qualified, whether or
+    /// not the template itself is usable. What another template's <c>[TemplateArgument]</c> finds the class
+    /// by: a class the author can see is never reported missing because its package made a mistake.
+    /// </summary>
+    public string? TemplateKey { get; init; }
+
+    /// <summary>Whether the id a template class is declared with is an entity id, which is what lets another class take it.</summary>
+    public bool TemplateIdIsEntityId { get; init; }
+
+    /// <summary>The metadata name of a template class, <c>Shop.Tenancy.ShopTenant</c>, for finding its symbol again when the parent is closed.</summary>
+    public string? MetadataName { get; init; }
+
+    /// <summary>
+    /// True when the parent of a template class has <c>[KeyPart]</c> properties. A class with key parts of its
+    /// own implements the key-part list again, and has to put the parent's in front of its own.
+    /// </summary>
+    public bool ParentHasKeyParts { get; init; }
+}
+
+/// <summary>
+/// What a template attribute on a class says, read before the other classes of the project are known.
+/// Resolving it fills the parent's type parameters in order: the attribute's own type arguments first,
+/// then each <see cref="Bindings"/> entry from the one class in the project declared with the attribute
+/// that entry names.
+/// </summary>
+/// <param name="AttributeKey">The template attribute's open definition, fully qualified; what a binding names to find this class.</param>
+/// <param name="AttributeName">The attribute as the author writes it, <c>TenantAggregate</c>, for diagnostics.</param>
+/// <param name="Parent">The parent's fully qualified name without type arguments.</param>
+/// <param name="ParentMetadataName">The parent's metadata name, for checking its constraints once every argument is known.</param>
+/// <param name="ParentParameters">The parent's type parameter names, for diagnostics; their count is its arity.</param>
+/// <param name="Arguments">
+/// The attribute's own type arguments, fully qualified. The first is the id. There may be more of them than the
+/// parent has type parameters: those beyond are not the parent's.
+/// </param>
+internal sealed record TemplateDeclaration(
+    string AttributeKey,
+    string AttributeName,
+    string Parent,
+    string ParentMetadataName,
+    EquatableArray<string> ParentParameters,
+    EquatableArray<string> Arguments,
+    EquatableArray<TemplateBinding> Bindings);
+
+/// <summary>One parent type parameter a template fills from another class of the project.</summary>
+/// <param name="Position">The parent type parameter it fills.</param>
+/// <param name="SourceKey">The open template attribute whose class provides it, fully qualified.</param>
+/// <param name="SourceName">That attribute as the author writes it, for diagnostics.</param>
+/// <param name="SourceMetadataName">That attribute's metadata name, for finding a class declared with it in a referenced project.</param>
+/// <param name="TakeType">True to take the class itself, false to take its id.</param>
+internal sealed record TemplateBinding(int Position, string SourceKey, string SourceName, string SourceMetadataName, bool TakeType);

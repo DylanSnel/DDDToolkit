@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy on Entity Framework</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;entity;framework;ef;efcore</PackageTags>
+    <Description>Stores Tenancy with Entity Framework Core: the tables of the application's tenancy classes, the read model other modules query in their own context, the tenant filter, the check every save of a tenant's row passes, and the store the use cases load and save through.</Description>
+  </PropertyGroup>
+
+  <!--
+    It declares no entities, ids or value objects of its own, so no generator runs on it: the application's
+    classes are declared in the application, which the generators already run on.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+    <ProjectReference Include="..\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+  </ItemGroup>
+
+</Project>

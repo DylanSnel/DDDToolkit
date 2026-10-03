@@ -27,6 +27,17 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 /// so that changes made by domain event handlers in the same save are versioned too. Register it after
 /// <see cref="PublishDomainEventsInterceptor"/>; <c>UseDDDToolkit</c> does this for you.
 /// </para>
+/// <para>
+/// <b>A statement that found no row is not always a lost race.</b> Under row level security, an update or a
+/// delete of a row a policy hides from the statement finds no row either, and no retry will change that. So
+/// before the conflict is thrown, each row the failed statement was for is read again by its key, as the same
+/// caller and through the context's filters: its own concurrency tokens, or its aggregate root's
+/// <c>Version</c> for a child that has none. When every one is still there, unchanged, nobody else wrote, and
+/// the save is refused with <see cref="ToolkitRefusals.Refused"/> instead, a <see cref="RefusalException"/> of
+/// kind <see cref="RefusalKind.NotPermitted"/> with the conflict as its inner exception, and a warning is logged
+/// through the context's logger factory. A row that is gone, hidden or changed is the conflict it always was.
+/// That costs one query for each row the failed statement was for, and none for a save that succeeds.
+/// </para>
 /// </summary>
 public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
 {
@@ -66,38 +77,95 @@ public sealed class AggregateVersionInterceptor : SaveChangesInterceptor
     /// <remarks>
     /// The update pipeline wraps whatever <see cref="ThrowingConcurrencyException"/> throws in a
     /// <see cref="DbUpdateException"/>. Throwing from here replaces the outgoing exception, so callers
-    /// can <c>catch (ConcurrencyConflictException)</c> directly.
+    /// can <c>catch (ConcurrencyConflictException)</c> directly, and <c>catch (RefusalException)</c> for a
+    /// save a policy denied.
     /// </remarks>
     public override void SaveChangesFailed(DbContextErrorEventData eventData)
     {
-        if (Unwrap(eventData.Exception) is { } conflict)
+        if (Unwrap(eventData.Exception, out var entries) is not { } conflict)
         {
-            ExceptionDispatchInfo.Throw(conflict);
+            return;
         }
+
+        if (eventData.Context is { } context && DatabaseRefusals.DeniedNotLate(context, RowsToReadAgain(context, entries), conflict) is { } refusal)
+        {
+            throw refusal;
+        }
+
+        ExceptionDispatchInfo.Throw(conflict);
     }
 
     /// <inheritdoc />
-    public override Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
+    public override async Task SaveChangesFailedAsync(DbContextErrorEventData eventData, CancellationToken cancellationToken = default)
     {
-        SaveChangesFailed(eventData);
-        return Task.CompletedTask;
+        if (Unwrap(eventData.Exception, out var entries) is not { } conflict)
+        {
+            return;
+        }
+
+        if (eventData.Context is { } context
+            && await DatabaseRefusals.DeniedNotLateAsync(context, RowsToReadAgain(context, entries), conflict, cancellationToken).ConfigureAwait(false) is { } refusal)
+        {
+            throw refusal;
+        }
+
+        ExceptionDispatchInfo.Throw(conflict);
     }
 
-    private static ConcurrencyConflictException? Unwrap(Exception exception)
+    /// <summary>The conflict <paramref name="exception"/> is or carries, with the entries of the statement that found no row.</summary>
+    private static ConcurrencyConflictException? Unwrap(Exception exception, out IReadOnlyList<EntityEntry> entries)
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
             switch (current)
             {
                 case ConcurrencyConflictException conflict:
+                    entries = (conflict.InnerException as DbUpdateConcurrencyException)?.Entries ?? [];
                     return conflict;
                 case DbUpdateConcurrencyException concurrency when concurrency.InnerException is not ConcurrencyConflictException:
                     // A provider raised the conflict without passing through ThrowingConcurrencyException.
+                    entries = concurrency.Entries;
                     return Translate(concurrency.Entries, concurrency);
             }
         }
 
+        entries = [];
         return null;
+    }
+
+    /// <summary>
+    /// The rows to read again to tell a denied save from a lost race: each entry of the failed statement that has
+    /// concurrency tokens of its own, and for one that has none, or is owned and so read only through its owner,
+    /// the aggregate root it belongs to, whose <c>Version</c> stands for the whole aggregate. Each once. Empty
+    /// when one of them has neither, since nothing can then be compared.
+    /// </summary>
+    private static IReadOnlyList<EntityEntry> RowsToReadAgain(DbContext context, IReadOnlyList<EntityEntry> entries)
+    {
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var rows = new List<EntityEntry>();
+
+        foreach (var entry in entries)
+        {
+            if (!entry.Metadata.IsOwned() && entry.Metadata.GetProperties().Any(static property => property.IsConcurrencyToken))
+            {
+                if (seen.Add(entry.Entity))
+                {
+                    rows.Add(entry);
+                }
+
+                continue;
+            }
+
+            var roots = FindOwningRoots(context, entry).ToList();
+            if (roots.Count == 0)
+            {
+                return [];
+            }
+
+            rows.AddRange(roots.Where(root => seen.Add(root.Entity)));
+        }
+
+        return rows;
     }
 
     /// <summary>Increments the version of every aggregate root that this save touches, once per root.</summary>

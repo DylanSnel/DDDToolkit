@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    An application with both supporting domains, as small as one can be: a campus. Its tenants, their
+    organizations, seats and roles are declared with Tenancy's templates, and two kinds of resource have
+    members declared with Membership's: courses, whose roles the application keeps for each tenant, and labs,
+    whose members hold the tenant's own roles. A member is a seat, and a role held in the organization where a
+    resource sits, or above it, reaches the resource.
+
+    Neither package knows the other, so what joins them is written into this project, by the generator of
+    Membership's Entity Framework package, which notices Tenancy here. The suites run against this application
+    rather than against classes written for a test, so they prove that the two packages work together in a host that
+    references both, on SQLite and on Postgres.
+
+    Everything is in the namespace Campus, outside the packages' own: host code is the application's.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Campus</AssemblyName>
+    <RootNamespace>Campus</RootNamespace>
+    <!-- Names the generated AddCampusConverters method. -->
+    <DDD_Module>Campus</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+    <!-- So the ids get their value converters, which the Entity Framework generator writes into this assembly. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <!-- Both stored with Entity Framework: the application's contexts and its registrations live here, where the classes are declared. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Membership's own: the one that writes the member list on each resource a member class names, -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- and the one that writes what joins a course and a lab to the organization, since Tenancy is here as well. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

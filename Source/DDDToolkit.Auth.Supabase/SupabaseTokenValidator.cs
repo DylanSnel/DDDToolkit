@@ -2,9 +2,6 @@ using System.Security.Claims;
 using System.Text;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
-using Microsoft.IdentityModel.JsonWebTokens;
-using Microsoft.IdentityModel.Protocols;
-using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
 namespace DDDToolkit.Auth.Supabase;
@@ -16,40 +13,71 @@ public sealed class SupabaseAuthOptions
     public string ProjectUrl { get; set; } = "";
 
     /// <summary>
-    /// The project's JWT secret, for the CLI's local stack and projects still on the legacy secret, whose
-    /// tokens are signed with it rather than with a key the project publishes. Leave it unset otherwise:
-    /// Supabase advises asymmetric signing keys rather than handing the secret to another service.
+    /// The project's JWT secret, for the tokens that are signed with it: those of a project still on the
+    /// legacy secret, and those a developer's machine signs itself. A token signed with a key Auth publishes
+    /// is checked with that key whether or not a secret is set, so a host that has both kinds, as one beside
+    /// the stack the Supabase CLI starts has, sets it and takes both. Leave it unset for a hosted project
+    /// with signing keys: Supabase advises those rather than handing the secret to another service.
     /// </summary>
     public string? JwtSecret { get; set; }
+
+    /// <summary>
+    /// Where Supabase Auth answers, when that is not <c>{ProjectUrl}/auth/v1</c>: an Auth server with no
+    /// gateway in front of it, or one reached inside a network under another name than the one its tokens
+    /// carry. The keys Auth publishes are fetched from there. The issuer a token has to name stays the one of
+    /// <see cref="ProjectUrl"/>.
+    /// </summary>
+    public string? AuthUrl { get; set; }
+
+    /// <summary>
+    /// Whether the keys Auth publishes are fetched over plain http from a server that is not on this machine:
+    /// for an Auth server on a private network of the host's own. Off: Auth is asked over https, or over
+    /// plain http on <c>localhost</c> or a loopback address, where nothing travels, and any other address in
+    /// plain http is refused when the host starts. A token signed with a published key is checked with
+    /// whatever key that address answers with, so over plain http whoever is in between could sign in as
+    /// anybody; turning this on says that the network in between is the host's own.
+    /// </summary>
+    public bool AllowPlainHttp { get; set; }
 }
 
 /// <summary>
 /// Validates the access tokens Supabase Auth issues, the ones supabase-js holds for a signed-in user,
 /// without a web framework: issued by <c>{projectUrl}/auth/v1</c>, for the audience <c>authenticated</c>,
 /// unexpired, and signed with a key the project publishes at <c>{projectUrl}/auth/v1/.well-known/jwks.json</c>,
-/// or with <see cref="SupabaseAuthOptions.JwtSecret"/>. The keys are fetched once and again when a token
-/// names one it has not seen, so rotating them needs nothing here.
+/// or with <see cref="SupabaseAuthOptions.JwtSecret"/> when there is one. The keys are fetched once and again
+/// when a token names one it has not seen, so rotating them needs nothing here.
 /// </summary>
 /// <remarks>
+/// <para>
 /// What comes out is the <see cref="Caller"/> row level security runs the application's queries
 /// as. A token that does not validate is no user at all, <see cref="Caller.Anonymous"/>, the way a
 /// request with a bad token is anonymous to an ASP.NET Core endpoint that allows anonymous callers.
+/// </para>
+/// <para>
+/// Which of the two a token is checked with is decided by how its header says it was signed, each kind with
+/// its own algorithms only: <see cref="SupabaseTokenHandler"/> has the rules. A token signed with the secret
+/// is checked without asking Auth anything.
+/// </para>
 /// </remarks>
 public sealed class SupabaseTokenValidator
 {
-    private readonly JsonWebTokenHandler _handler = new();
+    private readonly SupabaseTokenHandler _handler;
     private readonly TokenValidationParameters _parameters;
 
     /// <summary>A validator for the project <paramref name="options"/> names.</summary>
     /// <param name="options">The project.</param>
     /// <param name="httpClient">Fetches the project's keys; a new one when left out.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
-    /// <exception cref="ArgumentException">The project URL is not an http or https URL.</exception>
+    /// <exception cref="ArgumentException">
+    /// The project URL, or the Auth URL when one is given, is not an http or https URL; or the address Auth
+    /// answers at is plain http to another machine and <see cref="SupabaseAuthOptions.AllowPlainHttp"/> is off.
+    /// </exception>
     public SupabaseTokenValidator(SupabaseAuthOptions options, HttpClient? httpClient = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         Issuer = SupabaseTokens.IssuerOf(options.ProjectUrl);
+        _handler = new SupabaseTokenHandler(string.IsNullOrWhiteSpace(options.AuthUrl) ? Issuer : options.AuthUrl, httpClient, options.AllowPlainHttp);
         _parameters = new TokenValidationParameters
         {
             ValidIssuer = Issuer,
@@ -61,18 +89,6 @@ public sealed class SupabaseTokenValidator
         if (options.JwtSecret is { Length: > 0 } secret)
         {
             _parameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
-            _parameters.ValidAlgorithms = [SecurityAlgorithms.HmacSha256];
-        }
-        else
-        {
-            var documents = new HttpDocumentRetriever(httpClient ?? new HttpClient())
-            {
-                RequireHttps = Issuer.StartsWith(Uri.UriSchemeHttps + "://", StringComparison.OrdinalIgnoreCase),
-            };
-            _parameters.ConfigurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-                Issuer + "/.well-known/openid-configuration",
-                new OpenIdConnectConfigurationRetriever(),
-                documents);
         }
     }
 

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The domain of an application with both supporting domains, as a consumer of the published packages lays
+    one out. Its tenants are publishing houses with their imprints below them, declared with Tenancy's
+    templates. Its manuscripts have members, declared with Membership's template, who are seats of a house and
+    hold roles the house keeps for its manuscripts; a role held in the organization reaches a manuscript from
+    above.
+
+    A domain project references no storage, so only the two domain packages: the toolkit's generator has to
+    arrive with them, and Membership's, which ships inside Membership's package and writes the member list
+    the manuscript's constructor calls.
+  -->
+  <PropertyGroup>
+    <!-- A generator the compiler could not load is a warning, and the build then goes on without it. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Tenancy" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Membership" Version="$(DDDToolkitPackageVersion)" />
+  </ItemGroup>
+
+</Project>

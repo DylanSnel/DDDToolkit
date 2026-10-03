@@ -7,7 +7,8 @@ namespace DDDToolkit.Analyzers;
 
 /// <summary>
 /// Generates the base type, constructors and equality members for <c>[SingleValueObject&lt;TValue&gt;]</c>
-/// records, plus their always-valid twin.
+/// records, plus their always-valid twin. Both implement <c>ISingleValue&lt;TSelf, TValue&gt;</c> when the project
+/// can see it, so a project that does not declare them can still store them as their value.
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SingleValueObjectGenerator : IIncrementalGenerator
@@ -33,8 +34,11 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
 
         using (writer.TypeScope(type))
         {
+            var singleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(name, value.FullyQualifiedName)
+                : string.Empty;
             using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + ".SingleValueObject<" + value.FullyQualifiedName + ">, "
-                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">"))
+                + KnownTypes.ValidationNamespace + ".IValidatable<" + validName + ">" + singleValue))
             {
                 Emit.SingleValueEqualityMembers(writer, name, value.FullyQualifiedName, value.IsValueType);
                 writer.Line();
@@ -56,11 +60,20 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
                 writer.Line();
                 writer.Line("/// <summary>The always-valid twin. Throws when the value is invalid; call TryToValid() to be handed the failures instead.</summary>");
                 writer.Line("public " + validName + " ToValid() => new(this);");
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, name, value.FullyQualifiedName);
+                }
             }
 
             writer.Line();
 
-            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid"))
+            var twinSingleValue = definition.SingleValueAvailable
+                ? ", " + Emit.SingleValueInterface(validName, value.FullyQualifiedName)
+                : string.Empty;
+            using (writer.Block(type.Accessibility + " partial record " + validName + " : " + name + ", " + KnownTypes.InterfacesNamespace + ".IAlwaysValid" + twinSingleValue))
             {
                 // The record's copy constructor, not a property-by-property copy. It copies every field,
                 // protected, private and get-only ones included; a copy of the settable properties alone
@@ -79,6 +92,12 @@ public sealed class SingleValueObjectGenerator : IIncrementalGenerator
 
                 writer.Line();
                 Emit.SingleValueEqualityMembers(writer, validName, value.FullyQualifiedName, value.IsValueType);
+
+                if (definition.SingleValueAvailable)
+                {
+                    writer.Line();
+                    Emit.SingleValueFromValue(writer, validName, value.FullyQualifiedName);
+                }
             }
         }
 

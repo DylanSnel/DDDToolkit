@@ -7,12 +7,12 @@ namespace DDDToolkit.EntityFramework.Storage;
 /// provider that cannot order its own offset type can still index and order the column. SQLite is the
 /// provider that needs this; see <see cref="DomainEventTimestamps"/>.
 /// </summary>
-internal sealed class UtcDateTimeOffsetConverter() : ValueConverter<DateTimeOffset, DateTime>(
+public sealed class UtcDateTimeOffsetConverter() : ValueConverter<DateTimeOffset, DateTime>(
     static value => value.UtcDateTime,
     static value => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero));
 
 /// <summary>The nullable twin of <see cref="UtcDateTimeOffsetConverter"/>.</summary>
-internal sealed class NullableUtcDateTimeOffsetConverter() : ValueConverter<DateTimeOffset?, DateTime?>(
+public sealed class NullableUtcDateTimeOffsetConverter() : ValueConverter<DateTimeOffset?, DateTime?>(
     static value => value.HasValue ? value.Value.UtcDateTime : null,
     static value => value.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc), TimeSpan.Zero) : null);
 

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The host: no package reference and no module of its own, only the infrastructure project. NuGet hands it
+    the analyzers of every package below it, Membership's two generators among them, so they run here as
+    well, and must write nothing here: what they write belongs to the projects below, where the classes and
+    the contexts are. The script checks that they arrived here and wrote nothing.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Infrastructure\Acme.Press.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

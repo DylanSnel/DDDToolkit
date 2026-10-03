@@ -1,0 +1,511 @@
+namespace DDDToolkit.Supporting.Tenancy.Tests;
+
+/// <summary>
+/// The catalogue is checked once, as a whole, and every problem is reported together, so a catalogue that
+/// does not hold together stops start-up rather than a provisioning half way.
+/// </summary>
+public class CatalogueTests
+{
+    private static readonly RolePack Administrators = new("host-admin", "Administrator", "Runs the tenant", [], Administers: true);
+
+    /// <summary>Tenancy's own keys, as an administrators' pack that lists its keys writes them.</summary>
+    private static readonly string[] TenancysOwn = [.. TenancyKeys.Permissions.Select(permission => permission.Key)];
+
+    /// <summary>The problem of an administrators' pack that lists keys and leaves <paramref name="key"/> out.</summary>
+    private static string LeftOut(string pack, string key, string because)
+        => "The administrators' pack '" + pack + "' lists keys but not '" + key + "', which " + because
+           + ": an administrator holds every key that manages access, and Tenancy's own.";
+
+    private static ApplicationCatalogue Application(
+        IReadOnlyList<RolePack>? packs = null,
+        IReadOnlyList<UnitKind>? unitKinds = null,
+        IReadOnlyList<Permission>? permissions = null)
+        => new(packs ?? [Administrators], unitKinds ?? [new UnitKind("company", "Company")], permissions ?? HostCatalogue.Permissions);
+
+    private static IReadOnlyList<string> Problems(ApplicationCatalogue application, params Permission[] contributed)
+        => FluentActions.Invoking(() => TenancyCatalogue.Build(application, contributed))
+            .Should().Throw<TenancyCatalogueException>().Which.Problems;
+
+    [Fact]
+    public void Tenancy_keys_are_always_present()
+    {
+        var catalogue = TenancyCatalogue.Build(Application(permissions: []), []);
+
+        catalogue.Permissions.Select(permission => permission.Key).Should().Equal(
+            TenancyKeys.SettingsManage, TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, TenancyKeys.GrantsManage, TenancyKeys.RolesManage,
+            TenancyKeys.HistoryView);
+        catalogue.Permissions.Should().OnlyContain(permission => permission.Module == "Tenancy");
+        catalogue.LiveKeys.Should().BeEquivalentTo(TenancyKeys.Permissions.Select(permission => permission.Key));
+        TenancyKeys.AdministratorKey.Should().Be(TenancyKeys.RolesManage);
+    }
+
+    [Fact]
+    public void An_application_key_under_tenancy_is_refused()
+    {
+        Problems(Application(permissions: [new Permission("tenancy.extras.manage", "Extras", "Extra things")]))
+            .Should().ContainSingle().Which.Should().Contain("'tenancy.extras.manage'").And.Contain("belong to the Tenancy package");
+
+        Problems(Application(), new Permission(TenancyKeys.SettingsManage, "Widgets", "Duplicate"))
+            .Should().ContainSingle().Which.Should().Contain("A contribution");
+    }
+
+    [Fact]
+    public void A_duplicate_key_is_refused()
+    {
+        Problems(Application(), new Permission(HostCatalogue.WidgetRead, "Gadgets", "See gadgets"))
+            .Should().ContainSingle().Which.Should().Be("'widget.read' is declared more than once.");
+
+        Problems(Application(permissions: [new Permission("Widget.Read", "Widgets", "Shouting")]))
+            .Should().ContainSingle().Which.Should().Contain("not lowercase words");
+        Problems(Application(permissions: [new Permission("widgets", "Widgets", "No dot")]))
+            .Should().ContainSingle();
+        Problems(Application(permissions: [new Permission("widget.paint", " ", "Missing module")]))
+            .Should().ContainSingle().Which.Should().Contain("names no module");
+    }
+
+    [Fact]
+    public void A_pack_naming_an_unknown_or_retired_key_is_refused()
+    {
+        var problems = Problems(Application(
+            packs: [Administrators, new RolePack("painter", "Painter", "Paints", ["widget.paint", "widget.old"])],
+            permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]));
+
+        problems.Should().BeEquivalentTo(
+            "The pack 'painter' lists 'widget.old', which is retired.",
+            "The pack 'painter' lists 'widget.paint', which is unknown to the catalogue.");
+    }
+
+    [Fact]
+    public void A_duplicate_pack_is_refused()
+    {
+        var watcher = new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]);
+
+        Problems(Application(packs: [Administrators, watcher, watcher with { Name = "Other watcher" }]))
+            .Should().ContainSingle().Which.Should().Be("The pack 'watcher' is declared more than once.");
+    }
+
+    [Fact]
+    public void Each_shape_has_exactly_one_administrators_pack()
+    {
+        Problems(Application(packs: [new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead])]))
+            .Should().HaveCount(2).And.OnlyContain(problem => problem.Contains("exactly one administrators' pack"));
+
+        Problems(Application(packs: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat }]))
+            .Should().ContainSingle().Which.Should().StartWith("A flat tenant needs exactly one administrators' pack").And.Contain("host-admin, flat-admin");
+
+        Problems(Application(packs: [Administrators with { SeedOnProvision = false }]))
+            .Should().HaveCount(2, "an administrators' pack that is not seeded gives a new tenant no administrator");
+
+        var perShape = TenancyCatalogue.Build(Application(packs:
+        [
+            // Named apart: a flat tenant that turns hierarchical is given the other pack's role next to its own.
+            Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat },
+            Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical },
+        ]), []);
+        perShape.AdministratorPackFor(TenantShape.Flat).Key.Should().Be("flat-admin");
+        perShape.AdministratorPackFor(TenantShape.Hierarchical).Key.Should().Be("tree-admin");
+    }
+
+    [Fact]
+    public void Packs_for_a_shape_are_the_seeded_ones_of_that_shape_in_order()
+    {
+        var catalogue = New.Catalogue();
+
+        catalogue.PacksFor(TenantShape.Hierarchical).Select(pack => pack.Key).Should().Equal("host-admin", "supervisor", "operator", "watcher");
+        catalogue.PacksFor(TenantShape.Flat).Select(pack => pack.Key).Should().Equal("host-admin", "operator", "watcher");
+        catalogue.Packs.Single(pack => pack.Key == "operator").Keys
+            .Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead], "a pack's keys are stored expanded");
+    }
+
+    [Fact]
+    public void The_administrators_pack_holds_every_live_key()
+    {
+        PermissionContribution[] contributions =
+        [
+            new([new Permission("gadget.read", "Gadgets", "See gadgets")]),
+            new([new Permission("gizmo.read", "Gizmos", "See gizmos")]),
+        ];
+        var catalogue = TenancyCatalogue.Build(
+            Application(permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]),
+            contributions.SelectMany(contribution => contribution.Permissions));
+
+        var administrators = catalogue.AdministratorPackFor(TenantShape.Hierarchical);
+
+        administrators.Keys.Should().Equal(catalogue.LiveKeys);
+        administrators.Keys.Should().Contain([TenancyKeys.RolesManage, HostCatalogue.WidgetCreate, "gadget.read", "gizmo.read"],
+            "Tenancy's, the application's and every contribution's")
+            .And.NotContain("widget.old", "a retired key is not live")
+            .And.BeInAscendingOrder(StringComparer.Ordinal);
+        catalogue.Permissions.Select(permission => permission.Module).Should().BeInAscendingOrder(StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void An_administering_pack_may_list_keys()
+    {
+        var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", Implies: [HostCatalogue.WidgetRead], ManagesAccess: true);
+        var catalogue = TenancyCatalogue.Build(
+            Application(
+                packs: [Administrators with { Keys = [.. TenancysOwn, " widget.assign ", TenancyKeys.RolesManage] }],
+                permissions: [.. HostCatalogue.Permissions, assign]),
+            [new Permission("gauges.read", "Gauges", "Read gauges")]);
+
+        var administrators = catalogue.AdministratorPackFor(TenantShape.Hierarchical);
+
+        administrators.Keys.Should().Equal(
+            [
+                TenancyKeys.GrantsManage, TenancyKeys.HistoryView, TenancyKeys.RolesManage, TenancyKeys.SeatsManage, TenancyKeys.SettingsManage, TenancyKeys.UnitsManage,
+                "widget.assign", HostCatalogue.WidgetRead,
+            ],
+            "it holds what it lists, expanded as any pack is: trimmed, each key once, with what a key implies, in ordinal order");
+        administrators.Keys.Should().NotContain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "gauges.read"], "a live key it does not list is not its");
+        catalogue.LiveKeys.Should().Contain([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "gauges.read"]);
+        administrators.Administers.Should().BeTrue();
+        catalogue.AdministratorPackFor(TenantShape.Flat).Should().BeSameAs(administrators, "the one pack is for every shape");
+        catalogue.Packs.Should().ContainSingle().Which.Should().BeSameAs(administrators);
+
+        // What it lists is checked as any pack's list is.
+        Problems(Application(
+                packs: [Administrators with { Keys = [.. TenancysOwn, "widget.fly", "widget.old"] }],
+                permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]))
+            .Should().BeEquivalentTo(
+                "The pack 'host-admin' lists 'widget.fly', which is unknown to the catalogue.",
+                "The pack 'host-admin' lists 'widget.old', which is retired.");
+    }
+
+    [Fact]
+    public void A_listing_administering_pack_must_hold_every_tenancy_key()
+    {
+        Problems(Application(packs: [Administrators with { Keys = [.. TenancysOwn.Where(key => key != TenancyKeys.SettingsManage)] }]))
+            .Should().ContainSingle().Which.Should().Be(
+                "The administrators' pack 'host-admin' lists keys but not 'tenancy.settings.manage', which is one of Tenancy's own: "
+                + "an administrator holds every key that manages access, and Tenancy's own.");
+
+        // Every key it leaves out is named, each in a problem of its own, the administrator's key among them.
+        Problems(Application(packs: [Administrators with { Keys = [HostCatalogue.WidgetRead, TenancyKeys.GrantsManage] }]))
+            .Should().Equal(
+                LeftOut("host-admin", TenancyKeys.HistoryView, "is one of Tenancy's own"),
+                LeftOut("host-admin", TenancyKeys.RolesManage, "is one of Tenancy's own"),
+                LeftOut("host-admin", TenancyKeys.SeatsManage, "is one of Tenancy's own"),
+                LeftOut("host-admin", TenancyKeys.SettingsManage, "is one of Tenancy's own"),
+                LeftOut("host-admin", TenancyKeys.UnitsManage, "is one of Tenancy's own"));
+
+        // Each pack answers for its own list: the one that lists nothing is not asked, and a flat tenant's
+        // administrators hold the units key like any other of Tenancy's.
+        Problems(Application(packs:
+            [
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat, Keys = [.. TenancysOwn.Where(key => key != TenancyKeys.UnitsManage)] },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical },
+            ]))
+            .Should().ContainSingle().Which.Should().Be(LeftOut("flat-admin", TenancyKeys.UnitsManage, "is one of Tenancy's own"));
+    }
+
+    [Fact]
+    public void A_listing_administering_pack_must_hold_every_key_that_manages_access()
+    {
+        var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
+        var retired = new Permission("widget.old", "Widgets", "Old", Retired: true, ManagesAccess: true);
+        var locks = new Permission("gauges.lock", "Gauges", "Lock gauges", ManagesAccess: true);
+        var hands = new Permission("gauges.assign", "Gauges", "Hand gauges to people");
+
+        // Marked where the application declares it, where a module does, and by the application for a module.
+        ApplicationCatalogue Listing(params string[] keys)
+            => Application(
+                packs: [Administrators with { Keys = [.. TenancysOwn, .. keys] }],
+                permissions: [.. HostCatalogue.Permissions, assign, retired]) with { AccessManagingKeys = ["gauges.assign"] };
+
+        Problems(Listing(HostCatalogue.WidgetCreate), locks, hands)
+            .Should().Equal(
+                LeftOut("host-admin", "gauges.assign", "manages access"),
+                LeftOut("host-admin", "gauges.lock", "manages access"),
+                LeftOut("host-admin", "widget.assign", "manages access"));
+        Problems(Listing("gauges.assign", "gauges.lock"), locks, hands)
+            .Should().ContainSingle().Which.Should().Be(
+                "The administrators' pack 'host-admin' lists keys but not 'widget.assign', which manages access: "
+                + "an administrator holds every key that manages access, and Tenancy's own.");
+
+        var catalogue = TenancyCatalogue.Build(Listing("gauges.assign", "gauges.lock", "widget.assign"), [locks, hands]);
+        catalogue.AdministratorPackFor(TenantShape.Flat).Keys
+            .Should().Equal(
+                catalogue.AccessManagingKeys.Append(TenancyKeys.HistoryView).Order(StringComparer.Ordinal),
+                "this pack lists the keys that manage access and Tenancy's own, and no others")
+            .And.NotContain([HostCatalogue.WidgetRead, "widget.old"], "neither a key of the application that manages no access nor a retired one is asked of it");
+
+        // A key it holds through one that implies it counts: what is checked is what the role made from it holds.
+        var rule = new Permission("widget.rule", "Widgets", "Rule widgets", Implies: ["widget.assign"], ManagesAccess: true);
+        TenancyCatalogue.Build(
+                Application(packs: [Administrators with { Keys = [.. TenancysOwn, "widget.rule"] }], permissions: [.. HostCatalogue.Permissions, assign, rule]),
+                [])
+            .AdministratorPackFor(TenantShape.Flat).Keys.Should().Contain(["widget.assign", "widget.rule"]);
+
+        // A key that starts to manage access stops a catalogue that built until then: the pack lists it first.
+        var tenancysOnly = Application(packs: [Administrators with { Keys = TenancysOwn }]);
+        TenancyCatalogue.Build(tenancysOnly, []).AdministratorPackFor(TenantShape.Flat).Keys.Should().BeEquivalentTo(TenancysOwn);
+        Problems(tenancysOnly with { AccessManagingKeys = [HostCatalogue.WidgetCreate] })
+            .Should().ContainSingle().Which.Should().Be(LeftOut("host-admin", HostCatalogue.WidgetCreate, "manages access"));
+    }
+
+    [Fact]
+    public void An_administering_pack_that_lists_nothing_still_holds_every_live_key()
+    {
+        var application = Application(
+            packs:
+            [
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical, Keys = [.. TenancysOwn, "widget.assign"] },
+            ],
+            permissions:
+            [
+                .. HostCatalogue.Permissions,
+                new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true),
+                new Permission("widget.old", "Widgets", "Old", Retired: true),
+            ]);
+
+        var catalogue = TenancyCatalogue.Build(application, []);
+
+        catalogue.AdministratorPackFor(TenantShape.Flat).Keys.Should().Equal(catalogue.LiveKeys, "a pack that lists nothing holds every live key, next to one that lists its own")
+            .And.Contain([HostCatalogue.WidgetRead, HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, "widget.assign"])
+            .And.NotContain("widget.old", "a retired key is not live");
+        catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys.Should().BeEquivalentTo([.. TenancysOwn, "widget.assign"]);
+
+        // A list that is not there is one that lists nothing.
+        var unlisted = TenancyCatalogue.Build(Application(packs: [Administrators with { Keys = null! }]), []);
+        unlisted.AdministratorPackFor(TenantShape.Hierarchical).Keys.Should().Equal(unlisted.LiveKeys);
+
+        // A key declared later comes with the pack that lists nothing, and not with the one that lists.
+        var later = TenancyCatalogue.Build(application, [new Permission("gauges.read", "Gauges", "Read gauges")]);
+        later.AdministratorPackFor(TenantShape.Flat).Keys.Should().Equal(later.LiveKeys).And.Contain("gauges.read");
+        later.AdministratorPackFor(TenantShape.Hierarchical).Keys.Should().Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys);
+    }
+
+    [Fact]
+    public void Implications_are_one_hop_and_never_self()
+    {
+        Problems(Application(permissions: [new Permission("widget.spin", "Widgets", "Spin", Implies: ["widget.spin"])]))
+            .Should().ContainSingle().Which.Should().Be("'widget.spin' implies itself.");
+
+        Problems(Application(permissions: [new Permission("widget.spin", "Widgets", "Spin", Implies: ["widget.fly"])]))
+            .Should().ContainSingle().Which.Should().Contain("unknown to the catalogue");
+
+        Problems(Application(permissions:
+            [
+                new Permission("widget.read", "Widgets", "See"),
+                new Permission("widget.change", "Widgets", "Change", Implies: ["widget.read"]),
+                new Permission("widget.admin", "Widgets", "Everything", Implies: ["widget.change"]),
+            ]))
+            .Should().ContainSingle().Which.Should().Contain("'widget.change' is implied by another key and implies keys itself");
+    }
+
+    [Fact]
+    public void Unit_kinds_are_present_and_unique()
+    {
+        Problems(Application(unitKinds: [])).Should().ContainSingle().Which.Should().Contain("no unit kind");
+        Problems(Application(unitKinds: [new UnitKind("site", "Site"), new UnitKind("site", "Place")]))
+            .Should().ContainSingle().Which.Should().Contain("more than once");
+        Problems(Application(unitKinds: [new UnitKind(" ", "Blank"), new UnitKind(new string('k', 65), "Too long")]))
+            .Should().HaveCount(2);
+
+        var catalogue = New.Catalogue();
+        catalogue.UnitKinds.Select(kind => kind.Key).Should().Equal("company", "region", "site");
+        catalogue.KnowsUnitKind(" region ").Should().BeTrue();
+        catalogue.KnowsUnitKind("galaxy").Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_unknown_key_is_not_live()
+    {
+        var catalogue = TenancyCatalogue.Build(Application(permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]), []);
+
+        catalogue.Knows("widget.fly").Should().BeFalse();
+        catalogue.IsLive("widget.fly").Should().BeFalse();
+        catalogue.Knows("widget.old").Should().BeTrue();
+        catalogue.IsLive("widget.old").Should().BeFalse();
+        catalogue.IsLive(HostCatalogue.WidgetRead).Should().BeTrue();
+        catalogue.LiveKeys.Should().NotContain("widget.old");
+        catalogue.Permissions.Should().Contain(permission => permission.Key == "widget.old", "a retired key stays declared");
+
+        FluentActions.Invoking(() => catalogue.RequireAskable("widget.fly")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => catalogue.RequireAskable("widget.old")).Should().NotThrow("a retired key may be asked about, and holds nowhere");
+    }
+
+    [Fact]
+    public void Every_problem_is_reported_at_once()
+    {
+        var exception = FluentActions.Invoking(() => TenancyCatalogue.Build(
+                new ApplicationCatalogue(
+                    Packs: [new RolePack("watcher", "Watcher", "Looks", ["widget.fly"])],
+                    UnitKinds: [],
+                    Permissions: [new Permission("tenancy.extra", "Tenancy", "Taken")]),
+                [new Permission("Bad Key", "Gadgets", "Bad")]))
+            .Should().Throw<TenancyCatalogueException>().Which;
+
+        exception.Problems.Should().HaveCount(6, "a tenancy key, a malformed key, an unknown pack key, no administrators' pack for either shape, and no unit kind");
+        exception.Message.Should().StartWith("The Tenancy catalogue has 6 problems:");
+        foreach (var problem in exception.Problems)
+        {
+            exception.Message.Should().Contain(problem);
+        }
+    }
+
+    [Fact]
+    public void Pack_names_follow_the_role_rules_and_are_unique_ignoring_case()
+    {
+        var problems = Problems(Application(packs:
+        [
+            Administrators,
+            new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead]),
+            new RolePack("lookout", " watcher ", "Looks too", [HostCatalogue.WidgetRead]),
+            new RolePack("blank-name", " ", "Has no name", [HostCatalogue.WidgetRead]),
+            new RolePack("wordy", "Wordy", new string('d', 1001), [HostCatalogue.WidgetRead]),
+            new RolePack("long", new string('n', 121), "Long", [HostCatalogue.WidgetRead]),
+        ]));
+
+        problems.Should().BeEquivalentTo(
+            "The packs 'watcher' and 'lookout' are both named 'watcher', ignoring case; a tenant's roles have names of their own.",
+            "The pack 'blank-name' has a name of 0 characters; a role's name is 1 to 120.",
+            "The pack 'wordy' has a description longer than 1000 characters.",
+            "The pack 'long' has a name of 121 characters; a role's name is 1 to 120.");
+    }
+
+    [Fact]
+    public void Keys_longer_than_a_storage_keeps_them_are_refused()
+    {
+        // The longest key that fits: a word, a dot and a word, 128 characters in all.
+        var fits = "widget." + new string('k', Permission.MaxKeyLength - "widget.".Length);
+        var tooLong = fits + "k";
+        var longPack = new string('p', RolePack.MaxKeyLength + 1);
+
+        TenancyCatalogue.Build(Application(permissions: [.. HostCatalogue.Permissions, new Permission(fits, "Widgets", "Fits")]), [])
+            .LiveKeys.Should().Contain(fits);
+
+        Problems(Application(
+                packs: [Administrators, new RolePack(longPack, "Long", "Long key", [HostCatalogue.WidgetRead])],
+                permissions: [.. HostCatalogue.Permissions, new Permission(tooLong, "Widgets", "Too long")]),
+                new Permission("gadget." + tooLong, "Gadgets", "Too long as well"))
+            .Should().BeEquivalentTo(
+                "The application declares the key '" + tooLong + "', which is longer than 128 characters.",
+                "A contribution declares the key 'gadget." + tooLong + "', which is longer than 128 characters.",
+                "The pack '" + longPack + "' has a key longer than 64 characters.");
+    }
+
+    [Fact]
+    public void An_application_key_implying_a_tenancy_key_is_refused()
+    {
+        var ruler = new Permission("widget.rule", "Widgets", "Rule widgets", Implies: [TenancyKeys.RolesManage]);
+
+        Problems(Application(permissions: [.. HostCatalogue.Permissions, ruler]))
+            .Should().ContainSingle().Which.Should().Be("'widget.rule' implies 'tenancy.roles.manage': only Tenancy's own keys imply keys under 'tenancy.'.");
+        Problems(Application(), ruler with { Key = "gadget.rule", Module = "Gadgets" })
+            .Should().ContainSingle().Which.Should().StartWith("'gadget.rule' implies 'tenancy.roles.manage'");
+    }
+
+    [Fact]
+    public void Tenancys_own_keys_manage_access()
+    {
+        var catalogue = TenancyCatalogue.Build(Application(permissions: []), []);
+
+        // Every one of them but the key to read the history: reading what happened changes nobody's rights.
+        TenancyKeys.Permissions.Where(permission => permission.Key != TenancyKeys.HistoryView).Should().OnlyContain(permission => permission.ManagesAccess);
+        catalogue.AccessManagingKeys.Should().Equal(
+            TenancyKeys.GrantsManage, TenancyKeys.RolesManage, TenancyKeys.SeatsManage, TenancyKeys.SettingsManage, TenancyKeys.UnitsManage);
+        catalogue.Permissions.Where(permission => !permission.ManagesAccess).Select(permission => permission.Key).Should().Equal(TenancyKeys.HistoryView);
+        catalogue.ManagesAccess(TenancyKeys.HistoryView).Should().BeFalse("a role that holds it is given like any other");
+        catalogue.IsLive(TenancyKeys.HistoryView).Should().BeTrue();
+        New.Catalogue().ManagesAccess(HostCatalogue.WidgetChange).Should().BeFalse("a key nobody marks manages no access");
+    }
+
+    [Fact]
+    public void A_key_manages_access_only_when_it_is_marked_and_live()
+    {
+        var catalogue = TenancyCatalogue.Build(Application(permissions:
+        [
+            .. HostCatalogue.Permissions,
+            new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true),
+            new Permission("widget.old", "Widgets", "Old", Retired: true, ManagesAccess: true),
+        ]), []);
+
+        catalogue.ManagesAccess("widget.assign").Should().BeTrue();
+        catalogue.ManagesAccess(HostCatalogue.WidgetRead).Should().BeFalse("a key nobody marks manages no access");
+        catalogue.ManagesAccess("widget.old").Should().BeFalse("a retired key manages nothing");
+        catalogue.ManagesAccess("widget.fly").Should().BeFalse("nor does a key the catalogue does not know");
+        catalogue.AccessManagingKeys.Should().Contain("widget.assign").And.NotContain(["widget.old", HostCatalogue.WidgetRead]);
+        catalogue.Permissions.Single(permission => permission.Key == "widget.old").ManagesAccess.Should().BeTrue("the mark stays on the key, and counts once it is live again");
+    }
+
+    [Fact]
+    public void The_application_marks_keys_of_its_modules_as_managing_access()
+    {
+        var assign = new Permission("gauges.assign", "Gauges", "Hand gauges to people");
+        var marked = new Permission("gauges.lock", "Gauges", "Lock gauges", ManagesAccess: true);
+
+        var catalogue = TenancyCatalogue.Build(
+            Application() with { AccessManagingKeys = ["gauges.assign", "gauges.lock", TenancyKeys.RolesManage] },
+            [assign, marked]);
+
+        catalogue.ManagesAccess("gauges.assign").Should().BeTrue("the application marks a key a module declares");
+        catalogue.Permissions.Single(permission => permission.Key == "gauges.assign").ManagesAccess.Should().BeTrue("the built catalogue shows every mark");
+        catalogue.AccessManagingKeys.Should().Contain(["gauges.assign", "gauges.lock", TenancyKeys.RolesManage])
+            .And.BeInAscendingOrder(StringComparer.Ordinal)
+            .And.OnlyHaveUniqueItems("listing a key that is marked already, Tenancy's included, changes nothing");
+        catalogue.ManagesAccess(HostCatalogue.WidgetCreate).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Marks_on_blank_unknown_or_repeated_keys_are_refused()
+    {
+        Problems(Application() with { AccessManagingKeys = ["widget.fly", " ", null!, HostCatalogue.WidgetCreate, HostCatalogue.WidgetCreate] })
+            .Should().BeEquivalentTo(
+                "The application marks 'widget.fly' as managing access, which is unknown to the catalogue.",
+                "The application marks a blank key as managing access.",
+                "The application marks a blank key as managing access.",
+                "The application marks 'widget.create' as managing access more than once.");
+    }
+
+    [Fact]
+    public void The_keys_of_a_role_that_manage_access_are_its_marked_live_keys()
+    {
+        var catalogue = TenancyCatalogue.Build(
+            Application(permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true, ManagesAccess: true)])
+                with { AccessManagingKeys = [HostCatalogue.WidgetCreate] },
+            []);
+        string[] keys = [TenancyKeys.UnitsManage, HostCatalogue.WidgetRead, HostCatalogue.WidgetCreate, "widget.old", "widget.gone", TenancyKeys.GrantsManage, TenancyKeys.UnitsManage];
+
+        catalogue.AccessManagingKeysOf(new RoleFacts(true, keys))
+            .Should().Equal(TenancyKeys.GrantsManage, TenancyKeys.UnitsManage, HostCatalogue.WidgetCreate);
+        catalogue.AccessManagingKeysOf(new RoleFacts(false, keys)).Should().BeEmpty("an archived role grants nothing, so manages nothing");
+        catalogue.AccessManagingKeysOf(new RoleFacts(true, [HostCatalogue.WidgetRead, "widget.old"])).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_key_that_manages_no_access_implying_one_that_does_is_refused()
+    {
+        var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
+        var rule = new Permission("widget.rule", "Widgets", "Rule widgets", Implies: ["widget.assign"]);
+
+        Problems(Application(permissions: [.. HostCatalogue.Permissions, assign, rule]))
+            .Should().ContainSingle().Which.Should().Be(
+                "'widget.rule' implies 'widget.assign', which manages access: a key that manages no access implies none that does.");
+        Problems(Application(permissions: [.. HostCatalogue.Permissions, assign with { ManagesAccess = false }, rule]) with { AccessManagingKeys = ["widget.assign"] })
+            .Should().ContainSingle("a key the application marks counts as one marked where it is declared")
+            .Which.Should().StartWith("'widget.rule' implies 'widget.assign', which manages access");
+
+        // A key that manages access may imply one that does, and one that does not.
+        TenancyCatalogue.Build(
+                Application(permissions: [.. HostCatalogue.Permissions, assign, rule with { ManagesAccess = true, Implies = ["widget.assign", HostCatalogue.WidgetRead] }]),
+                [])
+            .Expand(["widget.rule"]).Should().Equal("widget.assign", "widget.read", "widget.rule");
+    }
+
+    [Fact]
+    public void A_retired_key_implying_one_that_manages_access_is_not_refused()
+    {
+        var assign = new Permission("widget.assign", "Widgets", "Hand widgets to people", ManagesAccess: true);
+        var rule = new Permission("widget.rule", "Widgets", "Rule widgets", Implies: ["widget.assign"]);
+
+        var retiredSource = TenancyCatalogue.Build(Application(permissions: [.. HostCatalogue.Permissions, assign, rule with { Retired = true }]), []);
+        var retiredTarget = TenancyCatalogue.Build(Application(permissions: [.. HostCatalogue.Permissions, assign with { Retired = true }, rule]), []);
+
+        retiredSource.IsLive("widget.rule").Should().BeFalse();
+        retiredTarget.Expand(["widget.rule"]).Should().Equal(["widget.rule"], "nothing follows an implication to a retired key");
+        retiredTarget.ManagesAccess("widget.rule").Should().BeFalse();
+    }
+}

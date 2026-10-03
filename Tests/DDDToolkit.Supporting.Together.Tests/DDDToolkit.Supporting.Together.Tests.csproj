@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <!--
+      Every claim is asked on SQLite in memory, with no Docker, and again on Postgres under row level security,
+      in a container started the first time a test asks for a database.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <!--
+    The two supporting domains in one application, the campus of the TestHost, tested through the packages'
+    public API only: there is no InternalsVisibleTo. The Postgres packages of both are referenced here, where
+    the access files are written, as an application references them in the project that runs its export.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Together.TestHost\DDDToolkit.Supporting.Together.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
+  </ItemGroup>
+
+  <!--
+    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, and the counted
+    commands and the clock a test sets that the two domains' own suites use.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\CommandCounter.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Tenancy.Tests\Support\FixedClock.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

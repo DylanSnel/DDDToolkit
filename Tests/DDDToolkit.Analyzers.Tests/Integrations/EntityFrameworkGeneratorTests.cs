@@ -281,4 +281,425 @@ public class EntityFrameworkGeneratorTests
         result.ShouldHaveDiagnostic("DDD00003", at: "NotARecord");
         result.ShouldNotHaveGeneratedFor("NotARecord");
     }
+
+    // ------------------------------------------------------------------ a module in layers
+
+    private const string Converter = "global::DDDToolkit.EntityFramework.Storage.SingleValueConverter";
+
+    /// <summary>A module's domain project, without Entity Framework: an id of each kind and a single value object.</summary>
+    private const string SalesDomain =
+        """
+        using System;
+        using DDDToolkit.Abstractions.Attributes;
+
+        [assembly: Module("Sales")]
+
+        namespace Sales.Domain;
+
+        [EntityId<Guid>("PRD")]
+        public readonly partial record struct ProductId;
+
+        [EntityId<Guid>("CUS")]
+        public partial record CustomerId;
+
+        [SingleValueObject<string>(ColumnLength: 80)]
+        public partial record EmailAddress;
+
+        [AggregateRoot<string>("INV", ColumnLength: 16)]
+        public partial class Invoice
+        {
+            public Invoice(InvoiceId id) : base(id) { }
+        }
+        """;
+
+    /// <summary>
+    /// A project of the module that holds the context: it references Entity Framework, and declares no ids. It sets
+    /// a <c>DDD_Module</c> of its own as well, which names its registration only when it declares no module.
+    /// </summary>
+    private static GeneratorTestHost Infrastructure(string? module = "Sales", string source = "namespace Sales.Infrastructure;\n\npublic static class Nothing;")
+    {
+        var host = GeneratorTestHost.Create(source, "Infrastructure.cs").WithAssemblyName("Sales.Infrastructure").WithModule("SalesInfrastructure");
+        return module is null ? host : host.WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"" + module + "\")]", "Module.cs");
+    }
+
+    private static string Registered(string type, string value, string maxLength = "")
+        => "modelConfigurationBuilder.Properties<" + type + ">().HaveConversion<" + Converter + "<" + type + ", " + value + ">>()" + maxLength + ";";
+
+    [Fact]
+    public void Ids_of_the_modules_project_without_Entity_Framework_are_registered_with_the_single_value_converter()
+    {
+        var result = Infrastructure()
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        // That it compiles is the strong half: HaveConversion<SingleValueConverter<T, TValue>> type-checks against
+        // EF Core only when T really implements ISingleValue<T, TValue>.
+        result.ShouldCompile();
+        result.ShouldContain(
+            "ConverterExtensions",
+            "public static global::Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddSalesConverters(",
+            "the module names the registration, whatever DDD_Module the project sets");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.ProductId", "global::System.Guid"));
+        result.ShouldContain(
+            "ConverterExtensions",
+            "modelConfigurationBuilder.DefaultTypeMapping<global::Sales.Domain.ProductId>().HasConversion<" + Converter + "<global::Sales.Domain.ProductId, global::System.Guid>>();");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.CustomerId", "global::System.Guid"));
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.ValidCustomerId", "global::System.Guid"), "a twin is stored as its value too");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.EmailAddress", "string", ".HaveMaxLength(80)"), "the column length comes from the attribute");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.ValidEmailAddress", "string", ".HaveMaxLength(80)"), "a twin's from its parent's");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.InvoiceId", "string", ".HaveMaxLength(16)"), "an implicit id's from its entity's");
+    }
+
+    [Fact]
+    public void A_project_with_no_ids_of_its_own_still_registers_its_modules()
+    {
+        var own = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+        own.GeneratedSources.Should().NotContain(source => source.HintName.Contains("ConverterExtensions", StringComparison.Ordinal), "nothing to register is nothing to write");
+
+        var withDomain = Infrastructure()
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+        withDomain.ShouldCompile();
+        withDomain.ShouldHaveGenerated("ConverterExtensions");
+    }
+
+    [Fact]
+    public void A_published_id_of_another_module_is_registered_and_an_unpublished_one_is_not()
+    {
+        var result = Infrastructure(source:
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Sales.Infrastructure;
+
+                [EntityId<Guid>]
+                public readonly partial record struct OrderId;
+                """)
+            .WithReferencedAssembly(
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                [assembly: Module("Billing")]
+
+                namespace Billing.Contracts;
+
+                [ModuleContract]
+                [EntityId<Guid>]
+                public readonly partial record struct InvoiceNumber;
+
+                [ModuleContract]
+                [EntityId<Guid>]
+                public partial record PayerId;
+
+                [EntityId<Guid>]
+                public readonly partial record struct LedgerLineId;
+                """,
+                "Billing.Contracts")
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", "Properties<global::Sales.Infrastructure.OrderId>().HaveConversion<global::Sales.Infrastructure.OrderId.OrderIdConverter>()", "its own ids keep their nested converters");
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.InvoiceNumber", "global::System.Guid"));
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.PayerId", "global::System.Guid"));
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.ValidPayerId", "global::System.Guid"), "the twin of a published id is the published id, validated");
+        result.ShouldNotContain("ConverterExtensions", "LedgerLineId", "another module's own ids are its business (DDD00022)");
+    }
+
+    [Fact]
+    public void An_id_whose_assembly_has_its_own_converter_is_left_to_it()
+    {
+        // The contracts project references Entity Framework, as it used to have to: it registers its ids itself.
+        var result = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject(
+                "Sales.Contracts",
+                project => project
+                    .WithModule("SalesContracts")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        [assembly: Module("Sales")]
+
+                        namespace Sales.Contracts;
+
+                        [ModuleContract]
+                        [EntityId<Guid>]
+                        public readonly partial record struct CustomerNumber;
+                        """),
+                GeneratorTestHost.EntityFrameworkGenerators())
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.ProductId", "global::System.Guid"));
+        result.ShouldNotContain("ConverterExtensions", "CustomerNumber", "the contracts' own AddSalesConverters() registers it with its nested converter");
+        result.ShouldContain(
+            "ConverterExtensions",
+            "global::Sales.Contracts.Converters.ConverterExtensions.AddSalesConverters(modelConfigurationBuilder);",
+            "and this project's registration calls that one, so the context makes one call for the module");
+    }
+
+    [Fact]
+    public void A_published_id_of_another_module_whose_project_references_entity_framework_is_registered_with_its_own_converter()
+    {
+        // The natural small layout: the other module declares its ids in a project that holds its context as well,
+        // so they have converters of their own. This module stores one of them, and its one call registers it.
+        var result = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject(
+                "Billing",
+                project => project
+                    .WithModule("Billing")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        [assembly: Module("Billing")]
+
+                        namespace Billing;
+
+                        [ModuleContract]
+                        [EntityId<Guid>]
+                        public readonly partial record struct InvoiceNumber;
+
+                        [ModuleContract]
+                        [EntityId<Guid>]
+                        public partial record PayerId;
+
+                        [EntityId<Guid>]
+                        public readonly partial record struct LedgerLineId;
+                        """),
+                GeneratorTestHost.EntityFrameworkGenerators())
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "ConverterExtensions",
+            "modelConfigurationBuilder.Properties<global::Billing.InvoiceNumber>().HaveConversion<global::Billing.InvoiceNumber.InvoiceNumberConverter>();");
+        result.ShouldContain(
+            "ConverterExtensions",
+            "modelConfigurationBuilder.DefaultTypeMapping<global::Billing.InvoiceNumber>().HasConversion<global::Billing.InvoiceNumber.InvoiceNumberConverter>();");
+        result.ShouldContain("ConverterExtensions", "Properties<global::Billing.PayerId>().HaveConversion<global::Billing.PayerId.PayerIdConverter>()");
+        result.ShouldContain("ConverterExtensions", "Properties<global::Billing.ValidPayerId>().HaveConversion<global::Billing.ValidPayerId.ValidPayerIdConverter>()", "the twin of a published id is published too");
+        result.ShouldNotContain("ConverterExtensions", "LedgerLineId", "another module's own ids are its business (DDD00022)");
+        result.ShouldNotContain("ConverterExtensions", "AddBillingConverters", "another module's registration is not this one's to call");
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Domain.ProductId", "global::System.Guid"));
+    }
+
+    [Fact]
+    public void A_published_id_whose_class_of_that_name_is_no_value_converter_is_not_registered_with_it()
+    {
+        // A class the application nested in its id under the name the generated converter has, for binding a route
+        // value say, is no converter a registration could name: the id is left alone, as an id that has a converter
+        // of its own the registration cannot name is, and the registration compiles.
+        var result = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject(
+                "Billing",
+                project => project
+                    .WithModule("Billing")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        [assembly: Module("Billing")]
+
+                        namespace Billing;
+
+                        [ModuleContract]
+                        [EntityId<Guid>]
+                        public readonly partial record struct InvoiceNumber
+                        {
+                            public sealed class InvoiceNumberConverter : System.ComponentModel.TypeConverter;
+                        }
+
+                        [ModuleContract]
+                        [EntityId<Guid>]
+                        public readonly partial record struct PayerNumber;
+                        """))
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldNotContain("ConverterExtensions", "InvoiceNumber");
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.PayerNumber", "global::System.Guid"));
+    }
+
+    /// <summary>
+    /// A second project of the module with Entity Framework, above the one that holds the context: the migrations
+    /// for another database, say. It references the infrastructure project and, through it, the domain project.
+    /// </summary>
+    private static GeneratorTestHost AboveInfrastructure(string source)
+        => GeneratorTestHost.Create(source, "Postgres.cs")
+            .WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Sales\")]", "Module.cs")
+            .WithAssemblyName("Sales.Postgres")
+            .WithEntityFrameworkRuntime()
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .WithReferencedProject(
+                "Sales.Infrastructure",
+                project => project
+                    .WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Sales\")]", "Module.cs")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        namespace Sales.Infrastructure;
+
+                        [EntityId<Guid>]
+                        public readonly partial record struct OutboxCursorId;
+                        """,
+                        "Infrastructure.cs"),
+                GeneratorTestHost.EntityFrameworkGenerators());
+
+    [Fact]
+    public void What_a_registration_this_one_calls_has_registered_is_not_registered_again()
+    {
+        // Both projects reference the domain project, both are Sales and both run the generator. The infrastructure
+        // project registered the domain's ids; this one calls it, so it leaves them to it.
+        var result = AboveInfrastructure(
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Sales.Postgres;
+
+                [EntityId<Guid>]
+                public readonly partial record struct MigrationRunId;
+                """)
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "ConverterExtensions",
+            "global::Sales.Infrastructure.Converters.ConverterExtensions.AddSalesConverters(modelConfigurationBuilder);");
+        result.ShouldContain("ConverterExtensions", "Properties<global::Sales.Postgres.MigrationRunId>()", "its own id is its own to register");
+        result.ShouldNotContain("ConverterExtensions", "Sales.Domain", "the registration it calls has every id of the domain project");
+        result.ShouldNotContain("ConverterExtensions", Converter);
+    }
+
+    [Fact]
+    public void A_project_whose_module_is_registered_by_the_one_it_references_gets_no_registration_of_its_own()
+    {
+        // Nothing is left for it to register, so nothing is written: its context calls the infrastructure
+        // project's AddSalesConverters(), the only one there is to import.
+        var result = AboveInfrastructure(
+                """
+                using Microsoft.EntityFrameworkCore;
+                using Sales.Infrastructure.Converters;
+
+                namespace Sales.Postgres;
+
+                public sealed class SalesContext : DbContext
+                {
+                    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+                        => configurationBuilder.AddSalesConverters();
+                }
+                """)
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.GeneratedSources.Should().NotContain(source => source.HintName.Contains("ConverterExtensions", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void What_the_called_registration_could_not_see_is_still_registered_here()
+    {
+        // The contracts project is referenced by this project and not by the infrastructure project, so the
+        // registration this one calls knows nothing of its ids.
+        var result = AboveInfrastructure("namespace Sales.Postgres;\n\npublic static class Nothing;")
+            .WithReferencedAssembly(
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                [assembly: Module("Sales")]
+
+                namespace Sales.Contracts;
+
+                [ModuleContract]
+                [EntityId<Guid>]
+                public readonly partial record struct CustomerNumber;
+                """,
+                "Sales.Contracts")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", Registered("global::Sales.Contracts.CustomerNumber", "global::System.Guid"));
+        result.ShouldContain(
+            "ConverterExtensions",
+            "global::Sales.Infrastructure.Converters.ConverterExtensions.AddSalesConverters(modelConfigurationBuilder);");
+        result.ShouldNotContain("ConverterExtensions", "Sales.Domain", "those the called registration has");
+    }
+
+    [Fact]
+    public void A_referenced_package_without_a_module_is_ignored()
+    {
+        // The Tenancy package declares TenantSlug, a single value object it maps itself; a shared kernel without a
+        // module is no module's to register.
+        var result = Infrastructure(source:
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Sales.Infrastructure;
+
+                [EntityId<Guid>]
+                public readonly partial record struct OrderId;
+                """)
+            .WithTenancy()
+            .WithReferencedAssembly(
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Shared.Kernel;
+
+                [EntityId<Guid>]
+                public readonly partial record struct CorrelationId;
+                """,
+                "Shared.Kernel")
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", "Sales.Infrastructure.OrderId");
+        result.ShouldNotContain("ConverterExtensions", "TenantSlug");
+        result.ShouldNotContain("ConverterExtensions", "CorrelationId");
+        result.ShouldNotContain("ConverterExtensions", Converter);
+    }
+
+    [Fact]
+    public void A_project_without_a_module_registers_only_its_own()
+    {
+        var result = Infrastructure(module: null, source:
+                """
+                using System;
+                using DDDToolkit.Abstractions.Attributes;
+
+                namespace Sales.Host;
+
+                [EntityId<Guid>]
+                public readonly partial record struct RequestId;
+                """)
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .WithEntityFrameworkRuntime()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", "Sales.Host.RequestId");
+        result.ShouldNotContain("ConverterExtensions", "Sales.Domain", "a project without a module is no module's");
+    }
 }

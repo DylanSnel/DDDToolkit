@@ -122,23 +122,6 @@ flowchart LR
     Valid --> Must["MustBeValid(), in a request validator"]
 ```
 
-`Errors` is FluentValidation's own `ValidationFailure`, handy when you already work in that library.
-`ValidationErrors` and `TryToValid()` hand back the toolkit's `ValidationError`, which carries the same
-property, code and attempted value, and FluentValidation's placeholder values as `Arguments`. A caller
-reads those without referencing FluentValidation at all:
-
-```csharp
-var email = EmailAddress.Create("nope");
-
-email.IsValid;                          // false
-email.Errors[0].PropertyName;           // "Value"
-
-email.TryToValid(out var valid, out var errors);
-errors[0].Code;                         // "EmailValidator"
-errors[0].Message;                      // "'Value' is not a valid email address."
-errors[0].AttemptedValue;               // "nope"
-```
-
 <details>
 <summary>Show the code: rules, a request validator and an endpoint</summary>
 
@@ -175,6 +158,23 @@ app.MapPost("/orders", (PlaceOrder body) =>
 ```
 
 </details>
+
+`Errors` is FluentValidation's own `ValidationFailure`, handy when you already work in that library.
+`ValidationErrors` and `TryToValid()` hand back the toolkit's `ValidationError`, which carries the same
+property, code and attempted value, and FluentValidation's placeholder values as `Arguments`. A caller
+reads those without referencing FluentValidation at all:
+
+```csharp
+var email = EmailAddress.Create("nope");
+
+email.IsValid;                          // false
+email.Errors[0].PropertyName;           // "Value"
+
+email.TryToValid(out var valid, out var errors);
+errors[0].Code;                         // "EmailValidator"
+errors[0].Message;                      // "'Value' is not a valid email address."
+errors[0].AttemptedValue;               // "nope"
+```
 
 ## A value object in a request validator
 

@@ -1,0 +1,71 @@
+@*
+    An action on the page. Filled when the API says the person may do it; outlined, "not allowed, try anyway", when
+    it says they may not. Either way a click sends the call and shows the answer: the button only reflects what the
+    API said it would decide, and the API decides again when the call arrives.
+*@
+<span class="action-button">
+    <button type="button"
+            class="btn btn-sm @(Allowed ? "btn-primary" : "btn-outline-danger")"
+            disabled="@_sending"
+            @onclick="SendAsync">
+        @Label
+        @if (!Allowed)
+        {
+            <span class="small">@T["action.try-anyway"]</span>
+        }
+    </button>
+</span>
+@if (_answer is not null && ShowsAnswer && Latest?.IsOf(this) != false)
+{
+    <ApiOutcomeView Answer="_answer" />
+}
+
+@code {
+    private ApiOutcome? _answer;
+    private bool _sending;
+
+    /// <summary>What the button says.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>Whether the API says the person may do this.</summary>
+    [Parameter]
+    public bool Allowed { get; set; }
+
+    /// <summary>Makes the call.</summary>
+    [Parameter, EditorRequired]
+    public Func<Task<ApiOutcome>> Send { get; set; } = default!;
+
+    /// <summary>
+    /// Whether the answer is shown under the button. A button in a table row leaves that to the page, through
+    /// <see cref="Answered"/>, so the row keeps its height.
+    /// </summary>
+    [Parameter]
+    public bool ShowsAnswer { get; set; } = true;
+
+    /// <summary>Told the answer, after it is shown; a page reloads on success.</summary>
+    [Parameter]
+    public EventCallback<ApiOutcome> Answered { get; set; }
+
+    /// <summary>
+    /// The page's latest answer, when the page cascades one: this button's answer is then shown only until another
+    /// action of the page answers.
+    /// </summary>
+    [CascadingParameter]
+    public LatestAnswer? Latest { get; set; }
+
+    private async Task SendAsync()
+    {
+        _sending = true;
+        try
+        {
+            _answer = await Send();
+            Latest?.IsFrom(this);
+            await Answered.InvokeAsync(_answer);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+}

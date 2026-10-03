@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Where the domain is stored and registered. Of the packages it references only the two Postgres ones.
+    Everything else has to arrive as a dependency of the package above it: Tenancy's and Membership's Entity
+    Framework packages, the toolkit's own Entity Framework integration, and the generators that write what
+    this project calls: the toolkit's own and Entity Framework's, each in a package of its own, and
+    Membership's Entity Framework generator, which ships inside Membership's Entity Framework package. The code
+    calls what each of them writes, so a package that is missing, or a generator that did not arrive, fails
+    this build; the script reads which generators wrote a file.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Acme.Press.Domain.csproj" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Tenancy.Postgres" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Membership.Postgres" Version="$(DDDToolkitPackageVersion)" />
+  </ItemGroup>
+
+</Project>

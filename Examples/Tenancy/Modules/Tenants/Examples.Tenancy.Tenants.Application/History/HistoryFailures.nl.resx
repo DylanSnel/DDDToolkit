@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="tenants.history.page-size-invalid" xml:space="preserve">
+    <value>Een pagina bevat 1 tot {Max} regels van de geschiedenis.</value>
+  </data>
+  <data name="tenants.history.page-from-both-ends" xml:space="preserve">
+    <value>Een pagina is het begin van een lijst of het einde ervan. Vraag met first of met last, niet met allebei.</value>
+  </data>
+</root>

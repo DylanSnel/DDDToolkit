@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    What two or more of the sample's modules mean the same thing by, and none of them owns: today one value object, a range
+    of calendar days, which Projects plans a project with and Inspections says an inspection's days with. A type
+    one module owns is not shared: it stays in that module's contracts project, as a project's id does.
+
+    No [assembly: Module] in this project, on purpose. The boundary analyzer keeps a module from naming another
+    module's types; what is declared here belongs to no module, so every module may name it and nobody publishes
+    anything. It references no module and neither Entity Framework nor ASP.NET Core: a module's domain and
+    contracts projects reference it, and each module's infrastructure project says how it stores what it keeps
+    of it. Keep it small: a type belongs here only when changing it is a change to every module at once.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the package above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

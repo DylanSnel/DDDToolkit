@@ -1,0 +1,130 @@
+@page "/projects"
+@inherits SessionPage
+
+<PageTitle>@T["nav.projects"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.projects"]</h1>
+<p class="text-body-secondary">@T.Html("projects.intro", Session.Tenant ?? T["common.no-tenant"])</p>
+
+<form class="row g-2 mb-3" @onsubmit="ReloadAsync">
+    <div class="col-auto">
+        <select class="form-select form-select-sm" title="@T["projects.state"]" @bind="_state">
+            <option value="">@T["projects.filter.any-state"]</option>
+            <option value="open">@T["projects.filter.open"]</option>
+            <option value="closed">@T["projects.filter.closed"]</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <input class="form-control form-control-sm" placeholder="@T["projects.filter.text"]" @bind="_text" />
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-sm btn-outline-primary">@T["projects.filter"]</button></div>
+</form>
+
+@if (_projects is null || _names is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else if (_projects.Value?.Items is not { } projects)
+{
+    <ApiOutcomeView Answer="_projects" />
+}
+else if (projects.Count == 0)
+{
+    <p>@T["projects.none"]</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>@T["projects.number"]</th><th>@T["common.name"]</th><th>@T["projects.unit"]</th><th>@T["projects.state"]</th><th>@T["projects.my-roles"]</th><th>@T["projects.via"]</th><th>@T["projects.crew"]</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var project in projects)
+                {
+                    <tr>
+                        <td><code>@project.Number</code></td>
+                        <td><a href="projects/@project.Id">@project.Name</a></td>
+                        <td class="small">@_names.OfUnit(project.UnitId)</td>
+                        <td>@project.State</td>
+                        <td>@(_names.OfProjectRoles(project.MyRoles) ?? "–")</td>
+                        <td><span class="badge @ViaCss(project.Via)">@Via(project.Via)</span></td>
+                        <td class="small">
+                            @foreach (var member in _names.CrewByName(project.Crew))
+                            {
+                                <div class="@(member.AppliesNow ? null : "not-applying")">
+                                    @_names.OfSeat(member.SeatId)
+                                    @* Which roles a member holds is answered to whoever manages the crew; for anybody else only the owner is marked. *@
+                                    <span class="text-body-secondary">@(member.RolesAreShown ? _names.OfProjectRoles(member.RolesHeld.Where(held => held.AppliesNow).Select(held => held.RoleId)) ?? T["projects.no-role"] : null)@(member.IsOwner ? (member.RolesAreShown ? ", " : null) + T["projects.owner"] : null)</span>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_projects.Value?.Next is { } next)
+    {
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => MoreAsync(next)">@T["common.more"]</button>
+    }
+}
+
+@code {
+    // A few at a time, so the demonstration's four projects show how the next page is asked for.
+    private const int PageSize = 3;
+
+    private ApiOutcome<ProjectPageInfo>? _projects;
+    private DirectoryNames? _names;
+    private string? _state;
+    private string? _text;
+
+    protected override async Task LoadAsync()
+    {
+        // The list first, then the names of what it lists: the names are new with every load, and shown together
+        // with the list they belong to, so a reload never shows ids for a moment.
+        var projects = await Api.VisibleProjectsAsync(state: _state, text: _text, size: PageSize);
+        var names = new DirectoryNames(Api);
+        await NameAsync(names, projects.Value?.Items);
+
+        (_projects, _names) = (projects, names);
+    }
+
+    // The next page goes under the ones shown. A refused page is shown as the answer it is, in place of the list.
+    private async Task MoreAsync(string after)
+    {
+        var more = await Api.VisibleProjectsAsync(after, _state, _text, PageSize);
+        if (more.Value is { } page && _projects?.Value is { } shown && _names is { } names)
+        {
+            await NameAsync(names, page.Items);
+            _projects = more with { Value = page with { Items = [.. shown.Items, .. page.Items] } };
+        }
+        else
+        {
+            _projects = more;
+        }
+    }
+
+    private static Task NameAsync(DirectoryNames names, IReadOnlyList<ProjectInfo>? listed)
+        => listed is null
+            ? Task.CompletedTask
+            : names.EnsureAsync(
+                seats: listed.SelectMany(project => project.Crew.Select(member => member.SeatId)),
+                units: listed.Select(project => project.UnitId),
+                projectRoles: listed.SelectMany(project => project.RoleIds));
+
+    // How the project is seen is one of two words of the API's; the page says them in its own language.
+    private string Via(string? via) => via switch
+    {
+        "crew" => T["via.crew"],
+        "organization" => T["via.organization"],
+        _ => via ?? "–",
+    };
+
+    private static string ViaCss(string? via) => via switch
+    {
+        "crew" => "text-bg-primary",
+        "organization" => "text-bg-secondary",
+        _ => "text-bg-light",
+    };
+}

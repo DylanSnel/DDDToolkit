@@ -89,14 +89,16 @@ explains both and when to use which.
 ### `UseDDDToolkit`
 
 Adds the toolkit's interceptors to the context: the one that delivers domain events, the one that
-checks invariants and the one that raises the version. Pass the `IServiceProvider` that the
-`AddDbContext` callback gives you, not the root provider. That provider belongs to the same scope as
-the context, so a handler that injects `OrderingContext` receives the very instance that is saving.
+checks invariants and the one that raises the version. Pass the `IServiceProvider` that the options
+callback gives you. With `AddDbContext` that provider belongs to the same scope as the context, so a
+handler that injects `OrderingContext` receives the very instance that is saving. With a context pool
+the callback runs once and is handed the application's root provider, and the handlers get the scope
+the context was rented in instead; see [Contexts from a pool](#contexts-from-a-pool).
 [The interceptors](#the-interceptors) lists them in the order they run.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
-`AddDDDToolkitConventions` adds the four toolkit conventions to the model. It is the same for every
+`AddDDDToolkitConventions` adds the five toolkit conventions to the model. It is the same for every
 context, so it takes no arguments. What each one does is under
 [What is generated and what is a convention](#what-is-generated-and-what-is-a-convention).
 
@@ -150,7 +152,9 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 ```
 
 An assembly that declares no identifier and no single value object produces no method, because there
-would be nothing for it to register.
+would be nothing for it to register, unless it is the project of a module whose other projects declare
+identifiers without Entity Framework: then its method registers theirs. See
+[A domain project without Entity Framework](#a-domain-project-without-entity-framework).
 
 ### `AddDDDToolkitEntityFramework`
 
@@ -421,6 +425,34 @@ retrying a computed value is wrong.
 [Why the exception is rethrown from `SaveChangesFailed`](#why-the-exception-is-rethrown-from-savechangesfailed)
 explains how it reaches your catch block unwrapped.
 
+### The version the client saw
+
+The token protects the moment between a load and its save. A client that read an order a minute ago and
+now sends a change it decided on then is not covered by that: the server loads the order as it is now,
+and saves over whatever happened in that minute. `ExpectVersion` closes the gap. Hand it the version the
+client read, after the load and before the change:
+
+```csharp
+var order = await context.Orders.SingleAsync(order => order.Id == id, cancellationToken);
+context.ExpectVersion(order, expectedVersion);   // from If-Match, or from the mutation's input
+order.Cancel(reason);
+await context.SaveChangesAsync(cancellationToken);
+```
+
+If the order is loaded at another version, it throws `ConcurrencyConflictException` there and then, before
+anything changes. If the versions agree, the save compares against that version as it always does, so a
+change somebody makes between the load and the save is the same conflict. One exception for both, because
+the client does the same thing for both: read again, and decide again.
+
+It reads nothing from the database and changes nothing in the context. It refuses, with an
+`InvalidOperationException`, an aggregate this context did not load, a new aggregate, which has no stored
+version yet, and a model that does not map `Version` as a concurrency token, where an expectation that
+only held at the load would look like protection and be none.
+
+A read answers the version next to the data, in the body or as an `ETag`, and a client that leaves the
+expectation out gets the last write wins it had before. In GraphQL the conflict is a
+[`ConcurrencyConflictError`](graphql.md#typed-errors-in-mutation-payloads) in the mutation's payload.
+
 ## Migrations
 
 There is nothing special to do. The toolkit adds types and configuration to your own `DbContext`
@@ -489,6 +521,7 @@ The conventions, added by `AddDDDToolkitConventions`, are:
 | `ReadOnlyCollectionConvention` | Maps generated get-only collections of primitives and converted types as primitive collections, applying the element converter |
 | `AggregateRootVersionConvention` | Makes `Version` on every aggregate root a concurrency token |
 | `KeyPartConvention` | Puts `[KeyPart]` properties into the primary key ahead of `Id`, and into the foreign key of every owned type below; see [Composite keys](composite-keys.md) |
+| `IndexRefusalConvention` | Checks every index that says what it refuses with, `RefusesAs`, when the model is built: the index is unique, and every property its message names in braces is one the entity maps |
 
 `InternalMemberConvention` is why `DomainEvents` never reaches your tables. The `AggregateRoot<TId>`
 base class marks it `[Internal]`, so the convention ignores it exactly as `[NotMapped]` would.
@@ -496,20 +529,126 @@ base class marks it `[Internal]`, so the convention ignores it exactly as `[NotM
 Explicit configuration in `OnModelCreating` still wins over any of this. The conventions fill in what
 you did not say.
 
+### A domain project without Entity Framework
+
+A module split into projects by layer (see [A module in layers](modules.md#a-module-in-layers)) keeps Entity
+Framework out of its domain and contracts projects. The generator writes Entity Framework's parts only into a
+project that references it, so those projects get no nested converters, no `[Owned]`, no `[ComplexType]`, and
+no `[BackingField]` on the field behind a generated collection. What the infrastructure project, which holds
+the context, gets instead:
+
+```mermaid
+flowchart LR
+    subgraph domain ["Ordering.Domain, no Entity Framework"]
+        direction TB
+        D1["OrderId, EmailAddress<br/>implement ISingleValue"]
+        D2["Order with its OrderLine entities<br/>no Owned, no BackingField"]
+        D3["OrderPlaced, a public domain event"]
+    end
+    subgraph infrastructure ["Ordering.Infrastructure, Entity Framework"]
+        direction TB
+        I1["AddOrderingConverters()<br/>SingleValueConverter for each id"]
+        I2["OrderingContext.OnModelCreating<br/>OwnsMany for the lines, by hand"]
+        I3["AddOrderingIntegrationEvents()<br/>names OrderPlaced"]
+    end
+    D1 --> I1
+    D2 --> I2
+    D3 --> I3
+```
+
+<details>
+<summary>Show the code: the infrastructure project's context and registration</summary>
+
+```csharp
+// Ordering.Infrastructure: the one project of the module that references Entity Framework
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
+{
+    public DbSet<Order> Orders => Set<Order>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        => modelBuilder.Entity<Order>(order =>
+        {
+            // The domain project marks nothing for Entity Framework, so the context says what an order line is
+            order.OwnsMany(row => row.Lines, line => line.ToTable("OrderLines"));
+        });
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.AddDDDToolkitConventions();
+
+        // Generated into this project: a converter for every id and single value object of the module
+        configurationBuilder.AddOrderingConverters();
+    }
+}
+
+// The module's registration, in the same project
+services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
+    outbox.AddOrderingIntegrationEvents()));   // generated here too: names OrderPlaced
+```
+
+</details>
+
+- **Identifiers and single value objects** are registered by the infrastructure project's generated
+  `Add{Module}Converters()`, with `SingleValueConverter<T, TValue>`, so the context calls that one method,
+  whichever of the module's projects declares the ids. See
+  [Identifiers](identifiers.md#stored-by-a-project-that-does-not-declare-it).
+- **Child entities and value objects** are not marked for Entity Framework, so the context maps them in
+  `OnModelCreating`: `OwnsMany` or `OwnsOne` for a child entity, `ComplexProperty` for a value object. Without
+  it a child entity with an id of its own is mapped as an entity type of its own, and the model changes.
+- **A generated read-only collection of ids or primitives** needs its backing field named. The read-only
+  collection convention finds the `List<T>` behind the property through `[BackingField]`, and without it
+  leaves the collection unmapped, so the context maps it with `HasField`. A collection of child entities is a
+  navigation, and Entity Framework finds its field by name.
+- **Domain events** are registered by the infrastructure project's `Add{Module}IntegrationEvents()`, and must
+  be `public` ([DDD00033](diagnostics.md#ddd00033)).
+
+Whether a model still maps as it did is what `HasPendingModelChanges()` answers: a test that asks it of each
+context catches a child entity or a collection the split left unmapped.
+
 ## The interceptors
 
-`UseDDDToolkit` adds three interceptors, in the order they run:
+`UseDDDToolkit` adds four interceptors, in the order they run:
 
 | | Interceptor | Why there |
 |---|---|---|
 | 1 | `PublishDomainEventsInterceptor` | Delivers domain events first, so whatever the handlers change is part of the same save |
 | 2 | `InvariantInterceptor` | Sees whatever those handlers changed |
-| 3 | `AggregateVersionInterceptor` | Comes last, so a save the invariants reject leaves no version bumped |
+| 3 | `AggregateVersionInterceptor` | Comes after both, so a save the invariants reject leaves no version bumped |
+| 4 | `DatabaseRefusalInterceptor` | Only answers a save the database refused: the refusal a unique index declares with `RefusesAs`, or `access.refused` for a row a policy denied |
 
-`AddDDDToolkitEntityFramework` registers them. The options object is a singleton,
-`PublishDomainEventsInterceptor` is scoped so that it can hand handlers the scope that owns the
-`DbContext` being saved, and `InvariantInterceptor` and `AggregateVersionInterceptor` are singletons
-because they hold no state.
+`AddDDDToolkitEntityFramework` registers them. The options object is a singleton, and so are
+`InvariantInterceptor`, `AggregateVersionInterceptor` and `DatabaseRefusalInterceptor`, because they
+hold no state. `UseDDDToolkit` builds a `PublishDomainEventsInterceptor` for the options it is called
+on, from the provider it is handed, and that interceptor hands the handlers the scope the saving
+`DbContext` belongs to: the scope that owns it under `AddDbContext`, the scope that rented it under
+[a pool](#contexts-from-a-pool). It is also registered as a scoped service, for a host that adds the
+interceptors by hand.
+
+### Checking the wiring
+
+A context built without `UseDDDToolkit` saves, and simply checks no invariant, bumps no version and
+stores no event. Nothing fails, so nobody notices. `EntityFrameworkChecks` says so at start-up, before the
+first request:
+
+```csharp
+var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
+    {
+        EntityFrameworkChecks.EnsureToolkitWired((DbContext)scope.ServiceProvider.GetRequiredService(contextType));
+    }
+}
+```
+
+`EnsureToolkitWired` opens nothing. It throws unless the context's options hold the three interceptors
+that decide what is saved, in the order above: a host that adds them by hand passes as long as events
+come before invariants and invariants before versions. It also throws when the model and the outbox
+disagree: the model maps an [event log](#an-event-log) that no `KeepEventLog()` keeps, or the context has
+an outbox of its own whose table, or whose event log, the model does not map. `RegisteredContexts` lists
+every context type the container knows, by name, so a module added later is checked without anyone
+remembering to list it.
 
 ## Why the exception is rethrown from `SaveChangesFailed`
 
@@ -523,6 +662,144 @@ conflict without passing through `ThrowingConcurrencyException`.
 Both the synchronous and the asynchronous save path behave the same.
 `Tests/DDDToolkit.EntityFramework.Tests/ConcurrencyTests.cs` covers the version arithmetic, child-only
 changes, deletes and both paths.
+
+## Contexts from a pool
+
+Entity Framework can keep context instances in a pool and hand them out again, instead of making one
+for every scope. `AddPooledDbContextFactory<TContext>` registers a factory to rent from, and
+`AddDbContextPool<TContext>` a context per scope. A pool earns its place when one request reads side
+by side, because no two queries may share a context: each read rents a context for its own query, the
+way a GraphQL server needs it for the fields of one query, while the commands of the request keep one
+context as their unit of work.
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+
+builder.Services.AddPooledDbContextFactory<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+builder.Services.AddScopedFromPool<OrderingContext>();
+```
+
+`UseDDDToolkit` is the call it always was. `AddScopedFromPool<TContext>()` makes the context a scope
+asks for one that is taken from the pool, bound to that scope, and given back when the scope ends. It
+goes after either pool registration. Entity Framework 10 registers the context as a scoped service for
+both of them already (checked on 10.0.0 and 10.0.12), so there the call adds the binding and nothing
+else; over a factory you registered yourself it registers the scoped context too. A context registered
+with `AddDbContext` or `AddDbContextFactory` is not pooled, and is refused with an
+`InvalidOperationException`: the first by the call itself, the second when a scope first asks for the
+context, because only the context it is then given says that it comes from no pool.
+
+**One rule comes with a pool: nothing in the options callback reads a caller, a request or a scope.**
+A pool builds its options once, with the application's root services, and every context it hands out
+shares them. The toolkit's own `Use...` methods resolve singletons only, and what differs per use is
+read when it is used: who is calling, which [row level security](row-level-security.md) asks on every
+open and before every command, and which scope the handlers of a save belong to. An interceptor of
+your own in that callback has to do the same, so register it as a singleton that asks per use, and
+capture nothing while the options are built.
+
+### Handlers and the scope of a rental
+
+In-process handlers run with a scope's services, so a handler that injects the context is given the
+one that is saving. A pool's options know no scope, so the toolkit remembers which scope each rental
+was bound to:
+
+```mermaid
+sequenceDiagram
+    participant Scope as Scope (a request)
+    participant Pool as Context pool
+    participant Context as Context
+    participant Handlers as Handlers
+
+    Scope->>Pool: first asks for the context
+    Pool-->>Scope: a context, bound to this scope
+    Scope->>Context: SaveChanges
+    Context->>Handlers: domain events, with the scope's services
+    Handlers-->>Context: changes on the same context
+    Context-->>Scope: saved
+    Scope->>Pool: the scope ends: the context goes back, tracking nothing
+    Note over Pool,Context: the next renter gets<br/>its own scope and its own caller
+```
+
+<details>
+<summary>Show the code: a command and a read on one pool</summary>
+
+The command takes the scope's context, which `AddScopedFromPool` took from the pool and bound to the
+scope, so the handlers of its events run with that scope:
+
+```csharp
+public sealed class CancelOrderHandler(OrderingContext context)
+{
+    public async Task HandleAsync(OrderId id, string reason, CancellationToken cancellationToken)
+    {
+        var order = await context.Orders.SingleAsync(order => order.Id == id, cancellationToken);
+        order.Cancel(reason);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+A read rents a context for its one query and gives it back, so two reads of one request never share
+one:
+
+```csharp
+public sealed class OrderReads(IDbContextFactory<OrderingContext> contexts)
+{
+    public async Task<bool> ExistsAsync(OrderId id, CancellationToken cancellationToken)
+    {
+        await using var context = await contexts.CreateDbContextAsync(cancellationToken);
+        return await context.Orders.AnyAsync(order => order.Id == id, cancellationToken);
+    }
+}
+```
+
+</details>
+
+- **The context a scope asks for** is bound to that scope by `AddScopedFromPool`. Nothing else is
+  needed.
+- **A context you rent from the factory** has no scope. Reading through it needs none, and neither
+  does saving with [an outbox](event-delivery.md#the-outbox), which writes its rows on the saving
+  context and resolves nothing. Dispatching in process does: name the scope with
+  `context.BindToScope(scope.ServiceProvider)`, which holds until the context is disposed.
+- **A pooled context with events to dispatch in process and no scope is refused**, with an
+  `InvalidOperationException` that names both ways out. It is refused before any event leaves its
+  aggregate, so nothing is dispatched, nothing is saved, and the same save goes through once the
+  context is bound. The toolkit does not make a scope of its own for the handlers: a handler that
+  asked such a scope for the context would be given another instance than the one that is saving, and
+  what it changed would be lost without a word.
+
+Options that are built once without a pool, `AddDbContextFactory` or `AddDbContext` with
+`optionsLifetime: ServiceLifetime.Singleton`, hand the callback the root provider as well. Where the
+container validates scopes, the first in-process dispatch from such a context is refused in the same
+way, and `BindToScope` is the way out there too.
+
+### What the next renter gets
+
+One instance serves one renter after another, and nothing of one reaches the next:
+
+| What | Who ends it | When |
+|---|---|---|
+| Tracked entities, and the domain events pending on them | Entity Framework | when the context goes back |
+| Change tracker settings, the command timeout, `SavingChanges` handlers | Entity Framework puts back what the context started with | when the context goes back |
+| An open transaction | Entity Framework rolls it back | when the context goes back |
+| A connection left open | Entity Framework closes it, and the context keeps the connection object | when the context goes back |
+| The role, the claims and the settings of row level security on the server connection | Npgsql resets the connection, and the interceptor sets them again on every open | before the connection is used again |
+| The scope a rental was bound to | the toolkit: a binding is for one rental | the next rental starts with none |
+| Who is calling | nobody has to: it is never kept on a context | read on every use |
+
+What nobody resets is a field your context class declares for itself, so declare none.
+
+A context pool bounds how many context instances are kept, not how many connections are open. A
+context holds a connection only while one of its commands runs, while it has a transaction, or after
+you opened one by hand; a context in the pool holds none. The bound on connections is the data
+source's `Maximum Pool Size`: a read that finds every connection taken waits up to `Timeout` seconds
+and then fails with Npgsql's exception, and the next one succeeds as soon as a connection is free.
+Code that already holds a connection and waits for a second one can end up waiting for itself, so do
+not nest them.
+
+`PooledContextSaveTests.cs`, `PooledContextRowLevelSecurityTests.cs` and `PooledContextBudgetTests.cs`
+in `Tests/DDDToolkit.EntityFramework.Tests` hold each of these lines, on SQLite and against a real
+Postgres.
 
 ## Providers
 
@@ -543,6 +820,25 @@ that none of it is a surprise in production.
 Timestamps are covered under [Timestamps](event-delivery.md#timestamps). Schemas are ignored by SQLite,
 which drops the schema when it writes an identifier, so `ddd.OutboxMessages` is plain `OutboxMessages`
 there and nothing else changes. The primitive collection is the one that needs a paragraph.
+
+### Your own timestamps on SQLite
+
+The outbox converts its timestamps for SQLite by itself; your own `DateTimeOffset` properties are left as
+they are, which is fine until a query compares or orders one. SQLite keeps a `DateTimeOffset` as text and
+throws on `Where(voyage => voyage.StartsAt <= now)`. Call `StoreDateTimeOffsetsAsUtc()` in
+`ConfigureConventions` and every `DateTimeOffset` and `DateTimeOffset?` property of the model, owned and
+keyless types included, is stored as its UTC instant in a `DateTime` column, on every provider, with the
+same converters the outbox uses. The value reads back as the same instant with an offset of zero; the
+offset it was written with is not kept. On PostgreSQL that is still `timestamp with time zone`, and on SQL
+Server it is `datetime2` instead of `datetimeoffset`, so decide before the first migration.
+
+```csharp
+protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+{
+    configurationBuilder.AddDDDToolkitConventions();
+    configurationBuilder.StoreDateTimeOffsetsAsUtc();
+}
+```
 
 ### Primitive collections do not port below LINQ
 
@@ -605,6 +901,112 @@ context saves: by running your handlers inside `SaveChanges`, or by writing the 
 table in the same transaction and delivering them afterwards. [Delivering domain events](event-delivery.md)
 explains both modes, how to choose between them, and the outbox's table, processor and retries.
 
+## An event log
+
+An outbox row is work: it is marked, retried, and deleted once it is delivered. Some events are also a
+record, of what happened and who did it, that has to stay as it was written. A context with an outbox
+keeps those in an event log, a table of its own that nothing updates:
+
+```csharp
+// in the module's registration
+options.UseOutbox<OrderingContext>(outbox => outbox
+    .RegisterEventsFromAssemblyContaining<Order>()
+    .KeepEventLog(log => log.Keep<OrderPlaced>().Keep<OrderCancelled>()));
+
+// in OrderingContext
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.AddDomainEventOutbox(Database);
+    modelBuilder.AddEventLog(Database, keepFor: TimeSpan.FromDays(365));
+}
+```
+
+The save that persists the aggregate adds one `EventLogEntry` per kept event next to the event's outbox
+row, so the aggregate, the outbox row and the log row are written by one transaction: all three, or none
+of them. `KeepEventLog()` without a choice keeps every event the context saves; `Keep<TEvent>()` keeps a
+type and everything derived from it, and `Only(domainEvent => ...)` whatever it chooses. The choices add
+up.
+
+A row has the event's id, which is its outbox row's id as well, its stable name, version and payload,
+when it occurred and when it was recorded, the aggregate that raised it, and who acted:
+
+| The caller | `ActedByKind` | `ActedById` |
+|---|---|---|
+| A signed-in user | `user` | the user's id, or the token's `sub` where that is no `uuid` |
+| The application's own work | `system` | `null` |
+| The application's own work inside a scope, `Caller.SystemIn("ordering")` | `system` | the scope |
+| A request without a user | `anonymous` | `null` |
+
+That pair is an `ActedBy`, and `IActedByAccessor` answers it. The one the toolkit registers reads the
+[caller](row-level-security.md#running-queries-as-the-caller) once for each save that keeps an event. Register a
+singleton of your own before `AddDDDToolkitEntityFramework` to say it differently, with a kind of your own
+for one: `new ActedBy("device", serialNumber)`.
+
+Who acted is what the application wrote, and the database does not check it: with the
+[written privileges](row-level-security.md#privileges-from-the-policies), every role that saves may add a
+row, under any actor. A log that has to hold the actor to the caller needs policies that do, written by a
+[contribution](row-level-security.md#policies-a-package-ships) that claims the table.
+
+A module adds columns of its own with the `configure` argument, as shadow properties, and fills them with
+an `IEventLogFields`:
+
+```csharp
+modelBuilder.AddEventLog(Database, configure: log => log.Property<string?>("Branch").HasMaxLength(64));
+
+public sealed class BranchOfTheEvent(IBranchAccessor branch) : IEventLogFields
+{
+    public void Fill(IDomainEvent domainEvent, EntityEntry<EventLogEntry> entry)
+    {
+        if (entry.Metadata.FindProperty("Branch") is not null)
+        {
+            entry.Property("Branch").CurrentValue = branch.Current;
+        }
+    }
+}
+
+services.AddSingleton<IEventLogFields, BranchOfTheEvent>();
+```
+
+> [!IMPORTANT]
+> `IActedByAccessor` and every `IEventLogFields` are singletons that read what they answer each time they
+> are asked, from what follows the flow of work: the ambient caller, the current request, the event
+> itself. They keep nothing between two events and take no scoped service. The interceptor asks its own
+> provider for them once per save, and for a context from [a pool](#contexts-from-a-pool) that provider is
+> the application's root one, where a scoped one is refused with a message that says so.
+
+**The guard.** On Postgres, `DDDToolkit.EntityFramework.Postgres` writes the table's guard into every
+[script of policies](row-level-security.md#writing-the-policies) of the context, and into its Supabase
+access file, whether or not the context has a rule: triggers that refuse every update of a row, a
+truncate, and every delete of a row younger than `keepFor`, by the database's own clock. They fire for
+every role, the table's owner and a superuser included, where a privilege or a policy would stop neither.
+A refused statement is SQLSTATE `55000` with the message `A kept row does not change.`,
+`PostgresRowAccess.KeptRowsSqlState` and `KeptRowsRefusal`. A log mapped without `keepFor` keeps every row
+for as long as the table exists. The guard needs Postgres 14 or later.
+
+The guard holds statements, not definitions: whoever owns the table can still drop its triggers, or the
+table. So the owner is the role that runs the migrations, and the application logs in as
+[a role that owns nothing](row-level-security.md#a-login-that-owns-nothing).
+
+> [!WARNING]
+> On SQLite and SQL Server nothing guards the table. The toolkit itself never updates a row and deletes
+> one only through retention, but a statement of your own is not refused there.
+
+**Letting old rows go.** [Retention](integration-events.md#keeping-the-tables-small) has a
+window for the log, separate from the outbox's, and leaves the log alone without one:
+
+```csharp
+services.AddDomainEventRetention<OrderingContext>(retention =>
+{
+    retention.KeepOutboxFor = TimeSpan.FromDays(7);
+    retention.KeepEventLogFor = TimeSpan.FromDays(400);
+});
+```
+
+The table has the last word, so `KeepEventLogFor` is at least the `keepFor` the log was mapped with. A run
+that finds it shorter, or finds a log kept for good, fails before it deletes anything and names both. The
+guard reads the database's clock and retention the application's, so retention waits a minute longer than
+`keepFor` whatever the window says; keep the two clocks within that minute of each other.
+
 ## Supabase
 
 The Supabase CLI applies migrations from SQL files in `supabase/migrations`, not from Entity Framework.
@@ -626,13 +1028,13 @@ build, and can check at start-up that Supabase applied them. See [Supabase](supa
 
 The runnable version of everything here is the shop in
 [`Examples/ModularMonolith.Supabase`](../Examples/ModularMonolith.Supabase). The host's
-[`Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs) shows the
+[`Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs) shows the
 registration,
-[`OrderingContext.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Infrastructure/Persistence/OrderingContext.cs)
+[`OrderingContext.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Infrastructure/Persistence/OrderingContext.cs)
 shows the conventions and the generated converters,
-[`OrderingModule.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/OrderingModule.cs) shows
+[`OrderingModule.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/OrderingModule.cs) shows
 the outbox, and
-[`OrderingEndpoints.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Api/OrderingEndpoints.cs)
+[`OrderingEndpoints.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Api/OrderingEndpoints.cs)
 shows the conflict catch block. The example's `supabase/` folder and each module's `Migrations` folder
 show the Supabase export.
 

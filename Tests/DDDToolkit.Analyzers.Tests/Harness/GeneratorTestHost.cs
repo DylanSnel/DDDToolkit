@@ -4,11 +4,13 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using DDDToolkit.Analyzers.Analyzers;
+using CoreAccessBehaviorGenerator = DDDToolkit.Analyzers.AccessBehaviorGenerator;
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
+using CoreTemplateRegistrationGenerator = DDDToolkit.Analyzers.TemplateRegistrationGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
 using EfIntegrationEventsGenerator = DDDToolkit.EntityFramework.Analyzers.IntegrationEventsGenerator;
@@ -16,6 +18,8 @@ using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyze
 using EfValueObjectGenerator = DDDToolkit.EntityFramework.Analyzers.ValueObjectGenerator;
 using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObjectGenerator;
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
+using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
+using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
@@ -87,7 +91,7 @@ public sealed class GeneratorTestHost
     public static GeneratorTestHost Create(string source, string path = "Source.cs")
         => new GeneratorTestHost().WithSource(source, path);
 
-    /// <summary>The six generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
+    /// <summary>The eight generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
     public static IIncrementalGenerator[] CoreGenerators() =>
     [
         new CoreEntityIdGenerator(),
@@ -96,6 +100,8 @@ public sealed class GeneratorTestHost
         new CoreEntityGenerator(),
         new CoreEventNamesGenerator(),
         new CoreRowAccessGenerator(),
+        new CoreTemplateRegistrationGenerator(),
+        new CoreAccessBehaviorGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
@@ -116,8 +122,14 @@ public sealed class GeneratorTestHost
     /// <summary>The generator in DDDToolkit.EntityFramework.Supabase.Analyzers.</summary>
     public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator()];
 
+    /// <summary>The generator in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs.</summary>
+    public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator()];
+
+    /// <summary>The generator in DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.</summary>
+    public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];
+
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
-    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer()];
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer()];
 
     public GeneratorTestHost WithSource(string source, string path = "Source.cs")
     {
@@ -222,11 +234,24 @@ public sealed class GeneratorTestHost
     /// assembly that has to carry an integration's generated code as well.
     /// </summary>
     public GeneratorTestHost WithReferencedAssembly(string source, string assemblyName = "DDDToolkit.Sample.Referenced", params IIncrementalGenerator[] generators)
-    {
-        var other = Create(source, assemblyName + ".cs").WithAssemblyName(assemblyName);
-        other._extraReferences.AddRange(_extraReferences);
+        => WithReferencedProject(assemblyName, project => project.WithSource(source, assemblyName + ".cs"), generators);
 
-        var outcome = other.RunCoreAnd(generators);
+    /// <summary>
+    /// Compiles another project into an assembly of its own and references it, as <see cref="WithReferencedAssembly"/>
+    /// does, for a project that needs more than one snippet or more than the core generators: a module's domain
+    /// project of several files, or a project that references Entity Framework and runs its generators too. The
+    /// project starts with this host's references; <paramref name="configure"/> adds its sources and anything else.
+    /// </summary>
+    /// <param name="assemblyName">The referenced assembly's name.</param>
+    /// <param name="configure">Adds the project's sources, references and build properties.</param>
+    /// <param name="alsoRun">Generators to run after the core ones, such as <see cref="EntityFrameworkGenerators"/>.</param>
+    public GeneratorTestHost WithReferencedProject(string assemblyName, Func<GeneratorTestHost, GeneratorTestHost> configure, params IIncrementalGenerator[] alsoRun)
+    {
+        var other = new GeneratorTestHost().WithAssemblyName(assemblyName);
+        other._extraReferences.AddRange(_extraReferences);
+        other = configure(other);
+
+        var outcome = other.RunCoreAnd(alsoRun);
         outcome.ShouldCompile();
 
         using var stream = new MemoryStream();
@@ -242,6 +267,46 @@ public sealed class GeneratorTestHost
         return this;
     }
 
+    /// <summary>
+    /// Adds DDDToolkit.Supporting.Tenancy, the package as it ships: its templates and parents, compiled with the
+    /// generators, seen through metadata the way an application sees them.
+    /// </summary>
+    public GeneratorTestHost WithTenancy()
+    {
+        _extraReferences.AddRange(ReferenceSets.Tenancy);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds DDDToolkit.Supporting.Tenancy.EntityFramework beside the package itself, with Entity Framework:
+    /// what a project sees that stores an organization, or asks Tenancy's questions over a context of its own.
+    /// </summary>
+    public GeneratorTestHost WithTenancyOnEntityFramework()
+    {
+        _extraReferences.AddRange(ReferenceSets.TenancyOnEntityFramework);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds DDDToolkit.Supporting.Membership and its Entity Framework package, as they ship, with Entity
+    /// Framework itself: the member template and the registration an application gets closed over its classes.
+    /// </summary>
+    public GeneratorTestHost WithMembership()
+    {
+        _extraReferences.AddRange(ReferenceSets.Membership);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds DDDToolkit.Supporting.Membership without its Entity Framework package: what a domain project sees,
+    /// which declares a member class and stores nothing.
+    /// </summary>
+    public GeneratorTestHost WithMembershipAlone()
+    {
+        _extraReferences.Add(ReferenceSets.MembershipAlone);
+        return this;
+    }
+
     public GeneratorTestHost WithFluentValidation()
     {
         _extraReferences.AddRange(ReferenceSets.FluentValidation);
@@ -254,7 +319,45 @@ public sealed class GeneratorTestHost
         return this;
     }
 
-    /// <summary>Runs the five DDDToolkit.Analyzers generators.</summary>
+    /// <summary>
+    /// Adds the Mediator library's abstractions and the service collection, which is what a project that
+    /// references the toolkit and the library sees: the generator writes a behavior for every
+    /// <c>[AccessRequests]</c> interface, and its registration.
+    /// </summary>
+    public GeneratorTestHost WithMediator()
+    {
+        _extraReferences.AddRange(ReferenceSets.Mediator);
+        return this;
+    }
+
+    /// <summary>Adds the Mediator library's abstractions and nothing else: a project that cannot see the service collection.</summary>
+    public GeneratorTestHost WithMediatorAlone()
+    {
+        _extraReferences.Add(ReferenceSets.MediatorAlone);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds the service collection without the Mediator library, for a snippet that brings a library of its
+    /// own under that name.
+    /// </summary>
+    public GeneratorTestHost WithDependencyInjection()
+    {
+        _extraReferences.Add(ReferenceSets.DependencyInjection);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds HotChocolate without DDDToolkit.HotChocolate: what the generator sees in a project whose copy of the
+    /// toolkit's package does not have a type the generator would otherwise write a use of.
+    /// </summary>
+    public GeneratorTestHost WithHotChocolateAlone()
+    {
+        _extraReferences.AddRange(ReferenceSets.HotChocolateAlone);
+        return this;
+    }
+
+    /// <summary>Runs the DDDToolkit.Analyzers generators.</summary>
     public GeneratorRunOutcome RunCore() => Run(CoreGenerators());
 
     /// <summary>Runs the core generators plus the given integration generators (the integrations build on the core output).</summary>

@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <!--
+    Membership's Postgres package, tested through its public API only (there is no InternalsVisibleTo), with
+    the application's classes, context, registration and row access rules of the TestHost: two kinds of
+    resource in one project. What needs no server runs here without Docker; the rest shares one Postgres
+    container per run, started the first time a test asks for a database.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.TestHost\DDDToolkit.Supporting.Membership.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
+  </ItemGroup>
+
+  <!--
+    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, and one set of
+    services, data and counted commands for both suites of the package that ask a database, so Postgres is
+    asked the same questions over the same data as SQLite.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\CommandCounter.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\FilingScenario.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\FilingServices.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\DepotScenario.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\DepotServices.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\GardenScenario.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.EntityFramework.Tests\Infrastructure\GardenServices.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.Tests\Support\Refused.cs" LinkBase="Support" />
+    <Compile Include="..\DDDToolkit.Supporting.Membership.Tests\Support\Break.cs" LinkBase="Support" />
+  </ItemGroup>
+
+</Project>

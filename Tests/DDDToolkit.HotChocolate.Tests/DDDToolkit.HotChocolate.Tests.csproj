@@ -25,11 +25,27 @@
     <PackageReference Include="HotChocolate" />
     <PackageReference Include="HotChocolate.Subscriptions.InMemory" />
     <PackageReference Include="HotChocolate.Types.Scalars" />
+    <!--
+      ToPageAsync over an Entity Framework query, for the tests that page by an id: HotChocolate's paging arrives
+      with this package, and SQLite is the database it runs against. DDDToolkit.HotChocolate itself needs neither.
+    -->
+    <PackageReference Include="HotChocolate.Data.EntityFramework" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Examples\DDDToolkit.ExampleLibrary\DDDToolkit.ExampleLibrary.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <!--
+      A module in two projects: ids in a domain project without HotChocolate, bound by the API project next to it.
+      Referencing the API project brings both.
+    -->
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Harbor.Api\DDDToolkit.HotChocolate.Tests.Harbor.Api.csproj" />
+    <!--
+      A module's API project written with HotChocolate's own generator: type classes over the application's records,
+      [Query] methods and a data loader. What the conventions do to a generated type class is checked against it.
+    -->
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Gallery.Api\DDDToolkit.HotChocolate.Tests.Gallery.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

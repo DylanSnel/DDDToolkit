@@ -23,7 +23,11 @@ public static partial class DependencyInjection
     /// it is the caller <see cref="Callers.Begin"/> made current, or <see cref="Caller.System"/> outside any.
     /// </summary>
     /// <param name="services">The application's services.</param>
-    /// <param name="configure">Changes what Supabase's roles would be, such as <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>.</param>
+    /// <param name="configure">
+    /// Changes what Supabase's roles would be, such as <see cref="PostgresRowLevelSecurityOptions.SystemRole"/>,
+    /// and how long the settings last: <see cref="PostgresRowLevelSecurityOptions.Scope"/> is
+    /// <see cref="RowLevelSecurityScope.Transaction"/> for a connection through Supabase's transaction pooler.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="ArgumentException">A role left empty by <paramref name="configure"/>.</exception>
     public static IServiceCollection AddSupabaseRowLevelSecurity(this IServiceCollection services, Action<PostgresRowLevelSecurityOptions>? configure = null)
@@ -47,7 +51,7 @@ public static partial class DependencyInjection
     /// as they do to the Data API. Needs <see cref="AddSupabaseRowLevelSecurity(IServiceCollection, Action{PostgresRowLevelSecurityOptions}?)"/>.
     /// </summary>
     /// <param name="optionsBuilder">The context's options.</param>
-    /// <param name="serviceProvider">The provider handed to the <c>AddDbContext</c> callback.</param>
+    /// <param name="serviceProvider">The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool.</param>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="InvalidOperationException">Row level security was not registered.</exception>
     public static DbContextOptionsBuilder UseSupabaseRowLevelSecurity(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DDDToolkit.Exceptions;
 using DDDToolkit.HotChocolate.Tests.Domain;
 using DDDToolkit.Invariants;
 using DDDToolkit.Localization;
@@ -51,9 +52,51 @@ public class FailureErrorFilterTests
     }
 
     [Fact]
+    public async Task A_refusal_becomes_one_coded_error_with_kind_and_arguments()
+    {
+        var errors = await ErrorsAsync("{ refused }");
+
+        var error = errors.Should().ContainSingle().Which;
+        error.GetProperty("message").GetString().Should().Be("The gold plan is closed.");
+        Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-closed");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("Conflict");
+        Extensions(error).GetProperty("arguments").GetProperty("Plan").GetString().Should().Be("gold");
+        Extensions(error).GetProperty("arguments").GetProperty("Seats").GetInt32().Should().Be(3);
+        error.GetProperty("path")[0].GetString().Should().Be("refused");
+        Extensions(error).TryGetProperty("field", out _).Should().BeFalse("a refusal about the command as a whole names no input");
+    }
+
+    [Fact]
+    public async Task A_refusal_about_one_input_names_it_where_a_validation_failure_names_its_property()
+    {
+        var errors = await ErrorsAsync("{ refusedAbout }");
+
+        // A refused query has no payload to carry a RefusalError, so the extension is where a client finds the
+        // input: the same extension a validation failure names its property in.
+        var error = errors.Should().ContainSingle().Which;
+        Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-unknown");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("Invalid");
+        Extensions(error).GetProperty("field").GetString().Should().Be("plan");
+        Extensions(error).GetProperty("arguments").GetProperty("Field").GetString().Should().Be("plan", "and the arguments keep it as well");
+    }
+
+    [Fact]
+    public async Task A_refusal_with_a_field_argument_has_the_field_extension()
+    {
+        var errors = await ErrorsAsync("{ refusedInput }");
+
+        var error = errors.Should().ContainSingle().Which;
+        Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-name-invalid");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("Invalid");
+        Extensions(error).GetProperty("field").GetString().Should().Be("name", "a form puts the message under the input, as it does for a validation failure");
+        Extensions(error).GetProperty("arguments").GetProperty("Field").GetString().Should().Be("name", "the argument stays among the arguments");
+        Extensions(error).GetProperty("arguments").GetProperty("Max").GetInt32().Should().Be(40);
+    }
+
+    [Fact]
     public async Task A_registered_localizer_phrases_every_message()
     {
-        var errors = await ErrorsAsync("{ refuse breakInvariant }", new Upper());
+        var errors = await ErrorsAsync("{ refuse breakInvariant refused }", new Upper());
 
         errors.Select(e => e.GetProperty("message").GetString())
             .Should().OnlyContain(message => message!.StartsWith("LOCALIZED "));
@@ -96,5 +139,7 @@ public class FailureErrorFilterTests
         public string Localize(ValidationError error) => "LOCALIZED " + error.Code;
 
         public string Localize(InvariantViolation violation) => "LOCALIZED " + violation.Code;
+
+        public string Localize(RefusalException refusal) => "LOCALIZED " + refusal.Code;
     }
 }

@@ -1,0 +1,319 @@
+@page "/try"
+@inherits SessionPage
+@inject AttemptRunner Runner
+@inject TimeProvider Clock
+
+<PageTitle>@T["nav.try"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.try"]</h1>
+<p class="text-body-secondary">@T["try.intro"]</p>
+
+<section class="try-free mb-5">
+    <h2 class="h4">@T["try.free"]</h2>
+
+    <div class="try-grid">
+        <label class="form-label small" for="try-action">@T["try.action"]</label>
+        <select id="try-action" class="form-select form-select-sm" @bind="_actionName">
+            @foreach (var action in TryItActions.All)
+            {
+                <option value="@action.Text">@T[action.Text]</option>
+            }
+        </select>
+
+        <label class="form-label small" for="try-tenant">@T["common.tenant"]</label>
+        <div>
+            <input id="try-tenant" class="form-control form-control-sm" placeholder="@T["try.tenant.blank"]" @bind="_input.Tenant" />
+            <div class="form-check small mt-1">
+                <input id="try-no-token" class="form-check-input" type="checkbox" @bind="_input.NoToken" />
+                <label class="form-check-label" for="try-no-token">@T["try.no-token"]</label>
+            </div>
+        </div>
+
+        @foreach (var field in Action.Fields)
+        {
+            <label class="form-label small">@Label(field)</label>
+            <div>
+                @switch (field)
+                {
+                    case TryItField.Project:
+                        <IdPicker Label="@Label(field)" @bind-Value="_input.Project" Options="ProjectOptions" />
+                        break;
+                    case TryItField.Seat:
+                        <IdPicker Label="@Label(field)" @bind-Value="_input.Seat" Options="SeatOptions" />
+                        break;
+                    case TryItField.Unit:
+                        <IdPicker Label="@Label(field)" @bind-Value="_input.Unit" Options="UnitOptions" />
+                        break;
+                    case TryItField.Role:
+                        <IdPicker Label="@Label(field)" @bind-Value="_input.Role" Options="RoleOptions" />
+                        break;
+                    case TryItField.ProjectRole:
+                        <IdPicker Label="@Label(field)" @bind-Value="_input.ProjectRole" Options="ProjectRoleOptions" />
+                        break;
+                    case TryItField.Key:
+                        <input class="form-control form-control-sm font-monospace" list="try-keys" placeholder="projects.close" @bind="_input.Key" />
+                        break;
+                    case TryItField.Name:
+                        <input class="form-control form-control-sm" @bind="_input.Name" />
+                        break;
+                    case TryItField.Title:
+                        <input class="form-control form-control-sm" @bind="_input.Title" />
+                        break;
+                    case TryItField.Until:
+                        <input class="form-control form-control-sm" type="date" @bind="_input.Until" />
+                        break;
+                    case TryItField.Reason:
+                        <input class="form-control form-control-sm" @bind="_input.Reason" />
+                        break;
+                }
+            </div>
+        }
+    </div>
+
+    <datalist id="try-keys">
+        @foreach (var permission in _keys)
+        {
+            <option value="@permission.Key">@permission.Description@(permission.ManagesAccess ? " (" + T["common.manages-access"] + ")" : string.Empty)</option>
+        }
+    </datalist>
+
+    <div class="request-preview mt-3">
+        <code>@Action.Method @Action.PathFor(_input)</code>
+        @if (PreviewBody is { } body)
+        {
+            <pre class="small">@body</pre>
+        }
+    </div>
+
+    <button type="button" class="btn btn-primary btn-sm mt-2" disabled="@_sending" @onclick="SendAsync">@T["try.send"]</button>
+
+    @if (_freeAnswer is not null)
+    {
+        <ApiOutcomeView Answer="_freeAnswer" />
+    }
+</section>
+
+<section class="try-presets mb-5">
+    <h2 class="h4">@T["try.presets"]</h2>
+    <p class="small text-body-secondary">@T["try.presets.intro"]</p>
+
+    @if (_presets is null)
+    {
+        <p><em>@T["common.loading"]</em></p>
+    }
+    else if (_presets.Value is not { } presets)
+    {
+        <ApiOutcomeView Answer="_presets" />
+    }
+    else
+    {
+        <button type="button" class="btn btn-outline-primary btn-sm mb-2" disabled="@_sending" @onclick="RunAllAsync">@T["try.run-all"]</button>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr><th>@T["try.attempt"]</th><th>@T["try.as"]</th><th>@T["try.expected"]</th><th></th><th>@T["common.answer"]</th><th>@T["common.verdict"]</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var preset in presets)
+                    {
+                        _runs.TryGetValue(preset.Id, out var run);
+                        <tr>
+                            <td class="small">@preset.Title</td>
+                            <td class="small">
+                                @(preset.SendToken ? preset.Person : T["common.no-token"])
+                                <span class="text-body-secondary">@(preset.SendTenant ? T["common.in", preset.Tenant] : T["common.no-header"])</span>
+                            </td>
+                            <td class="text-nowrap"><StatusBadge Status="preset.ExpectedStatus" /> <code>@preset.ExpectedCode</code></td>
+                            <td><button type="button" class="btn btn-outline-secondary btn-sm" disabled="@_sending" @onclick="() => RunAsync(preset)">@T["try.run"]</button></td>
+                            <td class="text-nowrap">
+                                @if (run is not null)
+                                {
+                                    <StatusBadge Status="run.Answer.Status" />
+                                    <code>@run.Answer.Problem?.Code</code>
+                                }
+                            </td>
+                            <td>
+                                @if (run is not null)
+                                {
+                                    <Verdict AsExpected="run.AsExpected" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="try-history">
+    <h2 class="h4">@T["try.history"]</h2>
+    @if (Session.History.Count == 0)
+    {
+        <p class="text-body-secondary small">@T["try.history.none"]</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr><th>@T["try.history.at"]</th><th>@T["try.history.what"]</th><th>@T["try.history.request"]</th><th>@T["common.answer"]</th><th>@T["common.verdict"]</th></tr></thead>
+                <tbody>
+                    @foreach (var entry in Session.History)
+                    {
+                        <tr>
+                            <td class="small text-nowrap">@entry.At.ToUniversalTime().ToString("HH:mm:ss 'UTC'", System.Globalization.CultureInfo.InvariantCulture)</td>
+                            @* A preset's title is the API's, shown as it came; an action of the form is named by its text. *@
+                            <td class="small">@(entry.Preset is null ? T[entry.What] : entry.What)</td>
+                            <td class="small">
+                                <code>@entry.Answer.Method @entry.Answer.Path</code>
+                                <span class="text-body-secondary">@T["common.as", entry.Answer.Caller], @(entry.Answer.Tenant is null ? T["common.no-header"] : T["common.in", entry.Answer.Tenant])</span>
+                            </td>
+                            <td class="text-nowrap"><StatusBadge Status="entry.Answer.Status" /> <code>@entry.Answer.Problem?.Code</code></td>
+                            <td>
+                                @if (entry.AsExpected is { } asExpected)
+                                {
+                                    <Verdict AsExpected="asExpected" />
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+@code {
+    private static readonly JsonSerializerOptions Indented = new(JsonSerializerOptions.Web) { WriteIndented = true };
+
+    private readonly TryItInput _input = new();
+    private readonly Dictionary<string, AttemptRun> _runs = new(StringComparer.Ordinal);
+    private string _actionName = TryItActions.All[0].Text;
+    private ApiOutcome? _freeAnswer;
+    private ApiOutcome<IReadOnlyList<AttemptPreset>>? _presets;
+    private IReadOnlyList<ProjectInfo> _projects = [];
+    private IReadOnlyList<SeatInfo> _seats = [];
+    private IReadOnlyList<UnitInfo> _units = [];
+    private IReadOnlyList<RoleInfo> _roles = [];
+    private IReadOnlyList<ProjectRoleInfo> _projectRoles = [];
+    private IReadOnlyList<PermissionInfo> _keys = [];
+    private bool _sending;
+
+    private TryItAction Action => TryItActions.ByText(_actionName);
+
+    // What the form calls a field, in the session's language: the field's name in the code is nobody's to read.
+    private string Label(TryItField field) => field switch
+    {
+        TryItField.Project => T["try.field.project"],
+        TryItField.Key => T["try.field.key"],
+        TryItField.Name => T["try.field.name"],
+        TryItField.Unit => T["try.field.unit"],
+        TryItField.Title => T["try.field.title"],
+        TryItField.Seat => T["try.field.seat"],
+        TryItField.Role => T["try.field.role"],
+        TryItField.ProjectRole => T["try.field.project-role"],
+        TryItField.Until => T["try.field.until"],
+        TryItField.Reason => T["try.field.reason"],
+        _ => field.ToString(),
+    };
+
+    private string? PreviewBody => Action.BodyFor(_input) is { } body ? JsonSerializer.Serialize(body, body.GetType(), Indented) : null;
+
+    private IReadOnlyList<(string Value, string Text)> ProjectOptions
+        => _projects.Select(project => (project.Id.ToString(), project.Number + " " + project.Name)).ToList();
+
+    private IReadOnlyList<(string Value, string Text)> SeatOptions
+        => _seats.Select(seat => (seat.Id.ToString(), seat.DisplayName + (seat.IsActive ? string.Empty : " (" + seat.Status.ToLowerInvariant() + ")"))).ToList();
+
+    private IReadOnlyList<(string Value, string Text)> UnitOptions
+        => _units.Select(unit => (unit.Id.ToString(), unit.Path)).ToList();
+
+    // Whether a role manages access says who may give it at a unit, so only the two org-role actions show it.
+    private IReadOnlyList<(string Value, string Text)> RoleOptions
+        => _roles.Select(role => (
+                role.Id.ToString(),
+                role.Name
+                + (role.IsActive ? string.Empty : " (" + role.Status.ToLowerInvariant() + ")")
+                + (Action.OrganizationRole && role.ManagesAccess ? " (" + T["common.manages-access"] + ")" : string.Empty)))
+            .ToList();
+
+    // Every project role stays in the list, an archived one too: giving one is one of the refusals to try.
+    private IReadOnlyList<(string Value, string Text)> ProjectRoleOptions
+        => _projectRoles.Select(role => (role.Id.ToString(), role.Name + (role.IsActive ? string.Empty : " (" + role.Status.ToLowerInvariant() + ")"))).ToList();
+
+    // The pickers list what the session's seat may see in its tenant; when that is refused, they are empty and ids
+    // are typed. The presets are the same for everybody.
+    protected override async Task LoadAsync()
+    {
+        _input.Tenant = Session.Tenant;
+        if (_presets?.Value is null)
+        {
+            _presets = await Api.AttemptsAsync();
+        }
+
+        _projects = (await Api.VisibleProjectsAsync()).Value?.Items ?? [];
+        _seats = (await Api.TenantSeatsAsync()).Value ?? [];
+        _units = (await Api.TenantUnitsAsync()).Value ?? [];
+        _roles = (await Api.TenantRolesAsync()).Value ?? [];
+        _projectRoles = (await Api.ProjectRolesAsync()).Value ?? [];
+        _keys = (await Api.KeyCatalogueAsync()).Value?.Permissions.Where(permission => !permission.Retired).ToList() ?? [];
+    }
+
+    private async Task SendAsync()
+    {
+        _sending = true;
+        try
+        {
+            var action = Action;
+            var outcome = await Api.SendAsync<JsonElement?>(
+                action.Method,
+                action.PathFor(_input),
+                action.BodyFor(_input),
+                _input.NoToken ? CallAs.Anonymous : CallAs.Session,
+                TenantChoice.Of(_input.Tenant));
+            _freeAnswer = outcome;
+            Session.Remember(new TryItEntry(Clock.GetUtcNow(), action.Text, outcome));
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task RunAsync(AttemptPreset preset)
+    {
+        _sending = true;
+        try
+        {
+            await RunOneAsync(preset);
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task RunAllAsync()
+    {
+        _sending = true;
+        try
+        {
+            foreach (var preset in _presets?.Value ?? [])
+            {
+                await RunOneAsync(preset);
+                StateHasChanged();
+            }
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task RunOneAsync(AttemptPreset preset)
+    {
+        var run = await Runner.RunAsync(preset);
+        _runs[preset.Id] = run;
+        Session.Remember(new TryItEntry(Clock.GetUtcNow(), preset.Title, run.Answer, preset));
+    }
+}

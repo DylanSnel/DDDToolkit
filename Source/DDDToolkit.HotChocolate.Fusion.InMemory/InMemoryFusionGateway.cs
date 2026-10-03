@@ -1,7 +1,10 @@
+using System.Collections.Immutable;
 using HotChocolate.Execution;
+using HotChocolate.Fusion.Composition;
 using HotChocolate.Fusion.Configuration;
 using HotChocolate.Fusion.Connectors.InMemory;
 using HotChocolate.Fusion.Execution.Clients;
+using HotChocolate.Fusion.Logging;
 using HotChocolate.Fusion.Options;
 using HotChocolate.Transport.Formatters;
 using Microsoft.AspNetCore.Builder;
@@ -33,9 +36,9 @@ namespace DDDToolkit.HotChocolate.Fusion.InMemory;
 /// </para>
 /// <para>
 /// A source schema that cannot be composed does not fail loudly in the in-memory connector: the gateway
-/// waits for a schema forever. The application's start therefore waits for the composed schema, and fails,
-/// naming the problem where it can, when there is none after
-/// <see cref="InMemoryFusionGatewayOptions.CompositionTimeout"/>.
+/// waits for a schema forever. The application's start therefore waits for the composed schema, and fails
+/// as soon as the composer refuses the source schemas, with every error it logged, or when there is no
+/// schema after <see cref="InMemoryFusionGatewayOptions.CompositionTimeout"/>.
 /// </para>
 /// </remarks>
 public static class InMemoryFusionGateway
@@ -72,6 +75,9 @@ public static class InMemoryFusionGateway
         services.AddSingleton(_ => gateway.RequireServices().GetRequiredService<ISourceSchemaClientScopeFactory>());
 
         services.AddHostedService(_ => new CompositionCheck(gateway));
+
+        // The schemas as text, for a test that compares each with a committed file.
+        services.AddSingleton(application => new InMemoryFusionSchemas(application, gateway.ComposedAsync));
 
         return services;
     }
@@ -111,15 +117,28 @@ public static class InMemoryFusionGateway
             .AddGraphQLGatewayServer()
             .AddConfigurationProvider(_ =>
             {
-                var provider = new InMemoryConfigurationProvider(names, sourceSchemas, sourceSchemaEvents, composition);
+                // The connector starts composing in its constructor, and tells only who is listening at that
+                // moment that a composition failed: it keeps nothing, and it does not try again. Source schemas
+                // that are built without waiting for anything would be composed, and refused, before anybody
+                // could subscribe. So the composer is handed no source schema until the listener is there.
+                var listening = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var provider = new InMemoryConfigurationProvider(names, new OnceListening(sourceSchemas, listening.Task), sourceSchemaEvents, composition);
 
-                // The connector tells only who is listening that a composition failed, and keeps nothing.
-                provider.Subscribe(new CompositionErrors(gateway));
+                try
+                {
+                    provider.Subscribe(new CompositionErrors(gateway));
+                }
+                finally
+                {
+                    listening.SetResult();
+                }
+
                 return provider;
             });
 
+        // The connector's clients, with the requests of a batch kept apart where the connector mixes them up.
         services.AddSingleton<ISourceSchemaClientFactory>(
-            new InMemorySourceSchemaClientFactory(sourceSchemas, sourceSchemaEvents, JsonResultFormatter.Default));
+            new RequestsKeptApart(new InMemorySourceSchemaClientFactory(sourceSchemas, sourceSchemaEvents, JsonResultFormatter.Default)));
 
         foreach (var name in names)
         {
@@ -146,12 +165,94 @@ public static class InMemoryFusionGateway
     {
         public InMemoryFusionGatewayOptions Options { get; } = options;
 
+        private readonly TaskCompletionSource _failed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public IServiceProvider? Services { get; set; }
 
-        public Exception? CompositionError { get; set; }
+        public Exception? CompositionError { get; private set; }
+
+        /// <summary>The composer refused the source schemas. It does not compose again, so whoever waits can stop.</summary>
+        public void Failed(Exception error)
+        {
+            CompositionError = error;
+            _failed.TrySetResult();
+        }
+
+        /// <summary>The source schemas composed, so an error of an earlier attempt no longer describes them.</summary>
+        public void Composed() => CompositionError = null;
 
         public IServiceProvider RequireServices()
             => Services ?? throw new InvalidOperationException("Call MapInMemoryFusionGateway() on the application.");
+
+        /// <summary>
+        /// The gateway's executor once the source schemas are composed. A composition that fails does not
+        /// always fail the request for the executor: when the gateway was not listening yet, it waits for a
+        /// schema forever. So this stops waiting when the composer said no, or after
+        /// <see cref="InMemoryFusionGatewayOptions.CompositionTimeout"/>, and says what is known.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        /// <see cref="MapInMemoryFusionGateway"/> was not called, or there is no composed schema.
+        /// </exception>
+        public async Task<IRequestExecutor> ComposedAsync(CancellationToken cancellationToken)
+        {
+            var executors = RequireServices().GetRequiredService<IRequestExecutorProvider>();
+            var composing = executors.GetExecutorAsync(cancellationToken: cancellationToken).AsTask();
+            var timeout = Options.CompositionTimeout;
+
+            if (await Task.WhenAny(composing, _failed.Task, Task.Delay(timeout, cancellationToken)).ConfigureAwait(false) == composing)
+            {
+                try
+                {
+                    return await composing.ConfigureAwait(false);
+                }
+                catch (SchemaCompositionException refused)
+                {
+                    // The gateway was listening too, and heard the composer a moment before this did. It is
+                    // the same refusal, so it reads the same whichever of the two got there first.
+                    throw Refused(CompositionError ?? refused);
+                }
+            }
+
+            // The request for the executor is given up on. If the gateway heard the composer as well, that
+            // request fails later, and nobody is left to look at how.
+            _ = composing.ContinueWith(
+                static abandoned => _ = abandoned.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            // Whoever stopped waiting gets a cancellation, not a story about composition.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            throw CompositionError is { } error
+                ? Refused(error)
+                : new InvalidOperationException(
+                    $"The source schemas were not composed into one within {timeout.TotalSeconds:0} seconds. "
+                    + "Composition failures are not always reported: check that every source schema's root query "
+                    + "type is called Query, that a type two schemas both declare shares its key, and that fields "
+                    + "several schemas return are @shareable.");
+        }
+
+        /// <summary>The composer's refusal as the application's start and a printed schema report it, with the composer's own exception inside.</summary>
+        private static InvalidOperationException Refused(Exception error)
+            => new("The source schemas could not be composed into one: " + Describe(error), error);
+
+        /// <summary>Every error the composer logged, where its own message names the first one only.</summary>
+        private static string Describe(Exception error)
+        {
+            if (error is not SchemaCompositionException { CompositionLog: { } log })
+            {
+                return error.Message;
+            }
+
+            var errors = log.Where(static entry => entry.Severity == LogSeverity.Error).Select(static entry => entry.Message).ToArray();
+            return errors.Length switch
+            {
+                0 => error.Message,
+                1 => errors[0],
+                _ => errors.Length + " errors." + string.Concat(errors.Select(static message => Environment.NewLine + "  - " + message)),
+            };
+        }
     }
 
     /// <summary>Keeps the composition error the connector reports and forgets.</summary>
@@ -161,9 +262,30 @@ public static class InMemoryFusionGateway
         {
         }
 
-        public void OnError(Exception error) => gateway.CompositionError = error;
+        public void OnError(Exception error) => gateway.Failed(error);
 
-        public void OnNext(FusionConfiguration value) => gateway.CompositionError = null;
+        public void OnNext(FusionConfiguration value) => gateway.Composed();
+    }
+
+    /// <summary>
+    /// The application's source schemas, held back until whoever keeps the composer's errors is listening:
+    /// the composer asks for them from its constructor, and is answered once <paramref name="listening"/>
+    /// completes, however fast a schema is built. After that it is the application's provider and nothing more.
+    /// </summary>
+    private sealed class OnceListening(IRequestExecutorProvider sourceSchemas, Task listening) : IRequestExecutorProvider
+    {
+        public ImmutableArray<string> SchemaNames => sourceSchemas.SchemaNames;
+
+        public ValueTask<IRequestExecutor> GetExecutorAsync(string? schemaName = null, CancellationToken cancellationToken = default)
+            => listening.IsCompletedSuccessfully
+                ? sourceSchemas.GetExecutorAsync(schemaName, cancellationToken)
+                : WaitAsync(schemaName, cancellationToken);
+
+        private async ValueTask<IRequestExecutor> WaitAsync(string? schemaName, CancellationToken cancellationToken)
+        {
+            await listening.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return await sourceSchemas.GetExecutorAsync(schemaName, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -172,25 +294,7 @@ public static class InMemoryFusionGateway
     /// </summary>
     private sealed class CompositionCheck(GatewayRegistration gateway) : IHostedService
     {
-        public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            var executors = gateway.RequireServices().GetRequiredService<IRequestExecutorProvider>();
-            var composing = executors.GetExecutorAsync(cancellationToken: cancellationToken).AsTask();
-            var timeout = gateway.Options.CompositionTimeout;
-
-            if (await Task.WhenAny(composing, Task.Delay(timeout, cancellationToken)) != composing)
-            {
-                throw new InvalidOperationException(gateway.CompositionError is { } error
-                    ? "The source schemas could not be composed into one: " + error.Message
-                    : $"The source schemas were not composed into one within {timeout.TotalSeconds:0} seconds. "
-                        + "Composition failures are not always reported: check that every source schema's root query "
-                        + "type is called Query, that a type two schemas both declare shares its key, and that fields "
-                        + "several schemas return are @shareable.",
-                    gateway.CompositionError);
-            }
-
-            await composing;
-        }
+        public Task StartAsync(CancellationToken cancellationToken) => gateway.ComposedAsync(cancellationToken);
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
@@ -200,8 +304,15 @@ public static class InMemoryFusionGateway
 public sealed class InMemoryFusionGatewayOptions
 {
     /// <summary>
-    /// How long the application's start waits for the composed schema. Thirty seconds by default.
+    /// How long the application's start waits for the composed schema at most. Thirty seconds by default. A
+    /// composition the composer refuses fails the start at once, without waiting this long.
     /// </summary>
+    /// <remarks>
+    /// It bounds the gateway's own wait, and nothing that comes before it. HotChocolate builds every source schema
+    /// when the application starts, in a hosted service that is registered before the gateway's and has no
+    /// timeout of its own: a source schema whose building never ends, one that waits in
+    /// <c>ConfigureSchemaAsync</c> for something that does not come, holds the start there, however short this is.
+    /// </remarks>
     public TimeSpan CompositionTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>

@@ -4,6 +4,7 @@ using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using static DDDToolkit.EntityFramework.Tests.Infrastructure.SupabaseRowLevelSecurityDatabase;
 
 namespace DDDToolkit.EntityFramework.Tests;
@@ -19,11 +20,117 @@ public sealed class CallerTests
 
     private readonly AmbientCallerAccessor _accessor = new();
 
+    private readonly AmbientCallerAccessor _strict = new(new CallerOptions { RequireExplicitCallers = true });
+
     [Fact]
     public void Outside_any_scope_there_is_no_caller_and_the_work_is_the_systems()
     {
         Callers.Ambient.Should().BeNull();
         _accessor.Current.Should().BeSameAs(Caller.System);
+    }
+
+    [Fact]
+    public void SystemIn_is_scoped_system_work_and_not_System()
+    {
+        var projects = Caller.SystemIn("projects");
+
+        projects.Kind.Should().Be(CallerKind.SystemIn);
+        projects.IsSystemIn.Should().BeTrue();
+        projects.IsSystem.Should().BeFalse("its work stays inside the policies, which the system's does not");
+        projects.Scope.Should().Be("projects");
+        projects.UserId.Should().BeNull();
+        projects.IsSignedIn.Should().BeFalse();
+        projects.Role.Should().BeNull("which role it runs as is the host's to configure");
+        projects.Claims.Should().BeNull();
+        projects.ToString().Should().Be("system in projects");
+
+        Caller.System.Scope.Should().BeNull();
+        Caller.System.IsSystemIn.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Projects")]
+    [InlineData("two words")]
+    [InlineData("projects.crews")]
+    [InlineData("projects'")]
+    [InlineData("pröjects")]
+    public void SystemIn_needs_a_scope(string scope)
+    {
+        var make = () => Caller.SystemIn(scope);
+
+        make.Should().Throw<ArgumentException>().WithParameterName("scope");
+        ((Func<Caller>)(() => Caller.SystemIn(null!))).Should().Throw<ArgumentException>().WithParameterName("scope");
+        Caller.SystemIn("crew_leads-2").Scope.Should().Be("crew_leads-2", "lower case letters, digits, '_' and '-' make a scope");
+    }
+
+    [Fact]
+    public void With_explicit_callers_required_asking_outside_any_scope_throws()
+    {
+        var ask = () => _strict.Current;
+
+        ask.Should().Throw<NoCallerException>()
+            .WithMessage("*RequireExplicitCallers*Callers.Begin(Caller.System)*")
+            .Which.Should().BeAssignableTo<InvalidOperationException>("code that caught what the toolkit threw before still catches it");
+    }
+
+    [Fact]
+    public void A_begun_caller_is_answered_either_way()
+    {
+        using (Callers.Begin(Alice))
+        {
+            _accessor.Current.Should().BeSameAs(Alice);
+            _strict.Current.Should().BeSameAs(Alice);
+        }
+
+        using (Callers.Begin(Caller.System))
+        {
+            _strict.Current.Should().BeSameAs(Caller.System, "the system's work is allowed, once somebody said so");
+        }
+    }
+
+    [Fact]
+    public void BeginNone_hides_the_ambient_caller_until_disposed()
+    {
+        using (Callers.Begin(Alice))
+        {
+            using (Callers.BeginNone())
+            {
+                Callers.Ambient.Should().BeNull();
+                _accessor.Current.Should().BeSameAs(Caller.System, "without the option nobody is still the system");
+                ((Func<Caller>)(() => _strict.Current)).Should().Throw<NoCallerException>();
+
+                using (Callers.Begin(Bob))
+                {
+                    _strict.Current.Should().BeSameAs(Bob, "a caller begun inside it is answered");
+                }
+
+                Callers.Ambient.Should().BeNull();
+            }
+
+            Callers.Ambient.Should().BeSameAs(Alice);
+        }
+
+        Callers.Ambient.Should().BeNull();
+    }
+
+    [Fact]
+    public void RequireExplicitCallers_is_what_the_accessor_asks()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ICallerAccessor, AmbientCallerAccessor>();
+        services.RequireExplicitCallers();
+        services.RequireExplicitCallers();
+
+        using var provider = services.BuildServiceProvider();
+
+        services.Count(descriptor => descriptor.ServiceType == typeof(CallerOptions)).Should().Be(1, "registering it twice is harmless");
+        provider.GetRequiredService<CallerOptions>().RequireExplicitCallers.Should().BeTrue();
+        ((Func<Caller>)(() => provider.GetRequiredService<ICallerAccessor>().Current)).Should().Throw<NoCallerException>();
+
+        using var plain = new ServiceCollection().AddSingleton<ICallerAccessor, AmbientCallerAccessor>().BuildServiceProvider();
+        plain.GetRequiredService<ICallerAccessor>().Current.Should().BeSameAs(Caller.System, "without it a 3.x host answers as it always did");
     }
 
     [Fact]
@@ -87,6 +194,27 @@ public sealed class CallerTests
         alice.Claim("app_metadata.teams").Should().Be("[\"north\"]", "what is not text comes as its JSON");
         alice.Claim("app_metadata.missing").Should().BeNull();
         alice.Claims.Should().Be(claims, "the database gets the claims as they were signed");
+    }
+
+    [Theory]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001"}""", null)]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":null}""", null)]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":"analyst"}""", "analyst")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":""}""", "")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":["authenticated"]}""", """["authenticated"]""")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":{"name":"authenticated"}}""", """{"name":"authenticated"}""")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":true}""", "true")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":7}""", "7")]
+    [InlineData("""{"sub":"a11ce000-0000-4000-8000-000000000001","role":"authenticated","role":"analyst"}""", "analyst")]
+    public void A_tokens_role_is_its_role_claim_and_a_claim_that_is_not_text_is_no_missing_claim(string claims, string? role)
+    {
+        // A caller without a role is a token that says nothing about one. A role claim of another shape says
+        // something, which is kept as written rather than read as nothing; and of a claim signed twice the last
+        // one counts, as it does for the database.
+        var caller = Callers.FromClaims(claims);
+
+        caller.Role.Should().Be(role);
+        caller.Claim("role").Should().Be(role, "the role is the claim, read as any claim is");
     }
 
     [Fact]

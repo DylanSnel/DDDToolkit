@@ -1,6 +1,6 @@
 <Project>
   <!--
-    What the three consumers in this folder share. build/verify-package-consumption.sh builds them from
+    What the consumers in this folder share. build/verify-package-consumption.sh builds them from
     a copy outside the repository, so the repository's own Directory.Build.props, which declares
     DDD_Module for every project below it, never reaches them: they get the property from the packages
     or not at all.

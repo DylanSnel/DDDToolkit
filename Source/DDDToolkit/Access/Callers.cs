@@ -41,9 +41,30 @@ public static class Callers
     }
 
     /// <summary>
+    /// Makes nobody the caller until the result is disposed, and the one before it again afterwards. The
+    /// toolkit runs the handlers it calls from its own background work inside this when the host requires
+    /// explicit callers (<see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>), so a
+    /// handler does not inherit the system caller its bookkeeping ran as: it runs as the caller something
+    /// begins for it, or, asking an <see cref="AmbientCallerAccessor"/>, fails with
+    /// <see cref="NoCallerException"/>.
+    /// <para>
+    /// It hides the ambient caller only. An accessor that knows the request, such as the one
+    /// <c>DDDToolkit.Auth.Supabase.AspNetCore</c> registers, still answers for the request inside it.
+    /// </para>
+    /// </summary>
+    public static IDisposable BeginNone()
+    {
+        var previous = AmbientCaller.Value;
+        AmbientCaller.Value = null;
+        return new Scope(previous);
+    }
+
+    /// <summary>
     /// The user an access token names, from its claims: <c>sub</c> is the user's id, <c>role</c> their
     /// role, and <see cref="Caller.Claim"/> reads the rest. The claims go to the database as they are, so
-    /// <c>auth.jwt()</c> there answers what the token says.
+    /// <c>auth.jwt()</c> there answers what the token says. A token without a <c>role</c> claim, or with
+    /// <c>null</c> for one, gives a caller without a role; a <c>role</c> that is not text is the caller's role
+    /// as the token writes it, which is never a role a host knows.
     /// </summary>
     /// <param name="claims">
     /// The payload of an access token that has already been validated: the JSON object between the two
@@ -72,7 +93,18 @@ public static class Callers
         }
 
         var user = root.TryGetProperty("sub", out var sub) && sub.ValueKind is JsonValueKind.String && Guid.TryParse(sub.GetString(), out var id) ? id : (Guid?)null;
-        var role = root.TryGetProperty("role", out var claimed) && claimed.ValueKind is JsonValueKind.String ? claimed.GetString() : null;
+
+        // A role claim that is there but is no text, a list of roles say, is kept as it is written: a role like
+        // any other, which no host listed. Left out, it would read as a token that says nothing about a role,
+        // and that is a signed-in user.
+        var role = root.TryGetProperty("role", out var claimed)
+            ? claimed.ValueKind switch
+            {
+                JsonValueKind.String => claimed.GetString(),
+                JsonValueKind.Null or JsonValueKind.Undefined => null,
+                _ => claimed.GetRawText(),
+            }
+            : null;
 
         return Caller.User(user, role, path => ClaimOf(root, path), claims);
     }

@@ -22,11 +22,17 @@ public static class DependencyInjection
     /// services.AddDDDToolkitLocalization(options =&gt; options.AddResource&lt;ShippingFailures&gt;());   // in AddShipping()
     /// </code>
     /// <para>
+    /// A package that ships texts for its own failures offers them from its registration
+    /// (<see cref="FailureTextsServiceCollectionExtensions.AddFailureTexts{TResource}"/>), so nothing is added
+    /// here for them. Offers are asked after every source added here and before the toolkit's own messages,
+    /// whichever was registered first: a text of yours for a package's code is the one a reader gets.
+    /// </para>
+    /// <para>
     /// A singleton: the language is read per call from the current UI culture, not fixed at registration.
     /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Adds the sources of your translations. Without it only the toolkit's own messages are known.</param>
+    /// <param name="configure">Adds the sources of your translations. Without it only the toolkit's own messages are known, and what the packages you registered offer.</param>
     public static IServiceCollection AddDDDToolkitLocalization(this IServiceCollection services, Action<FailureLocalizationOptions>? configure = null)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -39,8 +45,12 @@ public static class DependencyInjection
             services.AddSingleton(new FailureLocalizationSource(source.Name, source.Create));
         }
 
+        // The application's own sources first, in the order they were added, and then what the packages it
+        // registered offer for their failures: a package never answers before the application does.
         services.TryAddSingleton<IFailureLocalizer>(provider =>
-            new FailureLocalizer(provider.GetServices<FailureLocalizationSource>().Select(source => source.Create(provider))));
+            new FailureLocalizer(
+                provider.GetServices<FailureLocalizationSource>().Select(source => source.Create(provider))
+                    .Concat(OfferedTexts.SourcesOf(provider.GetServices<FailureTexts>()))));
 
         return services;
     }

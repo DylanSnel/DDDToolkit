@@ -73,7 +73,7 @@ public sealed class OrderLog(ILogger<OrderLog> logger) : INotificationHandler<Or
 }
 ```
 
-*[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/DomainEvents/OrderLog.cs)*
+*[`Ordering/Application/Orders/DomainEvents/OrderLog.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/DomainEvents/OrderLog.cs)*
 
 See [In-process dispatch](#in-process-dispatch).
 
@@ -167,6 +167,12 @@ transaction back.
 
 Do not call `SaveChanges` from a handler in this mode. The save is already in progress and it will
 pick your changes up.
+
+When the saving context comes from a context pool, the handlers run with the scope the context was
+rented in: the scope that asked for it, with `AddScopedFromPool`, or the one you named with
+`BindToScope`. A pooled context that was given no scope is refused before anything is dequeued. The
+outbox needs no scope, so a save that only writes outbox rows works from any pooled context. See
+[Contexts from a pool](entity-framework.md#contexts-from-a-pool).
 
 The events reach your handlers through a delegate. `DDDToolkit.Mediator` writes it for you; you can
 also write it yourself.
@@ -432,6 +438,13 @@ public static OutboxOptions AddOrderingIntegrationEvents(this OutboxOptions outb
 `outbox.AddOrderingIntegrationEvents()` in place of the assembly scan. The same method registers what a
 module publishes, which [Integration events](integration-events.md#registered-when-the-module-compiles)
 covers.
+
+A module whose domain project has no Entity Framework reference has no method there. The project of the
+module that does reference it, the one that holds the outbox, registers the domain project's events in its
+own `Add{Module}IntegrationEvents()`, under the same names, which the domain project's `[assembly: Module]`
+decides; any project with the same module counts, and a project that references Entity Framework registers
+its own. The events must be `public` for that: one the registering project cannot see is left out and
+reported as [DDD00033](diagnostics.md#ddd00033). See [A module in layers](modules.md#a-module-in-layers).
 
 An event name nobody registered is not fatal. The processor records the failure on the row, with a
 `LastError` that names the missing event and the registration call, increments `Attempts`, leaves

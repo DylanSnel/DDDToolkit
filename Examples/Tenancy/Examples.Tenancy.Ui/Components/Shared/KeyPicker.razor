@@ -1,0 +1,35 @@
+@*
+    Keys of the catalogue to pick, each by its text with what it does as its title. Every key that is not retired is
+    offered, whichever the API would take: one it refuses is something to try.
+*@
+<div class="key-picker">
+    @foreach (var permission in Keys)
+    {
+        <label class="form-check form-check-inline small" title="@permission.Description">
+            <input class="form-check-input" type="checkbox" checked="@Picked.Contains(permission.Key)" @onchange="change => Pick(permission.Key, change)" />
+            <code>@permission.Key</code>
+        </label>
+    }
+</div>
+
+@code {
+    /// <summary>The keys to offer.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<PermissionInfo> Keys { get; set; } = [];
+
+    /// <summary>The keys picked, which the picker changes as each is picked or put back.</summary>
+    [Parameter, EditorRequired]
+    public HashSet<string> Picked { get; set; } = [];
+
+    private void Pick(string key, ChangeEventArgs change)
+    {
+        if (change.Value is true)
+        {
+            Picked.Add(key);
+        }
+        else
+        {
+            Picked.Remove(key);
+        }
+    }
+}

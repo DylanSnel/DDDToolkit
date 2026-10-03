@@ -37,3 +37,21 @@ public readonly partial record struct LoginId
     /// <summary>An id over the given value.</summary>
     public static LoginId Create(string value) => new(value);
 }
+
+/// <summary>A value of two parts, which no GraphQL scalar and no paging cursor carries.</summary>
+public readonly record struct GridCell(int Column, int Row) : IComparable<GridCell>
+{
+    /// <inheritdoc />
+    public int CompareTo(GridCell other) => (Column, Row).CompareTo((other.Column, other.Row));
+}
+
+/// <summary>
+/// A struct id over such a value. The generated bindings register its converter and nothing else: no scalar is
+/// known for it, and it is not registered as a paging key, which would fail when the bindings are added.
+/// </summary>
+[EntityId<GridCell>]
+public readonly partial record struct PegId
+{
+    /// <summary>An id over the given value.</summary>
+    public static PegId Create(GridCell value) => new(value);
+}

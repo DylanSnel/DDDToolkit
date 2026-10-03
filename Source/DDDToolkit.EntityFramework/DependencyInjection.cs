@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Integration;
 using DDDToolkit.EntityFramework.Interceptors;
@@ -57,10 +58,18 @@ public static class DependencyInjection
 
             services.AddSingleton(options);
             services.AddSingleton(options.Contracts);
-            // Scoped so the interceptor hands the scope's own provider (and thereby the DbContext being saved) to the handlers.
+            // For a host that adds the interceptor by hand: scoped, so it hands the scope's own provider (and
+            // thereby the DbContext being saved) to the handlers. UseDDDToolkit builds its own instead, so the
+            // same call works in the options callback of a context pool, which is handed the root provider.
             services.TryAddScoped<PublishDomainEventsInterceptor>();
+            // How that interceptor tells a scope's provider from the root one before a handler gets it.
+            services.TryAddScoped<ScopeMarker>();
             services.TryAddSingleton<AggregateVersionInterceptor>();
             services.TryAddSingleton<InvariantInterceptor>();
+            services.TryAddSingleton<DatabaseRefusalInterceptor>();
+            // Who is acting, which an event log writes on every row: the toolkit's own caller, unless a package
+            // or the host registered an accessor that knows more. A singleton, asked once per save.
+            services.TryAddSingleton<IActedByAccessor, CallerActedByAccessor>();
         }
 
         configure?.Invoke(options);
@@ -120,19 +129,35 @@ public static class DependencyInjection
     /// Adds every DDDToolkit interceptor to the context, in the order they run: domain event
     /// delivery (<see cref="PublishDomainEventsInterceptor"/>), then the aggregates' own invariants
     /// (<see cref="InvariantInterceptor"/>), which therefore sees whatever the handlers changed,
-    /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes last so
-    /// a rejected save leaves no version bumped. Pass the provider handed to the
-    /// <c>AddDbContext</c> callback so handlers resolve from the same scope as the context.
+    /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes after them so
+    /// a rejected save leaves no version bumped, and last <see cref="DatabaseRefusalInterceptor"/>, which
+    /// only answers a save the database refused: the refusal a unique index declares, or
+    /// <c>access.refused</c> for a row a policy denied.
+    /// <para>
+    /// Pass the provider handed to the options callback: of <c>AddDbContext</c>, a scope's, so handlers
+    /// resolve from the same scope as the context; of a context pool (<c>AddPooledDbContextFactory</c>,
+    /// <c>AddDbContextPool</c>), the application's root provider, because a pool builds its options once.
+    /// Under a pool the handlers get the scope a context was rented in instead, which
+    /// <see cref="PooledContexts.AddScopedFromPool{TContext}"/> and
+    /// <see cref="PooledContexts.BindToScope{TContext}"/> name. Nothing scoped is resolved here, so the call
+    /// is the same for every registration.
+    /// </para>
     /// </summary>
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <param name="serviceProvider">The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="AddDDDToolkitEntityFramework"/> was not called.</exception>
     public static DbContextOptionsBuilder UseDDDToolkit(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
         optionsBuilder.AddInterceptors(
-            serviceProvider.GetRequiredService<PublishDomainEventsInterceptor>(),
+            // Built, not resolved: the registration is scoped, and a pool's callback has no scope to resolve it from.
+            new PublishDomainEventsInterceptor(serviceProvider, serviceProvider.GetRequiredService<DDDEntityFrameworkOptions>()),
             serviceProvider.GetRequiredService<InvariantInterceptor>(),
-            serviceProvider.GetRequiredService<AggregateVersionInterceptor>());
+            serviceProvider.GetRequiredService<AggregateVersionInterceptor>(),
+            serviceProvider.GetRequiredService<DatabaseRefusalInterceptor>());
 
         return optionsBuilder;
     }
@@ -249,21 +274,23 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Deletes the outbox and inbox rows of <typeparamref name="TContext"/> once they are older than you
-    /// want to keep them, every <see cref="DomainEventRetentionOptions{TContext}.Interval"/>:
+    /// Deletes the outbox, inbox and event log rows of <typeparamref name="TContext"/> once they are older
+    /// than you want to keep them, every <see cref="DomainEventRetentionOptions{TContext}.Interval"/>:
     /// <code>
     /// services.AddDomainEventRetention&lt;OrderingContext&gt;(retention =&gt;
     /// {
     ///     retention.KeepOutboxFor = TimeSpan.FromDays(7);
     ///     retention.KeepInboxFor = TimeSpan.FromDays(30);
+    ///     retention.KeepEventLogFor = TimeSpan.FromDays(365);
     /// });
     /// </code>
     /// Registers <see cref="DomainEventRetention{TContext}"/> (scoped) and
     /// <see cref="DomainEventRetentionService{TContext}"/>. Calling it again for the same context
-    /// configures the same options, so a module can add its own window to a host's.
+    /// configures the same options, so a module can add its own window to a host's. Each table has a window
+    /// of its own and one without is left alone, so the outbox's says nothing about the event log.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
-    /// <exception cref="ArgumentException">Neither window is set.</exception>
+    /// <exception cref="ArgumentException">No window is set.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A window or the interval is not positive, or the batch size is below 1.</exception>
     public static IServiceCollection AddDomainEventRetention<TContext>(this IServiceCollection services, Action<DomainEventRetentionOptions<TContext>> configure) where TContext : DbContext
     {

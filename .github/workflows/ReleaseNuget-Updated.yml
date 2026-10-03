@@ -60,9 +60,10 @@ jobs:
       # Unfiltered on purpose, unlike Build and Test. That job excludes the provider suite to stay at
       # about two minutes, because it runs on every push. This runs once per release, so the extra
       # few minutes to pull PostgreSQL and SQL Server buys the one thing worth having here: nothing
-      # reaches nuget.org that has not been run against a real server. The example shop's samples are
-      # the one exclusion: they test the examples, not a package, and Sample Tests runs them on every
-      # pull request.
+      # reaches nuget.org that has not been run against a real server. The samples are the one
+      # exclusion, the example shop's and the tests of the Tenancy sample that need its host on a
+      # database: they test the examples, not a package, and Sample Tests runs them on every pull
+      # request and every push to main. Sample Tests does not run on a release.
       - name: Test
         run: dotnet test DDDToolkit.slnx --no-build --configuration Release --filter "Category!=Samples"
 

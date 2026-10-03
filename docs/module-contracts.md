@@ -174,7 +174,7 @@ public sealed record OrderConfirmedV1(OrderId OrderId, string City, string Posta
 public sealed record OrderCancelledV1(OrderId OrderId, string Reason);
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 Shipping reads one of them, and keeps the `OrderId` it carries:
 
@@ -192,7 +192,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 }
 ```
 
-*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
+*[`Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Application/Shipments/IntegrationEvents/Inbound/BookShipment.cs)*
 
 </details>
 
@@ -238,13 +238,13 @@ module's contract a project of its own:
 
 ```
 Ordering/
-    DDDToolkit.Examples.Ordering/              the module: aggregates, persistence, handlers, endpoints
-    DDDToolkit.Examples.Ordering.Contracts/    what it publishes: OrderId and three integration events
+    Examples.Webshop.Ordering/              the module: aggregates, persistence, handlers, endpoints
+    Examples.Webshop.Ordering.Contracts/    what it publishes: OrderId and three integration events
 Shipping/
-    DDDToolkit.Examples.Shipping/              references Ordering.Contracts, never Ordering
+    Examples.Webshop.Shipping/              references Ordering.Contracts, never Ordering
 ```
 
-*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering.Contracts/OrderingContracts.cs)*
+*[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 Every arrow is a project reference. The modules that react to orders reference Ordering's contracts,
 and nothing references Ordering itself:
@@ -291,11 +291,11 @@ errors:
 </PropertyGroup>
 
 <ItemGroup>
-  <ProjectReference Include="..\..\Ordering\DDDToolkit.Examples.Ordering.Contracts\DDDToolkit.Examples.Ordering.Contracts.csproj" />
+  <ProjectReference Include="..\..\Ordering\Examples.Webshop.Ordering.Contracts\Examples.Webshop.Ordering.Contracts.csproj" />
 </ItemGroup>
 ```
 
-*[`DDDToolkit.Examples.Shipping.csproj`](../Examples/Modules/Shipping/DDDToolkit.Examples.Shipping/DDDToolkit.Examples.Shipping.csproj)*
+*[`Examples.Webshop.Shipping.csproj`](../Examples/Modules/Shipping/Examples.Webshop.Shipping/Examples.Webshop.Shipping.csproj)*
 
 </details>
 
@@ -309,8 +309,17 @@ split them:
   small project, and a pull request that touches it is visibly a change to a promise.
 - **Consumers get few dependencies.** Referencing the contracts brings the contracts, not Ordering's
   Entity Framework model or its packages. The example's contracts project does reference
-  `DDDToolkit.EntityFramework`, for one reason: the value converter for the published `OrderId` is
-  generated into the assembly that declares the id, and Shipping stores an `OrderId` in a column.
+  `DDDToolkit.EntityFramework`, for one reason: it declares the published `OrderId`, and with the
+  reference the generator writes the id's value converter into it, for the modules that store an
+  `OrderId` in a column.
+
+A contracts project needs no Entity Framework, though. Without it the id gets no converter of its own, and
+each module that stores it registers one itself: the generated `Add{Module}Converters()` of a module's
+project that references Entity Framework also registers the published ids of the other modules it
+references, with `SingleValueConverter<T, TValue>`, or with the id's own converter where its project
+references Entity Framework, so a module's one call covers whatever it stores either way (see
+[Identifiers](identifiers.md#stored-by-a-project-that-does-not-declare-it)). The Tenancy sample's contracts
+projects, Tenancy's and Projects', are built that way: each references `DDDToolkit` and nothing else.
 
 For a small codebase the split can wait. `[ModuleContract]` in the module's own project, with the
 analyzer watching the other modules, draws the same line with one project fewer.

@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Names the helpers the generators write for the widgets, the module that keeps its rows to a tenant here. -->
+    <DDD_Module>TenancyPostgresTests</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+  </ItemGroup>
+
+  <!--
+    The second naming the suite runs under is UseSnakeCaseNamingConvention() of EFCore.NamingConventions. That
+    package asks for Entity Framework 10.0.1 or later, one patch above the floor the toolkit's packages declare,
+    and is compiled against that patch's assemblies, so a floor run can neither restore it next to the floor
+    (NU1605) nor hold Entity Framework at the floor under it (CS1705). A floor run therefore leaves it out and
+    names the same model by hand (SnakeCaseByHandModel), which keeps this suite on the floor and proves the
+    other way an application names its database. Pass -p:TenancyNamingConvention=false to run that way on the
+    latest versions as well.
+  -->
+  <PropertyGroup>
+    <TenancyNamingConvention Condition="'$(TenancyNamingConvention)' == '' and '$(DDDDependencyVersions)' == 'Floor'">false</TenancyNamingConvention>
+    <TenancyNamingConvention Condition="'$(TenancyNamingConvention)' == ''">true</TenancyNamingConvention>
+    <DefineConstants Condition="'$(TenancyNamingConvention)' == 'true'">$(DefineConstants);NAMING_CONVENTION</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TenancyNamingConvention)' == 'true'">
+    <PackageReference Include="EFCore.NamingConventions" />
+  </ItemGroup>
+
+  <!--
+    Tenancy's Postgres package, tested through its public API only (there is no InternalsVisibleTo), with the
+    application's classes of the TestHost and a module of widgets that keeps its rows to a tenant and asks
+    Tenancy's questions in its rules. What needs no server runs here without Docker; the rest shares one
+    Postgres container per run, started the first time a test asks for a database.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.TestHost\DDDToolkit.Supporting.Tenancy.TestHost.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
+  </ItemGroup>
+
+  <!-- Generators, for the widgets' aggregate, ids and rules. A NuGet consumer gets these through the packages. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    One definition of DDDTOOLKIT_REQUIRE_CONTAINERS for every suite that starts a container, and one reading of a
+    Postgres plan for every suite that checks one.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\RequiredContainers.cs" LinkBase="Infrastructure" />
+    <Compile Include="..\DDDToolkit.EntityFramework.Tests\Infrastructure\QueryPlans.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+</Project>

@@ -17,6 +17,11 @@
 #      toolkit through a project reference.
 #   3. DDD00014: a project that has the generators and not their props file is told so, and a project
 #      that has both and sets no DDD_Module is not.
+#   4. The supporting domains: an application with Tenancy and Membership, in a domain project on their
+#      domain packages, an infrastructure project on their Postgres packages and a host, builds with
+#      everything it needs arriving as a dependency, Membership's two generators among it, which ship
+#      inside Membership's packages and write nothing in the host; and the packages carry their Dutch
+#      texts.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -48,6 +53,11 @@ packages_native="$(native_path "$packages")"
 core_id="$(dotnet msbuild "$root/Source/DDDToolkit/DDDToolkit.csproj" -getProperty:PackageId | tr -d '\r')"
 prefix="${core_id%DDDToolkit}"
 analyzers_id="${prefix}DDDToolkit.Analyzers"
+
+# NuGet lowercases the version for that folder as well. A release tag may carry a prerelease suffix in
+# capitals, v3.2.0-RC.1, and the folder is then 3.2.0-rc.1: Windows finds it either way, the release
+# job runs on Linux.
+version_folder="$(tr '[:upper:]' '[:lower:]' <<< "$version")"
 
 echo "==> Verifying package consumption at version $version, package ids ${prefix}DDDToolkit.*"
 
@@ -105,7 +115,7 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
 # assembly packed next to the generators rather than a package of their own. Nothing in a build uses
 # them, so nothing below would notice them missing; only the IDE would, silently.
-analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version"
+analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version_folder"
 analyzers_folder="$analyzers_package/analyzers/dotnet/cs"
 for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
@@ -255,5 +265,100 @@ echo "==> With the props file and no DDD_Module: named after the assembly, and n
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_Module=
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+
+# ---------------------------------------------------------------------------------------------------
+# The supporting domains, Tenancy and Membership, three packages each.
+#
+# SupportingDomains is an application with both, in the layers an application has. Its domain project
+# declares Tenancy's classes with the package's templates, and a resource with members and a role it
+# keeps for that resource with Membership's, and references the two domain packages alone. Its
+# infrastructure project maps and registers them and references only the two Postgres packages, so the
+# Entity Framework packages, the toolkit's own and every generator it needs have to arrive as a
+# dependency, at the version given. Its host references the infrastructure project and nothing else.
+#
+# Membership's two generators are no packages of their own: they ship inside Membership's packages, in
+# analyzers/dotnet/cs, so a package packed without one would still restore, and only a build that needs
+# what it writes would notice. This one does, since each project calls what its generators write, and
+# treats a generator the compiler could not load, which is a warning, as an error. A generator also
+# reaches every project above the one it is meant for, so the host is checked to have been handed both
+# of them and to have been written nothing by either.
+# ---------------------------------------------------------------------------------------------------
+
+# The file $2 must be in the restored package $1.
+expect_in_package() {
+  local folder
+  folder="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$1")/$version_folder"
+
+  if [ ! -f "$folder/$2" ]; then
+    echo "FAILED: $2 is missing from the $1 package." >&2
+    exit 1
+  fi
+}
+
+# The generators that wrote a file in the project folder $1, one per line.
+generators_that_wrote() {
+  find "$work/package-consumers/$1/obj" -path '*generated*' -name '*.g.cs' | sed "s#.*/generated/##" | cut -d/ -f1 | sort -u
+}
+
+# Each generator named after $1 wrote a file in the project folder $1.
+expect_generators_wrote() {
+  local project="$1" written expected
+  shift
+  written="$(generators_that_wrote "$project")"
+
+  for expected in "$@"; do
+    if ! grep -qxF "$expected" <<< "$written"; then
+      echo "FAILED: $project: $expected produced nothing. It should have arrived with the package that carries it." >&2
+      exit 1
+    fi
+
+    echo "    $project: $expected"
+  done
+}
+
+echo "==> The supporting domains, in a domain, an infrastructure and a host project"
+build_consumer SupportingDomains/Host/Acme.Press.Host.csproj
+expect_no_missing_properties_warning SupportingDomains
+
+expect_generators_wrote SupportingDomains/Domain \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.Supporting.Membership.Analyzers"
+
+expect_generators_wrote SupportingDomains/Infrastructure \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.EntityFramework.Analyzers" \
+  "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers"
+
+# The host is handed Membership's generators too, as a dependency of a dependency, and has nothing of
+# theirs to be written: the classes and the contexts are below it. A second member list or a second
+# registration there would be a generator that writes for what a project only references.
+host_assets="$work/package-consumers/SupportingDomains/Host/obj/project.assets.json"
+host_written="$(generators_that_wrote SupportingDomains/Host)"
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+  if ! grep -qF "analyzers/dotnet/cs/$generator.dll" "$host_assets"; then
+    echo "FAILED: SupportingDomains/Host: $generator was not handed to the host, so finding nothing written by it proves nothing." >&2
+    exit 1
+  fi
+
+  if grep -qxF "$generator" <<< "$host_written"; then
+    echo "FAILED: SupportingDomains/Host: $generator wrote a file in the host, which declares nothing of its own." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: handed both of Membership's generators, and written nothing by either"
+
+# Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership.EntityFramework" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" lib/net10.0/nl/DDDToolkit.Supporting.Tenancy.resources.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" lib/net10.0/nl/DDDToolkit.Supporting.Membership.resources.dll
+
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+  if [ -f "$feed/$prefix$generator.$version.nupkg" ]; then
+    echo "FAILED: $prefix$generator was packed as a package of its own. It ships inside the package that needs it." >&2
+    exit 1
+  fi
+done
 
 echo "==> Package consumption verified"

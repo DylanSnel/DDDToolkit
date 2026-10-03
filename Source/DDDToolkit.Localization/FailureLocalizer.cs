@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Resources;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Invariants;
 using DDDToolkit.Validation;
 using Microsoft.Extensions.Localization;
@@ -23,7 +24,8 @@ namespace DDDToolkit.Localization;
 /// </para>
 /// <list type="bullet">
 /// <item>for a <see cref="ValidationError"/>, <c>{PropertyName}</c>, <c>{AttemptedValue}</c> and <c>{Code}</c>;</item>
-/// <item>for an <see cref="InvariantViolation"/>, <c>{EntityType}</c>, <c>{EntityId}</c> and <c>{Code}</c>.</item>
+/// <item>for an <see cref="InvariantViolation"/>, <c>{EntityType}</c>, <c>{EntityId}</c> and <c>{Code}</c>;</item>
+/// <item>for a <see cref="RefusalException"/>, <c>{Code}</c> and <c>{Kind}</c>.</item>
 /// </list>
 /// <para>An argument of the same name wins.</para>
 /// </summary>
@@ -129,6 +131,39 @@ public sealed class FailureLocalizer : IFailureLocalizer
         });
     }
 
+    /// <summary>
+    /// The refusal in the reader's language, looked up by its <see cref="RefusalException.Code"/> exactly
+    /// as a validation failure is, or its own message when nothing knows the code.
+    /// </summary>
+    /// <param name="refusal">The refusal to phrase.</param>
+    public string Localize(RefusalException refusal)
+    {
+        ArgumentNullException.ThrowIfNull(refusal);
+
+        var template = Find(refusal.Code);
+        if (template is null)
+        {
+            return refusal.Message;
+        }
+
+        return FailureTemplate.Format(template, (string name, out object? value) =>
+        {
+            if (refusal.Arguments.TryGetValue(name, out value))
+            {
+                return true;
+            }
+
+            value = Builtin(name) switch
+            {
+                nameof(RefusalException.Code) => refusal.Code,
+                nameof(RefusalException.Kind) => refusal.Kind,
+                _ => Unknown,
+            };
+
+            return !ReferenceEquals(value, Unknown);
+        });
+    }
+
     /// <summary>Stands for "no such placeholder", which is different from a placeholder whose value is null.</summary>
     private static readonly object Unknown = new();
 
@@ -142,6 +177,7 @@ public sealed class FailureLocalizer : IFailureLocalizer
                      nameof(InvariantViolation.EntityType),
                      nameof(InvariantViolation.EntityId),
                      nameof(ValidationError.Code),
+                     nameof(RefusalException.Kind),
                  ])
         {
             if (string.Equals(known, name, StringComparison.OrdinalIgnoreCase))

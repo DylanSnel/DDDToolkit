@@ -1,6 +1,9 @@
 using System.Text.Json;
+using DDDToolkit.Abstractions.Access;
+using DDDToolkit.Access;
 using DDDToolkit.BaseTypes;
 using DDDToolkit.EntityFramework.Integration;
+using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Tests.Domain.Events;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using DDDToolkit.Messaging.Postgres;
@@ -128,6 +131,36 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         (await host.ArchivedAsync()).Should().Be(1);
     }
 
+    /// <summary>
+    /// A host that requires explicit callers, whose module reads its inbox through a context with row level
+    /// security: the consumer's reading and archiving needs no caller, the module's handler runs as the scope it
+    /// asked for, and a module that asked for none does not run and keeps the message on the queue.
+    /// </summary>
+    [Fact]
+    public async Task Pgmq_consumes_with_explicit_callers_required()
+    {
+        var shelves = new ShelfCounter();
+        await using (var host = await HostAsync("strict_q", shelves, requireExplicitCallers: true, around: IntegrationEventScopes.System))
+        {
+            await host.SendAsync(Message());
+            (await host.Consumer.ConsumeOnceAsync(Cancellation)).Should().Be(1);
+
+            shelves.Seen.Should().Equal("Fiction");
+            shelves.Callers.Should().Equal([Caller.System], "the module said its handler runs as the system");
+            (await host.PendingAsync()).Should().Be(0, "an applied message is archived");
+        }
+
+        var unscoped = new ShelfCounter();
+        await using (var host = await HostAsync("unscoped_q", unscoped, options => options.VisibilityTimeout = TimeSpan.FromSeconds(1), requireExplicitCallers: true))
+        {
+            await host.SendAsync(Message());
+            await host.Consumer.ConsumeOnceAsync(Cancellation);
+
+            unscoped.Seen.Should().BeEmpty("a module that said nothing about who its handlers run as does not run them");
+            (await host.PendingAsync()).Should().Be(1, "the message stays for a retry");
+        }
+    }
+
     [Fact]
     public async Task A_message_without_the_envelope_headers_is_archived_unread()
     {
@@ -195,18 +228,46 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
 
     // ------------------------------------------------------------------ the process under test
 
-    private async Task<ConsumerHost> HostAsync(string queue, ShelfCounter shelves, Action<PgmqConsumerOptions>? configure = null)
+    private async Task<ConsumerHost> HostAsync(
+        string queue,
+        ShelfCounter shelves,
+        Action<PgmqConsumerOptions>? configure = null,
+        bool requireExplicitCallers = false,
+        IntegrationEventScope? around = null)
     {
         var database = Database;
 
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.Register<ShelfOpenedV3>()));
-        services.AddDbContext<PgmqContext>((provider, options) => options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider));
-        services.AddModuleIntegrationEvents<PgmqContext>(module => module.Handle<ShelfOpenedV3>(shelves));
+        if (requireExplicitCallers)
+        {
+            // The module's context runs under row level security, which asks who is calling on every connection.
+            services.AddPostgresRowLevelSecurity();
+            services.RequireExplicitCallers();
+        }
+
+        services.AddDbContext<PgmqContext>((provider, options) =>
+        {
+            options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider);
+            if (requireExplicitCallers)
+            {
+                options.UsePostgresRowLevelSecurity(provider);
+            }
+        });
+        services.AddModuleIntegrationEvents<PgmqContext>(module =>
+        {
+            if (around is not null)
+            {
+                module.Around(around);
+            }
+
+            module.Handle<ShelfOpenedV3>(shelves);
+        });
 
         var provider = services.BuildServiceProvider();
         await using (var scope = provider.CreateAsyncScope())
+        using (Callers.Begin(Caller.System))
         {
             await scope.ServiceProvider.GetRequiredService<PgmqContext>().Database.EnsureCreatedAsync(Cancellation);
         }
@@ -262,6 +323,9 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
     {
         public List<string> Seen { get; } = [];
 
+        /// <summary>Who each run of the handler ran as.</summary>
+        public List<Caller?> Callers { get; } = [];
+
         public int FailuresLeft { get; set; }
 
         public Task HandleAsync(ShelfOpenedV3 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
@@ -272,6 +336,7 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
             }
 
             Seen.Add(contract.DisplayName);
+            Callers.Add(DDDToolkit.Access.Callers.Ambient);
             return Task.CompletedTask;
         }
     }
