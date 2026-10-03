@@ -17,7 +17,7 @@ public sealed class PackageReferenceTests
     {
         var project = XDocument.Load(Path.Combine(RepositoryRoot(), "Source", "DDDToolkit.Supporting.Membership.EntityFramework", "DDDToolkit.Supporting.Membership.EntityFramework.csproj"));
 
-        project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension((string)reference.Attribute("Include")!))
+        project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension(((string)reference.Attribute("Include")!).Replace('\\', '/')))
             .Should().BeEquivalentTo(
                 ["DDDToolkit.Supporting.Membership", "DDDToolkit.EntityFramework", "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers"],
                 "the core package, the toolkit's Entity Framework, and the generator it ships, which runs in the application");

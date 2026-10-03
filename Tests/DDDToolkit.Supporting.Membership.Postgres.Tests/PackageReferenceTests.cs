@@ -17,7 +17,7 @@ public sealed class PackageReferenceTests
     {
         var project = XDocument.Load(Path.Combine(RepositoryRoot(), "Source", "DDDToolkit.Supporting.Membership.Postgres", "DDDToolkit.Supporting.Membership.Postgres.csproj"));
 
-        project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension((string)reference.Attribute("Include")!))
+        project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension(((string)reference.Attribute("Include")!).Replace('\\', '/')))
             .Should().BeEquivalentTo("DDDToolkit.Abstractions", "DDDToolkit.Supporting.Membership.EntityFramework", "DDDToolkit.EntityFramework.Postgres");
         project.Descendants("PackageReference").Should().BeEmpty("it talks to Postgres through the connection the application's provider opens");
     }

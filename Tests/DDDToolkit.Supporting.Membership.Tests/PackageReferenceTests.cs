@@ -17,7 +17,7 @@ public sealed class PackageReferenceTests
     {
         var project = XDocument.Load(Path.Combine(RepositoryRoot(), "Source", "DDDToolkit.Supporting.Membership", "DDDToolkit.Supporting.Membership.csproj"));
 
-        var projects = project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension((string)reference.Attribute("Include")!)).ToArray();
+        var projects = project.Descendants("ProjectReference").Select(reference => Path.GetFileNameWithoutExtension(((string)reference.Attribute("Include")!).Replace('\\', '/'))).ToArray();
         var packages = project.Descendants("PackageReference").Select(reference => (string)reference.Attribute("Include")!).ToArray();
 
         projects.Should().BeEquivalentTo(

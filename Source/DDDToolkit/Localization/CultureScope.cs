@@ -54,7 +54,8 @@ public static class CultureScope
     public static IDisposable Use(string cultureName)
     {
         ArgumentNullException.ThrowIfNull(cultureName);
-        return Use(CultureInfo.GetCultureInfo(cultureName));
+        // Only a culture the platform knows: on Linux, ICU would otherwise make one up for any well-formed name.
+        return Use(CultureInfo.GetCultureInfo(cultureName, predefinedOnly: true));
     }
 
     /// <summary>Remembers the two cultures a scope replaced, and puts them back once.</summary>
