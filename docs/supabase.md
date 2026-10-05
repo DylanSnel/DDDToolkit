@@ -230,6 +230,10 @@ names every context with migrations missing, and each missing migration. Registe
 twice registers it once; with no sources registered it does nothing, which is what a module running on
 something other than Supabase wants.
 
+It asks as the system caller, so it switches to `SystemRole`. An application that logs in as a role of its own
+checks first that the role may switch to it, as
+[The role the application logs in as](#the-role-the-application-logs-in-as) shows.
+
 ## Several modules, one Supabase project
 
 A Supabase project is one database, so a modular monolith's modules share it. Give each module a
@@ -384,18 +388,27 @@ change or remove its lines. Rules written in C# do both for you, as the next sec
 **Background work** runs as `SystemRole`, or, left unset, as the role the application logged in as.
 Logged in as `postgres`, that is the owner, as before. For an application that should not be able to see
 everything by accident, log in as a role of its own that may do nothing but switch roles, as PostgREST's
-`authenticator` does, and set `SystemRole = SupabaseRowLevelSecurity.ServiceRole`. The migration makes the
-role without a login or a password, since it is kept in the repository; the login is turned on once per
-project, as `postgres`, with a secret of that project's, in the SQL editor or with `psql`:
+`authenticator` does, and set `SystemRole = SupabaseRowLevelSecurity.ServiceRole`. The build writes the
+migration that makes the role, without a login or a password, since it is kept in the repository, when the
+project that exports names it with [`SupabaseLoginRole`](#the-role-the-application-logs-in-as):
+
+```xml
+<SupabaseLoginRole>shop_app</SupabaseLoginRole>
+```
+
+The login is turned on once per project, as `postgres`, with a secret of that project's, in the SQL editor or
+with `psql`:
 
 ```sql
--- In a migration
-create role shop_app nologin noinherit;
-grant anon, authenticated, service_role to shop_app;
-
 -- Once per project, never in a file of the repository
 alter role shop_app with login password '...';
 ```
+
+The role is given `anon`, `authenticated` and the scoped system role, the roles the policies are written for.
+`service_role` is no such role, so the grant of it is yours, in a migration of your own after that file:
+`grant service_role to shop_app;`. A system caller of its own that is held to the policies, a
+[bookkeeping role](#privileges-forced-policies-and-the-bookkeeping-role), is one of them, and needs nothing of
+the kind.
 
 `Examples/ModularMonolith.Supabase` turns this on with `Supabase:Url`. An order there is its customer's:
 it knows who placed it, and two rules written in C#, `ACustomerHasTheirOrders` and
@@ -493,7 +506,9 @@ and what this one refuses. What it needs on Supabase:
   files are applied has it. An application that logs in as a role of its own, not as the role that applied
   the migrations, needs `grant usage on schema ddd to shop_app;` and
   `grant execute on procedure ddd.use_caller(text, text, text[], text[]) to shop_app;` in a migration
-  written by hand.
+  written by hand. The file [`SupabaseLoginRole`](#the-role-the-application-logs-in-as) writes grants roles
+  and no privilege, so these two stay yours; `EnsureLoginRoleMaySwitchToCallersAsync` says at start-up when
+  they are missing.
 - **Migrations through the session pooler, or directly.** The Supabase CLI applies the exported files over
   a connection of its own, which is neither the application's nor the transaction pooler's.
 
@@ -556,16 +571,18 @@ the file, `postgres` under `supabase db push`. What the file does not write is y
 migration of your own:
 
 - the role's privileges on your tables, which it needs, as `anon` and `authenticated` do, before its
-  policies let it read or write a row;
+  policies let it read or write a row, unless the files write them, as
+  [below](#privileges-forced-policies-and-the-bookkeeping-role);
 - a grant of the role to a role of your own that the application logs in as, when that is not the role
-  that applies the files.
+  that applies the files, unless the build writes that role's migration, as
+  [further below](#the-role-the-application-logs-in-as).
 
 ```sql
 grant usage on schema ordering to ddd_system_in;
 grant select, insert, update, delete on all tables in schema ordering to ddd_system_in;
 revoke select, update, delete on ordering."OutboxMessages" from ddd_system_in;   -- it only adds outbox rows
 revoke update, delete on ordering."InboxMessages" from ddd_system_in;
-grant ddd_system_in to app;   -- only for a login role of your own
+grant ddd_system_in to app;   -- only for a login role of your own, and SupabaseLoginRole writes it
 ```
 
 Every policy is for one role, and the rules that grant a role the same command on a table share one
@@ -720,6 +737,109 @@ The same three settings are `SupabaseMigrationOptions.WriteGrants`,
 `SupabaseMigrationOptions.ForceRowLevelSecurity` and `Roles.System` when you export
 [by hand](#exporting-by-hand). An unknown value of either property fails the export with an `error :` line
 that names it.
+
+#### The role the application logs in as
+
+An application that logs in as a role of its own makes that role in a migration: without a login and without
+a password, since a migration is kept in a repository, and a member of the roles its callers run as and of
+nothing else. That migration's one fact of its own is the role's name. The roles it is given are the ones
+`SupabaseRowAccessRoles` maps, so the build writes it, from one more property beside that one. The login stays
+the deployment's, and the host checks at start-up that the role may become every caller:
+
+```mermaid
+flowchart LR
+    Build["dotnet build, with SupabaseLoginRole beside SupabaseRowAccessRoles"] --> File["{version}_login_role.sample_api.ddd.sql, after the access files"]
+    File --> Push["supabase db push"]
+    Push --> Login["alter role with login, once per project, never in a file"]
+    Login --> Start["the host starts as the role, and checks it may become every caller"]
+    Build -. "in CI the build only checks, and fails while the file is missing or stale" .-> File
+```
+
+<details>
+<summary>Show the code: the two properties, in the project that exports</summary>
+
+```xml
+<PropertyGroup>
+  <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system</SupabaseRowAccessRoles>
+  <SupabaseLoginRole>sample_api</SupabaseLoginRole>
+</PropertyGroup>
+```
+
+</details>
+
+The file is `{version}_login_role.sample_api.ddd.sql`, written after every other file of that build, the access
+file that makes the roles it grants among them. It does what you would otherwise write by hand:
+
+```sql
+create role sample_api nologin noinherit;
+grant anon, authenticated, ddd_system_in, ddd_system to sample_api;
+```
+
+and it does it so that it runs again without harm, on a new database and on one that has every earlier file:
+
+- it makes the role where there is none, and `ddd_system_in` and `ddd_system` where no access file has made
+  them yet;
+- it refuses a `sample_api` that is there already and is a superuser, may bypass row level security, may create
+  roles, may replicate, or has the privileges of a role it is granted without switching to it, by its attribute
+  or by a grant made while it inherited. The error's hint is the `ALTER ROLE` or the `GRANT ... WITH INHERIT FALSE`
+  that fixes it;
+- it grants each role in a statement of its own, unless the role may switch to it already, and finds it granted
+  where the migration of another database on the server granted it at the same moment, since roles are the
+  server's.
+
+What it leaves out:
+
+- **The login and its password.** Whoever deploys turns the login on once per project, as `postgres`, with a
+  secret of that project's: `alter role sample_api with login password '...';`.
+- **Every privilege.** No table, schema or function is granted to the role: it reaches a table only by switching
+  to a role whose policies let it. The procedure the [transaction pooler](#through-the-transaction-pooler) needs
+  is the one grant of that kind an application may want, and it stays yours.
+- **Every other role.** `service_role` is no role the policies are written for, so a host whose system caller runs
+  as it grants it in a migration of its own.
+
+**It keeps up with the roles.** A file once written is never written again, as an access file is not: Supabase
+may have applied it. When the roles change, a token role mapped for one, the next build writes a new file,
+numbered after everything else, that grants the roles as they are now and takes back a role the file before it
+granted and no caller runs as any more. `Check` in CI fails until it is there, with
+`sample_api login role: has no file that says what it is now`. Another name gets a file of its own, and the old
+role is the deployment's to drop.
+
+**A name is refused** when the build runs, with an `error :` line that says what to use instead, when it is not
+a plain lowercase identifier (a lowercase letter or `_`, then lowercase letters, digits and `_`), is longer than
+the 63 bytes Postgres keeps of a name, is a word SQL keeps for itself, is one of Postgres's or Supabase's own
+roles (`postgres`, `authenticated`, `anon`, `service_role`, `authenticator`, those that start with `pg_` or
+`supabase_`, and a few more), or is one of the roles `SupabaseRowAccessRoles` maps: the role the application logs
+in as only switches to those. A `;` fails the build as it does in the other properties. Left unset, nothing is
+written and every other file is what it was. By hand, it is `SupabaseMigrationOptions.LoginRole`, which
+`Export` and `Compare` of the sources write and compare after every module's files.
+
+**At start-up**, `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` says whether the role the
+application logged in as may switch to every role its options name, which is what the file grants. It comes
+before [the migrations' check](#checking-at-start-up), which runs as the system caller and so switches to
+`SystemRole`: a login role that may not would fail there, on the switch, without saying why. Once per context
+the host registers:
+
+```csharp
+var app = builder.Build();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
+    {
+        var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
+        await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, CancellationToken.None);
+    }
+}
+
+await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+```
+
+Where the build writes this file, a role the check names is one the host's options switch to and
+`SupabaseRowAccessRoles` leaves out, `system=ddd_system` set in code and not in the exporter for one, or one
+whose file the database has not had yet. So the check names, besides the `GRANT`, the pair to add and the file
+to apply. Take that fix rather than the grant: granted by hand, the role passes the check, but the access files
+still write nothing for it, and the bookkeeping role then fails on the outbox when the first event is sent. See
+[A login that owns nothing](row-level-security.md#a-login-that-owns-nothing).
 
 ### In Azure Functions
 
@@ -924,7 +1044,8 @@ SupabaseMigrations.EnsureInSync([ordering, shipping]);  // throws unless everyth
 
 `SupabaseMigrationSource.For(() => ...)` takes a delegate instead of a factory. The rules, the access
 functions and the row access contributions go in `SupabaseMigrationOptions`: `RowAccessRules`,
-`RowAccessFunctions` and `RowAccessContributions`, which the build fills in for you. Given sources and no
+`RowAccessFunctions` and `RowAccessContributions`, which the build fills in for you, and so does the role the
+application logs in as, `LoginRole`, whose file only the forms that take sources write. Given sources and no
 directory, `Export`, `Compare` and `EnsureInSync` find the Supabase project the way the CLI does: from
 the current directory upwards to the nearest `supabase/config.toml`.
 `SupabaseMigrations.FindDirectory(start)` does the same from a directory you choose. The three also

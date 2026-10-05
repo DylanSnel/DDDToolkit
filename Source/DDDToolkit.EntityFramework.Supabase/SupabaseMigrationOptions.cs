@@ -16,6 +16,8 @@ public sealed class SupabaseMigrationOptions
 
     private PostgresCallerFunctions _callerFunctions = SupabaseRowLevelSecurity.CallerFunctions;
 
+    private string? _loginRole;
+
     /// <summary>
     /// The schemas whose new tables get <c>ENABLE ROW LEVEL SECURITY</c> appended to the migration that
     /// creates them. <c>public</c> by default.
@@ -112,6 +114,38 @@ public sealed class SupabaseMigrationOptions
     /// export.
     /// </summary>
     public bool ForceRowLevelSecurity { get; set; }
+
+    /// <summary>
+    /// The role the application logs in as, which the export then makes in a migration of its own,
+    /// <c>{version}_login_role.{role}.ddd.sql</c>: <c>NOLOGIN NOINHERIT</c>, and a member of the roles callers run
+    /// as, the ones <see cref="Roles"/> names, and of nothing else. It is given no privilege on a table, a schema
+    /// or a function. The login and its password stay the deployment's: a migration is kept in a repository, and a
+    /// password is not. <see langword="null"/> by default, and then nothing is written and every other file is
+    /// what it was.
+    /// <para>
+    /// The file is written the way an access file is: never again once it is there, because Supabase may have
+    /// applied it, and anew, numbered after everything else in the directory, when what it says changes, so the
+    /// newest one grants what <see cref="Roles"/> names now and takes back what the one before it granted that it
+    /// no longer names.
+    /// <see cref="SupabaseMigrations.Export(IEnumerable{SupabaseMigrationSource}, string?, SupabaseMigrationOptions?)">Export</see>
+    /// of the sources writes it, after every module's files, and <c>Compare</c> and <c>EnsureInSync</c> of the
+    /// sources report it missing or stale; the export of a single context leaves it out, since it is about every
+    /// module at once. The build takes it from the <c>SupabaseLoginRole</c> property of the project that runs the
+    /// export.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Set to a name that is not a plain lowercase identifier, a word SQL keeps for itself, longer than Postgres
+    /// keeps a name, or one of Postgres's or Supabase's own roles. One of the roles callers run as is refused when
+    /// the file is written, since <see cref="Roles"/> may be set after this.
+    /// </exception>
+    public string? LoginRole
+    {
+        get => _loginRole;
+        set => _loginRole = value is null ? null
+            : SupabaseMigrations.NotALoginRole(value) is { } problem ? throw new ArgumentException(problem, nameof(value))
+            : value;
+    }
 
     /// <summary>The clock a new access file takes its version from: the time it is written, in UTC.</summary>
     public TimeProvider TimeProvider { get; set; } = TimeProvider.System;

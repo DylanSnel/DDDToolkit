@@ -51,7 +51,10 @@ namespace Examples.Tenancy.Tests.Infrastructure;
 /// </remarks>
 public sealed class SampleOnPostgres : IAsyncDisposable
 {
-    /// <summary>The role the host logs in as, which the hand-written migration makes without a login.</summary>
+    /// <summary>
+    /// The role the host logs in as, which the migrations make without a login: the one the export writes from the
+    /// exporter's <c>SupabaseLoginRole</c>, and before it the one written by hand, which stays.
+    /// </summary>
     public const string LoginRole = "tenancy_api";
 
     /// <summary>
@@ -169,6 +172,17 @@ public sealed class SampleOnPostgres : IAsyncDisposable
 
         var host = await HostOnAsync(database, environment ?? Environments.Development, made, services, seedsItself: !seeded, cancellationToken);
         return new SampleOnPostgres(database, host, auth);
+    }
+
+    /// <summary>
+    /// A database of the calling test's own with every exported file applied, as a deployment applies them, and
+    /// nothing seeded: for a test that applies a file of its own after them. Skips the test without Docker, or fails
+    /// it where containers are required.
+    /// </summary>
+    public static Task<SupabaseDatabase> MigratedAsync(SampleSupabaseStack stack, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        return stack.CreateDatabaseFromAsync(Migrated, MigrateAsync, cancellationToken);
     }
 
     /// <summary>The settings every host of a run is given: its connection string, and its budget of connections.</summary>
@@ -311,7 +325,7 @@ public sealed class SampleOnPostgres : IAsyncDisposable
             $"The database '{database.Name}' still has connections ten seconds after the host that seeded it stopped, so no copy of it can be made: {connected}.");
     }
 
-    /// <summary>The exported files and the hand-written one, in the order they are applied.</summary>
+    /// <summary>The exported files and the one written by hand, in the order they are applied.</summary>
     public static IReadOnlyList<string> MigrationFiles()
         => [.. Directory.GetFiles(Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "supabase", "migrations"), "*.sql")
             .OrderBy(Path.GetFileName, StringComparer.Ordinal)];

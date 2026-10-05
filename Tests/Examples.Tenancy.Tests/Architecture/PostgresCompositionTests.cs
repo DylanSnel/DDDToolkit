@@ -159,6 +159,7 @@ public sealed partial class PostgresCompositionTests
         var exporter = XDocument.Load(ExporterFile);
         exporter.Descendants("SupabaseRowAccessGrants").Single().Value.Should().Be("Write", "the privileges are written from the policies, never by hand");
         exporter.Descendants("SupabaseForceRowLevelSecurity").Single().Value.Should().Be("true", "the tables' owner is held to the policies too");
+        exporter.Descendants("SupabaseLoginRole").Single().Value.Should().Be(SampleOnPostgres.LoginRole, "the role the host logs in as is made by the export, a member of these roles and of nothing else");
     }
 
     [Fact]

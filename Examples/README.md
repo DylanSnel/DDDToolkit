@@ -604,7 +604,7 @@ Tenancy/
   Examples.Tenancy.Host                            the API, REST and GraphQL at /graphql, and Examples.Tenancy.Host.http to walk through it
   Examples.Tenancy.Catalogue                       SampleCatalogue, and what Tenancy writes into the exported access files for it
   Examples.Tenancy.Exporter                        the export, as a build step of a program of its own
-  supabase/                                                 config.toml and migrations/: what the export wrote, and the login role's file, by hand
+  supabase/                                                 config.toml and migrations/: what the export wrote, the login role's file among them, and the earlier one written by hand, which stays
   Examples.Tenancy.Ui                              the UI
   Examples.Tenancy.AppHost                         Aspire: the containers of Supabase's own images, the migrations applied to them, and api and ui
 ```
@@ -680,13 +680,16 @@ The host runs on Postgres, as Supabase runs it, at the connection string it is g
 - **The database is made by whoever owns it**, from the files under `Tenancy/supabase/migrations`. There
   are three kinds: a file for each migration of a module, with its tables; a module's access file, with the
   policies, functions, triggers and privileges, written again under a later name whenever a rule, the
-  catalogue or the model changed; and `*_tenancy_login_role.sql`, the one file written by hand. They are
-  applied in the order of their names, each of which begins with a timestamp. The login role's file needs
-  an access file to have come before it, whichever module's: each makes, where they are missing, three of
-  the roles that file gives the login role (`ddd_system_in`, `ddd_system` and `tenancy_operator`). Files
-  exported since sort after it, and none of them names the login role. The host applies none of them. It
-  checks at start-up that none is missing and that the database is set up as the policies rely on, and does
-  not start otherwise.
+  catalogue or the model changed; and `*_login_role.tenancy_api.ddd.sql`, which makes the login role and
+  grants it the roles its callers run as, written from the exporter's `SupabaseLoginRole` and written again
+  under a later name whenever those roles change. They are applied in the order of their names, each of
+  which begins with a timestamp. Before the build wrote the login role's file, it was written by hand:
+  `*_tenancy_login_role.sql` says the same, and stays, since a database that applied it keeps its version
+  in the history the Supabase CLI compares the directory with. Both come after an access file, which makes
+  three of the roles they grant (`ddd_system_in`, `ddd_system` and `tenancy_operator`); the one written by
+  hand needs that, and the build's makes them where they are missing all the same. The host applies none of
+  the files. It checks at start-up that none is missing and that the database is set up as the policies
+  rely on, and does not start otherwise.
 - **The files are written by a build**, of `Examples.Tenancy.Exporter`: every migration of the
   modules' infrastructure projects, and the access files whenever a rule, the catalogue or the model
   changed. In CI the same build only compares. An access file names the project a row access contribution is
@@ -900,7 +903,7 @@ over a stub).
 | An entity with entities of its own: crew members, each with dated roles | `...Projects.Domain/Aggregates/Projects/Project.cs`, with `Entities/CrewMember.cs` beside it, the nested `OwnsMany` that `HasMembers` maps in `...Projects.Infrastructure/Persistence/ProjectsContext.cs`; `ProjectCrewTests`, `CrewMembershipScenarios` |
 | Row rules that ask a resource's members, for a database that checks rows | `...Projects.Infrastructure/Access/SeatsSeeTheProjectsTheyReach.cs`, which asks the functions the Membership package writes from the projects' rules (`Catalogue/ProjectMembershipFunctions.cs`); `ProjectRowRulesTests`, `SampleOnPostgresTests` |
 | A rule of one module asking another's, through a contract | `ProjectsISee` and `ProjectsWhereIHold` in `...Projects.Contracts/RowAccess/`, defined in `...Projects.Infrastructure/Access/`, asked by `...Inspections.Infrastructure/Access/`; `SampleOnPostgresTests` |
-| A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_tenancy_login_role.sql`, the three properties in `Examples.Tenancy.Exporter.csproj`, `Host/Storage/SampleStorage.cs`, `...Tenants.Infrastructure/Persistence/PostgresStartupCheck.cs`; `SampleOnPostgresTests`, `PostgresCompositionTests` |
+| A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, the four properties in `Examples.Tenancy.Exporter.csproj`, `Host/Storage/SampleStorage.cs`, `...Tenants.Infrastructure/Persistence/PostgresStartupCheck.cs`; `SampleOnPostgresTests`, `LoginRoleFileTests`, `PostgresCompositionTests` |
 | The export as a build step of a program of its own | `Tenancy/Examples.Tenancy.Exporter`, which references each module's infrastructure project and the catalogue; `PostgresCompositionTests` |
 | A module's migrations beside its context, and one factory that `dotnet ef`, the export and the host's start-up check build the context with | `...Tenants.Infrastructure/Persistence/Migrations/` and `TenantsContextFactory.cs`, marked `[SupabaseMigrations]`; the same in Projects and Inspections; `MigrationTests` |
 | A rule Postgres holds beyond a module's policies: a project's unit changes only with its keys, by a trigger of the module's own, and its owner and its crew's rows with theirs, by the Membership package's lock | `UnitChangesWithItsKeys` in `...Projects.Infrastructure/Access/` and `Catalogue/ProjectMembershipFunctions.cs`, used by `Tenancy/Examples.Tenancy.Exporter/Program.cs`; `SampleOnPostgresTests` |

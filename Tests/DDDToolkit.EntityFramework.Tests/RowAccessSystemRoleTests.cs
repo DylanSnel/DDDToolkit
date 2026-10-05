@@ -28,6 +28,14 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
     private const string LoginCheckCloses =
         "A statement that reaches the connection can always go back to the role that logged in, and from there to every role it may switch to, so what those roles own or hold is outside every policy.";
 
+    /// <summary>What every message of the check that the login role may switch to its callers' roles ends with.</summary>
+    private const string SwitchCheckCloses =
+        "A caller's role is switched to when that caller connects, not when the application starts: without it, the application starts and that caller's first request fails.";
+
+    /// <summary>The other fix the switch check names for a role, where the Supabase build writes the login role's migration.</summary>
+    private static string MappedOnSupabase(string pair)
+        => $"Or, where the Supabase build writes the login role's migration (SupabaseLoginRole), map it in SupabaseRowAccessRoles as {pair} and apply the file the next build writes.";
+
     private static int roles;
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -472,6 +480,44 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
     }
 
     [Fact]
+    public async Task The_login_check_names_a_login_role_that_may_create_roles_or_replicate()
+    {
+        var database = await ApiaryDatabase.CreateAsync(postgres);
+        var login = NewRole("clerk");
+        await database.RunAsOwnerAsync(
+            $"""
+            CREATE ROLE {login} LOGIN NOINHERIT CREATEROLE REPLICATION PASSWORD '{login}';
+            GRANT anon, authenticated, ddd_system TO {login} WITH INHERIT FALSE;
+            """,
+            Cancellation);
+
+        try
+        {
+            var connectionString = new NpgsqlConnectionStringBuilder(database.OwnerConnectionString) { Username = login, Password = login }.ConnectionString;
+            await using var host = database.BuildHost(connectionString: connectionString);
+            await using var scope = host.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ApiaryContext>();
+            var check = () => PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, Cancellation);
+
+            // It owns nothing, holds nothing and may switch to no role past the policies. But a role that may create
+            // roles grants itself one that is, before Postgres 16, and one that may replicate reads every change to
+            // every table from a replication slot: both on the connection, without switching to anything.
+            (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
+                $"The role '{login}' that 'ApiaryContext' logs in as is meant to hold nothing, and it does:\n" +
+                $"- it may create roles, and before Postgres 16 grant itself any role that is not a superuser. Fix: ALTER ROLE {login} NOCREATEROLE;\n" +
+                $"- it may replicate, and read every change of every table from a replication slot. Fix: ALTER ROLE {login} NOREPLICATION;\n" +
+                LoginCheckCloses);
+
+            await database.RunAsOwnerAsync($"ALTER ROLE {login} NOCREATEROLE NOREPLICATION;", Cancellation);
+            await check.Should().NotThrowAsync();
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync($"DROP OWNED BY {login}; DROP ROLE {login};", Cancellation);
+        }
+    }
+
+    [Fact]
     public async Task The_login_check_names_a_login_role_that_owns_the_database()
     {
         var database = await ApiaryDatabase.CreateAsync(postgres);
@@ -516,6 +562,117 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
         {
             await database.RunAsOwnerAsync($"""ALTER DATABASE "{name}" OWNER TO postgres; DROP OWNED BY {login}; DROP ROLE {login};""", Cancellation);
         }
+    }
+
+    [Fact]
+    public async Task The_switch_check_names_every_role_a_caller_runs_as_that_the_login_may_not_switch_to()
+    {
+        var database = await ApiaryDatabase.CreateAsync(postgres);
+
+        // A login role that holds nothing, as it should, and was given the anonymous caller's role alone: a request
+        // without a token works, and the first of every other caller would fail when it is made.
+        var login = NewRole("clerk");
+        await database.RunAsOwnerAsync($"CREATE ROLE {login} LOGIN NOINHERIT PASSWORD '{login}'; GRANT anon TO {login};", Cancellation);
+
+        try
+        {
+            var connectionString = new NpgsqlConnectionStringBuilder(database.OwnerConnectionString) { Username = login, Password = login }.ConnectionString;
+            await using var host = database.BuildHost(connectionString: connectionString);
+            await using (var scope = host.CreateAsyncScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<ApiaryContext>();
+                var check = () => PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, Cancellation);
+
+                // Asked as the login role itself: the system caller's role is among those it may not switch to, so the
+                // question could not have been asked as the system caller.
+                (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
+                    $"The role '{login}' that 'ApiaryContext' logs in as is meant to switch to every role its callers run as, and it cannot:\n" +
+                    $"- it may not switch to authenticated, the role of a signed-in user. Fix: GRANT authenticated TO {login}; {MappedOnSupabase("user=authenticated")}\n" +
+                    $"- it may not switch to ddd_system_in, the scoped system role. Fix: GRANT ddd_system_in TO {login}; {MappedOnSupabase("system-in=ddd_system_in")}\n" +
+                    $"- it may not switch to ddd_system, the role the system caller runs as. Fix: GRANT ddd_system TO {login}; {MappedOnSupabase("system=ddd_system")}\n" +
+                    $"- it may not switch to {ApiaryRules.RangerRole}, the role of the token role '{ApiaryRules.Ranger}'. Fix: GRANT {ApiaryRules.RangerRole} TO {login}; {MappedOnSupabase($"token:{ApiaryRules.Ranger}={ApiaryRules.RangerRole}")}\n" +
+                    SwitchCheckCloses);
+            }
+
+            // Which is what the first request of such a caller would have found, after a start that passed.
+            var refused = () => ApiaryDatabase.AsAsync(host, ApiaryDatabase.Alice, context => context.Hives.CountAsync(Cancellation));
+            (await refused.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+
+            await database.RunAsOwnerAsync($"GRANT authenticated, ddd_system_in, ddd_system, {ApiaryRules.RangerRole} TO {login};", Cancellation);
+            await using (var scope = host.CreateAsyncScope())
+            {
+                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(scope.ServiceProvider.GetRequiredService<ApiaryContext>(), Cancellation);
+            }
+
+            (await ApiaryDatabase.AsAsync(host, ApiaryDatabase.Alice, context => context.Hives.CountAsync(Cancellation))).Should().Be(0, "Alice keeps no hives here, and may now ask");
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync($"DROP OWNED BY {login}; DROP ROLE {login};", Cancellation);
+        }
+    }
+
+    [Fact]
+    public async Task The_switch_check_names_a_role_that_does_not_exist_and_the_procedure_a_transaction_is_set_with()
+    {
+        var database = await ApiaryDatabase.CreateAsync(postgres);
+        var login = NewRole("clerk");
+        var auditors = NewRole("auditors");
+        await database.RunAsOwnerAsync(
+            $"""
+            CREATE ROLE {login} LOGIN NOINHERIT PASSWORD '{login}';
+            GRANT anon, authenticated, ddd_system_in, ddd_system, {ApiaryRules.RangerRole} TO {login};
+            """,
+            Cancellation);
+
+        try
+        {
+            // A token role mapped to a role no migration made, and the settings lasting one transaction, through
+            // ddd.use_caller: the setup script gave it to the apiary's login role, and to no role made afterwards.
+            var connectionString = new NpgsqlConnectionStringBuilder(database.OwnerConnectionString) { Username = login, Password = login }.ConnectionString;
+            await using var host = database.BuildHost(
+                services: services => services.AddPostgresRowLevelSecurity(roles =>
+                {
+                    roles.TokenRoles["auditor"] = auditors;
+                    roles.Scope = RowLevelSecurityScope.Transaction;
+                }),
+                connectionString: connectionString);
+            await using var scope = host.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ApiaryContext>();
+            var check = () => PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, Cancellation);
+
+            (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
+                $"The role '{login}' that 'ApiaryContext' logs in as is meant to switch to every role its callers run as, and it cannot:\n" +
+                $"- {auditors}, the role of the token role 'auditor', does not exist. Fix: run the migrations that make it, or CREATE ROLE {auditors} NOLOGIN NOINHERIT; GRANT {auditors} TO {login}; {MappedOnSupabase($"token:auditor={auditors}")}\n" +
+                $"- it may not call ddd.use_caller(text, text, text[], text[]), which sets the caller of each transaction. Fix: GRANT USAGE ON SCHEMA ddd TO {login}; GRANT EXECUTE ON PROCEDURE ddd.use_caller(text, text, text[], text[]) TO {login};\n" +
+                SwitchCheckCloses);
+
+            await database.RunAsOwnerAsync(
+                $"""
+                CREATE ROLE {auditors} NOLOGIN NOINHERIT;
+                GRANT {auditors} TO {login};
+                GRANT USAGE ON SCHEMA ddd TO {login};
+                GRANT EXECUTE ON PROCEDURE ddd.use_caller(text, text, text[], text[]) TO {login};
+                """,
+                Cancellation);
+            await check.Should().NotThrowAsync();
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync($"DROP OWNED BY {login}; DROP ROLE {login}; DROP ROLE IF EXISTS {auditors};", Cancellation);
+        }
+    }
+
+    [Fact]
+    public async Task The_switch_check_refuses_a_context_that_does_not_run_as_the_caller()
+    {
+        // Without the interceptor nothing switches to any role, and there is nothing to ask the database about.
+        await using var notes = new PublicNotes(new DbContextOptionsBuilder<PublicNotes>().UseNpgsql("Host=nowhere.invalid;Database=unused").Options);
+
+        var check = () => PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(notes, Cancellation);
+
+        (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().StartWith(
+            "'PublicNotes' does not run its commands as the caller: its options have no PostgresRowLevelSecurityInterceptor");
     }
 
     /// <summary>A context whose one table is in <c>public</c>, the schema every database has from the start.</summary>

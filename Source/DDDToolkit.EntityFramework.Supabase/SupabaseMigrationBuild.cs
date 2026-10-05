@@ -23,7 +23,8 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// the role its own bookkeeping runs as, <c>system=&lt;role&gt;</c>. Whether the access files write the tables'
 /// privileges and force row level security comes from <see cref="GrantsVariable"/> and
 /// <see cref="ForceVariable"/>, the project's <c>SupabaseRowAccessGrants</c> and
-/// <c>SupabaseForceRowLevelSecurity</c>.
+/// <c>SupabaseForceRowLevelSecurity</c>. The role the application logs in as, whose migration the export writes
+/// where the project names one, comes from <see cref="LoginRoleVariable"/>, the project's <c>SupabaseLoginRole</c>.
 /// </para>
 /// </summary>
 [EditorBrowsable(EditorBrowsableState.Never)]
@@ -69,6 +70,13 @@ public static partial class SupabaseMigrationBuild
     /// </summary>
     public const string ForceVariable = "DDDTOOLKIT_SUPABASE_FORCE";
 
+    /// <summary>
+    /// The role the application logs in as, from the <c>SupabaseLoginRole</c> property: the export writes the
+    /// migration that makes it, a member of the roles <see cref="RolesVariable"/> names and of nothing else.
+    /// Unset means no such migration. See <see cref="SupabaseMigrationOptions.LoginRole"/>.
+    /// </summary>
+    public const string LoginRoleVariable = "DDDTOOLKIT_SUPABASE_LOGIN_ROLE";
+
     /// <summary>The project property <see cref="RolesVariable"/> comes from, as an error names it.</summary>
     private const string RolesProperty = "SupabaseRowAccessRoles";
 
@@ -80,6 +88,9 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>The project property <see cref="ForceVariable"/> comes from, as an error names it.</summary>
     private const string ForceProperty = "SupabaseForceRowLevelSecurity";
+
+    /// <summary>The project property <see cref="LoginRoleVariable"/> comes from, as an error names it.</summary>
+    private const string LoginRoleProperty = "SupabaseLoginRole";
 
     /// <summary>What the key of a pair that maps a token role starts with, before the token role: <c>token:analyst=desk_analyst</c>.</summary>
     private const string TokenKey = "token:";
@@ -158,6 +169,7 @@ public static partial class SupabaseMigrationBuild
             Environment.GetEnvironmentVariable(CallerFunctionsVariable),
             Environment.GetEnvironmentVariable(GrantsVariable),
             Environment.GetEnvironmentVariable(ForceVariable),
+            Environment.GetEnvironmentVariable(LoginRoleVariable),
             Console.Out);
 
         Console.Out.Flush();
@@ -300,6 +312,43 @@ public static partial class SupabaseMigrationBuild
         string? grants,
         string? force,
         TextWriter output)
+        => Run(mode, sources, rules, functions, contributions, directory, start, roles, callerFunctions, grants, force, loginRole: null, output);
+
+    /// <summary>
+    /// Runs the export with everything the build passed: the row access contributions the host uses, the roles
+    /// and the caller functions, whether the access files write the tables' privileges and force row level
+    /// security, and the role the application logs in as, whose migration it writes after every other file. It
+    /// describes the run on <paramref name="output"/>, problems in the <c>error : message</c> form MSBuild shows
+    /// as build errors.
+    /// </summary>
+    /// <param name="mode"><c>Write</c> or <c>Check</c>.</param>
+    /// <param name="sources">The contexts to export.</param>
+    /// <param name="rules">The rules to write as policies, each with the context that maps its aggregate.</param>
+    /// <param name="functions">The access functions to write, each with the context that maps its aggregate.</param>
+    /// <param name="contributions">The row access contributions to ask what they write for each context.</param>
+    /// <param name="directory">The migrations directory, or null or empty to find it.</param>
+    /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
+    /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
+    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, or <c>None</c>, null or empty to write no privileges.</param>
+    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, or <c>false</c>, null or empty not to force row level security.</param>
+    /// <param name="loginRole">The <see cref="LoginRoleVariable"/>'s value: the role the application logs in as, or null or empty to write no migration for it.</param>
+    /// <param name="output">Where to report.</param>
+    /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
+    public static int Run(
+        string mode,
+        IReadOnlyList<SupabaseMigrationSource> sources,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<RowAccessFunction> functions,
+        IReadOnlyList<IRowAccessContribution> contributions,
+        string? directory,
+        string? start,
+        string? roles,
+        string? callerFunctions,
+        string? grants,
+        string? force,
+        string? loginRole,
+        TextWriter output)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(rules);
@@ -315,7 +364,8 @@ public static partial class SupabaseMigrationBuild
         }
 
         var options = new SupabaseMigrationOptions();
-        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var problem))
+        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var problem)
+            || !TryConfigureLoginRole(options, loginRole, out problem))
         {
             output.WriteLine($"error : {problem}");
             return 2;
@@ -506,6 +556,37 @@ public static partial class SupabaseMigrationBuild
             caller.GetValueOrDefault("role") ?? options.CallerFunctions.Role,
             caller.GetValueOrDefault("claims") ?? options.CallerFunctions.Claims);
 
+        return true;
+    }
+
+    /// <summary>
+    /// Sets <paramref name="options"/>' login role from the build's property, once the roles callers run as are
+    /// set, or says what is wrong with it: a name the migration cannot write as it is, one of Postgres's or
+    /// Supabase's own roles, or one of the roles callers run as. White space is no login role at all.
+    /// </summary>
+    private static bool TryConfigureLoginRole(SupabaseMigrationOptions options, string? loginRole, out string problem)
+    {
+        problem = "";
+        if (string.IsNullOrWhiteSpace(loginRole))
+        {
+            return true;
+        }
+
+        var login = loginRole.Trim();
+        if (SupabaseMigrations.NotALoginRole(login) is { } notALogin)
+        {
+            problem = $"{LoginRoleProperty} is '{login}'. {notALogin}";
+            return false;
+        }
+
+        if (SupabaseMigrations.CallerRoleNamed(login, options.Roles) is { } key)
+        {
+            problem = $"{LoginRoleProperty} is '{login}', the role of {key} in {RolesProperty}: a role callers run as. " +
+                      "The role the application logs in as only switches to those, and is a role of its own; name another, such as sample_api.";
+            return false;
+        }
+
+        options.LoginRole = login;
         return true;
     }
 

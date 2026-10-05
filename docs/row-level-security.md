@@ -1591,10 +1591,19 @@ That takes three things. The migrations run as another role, which owns the tabl
 in as a role that owns nothing, holds no privilege on a table, and gets the roles it switches to without
 inheriting them. A migration makes the role, without a login or a password, since a migration is kept in a
 repository and a password is not; whoever deploys turns the login on once, as the database's owner, with a
-secret of that deployment:
+secret of that deployment. On Supabase the build writes that migration from the role's name, set in the
+project that exports beside the roles the policies are written for. It writes it after every other file, and a
+new one whenever those roles change; see
+[The role the application logs in as](supabase.md#the-role-the-application-logs-in-as).
+
+```xml
+<SupabaseLoginRole>app</SupabaseLoginRole>
+```
+
+Without that build, the migration is yours to write. The deployment's one statement is yours either way:
 
 ```sql
--- In a migration
+-- In a migration, or written by the Supabase build
 create role app nologin noinherit;
 grant anon, authenticated, ddd_system_in to app;
 
@@ -1625,10 +1634,12 @@ builder.Services.AddPostgresRowLevelSecurity(options => options.SystemRole = "dd
   migration history where the database keeps one; and, on an event log that lets old rows go, `DELETE` and
   `SELECT` on the columns that find them.
 
-The login role needs the grant too, in a migration after the script: `grant ddd_system to app;`. Where
-the [settings travel per transaction](#how-the-settings-travel), it needs the procedure that sets them as
-well: `grant usage on schema ddd to app;` and
-`grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`.
+The login role needs the grant too, in a migration after the script: `grant ddd_system to app;`, which
+the Supabase build writes into the login role's file once `SupabaseRowAccessRoles` has `system=ddd_system`.
+Where the [settings travel per transaction](#how-the-settings-travel), it needs the procedure that sets them
+as well: `grant usage on schema ddd to app;` and
+`grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`, which no file of the build
+writes.
 
 System work that reads a module's own tables now fails with `permission denied`, which is the point: it
 runs as a [scoped system caller](#the-scoped-system-role) instead, inside the policies. Where the
@@ -1643,19 +1654,36 @@ configured is refused, naming it.
 > name out. With `WriteGrants`, write them with `RowAccessRoleNames.Of(options) with { System = null }`:
 > a role that bypasses the policies is refused as a bookkeeping role when the script runs.
 
-Two checks say at start-up, before the first request, whether the database and the context are as this
+Three checks say at start-up, before the first request, whether the database and the context are as this
 relies on:
 
 ```csharp
+await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
 await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, cancellationToken);
 PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 ```
 
-The first reads the catalogs on the context's own connection and throws unless the role the application
+The first asks whether the role the application logged in as may switch to every role the context's
+interceptor switches to: the user's, the anonymous caller's, the scoped system role, `SystemRole`, and the
+role of every mapped token role. A role is switched to when a caller of its kind connects, not when the
+application starts, so a grant left out passes the start and fails the first request of that caller: a token
+role nobody holds while testing, or the background work. Where the settings travel per transaction, it also
+asks whether the login role may call `ddd.use_caller`. It asks as the login role itself, on the context's
+connection opened past the interceptor, since the system caller's role is one of those it asks about; so it
+comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them. It
+throws naming the login role, and each role it may not switch to, or that does not exist, with the `GRANT` that
+fixes it, and the pair of `SupabaseRowAccessRoles` that maps the role, the fix for a host whose Supabase build
+writes the login role's migration: that file grants what the property maps, so there a missing role is a missing
+pair.
+
+The second reads the catalogs on the context's own connection and throws unless the role the application
 logged in as owns no table, view, sequence, function or schema among the schemas of the context's model
 and `ddd`, holds no privilege on their tables and may create nothing in those schemas, of its own or
 through `PUBLIC`, has the privileges of no role it is a member of without switching to it, and is neither
-a superuser nor a role that bypasses row level security. A role it may switch to is one statement away, so
+a superuser nor a role that bypasses row level security. Nor may it create roles or replicate, each a way past
+the policies that a statement takes as the login role itself: before Postgres 16 a role that may create roles
+grants itself any role that is not a superuser, and a role that may replicate reads every change to every
+table from a replication slot. A role it may switch to is one statement away, so
 the check also names each such role that is a superuser, bypasses row level security, or owns a table, a
 function or a schema there: a login role granted the role that owns the tables holds nothing and reaches
 everything. A login role that owns the database is `pg_database_owner`, which owns the schema `public`:
@@ -1664,7 +1692,7 @@ database. The role the system caller runs as is not asked whether it bypasses, s
 bypassing `SystemRole`, Supabase's `service_role` for one, chose that. The exception names the login role
 and every finding with the statement that fixes it. A login role that owns a schema there made it, so it is
 the role the migrations run as: then the one finding is that, with the one fix, to log in as a role of its
-own and keep that one for the migrations. The second opens nothing: it throws unless the context runs its commands
+own and keep that one for the migrations. The third opens nothing: it throws unless the context runs its commands
 through the row level security interceptor, without which every command runs as the login role, and is
 refused outright where that role holds nothing.
 
@@ -1693,7 +1721,7 @@ that moves data runs as one.
 start-up: it throws unless every function that runs as its owner, in the schemas of the context's model
 and in `ddd`, is owned by a role that bypasses row level security or is a superuser, and names each
 function, its owner and the fix. While no table in those schemas is forced it passes, whoever owns the
-functions, so it can stand next to the two checks above in a host that forces nothing yet. On Supabase the
+functions, so it can stand next to the three checks above in a host that forces nothing yet. On Supabase the
 migrations run as `postgres`, which may.
 
 It is off by default, and a script without it is byte for byte what it was. Turning it off again does not

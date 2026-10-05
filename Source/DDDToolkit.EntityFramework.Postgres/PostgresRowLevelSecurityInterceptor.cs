@@ -189,6 +189,13 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <summary>The statements that set a caller, by how many settings they carry, how long they last and whether a timeout follows.</summary>
     private readonly ConcurrentDictionary<(int Settings, bool Local, bool Timed), string> _statements = new();
 
+    /// <summary>
+    /// The roles this interceptor gives each kind of caller and how long the settings last, as they were when it
+    /// was built: what <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync"/> holds the
+    /// database to.
+    /// </summary>
+    internal PostgresRowLevelSecurityOptions Options => _options;
+
     /// <summary>An interceptor that asks <paramref name="callers"/> who is calling, and gives each kind of caller the role <paramref name="options"/> names.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="callers"/> or <paramref name="options"/> is null.</exception>
     /// <exception cref="ArgumentException">A role in <paramref name="options"/> is empty.</exception>

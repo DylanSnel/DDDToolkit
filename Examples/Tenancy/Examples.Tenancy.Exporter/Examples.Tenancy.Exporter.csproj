@@ -36,6 +36,18 @@
 
     <!-- The tables' owner is held to the policies too: the only way past them is a role that may bypass them. -->
     <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
+
+    <!--
+      The role the host logs in as, which owns nothing and may only switch to the roles above: the export writes the
+      migration that makes it, and a new one when those roles change, so a token role added there reaches the login
+      role with the next build. Its login and its password are the deployment's, turned on once and never in a file.
+
+      The role was first made by a migration written by hand, *_tenancy_login_role.sql, which stays: a database that
+      applied it, a developer's own local stack for one, has it in its history, and the Supabase CLI refuses to apply
+      a directory that no longer has every version the database applied. The two say the same, and both run again
+      without harm, so a new database applies one after the other.
+    -->
+    <SupabaseLoginRole>tenancy_api</SupabaseLoginRole>
   </PropertyGroup>
 
   <ItemGroup>

@@ -26,7 +26,7 @@
 #      texts.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
-#      no warning.
+#      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -488,6 +488,30 @@ if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr 
   echo "FAILED: the export did not write the access files of both contexts into $supabase_migrations." >&2
   exit 1
 fi
+
+# The host names the role it logs in as with SupabaseLoginRole, which the packaged build step hands the export
+# among its variables: the export wrote the migration that makes the role, after every other file, granting it
+# the roles callers run as and nothing else.
+login_role_file="$(find "$supabase_migrations" -name '*_login_role.press_api.ddd.sql')"
+if [ -z "$login_role_file" ] || [ "$(wc -l <<< "$login_role_file" | tr -d ' ')" != 1 ]; then
+  echo "FAILED: the export did not write the login role's file into $supabase_migrations, so SupabaseLoginRole did not reach it." >&2
+  exit 1
+fi
+
+if [ "$(find "$supabase_migrations" -name '*.sql' -exec basename {} \; | LC_ALL=C sort | tail -n 1)" != "$(basename "$login_role_file")" ]; then
+  echo "FAILED: the login role's file is not the last in $supabase_migrations, after the access files that make the roles it grants." >&2
+  exit 1
+fi
+
+# Each role in a statement of its own, in the order the file grants them.
+granted="$(tr -d '\r' < "$login_role_file" | sed -n 's/^ *GRANT \(.*\) TO press_api;$/\1/p' | paste -sd ' ' -)"
+if [ "$granted" != "anon authenticated ddd_system_in" ]; then
+  echo "FAILED: the login role's file grants press_api '$granted', not the roles callers run as:" >&2
+  cat "$login_role_file" >&2
+  exit 1
+fi
+
+echo "    SupportingDomains/Host: $(basename "$login_role_file")"
 
 for mode in Check Write ""; do
   echo "==> SupabaseMigrationsExport='$mode' for the whole build, on the command line"

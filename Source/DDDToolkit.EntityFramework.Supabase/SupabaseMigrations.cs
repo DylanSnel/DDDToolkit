@@ -44,7 +44,9 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// Several contexts can export into one directory, which is the usual shape for a modular monolith on
 /// one Supabase project: each module's migrations, in its own schema, in one history. A context only
 /// ever reports its own files as orphaned, and two migrations that share a timestamp are reported as
-/// <see cref="SupabaseMigrationStatus.VersionTaken"/> rather than written.
+/// <see cref="SupabaseMigrationStatus.VersionTaken"/> rather than written. Where the options name the role the
+/// application logs in as, <see cref="SupabaseMigrationOptions.LoginRole"/>, the export of the sources also
+/// writes the migration that makes it, after every module's files.
 /// </para>
 /// <para>
 /// The <c>__EFMigrationsHistory</c> insert stays in. After Supabase applies a file, Entity Framework
@@ -58,7 +60,7 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// Postgres SQL, but a connection string that points nowhere is enough.
 /// </para>
 /// </summary>
-public static class SupabaseMigrations
+public static partial class SupabaseMigrations
 {
     /// <summary>Where the Supabase CLI looks for migrations, relative to the project root.</summary>
     public const string DefaultDirectory = "supabase/migrations";
@@ -278,8 +280,12 @@ public static class SupabaseMigrations
     /// <param name="sources">The contexts to export, typically one per module.</param>
     /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
-    /// <returns>One report per source, in the order they were exported.</returns>
+    /// <returns>
+    /// One report per source, in the order they were exported, and where the options name a
+    /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file, written after all of them.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The options' login role is one of the roles callers run as.</exception>
     public static IReadOnlyList<SupabaseMigrationReport> Export(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: true);
 
@@ -290,8 +296,12 @@ public static class SupabaseMigrations
     /// <param name="sources">The contexts to compare, typically one per module.</param>
     /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
-    /// <returns>One report per source, in the order an export would write them.</returns>
+    /// <returns>
+    /// One report per source, in the order an export would write them, and where the options name a
+    /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The options' login role is one of the roles callers run as.</exception>
     public static IReadOnlyList<SupabaseMigrationReport> Compare(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: false);
 
@@ -330,6 +340,14 @@ public static class SupabaseMigrations
         directory ??= FindDirectory();
         options ??= new SupabaseMigrationOptions();
 
+        // Refused before anything is written: the role the application logs in as is no role a caller runs as.
+        // Asked here rather than where it was set, since the roles may have been set after it.
+        if (options.LoginRole is { } login && CallerRoleNamed(login, options.Roles) is { } key)
+        {
+            throw new InvalidOperationException(
+                $"The login role '{login}' is the role of {key} among the roles callers run as. The role the application logs in as only switches to those, and is a role of its own; name another, such as {ExampleLoginRole}.");
+        }
+
         var all = sources.ToList();
         var contexts = new List<DbContext>(all.Count);
         try
@@ -346,10 +364,17 @@ public static class SupabaseMigrations
                 EnsureDefined(context, options, export);
             }
 
-            var reports = new List<SupabaseMigrationReport>(all.Count);
+            var reports = new List<SupabaseMigrationReport>(all.Count + 1);
             foreach (var (context, script) in PostgresRowAccess.Scripts(contexts, options.RowAccessRules, options.RowAccessFunctions, export))
             {
                 reports.Add(Run(context, all[contexts.IndexOf(context)].Module, directory, options, write, names, script));
+            }
+
+            // Last, so a new file comes after every module's, the access files that make the roles it grants among
+            // them, and is a report of its own: it belongs to no module.
+            if (options.LoginRole is { } loginRole)
+            {
+                reports.Add(new SupabaseMigrationReport(directory, [LoginRoleEntry(loginRole, directory, options, write)]));
             }
 
             return reports;

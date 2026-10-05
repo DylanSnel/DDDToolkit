@@ -73,6 +73,36 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
         File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Single()).Should().NotContain(" ON TABLE ").And.NotContain("FORCE");
     }
 
+    [Fact]
+    public async Task The_build_reads_the_login_role_from_the_environment()
+    {
+        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", callerFunctions: null, loginRole: "desk_api");
+
+        exitCode.Should().Be(0, output);
+        var files = Directory.GetFiles(Migrations).Select(path => Path.GetFileName(path)).Order(StringComparer.Ordinal).ToList();
+        files[^1].Should().MatchRegex(@"^\d{14}_login_role\.desk_api\.ddd\.sql$", "SupabaseLoginRole reached the export, which wrote the file after every other");
+        File.ReadAllText(Path.Combine(Migrations, files[^1])).Split('\n').Select(line => line.Trim())
+            .Where(line => line.StartsWith("GRANT ", StringComparison.Ordinal) && line.EndsWith(" TO desk_api;", StringComparison.Ordinal))
+            .Should().Equal(
+                ["GRANT anon TO desk_api;", "GRANT authenticated TO desk_api;", "GRANT ddd_system_in TO desk_api;", "GRANT desk_books TO desk_api;", "GRANT desk_analyst TO desk_api;"],
+                "with the roles the same build mapped");
+
+        // Left out, there is no such file.
+        Directory.Delete(Migrations, recursive: true);
+        (await BuildAsync(roles: "token:analyst=desk_analyst", callerFunctions: null)).ExitCode.Should().Be(0);
+        Directory.GetFiles(Migrations, "*_login_role.*").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_semicolon_in_the_login_role_is_refused_naming_what_a_name_is()
+    {
+        var (exitCode, output) = await BuildAsync(roles: null, callerFunctions: null, loginRole: "desk_api;DDDTOOLKIT_SUPABASE_EXPORT=Check");
+
+        exitCode.Should().NotBe(0);
+        output.Should().Contain("SupabaseLoginRole is 'desk_api;DDDTOOLKIT_SUPABASE_EXPORT=Check', with a ';'. It is the name of one role, a plain lowercase identifier such as sample_api");
+        Directory.Exists(Migrations).Should().BeFalse("the export never ran");
+    }
+
     [Theory]
     [InlineData("SupabaseRowAccessRoles", "user=desk_user;anonymous=desk_guest")]
     [InlineData("SupabaseCallerFunctions", "uid=who.id();role=who.role()")]
@@ -186,9 +216,9 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
     /// <summary>
     /// Builds a project that imports the targets file as a host does, an application with the export on, writing
     /// into <see cref="Migrations"/>, and <paramref name="roles"/>, <paramref name="callerFunctions"/>,
-    /// <paramref name="grants"/> and <paramref name="force"/> as the project would set them.
+    /// <paramref name="grants"/>, <paramref name="force"/> and <paramref name="loginRole"/> as the project would set them.
     /// </summary>
-    private Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? callerFunctions, string? grants = null, string? force = null)
+    private Task<(int ExitCode, string Output)> BuildAsync(string? roles, string? callerFunctions, string? grants = null, string? force = null, string? loginRole = null)
     {
         var properties = new Dictionary<string, string>
         {
@@ -200,7 +230,8 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
             ("SupabaseRowAccessRoles", roles),
             ("SupabaseCallerFunctions", callerFunctions),
             ("SupabaseRowAccessGrants", grants),
-            ("SupabaseForceRowLevelSecurity", force)])
+            ("SupabaseForceRowLevelSecurity", force),
+            ("SupabaseLoginRole", loginRole)])
         {
             if (value is not null)
             {

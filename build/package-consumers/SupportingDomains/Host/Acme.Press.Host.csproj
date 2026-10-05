@@ -8,13 +8,15 @@
 
     The Supabase package's build step and generator arrive the same way, through the infrastructure project, and
     this is where they work: the host turns the export on, as docs/supabase.md has it, and every build writes the
-    access files of the two contexts into ../supabase/migrations. The script also gives the property for the whole
-    build, the way a CI script does, and holds that it then reaches this project and no other.
+    access files of the two contexts into ../supabase/migrations, and the migration that makes the role the host
+    logs in as, which SupabaseLoginRole names. The script also gives the export's property for the whole build,
+    the way a CI script does, and holds that it then reaches this project and no other.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <SupabaseLoginRole>press_api</SupabaseLoginRole>
   </PropertyGroup>
 
   <ItemGroup>

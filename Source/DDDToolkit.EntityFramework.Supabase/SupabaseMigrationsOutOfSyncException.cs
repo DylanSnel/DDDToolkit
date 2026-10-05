@@ -37,6 +37,9 @@ public sealed class SupabaseMigrationsOutOfSyncException : InvalidOperationExcep
                 SupabaseMigrationStatus.Missing when entry.MigrationId.EndsWith(" row access rules", StringComparison.Ordinal) =>
                     "have no file that says what they are now: a rule changed, or a migration of the module came after the last file. " +
                     "A build with SupabaseMigrationsExport=Write, or SupabaseMigrations.Export, writes a new one.",
+                SupabaseMigrationStatus.Missing when entry.MigrationId.EndsWith(" login role", StringComparison.Ordinal) =>
+                    "has no file that says what it is now: SupabaseLoginRole was set, or the roles callers run as changed. " +
+                    "A build with SupabaseMigrationsExport=Write, or SupabaseMigrations.Export, writes a new one.",
                 SupabaseMigrationStatus.Missing =>
                     $"has no file. A build with SupabaseMigrationsExport=Write, or SupabaseMigrations.Export, writes {Path.GetFileName(entry.Path)}.",
                 SupabaseMigrationStatus.Changed =>

@@ -19,6 +19,11 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// The module registers it before <see cref="TenancyStartupCheck"/>, always: there is no host of the sample
 /// without the roles and the policies it checks. In order:
 /// <list type="bullet">
+/// <item><b>The role the host logs in as may become every caller.</b> It may switch to the role of a signed-in user,
+/// of a caller without a token, of the operators' token role, of system work in a tenant and of the bookkeeping, as
+/// the migration the export writes for it grants. First, and asked as that role itself: every check after it runs
+/// as the system caller, which switches to the bookkeeping role, and a login role that may not would fail there
+/// without saying why.</item>
 /// <item><b>Every migration is applied.</b> The host applies none: whoever owns the database does, from the files
 /// the export writes. A host started against a database that misses one stops here, naming it.</item>
 /// <item><b>The host says who is calling.</b> Every flow of work names its caller, and a token role Tenancy seats
@@ -40,6 +45,14 @@ public sealed class PostgresStartupCheck(IServiceProvider services) : IHostedSer
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         using var system = Callers.Begin(Caller.System);
+
+        await using (var scope = services.CreateAsyncScope())
+        {
+            foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
+            {
+                await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync((DbContext)scope.ServiceProvider.GetRequiredService(contextType), cancellationToken);
+            }
+        }
 
         await services.EnsureSupabaseMigrationsAppliedAsync(cancellationToken);
 

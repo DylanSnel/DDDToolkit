@@ -437,12 +437,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   security and that turns `WriteGrants` on writes its scripts with
   `RowAccessRoleNames.Of(options) with { System = null }`, because such a role is refused as a bookkeeping role.
   `PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync` checks at start-up that the role the application
-  logged in as owns and holds nothing, may create nothing in the schemas, and may switch to no role that is a
-  superuser, bypasses row level security or owns something there, naming the role and every finding with its
+  logged in as owns and holds nothing, may create nothing in the schemas, may neither create roles nor
+  replicate, and may switch to no role that is a superuser, bypasses row level security or owns something
+  there, naming the role and every finding with its
   fix; a login role that owns a schema there is the role the migrations run as, and that is the one finding,
   with the one fix, to log in as a role of its own, and
   `EnsureRowLevelSecurityWired` that a context runs its commands as the caller. See
   [A login that owns nothing](docs/row-level-security.md#a-login-that-owns-nothing).
+- `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` checks at start-up that the role the
+  application logged in as may switch to every role the context's interceptor switches to: the user's, the
+  anonymous caller's, the scoped system role, `SystemRole` and the role of every mapped token role, and, where the
+  settings last one transaction, that it may call `ddd.use_caller`. A role is switched to when a caller of its kind
+  connects, so without the check a grant left out passes the start and fails that caller's first request. It
+  asks as the login role itself, on the context's connection opened past the interceptor, because the system
+  caller's role is one of those it asks about, and names each role that is missing or not granted with the
+  statement that fixes it and, for a host whose Supabase build writes the login role's migration, the pair of
+  `SupabaseRowAccessRoles` that maps the role, since there a role left out is a pair left out.
 - **Forced row level security.** `RowAccessExport.ForceRowLevelSecurity`, and
   `<SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>` in the Supabase build, write
   `FORCE ROW LEVEL SECURITY` after every `ENABLE` of a script, so a table's owner is held to its policies
@@ -460,6 +470,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   at every `;`; a `;` fails the build, and an unknown key, a malformed pair, a role no policy can be for
   or a caller function that is not a call without arguments is an `error :` line. See
   [Roles and caller functions of your own](docs/supabase.md#roles-and-caller-functions-of-your-own).
+- **The role the application logs in as, written by the export.** `<SupabaseLoginRole>sample_api</SupabaseLoginRole>`
+  in the project that exports, beside `SupabaseRowAccessRoles`, and `SupabaseMigrationOptions.LoginRole` by hand,
+  write the migration that makes that role, `{version}_login_role.sample_api.ddd.sql`: `NOLOGIN NOINHERIT`,
+  and granted the roles the policies are written for, the user's, the anonymous caller's, the scoped system
+  role, the bookkeeping role and the roles of the mapped token roles, and nothing else: no table, schema or
+  function. A role of that name that is there already is refused, with a hint that names the fix, where it is a
+  superuser, may bypass row level security, create roles or replicate, or has the privileges of a role without
+  switching to it, also by a grant made while it inherited. Each role is granted in a statement of its own
+  unless the role may switch to it already, so the file runs again without harm, and beside the migration of
+  another database on the server that grants the same at the same moment. It makes the roles the access files
+  make where none has yet, and needs the user's and the anonymous caller's to exist. The login and its
+  password stay the deployment's. The file is written after every other file of the
+  build and, as an access file, never again: when the roles change, the next build writes a new one that grants
+  them as they are and takes back what the one before granted and no caller runs as any more, and `Check` fails
+  until it is there. A name that is not a plain lowercase identifier, is a word SQL keeps, is one of Postgres's or
+  Supabase's own roles or is one of the mapped roles is an `error :` line that says what to use; unset, nothing
+  is written and every file is what it was. `Export` and `Compare` of the sources report it in one more report,
+  after the sources'. See
+  [The role the application logs in as](docs/supabase.md#the-role-the-application-logs-in-as).
 - DDD00055 warns about a `[SupabaseMigrations]` factory whose assembly and whose context's assembly both
   declare no module: its files are named after the context's class, so the export would recognize none of
   them once the class is renamed.
@@ -1386,6 +1415,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   to the toolkit's localizer with its own registration, the host chooses the language per request and its
   exception handler names it, and the UI has a language switch for its own pages that it sends with every call. See
   [A sample in two languages](docs/localization.md#a-sample-in-two-languages).
+- **The Tenancy sample's login role is written by its export.** `Examples.Tenancy.Exporter` sets
+  `SupabaseLoginRole` to `tenancy_api`, so a token role added to its roles reaches the login role with the next
+  build. The migration that made the role by hand, `*_tenancy_login_role.sql`, stays, since a database that
+  applied it keeps its version in its history; the two say the same and both run again without harm. The host
+  checks first, before anything runs as the system caller, that `tenancy_api` may switch to every role its
+  callers run as; `LoginRoleFileTests` applies the file the export writes to Supabase's own Postgres and starts
+  the host as the role it made.
 
 #### Docs
 

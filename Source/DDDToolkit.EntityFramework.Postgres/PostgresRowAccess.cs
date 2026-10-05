@@ -136,7 +136,7 @@ public static partial class PostgresRowAccess
         "CREATE OR REPLACE PROCEDURE ddd.use_caller(role_name text, claims text, setting_names text[], setting_values text[]) LANGUAGE plpgsql AS ";
 
     /// <summary>The signature <see cref="UseCallerBody"/> is found, revoked and granted by.</summary>
-    private const string UseCallerSignature = "ddd.use_caller(text, text, text[], text[])";
+    internal const string UseCallerSignature = "ddd.use_caller(text, text, text[], text[])";
 
     /// <summary>The commands an entity's table gets a policy for, in the order a script writes them.</summary>
     private static readonly string[] EntityCommands = ["SELECT", "INSERT", "UPDATE", "DELETE"];

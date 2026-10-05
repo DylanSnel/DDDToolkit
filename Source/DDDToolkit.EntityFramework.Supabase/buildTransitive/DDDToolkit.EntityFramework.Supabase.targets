@@ -46,6 +46,15 @@
     event log; None, the default, leaves them to hand-written migrations. The second writes FORCE ROW LEVEL
     SECURITY after every ENABLE, so a table's owner is held to its policies too.
 
+    One more names the role the application logs in as, where that is a role of its own that owns nothing:
+
+      <SupabaseLoginRole>sample_api</SupabaseLoginRole>
+
+    The export then writes the migration that makes it, NOLOGIN NOINHERIT, and grants it the roles the first
+    property maps and nothing else, after every other file; a new one whenever those roles change. The login
+    and its password stay the deployment's, since a migration is kept in a repository. Unset, nothing is
+    written.
+
     It shipped here, in buildTransitive, so the host gets it through the module that references this
     package; the host does not have to reference the package itself.
 
@@ -77,14 +86,16 @@
     </PropertyGroup>
 
     <!--
-      The variables below are passed as one list that MSBuild splits at every ';', so a ';' in either
-      property would cut it short, and the rest would become variables of their own. Refused, naming the
-      separator that works.
+      The variables below are passed as one list that MSBuild splits at every ';', so a ';' in any of these
+      properties would cut it short, and the rest would become variables of their own. Refused, naming the
+      separator that works, or for the login role, which is one name, what a name is.
     -->
     <Error Condition="$(SupabaseRowAccessRoles.Contains(';'))"
            Text="SupabaseRowAccessRoles is '$(SupabaseRowAccessRoles)', with a ';'. Separate its pairs with '|' instead, as in user=authenticated|anonymous=anon|system-in=ddd_system_in: MSBuild splits the export's variables at every ';'." />
     <Error Condition="$(SupabaseCallerFunctions.Contains(';'))"
            Text="SupabaseCallerFunctions is '$(SupabaseCallerFunctions)', with a ';'. Separate its pairs with '|' instead, as in uid=auth.uid()|role=auth.role()|claims=auth.jwt(): MSBuild splits the export's variables at every ';'." />
+    <Error Condition="$(SupabaseLoginRole.Contains(';'))"
+           Text="SupabaseLoginRole is '$(SupabaseLoginRole)', with a ';'. It is the name of one role, a plain lowercase identifier such as sample_api: MSBuild splits the export's variables at every ';'." />
 
     <!--
       Runs the application that was just built. The generated module initializer sees the variable before
@@ -93,6 +104,6 @@
     -->
     <Exec Command="&quot;$(_DDDToolkitDotnet)&quot; &quot;$(TargetPath)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)"
-          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory);DDDTOOLKIT_SUPABASE_ROLES=$(SupabaseRowAccessRoles);DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS=$(SupabaseCallerFunctions);DDDTOOLKIT_SUPABASE_GRANTS=$(SupabaseRowAccessGrants);DDDTOOLKIT_SUPABASE_FORCE=$(SupabaseForceRowLevelSecurity)" />
+          EnvironmentVariables="DDDTOOLKIT_SUPABASE_EXPORT=$(SupabaseMigrationsExport);DDDTOOLKIT_SUPABASE_DIRECTORY=$(SupabaseMigrationsDirectory);DDDTOOLKIT_SUPABASE_START=$(MSBuildProjectDirectory);DDDTOOLKIT_SUPABASE_ROLES=$(SupabaseRowAccessRoles);DDDTOOLKIT_SUPABASE_CALLER_FUNCTIONS=$(SupabaseCallerFunctions);DDDTOOLKIT_SUPABASE_GRANTS=$(SupabaseRowAccessGrants);DDDTOOLKIT_SUPABASE_FORCE=$(SupabaseForceRowLevelSecurity);DDDTOOLKIT_SUPABASE_LOGIN_ROLE=$(SupabaseLoginRole)" />
   </Target>
 </Project>

@@ -71,7 +71,7 @@ public sealed class SampleOnTheCliStackTests(SupabaseCliStack stack) : IClassFix
         tables.Where(table => !(bool)table[1]!).Select(table => (string)table[0]!)
             .Should().BeEquivalentTo(TablesWithoutPolicies, "every other table has row level security, forced on its owner too");
 
-        // The image's own two, the three the access files make, and the one the hand-written file makes.
+        // The image's own two, the three the access files make, and the one the login role's files make.
         (await ListAsync(owner, "SELECT rolname::text FROM pg_roles WHERE rolname IN ('anon', 'authenticated', 'ddd_system_in', 'ddd_system', 'tenancy_operator', 'tenancy_api') ORDER BY 1"))
             .Should().Equal("anon", "authenticated", "ddd_system", "ddd_system_in", "tenancy_api", "tenancy_operator");
 
