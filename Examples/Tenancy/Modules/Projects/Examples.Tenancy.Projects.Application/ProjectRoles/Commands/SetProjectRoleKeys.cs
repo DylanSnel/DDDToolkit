@@ -21,7 +21,7 @@ public sealed record SetProjectRoleKeys(ProjectRoleId Id, IReadOnlyCollection<st
     public const string RequiredKey = ProjectRoleListing.KeysKey;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(RequiredKey);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="SetProjectRoleKeys"/>: loads the role, sets its keys and saves.</summary>

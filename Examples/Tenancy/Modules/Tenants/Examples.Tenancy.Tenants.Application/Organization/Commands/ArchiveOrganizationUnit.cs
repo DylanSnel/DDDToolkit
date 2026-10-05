@@ -6,13 +6,14 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// Archives a unit: nothing new is placed or granted there, and what is there keeps working.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.units.manage</c> at the unit's parent.
+/// It requires a caller who works in the tenant. The key is for the package's use case to ask, since only it reads
+/// where the unit hangs: <c>tenancy.units.manage</c> at the unit's parent.
 /// </remarks>
 /// <param name="Unit">The unit to archive.</param>
 public sealed record ArchiveOrganizationUnit(OrganizationUnitId Unit) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Handles <see cref="ArchiveOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

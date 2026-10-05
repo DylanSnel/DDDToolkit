@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
@@ -6,14 +7,14 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// Makes a suspended seat active again, with every grant that has not ended.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.seats.manage</c> for the whole tenant, and for what
-/// giving each of the seat's roles would need.
+/// It requires <c>tenancy.seats.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// for what giving each of the seat's roles would need.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 public sealed record ReactivateTenantSeat(SeatId Seat) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
 }
 
 /// <summary>Handles <see cref="ReactivateTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

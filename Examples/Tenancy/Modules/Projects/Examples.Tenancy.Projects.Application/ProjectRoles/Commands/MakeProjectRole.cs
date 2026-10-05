@@ -26,7 +26,7 @@ public sealed record MakeProjectRole(string Name, string? Description, IReadOnly
     public const string RequiredKey = ProjectRoleListing.KeysKey;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(RequiredKey);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 
     /// <summary>
     /// <paramref name="keys"/>, when the catalogue knows every one of them: a key it does not know is a wrong

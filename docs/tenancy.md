@@ -86,7 +86,9 @@ Tenancy becomes a module of your application, like any other. In the order you w
    ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy) has the middleware).
 5. **Provision a tenant.** `TenantCommands.ProvisionAsync` makes the tenant, its root unit, its roles from
    the packs and its first seat, as [system work](#system-work). [Calling a use case](#calling-a-use-case)
-   shows the call, and the alias every use case is named through.
+   shows the call, and the alias every use case is named through. A request that asks for a tenant says who
+   may send it, and its handler begins the system work itself
+   ([Who may ask, and what the work runs as](#who-may-ask-and-what-the-work-runs-as)).
 6. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity and `UseTenancy` on its context, after
    `UseDDDToolkit` ([Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check)).
 7. **Ask in your modules.** A module maps the read model and asks where the caller holds a key, inside its
@@ -95,7 +97,8 @@ Tenancy becomes a module of your application, like any other. In the order you w
    ([What a request requires of its caller](#what-a-request-requires-of-its-caller)). A module answers ids,
    and a screen asks the directory what they are called ([Names](#names)).
 8. **Let people manage access.** The package's use cases place seats, give roles and change roles, each
-   held to [who may give a role](#who-may-give-a-role). Put routes of your own in front of them.
+   held to [who may give a role](#who-may-give-a-role). Put requests of your own in front of them, each
+   declaring what its use case asks first, and routes in front of those.
 9. **Add what you need of the rest**: [invitations](#invitations), role names in a tenant's
    [language](#languages), [operators](#operators), [who changed a row](#who-changed-a-row) and the
    [access history](#access-history).
@@ -478,53 +481,196 @@ may have ended. Whether a command may run is asked when it runs, by the use case
 
 ### What a request requires of its caller
 
-Where a command or a query can say beforehand what it takes, it declares that, and a check holds the caller
-to it before the handler runs. The types for it are the toolkit's own, in `DDDToolkit.Access`:
-[Access requirements](access-requirements.md) has how a request declares what it requires, how the checks
-are asked and fail closed, and the pipeline behavior that is written for you with Mediator. Tenancy ships
-the cases it is the one to decide:
+Every command and query says what it requires, and a check holds the caller to it before the handler runs.
+The types for it are the toolkit's own, in `DDDToolkit.Access`: [Access requirements](access-requirements.md)
+has how a request declares what it requires, how the checks are asked and fail closed, and the pipeline
+behavior that is written for you with Mediator. Tenancy ships the cases it is the one to decide, spelled with
+`TenancyAccess`:
 
 ```csharp
 public interface IBillingRequest : IRequireAccess;              // one interface per module
 
 public sealed record CloseTheBooks(int Year) : IBillingRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(BillingKeys.CloseTheBooks);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(BillingKeys.CloseTheBooks);
 }
 ```
 
-| `TenancyRequirement` | Lets through | Refuses with |
-|---|---|---|
-| `DecidedByThePackage` | everyone: the use case of the package the handler calls checks the caller itself | |
-| `InTenant` | a seat in a tenant, and system work in one | what the caller is nobody for, such as `tenancy.not-seated` |
-| `SystemWorkInTenant` | system work in a tenant | `tenancy.system-only`, for a seat whatever it holds |
-| `ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
-| `AtUnit<OrganizationUnitId>(key, unit)` | whoever holds the key at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the key and the unit |
-| `OperatorsOnly` | an [operator](#operators) | `tenancy.operators-only`, for a seat and for system work too |
+| A request requires | It writes | Lets through | Refuses with |
+|---|---|---|---|
+| a caller who works in the tenant | `TenancyAccess.InTenant()` | a seat in the tenant the request was sent for, and system work there | what the caller is nobody for, such as `tenancy.not-seated` |
+| a key for the whole tenant | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
+| a key at a unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the key and the unit |
+| one of the application's operators | `TenancyAccess.RequiresOperator()` | an [operator](#operators) | `tenancy.operators-only`, for a seat and for system work too |
 
-`AtUnit` is for a command that makes something at a unit, where nothing exists yet that a key could be held
-on, such as opening a project there: the check a module would otherwise write in its handler. It is closed
-over your unit id, since the unit is the request's own:
+Beside them a request of a module with Tenancy uses the toolkit's own, which are about who is calling and
+nothing else: `AccessRequirement.AllowAnonymous()` for anyone, `AccessRequirement.SignedIn()` for a signed-in
+user who has no seat yet, as for accepting an invitation or picking a tenant, and
+`AccessRequirement.RequiresSystemWork()` for what only the application sends, as seeding does. They are
+[the vocabulary](access-requirements.md#the-vocabulary) every request picks one from.
+
+`AtUnit` is for a command that acts at a unit the request names: one the package's use case decides, such as
+placing a seat or giving a role there, and one that makes something at a unit, where nothing exists yet that a
+key could be held on, such as opening a project there. It is closed over your unit id, which it takes from the
+argument:
 
 ```csharp
 public sealed record OpenLedger(string Name, OrganizationUnitId UnitId) : IBillingRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.AtUnit<OrganizationUnitId>(BillingKeys.OpenLedger, UnitId);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(BillingKeys.OpenLedger, UnitId);
 }
 ```
+
+Because the id is taken from the argument, the compiler does not tell a unit from another id: on a request
+that also carries a seat, `AtUnit(key, Seat)` compiles. It lets nobody through: the check stops every send of
+it with an `InvalidOperationException` that names your unit id. Write the type,
+`TenancyAccess.AtUnit<OrganizationUnitId>(key, Unit)`, where a request carries more ids than one, or hold
+every request to the requirement it should declare in a test, as the sample's `AccessDeclarationTests` does.
 
 What is held on one thing a module keeps at a unit is that module's own case, with a
 [check of its own](access-requirements.md#what-answers-it) written over the questions above;
 [Membership](membership.md) ships such cases for a resource with members.
 
-`DecidedByThePackage` asks nothing and gives no reason, in whichever module's set of checks Tenancy's check
-sits. It is right for one kind of request only: one whose handler hands it to a use case of the package and
-does nothing else, since that use case asks who is calling. On any other request it is an open door, and
-nothing in the package can tell the two apart: a requirement does not see the handler. So hold it with an
-architecture test of your own, over the requests of every module that adds the check: a request that
-declares it has a handler that takes the package's commands, or its read port for a query, and nothing
-besides; and a handler that takes the package's commands belongs to a request that declares it. The sample's
-`AccessDeclarationTests.What_the_package_decides_only_the_package_handles` is that test.
+```mermaid
+flowchart LR
+    Request["MakeGrant"] --> Door["its requirement:<br/>grants.manage at the unit"]
+    Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
+    Door -- "held" --> UseCase["the use case: the key again,<br/>and what only it can read"]
+    UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
+    UseCase -- "saves, as the seat" --> Policies[("Tenancy's policies,<br/>on Postgres")]
+```
+
+**A request handed to a use case of the package says what that use case asks first.** No requirement leaves
+a request to the package. A command that gives a role declares `TenancyAccess.AtUnit(TenancyKeys.GrantsManage,
+Unit)`, one that makes a role `TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)`, and a query the
+package's directory answers `TenancyAccess.InTenant()`. Where the first thing the use case asks needs
+something read, the request declares what it can name and the use case asks the rest: archiving a unit takes
+`tenancy.units.manage` at the unit's parent, which only the use case reads, so its request declares
+`TenancyAccess.InTenant()`. The use case asks again past the check, whoever calls it, and then for what only it
+can read: who may give a role that manages access, whether a move gives away what the caller could not,
+whether the tenant keeps an administrator. Those rules are the package's, and no request spells them. A caller
+the use case would refuse first is refused at the door already, with the same code and the same key. Under it
+all, on Postgres, [the second lock](#on-postgres-the-second-lock) holds every row the use case saves to the
+seat it runs as.
+
+<details>
+<summary>Show the code: a command handed to the package's use case</summary>
+
+```csharp
+public sealed record MakeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest
+{
+    // What the use case asks first, and the request names: the check refuses a caller without it.
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
+}
+
+public sealed class MakeGrantHandler(SampleTenancy.SeatCommands seats) : ICommandHandler<MakeGrant>
+{
+    public async ValueTask<Unit> Handle(MakeGrant command, CancellationToken cancellationToken)
+    {
+        // The use case asks for the key again, whoever calls it, and then for the rules only it can read.
+        await seats.GrantAsync(command.Seat, command.Unit, command.Role, command.Until, command.Reason, cancellationToken);
+        return Unit.Value;
+    }
+}
+```
+
+</details>
+
+#### Who may ask, and what the work runs as
+
+A tenant is provisioned by system work outside any tenant, and nobody holds a seat to ask for that with. So
+who may send the request that provisions one is one decision, and what the work runs with is another: the
+handler begins the system work itself, in trusted code, whichever requirement its request declares.
+
+```mermaid
+sequenceDiagram
+    participant Person as Signed-in person
+    participant Door as Requirement
+    participant Handler as RegisterOrganization's handler
+    participant Tenancy as ProvisionAsync
+    Person->>Door: RegisterOrganization
+    Door->>Handler: SignedIn(): let through
+    Handler->>Handler: the token's user is the administrator
+    Handler->>Handler: begins system work
+    Handler->>Tenancy: provision the tenant
+    Tenancy-->>Handler: the new tenant
+```
+
+The request's requirement says who gets as far as the handler. Every handler below begins
+`TenancyWork.BeginSystem` and provisions as that, whoever sent the request, and the caller gets nothing more by
+it: what the system work does is the handler's to say, and the database's policies hold it to the tenant it
+makes. What changes with the requirement is where the handler finds what system work cannot tell it, the
+first administrator:
+
+| Who may send it | Its requirement | Where the first administrator comes from |
+|---|---|---|
+| a signed-in person who registers an organization | `AccessRequirement.SignedIn()` | the caller's own token, read before the system work begins, never the request; an anonymous sign-in is refused |
+| anyone, through a public registration form | `AccessRequirement.AllowAnonymous()` | there is no caller to take it from: the form carries an address, and the handler makes that account with `IIdentityAccounts.InviteByEmailAsync` and provisions for the id it answers |
+| a job or a console tool the application runs, such as an import | `AccessRequirement.RequiresSystemWork()` | the request, which the trusted code that began the job filled in |
+
+An operator's screen is none of these. An operator is a signed-in user, whom `RequiresSystemWork()` refuses
+like any other, and what an operator asks for is carried out by system work that names the operator,
+`TenancyWork.BeginOperator(identity)` ([Operators](#operators)).
+
+<details>
+<summary>Show the code: a registration that provisions a tenant</summary>
+
+```csharp
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, IShopRequest
+{
+    // Who may send it: a signed-in person, who becomes the first administrator.
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
+}
+
+public sealed class RegisterOrganizationHandler(ShopTenancy.TenantCommands tenants, ICallerAccessor callers)
+    : ICommandHandler<RegisterOrganization, TenantId>
+{
+    public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
+    {
+        // The administrator is the verified identity of the request's own token, never one the request carries,
+        // and it is read before the system work begins: inside it, the caller is the system. SignedIn() lets an
+        // anonymous sign-in through as well, and no seat should belong to one.
+        var caller = callers.Current;
+        if (caller.UserId is not { } administrator
+            || string.Equals(caller.Claim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            throw TenancyRefusals.Of(TenancyRefusals.IdentityRequired);
+        }
+
+        // What it runs with: system work outside any tenant, begun here, which is what provisions a tenant.
+        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        {
+            var made = await tenants.ProvisionAsync(
+                new ShopTenancy.TenantToProvision(
+                    command.Slug, command.Name, TenantShape.Flat, command.Name, "company", administrator, command.AdministratorName),
+                cancellationToken);
+            return made.Tenant;
+        }
+    }
+}
+```
+
+A form anyone may fill in declares `AccessRequirement.AllowAnonymous()` and carries an address instead, and its
+handler makes the account before it provisions. An address that has an account already is answered as if it
+had none: the form must not tell anyone who has one, and that person signs in and registers as above.
+
+```csharp
+var made = await accounts.InviteByEmailAsync(command.Address, signInRedirect: null, cancellationToken);
+if (made is not IdentityAccountOutcome.Created(var administrator))
+{
+    return;                                          // the address has an account: answer as if it had none
+}
+
+using (TenancyWork.BeginSystem<TenantId, SeatId>())
+{
+    await tenants.ProvisionAsync(
+        new ShopTenancy.TenantToProvision(
+            command.Slug, command.Name, TenantShape.Flat, command.Name, "company", administrator, command.AdministratorName),
+        cancellationToken);
+}
+```
+
+</details>
 
 The check that decides Tenancy's cases is added per module, for the module's request interface and over the
 module's context:
@@ -1184,9 +1330,10 @@ says what it checks, and what it leaves to the use cases.
 
 ### System work
 
-A request is never system work: a person reaches Tenancy through a seat. Work nobody asked for in a
-request, such as seeding, an import or an operator's command, is begun on purpose with `TenancyWork`, and
-it begins two callers at once, ended together:
+Nothing becomes system work by itself: a person reaches Tenancy through a seat. Work nobody asked for in a
+request, such as seeding, an import or an operator's command, and work a handler does that no caller of its
+request could, such as [provisioning a tenant](#who-may-ask-and-what-the-work-runs-as), is begun on purpose
+with `TenancyWork`, and it begins two callers at once, ended together:
 
 | | Tenancy's caller | The toolkit's caller |
 |---|---|---|
@@ -1201,6 +1348,27 @@ Neither is the toolkit's `Caller.System`, the application itself, which
 system caller runs as a role that cannot bypass them. The scope says whose work it is. Work that calls
 Tenancy's use cases keeps Tenancy's own; a module's own work in a tenant that only reads Tenancy's rows
 next to its own passes its module's name.
+
+Everything about system work is named after the toolkit's caller of the application itself, `Caller.System`,
+so one word says it wherever it comes up:
+
+| System work | Spelled |
+|---|---|
+| the application itself, past every policy | `Caller.System`, on the login role or the one `SystemRole` names, such as `ddd_system` |
+| the application at work in a scope, inside the policies | `Caller.SystemIn(scope)`, on `ddd_system_in` unless the host names another |
+| begun in Tenancy, outside any tenant or in one | `TenancyWork.BeginSystem<TTenantId, TSeatId>()`, `TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant)` |
+| a request only it sends | `AccessRequirement.RequiresSystemWork()`, which lets through system work trusted code began and refuses every user with `access.system-only` |
+
+`RequiresSystemWork()` takes system work that was begun on purpose, with `TenancyWork` or with
+`Callers.Begin(Caller.System)`. Work nobody began a caller for is refused too, also in a host that does not
+[require explicit callers](row-level-security.md#fail-closed-callers), whose accessor answers the application
+itself for such work: there, that is the answer a web request gets as well when no accessor knows requests.
+It says who may send a request, not where the work acts: it lets system work through in a tenant and outside
+any. A handler that acts in a tenant asks Tenancy which one, and Tenancy refuses system work outside any
+tenant there, as the sample's `MarkTenantAsDemo` does. Tenancy's own use cases that only system work may call,
+provisioning a tenant and suspending, reactivating or closing one, refuse a seat with the same
+`access.system-only`. The database roles keep their names: migrations an application applied already grant
+them.
 
 ```csharp
 using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, actingSeat))
@@ -1266,7 +1434,7 @@ tenants. An operator is not an administrator of every tenant. It **holds no seat
 - **What it reads.** `TenantDirectory.ListAsync(after, size)` lists every tenant by slug, a page at a time,
   each with its name, its status and how many of its seats are active. Anyone else is refused with
   `tenancy.operators-only`, before anything is read. A request of your own that is an operator's declares
-  `TenancyRequirement.OperatorsOnly`, and is refused the same way
+  `TenancyAccess.RequiresOperator()`, and is refused the same way
   ([What a request requires of its caller](#what-a-request-requires-of-its-caller)). A page holds 1 to 200 tenants
   (`tenancy.page-size-invalid`), and the next one is asked with the marker the page before gave
   (`tenancy.cursor-invalid` for anything else). The read runs as the operator, never as the system.
@@ -1701,8 +1869,9 @@ tagged with the refusal's code. Saving stays in the handler, through the store: 
 No module writes a behavior. Each writes its request interface, marked `[AccessRequests]`, and a check only
 for the cases that are its own: Projects for a key at a unit, Inspections for what takes Projects' gate,
 Tenants none. A key on a project is the Membership package's case, and its check is added to Projects' set.
-That the caller works in a tenant, holds a key for the whole of it or is an operator are the Tenancy package's
-cases, and its check is added to each module's set. A case no check of the module decides stops the request
+That the caller works in a tenant, holds a key for the whole of it or at a unit, or is an operator are the
+Tenancy package's cases, and its check is added to each module's set. That the caller signed in, or is the
+application itself, the toolkit decides in every set. A case no check of the module decides stops the request
 where it is sent, and a test holds every case the requests declare to having a check.
 
 The check and the load are two statements, and the check reads on a context of its own. So the handler takes
@@ -1736,7 +1905,7 @@ can say beforehand:
 | `ChangeProjectOwner` | `projects.owner.change` on the project | an active seat; the new owner gets the crew lead's project role, and the old owner loses it and stays on the crew |
 | `TenantProjectRoles`, `ProjectRolesById` (queries) | a caller that works in a tenant | the keys of each role only for a caller that holds `tenancy.roles.manage` for the whole tenant |
 | `MakeProjectRole`, `RenameProjectRole`, `SetProjectRoleKeys`, `ArchiveProjectRole` | `tenancy.roles.manage` for the whole tenant | the same again: no use case of a package stands between the command and the role |
-| `SetUpProjectRoles` | system work in the tenant; no route sends it, whatever sets a tenant up does | the same again |
+| `SetUpProjectRoles` | system work; no route sends it, whatever sets a tenant up does | the same again, and narrower: system work in the tenant it sets up |
 
 | Inspections | Declares | The handler adds |
 |---|---|---|
@@ -1751,20 +1920,31 @@ project out of sight is `projects.not-found`, a closed one `projects.closed`, a 
 `projects.not-permitted`. Its handlers act on the project the gate answered for, which the check keeps for
 them as Projects' check keeps the project it read.
 
-| Tenants | Declares |
-|---|---|
-| `SeatsOfMine` (query) | nothing, with the reason: a person's own seats are asked for before any tenant, by the verified identity of the token alone |
-| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById` (queries) | that the Tenancy package decides: its directory checks the caller itself |
-| `CatalogueContents`, `UnitsWhereIHold` (queries) | a caller that works in a tenant |
-| the fourteen commands on units, the tenant's shape, placements, grants, seats and roles, such as `MakeGrant` | that the Tenancy package decides: the use case the handler calls checks the caller itself, and refuses with the package's codes |
-| `MarkTenantAsDemo` | system work in the tenant; no route sends it, the seeding does. No use case of the package stands between it and the tenant, so its handler asks the same again |
-| `AccessHistory` (query) | `tenancy.history.view` for the whole tenant |
-| `InvitePerson`, `CancelInvitation`, `AcceptInvitation`, and `OpenInvitations` (query) | that the Tenancy package decides |
-| `AllTenants`, `TenantAccessHistory` (queries) | an operator, and nobody else |
+| Tenants | Declares | The package's use case asks besides |
+|---|---|---|
+| `SeatsOfMine` (query) | a signed-in user: a person's own seats are asked for before any tenant, by the verified identity of the token alone | |
+| `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById` (queries) | a caller that works in a tenant | the directory answers it; `OverviewOfMine` only a seat, since only a seat has a self |
+| `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` (queries) | a caller that works in a tenant | the open invitations are those into the units where the caller holds `tenancy.seats.manage` |
+| `AddOrganizationUnit` | `tenancy.units.manage` at the parent | that the kind is one of the application's |
+| `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | a caller that works in a tenant | `tenancy.units.manage` at the parent the unit hangs under now, which only the use case reads, and for a move at the new parent too, and that the move gives or takes away nothing the caller could not |
+| `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant | |
+| `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit | that a seat does not place itself; for a withdrawal, what taking each role away would need |
+| `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit | for a role that manages access, that the caller holds its keys that do, there and for long enough, and never gives it to itself; that the tenant keeps an administrator |
+| `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant | what taking or giving each of the seat's roles would need; that the tenant keeps an administrator |
+| `CreateTenantRole`, `SetRoleKeys`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant | that only an administrator adds, takes out or archives what manages access |
+| `InvitePerson` | `tenancy.seats.manage` for the whole tenant | `tenancy.grants.manage` at the unit, and the rule every grant is held to |
+| `CancelInvitation` | a caller that works in a tenant | `tenancy.seats.manage` at the invitation's unit, which only the use case reads; anyone else is told there is no such invitation |
+| `AcceptInvitation` | a signed-in user: there is no seat yet to hold a key | a verified identity that may hold a seat, and the token of an open invitation; then the work is done as system work in the invitation's tenant, begun by the package |
+| `MarkTenantAsDemo` | system work; no route sends it, the seeding does | no use case of the package stands between it and the tenant, so its handler asks again, and narrower: system work in the tenant it marks |
+| `AccessHistory` (query) | `tenancy.history.view` for the whole tenant | |
+| `AllTenants`, `TenantAccessHistory` (queries) | an operator, and nobody else | |
 
-A request that declared nothing would reach its handler unchecked, so the sample's tests fail for one that
-neither declares what it requires nor is marked open with a reason, and hold every request to the tables above
-(`AccessDeclarationTests`).
+Every request of the package's says the first thing its use case asks, so a caller the use case would refuse
+first is refused at the door already, with the same code and the same key; the use case asks again past it,
+and then what the third column says. A request that declared nothing would reach its handler unchecked, so the
+sample's tests fail for one that declares nothing, find no request anyone may send, and hold every request to
+the tables above (`AccessDeclarationTests`). That the door and the use case refuse alike is held by
+`RequestPipelineTests`.
 
 What Projects and Inspections answer names a unit, a seat and a crew's role by its id, and never by a name:
 they read Tenancy through the [read model](#what-a-module-reads-of-tenancy), which has none, and a crew's role
@@ -2158,7 +2338,7 @@ Each route has a field in the GraphQL schema, which sends the same query
 
 An operator works in no tenant, so the tenant is in the path and the query names it past the tenant filter
 (`IgnoreQueryFilters([TenancyQueryFilter.Name])`). The policy is a courtesy, as the seat's is: every one of
-these queries declares `TenancyRequirement.OperatorsOnly`, and the package's check, added to each module's set,
+these queries declares `TenancyAccess.RequiresOperator()`, and the package's check, added to each module's set,
 refuses anyone else with `tenancy.operators-only`, a seat that holds every key and system work included. In the
 database the query runs as the operators' own role, which reads a module's table only where a rule of that module
 admits it:
@@ -2869,7 +3049,8 @@ header, exactly as any other client would:
   as juno, whom tove invited into meadow, and the tenant picker has meadow from then on.
 
 Every call takes the same way through the API: the bearer finds the person, the `Tenant` header and the
-person's own seats decide the seat, and the use case refuses what the seat may not do, with a code. Here
+person's own seats decide the seat, the request's requirement lets through who may send it, and the use case
+refuses what the seat may not do, with a code. Here
 rhea grants leo a role that manages access with keys she does not hold:
 
 ```mermaid
@@ -2879,6 +3060,7 @@ sequenceDiagram
     box API
         participant Bearer as Supabase bearer
         participant Selection as Tenant selection
+        participant Requirement
         participant UseCase as Use case
     end
 
@@ -2886,7 +3068,8 @@ sequenceDiagram
     UI->>Bearer: POST grants<br/>token, Tenant: harbor
     Bearer->>Selection: the token's sub
     Selection->>Selection: her seat in harbor
-    Selection->>UseCase: runs as that seat
+    Selection->>Requirement: runs as that seat
+    Requirement->>UseCase: grants.manage<br/>at the unit: held
     UseCase->>UseCase: the role manages access,<br/>with keys she lacks there
     UseCase-->>UI: refused, 403 problem+json<br/>tenancy.grant-exceeds-own
     UI-->>Browser: status, code,<br/>the missing keys
@@ -2933,8 +3116,10 @@ operators.MapInspectionsOperations();
 ```
 
 `POST .../grants` sends `MakeGrant`, which passes tracing and then the Tenants module's access behavior, as
-[every request does](#who-may-do-what-in-the-sample). `MakeGrant` declares that the package decides, so the package's check lets it through and the
-handler hands it to the package's use case, which asks who is calling and refuses as above. The queries
+[every request does](#who-may-do-what-in-the-sample). `MakeGrant` requires `tenancy.grants.manage` at the unit,
+which rhea holds there, so the package's check lets her through, and the handler hands the request to the
+package's use case. That asks for the key again, and then for what only it can read: the role manages access,
+and rhea does not hold its keys that do, so it refuses as above. The queries
 that list the tenant's units, seats and roles, name them by id and describe the caller's own seat are answered
 by the package's directory, each in a scope of its own, whose context is taken from the module's pool, so two
 of them sent side by side never share a context.
@@ -3039,6 +3224,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 
 | The choice | Where to see it |
 |---|---|
+| Every request says what it requires, in one line on the request, and none leaves it to a package. A request handed to a use case of Tenancy's says what that use case asks first; the use case asks again, and keeps the rules only it can read | **Code:** [`AccessRequirement.cs`](../Source/DDDToolkit/Access/AccessRequirement.cs), [`TenancyAccess.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RequiredAccess/TenancyAccess.cs), [`MakeGrant.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Grants/Commands/MakeGrant.cs)<br/>**Try it:** Preset `grant-outside-your-region`, which the request's requirement refuses, and `give-a-role-that-manages-access`, which it lets through and the use case refuses<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests`, `CallerRequirementTests` |
 | A project's owner may do everything that acts on the project, and a crew role reaches no further than the crew lead's | **Code:** [`Project.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Project.cs), [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs)<br/>**Try it:** Sign in as leo and open Pier 7. Presets `owner-change-from-the-crew`, `remove-the-owner` and `take-the-owners-lead-role`<br/>**Test:** `OwnerScenarios`, `CrewRoleScenarios` |
 | Whoever may close a project may reopen it | **Code:** [`ReopenProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/ReopenProject.cs)<br/>**Try it:** The Reopen button on a closed project's page; leo's close and reopen in the `.http` file<br/>**Test:** `ClosingAndReopeningScenarios` |
 | Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |

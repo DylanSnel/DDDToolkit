@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
@@ -7,9 +8,10 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// the package lets only system work pick one, and no request made through here is.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.grants.manage</c> at the unit, and for a role that
-/// manages access, that the caller holds its keys that do, there and for at least as long, and is not giving it to
-/// itself.
+/// It requires <c>tenancy.grants.manage</c> at the unit, which the request names, so a caller without it is refused
+/// before the handler runs. The package's use case asks for that key again, and then for what only it can read: for
+/// a role that manages access, that the caller holds its keys that do, there and for at least as long, and is not
+/// giving it to itself.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit of one of its placements.</param>
@@ -19,7 +21,7 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 public sealed record MakeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? Reason) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
 }
 
 /// <summary>Handles <see cref="MakeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

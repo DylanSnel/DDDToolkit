@@ -88,10 +88,10 @@ public sealed class RenameBasketHandler(StepLog steps, Checked<BasketId> checked
     }
 }
 
-/// <summary>How many kinds of basket there are: a request of the module that requires nothing, and says why.</summary>
+/// <summary>How many kinds of basket there are: a request of the module that anyone may send.</summary>
 public sealed record BasketKinds : IQuery<int>, IBasketRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("The kinds of basket are the same for everyone.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>Answers <see cref="BasketKinds"/>.</summary>

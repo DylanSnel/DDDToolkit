@@ -618,7 +618,7 @@ public class AccessBehaviorGenerationTests
 
         (await RunThroughAsync(emitted, 7, mayClose)).Should().Be("check 7, handler 7");
         (await RunThroughAsync(emitted, -1, mayClose)).Should().Be("check -1, RefusalException", "a refused caller never reaches the handler");
-        (await RunThroughAsync(emitted, 7, new global::DDDToolkit.Access.AccessRequirement.Open("the price list is public"))).Should().Be("handler 7", "nobody has to decide that nothing is required");
+        (await RunThroughAsync(emitted, 7, global::DDDToolkit.Access.AccessRequirement.AllowAnonymous())).Should().Be("handler 7", "nobody has to decide that anyone may send it");
         (await RunThroughAsync(emitted, 7, null)).Should().Be("InvalidOperationException", "a request that declares nothing lets nobody through");
 
         static async Task<string> RunThroughAsync(EmittedAssembly emitted, int invoice, object? requires)
@@ -660,10 +660,12 @@ public class AccessBehaviorGenerationTests
         scope.ServiceProvider.GetServices(typeof(IPipelineBehavior<,>).MakeGenericType(emitted.Type("Shop.Billing.Ping"), typeof(Unit)))
             .Should().BeEmpty("a message that does not implement the interface is not the behavior's");
 
-        // No check was added: the set is there all the same, lets an open request through and stops every other.
+        // No check was added: the set is there all the same, decides what the core decides, and stops every other.
         var checks = scope.ServiceProvider.GetRequiredService(typeof(global::DDDToolkit.Access.AccessChecks<>).MakeGenericType(emitted.Type("Shop.Billing.IBillingRequest")));
         var decides = checks.GetType().GetMethod("Decides")!;
-        decides.Invoke(checks, [new global::DDDToolkit.Access.AccessRequirement.Open("the price list is public")]).Should().Be(true);
+        decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.AllowAnonymous()]).Should().Be(true);
+        decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.SignedIn()]).Should().Be(true, "the core decides who is calling in every set");
+        decides.Invoke(checks, [global::DDDToolkit.Access.AccessRequirement.RequiresSystemWork()]).Should().Be(true);
         decides.Invoke(checks, [emitted.New("Shop.Billing.MayClose")]).Should().Be(false, "a requirement no check decides lets nobody through");
     }
 
@@ -676,8 +678,8 @@ public class AccessBehaviorGenerationTests
         // "asked" is where the caller holds the stream and has read nothing of it: nothing runs before the first read.
         (await RunThroughAsync(emitted, 2026, mayExport)).Should().Be("asked, check 2026, handler 2026, invoice 1, invoice 2");
         (await RunThroughAsync(emitted, -1, mayExport)).Should().Be("asked, check -1, RefusalException", "a refused caller never reaches the handler, and reads nothing");
-        (await RunThroughAsync(emitted, 2026, new global::DDDToolkit.Access.AccessRequirement.Open("the invoices of a demo are public")))
-            .Should().Be("asked, handler 2026, invoice 1, invoice 2", "nobody has to decide that nothing is required");
+        (await RunThroughAsync(emitted, 2026, global::DDDToolkit.Access.AccessRequirement.AllowAnonymous()))
+            .Should().Be("asked, handler 2026, invoice 1, invoice 2", "nobody has to decide that anyone may send it");
         (await RunThroughAsync(emitted, 2026, null)).Should().Be("asked, InvalidOperationException", "a stream query that declares nothing lets nobody through");
 
         static async Task<string> RunThroughAsync(EmittedAssembly emitted, int year, object? requires)

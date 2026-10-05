@@ -7,14 +7,15 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Queries;
 /// for and what it offers by id.
 /// </summary>
 /// <remarks>
-/// The package decides what the caller reads: the invitations into the units where it holds
-/// <c>tenancy.seats.manage</c>, which may be none. Nobody is refused with its own reason, such as
-/// <c>tenancy.not-seated</c>. No answer carries a token: that was shown once, when the invitation was issued.
+/// It requires a caller who works in the tenant, and the package decides what the caller reads: the invitations
+/// into the units where it holds <c>tenancy.seats.manage</c>, which may be none. Nobody is refused with its own
+/// reason, such as <c>tenancy.not-seated</c>. No answer carries a token: that was shown once, when the invitation
+/// was issued.
 /// </remarks>
 public sealed record OpenInvitations : IQuery<IReadOnlyList<SampleTenancy.OpenInvitation<InvitationId>>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="OpenInvitations"/> from the Tenancy package, which checks the caller and reads.</summary>

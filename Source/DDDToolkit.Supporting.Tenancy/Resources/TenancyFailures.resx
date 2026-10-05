@@ -39,9 +39,6 @@
   <data name="tenancy.other-tenant" xml:space="preserve">
     <value>That row belongs to a tenant you are not working in.</value>
   </data>
-  <data name="tenancy.system-only" xml:space="preserve">
-    <value>Provisioning, suspending, reactivating and closing a tenant is system work.</value>
-  </data>
   <data name="tenancy.start-system-only" xml:space="preserve">
     <value>A grant you make starts now; only system work picks another start.</value>
   </data>

@@ -58,7 +58,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <param name="command">What to provision.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.system-only</c> for a seat, <c>tenancy.slug-taken</c>, <c>tenancy.unknown-unit-kind</c>
+        /// <c>access.system-only</c> for a seat, <c>tenancy.slug-taken</c>, <c>tenancy.unknown-unit-kind</c>
         /// for the root's kind, <c>tenancy.role-name-taken</c> when two packs are named alike in the tenant's
         /// language, and what the aggregates refuse: an invalid name, a pack's translated one included, or an
         /// empty identity.
@@ -249,14 +249,14 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <param name="reason">Why; required.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
+        /// <c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
         public Task SuspendAsync(string reason, CancellationToken cancellationToken)
             => ChangeStatusAsync((tenant, by) => tenant.Suspend(reason, by), cancellationToken);
 
         /// <summary>Puts the caller's suspended tenant back in use: system work in that tenant only.</summary>
-        /// <exception cref="Exceptions.RefusalException"><c>tenancy.system-only</c> for a seat, <c>tenancy.tenant-state</c>.</exception>
+        /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
         public Task ReactivateAsync(CancellationToken cancellationToken)
             => ChangeStatusAsync((tenant, by) => tenant.Reactivate(by), cancellationToken);
@@ -265,7 +265,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <param name="reason">Why; required.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
+        /// <c>access.system-only</c> for a seat, <c>tenancy.tenant-state</c>, <c>tenancy.reason-required</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
         public Task CloseAsync(string reason, CancellationToken cancellationToken)

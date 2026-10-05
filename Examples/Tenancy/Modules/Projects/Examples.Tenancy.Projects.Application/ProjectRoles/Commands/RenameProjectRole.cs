@@ -17,7 +17,7 @@ public sealed record RenameProjectRole(ProjectRoleId Id, string Name, string? De
     public const string RequiredKey = ProjectRoleListing.KeysKey;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(RequiredKey);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="RenameProjectRole"/>: loads the role, renames it and saves.</summary>

@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Queries;
 public sealed record TenantProjectRoles : IQuery<IReadOnlyList<ProjectRoleListing>>, IProjectsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.InTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="TenantProjectRoles"/> in two statements, on a reading of this query's own.</summary>

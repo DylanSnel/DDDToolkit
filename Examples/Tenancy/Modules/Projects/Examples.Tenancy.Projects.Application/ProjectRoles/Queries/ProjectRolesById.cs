@@ -18,7 +18,7 @@ public sealed record ProjectRolesById(IReadOnlyList<ProjectRoleId> Ids) : IQuery
     public const int MostRoles = 200;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.InTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

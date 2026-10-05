@@ -1,3 +1,4 @@
+using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
@@ -70,7 +71,12 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
             };
 
         /// <summary>Only system work outside any tenant provisions one.</summary>
-        /// <exception cref="Exceptions.RefusalException"><c>tenancy.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
+        /// <remarks>
+        /// A seat is refused with the toolkit's <c>access.system-only</c>, the code a request that requires system
+        /// work is refused with at the door, so a client reads one code for "only the application itself" wherever
+        /// it is refused.
+        /// </remarks>
+        /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work in a tenant.</exception>
         public void RequireSystemOutsideTenants()
         {
@@ -79,7 +85,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
                 case TenancyCallerKind.System:
                     return;
                 case TenancyCallerKind.Seat:
-                    throw TenancyRefusals.Of(TenancyRefusals.SystemOnly);
+                    throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly);
                 case TenancyCallerKind.SystemInTenant:
                     throw new InvalidOperationException(
                         "A tenant is provisioned by system work outside any tenant. Begin TenancyWork.BeginSystem() for it.");
@@ -89,13 +95,13 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         }
 
         /// <summary>Only system work in the tenant suspends, reactivates or closes it.</summary>
-        /// <exception cref="Exceptions.RefusalException"><c>tenancy.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
+        /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
         public TTenantId RequireSystemInTenant()
             => Caller.Kind switch
             {
                 TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
-                TenancyCallerKind.Seat => throw TenancyRefusals.Of(TenancyRefusals.SystemOnly),
+                TenancyCallerKind.Seat => throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly),
                 TenancyCallerKind.System => throw new InvalidOperationException(
                     "A tenant is suspended, reactivated or closed by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it."),
                 _ => throw Refusal(),

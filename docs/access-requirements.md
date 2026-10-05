@@ -1,15 +1,16 @@
 # Access requirements
 
-A command or a query can often say beforehand what it takes to send it: a key held on the thing it is
-about, a key for the whole tenant, nothing at all. `DDDToolkit.Access` has the types for saying that on the
-request and for holding the caller to it before the handler runs. They are part of the core package, free
-of any dispatcher and of any [supporting domain](writing-a-supporting-domain.md):
+A command or a query says beforehand what it takes to send it: a signed-in user, a key held on the thing it
+is about, a key for the whole tenant, or only the application itself. `DDDToolkit.Access` has the types for
+saying that on the request and for holding the caller to it before the handler runs. They are part of the
+core package, free of any dispatcher and of any [supporting domain](writing-a-supporting-domain.md):
 
 | Type | What it is |
 |---|---|
 | `IRequireAccess` | What a request implements: one member, `RequiredAccess`. |
-| `AccessRequirement` | What a request answers it with: a record that says what is required. The cases come from whoever can decide them. |
+| `AccessRequirement` | What a request answers it with: a record that says what is required. The core spells the cases about who is calling; the others come from whoever can decide them. |
 | `IAccessCheck` | What decides the cases of one owner: a package ships one, a module writes one for its own. |
+| `CallerAccessCheck` | The core's check of who is calling, first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
 | `Checked<T>` | What a check read on the way, kept for the request's handler. |
 
@@ -32,9 +33,14 @@ public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest
     AccessRequirement IRequireAccess.RequiredAccess => new BillingAccess.OnInvoice("billing.close", Invoice);
 }
 
+public sealed record MyInvoices : IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
+}
+
 public sealed record ListPlans : IBillingRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("The price list is for everybody.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 ```
 
@@ -42,11 +48,110 @@ public sealed record ListPlans : IBillingRequest
   without becoming one of them: it is not serialized with the request and not part of its shape.
 - **A requirement says what is asked, never who may.** It carries a key and the ids the request names. The
   check reads the rest where it is kept. What a requirement cannot say, a second key or a rule about what is
-  given to whom, stays in the handler, in plain sight.
-- **A request that requires nothing says so, with its reason:** `AccessRequirement.Open`. It is the one case
-  the core declares, because it is the one nobody has to decide.
+  given to whom, stays in the handler, in plain sight, or in the use case of the package the handler calls.
+- **There is no requirement that says nothing.** A request that declares none is stopped, so a requirement
+  somebody forgot never opens a door. A request anyone may send says so: `AccessRequirement.AllowAnonymous()`,
+  named as ASP.NET Core's `[AllowAnonymous]` is, so it reads as meant in a review where `None` would read as
+  forgotten.
 - **A requirement is a record,** so two that say the same are equal, and a test can hold every request to
   the one it is meant to declare.
+
+## The vocabulary
+
+Every request says what it requires with one of a few requirements, each named for what it requires and
+spelled on whoever decides it:
+
+| A request requires | It answers `RequiredAccess` with | Let through | Anyone else is refused with |
+|---|---|---|---|
+| anyone, a caller who did not sign in too | `AccessRequirement.AllowAnonymous()` | everyone: nobody is asked | |
+| a signed-in user, who need not hold anything yet | `AccessRequirement.SignedIn()` | a user who signed in, an anonymous sign-in of the identity provider too | `access.not-signed-in` |
+| a caller who works in the tenant | `TenancyAccess.InTenant()`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | a seat in the tenant the request was sent for, and system work there | the caller's own reason, such as `tenancy.not-seated` |
+| a key for the whole tenant | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
+| a key at a unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
+| a key on a resource | `MemberAccess.On(key, resource)`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| one of the application's operators | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
+| only the application itself | `AccessRequirement.RequiresSystemWork()` | system work trusted code began: `Caller.System`, or `Caller.SystemIn(scope)` | `access.system-only`, for every user whatever they hold, and for work nobody began a caller for |
+| something only your module knows | a record of your own | what your check lets through | your module's code |
+
+The three of `AccessRequirement` are about who is calling and nothing else, so the core decides them, and a
+host without any supporting domain has them. Who is calling is what the host's `ICallerAccessor` answers; in a
+host that [requires explicit callers](row-level-security.md#fail-closed-callers), work nobody began a caller
+for fails with `NoCallerException` before it is let through or refused.
+
+- **`SignedIn()`** asks whether the caller's token names a user. An anonymous sign-in, such as Supabase Auth
+  makes for a visitor without an account, names one too, marked with the `is_anonymous` claim. A handler that
+  should take only an account with a verified identity refuses that claim itself, as the registration that
+  [provisions a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) does, and as Tenancy's acceptance of
+  an invitation does.
+- **`RequiresSystemWork()`** takes only system work that trusted code began, with
+  `Callers.Begin(Caller.System)`, `Callers.Begin(Caller.SystemIn(scope))` or a supporting domain's own way,
+  such as Tenancy's `TenancyWork`. A host that does not require explicit callers answers the application
+  itself for work nobody began a caller for, and with no accessor that knows requests a web request gets the
+  same answer; the door does not take that default for system work. A query of a resource with members
+declares what filters it, `MemberAccess.SeenWith(key)`
+([Inside your own statements](membership.md#inside-your-own-statements)).
+
+Each is a method on the class of whoever decides it, so the requirements read alike side by side:
+`AccessRequirement.SignedIn()`, `TenancyAccess.InTenant()`, `MemberAccess.On(key, resource)`. A method rather
+than a constructor, so a case closed over your own id takes it from the argument: `TenancyAccess.AtUnit(key,
+unit)` is closed over your unit id without your writing it. And `AllowAnonymous()`, `SignedIn()` and
+`RequiresSystemWork()` say who is let through rather than what is checked, as the name a reviewer looks for.
+
+## Who may send it, and what it runs with
+
+Three things stand between a caller and a row, and each asks what it alone can answer.
+
+```mermaid
+flowchart LR
+    Caller["a caller"] --> Door["the request's<br/>requirement"]
+    Door -- "not met" --> Refused["refused,<br/>with a code"]
+    Door -- "met" --> Handler["the handler, and the<br/>use case it calls"]
+    Handler -- "a rule only it can read" --> Refused
+    Handler -- "as the caller, or as<br/>system work it begins" --> Database[("row level<br/>security")]
+    Database -- "a row the policies refuse" --> Refused
+```
+
+- **The request's requirement** says who may send the request, and the module's checks hold the caller to it
+  before the handler runs. It is one line on the request, where a review reads it.
+- **The handler**, and the use case of a package it hands the request to, asks what only it can read: who
+  may give a role that manages access, where a unit hangs now, whether a project is still open. A package
+  keeps such rules inside its use cases; a request never spells them.
+- **Row level security** holds every row the work reads or writes to the caller it runs as, whatever the code
+  above it did ([Row level security](row-level-security.md)).
+
+**Who may send a request is not what its handler runs with.** The requirement decides who gets as far as the
+handler. The work then runs as the caller, unless the handler begins system work itself, in trusted code, for
+what no caller of the request could do: a registration form is `AllowAnonymous()`, and the handler that
+provisions a tenant for it begins the system work that provisions it. With `SignedIn()`, for a signed-in user
+who registers an organization, or `RequiresSystemWork()`, for a job only the application runs, the handler
+begins the same system work. What changes with the requirement is who gets that far, and where the handler
+finds what system work cannot tell it, such as who becomes the first administrator: the caller's own token
+for `SignedIn()`, an account the handler makes for the address on the form for `AllowAnonymous()`, and the
+request itself for a job. The caller gets nothing more by it, since the handler alone says what that system
+work does. [Provisioning a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) shows it with Tenancy.
+
+<details>
+<summary>Show the code: a form anyone may send, whose handler begins system work</summary>
+
+```csharp
+public sealed record RequestQuote(string Email, string Product) : IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();  // who may send it
+}
+
+public sealed class RequestQuoteHandler(IQuoteStore quotes) : IHandler<RequestQuote>
+{
+    public async Task HandleAsync(RequestQuote command, CancellationToken cancellationToken)
+    {
+        using (Callers.Begin(Caller.SystemIn("billing")))                                  // what it runs with
+        {
+            await quotes.AddAsync(command.Email, command.Product, cancellationToken);    // the one thing it does so
+        }
+    }
+}
+```
+
+</details>
 
 ## What answers it
 
@@ -55,7 +160,8 @@ with the `IAccessCheck` that does:
 
 | The case is about | Its requirement | Its check is added with |
 |---|---|---|
-| a tenant: a seat in it, a key for the whole of it or at a unit, operators | `TenancyRequirement`, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
+| who is calling: anyone, a signed-in user, the application itself | `AccessRequirement.AllowAnonymous()`, `SignedIn()` and `RequiresSystemWork()`, of the core | nothing: every module's set asks the core's `CallerAccessCheck` first, and nobody has to decide that anyone may send a request |
+| a tenant: a seat in it, a key for the whole of it or at a unit, operators | `TenancyAccess.InTenant()` and the rest of `TenancyRequirement`'s cases, of [Tenancy](tenancy.md#what-a-request-requires-of-its-caller) | `services.AddTenancyAccess<...>()`, for each module |
 | a resource with members: a key held on it | `MemberAccess.On(key, resource)`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | `services.AddDocumentMemberAccess<IFilingRequest>()`, generated for each resource |
 | something only your module knows | a record of your own | `services.AddAccessCheck<IBillingRequest, BillingAccessCheck>()` |
 
@@ -135,12 +241,15 @@ the way round the check. A request is found by reference, so declare it as a cla
 ```mermaid
 flowchart LR
     Request["CloseInvoice<br/>requires a key<br/>on an invoice"] --> Checks["the checks of<br/>IBillingRequest"]
+    Checks -- "who is calling" --> Core["the core's check"]
     Checks -- "a package's case" --> Package["the package's check"]
     Checks -- "the module's own case" --> Own["the module's check"]
     Checks -- "no check decides it" --> Stopped["stopped"]
-    Package -- "met" --> Handler["the handler"]
+    Core -- "met" --> Handler["the handler"]
+    Package -- "met" --> Handler
     Own -- "met" --> Handler
-    Package -- "not met" --> Refused["refused, with a code"]
+    Core -- "not met" --> Refused["refused, with a code"]
+    Package -- "not met" --> Refused
     Own -- "not met" --> Refused
 ```
 
@@ -152,7 +261,7 @@ flowchart LR
 var requirement = request.RequiredAccess
     ?? throw new InvalidOperationException("CloseInvoice declares no access requirement. ...");
 
-if (requirement is AccessRequirement.Open)
+if (requirement is AccessRequirement.Anyone)                    // AllowAnonymous()
 {
     return;                                                     // decided here, by asking nobody
 }
@@ -271,7 +380,7 @@ for `IStreamPipelineBehavior<,>` as well.
 
 ## Holding it with a test
 
-Two things no check can see are worth a test of your own, over the requests of every module:
+A few things no check can see are worth a test of your own, over the requests of every module:
 
 - **Every command and query declares.** A request that implements no interface derived from `IRequireAccess`
   passes unchecked, since nothing asks about it. List the request types of a module by reflection and hold
@@ -284,6 +393,9 @@ Two things no check can see are worth a test of your own, over the requests of e
   reaches nothing under any rules: it says what a query's own statement filters by, and that filter is the check.
   Declared on a command, it lets the handler run unchecked. Hold every request that declares it to being a
   query, as the Tenancy sample's `AccessDeclarationTests.Only_a_query_declares_what_it_shows` does.
+- **A request anyone may send is one somebody meant.** List the requests that declare
+  `AccessRequirement.AllowAnonymous()` and hold them to a list of your own, so a new one is a decision a
+  review sees. The Tenancy sample holds it to none: every route of it takes a token.
 
 Because a requirement is a record, the same test can pin which request declares which: a table of request
 types and the requirement each is meant to answer, compared with what they do answer.

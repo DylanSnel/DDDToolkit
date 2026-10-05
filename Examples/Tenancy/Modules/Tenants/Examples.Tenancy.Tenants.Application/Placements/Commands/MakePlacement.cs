@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
@@ -6,8 +7,8 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 /// Places a seat in a unit.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.seats.manage</c> at the unit, and refuses a seat
-/// that places itself.
+/// It requires <c>tenancy.seats.manage</c> at the unit, which the request names. The package's use case asks for
+/// that key again, and refuses a seat that places itself.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit, which must be active.</param>
@@ -15,7 +16,7 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 public sealed record MakePlacement(SeatId Seat, OrganizationUnitId Unit, bool Primary) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.SeatsManage, Unit);
 }
 
 /// <summary>Handles <see cref="MakePlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

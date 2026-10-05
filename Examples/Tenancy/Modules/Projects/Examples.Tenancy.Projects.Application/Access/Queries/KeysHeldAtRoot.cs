@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Projects.Application.Access.Queries;
 public sealed record KeysHeldAtRoot(IReadOnlyCollection<string> Keys) : IQuery<IReadOnlyList<string>>, IProjectsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.InTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 
     /// <summary>
     /// <paramref name="keys"/>, each once and without the retired ones, which are held nowhere; refused when the

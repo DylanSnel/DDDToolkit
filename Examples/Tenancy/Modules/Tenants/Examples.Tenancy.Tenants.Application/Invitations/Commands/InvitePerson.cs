@@ -1,4 +1,5 @@
 using DDDToolkit.Identity;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using Mediator;
 
@@ -9,9 +10,9 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// whoever accepts with the token this answers. No seat is made here; accepting makes it.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.seats.manage</c> for the whole tenant and
-/// <c>tenancy.grants.manage</c> at the unit, and holds the role to the rule every grant is held to, so nobody
-/// offers by invitation what they could not give by hand.
+/// It requires <c>tenancy.seats.manage</c> for the whole tenant, the first thing the package's use case asks. The
+/// use case asks for that key again, then for <c>tenancy.grants.manage</c> at the unit, and holds the role to the
+/// rule every grant is held to, so nobody offers by invitation what they could not give by hand.
 /// <para>
 /// The token is answered this once, and the application keeps only its digest: it writes the token to no log, no
 /// event and no refusal of its own. Whoever invites can hand it to the person, as the link the UI shows. That is
@@ -27,7 +28,7 @@ public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleI
     : ICommand<SampleTenancy.IssuedInvitation<InvitationId>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
 }
 
 /// <summary>

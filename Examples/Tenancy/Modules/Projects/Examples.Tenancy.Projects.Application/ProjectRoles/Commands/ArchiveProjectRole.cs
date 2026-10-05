@@ -16,7 +16,7 @@ public sealed record ArchiveProjectRole(ProjectRoleId Id) : ICommand, IProjectsR
     public const string RequiredKey = ProjectRoleListing.KeysKey;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(RequiredKey);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Handles <see cref="ArchiveProjectRole"/>: loads the role, archives it and saves.</summary>

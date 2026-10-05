@@ -21,7 +21,7 @@ public sealed record AccessHistory(PagingArguments Paging) : IQuery<Page<AccessH
     public const string RequiredKey = TenancyKeys.HistoryView;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.ForTheWholeTenant(RequiredKey);
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(RequiredKey);
 }
 
 /// <summary>Answers <see cref="AccessHistory"/> for the tenant the caller works in, on a context of the read's own.</summary>

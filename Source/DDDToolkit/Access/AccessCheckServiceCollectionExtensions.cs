@@ -15,9 +15,16 @@ public static class AccessCheckServiceCollectionExtensions
     /// </code>
     /// <see cref="AddAccessCheck{TRequests, TCheck}"/> calls it, so a module that adds a check has no need to.
     /// It is for whoever asks the set in front of the handlers: the pipeline behavior the generator writes for
-    /// an interface marked <c>[AccessRequests]</c> registers the set with itself, so a module whose requests
-    /// are all <see cref="AccessRequirement.Open"/> has a set that holds nothing, and a request that
-    /// declares anything else is still stopped there.
+    /// an interface marked <c>[AccessRequests]</c> registers the set with itself.
+    /// <para>
+    /// The set asks the core's <see cref="CallerAccessCheck"/> first, so the requirements that are about who is
+    /// calling and nothing else work in every module, with no check added:
+    /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/> and
+    /// <see cref="AccessRequirement.RequiresSystemWork"/>. Who is calling is what the host's
+    /// <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/> made current
+    /// (<see cref="AmbientCallerAccessor"/>); system work counts only where trusted code began it. Anything else
+    /// a request declares is stopped unless a check the module added decides it.
+    /// </para>
     /// <para>
     /// Everything is registered per scope: the set, and <see cref="Checked{T}"/> for what a check keeps for a
     /// handler. Calling it more than once is harmless.
@@ -30,10 +37,13 @@ public static class AccessCheckServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Made from the registrations kept for this interface alone. The set's own constructor takes every
-        // check there is, so the container is never left to call it.
+        // Made from the registrations kept for this interface alone, behind the core's check of who is calling. The
+        // set's own constructor takes every check there is, so the container is never left to call it. No accessor
+        // is registered here: one the host adds later, with TryAdd too, is the one asked.
         services.TryAddScoped(static provider => new AccessChecks<TRequests>(
-            provider.GetServices<RegisteredAccessCheck<TRequests>>().Select(static registered => registered.Check)));
+            provider.GetServices<RegisteredAccessCheck<TRequests>>()
+                .Select(static registered => registered.Check)
+                .Prepend(new CallerAccessCheck(provider.GetService<ICallerAccessor>() ?? new AmbientCallerAccessor(provider.GetService<CallerOptions>())))));
         services.TryAddScoped(typeof(Checked<>));
 
         return services;

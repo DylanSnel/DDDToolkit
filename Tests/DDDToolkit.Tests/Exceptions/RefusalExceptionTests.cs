@@ -13,7 +13,7 @@ public class RefusalExceptionTests
     [Fact]
     public void The_toolkits_own_refusals_have_a_code_a_kind_and_a_text()
     {
-        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed);
+        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly);
         ToolkitRefusals.Refused.Should().Be("access.refused");
         ToolkitRefusals.KindOf(ToolkitRefusals.Refused).Should().Be(RefusalKind.NotPermitted, "the caller may not do this, and a retry gives the same answer");
         ToolkitRefusals.TemplateOf(ToolkitRefusals.Refused).Should().Be("The database refused this change.");
@@ -29,6 +29,20 @@ public class RefusalExceptionTests
 
         FluentActions.Invoking(() => ToolkitRefusals.Of("access.unheard-of")).Should().Throw<ArgumentException>().WithMessage("*not one of the toolkit's refusal codes*");
         FluentActions.Invoking(() => ToolkitRefusals.KindOf(null!)).Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void A_caller_who_is_not_who_a_request_requires_is_refused_with_one_of_two_codes()
+    {
+        ToolkitRefusals.NotSignedIn.Should().Be("access.not-signed-in");
+        ToolkitRefusals.KindOf(ToolkitRefusals.NotSignedIn).Should().Be(RefusalKind.NotPermitted, "the same caller gets the same answer until it signs in");
+        ToolkitRefusals.TemplateOf(ToolkitRefusals.NotSignedIn).Should().Be("Only a signed-in user can do this.");
+
+        ToolkitRefusals.SystemOnly.Should().Be("access.system-only");
+        ToolkitRefusals.KindOf(ToolkitRefusals.SystemOnly).Should().Be(RefusalKind.NotPermitted, "no key or role gives it");
+        ToolkitRefusals.TemplateOf(ToolkitRefusals.SystemOnly).Should().Be("Only the application itself can do this.");
+
+        ToolkitRefusals.Of(ToolkitRefusals.SystemOnly).Arguments.Should().BeEmpty("it says nothing of the caller, whatever they hold");
     }
 
     [Fact]

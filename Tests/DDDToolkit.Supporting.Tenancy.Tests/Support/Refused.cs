@@ -22,7 +22,9 @@ public static class Refused
     private static RefusalException Checked(RefusalException refusal, string code)
     {
         refusal.Code.Should().Be(code, refusal.Message);
-        refusal.Kind.Should().Be(TenancyRefusals.KindOf(code), "the kind of a code comes from the one table");
+        // A code of the toolkit's own, such as access.system-only, which Tenancy refuses with too, is in the toolkit's table.
+        var kind = ToolkitRefusals.Codes.Contains(code) ? ToolkitRefusals.KindOf(code) : TenancyRefusals.KindOf(code);
+        refusal.Kind.Should().Be(kind, "the kind of a code comes from the one table");
         return refusal;
     }
 }

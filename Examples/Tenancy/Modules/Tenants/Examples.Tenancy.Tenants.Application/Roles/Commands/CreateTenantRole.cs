@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
@@ -6,8 +7,8 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 /// Makes a role by hand, from no pack.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.roles.manage</c> for the whole tenant, and that the
-/// catalogue knows every key.
+/// It requires <c>tenancy.roles.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// that the catalogue knows every key.
 /// </remarks>
 /// <param name="Name">Its name, unique in the tenant.</param>
 /// <param name="Description">What it is for.</param>
@@ -15,7 +16,7 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 public sealed record CreateTenantRole(string Name, string Description, IReadOnlyList<string> Keys) : ICommand<RoleId>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage);
 }
 
 /// <summary>Handles <see cref="CreateTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

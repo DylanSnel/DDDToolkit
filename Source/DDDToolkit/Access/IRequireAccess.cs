@@ -27,8 +27,8 @@ namespace DDDToolkit.Access;
 public interface IRequireAccess
 {
     /// <summary>
-    /// What the request requires of its caller. Never null: a request that requires nothing says so with
-    /// <see cref="AccessRequirement.Open"/> and its reason.
+    /// What the request requires of its caller. Never null: a request that anyone may send says so with
+    /// <see cref="AccessRequirement.AllowAnonymous"/>, and one that declares nothing is stopped.
     /// </summary>
     AccessRequirement RequiredAccess { get; }
 }

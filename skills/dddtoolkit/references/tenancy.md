@@ -193,7 +193,12 @@ set-shaped: once per statement, never per row. See `tenancy.md`, "On Postgres: t
   module's checks before the handler runs. A module writes a check (`IAccessCheck`) only for cases of its
   own; `AddTenancyAccess` adds the package's check for Tenancy's cases, and
   `AddProjectMemberAccess<IProjectsRequest>()`, generated for the Membership package's member class, the
-  check for a key held on a project. A test fails for a request that declares nothing.
+  check for a key held on a project. Every request picks one requirement that says what it requires: the
+  toolkit's `AccessRequirement.AllowAnonymous()`, `SignedIn()` or `RequiresSystemWork()`, Tenancy's
+  `TenancyAccess.InTenant()`, `ForTheWholeTenant(key)`, `AtUnit(key, unit)` or `RequiresOperator()`, or
+  Membership's `MemberAccess.On(key, resource)`. None leaves the decision to a package: a request handed to
+  Tenancy's use case says what that use case asks first, and the use case keeps the rest. A test fails for a
+  request that declares nothing.
 
   ```csharp
   public sealed record CloseProject(ProjectId Id, long? ExpectedVersion = null) : ICommand, IProjectsRequest

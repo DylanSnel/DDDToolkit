@@ -7,13 +7,13 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// it holds now with where that key reaches.
 /// </summary>
 /// <remarks>
-/// The package decides who may ask: only a seat has a self, so its directory refuses everyone else with
-/// <c>tenancy.not-seated</c>, system work included.
+/// It requires a caller who works in the tenant. Only a seat has a self, so the package's directory refuses
+/// everyone else with <c>tenancy.not-seated</c>, system work included.
 /// </remarks>
 public sealed record OverviewOfMine : IQuery<SampleTenancy.SeatOverview>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="OverviewOfMine"/> from the Tenancy package's directory.</summary>

@@ -5,7 +5,7 @@ namespace Examples.Tenancy.Tenants.Application.Access;
 /// for a query that answers more to a caller who holds a key than to one who does not, and refuses neither.
 /// </summary>
 /// <remarks>
-/// A request that requires such a key declares <see cref="TenancyRequirement.ForTheWholeTenant"/>, and the
+/// A request that requires such a key declares <see cref="TenancyAccess.ForTheWholeTenant"/>, and the
 /// package's check refuses the caller before the handler runs. This asks the same question of the same rows for
 /// the part of an answer that depends on it, such as a role's keys in a list every seat of the tenant may read.
 /// </remarks>

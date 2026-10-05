@@ -158,6 +158,8 @@ public class FailureLocalizerTests
         using (new Culture("nl-NL"))
         {
             FailureLocalizer.Default.Localize(notAllowed).Should().Be("De rol van deze aanmelding geeft hier geen toegang: intern.", "the translation is filled from the refusal's arguments");
+            FailureLocalizer.Default.Localize(ToolkitRefusals.Of(ToolkitRefusals.NotSignedIn)).Should().Be("Dit kan alleen een aangemelde gebruiker.");
+            FailureLocalizer.Default.Localize(ToolkitRefusals.Of(ToolkitRefusals.SystemOnly)).Should().Be("Dit kan alleen de applicatie zelf.");
         }
 
         // Every code the toolkit refuses with has both texts, and the neutral one is the one it throws.

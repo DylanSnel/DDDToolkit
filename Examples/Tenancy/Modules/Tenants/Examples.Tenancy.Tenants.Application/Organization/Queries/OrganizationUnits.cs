@@ -6,11 +6,13 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Queries;
 /// The units the caller reads, each by its path from the root: for a seat, the units it is placed in and every
 /// unit below them; for system work in the tenant, every unit.
 /// </summary>
-/// <remarks>The package decides who may ask, and which units a seat reads: its directory answers.</remarks>
+/// <remarks>
+/// It requires a caller who works in the tenant. Which units a seat reads is the package's to say: its directory answers.
+/// </remarks>
 public sealed record OrganizationUnits : IQuery<IReadOnlyList<SampleTenancy.UnitSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="OrganizationUnits"/> from the Tenancy package's directory.</summary>

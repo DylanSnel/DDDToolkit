@@ -49,7 +49,7 @@ public sealed class AccessBehaviorTests
     }
 
     [Fact]
-    public async Task An_open_request_passes_without_a_check_and_one_nothing_decides_does_not_pass()
+    public async Task A_request_anyone_may_send_passes_without_a_check_and_one_nothing_decides_does_not_pass()
     {
         using var host = new TestHost();
         using var scope = host.CreateScope();

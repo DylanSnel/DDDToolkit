@@ -39,9 +39,6 @@
   <data name="tenancy.other-tenant" xml:space="preserve">
     <value>Die rij hoort bij een andere tenant dan die van dit verzoek.</value>
   </data>
-  <data name="tenancy.system-only" xml:space="preserve">
-    <value>Een tenant inrichten, schorsen, heractiveren of sluiten is systeemwerk.</value>
-  </data>
   <data name="tenancy.start-system-only" xml:space="preserve">
     <value>Een toekenning gaat nu in; alleen systeemwerk kiest een ander begin.</value>
   </data>

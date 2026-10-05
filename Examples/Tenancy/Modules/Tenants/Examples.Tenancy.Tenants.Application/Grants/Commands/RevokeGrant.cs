@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
@@ -6,9 +7,9 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 /// Takes a role away from a seat at a unit.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.grants.manage</c> at the unit, and for a role that
-/// manages access, that the caller holds its keys that do, there and until the grant's end; and it keeps the tenant
-/// an administrator.
+/// It requires <c>tenancy.grants.manage</c> at the unit, which the request names. The package's use case asks for
+/// that key again, and then for what only it can read: for a role that manages access, that the caller holds its
+/// keys that do, there and until the grant's end; and it keeps the tenant an administrator.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit the role is held at.</param>
@@ -16,7 +17,7 @@ namespace Examples.Tenancy.Tenants.Application.Grants.Commands;
 public sealed record RevokeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
 }
 
 /// <summary>Handles <see cref="RevokeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

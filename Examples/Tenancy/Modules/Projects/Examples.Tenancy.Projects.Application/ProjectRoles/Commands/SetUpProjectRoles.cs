@@ -1,6 +1,6 @@
 using DDDToolkit.Access;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Membership.UseCases;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 
 namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
@@ -26,15 +26,15 @@ namespace Examples.Tenancy.Projects.Application.ProjectRoles.Commands;
 public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId>? Ids = null) : ICommand, IProjectsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.SystemWorkInTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.RequiresSystemWork();
 }
 
 /// <summary>Handles <see cref="SetUpProjectRoles"/>: reads the tenant's roles, makes the starter roles it lacks and saves.</summary>
 /// <remarks>
 /// Nothing of a package's stands between this command and the role, and nothing else asks who may send it, so the
-/// handler asks again what its request declared, of the very checks the pipeline asks. It then decides the same
-/// wherever it runs, in a program that left the module's access behavior out of the pipeline as much as in the
-/// host, for the check's statement a second time on a command that is sent rarely.
+/// handler asks again what its request declared, of the very checks the pipeline asks, and then narrower: system
+/// work in the very tenant it sets up, which is where the roles are made. It then decides the same wherever it
+/// runs, in a program that left the module's access behavior out of the pipeline as much as in the host.
 /// </remarks>
 /// <param name="store">Where project roles are read, added and saved.</param>
 /// <param name="membership">The projects' rules and starter roles.</param>
@@ -43,12 +43,18 @@ public sealed record SetUpProjectRoles(IReadOnlyDictionary<string, ProjectRoleId
 public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembership membership, SampleAnswers answers, AccessChecks<IProjectsRequest> checks) : ICommandHandler<SetUpProjectRoles>
 {
     /// <inheritdoc />
-    /// <exception cref="Exceptions.RefusalException"><c>tenancy.system-only</c>: anybody but system work in the tenant.</exception>
+    /// <exception cref="RefusalException"><c>access.system-only</c>: anybody but system work in the tenant.</exception>
     public async ValueTask<Unit> Handle(SetUpProjectRoles command, CancellationToken cancellationToken)
     {
         await checks.RequireAsync(command, cancellationToken);
 
-        var tenant = answers.RequireTenant().Tenant;
+        var scope = answers.RequireTenant();
+        if (!scope.BySystem)
+        {
+            throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly);
+        }
+
+        var tenant = scope.Tenant;
         var missing = StarterRoles.Missing(membership.Rules, await store.RolesOfTheTenantAsync(cancellationToken));
         if (missing.Count == 0)
         {

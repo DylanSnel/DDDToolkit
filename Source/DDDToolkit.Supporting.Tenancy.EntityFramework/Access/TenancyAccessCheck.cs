@@ -54,19 +54,8 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
         switch (requirement)
         {
-            case TenancyRequirement.DecidedByThePackage:
-                break;
-
             case TenancyRequirement.InTenant:
                 answers.RequireTenant();
-                break;
-
-            case TenancyRequirement.SystemWorkInTenant:
-                if (!answers.RequireTenant().BySystem)
-                {
-                    throw TenancyRefusals.Of(TenancyRefusals.SystemOnly);
-                }
-
                 break;
 
             case TenancyRequirement.ForTheWholeTenant required:
@@ -89,7 +78,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
 
                 break;
 
-            case TenancyRequirement.OperatorsOnly:
+            case TenancyRequirement.Operator:
                 // The token's own role, never the Tenancy caller: an operator is nobody in every tenant.
                 if (!options.IsOperator(callers.Current))
                 {

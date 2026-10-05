@@ -8,14 +8,14 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Queries;
 /// keys.
 /// </summary>
 /// <remarks>
-/// The package decides who may ask: its directory answers anyone who works in the tenant. Which keys a role
-/// brings is this application's to keep to those who decide it (<see cref="RoleListing.KeysKey"/>), and the
-/// handler holds that itself, so the route and the GraphQL field answer alike.
+/// It requires a caller who works in the tenant, whom the package's directory answers. Which keys a role brings is
+/// this application's to keep to those who decide it (<see cref="RoleListing.KeysKey"/>), and the handler holds
+/// that itself, so the route and the GraphQL field answer alike.
 /// </remarks>
 public sealed record TenantRoles : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

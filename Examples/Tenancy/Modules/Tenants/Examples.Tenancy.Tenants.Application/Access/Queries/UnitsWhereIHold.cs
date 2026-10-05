@@ -20,7 +20,7 @@ namespace Examples.Tenancy.Tenants.Application.Access.Queries;
 public sealed record UnitsWhereIHold(string Key) : IQuery<HeldUnits>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.InTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Where a caller holds a key: the units, and whether it holds the key tenant-wide.</summary>

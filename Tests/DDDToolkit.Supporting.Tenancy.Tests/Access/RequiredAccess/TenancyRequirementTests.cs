@@ -6,8 +6,9 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// What a request declares where Tenancy is the one that knows: a closed set of cases, each a requirement of the
-/// toolkit's, equal when they say the same, so a test of an application can hold every request to the case it is
-/// meant to declare. What each case lets through is the storage package's check to prove.
+/// toolkit's, spelled with <see cref="TenancyAccess"/> and equal when they say the same, so a test of an
+/// application can hold every request to the case it is meant to declare. What each case lets through is the
+/// storage package's check to prove.
 /// </summary>
 public class TenancyRequirementTests
 {
@@ -16,24 +17,35 @@ public class TenancyRequirementTests
     [Fact]
     public void Two_requirements_that_say_the_same_are_equal()
     {
-        new TenancyRequirement.DecidedByThePackage().Should().Be(new TenancyRequirement.DecidedByThePackage());
-        new TenancyRequirement.InTenant().Should().Be(new TenancyRequirement.InTenant());
-        new TenancyRequirement.SystemWorkInTenant().Should().Be(new TenancyRequirement.SystemWorkInTenant());
-        new TenancyRequirement.OperatorsOnly().Should().Be(new TenancyRequirement.OperatorsOnly());
-        new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage).Should().Be(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage))
-            .And.NotBe(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage), "another key is another requirement");
+        TenancyAccess.InTenant().Should().Be(TenancyAccess.InTenant());
+        TenancyAccess.RequiresOperator().Should().Be(TenancyAccess.RequiresOperator());
+        TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage).Should().Be(TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage))
+            .And.NotBe(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage), "another key is another requirement");
 
-        AccessRequirement inTenant = new TenancyRequirement.InTenant();
-        inTenant.Should().NotBe(new TenancyRequirement.SystemWorkInTenant(), "two cases are never each other");
-        new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage).Key.Should().Be(TenancyKeys.RolesManage);
+        AccessRequirement inTenant = TenancyAccess.InTenant();
+        inTenant.Should().NotBe(TenancyAccess.RequiresOperator(), "two cases are never each other")
+            .And.NotBe(AccessRequirement.SignedIn(), "nor one of the core's");
+        TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage).Key.Should().Be(TenancyKeys.RolesManage);
 
         var north = OrganizationUnitId.CreateSequential();
-        new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north).Should().Be(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north))
-            .And.NotBe(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, OrganizationUnitId.CreateSequential()), "another unit is another requirement")
-            .And.NotBe(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.SeatsManage, north), "and so is another key");
-        ((AccessRequirement)new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north)).Should().NotBe(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.UnitsManage));
-        var atNorth = new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north);
+        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().Be(TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north))
+            .And.NotBe(TenancyAccess.AtUnit(TenancyKeys.UnitsManage, OrganizationUnitId.CreateSequential()), "another unit is another requirement")
+            .And.NotBe(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, north), "and so is another key");
+        ((AccessRequirement)TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north)).Should().NotBe(TenancyAccess.ForTheWholeTenant(TenancyKeys.UnitsManage));
+        var atNorth = TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north);
         (atNorth.Key, atNorth.Unit).Should().Be((TenancyKeys.UnitsManage, north));
+    }
+
+    [Fact]
+    public void Each_method_answers_its_case_closed_over_the_unit_id_it_is_given()
+    {
+        var north = OrganizationUnitId.CreateSequential();
+
+        TenancyAccess.InTenant().Should().BeOfType<TenancyRequirement.InTenant>();
+        TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage).Should().BeOfType<TenancyRequirement.ForTheWholeTenant>();
+        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>()
+            .And.Be(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north), "the unit's type is taken from the argument");
+        TenancyAccess.RequiresOperator().Should().BeOfType<TenancyRequirement.Operator>();
     }
 
     [Theory]
@@ -41,27 +53,27 @@ public class TenancyRequirementTests
     [InlineData("")]
     [InlineData("  ")]
     public void A_key_for_the_whole_tenant_is_never_blank(string? key)
-        => FluentActions.Invoking(() => new TenancyRequirement.ForTheWholeTenant(key!)).Should().Throw<ArgumentException>();
+        => FluentActions.Invoking(() => TenancyAccess.ForTheWholeTenant(key!)).Should().Throw<ArgumentException>();
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
     public void A_key_at_a_unit_is_never_blank(string? key)
-        => FluentActions.Invoking(() => new TenancyRequirement.AtUnit<OrganizationUnitId>(key!, OrganizationUnitId.CreateSequential())).Should().Throw<ArgumentException>();
+        => FluentActions.Invoking(() => TenancyAccess.AtUnit(key!, OrganizationUnitId.CreateSequential())).Should().Throw<ArgumentException>();
 
     [Fact]
-    public void The_cases_are_these_six_and_nobody_adds_one()
+    public void The_cases_are_these_four_and_nobody_adds_one()
     {
+        // No case says that the package decides: every request says what it requires. Anyone, a signed-in user and
+        // system work are the core's, which a host without Tenancy has too.
         var cases = typeof(TenancyRequirement).GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
 
         cases.Select(each => each.Name).Should().BeEquivalentTo(
-            nameof(TenancyRequirement.DecidedByThePackage),
             nameof(TenancyRequirement.InTenant),
-            nameof(TenancyRequirement.SystemWorkInTenant),
             nameof(TenancyRequirement.ForTheWholeTenant),
             typeof(TenancyRequirement.AtUnit<>).Name,
-            nameof(TenancyRequirement.OperatorsOnly));
+            nameof(TenancyRequirement.Operator));
         cases.Should().OnlyContain(each => each.IsSealed && each.IsNestedPublic && each.BaseType == typeof(TenancyRequirement));
 
         typeof(TenancyRequirement).IsAbstract.Should().BeTrue();
@@ -73,7 +85,10 @@ public class TenancyRequirementTests
 
     [Fact]
     public void The_requirements_live_with_the_access_questions()
-        => typeof(TenancyRequirement).Namespace.Should().Be(typeof(ITenancyAnswers<,,,>).Namespace, "a module that asks Tenancy names both with one using");
+    {
+        typeof(TenancyRequirement).Namespace.Should().Be(typeof(ITenancyAnswers<,,,>).Namespace, "a module that asks Tenancy names both with one using");
+        typeof(TenancyAccess).Namespace.Should().Be(typeof(TenancyRequirement).Namespace, "and the methods a request spells them with as well");
+    }
 
     [Fact]
     public void Who_is_an_operator_is_said_in_one_place()

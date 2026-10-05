@@ -111,7 +111,7 @@ public static class SampleLayout
     /// its vocabulary, <c>I{Module}Request</c>, which the module writes, and <c>{Module}AccessBehavior&lt;,&gt;</c>,
     /// which the toolkit's generator writes beside the interface and names after it. So a module that gains
     /// its first command or query is held to the rules for requests without being added anywhere, and
-    /// <c>Every_command_and_query_declares_its_access_or_is_marked_open</c> fails for a request of a module that
+    /// <c>Every_command_and_query_declares_its_access</c> fails for a request of a module that
     /// has no such vocabulary.
     /// </remarks>
     public static IReadOnlyDictionary<string, (Type Request, Type Behavior)> OnTheMediator { get; } = Modules

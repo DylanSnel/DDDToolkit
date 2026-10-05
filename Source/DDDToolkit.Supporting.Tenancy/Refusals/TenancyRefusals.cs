@@ -78,13 +78,13 @@ public static class TenancyRefusals
     /// <summary>A change would write a row of another tenant.</summary>
     public const string OtherTenant = "tenancy.other-tenant";
 
-    /// <summary>Only system work provisions, suspends, reactivates or closes a tenant.</summary>
-    public const string SystemOnly = "tenancy.system-only";
-
     /// <summary>Only system work chooses when a grant starts.</summary>
     public const string StartSystemOnly = "tenancy.start-system-only";
 
-    /// <summary>Only an operator of the application reads the tenants' directory.</summary>
+    /// <summary>
+    /// Only an operator of the application reads the tenants' directory, or sends a request that requires one
+    /// (<c>TenancyAccess.RequiresOperator()</c>).
+    /// </summary>
     public const string OperatorsOnly = "tenancy.operators-only";
 
     /// <summary>
@@ -303,7 +303,6 @@ public static class TenancyRefusals
             [SelfAssignment] = (RefusalKind.NotPermitted, "Someone else must place you."),
             [SelfAppointment] = (RefusalKind.NotPermitted, "Someone else must give you a role that manages access."),
             [OtherTenant] = (RefusalKind.NotPermitted, "That row belongs to a tenant you are not working in."),
-            [SystemOnly] = (RefusalKind.NotPermitted, "Provisioning, suspending, reactivating and closing a tenant is system work."),
             [StartSystemOnly] = (RefusalKind.NotPermitted, "A grant you make starts now; only system work picks another start."),
             [OperatorsOnly] = (RefusalKind.NotPermitted, "Only an operator can do this."),
             [AddressMismatch] = (RefusalKind.NotPermitted, "This invitation was sent to another address than this account's."),

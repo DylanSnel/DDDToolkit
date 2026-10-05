@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
@@ -6,14 +7,14 @@ namespace Examples.Tenancy.Tenants.Application.Roles.Commands;
 /// Archives a role: it stays where it was granted, and grants nothing from now on.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.roles.manage</c> for the whole tenant, and that only
-/// an administrator archives a role that manages access.
+/// It requires <c>tenancy.roles.manage</c> for the whole tenant. The package's use case asks for that key again, and
+/// that only an administrator archives a role that manages access.
 /// </remarks>
 /// <param name="Role">The role.</param>
 public sealed record ArchiveTenantRole(RoleId Role) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage);
 }
 
 /// <summary>Handles <see cref="ArchiveTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

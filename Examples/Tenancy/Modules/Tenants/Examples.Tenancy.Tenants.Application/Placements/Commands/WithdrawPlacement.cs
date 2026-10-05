@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
@@ -6,15 +7,15 @@ namespace Examples.Tenancy.Tenants.Application.Placements.Commands;
 /// Withdraws a seat from a unit, which takes away every role it holds there.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.seats.manage</c> at the unit, and for what taking
-/// each of those roles away would need.
+/// It requires <c>tenancy.seats.manage</c> at the unit, which the request names. The package's use case asks for
+/// that key again, and for what taking each of those roles away would need.
 /// </remarks>
 /// <param name="Seat">The seat.</param>
 /// <param name="Unit">The unit it is placed in.</param>
 public sealed record WithdrawPlacement(SeatId Seat, OrganizationUnitId Unit) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.SeatsManage, Unit);
 }
 
 /// <summary>Handles <see cref="WithdrawPlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

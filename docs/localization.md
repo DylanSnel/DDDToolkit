@@ -425,7 +425,7 @@ application's choice, and a text without either is right in both.
 
 ## The toolkit's own messages
 
-The toolkit writes four messages itself, and ships them in English and Dutch:
+The toolkit writes six messages itself, and ships them in English and Dutch:
 
 | Code | Where it comes from | Placeholders |
 | --- | --- | --- |
@@ -433,9 +433,11 @@ The toolkit writes four messages itself, and ships them in English and Dutch:
 | `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation` | `{PropertyName}`, `{ValueObject}` |
 | `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy denied, refused by `DDDToolkit.EntityFramework` | none |
 | `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`: a token whose role is on no list of the host's, refused by `DDDToolkit.EntityFramework.Postgres` before anything runs for it | `{Role}` |
+| `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`: a request that requires a signed-in user (`AccessRequirement.SignedIn()`), sent by anybody else | none |
+| `access.system-only` | `ToolkitRefusals.SystemOnly`: a request only the application itself sends (`AccessRequirement.RequiresSystemWork()`), sent by a user or by work nobody began a caller for, and Tenancy's use cases that only system work calls, called by a seat | none |
 
 They are asked last, so a key of the same name in your own resx overrides them, and adding another
-language is adding those four keys to it.
+language is adding those six keys to it.
 
 Override them in every language you support, not only in your neutral resx. `IStringLocalizer` falls
 back from `SharedFailures.nl.resx` to `SharedFailures.resx` before the toolkit is asked at all, so an

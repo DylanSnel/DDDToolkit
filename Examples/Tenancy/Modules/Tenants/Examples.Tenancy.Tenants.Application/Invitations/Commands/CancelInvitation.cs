@@ -9,15 +9,15 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// and the account the identity provider made for that address is deleted when nobody ever used it.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.seats.manage</c> at the invitation's unit,
-/// whoever issued it, and answers anyone else that there is no such invitation, as it is not among the ones
-/// they list.
+/// It requires a caller who works in the tenant. The key is for the package's use case to ask, since only it reads
+/// which unit the invitation is for: <c>tenancy.seats.manage</c> at that unit, whoever issued it. It answers anyone
+/// else that there is no such invitation, as it is not among the ones they list.
 /// </remarks>
 /// <param name="Invitation">The invitation.</param>
 public sealed record CancelInvitation(InvitationId Invitation) : ICommand, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

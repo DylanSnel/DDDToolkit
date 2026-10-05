@@ -35,6 +35,23 @@ public static class ToolkitRefusals
     public const string RoleNotAllowed = "access.role-not-allowed";
 
     /// <summary>
+    /// A request requires a signed-in user (<c>AccessRequirement.SignedIn()</c>), and the caller is not one: it
+    /// did not sign in, or it is the application's own work, which is nobody's sign-in. It is
+    /// <see cref="RefusalKind.NotPermitted"/>, and the same caller gets the same answer until it signs in. The
+    /// core's <c>CallerAccessCheck</c> makes it, before the handler runs. No arguments.
+    /// </summary>
+    public const string NotSignedIn = "access.not-signed-in";
+
+    /// <summary>
+    /// A request requires system work (<c>AccessRequirement.RequiresSystemWork()</c>), and the caller is not the
+    /// application itself: a signed-in user, whatever they hold, a caller who did not sign in, or work nobody began
+    /// a caller for. It is <see cref="RefusalKind.NotPermitted"/>, and no key or role gives it. The core's
+    /// <c>CallerAccessCheck</c> makes it, before the handler runs, and a supporting domain's use case that only
+    /// system work may call refuses a seat with it too, so "only the application itself" has one code. No arguments.
+    /// </summary>
+    public const string SystemOnly = "access.system-only";
+
+    /// <summary>
     /// The kind and English text of every code. The text is a template, as a translation of it is: a placeholder
     /// such as <c>{Name}</c> stands for the argument of that name.
     /// </summary>
@@ -43,6 +60,8 @@ public static class ToolkitRefusals
         {
             [Refused] = (RefusalKind.NotPermitted, "The database refused this change."),
             [RoleNotAllowed] = (RefusalKind.NotPermitted, "The role this sign-in carries gives no access here: {Role}."),
+            [NotSignedIn] = (RefusalKind.NotPermitted, "Only a signed-in user can do this."),
+            [SystemOnly] = (RefusalKind.NotPermitted, "Only the application itself can do this."),
         });
 
     /// <summary>Every code, in the order the table lists them.</summary>

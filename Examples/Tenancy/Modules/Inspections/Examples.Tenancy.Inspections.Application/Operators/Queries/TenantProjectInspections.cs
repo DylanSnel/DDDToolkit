@@ -18,7 +18,7 @@ namespace Examples.Tenancy.Inspections.Application.Operators.Queries;
 public sealed record TenantProjectInspections(TenantId Tenant, ProjectId Project) : IQuery<IReadOnlyList<InspectionOverview>>, IInspectionsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.OperatorsOnly();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
 }
 
 /// <summary>Answers <see cref="TenantProjectInspections"/> in one statement, on a context of this query's own.</summary>

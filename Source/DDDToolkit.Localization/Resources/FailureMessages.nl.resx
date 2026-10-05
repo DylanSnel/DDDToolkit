@@ -18,6 +18,12 @@
   <data name="access.role-not-allowed" xml:space="preserve">
     <value>De rol van deze aanmelding geeft hier geen toegang: {Role}.</value>
   </data>
+  <data name="access.not-signed-in" xml:space="preserve">
+    <value>Dit kan alleen een aangemelde gebruiker.</value>
+  </data>
+  <data name="access.system-only" xml:space="preserve">
+    <value>Dit kan alleen de applicatie zelf.</value>
+  </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is niet geldig.</value>
   </data>

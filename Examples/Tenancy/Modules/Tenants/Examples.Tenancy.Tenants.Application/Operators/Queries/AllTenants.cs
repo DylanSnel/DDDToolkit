@@ -19,7 +19,7 @@ public sealed record AllTenants(string? After = null, int Size = AllTenants.Defa
     public const int DefaultPage = 50;
 
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.OperatorsOnly();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
 }
 
 /// <summary>Answers <see cref="AllTenants"/> from the Tenancy package's directory of tenants.</summary>

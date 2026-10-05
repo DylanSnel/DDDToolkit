@@ -9,16 +9,16 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// What a screen asks once another module answered it role ids.
 /// </summary>
 /// <remarks>
-/// The package decides who may ask: its directory answers anyone who works in the tenant, about any role of that
-/// tenant. An id of another tenant, or of no role, is left out of the answer without a word; more ids than one
-/// question takes are refused. A role's keys are answered only to a caller who manages the tenant's roles
+/// It requires a caller who works in the tenant, and the package's directory answers such a caller about any role
+/// of that tenant. An id of another tenant, or of no role, is left out of the answer without a word; more ids than
+/// one question takes are refused. A role's keys are answered only to a caller who manages the tenant's roles
 /// (<see cref="RoleListing.KeysKey"/>), as in the list of them.
 /// </remarks>
 /// <param name="Ids">The roles asked about.</param>
 public sealed record RolesById(IReadOnlyList<RoleId> Ids) : IQuery<IReadOnlyList<RoleListing>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>

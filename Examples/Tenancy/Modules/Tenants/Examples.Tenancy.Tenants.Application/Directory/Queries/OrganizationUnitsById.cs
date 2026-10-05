@@ -7,17 +7,17 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// placed under. What a screen asks once another module answered it unit ids.
 /// </summary>
 /// <remarks>
-/// The package decides who may ask: its directory answers anyone who works in the tenant, about any unit of that
-/// tenant. That is wider than <see cref="OrganizationUnits"/>, which lists the units a seat is placed under: a
-/// crew member works on a project at a unit it is not placed under, and still reads what that unit is called. An
-/// id of another tenant, or of no unit, is left out of the answer without a word; more ids than one question
-/// takes are refused.
+/// It requires a caller who works in the tenant, and the package's directory answers such a caller about any unit
+/// of that tenant. That is wider than <see cref="OrganizationUnits"/>, which lists the units a seat is placed under:
+/// a crew member works on a project at a unit it is not placed under, and still reads what that unit is called. An
+/// id of another tenant, or of no unit, is left out of the answer without a word; more ids than one question takes
+/// are refused.
 /// </remarks>
 /// <param name="Ids">The units asked about.</param>
 public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<SampleTenancy.UnitSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's directory.</summary>

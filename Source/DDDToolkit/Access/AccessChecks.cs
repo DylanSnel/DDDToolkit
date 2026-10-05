@@ -16,8 +16,11 @@ namespace DDDToolkit.Access;
 /// a case added without its check lets nobody in, and says which check is missing.
 /// </para>
 /// <para>
-/// The checks are asked in the order they were registered, and the first that decides a requirement is the
-/// one that holds the caller to it. <see cref="AccessRequirement.Open"/> is decided here, by asking nobody.
+/// The checks are asked in the order they were given, and the first that decides a requirement is the one that
+/// holds the caller to it. <see cref="AccessRequirement.AllowAnonymous"/> is decided here, by asking nobody. The
+/// set dependency injection makes asks the core's <see cref="CallerAccessCheck"/> first, for
+/// <see cref="AccessRequirement.SignedIn"/> and <see cref="AccessRequirement.RequiresSystemWork"/>, and then the
+/// checks the module added.
 /// </para>
 /// <para>
 /// It keeps nothing between two requests and nothing during one, so requests sent side by side within one
@@ -31,8 +34,10 @@ public sealed class AccessChecks<TRequests>
     private readonly IAccessCheck[] _checks;
 
     /// <summary>
-    /// A set of the given checks, asked in this order. Dependency injection makes one per scope from the checks
-    /// registered for <typeparamref name="TRequests"/>; a test makes one by hand.
+    /// A set of the given checks, asked in this order. Dependency injection makes one per scope, of the core's
+    /// <see cref="CallerAccessCheck"/> and then the checks registered for <typeparamref name="TRequests"/>; a test
+    /// makes one by hand, and gives it the <see cref="CallerAccessCheck"/> where its requests require a signed-in
+    /// user or system work.
     /// </summary>
     /// <param name="checks">The checks of the module, in the order they are asked.</param>
     /// <exception cref="ArgumentNullException"><paramref name="checks"/> is null.</exception>
@@ -49,9 +54,9 @@ public sealed class AccessChecks<TRequests>
     }
 
     /// <summary>
-    /// Whether a request that declares <paramref name="requirement"/> can pass at all: it is
-    /// <see cref="AccessRequirement.Open"/>, or one of the module's checks decides it. Nothing is read and
-    /// nobody is refused, so a test asks it for every requirement the module's requests declare.
+    /// Whether a request that declares <paramref name="requirement"/> can pass at all: anyone may send it
+    /// (<see cref="AccessRequirement.AllowAnonymous"/>), or one of the set's checks decides it. Nothing is read
+    /// and nobody is refused, so a test asks it for every requirement the module's requests declare.
     /// </summary>
     /// <param name="requirement">What a request declares.</param>
     /// <exception cref="ArgumentNullException"><paramref name="requirement"/> is null.</exception>
@@ -59,7 +64,7 @@ public sealed class AccessChecks<TRequests>
     {
         ArgumentNullException.ThrowIfNull(requirement);
 
-        return requirement is AccessRequirement.Open || CheckFor(requirement) is not null;
+        return requirement is AccessRequirement.Anyone || CheckFor(requirement) is not null;
     }
 
     /// <summary>
@@ -82,9 +87,9 @@ public sealed class AccessChecks<TRequests>
         var requirement = request.RequiredAccess
             ?? throw new InvalidOperationException(
                 $"{NameOf(request.GetType())} declares no access requirement. A request that declares nothing lets nobody through: "
-                + "answer RequiredAccess with what it requires, or with AccessRequirement.Open and the reason it requires nothing.");
+                + "answer RequiredAccess with what it requires, or with AccessRequirement.AllowAnonymous() where anyone may send it.");
 
-        if (requirement is AccessRequirement.Open)
+        if (requirement is AccessRequirement.Anyone)
         {
             return ValueTask.CompletedTask;
         }

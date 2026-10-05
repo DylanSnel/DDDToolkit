@@ -1,3 +1,4 @@
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
@@ -6,8 +7,8 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 /// Adds a unit to the organization, below another.
 /// </summary>
 /// <remarks>
-/// The package decides who may: its use case asks for <c>tenancy.units.manage</c> at the parent, and that the kind is
-/// one of the application's.
+/// It requires <c>tenancy.units.manage</c> at the parent, which the request names. The package's use case asks for
+/// that key again, and that the kind is one of the application's.
 /// </remarks>
 /// <param name="Parent">The unit it hangs under.</param>
 /// <param name="Name">Its name.</param>
@@ -15,7 +16,7 @@ namespace Examples.Tenancy.Tenants.Application.Organization.Commands;
 public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name, string Kind) : ICommand<OrganizationUnitId>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.UnitsManage, Parent);
 }
 
 /// <summary>Handles <see cref="AddOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>

@@ -7,15 +7,15 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// What a screen asks once another module answered it seat ids.
 /// </summary>
 /// <remarks>
-/// The package decides who may ask: its directory answers anyone who works in the tenant, about any seat of that
-/// tenant. An id of another tenant, or of no seat, is left out of the answer without a word; more ids than one
-/// question takes are refused.
+/// It requires a caller who works in the tenant, and the package's directory answers such a caller about any seat
+/// of that tenant. An id of another tenant, or of no seat, is left out of the answer without a word; more ids than
+/// one question takes are refused.
 /// </remarks>
 /// <param name="Ids">The seats asked about.</param>
 public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList<SampleTenancy.SeatSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="SeatsById"/> from the Tenancy package's directory.</summary>

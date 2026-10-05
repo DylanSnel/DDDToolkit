@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
@@ -233,18 +234,30 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 Cancellation);
         }
 
-        // Its administrator holds every key that manages access, and may not: no key gives this.
+        // Its administrator holds every key that manages access, and may not: the request requires system work,
+        // and no key gives that.
         using (AsSeatOf(DemoPeople.Ada))
         {
             var refused = await RefusalOfAsync(host, new MarkTenantAsDemo());
-            refused.Code.Should().Be(TenancyRefusals.SystemOnly);
+            refused.Code.Should().Be(ToolkitRefusals.SystemOnly);
             refused.Kind.Should().Be(RefusalKind.NotPermitted);
         }
 
-        (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(TenancyRefusals.NotSeated, "nobody is refused as nobody");
+        using (Callers.Begin(Caller.Anonymous))
+        {
+            (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(ToolkitRefusals.SystemOnly, "a caller who did not sign in is no system work either");
+        }
 
-        // No use case of the package stands between this command and the tenant, so its handler asks the same
-        // again: handed the command directly, past the check, it still refuses a seat.
+        // Work nobody began a caller for fails in a host that requires explicit callers, before it is refused or
+        // let through: it is a mistake in the calling code, not a caller.
+        await using (var unasked = host.Services.CreateAsyncScope())
+        {
+            var send = async () => await unasked.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
+            await send.Should().ThrowAsync<NoCallerException>();
+        }
+
+        // No use case of the package stands between this command and the tenant, so its handler asks again, and
+        // narrower: handed the command directly, past the check, it still refuses a seat.
         using (AsSeatOf(DemoPeople.Ada))
         {
             await using var scope = host.Services.CreateAsyncScope();
@@ -253,7 +266,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>());
 
             var handle = async () => await handler.Handle(new MarkTenantAsDemo(), Cancellation);
-            (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.SystemOnly);
+            (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.SystemOnly);
         }
 
         (await IsDemoAsync(host)).Should().BeFalse("a refused command changes nothing");
@@ -265,6 +278,55 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         }
 
         (await IsDemoAsync(host)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_command_of_the_package_s_is_refused_at_the_door_as_its_use_case_refuses_it_past_the_door()
+    {
+        // A request handed to a use case of Tenancy's says the first thing that use case asks. Juno, a surveyor,
+        // holds none of the keys that manage the organization: each command is refused before its handler runs,
+        // and handed to its handler directly, past the door, the use case refuses her the same way, with the same
+        // key, and at the same unit. Nothing is changed either way.
+        await using var host = await sample.StartAsync();
+        var unit = Harbor.Root;
+        var seat = Harbor.Administrator.Id;
+        var role = Harbor.AdministratorsRole;
+        IMessage[] commands =
+        [
+            new AddOrganizationUnit(unit, "Annex", "region"),
+            new MakePlacement(seat, unit, Primary: false),
+            new WithdrawPlacement(seat, unit),
+            new MakeGrant(seat, unit, role, Until: null, Reason: null),
+            new RevokeGrant(seat, unit, role),
+            new SuspendTenantSeat(seat),
+            new ReactivateTenantSeat(seat),
+            new DeactivateTenantSeat(seat),
+            new CreateTenantRole("Storekeeper", "Keeps the stores", []),
+            new SetRoleKeys(role, []),
+            new ArchiveTenantRole(role),
+            new ChangeTenantShape(TenantShape.Hierarchical),
+            new InvitePerson("wren@example.test", unit, role, Until: null, DisplayName: null),
+        ];
+
+        using (AsSeatOf(DemoPeople.Juno))
+        {
+            foreach (var command in commands)
+            {
+                var name = command.GetType().Name;
+                var declared = ((IRequireAccess)command).RequiredAccess;
+                var atTheDoor = await RefusalAtTheDoorAsync(host, command);
+                var pastTheDoor = await RefusalPastTheDoorAsync(host, command);
+
+                atTheDoor.Code.Should().Be(TenancyRefusals.NotPermitted, "{0} requires a key juno does not hold", name);
+                pastTheDoor.Code.Should().Be(atTheDoor.Code, "the use case of {0} asks first what its request requires", name);
+                atTheDoor.Arguments["Key"].Should().Be(declared is TenancyRequirement.AtUnit<OrganizationUnitId> at ? at.Key : ((TenancyRequirement.ForTheWholeTenant)declared).Key, name)
+                    .And.Be(pastTheDoor.Arguments["Key"], "the door and the use case name the same key for {0}", name);
+                if (declared is TenancyRequirement.AtUnit<OrganizationUnitId> atUnit)
+                {
+                    atTheDoor.Arguments["Unit"].Should().Be(atUnit.Unit, name).And.Be(pastTheDoor.Arguments["Unit"], "and the same unit for {0}", name);
+                }
+            }
+        }
     }
 
     [Fact]
@@ -1005,12 +1067,12 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             }
 
             // Tenancy's check keeps nothing for its handlers, and needs to keep nothing. Every command of the
-            // package's goes to a use case of the package, which asks who is calling whoever calls it; the commands
-            // that are the modules' own, marking a tenant as a demonstration and those of the project roles, each
-            // ask again what they declared. So the seat is refused before the handler looks for the role, which is
-            // not there.
-            (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(TenancyRefusals.SystemOnly);
-            (await RefusalOfAsync(host, new SetUpProjectRoles())).Code.Should().Be(TenancyRefusals.SystemOnly);
+            // package's goes to a use case of the package, which asks again for what its request requires, whoever
+            // calls it; the commands that are the modules' own, marking a tenant as a demonstration and those of the
+            // project roles, each ask again what they declared. So the seat is refused before the handler looks for
+            // the role, which is not there.
+            (await RefusalOfAsync(host, new MarkTenantAsDemo())).Code.Should().Be(ToolkitRefusals.SystemOnly);
+            (await RefusalOfAsync(host, new SetUpProjectRoles())).Code.Should().Be(ToolkitRefusals.SystemOnly);
             (await RefusalOfAsync(host, new MakeProjectRole("Rigger", null, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new RenameProjectRole(role, "Rigger", null))).Code.Should().Be(TenancyRefusals.NotPermitted);
             (await RefusalOfAsync(host, new SetProjectRoleKeys(role, []))).Code.Should().Be(TenancyRefusals.NotPermitted);
@@ -1154,6 +1216,29 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         await using var scope = host.Services.CreateAsyncScope();
         var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
         return (await send.Should().ThrowAsync<RefusalException>()).Which;
+    }
+
+    /// <summary>The refusal <paramref name="request"/> is answered with when sent through the pipeline, from a scope of its own, as the current caller.</summary>
+    private static async Task<RefusalException> RefusalAtTheDoorAsync(SampleFactory host, IMessage request)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
+        return (await send.Should().ThrowAsync<RefusalException>(request.GetType().Name)).Which;
+    }
+
+    /// <summary>
+    /// The refusal <paramref name="request"/> is answered with when its handler is handed it directly, past the
+    /// pipeline and its access behavior, as the mediator would make the handler, from a scope of its own.
+    /// </summary>
+    private static async Task<RefusalException> RefusalPastTheDoorAsync(SampleFactory host, IMessage request)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        var handled = HostRegistrations.Requests.Single(each => each.Type == request.GetType());
+        var handler = ActivatorUtilities.CreateInstance(scope.ServiceProvider, handled.Handler);
+        var pending = handled.Handler.GetMethod("Handle", [request.GetType(), typeof(CancellationToken)])!.Invoke(handler, [request, Cancellation])!;
+        var handling = (Task)pending.GetType().GetMethod(nameof(ValueTask.AsTask))!.Invoke(pending, null)!;
+        var handle = async () => await handling;
+        return (await handle.Should().ThrowAsync<RefusalException>(request.GetType().Name)).Which;
     }
 
     /// <summary>Whether harbor is marked as a demonstration, read as system work there.</summary>

@@ -1,4 +1,5 @@
 using System.Reflection;
+using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,10 +8,11 @@ namespace DDDToolkit.Analyzers.Tests.Docs;
 
 /// <summary>
 /// The examples of docs/access-requirements.md, read from the page and compiled as they stand: a module's request
-/// interface, two requests, a requirement and a check of the module's own, its registration, a handler that acts
+/// interface, three requests, a requirement and a check of the module's own, its registration, a handler that acts
 /// on what was checked, and a dispatcher that asks the checks. And run, so what the page says they do is what
 /// they do: a caller that holds the key passes and its handler gets what was checked, one that does not is
-/// refused with the module's code, and an open request passes with nothing asked.
+/// refused with the module's code, a request anyone may send passes with nothing asked, and one that requires a
+/// signed-in user passes for one and refuses everyone else, with no check the module added.
 /// </summary>
 public class AccessRequirementsDocsExampleTests
 {
@@ -105,7 +107,7 @@ public class AccessRequirementsDocsExampleTests
     }
 
     [Fact]
-    public void A_caller_that_does_not_hold_the_key_is_refused_with_the_modules_code_and_an_open_request_passes()
+    public void A_caller_that_does_not_hold_the_key_is_refused_with_the_modules_code_and_a_request_anyone_may_send_passes()
     {
         var emitted = Run().Emit();
         using var provider = Services(emitted, holds: false);
@@ -118,6 +120,29 @@ public class AccessRequirementsDocsExampleTests
             .Should().Throw<RefusalException>().Which.Code.Should().Be("billing.not-permitted");
 
         Await(require.Invoke(checks, [emitted.New("Billing.ListPlans"), CancellationToken.None])!);
+    }
+
+    [Fact]
+    public void A_request_that_requires_a_signed_in_user_passes_for_one_and_refuses_anyone_else()
+    {
+        var emitted = Run().Emit();
+        using var provider = Services(emitted, holds: false);
+        using var scope = provider.CreateScope();
+        var checks = scope.ServiceProvider.GetRequiredService(typeof(AccessChecks<>).MakeGenericType(emitted.Type("Billing.IBillingRequest")));
+        var require = checks.GetType().GetMethod("RequireAsync")!;
+        var mine = emitted.New("Billing.MyInvoices");
+
+        // The module added a check of its own and none of the core's: who is calling is the core's in every module.
+        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        {
+            Await(require.Invoke(checks, [mine, CancellationToken.None])!);
+        }
+
+        using (Callers.Begin(Caller.Anonymous))
+        {
+            FluentActions.Invoking(() => Await(require.Invoke(checks, [mine, CancellationToken.None])!))
+                .Should().Throw<RefusalException>().Which.Code.Should().Be("access.not-signed-in");
+        }
     }
 
     /// <summary>The module's services, as the page registers them, with the two answers a test supplies.</summary>

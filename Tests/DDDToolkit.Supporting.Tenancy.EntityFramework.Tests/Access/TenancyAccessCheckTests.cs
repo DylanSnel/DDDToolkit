@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,24 +81,46 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     // ------------------------------------------------------------------ the cases
 
     [Fact]
-    public async Task What_the_package_decides_passes_here_whoever_calls()
+    public async Task Who_is_calling_is_the_core_s_to_decide_in_a_module_of_tenancy_s_too()
     {
-        var decided = new Declaring(new TenancyRequirement.DecidedByThePackage());
+        var signedIn = new Declaring(AccessRequirement.SignedIn());
+        var systemWork = new Declaring(AccessRequirement.RequiresSystemWork());
 
-        await ByNobody(decided);
-        await _services.BySeat(_harbor.Tenant, _wes, scoped => RequireAsync(scoped, decided));
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        // A person who signed in and has no seat yet, as when accepting an invitation: Tenancy is not asked.
+        await using (var scope = _services.Scope())
+        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        using (TenancyCallers.BeginNone())
         {
-            await InScope(decided);
+            await RequireAsync(scope.ServiceProvider, signedIn);
+            await RefusedByTheToolkitAsync(ToolkitRefusals.SystemOnly, () => RequireAsync(scope.ServiceProvider, systemWork), "no user is the application itself");
         }
 
-        _services.Commands.Commands.Should().BeEmpty("the use case the handler calls asks who is calling, and nothing is asked before it");
+        await using (var scope = _services.Scope())
+        using (Callers.Begin(Caller.Anonymous))
+        {
+            await RefusedByTheToolkitAsync(ToolkitRefusals.NotSignedIn, () => RequireAsync(scope.ServiceProvider, signedIn));
+        }
+
+        // System work passes in its tenant, and outside any as well: the requirement says who may send a request,
+        // not where the work acts. What acts in a tenant asks Tenancy for it, which refuses system work outside any.
+        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        {
+            await InScope(systemWork);
+            await RefusedByTheToolkitAsync(ToolkitRefusals.NotSignedIn, () => InScope(signedIn), "the application's own work is nobody's sign-in");
+        }
+
+        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(_harbor.Tenant))
+        {
+            await InScope(systemWork);
+        }
+
+        _services.Commands.Commands.Should().BeEmpty("who is calling is kept with the flow of work: nothing is read for it");
     }
 
     [Fact]
     public async Task A_request_in_a_tenant_takes_a_seat_or_system_work_there_and_refuses_nobody_as_nobody()
     {
-        var inTenant = new Declaring(new TenancyRequirement.InTenant());
+        var inTenant = new Declaring(TenancyAccess.InTenant());
 
         await _services.BySeat(_harbor.Tenant, _wes, scoped => RequireAsync(scoped, inTenant));
         await _services.BySystemIn(_harbor.Tenant, scoped => RequireAsync(scoped, inTenant));
@@ -114,25 +137,11 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         _services.Commands.Commands.Should().BeEmpty("who is calling is kept with the flow of work: nothing is read for it");
     }
 
-    [Fact]
-    public async Task System_work_in_a_tenant_is_what_only_the_application_itself_does()
-    {
-        var systemWork = new Declaring(new TenancyRequirement.SystemWorkInTenant());
-
-        await _services.BySystemIn(_harbor.Tenant, scoped => RequireAsync(scoped, systemWork));
-
-        // The tenant's administrator holds every key, and may not: no key gives this.
-        var refusal = await Refused.WithCodeAsync(TenancyRefusals.SystemOnly, () => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, systemWork)));
-        refusal.Kind.Should().Be(DDDToolkit.Exceptions.RefusalKind.NotPermitted);
-        await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => ByNobody(systemWork), "nobody is refused as nobody, before it is told what only system work does");
-
-        _services.Commands.Commands.Should().BeEmpty();
-    }
 
     [Fact]
     public async Task A_key_for_the_whole_tenant_is_asked_at_the_root_in_one_statement()
     {
-        var seats = new Declaring(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
 
         // Ada administers the tenant: every key, at the root.
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, seats));
@@ -156,7 +165,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Nobody_is_refused_as_nobody_before_anything_is_read_for_a_key()
     {
-        var seats = new Declaring(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
 
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => ByNobody(seats));
 
@@ -166,7 +175,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_key_the_catalogue_does_not_know_is_a_mistake_in_the_request_whoever_calls()
     {
-        var unknown = new Declaring(new TenancyRequirement.ForTheWholeTenant("widget.polish"));
+        var unknown = new Declaring(TenancyAccess.ForTheWholeTenant("widget.polish"));
 
         await FluentActions.Awaiting(() => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, unknown)))
             .Should().ThrowAsync<ArgumentException>("a request that required a key nobody can hold would refuse everyone, so it fails as the bug it is");
@@ -175,7 +184,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_key_at_a_unit_is_asked_there_and_above_in_one_statement()
     {
-        static Declaring At(OrganizationUnitId unit) => new(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.SeatsManage, unit));
+        static Declaring At(OrganizationUnitId unit) => new(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, unit));
 
         // Seth manages seats at North: there the key is his, asked in one statement over the context the check was registered for.
         await _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, At(_north)));
@@ -207,7 +216,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_key_at_a_unit_known_by_another_type_than_the_application_s_units_stops_the_request()
     {
-        var elsewhere = new Declaring(new TenancyRequirement.AtUnit<SeatId>(TenancyKeys.SeatsManage, _seth));
+        var elsewhere = new Declaring(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, _seth));
 
         (await FluentActions.Awaiting(() => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, elsewhere)))
                 .Should().ThrowAsync<InvalidOperationException>("a case the check cannot decide lets nobody through, the administrator included"))
@@ -217,7 +226,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Only_an_operator_passes_what_is_for_operators()
     {
-        var operators = new Declaring(new TenancyRequirement.OperatorsOnly());
+        var operators = new Declaring(TenancyAccess.RequiresOperator());
         var odette = Guid.NewGuid();
 
         // An operator works in no tenant: the toolkit's caller says who it is, and to Tenancy it is nobody.
@@ -262,12 +271,10 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
 
         AccessRequirement[] ofTenancy =
         [
-            new TenancyRequirement.DecidedByThePackage(),
-            new TenancyRequirement.InTenant(),
-            new TenancyRequirement.SystemWorkInTenant(),
-            new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage),
-            new TenancyRequirement.OperatorsOnly(),
-            new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.SeatsManage, _north),
+            TenancyAccess.InTenant(),
+            TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage),
+            TenancyAccess.RequiresOperator(),
+            TenancyAccess.AtUnit(TenancyKeys.SeatsManage, _north),
         ];
         ofTenancy.Should().OnlyContain(requirement => checks.Decides(requirement));
         checks.Decides(new OnWidget(Guid.NewGuid())).Should().BeFalse("a module's own case takes a check of the module's own");
@@ -287,7 +294,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         // not only that some check is missing.
         var checks = new AccessChecks<IWidgetRequest>([]);
 
-        (await FluentActions.Awaiting(() => checks.RequireAsync(new OfWidgetsDeclaring(new TenancyRequirement.InTenant()), Cancellation).AsTask())
+        (await FluentActions.Awaiting(() => checks.RequireAsync(new OfWidgetsDeclaring(TenancyAccess.InTenant()), Cancellation).AsTask())
                 .Should().ThrowAsync<InvalidOperationException>())
             .WithMessage(
                 "*declares 'TenancyRequirement.InTenant', which none of the access checks registered for TenancyAccessCheckTests.IWidgetRequest decides. "
@@ -298,7 +305,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task A_module_is_checked_over_its_own_context()
     {
-        var seats = new OfWidgetsDeclaring(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new OfWidgetsDeclaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
 
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => scoped.GetRequiredService<AccessChecks<IWidgetRequest>>().RequireAsync(seats, Cancellation).AsTask());
 
@@ -313,7 +320,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     [Fact]
     public async Task Without_a_factory_the_key_is_asked_on_the_scope_s_own_context()
     {
-        var seats = new Declaring(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
 
         await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async scoped =>
         {
@@ -327,7 +334,7 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     {
         using var pooled = await ServicesAsync(pooled: true);
         var harbor = await pooled.ProvisionAsync("harbor");
-        var seats = new Declaring(new TenancyRequirement.ForTheWholeTenant(TenancyKeys.SeatsManage));
+        var seats = new Declaring(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
 
         await pooled.BySeat(harbor.Tenant, harbor.AdminSeat, async scoped =>
         {
@@ -363,6 +370,10 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
 
     private static Task RequireAsync(IServiceProvider scoped, Declaring request)
         => scoped.GetRequiredService<AccessChecks<IHostRequest>>().RequireAsync(request, Cancellation).AsTask();
+
+    /// <summary>Asserts that <paramref name="act"/> is refused with one of the toolkit's own codes, which Tenancy's table does not hold.</summary>
+    private static async Task RefusedByTheToolkitAsync(string code, Func<Task> act, string because = "")
+        => (await FluentActions.Awaiting(act).Should().ThrowAsync<RefusalException>(because)).Which.Code.Should().Be(code, because);
 
     /// <summary>Holds <paramref name="request"/> to what it declares in a scope of its own, as whoever the caller begun around it is.</summary>
     private async Task InScope(Declaring request)

@@ -69,7 +69,8 @@ public sealed class MemberAccessCheckTests
         documents.Decides(MemberAccess.SeenWith<DocumentId>(DocumentKeys.View)).Should().BeTrue();
         documents.Decides(MemberAccess.On(FolderKeys.File, Cabinet)).Should().BeFalse();
         documents.Decides(MemberAccess.SeenWith<FolderId>(FolderKeys.Read)).Should().BeFalse();
-        documents.Decides(new AccessRequirement.Open("Anyone may ask.")).Should().BeFalse("nobody has to decide an open request");
+        documents.Decides(AccessRequirement.AllowAnonymous()).Should().BeFalse("nobody has to decide that anyone may send a request");
+        documents.Decides(AccessRequirement.SignedIn()).Should().BeFalse("who is calling is the core's to decide");
         documents.Decides(new SomethingElse()).Should().BeFalse();
 
         folders.Decides(MemberAccess.On(FolderKeys.File, Cabinet)).Should().BeTrue();

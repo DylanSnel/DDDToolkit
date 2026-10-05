@@ -12,7 +12,7 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// Tenancy's. This one is left because it is asked where there is no project yet, and so no crew either: only
 /// the organization holds a key there.
 /// <para>
-/// Tenancy has a case for a key at a unit too, <c>TenancyRequirement.AtUnit</c>, and a module that needs nothing
+/// Tenancy has a case for a key at a unit too, <c>TenancyAccess.AtUnit</c>, and a module that needs nothing
 /// more declares that one. This one is Projects' own for two things that case does not do: it refuses under the
 /// module's own code, <c>projects.not-permitted</c>, which the module's clients read for every refusal about a
 /// project, and it keeps the unit it checked for the handler (<see cref="Checked{T}"/>), which opens the project

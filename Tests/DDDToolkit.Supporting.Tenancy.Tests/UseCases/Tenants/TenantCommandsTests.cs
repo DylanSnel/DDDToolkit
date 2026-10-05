@@ -195,7 +195,8 @@ public class TenantCommandsTests
     {
         var harness = Harness.OfHarbor();
 
-        await Refused.WithCodeAsync(TenancyRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
+        // The toolkit's code for "only the application itself", which a request that requires system work is refused with too.
+        await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)));
         await FluentActions.Awaiting(() => harness.BySystemWork(h => h.Tenants.ProvisionAsync(Harbor(slug: "wharf"), default)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("*BeginSystem()*");
         await Refused.WithCodeAsync(TenancyRefusals.TenantRequired,
@@ -209,9 +210,9 @@ public class TenantCommandsTests
     {
         var harness = Harness.OfHarbor();
 
-        await Refused.WithCodeAsync(TenancyRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.SuspendAsync("unpaid", default)));
-        await Refused.WithCodeAsync(TenancyRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ReactivateAsync(default)));
-        await Refused.WithCodeAsync(TenancyRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.CloseAsync("no longer needed", default)));
+        await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.SuspendAsync("unpaid", default)));
+        await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.ReactivateAsync(default)));
+        await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => h.Tenants.CloseAsync("no longer needed", default)));
 
         foreach (var act in new Func<Harness, Task>[]
                  {

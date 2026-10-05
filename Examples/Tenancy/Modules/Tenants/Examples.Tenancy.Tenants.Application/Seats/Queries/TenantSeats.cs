@@ -6,11 +6,11 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// Every seat of the caller's tenant, by name, for the pickers: its id, its name and its status, never an
 /// identity.
 /// </summary>
-/// <remarks>The package decides who may ask: its directory answers anyone who works in the tenant.</remarks>
+/// <remarks>It requires a caller who works in the tenant, whom the package's directory answers.</remarks>
 public sealed record TenantSeats : IQuery<IReadOnlyList<SampleTenancy.SeatSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>Answers <see cref="TenantSeats"/> from the Tenancy package's directory.</summary>

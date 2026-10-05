@@ -14,7 +14,7 @@ namespace Examples.Tenancy.Tenants.Application.Catalogue.Queries;
 public sealed record CatalogueContents : IQuery<CatalogueOverview>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.InTenant();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
 /// <summary>The catalogue as a client reads it.</summary>

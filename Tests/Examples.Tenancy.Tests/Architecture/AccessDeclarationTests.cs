@@ -23,13 +23,11 @@ namespace Examples.Tenancy.Tests.Architecture;
 /// which the toolkit's generator writes for that interface, asks the module's checks before the handler runs. The
 /// rules here keep that from being gone round: every request declares, what each declares is written out once
 /// more below, every requirement that is declared has a check in its module's set, every request passes its
-/// module's behavior, nothing sends a request from inside another, a query reads and answers with data, and what
-/// the Tenancy package decides is handed to the package and to nothing else.
+/// module's behavior, nothing sends a request from inside another, a query reads and answers with data, and a
+/// request handed to the Tenancy package says what the package asks first, so no requirement leaves a door open.
 /// </remarks>
 public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClassFixture<SampleWithoutDatabase>
 {
-    private static readonly TenancyRequirement ThePackage = new TenancyRequirement.DecidedByThePackage();
-
     private static readonly ProjectId TheProject = ProjectId.CreateSequential();
 
     private static readonly OrganizationUnitId TheUnit = OrganizationUnitId.CreateSequential();
@@ -52,7 +50,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new AbilitiesOnProjects([TheProject]), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
         (new KeyOnProject(TheProject, ProjectKeys.Edit), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
         (new KeysOnProjects([TheProject], [ProjectKeys.Edit]), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
-        (new KeysHeldAtRoot([ProjectKeys.Open]), new TenancyRequirement.InTenant()),
+        (new KeysHeldAtRoot([ProjectKeys.Open]), TenancyAccess.InTenant()),
         (new OpenProject("P-900", "Quay wall", TheUnit, SeatId.CreateSequential(), ProjectId.CreateSequential()), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit)),
         (new ChangeProjectName(TheProject, "Quay wall, east", ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
         (new PlanProject(TheProject, DateRange.Of(new DateOnly(2026, 10, 5)), ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
@@ -65,52 +63,52 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RemoveCrewMember(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectKeys.ManageCrew, TheProject)),
         (new AllCrewMembers(TheProject), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
         (new ChangeProjectOwner(TheProject, SeatId.CreateSequential()), MemberAccess.On(ProjectKeys.ChangeOwner, TheProject)),
-        (new TenantProjects(TheTenant), new TenancyRequirement.OperatorsOnly()),
-        (new TenantProjectRoles(), new TenancyRequirement.InTenant()),
-        (new ProjectRolesById([ProjectRoleId.CreateSequential()]), new TenancyRequirement.InTenant()),
-        (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectKeys.View]), new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new SetProjectRoleKeys(ProjectRoleId.CreateSequential(), []), new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage)),
-        (new SetUpProjectRoles(), new TenancyRequirement.SystemWorkInTenant()),
-        (new SeatsOfMine(), new AccessRequirement.Open(SeatsOfMine.OpenBecause)),
-        (new OverviewOfMine(), ThePackage),
-        (new OrganizationUnits(), ThePackage),
-        (new TenantSeats(), ThePackage),
-        (new TenantRoles(), ThePackage),
-        (new SeatsById([SeatId.CreateSequential()]), ThePackage),
-        (new OrganizationUnitsById([OrganizationUnitId.CreateSequential()]), ThePackage),
-        (new RolesById([RoleId.CreateSequential()]), ThePackage),
-        (new CatalogueContents(), new TenancyRequirement.InTenant()),
-        (new UnitsWhereIHold(TenancyKeys.UnitsManage), new TenancyRequirement.InTenant()),
-        (new AddOrganizationUnit(OrganizationUnitId.CreateSequential(), "North", "region"), ThePackage),
-        (new MoveOrganizationUnit(OrganizationUnitId.CreateSequential(), OrganizationUnitId.CreateSequential()), ThePackage),
-        (new ArchiveOrganizationUnit(OrganizationUnitId.CreateSequential()), ThePackage),
-        (new ChangeTenantShape(TenantShape.Hierarchical), ThePackage),
-        (new MakePlacement(SeatId.CreateSequential(), OrganizationUnitId.CreateSequential(), Primary: true), ThePackage),
-        (new WithdrawPlacement(SeatId.CreateSequential(), OrganizationUnitId.CreateSequential()), ThePackage),
-        (new MakeGrant(SeatId.CreateSequential(), OrganizationUnitId.CreateSequential(), RoleId.CreateSequential(), Until: null, Reason: null), ThePackage),
-        (new RevokeGrant(SeatId.CreateSequential(), OrganizationUnitId.CreateSequential(), RoleId.CreateSequential()), ThePackage),
-        (new SuspendTenantSeat(SeatId.CreateSequential()), ThePackage),
-        (new ReactivateTenantSeat(SeatId.CreateSequential()), ThePackage),
-        (new DeactivateTenantSeat(SeatId.CreateSequential()), ThePackage),
-        (new CreateTenantRole("Storekeeper", "Keeps the stores", []), ThePackage),
-        (new SetRoleKeys(RoleId.CreateSequential(), []), ThePackage),
-        (new ArchiveTenantRole(RoleId.CreateSequential()), ThePackage),
-        (new MarkTenantAsDemo(), new TenancyRequirement.SystemWorkInTenant()),
-        (new AccessHistory(new PagingArguments(first: 10)), new TenancyRequirement.ForTheWholeTenant(TenancyKeys.HistoryView)),
-        (new InvitePerson("wren@example.test", OrganizationUnitId.CreateSequential(), RoleId.CreateSequential(), Until: null, DisplayName: null), ThePackage),
-        (new OpenInvitations(), ThePackage),
-        (new CancelInvitation(InvitationId.CreateSequential()), ThePackage),
-        (new AcceptInvitation("a-token-nobody-was-given", DisplayName: null), ThePackage),
-        (new AllTenants(), new TenancyRequirement.OperatorsOnly()),
-        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), new TenancyRequirement.OperatorsOnly()),
+        (new TenantProjects(TheTenant), TenancyAccess.RequiresOperator()),
+        (new TenantProjectRoles(), TenancyAccess.InTenant()),
+        (new ProjectRolesById([ProjectRoleId.CreateSequential()]), TenancyAccess.InTenant()),
+        (new MakeProjectRole("Rigger", "Rigs the hoists", [ProjectKeys.View]), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new RenameProjectRole(ProjectRoleId.CreateSequential(), "Rigger", null), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new SetProjectRoleKeys(ProjectRoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new ArchiveProjectRole(ProjectRoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new SetUpProjectRoles(), AccessRequirement.RequiresSystemWork()),
+        (new SeatsOfMine(), AccessRequirement.SignedIn()),
+        (new OverviewOfMine(), TenancyAccess.InTenant()),
+        (new OrganizationUnits(), TenancyAccess.InTenant()),
+        (new TenantSeats(), TenancyAccess.InTenant()),
+        (new TenantRoles(), TenancyAccess.InTenant()),
+        (new SeatsById([SeatId.CreateSequential()]), TenancyAccess.InTenant()),
+        (new OrganizationUnitsById([OrganizationUnitId.CreateSequential()]), TenancyAccess.InTenant()),
+        (new RolesById([RoleId.CreateSequential()]), TenancyAccess.InTenant()),
+        (new CatalogueContents(), TenancyAccess.InTenant()),
+        (new UnitsWhereIHold(TenancyKeys.UnitsManage), TenancyAccess.InTenant()),
+        (new AddOrganizationUnit(TheUnit, "North", "region"), TenancyAccess.AtUnit(TenancyKeys.UnitsManage, TheUnit)),
+        (new MoveOrganizationUnit(OrganizationUnitId.CreateSequential(), TheUnit), TenancyAccess.InTenant()),
+        (new ArchiveOrganizationUnit(TheUnit), TenancyAccess.InTenant()),
+        (new ChangeTenantShape(TenantShape.Hierarchical), TenancyAccess.ForTheWholeTenant(TenancyKeys.SettingsManage)),
+        (new MakePlacement(SeatId.CreateSequential(), TheUnit, Primary: true), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit)),
+        (new WithdrawPlacement(SeatId.CreateSequential(), TheUnit), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit)),
+        (new MakeGrant(SeatId.CreateSequential(), TheUnit, RoleId.CreateSequential(), Until: null, Reason: null), TenancyAccess.AtUnit(TenancyKeys.GrantsManage, TheUnit)),
+        (new RevokeGrant(SeatId.CreateSequential(), TheUnit, RoleId.CreateSequential()), TenancyAccess.AtUnit(TenancyKeys.GrantsManage, TheUnit)),
+        (new SuspendTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new ReactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new DeactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new CreateTenantRole("Storekeeper", "Keeps the stores", []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new SetRoleKeys(RoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new ArchiveTenantRole(RoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
+        (new MarkTenantAsDemo(), AccessRequirement.RequiresSystemWork()),
+        (new AccessHistory(new PagingArguments(first: 10)), TenancyAccess.ForTheWholeTenant(TenancyKeys.HistoryView)),
+        (new InvitePerson("wren@example.test", TheUnit, RoleId.CreateSequential(), Until: null, DisplayName: null), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
+        (new OpenInvitations(), TenancyAccess.InTenant()),
+        (new CancelInvitation(InvitationId.CreateSequential()), TenancyAccess.InTenant()),
+        (new AcceptInvitation("a-token-nobody-was-given", DisplayName: null), AccessRequirement.SignedIn()),
+        (new AllTenants(), TenancyAccess.RequiresOperator()),
+        (new TenantAccessHistory(TheTenant, new PagingArguments(first: 10)), TenancyAccess.RequiresOperator()),
         (new ProjectInspections(TheProject), new InspectionsRequirement.OnProject(ProjectKeys.View, TheProject)),
         (new InspectionDetail(TheProject, InspectionId.CreateSequential()), new InspectionsRequirement.OnProject(ProjectKeys.View, TheProject)),
         (new InspectionsOfProjects(TheProjects, new PagingArguments(first: 5)), new InspectionsRequirement.OnProjectsInReach(ProjectKeys.View, TheProjects)),
         (new ProjectsOpenToRecording(TheProjects), new InspectionsRequirement.OnProjectsInReach(InspectionKeys.Record, TheProjects)),
         (new RecordInspection(TheProject, "Loose railing"), new InspectionsRequirement.OnOpenProject(InspectionKeys.Record, TheProject, BySeat: true)),
-        (new TenantProjectInspections(TheTenant, TheProject), new TenancyRequirement.OperatorsOnly()),
+        (new TenantProjectInspections(TheTenant, TheProject), TenancyAccess.RequiresOperator()),
     ];
 
     private static IReadOnlyList<HandledRequest> Requests => HostRegistrations.Requests;
@@ -128,7 +126,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     }
 
     [Fact]
-    public void Every_command_and_query_declares_its_access_or_is_marked_open()
+    public void Every_command_and_query_declares_its_access()
     {
         Requests.Should().NotBeEmpty("the host handles requests, and they are found in its container");
 
@@ -150,17 +148,13 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
 
         foreach (var (request, _) in Declared)
         {
-            var declared = DeclaredBy(request);
-            declared.Should().NotBeNull("{0} declares what it requires", request.GetType().Name);
-
-            // A request that requires nothing says so, and says why.
-            if (declared is AccessRequirement.Open open)
-            {
-                open.Reason.Should().NotBeNullOrWhiteSpace("{0} is open, and says why", request.GetType().Name);
-            }
+            DeclaredBy(request).Should().NotBeNull("{0} declares what it requires: there is no requirement that says nothing", request.GetType().Name);
         }
 
-        Declared.Should().Contain(row => DeclaredBy(row.Request) is AccessRequirement.Open, "one request is open, or the reason is never looked at");
+        // Nothing of the sample is for a caller who did not sign in. A request that is says AllowAnonymous() in the
+        // table above, where a review sees the open door for what it is.
+        Declared.Where(row => row.Declares is AccessRequirement.Anyone).Select(row => row.Request.GetType().Name)
+            .Should().BeEmpty("every route of the sample takes a token");
     }
 
     [Fact]
@@ -202,15 +196,18 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         Decides(scope.ServiceProvider, "Projects", new InspectionsRequirement.OnProject(ProjectKeys.View, TheProject)).Should().BeFalse();
         Decides(scope.ServiceProvider, "Tenants", new InspectionsRequirement.OnProject(ProjectKeys.View, TheProject)).Should().BeFalse();
 
-        // Tenancy's cases are decided in every module, by the package's check registered for each.
+        // Tenancy's cases are decided in every module, by the package's check registered for each, and who is calling
+        // by the toolkit's own, which every module's set asks first.
         foreach (var module in SampleLayout.OnTheMediator.Keys)
         {
-            Decides(scope.ServiceProvider, module, new TenancyRequirement.ForTheWholeTenant(TenancyKeys.RolesManage)).Should().BeTrue("{0} registers Tenancy's check", module);
+            Decides(scope.ServiceProvider, module, TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)).Should().BeTrue("{0} registers Tenancy's check", module);
+            Decides(scope.ServiceProvider, module, AccessRequirement.SignedIn()).Should().BeTrue("{0}'s set asks the toolkit who is calling", module);
+            Decides(scope.ServiceProvider, module, AccessRequirement.RequiresSystemWork()).Should().BeTrue();
         }
 
         Declared.Select(row => row.Declares.GetType().DeclaringType ?? row.Declares.GetType()).Distinct().Should().BeEquivalentTo(
             [typeof(AccessRequirement), typeof(TenancyRequirement), typeof(MemberAccess<>), typeof(ProjectsRequirement), typeof(InspectionsRequirement)],
-            "the toolkit's open case, the Tenancy package's cases, the Membership package's, and the two modules' own");
+            "the toolkit's cases of who is calling, the Tenancy package's cases, the Membership package's, and the two modules' own");
     }
 
     [Fact]
@@ -292,71 +289,35 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     }
 
     [Fact]
-    public void What_the_package_decides_only_the_package_handles()
+    public void A_request_handed_to_the_package_says_what_it_requires_and_the_package_keeps_the_rest()
     {
-        // A handler whose request leaves the decision to the Tenancy package hands it to the package and to nothing
-        // else: a command to one of the package's use cases, a query to the package's directory through the read
-        // port. And the other way round: a handler that calls a use case of the package says that the package
-        // decides, so no check is promised here that is not made.
-        //
-        // Three commands take more, which decides nothing. Inviting takes the identity provider's accounts,
-        // asked for an account at the address once the package has issued the invitation, the page the
-        // provider's mail leads to, where the host named one, and the stores the invitation is found and saved
-        // through, to keep the id of the account the provider made. Cancelling takes the accounts and the store
-        // of invitations too, to delete an account nobody used once the package has cancelled. Accepting takes the
-        // caller, whose own address it hands the package beside the request. And the open invitations are the one
-        // answer of the package's that its directory does not give: the read port asks the package for them.
-        //
-        // The two queries that answer roles take Tenancy's answers about the caller as well. Who may ask is still
-        // the package's to decide; what they ask beside it is whether the caller holds the key a role's keys are
-        // answered to, which decides what is in the answer and refuses nobody.
-        //
-        // The rule is about every module, not the one that happens to declare it today. "The package decides"
-        // passes the check with nothing asked, in whichever module's set the package's check sits, so a request
-        // of Projects or Inspections that declared it would reach its handler unchecked unless that handler did
-        // nothing but hand the request to the package.
+        // No requirement leaves a request to the package. A request handed to a use case of Tenancy's says the first
+        // thing that use case asks, which the request itself can name: a caller who works in the tenant, a key there,
+        // or, before any tenant, a signed-in user. The check holds the caller to it before the handler runs. The use
+        // case asks again past it, and then what only it can read, such as who may give a role that manages access or
+        // where a unit hangs now; the database's policies ask once more. So the Tenants module declares the toolkit's
+        // cases and Tenancy's, and has no case of its own, and no check of its own.
         Declared.Where(row => ModuleOf(row.Request) == "Tenants").Select(row => row.Declares)
-            .Should().OnlyContain(declares => declares is TenancyRequirement || declares is AccessRequirement.Open, "the Tenants module has no case of its own, and so no check of its own");
+            .Should().OnlyContain(
+                declares => declares is TenancyRequirement || declares is AccessRequirement.SignedInUser || declares is AccessRequirement.SystemWork,
+                "the Tenants module has no case of its own, and so no check of its own");
         Requests.Select(request => request.Module).Distinct().Should().BeEquivalentTo(SampleLayout.Modules, "every module's requests are held to it");
 
-        foreach (var request in Requests)
+        // A handler that hands its request to the package's commands belongs to a request that requires a caller in
+        // the tenant, a key there, or a signed-in user: what the use case asks first, so a caller it would refuse
+        // before anything else is refused at the door already, with the same code. Which code each gets is
+        // RequestPipelineTests' to prove, past the door and in front of it.
+        var handedOn = Requests
+            .Where(request => request.Handler.GetConstructors().Single().GetParameters().Any(parameter => IsPackageCommands(parameter.ParameterType)))
+            .ToList();
+        handedOn.Should().Contain(request => request.Type == typeof(MakeGrant), "the package's commands are found by their type, or this proves nothing");
+
+        foreach (var request in handedOn)
         {
-            var takes = request.Handler.GetConstructors().Single().GetParameters().Select(parameter => parameter.ParameterType)
-                .Where(taken => !(request.Type == typeof(InvitePerson) && (taken == typeof(DDDToolkit.Identity.IIdentityAccounts) || taken == typeof(Examples.Tenancy.Tenants.Application.Invitations.InvitationPage))))
-                .Where(taken => !((request.Type == typeof(InvitePerson) || request.Type == typeof(CancelInvitation))
-                    && (taken == typeof(DDDToolkit.Identity.IIdentityAccounts)
-                        || taken == typeof(SampleTenancy.IInvitationStore<Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation, InvitationId>)
-                        || taken == typeof(SampleTenancy.IStore))))
-                .Where(taken => !(request.Type == typeof(AcceptInvitation) && taken == typeof(DDDToolkit.Access.ICallerAccessor)))
-                .Where(taken => !((request.Type == typeof(TenantRoles) || request.Type == typeof(RolesById))
-                    && taken == typeof(DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>)))
-                .ToList();
-            var decidedByThePackage = DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request) is TenancyRequirement.DecidedByThePackage;
-
-            if (decidedByThePackage)
-            {
-                takes.Should().ContainSingle("{0} hands its request on, and needs one thing for that", request.Handler.Name)
-                    .Which.Should().Match<Type>(
-                        taken => request.IsQuery ? taken == typeof(ITenancyReads) : IsPackageCommands(taken),
-                        "{0} is decided by the package", request.Type.Name);
-
-                if (request.IsQuery)
-                {
-                    var named = TypeScan.Of(TypeScan.WithNested(request.Handler)).Uses.Select(use => use.Type).ToList();
-                    named.Should().NotContain(typeof(ITenancyReading), "{0} reads no rows itself, past the package's own check", request.Handler.Name);
-                    if (request.Type != typeof(OpenInvitations))
-                    {
-                        named.Should().Contain(typeof(TenancyUseCases<,,,,,,,,>.TenancyDirectory), "{0} asks the package's directory", request.Handler.Name);
-                    }
-                }
-            }
-            else
-            {
-                takes.Where(IsPackageCommands).Should().BeEmpty("{0} does not say the package decides, so it must not lean on a check of the package's", request.Handler.Name);
-            }
+            var declares = DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request);
+            (declares is TenancyRequirement.InTenant or TenancyRequirement.ForTheWholeTenant or TenancyRequirement.AtUnit<OrganizationUnitId> or AccessRequirement.SignedInUser)
+                .Should().BeTrue("{0} is handed to the package's use case, which asks first for a caller of the tenant, a key there, or a signed-in user", request.Type.Name);
         }
-
-        Requests.Should().Contain(request => !request.IsQuery && DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request) is TenancyRequirement.DecidedByThePackage);
     }
 
     [Fact]

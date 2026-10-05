@@ -5,14 +5,22 @@ using DDDToolkit.Access;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// The only ways to system power in Tenancy. A request is never system work, whatever the toolkit's own
-/// caller says: a person reaches Tenancy through a seat, and system work is begun here, on purpose.
+/// The only ways to system power in Tenancy. Nothing becomes system work in Tenancy by itself, whatever the
+/// toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here, on purpose.
 /// <code>
 /// using (TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant, actingSeat))
 /// {
 ///     await seats.PlaceAsync(seat, unit, primary: true, cancellationToken);
 /// }
 /// </code>
+/// <para>
+/// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
+/// work here itself, in trusted code, whatever its request requires: <c>AccessRequirement.AllowAnonymous()</c>
+/// for a registration form anyone may fill in, <c>AccessRequirement.SignedIn()</c> for a signed-in user who
+/// registers an organization, <c>AccessRequirement.RequiresSystemWork()</c> for a tool only the application
+/// runs. The requirement decides who gets as far as the handler; what the work may then do is what is begun
+/// here, and nothing of the caller's.
+/// </para>
 /// <para>
 /// Each method begins two callers, and ends both when its result is disposed: the Tenancy caller, which says
 /// in which tenant the work acts, and the toolkit's scoped system caller, <c>Caller.SystemIn(scope)</c>, which

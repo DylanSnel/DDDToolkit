@@ -7,9 +7,11 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// the invitation's tenant, placed in its unit, with its role there.
 /// </summary>
 /// <remarks>
-/// The package decides who may, and it is asked before the person is in any tenant: there is no seat yet to hold
-/// a key. Its use case requires a signed-in user with a verified identity, read from the caller's own token and
-/// never from the request, who holds the token of an invitation that is still open.
+/// It requires a signed-in user, and nothing more, because it is sent before the person is in any tenant: there is
+/// no seat yet to hold a key. The package's use case asks the rest: a verified identity that may hold a seat, read
+/// from the caller's own token and never from the request, which holds the token of an invitation that is still
+/// open. It then does its work as system work in the invitation's tenant, begun by the package itself: what the
+/// person gets is the seat the invitation offers, and nothing of the system work's.
 /// <para>
 /// The application invites by address, so it also holds an invitation to its address: the address in the
 /// caller's token must be the one the invitation was sent to. That only narrows. Nothing is found by an address,
@@ -25,7 +27,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 public sealed record AcceptInvitation(string Token, string? DisplayName) : ICommand<SeatId>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.DecidedByThePackage();
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
 
     /// <summary>Says that it accepts and not with which token: a record prints its members, and a token must not end up in a log.</summary>
     public override string ToString() => nameof(AcceptInvitation);

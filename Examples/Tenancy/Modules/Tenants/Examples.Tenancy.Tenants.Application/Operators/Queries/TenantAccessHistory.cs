@@ -17,7 +17,7 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 public sealed record TenantAccessHistory(TenantId Tenant, PagingArguments Paging) : IQuery<Page<AccessHistoryEntry>>, ITenantsRequest
 {
     /// <inheritdoc />
-    AccessRequirement IRequireAccess.RequiredAccess => new TenancyRequirement.OperatorsOnly();
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.RequiresOperator();
 }
 
 /// <summary>Answers <see cref="TenantAccessHistory"/> on a context of the read's own.</summary>
