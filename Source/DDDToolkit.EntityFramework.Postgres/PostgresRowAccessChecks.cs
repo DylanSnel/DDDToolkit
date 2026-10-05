@@ -35,7 +35,7 @@ public static class PostgresRowAccessChecks
     private const string Owner = "<the role that runs the migrations>";
 
     /// <summary>
-    /// What the role the application logged in as owns or holds in the schemas of <paramref name="context"/>'s
+    /// What the role the application logged in as owns or holds in the schemas of the checked context's
     /// model and in <c>ddd</c>, one finding and its fix per row, each with the role's name. The role is the
     /// session's user, whatever role the connection runs as. The first, numbered 0, is said only of a role that
     /// owns a schema there: it made the schema, so it is the role the migrations run as, and its fix is another

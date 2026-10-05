@@ -1619,6 +1619,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Fixed
 
+- **The packages ship their XML documentation.** No package carried the XML documentation file beside its
+  assembly in `lib/`, so Visual Studio and other editors showed none of the toolkit's `///` comments, however
+  well the source is documented. Every package now does, and the consumption check fails a package that does
+  not. A parent the generator writes for `[AggregateRootBase]` or `[EntityBase]` now documents every parameter
+  of the method its derived class calls, so a package of your own that generates its documentation gets no
+  CS1573 from it.
+
 - **The Supabase export given for a whole build.** `SupabaseMigrationsExport` given on the command line, in a
   `Directory.Build.props` or by CI reached every project that references `DDDToolkit.EntityFramework.Supabase`,
   or a project that does, because the package's build step and generator arrive through `buildTransitive`.

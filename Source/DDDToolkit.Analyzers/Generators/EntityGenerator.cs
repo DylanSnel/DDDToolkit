@@ -373,6 +373,12 @@ public sealed class EntityGenerator : IIncrementalGenerator
         string lastLine;
         if (definition.IsBase)
         {
+            // Documented like the other two: a package that ships the parent and its XML documentation
+            // would otherwise get CS1573 for this parameter in every parent it declares.
+            writer.Line("/// <param name=\"entityType\">");
+            writer.Line("/// The type every violation names, the class that derives from this parent: the parent cannot");
+            writer.Line("/// name it, so its caller passes it.");
+            writer.Line("/// </param>");
             writer.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
             writer.Line("protected void CollectBaseInvariantViolations(");
             writer.Line("    ref " + list + "? violations,");

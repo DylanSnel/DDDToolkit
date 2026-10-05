@@ -21,7 +21,7 @@ public sealed class OutboxOptions
 {
     /// <summary>
     /// Serializer options for event payloads. The defaults are case-insensitive and include the
-    /// toolkit's <see cref="SingleValueObjectConverterFactory"/>, so class ids and single value objects
+    /// toolkit's <see cref="DDDToolkit.Serialization.Converters.SingleValueObjectConverterFactory"/>, so class ids and single value objects
     /// are stored as their raw value. Replace or extend as needed; the same options are used to read
     /// the payload back, so change them with care once messages exist.
     /// </summary>

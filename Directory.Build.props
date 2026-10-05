@@ -44,6 +44,27 @@
     <PackageId>$(DDDPackageIdPrefix)$(MSBuildProjectName)</PackageId>
   </PropertyGroup>
 
+  <!--
+    The XML documentation file, which pack puts beside the assembly in lib/<tfm>/. It is where Visual Studio
+    and every other editor read a package's /// comments from: without it a consumer sees none of them,
+    however well the source is documented, and the symbols and Source Link do not change that.
+
+    Every project under Source is a package or ships inside one; the tests, samples and benchmarks are
+    neither. The generators and code fixes, the *.Analyzers and *.CodeFixes projects, are left out: they
+    ship in analyzers/dotnet/cs, where the compiler and the IDE load them and nothing references them, so
+    nothing would read their XML. What a generator writes keeps its comments in the code it writes: in a
+    consumer's project the editor reads them there, and where a generator writes into one of these
+    packages, as it writes Tenancy's parents, they land in that package's XML.
+
+    With the file comes CS1591 for a public member without a comment. The packages are documented
+    throughout and keep it, so a new member says so; the three that still have such members, the core,
+    Abstractions and Newtonsoft.Json, turn it off in their own project file, where NoWarn already holds
+    the SDK's defaults.
+  -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)Source')) and !$(MSBuildProjectName.EndsWith('.Analyzers')) and !$(MSBuildProjectName.EndsWith('.CodeFixes'))">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)DDDToolkit-Icon.png" Pack="true" PackagePath="\" Visible="false" />
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />

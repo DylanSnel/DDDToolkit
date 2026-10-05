@@ -8,7 +8,8 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// <summary>
 /// The export the build runs. The build step starts the freshly built application with
 /// <see cref="ModeVariable"/> set; a module initializer the generator wrote into it calls
-/// <see cref="RunIfRequested"/> before <c>Main</c>, which exports every source it was handed and ends the
+/// <see cref="RunIfRequested(Func{IReadOnlyList{SupabaseMigrationSource}}, Func{IReadOnlyList{RowAccessRule}}, Func{IReadOnlyList{RowAccessFunction}}, Func{IReadOnlyList{IRowAccessContribution}})">RunIfRequested</see>
+/// before <c>Main</c>, which exports every source it was handed and ends the
 /// process. The application's own start-up, its configuration included, never runs.
 /// <para>
 /// Without the variable nothing happens, which is every start of the application outside that build step.

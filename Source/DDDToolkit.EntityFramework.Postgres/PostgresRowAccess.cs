@@ -289,7 +289,8 @@ public static partial class PostgresRowAccess
     /// is not checked.
     /// </para>
     /// <para>
-    /// The role that runs this owns the <c>ddd</c> schema, its functions and its procedure. A <see cref="Script"/>
+    /// The role that runs this owns the <c>ddd</c> schema, its functions and its procedure. A
+    /// <see cref="Script(DbContext, IEnumerable{RowAccessRule}, IEnumerable{RowAccessFunction}?, RowAccessExport)">script</see>
     /// run later by another role, the application's, leaves them alone while they are as it needs them. When a
     /// new version of the toolkit changes <c>ddd.written_in_this_transaction</c> or <c>ddd.use_caller</c>, such a
     /// script cannot replace what it does not own: run this again first, as the role that ran it before.
@@ -1046,7 +1047,9 @@ public static partial class PostgresRowAccess
     }
 
     /// <summary>
-    /// What makes <see cref="CreateStatements"/>' policies work, whatever the database already has: the
+    /// What makes the policies of
+    /// <see cref="CreateStatements(DbContext, IReadOnlyList{RowAccessRule}, IReadOnlyList{RowAccessFunction}?, RowAccessExport)"/>
+    /// work, whatever the database already has: the
     /// toolkit's schema and <c>ddd.written_in_this_transaction</c>, which the policies of an aggregate's
     /// entities ask, the scoped system role when a policy is for it, and the right to ask them for every
     /// role a policy names. It comes right after the drop in every script and every access file, so none

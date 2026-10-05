@@ -9,7 +9,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <para>
 /// You rarely build one yourself. <c>DDDToolkit.EntityFramework.Supabase</c>'s build step writes one per
 /// rule it finds in the modules a host references, and exports them as policies. Build one by hand, from
-/// the rule's generated <c>RowAccessSql</c> constant, to hand to <see cref="PostgresRowAccess.Script"/>
+/// the rule's generated <c>RowAccessSql</c> constant, to hand to
+/// <see cref="PostgresRowAccess.Script(Microsoft.EntityFrameworkCore.DbContext, IEnumerable{RowAccessRule}, IEnumerable{RowAccessFunction}?, RowAccessExport)">PostgresRowAccess.Script</see>
 /// from a migration, a test or a tool of your own.
 /// </para>
 /// </summary>

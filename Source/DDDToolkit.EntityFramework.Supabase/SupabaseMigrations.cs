@@ -240,7 +240,8 @@ public static class SupabaseMigrations
     /// Writes a file for every migration that has none, and reports on the rest. It never overwrites or
     /// deletes a file: once Supabase has applied a version it will not apply it again, so a rewritten file
     /// would change nothing on a database that already ran it and quietly diverge from one that did not.
-    /// Check <see cref="SupabaseMigrationReport.IsInSync"/>, or call <see cref="EnsureInSync"/> afterwards.
+    /// Check <see cref="SupabaseMigrationReport.IsInSync"/>, or call
+    /// <see cref="EnsureInSync(DbContext, string, SupabaseMigrationOptions?)">EnsureInSync</see> afterwards.
     /// </summary>
     /// <param name="context">A context configured with the Npgsql provider; it is not opened.</param>
     /// <param name="directory">The Supabase migrations directory; it is created when missing.</param>
@@ -451,7 +452,15 @@ public static class SupabaseMigrations
     /// about it all the same: the guard of an event log, or, where the files write privileges, those of its
     /// outbox, inbox or event log.
     /// </summary>
+    /// <param name="context">The context whose rules, access functions and contributions the file says; the access files whose first line names its type are its own.</param>
+    /// <param name="module">The module the file is named after, <c>&lt;version&gt;_access.&lt;module&gt;.ddd.sql</c>.</param>
+    /// <param name="directory">The Supabase migrations directory.</param>
+    /// <param name="existing">The files in the directory, by version; a file written here is added to it.</param>
+    /// <param name="migrations">The context's migrations, written or not; an access file older than the newest of them is written again.</param>
+    /// <param name="options">The rules, access functions and contributions to choose from, and how the file is written.</param>
+    /// <param name="names">Where the access functions of every module live, by logical name.</param>
     /// <param name="script">The module's script, written with every other module's; null to write it knowing this module alone.</param>
+    /// <param name="write">Whether to write a new file; when not, the file a write would add is reported missing.</param>
     private static SupabaseMigrationEntry? Access(
         DbContext context,
         string module,

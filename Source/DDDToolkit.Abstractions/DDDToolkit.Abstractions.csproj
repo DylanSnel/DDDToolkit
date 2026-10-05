@@ -6,6 +6,14 @@
     <Title>Domain Driven Design Toolkit - Abstractions</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;abstractions</PackageTags>
     <Description>Attributes and marker interfaces shared by the DDDToolkit packages.</Description>
+    <!--
+      Some public members have no comment yet: the hidden non-generic bases of the declaring attributes,
+      [DontCompare], the constructors of [DomainEventName] and [Internal] and the name of the first, and the
+      id and value of IEntity and IEntityId. They are left without one rather than given one that only
+      repeats their name, and everything documented ships all the same (see Directory.Build.props). Remove
+      this once the last of them has a comment of its own.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
 </Project>

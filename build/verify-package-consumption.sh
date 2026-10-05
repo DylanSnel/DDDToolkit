@@ -10,19 +10,21 @@
 # untested by a green solution build, and it has broken before.
 #
 # What it proves, in order:
-#   1. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
+#   1. Every assembly a package ships in lib/<tfm>/ has its XML documentation beside it, which is where
+#      an editor reads the package's comments from.
+#   2. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
 #      and produces what Check.cs names.
-#   2. build/package-consumers: DDD_Module reaches the generators wherever they run. With only
+#   3. build/package-consumers: DDD_Module reaches the generators wherever they run. With only
 #      Abstractions and Analyzers, with only the DDDToolkit package, and in a project that gets the
 #      toolkit through a project reference.
-#   3. DDD00014: a project that has the generators and not their props file is told so, and a project
+#   4. DDD00014: a project that has the generators and not their props file is told so, and a project
 #      that has both and sets no DDD_Module is not.
-#   4. The supporting domains: an application with Tenancy and Membership, in a domain project on their
+#   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
 #      inside Membership's packages and write nothing in the host; and the packages carry their Dutch
 #      texts.
-#   5. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
+#   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning.
 #
@@ -69,6 +71,39 @@ if ! compgen -G "$feed/$core_id.$version.nupkg" > /dev/null; then
   echo "  for p in \$(find ./Source -name '*.csproj'); do dotnet pack \"\$p\" -c Release -o nupkgs -p:PackageVersion=$version; done" >&2
   exit 1
 fi
+
+# The XML documentation beside every assembly in lib/<tfm>/. Visual Studio and every other editor read a
+# package's /// comments from that file and nowhere else, and nothing in a build reads it, so a package
+# packed without it restores and builds like any other, and its consumers see none of its comments. That
+# is how 3.2.0-preview.1 shipped. Read from the packed packages themselves, every one of them, rather than
+# from the few the consumers below restore. A satellite assembly, nl/<name>.resources.dll, is one folder
+# deeper and needs none; a package that only carries generators has no lib/ and nothing to check.
+echo "==> The XML documentation beside every assembly in lib/"
+undocumented=""
+assemblies=0
+for nupkg in "$feed/${prefix}"DDDToolkit*."$version".nupkg; do
+  entries="$(unzip -Z1 "$nupkg" | tr -d '\r')"
+  while IFS= read -r assembly; do
+    assemblies=$((assemblies + 1))
+    if ! grep -qxF "${assembly%.dll}.xml" <<< "$entries"; then
+      undocumented+="    $(basename "$nupkg"): $assembly"$'\n'
+    fi
+  done < <(grep -E '^lib/[^/]+/[^/]+\.dll$' <<< "$entries" || true)
+done
+
+if [ -n "$undocumented" ]; then
+  echo "FAILED: these assemblies have no XML documentation beside them, so an editor shows none of their comments." >&2
+  echo "        GenerateDocumentationFile is set for the packages in Directory.Build.props." >&2
+  printf '%s' "$undocumented" >&2
+  exit 1
+fi
+
+if [ "$assemblies" = 0 ]; then
+  echo "FAILED: no package in $feed at $version has an assembly in lib/, so there was no documentation to check." >&2
+  exit 1
+fi
+
+echo "    $assemblies assemblies, each with its XML documentation"
 
 # A fresh package folder every run. NuGet caches by id and version, so without this a second run at
 # the same version would restore the packages from the first one and verify nothing.

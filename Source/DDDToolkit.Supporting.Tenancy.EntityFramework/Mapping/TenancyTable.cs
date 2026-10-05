@@ -1,6 +1,9 @@
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
-/// <summary>Tenancy's own tables, as <see cref="TenancyModel.TableOf"/> names them.</summary>
+/// <summary>
+/// Tenancy's own tables, as
+/// <see cref="TenancyModel.TableOf(Microsoft.EntityFrameworkCore.Metadata.IEntityType)">TenancyModel.TableOf</see> names them.
+/// </summary>
 public enum TenancyTable
 {
     /// <summary>The tenants.</summary>
