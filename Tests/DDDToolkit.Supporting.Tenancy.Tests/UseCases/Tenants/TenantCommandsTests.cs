@@ -104,6 +104,50 @@ public class TenantCommandsTests
     }
 
     [Fact]
+    public async Task A_catalogue_that_declares_no_packs_makes_the_first_seat_an_administrator_all_the_same()
+    {
+        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { Packs = [] }, [new Permission("gauges.read", "Gauges", "Read gauges")]);
+        var harness = new Harness(catalogue);
+
+        foreach (var (shape, slug) in new[] { (TenantShape.Flat, "kiosk"), (TenantShape.Hierarchical, "harbor") })
+        {
+            var provisioned = await Provision(harness, Harbor(shape, slug));
+
+            // The one role the tenant gets is the default administrators', and the first seat is given it at the root.
+            provisioned.RolesByPack.Keys.Should().Equal([TenancyPacks.DefaultAdministratorsKey], "a {0} tenant gets the one pack there is", shape);
+            provisioned.AdministratorRole.Should().Be(provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey]);
+            var administrators = harness.Store.Role(provisioned.AdministratorRole);
+            administrators.Name.Should().Be("Administrator");
+            administrators.Description.Should().Be(TenancyPacks.DefaultAdministrators.Description);
+            administrators.FromPack.Should().Be(TenancyPacks.DefaultAdministratorsKey);
+            administrators.Keys.Should().Equal(catalogue.LiveKeys).And.Contain([TenancyKeys.RolesManage, HostCatalogue.WidgetCreate, "gauges.read"]);
+            var grant = harness.Store.Seat(provisioned.AdminSeat).Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which;
+            grant.RoleId.Should().Be(provisioned.AdministratorRole);
+            grant.EndsAt.Should().BeNull();
+
+            // So the seat holds every live key for the whole tenant, and runs it: it makes a role, and gives it.
+            var caller = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
+            var held = await harness.Run(caller, async h =>
+            {
+                var questions = new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(h.Catalogue, h.Clock).Over(h.Store, h.Store);
+                return await Task.WhenAll(h.Catalogue.LiveKeys.Select(key => questions.HoldsTenantWideAsync(key, default)));
+            });
+            held.Should().OnlyContain(holds => holds, "the default administrators' role holds every live key, granted at the root");
+
+            var clerk = await harness.Run(caller, h => h.Roles.CreateAsync("Clerk", "Files widgets", [HostCatalogue.WidgetCreate], default));
+            await harness.Run(caller, h => h.Seats.GrantAsync(provisioned.AdminSeat, provisioned.RootUnit, clerk, until: null, reason: null, default));
+        }
+
+        // A flat tenant that turns hierarchical has the one pack there is already: no role is added.
+        var kiosk = new TenantId(101);
+        var roles = harness.Store.RolesOf(kiosk).Count;
+        await harness.Run(HostCaller.InSeat(kiosk, harness.Store.SeatsIn(kiosk).Single().Id),
+            h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
+        harness.Store.Tenant(kiosk).Shape.Should().Be(TenantShape.Hierarchical);
+        harness.Store.RolesOf(kiosk).Should().HaveCount(roles);
+    }
+
+    [Fact]
     public async Task Provisioning_a_listing_pack_grants_its_keys_only()
     {
         var catalogue = New.ListingCatalogue();

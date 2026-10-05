@@ -50,9 +50,6 @@ public sealed partial class Role;
 /// <summary>The roles a publishing house starts with, the kinds of unit it has, and the keys of its manuscripts a role of the organization can hold.</summary>
 public static class PressCatalogue
 {
-    /// <summary>The administrators' pack: every key, for the whole house.</summary>
-    public const string AdministratorPack = "house-admin";
-
     /// <summary>Heads an imprint: reads and edits its manuscripts.</summary>
     public const string ImprintHeadPack = "imprint-head";
 
@@ -69,11 +66,14 @@ public static class PressCatalogue
         new(ManuscriptKeys.Edit, "Manuscripts", "Edit a manuscript", Order: 20),
     ];
 
-    /// <summary>What the application passes as <c>TenancyOptions.Catalogue</c>.</summary>
+    /// <summary>
+    /// What the application passes as <c>TenancyOptions.Catalogue</c>. It declares no administrators' pack, so the
+    /// catalogue adds Tenancy's own, <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every key for
+    /// the whole house, and the access file the export writes from <see cref="Built"/> has it.
+    /// </summary>
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
         [
-            new(AdministratorPack, "Administrator", "Runs the house", [], Administers: true, Order: 10),
             new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptKeys.Read, ManuscriptKeys.Edit], Order: 20),
         ],
         UnitKinds: [new(HeadOffice, "Head office", 10), new(Imprint, "Imprint", 20)]);

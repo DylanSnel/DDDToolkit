@@ -168,6 +168,58 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     }
 
     [Fact]
+    public async Task A_catalogue_that_declares_no_packs_writes_the_default_administrators_pack_and_gives_its_role_to_the_first_seat()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        var noPacks = HostCatalogue.Application with { Packs = [] };
+        var catalogue = TenancyCatalogue.Build(noPacks, []);
+
+        // The access file written from that catalogue has the default pack, and the start-up check finds the database
+        // written from the catalogue the application runs with.
+        string.Concat(TenancyPostgres.AccessScripts(catalogue, names: names)).Should().Contain("WHEN 'administrator' THEN ARRAY[");
+        await using var services = await ServicesWithAsync(database, noPacks);
+
+        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        {
+            (await owner.ScalarAsync<string[]>("SELECT tenancy.pack_keys($1)", Cancellation, TenancyPacks.DefaultAdministratorsKey))
+                .Should().Equal(catalogue.LiveKeys, "the default administrators' pack holds every live key, as one that lists none does");
+            (await owner.ScalarAsync<bool>("SELECT tenancy.pack_keys($1) IS NULL", Cancellation, HostCatalogue.AdministratorPack))
+                .Should().BeTrue("the TestHost's own packs are not in this catalogue");
+        }
+
+        var dan = Guid.NewGuid();
+        var provisioned = await ProvisionEstuaryAsync(services, TenantShape.Flat, dan);
+
+        // The tenant's one role is a copy of the default pack, and the database wrote the first seat's rights from it:
+        // every live key, at the root.
+        provisioned.RolesByPack.Keys.Should().Equal(TenancyPacks.DefaultAdministratorsKey);
+        await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
+        {
+            (await owner.ListAsync<string>("SELECT \"Name\" || ' ' || \"FromPack\" FROM tenancy.\"Roles\" WHERE \"TenantId\" = $1", Cancellation, Estuary.Value))
+                .Should().Equal("Administrator administrator");
+            (await owner.ListAsync<string>("SELECT \"Key\" FROM tenancy.\"SeatRights\" WHERE \"SeatId\" = $1", Cancellation, provisioned.AdminSeat.Value))
+                .Should().BeEquivalentTo(catalogue.LiveKeys, "each key once, at the root");
+        }
+
+        // Under the policies the first seat is an administrator: it holds every key for the whole tenant, and gives a
+        // role that manages access.
+        await using (var asDan = await AsCaller.PersonAsync(database, dan, Estuary, Cancellation))
+        {
+            foreach (var key in catalogue.LiveKeys)
+            {
+                (await asDan.ScalarAsync<bool>("SELECT tenancy.holds_tenant_wide($1)", Cancellation, key)).Should().BeTrue("the default pack holds {0}", key);
+            }
+        }
+
+        var desk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
+            scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
+        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Fay", Cancellation));
+        await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
+        await services.BySeat(dan, Estuary, provisioned.AdminSeat,
+            scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, desk, until: null, reason: null, Cancellation));
+    }
+
+    [Fact]
     public async Task A_settings_manager_changing_the_shape_adds_the_listing_administrators_role_as_its_pack_lists_it()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
@@ -299,14 +351,20 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     /// An application that runs with <see cref="ListingAdministrators"/> over <paramref name="database"/>, after the
     /// access file written from that catalogue was applied: it is the migration, as for any change of a pack.
     /// </summary>
-    private async Task<TenancyServices> ListingServicesAsync(TestDatabase database)
+    private Task<TenancyServices> ListingServicesAsync(TestDatabase database) => ServicesWithAsync(database, ListingAdministrators);
+
+    /// <summary>
+    /// An application that runs with <paramref name="application"/> over <paramref name="database"/>, after the access
+    /// file written from the catalogue built of it was applied, and the start-up check found the policies in place.
+    /// </summary>
+    private async Task<TenancyServices> ServicesWithAsync(TestDatabase database, ApplicationCatalogue application)
     {
-        foreach (var script in TenancyPostgres.AccessScripts(TenancyCatalogue.Build(ListingAdministrators, []), names: names))
+        foreach (var script in TenancyPostgres.AccessScripts(TenancyCatalogue.Build(application, []), names: names))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }
 
-        var services = new TenancyServices(database, catalogue: ListingAdministrators);
+        var services = new TenancyServices(database, catalogue: application);
         try
         {
             await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);

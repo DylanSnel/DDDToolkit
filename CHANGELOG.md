@@ -770,6 +770,24 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   starts with, not a wall around the seat: an administrator still puts any key into a role, and gives itself a
   role that manages no access. On Postgres `pack_keys` answers the listed keys for such a pack, so the access
   file written from the catalogue is the migration, as for any change of a pack.
+- **Tenancy: an administrators' pack when the application declares none.** A catalogue that declares no
+  administrators' pack at all gets `TenancyPacks.DefaultAdministrators` from `TenancyCatalogue.Build`: key
+  `administrator`, named Administrator, for every shape, seeded on provision and listed first, with no keys, so
+  it holds every live key, one a module adds later included. A tenant's first seat is given its role, so the
+  smallest catalogue is the kinds of unit and the keys:
+  `new ApplicationCatalogue(UnitKinds: [...], Permissions: ...)`, through a new constructor without packs, or
+  `Packs: []` as before; calls that name packs are unchanged, and only `new([], [])`, which names no kind of
+  unit and was refused by `Build` anyway, no longer compiles. A catalogue that declares an administrators' pack
+  for one shape and not the other is still refused, and the problem now says the default is added only when
+  none is declared. While the default is added, a pack of the application's that has its key, or one of its
+  names ignoring case, Administrator or the Dutch Beheerder, is refused, with the fix: rename the pack, or
+  declare it with `Administers: true`. `TenancyCatalogue.HasDefaultAdministrators` says whether a built
+  catalogue has it. Its role is named by the application's `IRolePackTexts` first, by the pack's key, and
+  otherwise by the package, in English or Dutch, from `TenancyPackTexts.resx` and its Dutch twin. On Postgres
+  the access file written from the catalogue has the pack, so `pack_keys('administrator')` answers every live
+  key and `EnsurePoliciesAreInPlaceAsync` agrees with the catalogue the application runs. An application that
+  switches to it keeps its tenants' old administrators' roles; a change of shape then copies the default, and
+  is refused while the tenant has a role of the same name.
 - `TenancyUseCases<…>.IStore` is what the use cases ask of a storage; the Entity Framework store implements it,
   and so does a store of your own. Among its members: `ListSeatsAsync(tenant, only, ...)`, the tenant's seats as
   the directory shows them, all or the ones among the ids given, read from the seats themselves and never with

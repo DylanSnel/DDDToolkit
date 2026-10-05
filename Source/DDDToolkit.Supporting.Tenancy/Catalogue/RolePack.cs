@@ -26,6 +26,10 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// puts any key into a role, and gives itself a role that manages no access, as every seat that manages grants
 /// may; the grant records the seat that gave it.
 /// </para>
+/// <para>
+/// An application that marks no pack as administering gets <see cref="TenancyPacks.DefaultAdministrators"/>,
+/// which lists no keys, for every shape. One that marks a pack marks one for every shape.
+/// </para>
 /// </param>
 /// <param name="SeedOnProvision">Whether a newly provisioned tenant gets a copy.</param>
 /// <param name="Order">Where it is listed; lower first.</param>

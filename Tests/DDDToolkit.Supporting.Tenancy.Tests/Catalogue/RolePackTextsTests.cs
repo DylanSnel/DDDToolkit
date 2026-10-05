@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Globalization;
+using System.Resources;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.Supporting.Tenancy.Tests;
@@ -251,6 +253,74 @@ public class RolePackTextsTests
             .Should().BeEquivalentTo("Hoofdgebruiker", "Bediener", "Toeschouwer");
         (await RoleNamesWith(_ => { }))
             .Should().BeEquivalentTo(["Administrator", "Operator", "Watcher"], "an application that registers no texts gets the catalogue's, as before there were any");
+    }
+
+    [Fact]
+    public async Task The_default_administrators_pack_is_named_by_the_package_in_dutch_unless_the_application_names_it()
+    {
+        var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { Packs = [] }, []);
+
+        async Task<(string Name, string Description)> AdministratorsIn(CultureInfo? language, IRolePackTexts? texts = null)
+        {
+            var harness = new Harness(catalogue) { PackTexts = texts };
+            var provisioned = await Provision(harness, Harbor(TenantShape.Flat, language));
+            var role = harness.Store.Role(provisioned.AdministratorRole);
+            return (role.Name, role.Description);
+        }
+
+        var english = (TenancyPacks.DefaultAdministrators.Name, TenancyPacks.DefaultAdministrators.Description);
+        var dutch = ("Beheerder", "Heeft elk recht: beheert de organisatie, de mensen en hun toegang");
+
+        // The application registered no texts: the package ships the pack's name in Dutch, as it ships its refusals.
+        (await AdministratorsIn(Dutch)).Should().Be(dutch);
+        (await AdministratorsIn(CultureInfo.GetCultureInfo("nl-BE"))).Should().Be(dutch, "a regional culture falls back to its language");
+        (await AdministratorsIn(CultureInfo.GetCultureInfo("de"))).Should().Be(english, "a language the package does not ship gets the catalogue's English");
+        (await AdministratorsIn(language: null)).Should().Be(english, "without a language nothing is translated");
+
+        // The application's texts come first, by the pack's key; where they have none for it, the package's stand.
+        (await AdministratorsIn(Dutch, new PackTexts().In("nl", TenancyPacks.DefaultAdministratorsKey, "Hoofdbeheerder", "Regelt alles")))
+            .Should().Be(("Hoofdbeheerder", "Regelt alles"));
+        (await AdministratorsIn(CultureInfo.GetCultureInfo("de"), new PackTexts().In("de", TenancyPacks.DefaultAdministratorsKey, "Verwalter", "Verwaltet alles")))
+            .Should().Be(("Verwalter", "Verwaltet alles"), "the application names it in a language the package does not ship");
+        var asked = DutchTexts();
+        (await AdministratorsIn(Dutch, asked)).Should().Be(dutch);
+        asked.Asked.Should().Equal([(TenancyPacks.DefaultAdministratorsKey, "nl")], "the application is asked about the pack like any other");
+    }
+
+    [Fact]
+    public async Task A_pack_of_the_applications_own_under_the_default_key_keeps_the_applications_texts()
+    {
+        // The application declares an administrators' pack keyed as the default is: it is the application's, and the
+        // package has no texts for it.
+        var catalogue = TenancyCatalogue.Build(
+            HostCatalogue.Application with { Packs = [new RolePack(TenancyPacks.DefaultAdministratorsKey, "Harbor master", "Runs the harbor", [], Administers: true)] },
+            []);
+        var harness = new Harness(catalogue);
+
+        var provisioned = await Provision(harness, Harbor(TenantShape.Flat, Dutch));
+
+        harness.Store.Role(provisioned.AdministratorRole).Name.Should().Be("Harbor master");
+    }
+
+    [Fact]
+    public void The_package_ships_the_default_administrators_texts_in_english_and_dutch()
+    {
+        var resources = new ResourceManager("DDDToolkit.Supporting.Tenancy.TenancyPackTexts", typeof(TenancyFailures).Assembly);
+        Dictionary<string, string> Resx(CultureInfo culture)
+            => resources.GetResourceSet(culture, createIfNotExists: true, tryParents: false)!
+                .Cast<DictionaryEntry>()
+                .ToDictionary(entry => (string)entry.Key, entry => (string)entry.Value!);
+
+        var english = Resx(CultureInfo.InvariantCulture);
+        var dutch = Resx(Dutch);
+
+        english.Should().Equal(new Dictionary<string, string>
+        {
+            ["administrator.name"] = TenancyPacks.DefaultAdministrators.Name,
+            ["administrator.description"] = TenancyPacks.DefaultAdministrators.Description,
+        }, "the English texts are the pack's own, as the catalogue declares it");
+        dutch.Keys.Should().BeEquivalentTo(english.Keys, "every text has a Dutch one under the same name");
+        dutch.Values.Should().OnlyContain(text => !string.IsNullOrWhiteSpace(text)).And.NotIntersectWith(english.Values);
     }
 
     /// <summary>Pack texts from a table, by language and pack: what an application reads from its own resources.</summary>

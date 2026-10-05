@@ -39,7 +39,7 @@ The page goes in the order you need it:
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived, never deleted. |
 | **Seat** | A person in a tenant: their **Placements** in units, and the **RoleGrants** at each | One placement per unit and one primary. Only active roles are granted. The person a seat belongs to never changes. |
 | **Role** | A name and the **Permission** keys it grants | Only keys from the catalogue, with the keys they imply expanded. |
-| **Catalogue** | The permission keys, the **RolePacks** and the kinds of unit | One administrators' pack per shape. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
+| **Catalogue** | The permission keys, the **RolePacks** and the kinds of unit | One administrators' pack per shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
 
 Tenant, Organization, Seat and Role are aggregates, and they refer to each other by id. The catalogue is
 data your application supplies, not a class you declare. Two rules span more than one aggregate, and so
@@ -56,6 +56,72 @@ key is what makes an administrator: an active seat, placed at the root, that hol
 with no end. A key that manages access is added to a role, or taken out, by an administrator alone
 ([who may give a role](#who-may-give-a-role)).
 
+Tenancy raises domain events. Integration events are the application's to write, from those, the way any
+module writes its own.
+
+### The administrators' pack
+
+A tenant's first seat is given the role of the administrators' pack, at the root. That role holds the keys
+that manage access, so whoever holds it can give the next role: a tenant cannot start without one. You need
+not declare it. When your catalogue declares no administrators' pack at all, `TenancyCatalogue.Build` adds
+Tenancy's own, `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every
+shape, seeded when a tenant is provisioned. It lists no keys, so it holds every live key, one a module adds
+later included. The smallest catalogue is your kinds of unit and your keys, and packs that administer nothing,
+such as a viewer's, sit next to the default one.
+
+```mermaid
+flowchart TD
+    Declares{"does a pack<br/>administer?"}
+    Declares -- no --> Taken{"one with the<br/>default's key<br/>or name?"}
+    Declares -- yes --> PerShape{"one seeded<br/>per shape?"}
+    Taken -- no --> Default(["Tenancy's own<br/>is added"])
+    Taken -- yes --> Refused["refused, with<br/>the fix"]
+    PerShape -- no --> Refused
+    PerShape -- yes --> Yours(["yours are<br/>used"])
+```
+
+Declare your own once the role should have another name or list its keys, and then declare one for every
+shape. The default is added only when you declare none, so a catalogue with an administrators' pack for a
+flat tenant and none for a hierarchical one is refused, with a problem that says so. While the default is
+added, a pack of yours may not have its key, or one of its names ignoring case, Administrator or the Dutch
+Beheerder, since a tenant's roles have names of their own; the problem names the pack, and says to rename it
+or to declare it with `Administers: true`, which makes it the administrators' pack. `HasDefaultAdministrators`
+on the built catalogue says which of the two it has.
+
+A tenant provisioned in Dutch gets the default role as Beheerder: the package names its own pack in the two
+languages it ships, and your `IRolePackTexts` is asked first, by the key `administrator`
+([Roles in the tenant's language](#roles-in-the-tenants-language)). On Postgres the access file is written
+from the same catalogue, so `pack_keys('administrator')` answers every live key, and the start-up check that
+compares the database's functions with the catalogue the application runs with passes.
+
+<details>
+<summary>Show the code: a catalogue that declares no packs</summary>
+
+```csharp
+// Every tenant starts with the role of the default administrators' pack, given to its first seat
+public static ApplicationCatalogue Application { get; } = new(
+    UnitKinds: [new UnitKind("company", "Company")],
+    Permissions: ShopKeys.All);
+
+// The same, with the packs named and empty
+public static ApplicationCatalogue Same { get; } = new(
+    Packs: [],
+    UnitKinds: [new UnitKind("company", "Company")],
+    Permissions: ShopKeys.All);
+
+// A provisioned tenant names the role by the pack's key
+var administrators = provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey];
+```
+
+</details>
+
+Switching an application that runs already from a pack of its own to the default changes no tenant it has.
+Each keeps the role its old pack gave it, with that role's keys, and the seats that hold it keep it. Nothing
+copies the default into those tenants until a change of shape, which copies every pack of the new shape the
+tenant has no copy of, the default among them. A tenant that still has a role named like the default, as an
+old pack called Administrator gave it, refuses that copy with `tenancy.role-name-taken`, and the change of
+shape with it. Rename that role in those tenants first, or keep declaring your own pack.
+
 An administrators' pack that lists no keys holds every key of the catalogue, the modules' included. One that
 lists keys holds those and no others, for administrators who run access without holding the keys to the
 modules' work. Its list has to hold every one of Tenancy's keys and every key that manages access, itself or
@@ -64,9 +130,6 @@ so marking another key stops the application at start-up until the pack lists it
 can give every role, and appointing an area manager needs no system work. The list is what the administrators'
 role starts with, not a wall around the seat: an administrator still puts any key into a role, and gives
 itself a role that manages no access, as every seat that manages grants may.
-
-Tenancy raises domain events. Integration events are the application's to write, from those, the way any
-module writes its own.
 
 ## Adopting it, step by step
 
@@ -80,7 +143,8 @@ Tenancy becomes a module of your application, like any other. In the order you w
    ([Your tenancy module](#your-tenancy-module)).
 3. **Write your catalogue.** The permission keys of your modules, the role packs a tenant starts with and the
    kinds of unit, and a mark on every key that manages access
-   ([Which keys manage access](#who-may-give-a-role)).
+   ([Which keys manage access](#who-may-give-a-role)). Declare no administrators' pack, and every tenant
+   starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)).
 4. **Say who is calling, per request.** After authentication, `TenantSelection` finds the seat the token's
    identity has in the tenant the request names, and that seat is the caller for the rest of the request
    ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy) has the middleware).
@@ -1187,7 +1251,8 @@ start-up checks cover both tables and the function.
 Tenancy keeps no language. Which language a tenant works in and which a person reads are fields of your own
 tenant and seat classes, because which languages an application offers is the application's to say. The
 package phrases its refusals in the two languages it ships, and takes a language where it makes a text that
-stays: the name of a role.
+stays: the name of a role. Its own administrators' pack, for a catalogue that declares none, comes in those two
+languages as well.
 
 ### Refusals in English and Dutch
 
@@ -1267,6 +1332,15 @@ texts. The texts are chosen once. Afterwards the role is the tenant's own, renam
 tenant that changes its language later keeps its roles' names. A translated name is checked like any role's
 name: blank or too long is `tenancy.name-invalid`, and two packs of one shape under one name, ignoring case,
 are `tenancy.role-name-taken`, so give every pack a name of its own in every language.
+
+The [default administrators' pack](#the-administrators-pack), which Tenancy adds when you declare no
+administrators' pack, is the package's own, so the package has texts for it: Administrator in English and
+Beheerder in Dutch. Your `IRolePackTexts` is asked first, by the key `administrator`; where it answers `null`
+for it, or none is registered, its role gets the package's text in the language passed, and the English in a
+language the package does not ship. Without a language it is called Administrator, the catalogue's name.
+`TenancyCatalogue.Build` refuses a pack of yours named Administrator or Beheerder while it adds the default, so
+a tenant in either language never meets the clash. Your own texts it cannot see: a pack your `IRolePackTexts`
+calls Beheerder in Dutch collides with the default at provisioning, like any two packs named alike.
 
 ## Keeping tenants apart: the filter and the save check
 
@@ -3245,6 +3319,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleTenancyContribution.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleTenancyContribution.cs), `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
+| A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, `build/verify-package-consumption.sh` |
 | A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, re-key and archive | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
 | A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. Only for the command whose check let it through, the request in hand: a handler reached around its check saves as the caller, and the database judges it. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios`, `AccessHoldScenarios` |
 
@@ -3351,6 +3426,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A request is answered in the language it asks for, and code that phrases a text outside a request names its reader's language | **Code:** [`CultureScope.cs`](../Source/DDDToolkit/Localization/CultureScope.cs), [`RequestLanguages.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Languages/RequestLanguages.cs), [`RefusalProblems.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Requests/RefusalProblems.cs)<br/>**Try it:** The same switch: any refusal on a page reads Dutch after it<br/>**Test:** `CultureScopeTests`, `LanguageScenarios` |
 | The input a refusal is about stays an argument, `Field`, in the word the use cases call it by. The sample's own codes do not carry it yet, and no form of the UI uses it | **Code:** [`TenancyRefusals.cs`](../Source/DDDToolkit.Supporting.Tenancy/Refusals/TenancyRefusals.cs), [`TenancyNames.cs`](../Source/DDDToolkit.Supporting.Tenancy/Services/TenancyNames.cs)<br/>**Try it:** rhea asks about a key the catalogue does not know, in the `.http` file: the answer's `Field` is `keys`<br/>**Test:** `RefusalTableTests` |
 | A role made from a pack is named once, in the language the application passes, and is the tenant's own afterwards | **Code:** [`IRolePackTexts.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/IRolePackTexts.cs)<br/>**Try it:** Not in the sample: it passes no language, so its roles have the catalogue's names<br/>**Test:** `RolePackTextsTests`, `ProvisioningHooksTests` |
+| The package names its own administrators' pack in English and Dutch, after the application's texts | **Code:** [`TenancyPackTexts.nl.resx`](../Source/DDDToolkit.Supporting.Tenancy/Resources/TenancyPackTexts.nl.resx), [`TenancyUseCases.Tenants.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Tenants/TenancyUseCases.Tenants.cs)<br/>**Try it:** Not in the sample: it declares its own packs<br/>**Test:** `RolePackTextsTests` |
 
 ## On Postgres: the second lock
 
@@ -3883,7 +3959,7 @@ takes `tenancy.roles.manage` for the whole tenant. A settings manager adds a rol
 as the use case that changes a tenant's shape does: it names the pack, and holds exactly the keys `pack_keys`
 says. When you mark another key, or change a pack, the next build writes these functions again, and the
 access file it writes is the migration: nobody writes it by hand. An administrators' pack that lists no keys
-holds every key, so adding a key writes them again as well.
+holds every key, Tenancy's default one included, so adding a key writes them again as well.
 
 **The database keeps the rights.** A trigger on the grants, the seats and the roles writes the rights each
 change reaches, in the same statement, so they are never behind, inside a transaction either, and whoever

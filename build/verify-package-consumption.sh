@@ -27,6 +27,7 @@
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
+#      The application declares no administrators' pack, and the access file has Tenancy's default one.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -488,6 +489,16 @@ if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr 
   echo "FAILED: the export did not write the access files of both contexts into $supabase_migrations." >&2
   exit 1
 fi
+
+# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_keys in the
+# access file the export wrote from that catalogue answers its keys: every live key, the manuscripts' included,
+# which the house never listed for it.
+if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supabase_migrations"/*_access.press.ddd.sql; then
+  echo "FAILED: the access files in $supabase_migrations have no pack_keys answer for the default administrators' pack, 'administrator', holding the manuscripts' keys." >&2
+  exit 1
+fi
+
+echo "    SupportingDomains/Host: pack_keys answers the default administrators' pack"
 
 # The host names the role it logs in as with SupabaseLoginRole, which the packaged build step hands the export
 # among its variables: the export wrote the migration that makes the role, after every other file, granting it

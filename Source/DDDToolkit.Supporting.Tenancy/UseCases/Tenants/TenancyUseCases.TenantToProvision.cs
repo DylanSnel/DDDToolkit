@@ -20,8 +20,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// <param name="Language">
     /// The language the tenant's roles are named in: each pack's name and description are asked of the
     /// application's <see cref="IRolePackTexts"/> in it. <see langword="null"/>, or an application that
-    /// registered no texts, keeps the catalogue's own. The package keeps no language itself: where the tenant
-    /// remembers its language is a field of the application's tenant class, set in
+    /// registered no texts, keeps the catalogue's own; the default administrators' pack, which the package adds,
+    /// falls back to the package's own texts in it, English or Dutch. The package keeps no language itself:
+    /// where the tenant remembers its language is a field of the application's tenant class, set in
     /// <paramref name="ConfigureTenant"/>.
     /// </param>
     /// <param name="ConfigureTenant">

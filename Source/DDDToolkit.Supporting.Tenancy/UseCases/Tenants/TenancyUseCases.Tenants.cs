@@ -21,7 +21,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// <param name="clock">What "now" is.</param>
     /// <param name="packTexts">
     /// The packs' names and descriptions in a tenant's language, when the application registered some;
-    /// otherwise every role made from a pack gets the catalogue's texts.
+    /// otherwise every role made from a pack gets the catalogue's texts, but the role of the default
+    /// administrators' pack, which the package adds, gets the package's own texts in that language, English or
+    /// Dutch.
     /// </param>
     public sealed class TenantCommands(
         IStore store,
@@ -42,7 +44,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <para>
         /// The roles are named as the catalogue names its packs, or, with a
         /// <see cref="TenantToProvision.Language"/> and an <see cref="IRolePackTexts"/> registered, in that
-        /// language. The fields the application added to its tenant and seat classes are set by
+        /// language. The role of <see cref="TenancyPacks.DefaultAdministrators"/>, for an application that declares
+        /// no administrators' pack, is named in that language by the application's texts, or else by the package's
+        /// own, in English or Dutch. The fields the application added to its tenant and seat classes are set by
         /// <see cref="TenantToProvision.ConfigureTenant"/> and <see cref="TenantToProvision.ConfigureFirstSeat"/>,
         /// before the tenant is activated and in the same save.
         /// </para>
@@ -171,8 +175,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <param name="language">
         /// The language the new roles are named in, usually the tenant's, which the application keeps: each
         /// pack's texts are asked of the application's <see cref="IRolePackTexts"/> in it. <see langword="null"/>,
-        /// or an application that registered no texts, keeps the catalogue's own. The roles the tenant has
-        /// already keep their names.
+        /// or an application that registered no texts, keeps the catalogue's own; the default administrators'
+        /// pack, which the package adds, gets the package's own texts in that language, English or Dutch, where
+        /// the application's have none for it. The roles the tenant has already keep their names.
         /// </param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
@@ -285,12 +290,20 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// What a role copied from <paramref name="pack"/> starts as. It holds the keys the catalogue built the
         /// pack with, the administrators' role too: every live key for a pack that lists none, and for one that
         /// lists keys those and no others. Its name and description are the application's texts for the pack in
-        /// <paramref name="language"/> when it has some, and the catalogue's otherwise.
+        /// <paramref name="language"/> when it has some, and the catalogue's otherwise. The default
+        /// administrators' pack, which the application did not declare, has the package's texts in between: a
+        /// tenant in Dutch gets it in Dutch, as it gets the package's refusals.
         /// </summary>
         private RoleDraft DraftOf(RolePack pack, CultureInfo? language)
-            => language is not null && packTexts?.For(pack, language) is { } texts
+            => language is not null && (packTexts?.For(pack, language) ?? PackageTextsOf(pack, language)) is { } texts
                 ? new RoleDraft(texts.Name, texts.Description, pack.Keys, pack.Key)
                 : new RoleDraft(pack.Name, pack.Description, pack.Keys, pack.Key);
+
+        /// <summary>The package's texts for its own pack, the default administrators' one, in <paramref name="language"/>; none for the application's packs.</summary>
+        private (string Name, string Description)? PackageTextsOf(RolePack pack, CultureInfo language)
+            => catalogue.HasDefaultAdministrators && string.Equals(pack.Key, TenancyPacks.DefaultAdministratorsKey, StringComparison.Ordinal)
+                ? TenancyPackTexts.DefaultAdministratorsIn(language)
+                : null;
 
         /// <summary>
         /// A role made from the <paramref name="draft"/> of a pack, with the id given for the pack or a new one.

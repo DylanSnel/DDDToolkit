@@ -12,8 +12,14 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// own, renamed like any other, and a later change of the tenant's language changes no role.
 /// </para>
 /// <para>
-/// The application implements it over its own resources and registers it; without one, or without a language,
-/// a role gets the catalogue's texts.
+/// The application implements it over its own resources and registers it; without a language a role gets the
+/// catalogue's texts, and so it does without one registered, the default administrators' pack apart (below).
+/// </para>
+/// <para>
+/// <see cref="TenancyPacks.DefaultAdministrators"/>, which the catalogue adds when the application declares no
+/// administrators' pack, is asked for like any pack, by <see cref="TenancyPacks.DefaultAdministratorsKey"/>.
+/// Where this answers <see langword="null"/> for it, or none is registered, its role gets the package's own
+/// texts in the language: English and Dutch ship with the package, and any other language gets the English.
 /// </para>
 /// <code>
 /// public sealed class ShopPackTexts(IStringLocalizer&lt;ShopPacks&gt; texts) : IRolePackTexts
@@ -35,7 +41,8 @@ public interface IRolePackTexts
 {
     /// <summary>
     /// The texts of <paramref name="pack"/> in <paramref name="culture"/>, or <see langword="null"/> to keep the
-    /// catalogue's own.
+    /// catalogue's own; for <see cref="TenancyPacks.DefaultAdministrators"/>, to keep the package's, in English or
+    /// Dutch.
     /// <para>
     /// What comes back is checked like any role's name and description: a name that is blank or too long is
     /// refused with <c>tenancy.name-invalid</c>, and one another role of the tenant has already, ignoring case,

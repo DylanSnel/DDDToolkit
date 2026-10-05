@@ -35,12 +35,14 @@ public sealed partial class TenancyCatalogue
         IReadOnlyList<string> liveKeys,
         IReadOnlyList<string> accessManagingKeys,
         IReadOnlyList<RolePack> packs,
+        bool hasDefaultAdministrators,
         IReadOnlyList<UnitKind> unitKinds)
     {
         Permissions = permissions;
         LiveKeys = liveKeys;
         AccessManagingKeys = accessManagingKeys;
         Packs = packs;
+        HasDefaultAdministrators = hasDefaultAdministrators;
         UnitKinds = unitKinds;
 
         _byKey = permissions.ToDictionary(permission => permission.Key, StringComparer.Ordinal);
@@ -66,16 +68,26 @@ public sealed partial class TenancyCatalogue
 
     /// <summary>
     /// The role packs as built, their keys expanded. An administrators' pack that lists no keys holds
-    /// <see cref="LiveKeys"/>; one that lists keys holds those, as any other pack does.
+    /// <see cref="LiveKeys"/>; one that lists keys holds those, as any other pack does. When the application
+    /// declares no administrators' pack, <see cref="TenancyPacks.DefaultAdministrators"/> comes first, holding
+    /// <see cref="LiveKeys"/>.
     /// </summary>
     public IReadOnlyList<RolePack> Packs { get; }
+
+    /// <summary>
+    /// Whether the application declared no administrators' pack, so that <see cref="Packs"/> holds
+    /// <see cref="TenancyPacks.DefaultAdministrators"/>, added by <see cref="Build"/>. The pack of that key is then
+    /// the package's, named in the languages the package ships; otherwise every pack is the application's.
+    /// </summary>
+    public bool HasDefaultAdministrators { get; }
 
     /// <summary>The kinds of unit.</summary>
     public IReadOnlyList<UnitKind> UnitKinds { get; }
 
     /// <summary>
     /// Builds the catalogue from the application's part and the modules' contributions, and checks it as a
-    /// whole.
+    /// whole. An application that declares no administrators' pack gets
+    /// <see cref="TenancyPacks.DefaultAdministrators"/>, for every shape.
     /// </summary>
     /// <param name="application">The application's packs, unit kinds and keys.</param>
     /// <param name="contributed">The keys the modules contribute.</param>
@@ -96,7 +108,10 @@ public sealed partial class TenancyCatalogue
         var managing = live.Where(marked.Contains).ToArray();
 
         CheckImplications(declared, byKey, marked, problems);
-        var packs = CheckPacks(application.Packs ?? [], byKey, live, managing, problems);
+        // Whether the application declares an administrators' pack is read off what it declares, a pack refused
+        // for another reason included: once it declares one, it declares them for every shape.
+        var declaresAdministrators = (application.Packs ?? []).Any(pack => pack is { Administers: true });
+        var packs = CheckPacks(application.Packs ?? [], byKey, live, managing, declaresAdministrators, problems);
         CheckUnitKinds(application.UnitKinds ?? [], problems);
 
         if (problems.Count > 0)
@@ -112,7 +127,7 @@ public sealed partial class TenancyCatalogue
             .ThenBy(permission => permission.Key, StringComparer.Ordinal)
             .ToArray();
 
-        return new TenancyCatalogue(permissions, live, managing, [.. packs], [.. application.UnitKinds!]);
+        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators, [.. application.UnitKinds!]);
     }
 
     /// <summary>Whether the catalogue declares <paramref name="key"/>, retired or not.</summary>
@@ -165,7 +180,10 @@ public sealed partial class TenancyCatalogue
     public IEnumerable<RolePack> PacksFor(TenantShape shape)
         => Packs.Where(pack => pack.SeedOnProvision && (pack.Shape is null || pack.Shape == shape)).OrderBy(pack => pack.Order);
 
-    /// <summary>The pack the first administrator of a tenant of <paramref name="shape"/> is granted.</summary>
+    /// <summary>
+    /// The pack the first administrator of a tenant of <paramref name="shape"/> is granted: the application's, or
+    /// <see cref="TenancyPacks.DefaultAdministrators"/> when it declares none.
+    /// </summary>
     public RolePack AdministratorPackFor(TenantShape shape)
         => PacksFor(shape).Single(pack => pack.Administers);
 
@@ -334,12 +352,19 @@ public sealed partial class TenancyCatalogue
     /// needs (<see cref="CheckAdministratorsKeys"/>); and each shape has exactly one administrators' pack that is
     /// seeded. Returns the packs as built: their keys expanded, and for an administrators' pack that lists none,
     /// every live key.
+    /// <para>
+    /// An application that declares no administrators' pack at all gets <see cref="TenancyPacks.DefaultAdministrators"/>,
+    /// which gives every shape its one (<see cref="AddDefaultAdministrators"/>). One that declares an
+    /// administrators' pack declares them all: a shape it leaves without one is a mistake to report, not a gap
+    /// to fill, since the application chose what its administrators hold and the default might hold more.
+    /// </para>
     /// </summary>
     private static List<RolePack> CheckPacks(
         IReadOnlyList<RolePack> packs,
         Dictionary<string, Permission> byKey,
         string[] live,
         string[] managing,
+        bool declaresAdministrators,
         List<string> problems)
     {
         var result = new List<RolePack>();
@@ -411,6 +436,11 @@ public sealed partial class TenancyCatalogue
             result.Add(pack with { Keys = expanded });
         }
 
+        if (!declaresAdministrators)
+        {
+            AddDefaultAdministrators(result, seen, names, live, problems);
+        }
+
         foreach (var shape in Enum.GetValues<TenantShape>())
         {
             var administrators = result
@@ -421,11 +451,64 @@ public sealed partial class TenancyCatalogue
             if (administrators.Length != 1)
             {
                 problems.Add("A " + shape.ToString().ToLowerInvariant() + " tenant needs exactly one administrators' pack that is seeded, and has "
-                             + (administrators.Length == 0 ? "none." : administrators.Length + ": " + string.Join(", ", administrators) + "."));
+                             + (administrators.Length == 0
+                                 ? "none. The default one, '" + TenancyPacks.DefaultAdministratorsKey + "', is added only when the application declares "
+                                   + "no administrators' pack at all: declare a seeded one for this shape as well, or declare none."
+                                 : administrators.Length + ": " + string.Join(", ", administrators) + "."));
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Puts <see cref="TenancyPacks.DefaultAdministrators"/> first among the packs, holding every live key. Its key
+    /// is its own, and so are its names, ignoring case, as a tenant's role names are: the catalogue's, and the one
+    /// the package gives it in each language it ships, Beheerder in Dutch. So a pack of the application's that has
+    /// the key or any of the names is refused, with what to do about it. That pack is no administrators' pack, or
+    /// the default would not be added: it is renamed, or declared as the administrators' pack. A name the
+    /// application's own <see cref="IRolePackTexts"/> gives a pack is not known here, and is refused at
+    /// provisioning, as a clash between two of the application's own packs is.
+    /// </summary>
+    /// <param name="result">The application's packs as built; the default goes first.</param>
+    /// <param name="keys">The keys of the application's packs.</param>
+    /// <param name="names">The names of the application's packs, ignoring case, each with the key of its pack.</param>
+    /// <param name="live">Every live key, in ordinal order: what the default holds.</param>
+    /// <param name="problems">Where a pack that has the default's key or name is reported.</param>
+    private static void AddDefaultAdministrators(
+        List<RolePack> result,
+        HashSet<string> keys,
+        Dictionary<string, string> names,
+        string[] live,
+        List<string> problems)
+    {
+        var fallback = TenancyPacks.DefaultAdministrators;
+        const string Added = "the default administrators' pack, added because the application declares no administrators' pack";
+        const string Fix = ", or declare it with Administers: true to make it the administrators' pack instead.";
+
+        if (keys.Contains(fallback.Key))
+        {
+            problems.Add("The pack '" + fallback.Key + "' has the key of " + Added + ". Give the pack another key" + Fix);
+        }
+
+        // The catalogue's name, which a tenant without a language gets, and the package's own in every language it
+        // ships: a pack named like any of them would be refused at provisioning, in a tenant of that language.
+        IEnumerable<(string Name, string InLanguage)> defaultNames =
+        [
+            (fallback.Name, string.Empty),
+            .. TenancyPackTexts.DefaultAdministratorsTranslations().Select(translation => (translation.Name, " in " + translation.Language.EnglishName)),
+        ];
+        foreach (var (defaultName, inLanguage) in defaultNames)
+        {
+            if (names.TryGetValue(defaultName, out var taking))
+            {
+                var name = result.First(pack => string.Equals(pack.Key, taking, StringComparison.Ordinal)).Name.Trim();
+                problems.Add("The pack '" + taking + "' is named '" + name + "', and " + Added + ", is named '" + defaultName + "'" + inLanguage
+                             + "; a tenant's roles have names of their own, ignoring case. Give the pack another name" + Fix);
+            }
+        }
+
+        result.Insert(0, fallback with { Keys = live });
     }
 
     /// <summary>

@@ -87,14 +87,12 @@ public class CatalogueTests
     [Fact]
     public void Each_shape_has_exactly_one_administrators_pack()
     {
-        Problems(Application(packs: [new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetRead])]))
-            .Should().HaveCount(2).And.OnlyContain(problem => problem.Contains("exactly one administrators' pack"));
-
         Problems(Application(packs: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat }]))
             .Should().ContainSingle().Which.Should().StartWith("A flat tenant needs exactly one administrators' pack").And.Contain("host-admin, flat-admin");
 
         Problems(Application(packs: [Administrators with { SeedOnProvision = false }]))
-            .Should().HaveCount(2, "an administrators' pack that is not seeded gives a new tenant no administrator");
+            .Should().HaveCount(2, "an administrators' pack that is not seeded gives a new tenant no administrator, and the default is not added in its place")
+            .And.OnlyContain(problem => problem.Contains("is added only when the application declares no administrators' pack at all"));
 
         var perShape = TenancyCatalogue.Build(Application(packs:
         [
@@ -104,6 +102,128 @@ public class CatalogueTests
         ]), []);
         perShape.AdministratorPackFor(TenantShape.Flat).Key.Should().Be("flat-admin");
         perShape.AdministratorPackFor(TenantShape.Hierarchical).Key.Should().Be("tree-admin");
+        perShape.HasDefaultAdministrators.Should().BeFalse();
+    }
+
+    [Fact]
+    public void An_application_that_declares_no_packs_gets_the_default_administrators_pack_for_every_shape()
+    {
+        var catalogue = TenancyCatalogue.Build(Application(packs: []), []);
+
+        var administrators = catalogue.Packs.Should().ContainSingle().Which;
+        administrators.Should().BeEquivalentTo(TenancyPacks.DefaultAdministrators with { Keys = catalogue.LiveKeys }, options => options.ComparingByMembers<RolePack>());
+        administrators.Key.Should().Be("administrator");
+        administrators.Name.Should().Be("Administrator");
+        administrators.Description.Should().NotBeNullOrWhiteSpace("the screens that assign roles show it");
+        administrators.Should().Match<RolePack>(pack => pack.Administers && pack.SeedOnProvision && pack.Shape == null);
+        administrators.Keys.Should().Equal(catalogue.LiveKeys, "it lists nothing, and so holds every live key, Tenancy's and the application's");
+        catalogue.HasDefaultAdministrators.Should().BeTrue();
+
+        foreach (var shape in Enum.GetValues<TenantShape>())
+        {
+            catalogue.AdministratorPackFor(shape).Should().BeSameAs(administrators);
+            catalogue.PacksFor(shape).Should().Equal([administrators], "a new tenant of every shape gets a copy");
+        }
+
+        // The application leaves the packs out altogether, and names its kinds of unit and its keys.
+        var withoutPacks = TenancyCatalogue.Build(new ApplicationCatalogue(UnitKinds: [new UnitKind("company", "Company")], Permissions: HostCatalogue.Permissions), []);
+        withoutPacks.Packs.Should().BeEquivalentTo(catalogue.Packs, options => options.ComparingByMembers<RolePack>());
+        withoutPacks.LiveKeys.Should().Equal(catalogue.LiveKeys).And.Contain(HostCatalogue.WidgetCreate);
+
+        var marked = new ApplicationCatalogue([new UnitKind("company", "Company")], HostCatalogue.Permissions, [HostCatalogue.WidgetCreate]);
+        marked.Packs.Should().BeEmpty();
+        marked.Permissions.Should().BeSameAs(HostCatalogue.Permissions);
+        TenancyCatalogue.Build(marked, []).AccessManagingKeys.Should().Contain(HostCatalogue.WidgetCreate, "the keys it marks reach the catalogue as through the other constructor");
+
+        New.Catalogue().HasDefaultAdministrators.Should().BeFalse("the host declares an administrators' pack of its own");
+        New.Catalogue().Packs.Should().NotContain(pack => pack.Key == TenancyPacks.DefaultAdministratorsKey);
+    }
+
+    [Fact]
+    public void The_default_administrators_pack_comes_first_next_to_the_packs_the_application_declares()
+    {
+        var watcher = new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetChange], Order: 10);
+        var supervisor = new RolePack("supervisor", "Supervisor", "Runs a part", [TenancyKeys.UnitsManage], Shape: TenantShape.Hierarchical, Order: 20);
+
+        var catalogue = TenancyCatalogue.Build(Application(packs: [watcher, supervisor]), []);
+
+        catalogue.HasDefaultAdministrators.Should().BeTrue("no pack the application declares administers");
+        catalogue.Packs.Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher", "supervisor");
+        catalogue.PacksFor(TenantShape.Hierarchical).Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher", "supervisor");
+        catalogue.PacksFor(TenantShape.Flat).Select(pack => pack.Key).Should().Equal(TenancyPacks.DefaultAdministratorsKey, "watcher");
+        catalogue.Packs.Single(pack => pack.Key == "watcher").Keys.Should().Equal([HostCatalogue.WidgetChange, HostCatalogue.WidgetRead], "the application's packs are built as they were");
+        catalogue.AdministratorPackFor(TenantShape.Flat).Keys.Should().Equal(catalogue.LiveKeys);
+    }
+
+    [Fact]
+    public void The_default_administrators_pack_holds_a_key_declared_later_as_a_pack_that_lists_none_does()
+    {
+        var application = Application(packs: [], permissions: [.. HostCatalogue.Permissions, new Permission("widget.old", "Widgets", "Old", Retired: true)]);
+
+        var before = TenancyCatalogue.Build(application, []);
+        var later = TenancyCatalogue.Build(application, [new Permission("gauges.read", "Gauges", "Read gauges"), new Permission("gauges.lock", "Gauges", "Lock gauges", ManagesAccess: true)]);
+
+        before.AdministratorPackFor(TenantShape.Flat).Keys.Should().Equal(before.LiveKeys).And.NotContain("widget.old", "a retired key is not live");
+        later.AdministratorPackFor(TenantShape.Hierarchical).Keys.Should().Equal(later.LiveKeys)
+            .And.Contain(["gauges.read", "gauges.lock"], "a module's key comes with it, one that manages access included, as the application never lists it")
+            .And.Contain(before.LiveKeys);
+    }
+
+    [Fact]
+    public void Administrators_packs_declared_for_some_shapes_and_not_others_are_refused()
+    {
+        Problems(Application(packs: [Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat }]))
+            .Should().ContainSingle().Which.Should().Be(
+                "A hierarchical tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
+                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.");
+
+        // A pack that administers counts as declared even when something else about it is refused.
+        Problems(Application(packs: [Administrators with { Key = " " }]))
+            .Should().BeEquivalentTo(
+                "A pack has no key.",
+                "A flat tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
+                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.",
+                "A hierarchical tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
+                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.");
+    }
+
+    [Fact]
+    public void A_pack_that_takes_the_default_administrators_key_or_name_is_refused()
+    {
+        const string Added = "the default administrators' pack, added because the application declares no administrators' pack";
+        const string Fix = ", or declare it with Administers: true to make it the administrators' pack instead.";
+
+        Problems(Application(packs: [new RolePack("administrator", "Keeper", "Keeps widgets", [HostCatalogue.WidgetRead])]))
+            .Should().ContainSingle().Which.Should().Be("The pack 'administrator' has the key of " + Added + ". Give the pack another key" + Fix);
+
+        Problems(Application(packs: [new RolePack("chief", " ADMINISTRATOR ", "Runs widgets", [HostCatalogue.WidgetChange])]))
+            .Should().ContainSingle().Which.Should().Be(
+                "The pack 'chief' is named 'ADMINISTRATOR', and " + Added + ", is named 'Administrator'; a tenant's roles have names of their own, "
+                + "ignoring case. Give the pack another name" + Fix);
+
+        Problems(Application(packs: [new RolePack("administrator", "Administrator", "Runs widgets", [HostCatalogue.WidgetChange])]))
+            .Should().HaveCount(2, "the key and the name are each taken");
+    }
+
+    [Fact]
+    public void A_pack_named_like_the_default_administrators_pack_in_dutch_is_refused_as_well()
+    {
+        // A tenant provisioned in Dutch gets the default's role as Beheerder, from the package's own texts, and a pack
+        // the application named Beheerder would then be refused half way through provisioning, by a name the
+        // application never wrote.
+        Problems(Application(packs: [new RolePack("keeper", " beheerder ", "Keeps widgets", [HostCatalogue.WidgetRead])]))
+            .Should().ContainSingle().Which.Should().Be(
+                "The pack 'keeper' is named 'beheerder', and the default administrators' pack, added because the application declares no "
+                + "administrators' pack, is named 'Beheerder' in Dutch; a tenant's roles have names of their own, ignoring case. Give the pack "
+                + "another name, or declare it with Administers: true to make it the administrators' pack instead.");
+
+        // An administrators' pack of the application's own may be called anything: no default is added next to it.
+        TenancyCatalogue.Build(Application(packs: [Administrators with { Name = "Beheerder" }]), []).HasDefaultAdministrators.Should().BeFalse();
+
+        // Declared as the administrators' pack, it is the application's own, and nothing is added.
+        var own = TenancyCatalogue.Build(Application(packs: [new RolePack("administrator", "Administrator", "Runs widgets", [], Administers: true)]), []);
+        own.HasDefaultAdministrators.Should().BeFalse();
+        own.Packs.Should().ContainSingle().Which.Description.Should().Be("Runs widgets");
     }
 
     [Fact]
@@ -332,14 +452,18 @@ public class CatalogueTests
     {
         var exception = FluentActions.Invoking(() => TenancyCatalogue.Build(
                 new ApplicationCatalogue(
-                    Packs: [new RolePack("watcher", "Watcher", "Looks", ["widget.fly"])],
+                    Packs:
+                    [
+                        new RolePack("watcher", "Watcher", "Looks", ["widget.fly"]),
+                        new RolePack("flat-admin", "Flat administrator", "Runs a flat tenant", [], Shape: TenantShape.Flat, Administers: true),
+                    ],
                     UnitKinds: [],
                     Permissions: [new Permission("tenancy.extra", "Tenancy", "Taken")]),
                 [new Permission("Bad Key", "Gadgets", "Bad")]))
             .Should().Throw<TenancyCatalogueException>().Which;
 
-        exception.Problems.Should().HaveCount(6, "a tenancy key, a malformed key, an unknown pack key, no administrators' pack for either shape, and no unit kind");
-        exception.Message.Should().StartWith("The Tenancy catalogue has 6 problems:");
+        exception.Problems.Should().HaveCount(5, "a tenancy key, a malformed key, an unknown pack key, no administrators' pack for a hierarchical tenant, and no unit kind");
+        exception.Message.Should().StartWith("The Tenancy catalogue has 5 problems:");
         foreach (var problem in exception.Problems)
         {
             exception.Message.Should().Contain(problem);
