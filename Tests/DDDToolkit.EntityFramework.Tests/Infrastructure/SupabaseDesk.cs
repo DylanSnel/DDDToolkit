@@ -231,6 +231,28 @@ public static partial class PublicTicketsAreEveryones
     public static bool Allows(Ticket ticket, Caller caller) => ticket.IsPublic;
 }
 
+/// <summary>A teammate works on the team's tickets: reads and changes them, whichever column, as far as the rules for the row go.</summary>
+[RowAccess<Ticket>(RowOperations.Read | RowOperations.Change, To = [RowAccessRoles.User])]
+public static partial class TeammatesWorkOnTheTeamsTickets
+{
+    public static bool Allows(Ticket ticket, Caller caller) => ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team");
+}
+
+/// <summary>Only its owner closes a ticket or opens it again: a column rule, one condition more for a change of its status.</summary>
+[RowAccess<Ticket>(RowOperations.Change, Columns = [nameof(Ticket.Status)])]
+public static partial class OwnersCloseTheirTickets
+{
+    public static bool Allows(Ticket ticket, Caller caller) => caller.IsSignedIn && ticket.Owner == caller.UserId;
+}
+
+/// <summary>A team's lead closes the team's tickets as well: a second column rule on the same column.</summary>
+[RowAccess<Ticket>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Ticket.Status)])]
+public static partial class LeadsCloseTheTeamsTickets
+{
+    public static bool Allows(Ticket ticket, Caller caller)
+        => ticket.Team != null && ticket.Team == caller.Claim("app_metadata.team") && caller.Claim("app_metadata.lead") == "yes";
+}
+
 /// <summary>The desk's rules, each as the export takes it and as C# asks it.</summary>
 public static class DeskRules
 {
@@ -267,6 +289,12 @@ public static class DeskRules
     public static readonly RowAccessRule NotOfTheCallersSeat = RowAccessRule.For<Ticket>("Tickets not of the callers seat", RowOperations.Read, TicketsNotOfTheCallersSeat.RowAccessSql);
 
     public static readonly RowAccessRule OnDuty = RowAccessRule.For<Ticket>("On duty handle every ticket", RowOperations.All, OnDutyHandleEveryTicket.RowAccessSql);
+
+    public static readonly RowAccessRule TeamWork = RowAccessRule.For<Ticket>("Teammates work on the teams tickets", RowOperations.Read | RowOperations.Change, TeammatesWorkOnTheTeamsTickets.RowAccessSql, RowAccessRoles.User);
+
+    public static readonly RowAccessRule OwnersClose = RowAccessRule.ForColumns<Ticket>("Owners close their tickets", [nameof(Ticket.Status)], OwnersCloseTheirTickets.RowAccessSql);
+
+    public static readonly RowAccessRule LeadsClose = RowAccessRule.ForColumns<Ticket>("Leads close the teams tickets", [nameof(Ticket.Status)], LeadsCloseTheTeamsTickets.RowAccessSql, RowAccessRoles.User);
 
     /// <summary>Whether the rules that let a caller read let <paramref name="caller"/> read <paramref name="ticket"/>, in C#.</summary>
     public static bool Reads(Ticket ticket, Caller caller, bool withPublic = true)

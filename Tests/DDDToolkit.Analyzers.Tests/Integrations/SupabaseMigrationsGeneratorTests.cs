@@ -333,6 +333,42 @@ public sealed class SupabaseMigrationsGeneratorTests
     }
 
     [Fact]
+    public void A_column_rule_is_listed_with_the_columns_it_holds_for_the_export_to_write_its_trigger()
+    {
+        var module = OrderingModule + """
+
+
+            [DDDToolkit.Abstractions.Attributes.EntityId<System.Guid>]
+            public readonly partial record struct OrderId;
+
+            [DDDToolkit.Abstractions.Attributes.AggregateRoot<OrderId>]
+            public partial class Order
+            {
+                public Order(OrderId id) : base(id) { }
+
+                public System.Guid? PlacedBy { get; private set; }
+
+                public string Status { get; private set; } = "";
+
+                public System.DateTimeOffset? Due { get; private set; }
+            }
+
+            [DDDToolkit.Abstractions.Attributes.RowAccess<Order>(DDDToolkit.Abstractions.Attributes.RowOperations.Change, To = [DDDToolkit.Abstractions.Attributes.RowAccessRoles.User], Columns = [nameof(Order.Status), nameof(Order.Due)])]
+            public static partial class TheCustomerCancels
+            {
+                public static bool Allows(Order order, DDDToolkit.Abstractions.Access.Caller caller) => order.PlacedBy == caller.UserId;
+            }
+            """;
+
+        var result = HostReferencing(module).Run(GeneratorTestHost.SupabaseGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            "SupabaseMigrationSources",
+            "global::DDDToolkit.EntityFramework.Postgres.RowAccessRule.ForColumns(\"Shop.Ordering.Order\", \"The customer cancels\", new string[] { \"Status\", \"Due\" }, \"{columns}({col:PlacedBy} IS NOT DISTINCT FROM {caller:uid})\", \"@user\"),");
+    }
+
+    [Fact]
     public void A_rule_for_a_token_role_is_listed_by_the_token_roles_symbolic_name()
     {
         // An attribute takes constants, so a rule names a token role as the prefix and the role: a constant of

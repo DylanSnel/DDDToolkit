@@ -1192,6 +1192,22 @@ The same holds, with a little more, for the others the generator reads:
 - **A function's name** is `schema.name`, `owner/name`, or a name relative to its owner, each part letters,
   digits and underscores, and the owner lower case letters, digits and dashes. A relative name with no owner
   is [DDD00052](#ddd00052).
+- **A [column rule](row-level-security.md#column-rules)**, a rule with `Columns`, is for `RowOperations.Change`
+  alone: reading, adding and removing are about whole rows. Each name in `Columns` is a property of the
+  aggregate, its parent or its template's parent, or a property of a value object it holds, written with a
+  dot: `"Planned.From"`. It is not a collection of its entities, whose rows are in a table of their own and
+  follow the rules for the aggregate's row; a collection of values, such as a list of strings stored as an
+  array, is one column and may be named whole. It is reported on the `Columns` argument. Whether the model
+  stores the property in a column of the aggregate's table only the export knows, and it refuses one that it
+  does not, naming the rule.
+- **A function a column rule calls with `Sql.Call`** names its schema: `"public.is_agent"`, or
+  `"pg_catalog.lower"` for one of Postgres's own. A column rule is asked in a trigger whose search path is
+  empty, where a name without a schema finds Postgres's own functions alone. It is reported on the name.
+
+```csharp
+[RowAccess<Project>(RowOperations.Read | RowOperations.Change, Columns = [nameof(Project.State)])]   // DDD00038: Change alone
+[RowAccess<Project>(RowOperations.Change, Columns = ["Stat", nameof(Project.Crew)])]                  // DDD00038: no property, a collection of entities
+```
 
 ## DDD00039
 

@@ -3276,7 +3276,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
-| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
 | The application's clock and the database's are expected to be in step. The policies have no tolerance for a difference | **Code:** [The functions](#the-functions) says so; nothing in the packages<br/>**Try it:** Nothing to try: it is a property of the machines' clocks<br/>**Test:** `DatabaseClock`, the clock the Postgres tests of the package run with |
 | The real sign-in stands beside the dev login. The host takes both kinds of token Supabase Auth issues, one checked with the JWT secret and one with a key Auth publishes | **Code:** [`SupabaseTokenHandler.cs`](../Source/DDDToolkit.Auth.Supabase/SupabaseTokenHandler.cs), [`SampleAuthentication.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Auth/SampleAuthentication.cs), [`SupabaseLoginClient.cs`](../Examples/Tenancy/Examples.Tenancy.Ui/Auth/SupabaseLoginClient.cs)<br/>**Try it:** The password form on the login page, with `rhea@example.test` and the password the dashboard shows under Parameters<br/>**Test:** `SampleOnSupabaseTests`, `PublishedKeyTokenTests`, `SupabaseTokenHandlerTests` |
@@ -3991,23 +3991,27 @@ may open projects where it goes. The lock the Membership package writes from the
 project, and writes the rows of its crew only for a seat that holds `projects.crew.manage` or
 `projects.owner.change` there. The rule that opens a project (`SeatsOpenProjectsWhereTheyMay`) names the seat
 itself its owner unless the seat may name owners at the unit, and a policy of the module's own
-(`CrewSeatsOfTheProjectsTenant`) puts only seats of the project's tenant on a crew. What a statement that goes
-round the application can still do, as a seat that holds any one of those keys on a project:
+(`CrewSeatsOfTheProjectsTenant`) puts only seats of the project's tenant on a crew. And the columns whose
+commands ask a stricter key than any of them have [column rules](row-level-security.md#column-rules): the
+project's name and its planned days change only for a seat that holds `projects.edit` on it
+(`NameAndPlanChangeWithTheEditKey`), and whether it is open only for one that holds `projects.close`
+(`StateChangesWithTheCloseKey`). What a statement that goes round the application can still do, as a seat that
+holds any one of those keys on a project:
 
-- change the project's name, its planned days and whether it is open, whichever key it is that the seat
-  holds: with `projects.close` alone it renames, and with `projects.edit` alone it closes and reopens;
-- with `projects.open` at a unit alone, which in C# opens new projects there and changes none, change those
-  columns of every project at that unit;
+- with any of them, `projects.open` at the project's unit included, which in C# opens new projects there and
+  changes none, write the row with nothing changed but its version and the columns that say who changed it
+  last, which the policy alone leaves to every key that changes a project: a save that adds a crew member bumps
+  the project's version;
 - with `projects.crew.manage` or `projects.owner.change`, write every row of the project's crew, as the
   commands would, but without their rules: put a seat on it twice, or give one of the tenant's archived
   project roles, which gives nothing;
-- leave the project without what only the aggregate keeps: an owner who is on the crew with the lead role, and
-  a name and planned days that are valid.
+- leave the project without what only the aggregate keeps: an owner who is on the crew with the lead role, and,
+  with `projects.edit`, a name and planned days that are valid.
 
 It never crosses a tenant, reaches none of Tenancy's tables or keys, gives nobody a role on a crew without the
-key that manages it or the one that names the owner, names no owner without the key that does, and changes
-neither a project's number nor who wrote its row first. Taking `projects.open` out of what changes a project
-would close the rest; the sample does not.
+key that manages it or the one that names the owner, names no owner without the key that does, renames, plans,
+closes and reopens nothing without the key its command asks, and changes neither a project's number nor who wrote
+its row first.
 
 ### What the second lock stops, and what it does not
 

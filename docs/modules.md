@@ -388,8 +388,9 @@ Projects/
     Module.cs, GlobalUsings.cs, ProjectsInfrastructure.cs
     Persistence/                  ProjectsContext.cs, EfProjectStore.cs, EfProjectReads.cs; Migrations/, and
                                   ProjectsContextFactory.cs, which dotnet ef and the export build the context with
-    Access/                       the row rules, a class per file; UnitChangesWithItsKeys.cs, a rule Postgres
-                                  holds beyond the policies, as a trigger
+    Access/                       the row rules, a class per file, column rules among them;
+                                  UnitChangesWithItsKeys.cs, a rule Postgres holds beyond the
+                                  policies, as a trigger of the module's own
   Examples.Tenancy.Projects.Api/
     Module.cs, GlobalUsings.cs, ProjectsModule.cs
     Access/Rest/                  AccessEndpoints.cs

@@ -722,6 +722,16 @@ public static MembershipRules Rules { get; } = new(
   - *Who may be put on a member list.* Who a member's row is of is fixed once it is there (`HasMembers`
     maps it so, and the exported privileges leave it out of UPDATE), but who is added is your rules'. The
     sample's `CrewSeatsOfTheProjectsTenant` adds a crew member only for a seat of the project's tenant.
+- **The resource's other columns follow your rule for changing it.** The lock holds the member rows and the
+  owner column. Every other column of the resource is written by whoever your rule lets change the resource,
+  and that rule asks for any key that changes it, since a row knows no command: in the sample, a seat that only
+  manages a project's crew may change the project's row, because adding a member bumps the project's version.
+  Where a column's command asks a stricter key than that, hold the column with a
+  [column rule](row-level-security.md#column-rules), a rule with `Columns` that asks the functions for the key
+  the command asks: the sample's `NameAndPlanChangeWithTheEditKey` holds a project's name and planned days to
+  `projects.edit`, and `StateChangesWithTheCloseKey` its state to `projects.close`. The owner column stays the
+  lock's, written from the key the rules name with nothing of yours, and held by the start-up check below; a
+  column rule of your own on it would hold it a second time.
 - **It narrows, and allows nothing.** The lock is for the database roles of `grantTo`, on top of your own
   rules. Reading stays what your rules say. The application itself and the role that owns the tables are
   not held by it.

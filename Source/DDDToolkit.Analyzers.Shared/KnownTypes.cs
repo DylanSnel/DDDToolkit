@@ -88,6 +88,13 @@ internal static class KnownTypes
     /// <summary>The constant the core generator writes into a row access rule: its SQL, columns still to fill in.</summary>
     public const string RowAccessSqlField = "RowAccessSql";
 
+    /// <summary>
+    /// What a column rule's <see cref="RowAccessSqlField"/> starts with. An export that does not know column rules
+    /// stops at it, as at any placeholder it does not know, rather than write the rule as a policy for the whole
+    /// row, which would let whoever it allows change every column.
+    /// </summary>
+    public const string ColumnRuleSqlMarker = "{columns}";
+
     /// <summary>On a module's request interface: the generator writes the pipeline behavior that holds its requests to what they declare.</summary>
     public const string AccessRequestsAttribute = AttributesNamespace + ".AccessRequestsAttribute";
 

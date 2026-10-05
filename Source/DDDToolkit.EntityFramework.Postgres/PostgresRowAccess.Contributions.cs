@@ -128,7 +128,9 @@ public static partial class PostgresRowAccess
         }
 
         var roles = rules.Distinct().ToDictionary(rule => rule, rule => RolesOf(rule, export.Roles));
-        EnsureKeptToThemselves(context, rules, contributions);
+
+        // A column rule adds no policy, only a trigger, so it leaves a table a contribution keeps to itself alone.
+        EnsureKeptToThemselves(context, [.. rules.Where(rule => !rule.IsColumnRule)], contributions);
 
         return new Prepared(context, rules, functions, contributions, names, roles, export.Roles);
     }

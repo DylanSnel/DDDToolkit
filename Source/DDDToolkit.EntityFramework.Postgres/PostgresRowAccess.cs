@@ -42,6 +42,9 @@ public static partial class PostgresRowAccess
     /// <summary>The comment on every policy made from a rule, which is how the next script finds it to drop.</summary>
     public const string PolicyComment = "DDDToolkit row access rule";
 
+    /// <summary>The comment on every trigger made from a column rule, which is how the next script finds it to drop.</summary>
+    public const string ColumnRuleComment = "DDDToolkit column rule";
+
     /// <summary>The schema of a table the model gives none.</summary>
     public const string DefaultSchema = "public";
 
@@ -689,10 +692,11 @@ public static partial class PostgresRowAccess
                 $"The function {logical} would be created in the schema '{schema}' of {context.GetType().Name}, and a script writes a function's name without quotes, so Postgres would read it as a function of another schema, or of none. Give the schema a name of lower case letters, digits and underscores{(qualifiable ? ", or name the function with its schema" : "")}.");
 
     /// <summary>
-    /// A statement that drops every policy made from a rule on this context's tables. The Supabase export
-    /// puts it at the start of every migration of a module with rules too, because a policy stands in the
-    /// way of dropping a column it reads or changing its type; the script after it makes them again.
-    /// Empty for a context without tables.
+    /// A statement that drops every policy made from a rule on this context's tables, and every trigger made from
+    /// a column rule. The Supabase export puts it at the start of every migration of a module with rules too,
+    /// because a policy stands in the way of dropping a column it reads or changing its type, and a column rule's
+    /// trigger in the way of a column it holds; the script after it makes them again. Empty for a context
+    /// without tables.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     public static string DropStatement(DbContext context)
@@ -723,6 +727,18 @@ public static partial class PostgresRowAccess
             .Append("          AND (n.nspname, c.relname) IN (").Append(string.Join(", ", tables)).Append(')').Append('\n')
             .Append("    LOOP").Append('\n')
             .Append("        EXECUTE format('DROP POLICY %I ON %I.%I', generated.polname, generated.nspname, generated.relname);").Append('\n')
+            .Append("    END LOOP;").Append('\n')
+            .Append("    -- The triggers of the column rules, which stand in the way of a column as a policy does.").Append('\n')
+            .Append("    FOR generated IN").Append('\n')
+            .Append("        SELECT t.tgname, n.nspname, c.relname").Append('\n')
+            .Append("        FROM pg_catalog.pg_trigger t").Append('\n')
+            .Append("        JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid").Append('\n')
+            .Append("        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace").Append('\n')
+            .Append("        JOIN pg_catalog.pg_description d ON d.objoid = t.oid AND d.classoid = 'pg_catalog.pg_trigger'::regclass").Append('\n')
+            .Append("        WHERE d.description = ").Append(Literal(ColumnRuleComment)).Append('\n')
+            .Append("          AND (n.nspname, c.relname) IN (").Append(string.Join(", ", tables)).Append(')').Append('\n')
+            .Append("    LOOP").Append('\n')
+            .Append("        EXECUTE format('DROP TRIGGER %I ON %I.%I', generated.tgname, generated.nspname, generated.relname);").Append('\n')
             .Append("    END LOOP;").Append('\n')
             .Append("END").Append('\n')
             .Append("$ddd$;").Append('\n')
@@ -811,13 +827,16 @@ public static partial class PostgresRowAccess
         var definitions = InDependencyOrder(context, Definitions(prepared, writing, knowledge));
         var policies = ContributedPolicies(prepared, writing);
 
+        // The column rules' triggers, worked out before anything is written, so their functions are kept.
+        var columnTriggers = ColumnTriggers(prepared, policies, writing);
+
         // What the permissive policies allow, collected as they are written, where the script writes privileges too.
         var privileges = export.WriteGrants ? new Privileges() : null;
 
         var named = prepared.Roles.Values.SelectMany(roles => roles)
             .Concat(policies.Select(policy => policy.Role))
             .Concat(definitions.SelectMany(definition => definition.GrantTo));
-        List<string> kept = [.. definitions.Select(definition => definition.Resolved)];
+        List<string> kept = [.. definitions.Select(definition => definition.Resolved), .. columnTriggers.Select(trigger => trigger.Function)];
 
         // Whether the script is about the bookkeeping role: it writes privileges, or something of it is for the
         // role by its symbol. A role a host names as the database spells it is the host's own to make, also
@@ -840,7 +859,9 @@ public static partial class PostgresRowAccess
 
         statements.Append(GrantStatements(context, definitions, kept, sql));
 
+        // A column rule is no policy: its trigger is written after them.
         var aggregates = prepared.Rules
+            .Where(rule => !rule.IsColumnRule)
             .GroupBy(rule => rule.AggregateTypeName, StringComparer.Ordinal)
             .OrderBy(group => group.Key, StringComparer.Ordinal)
             .Select(group => new AggregateRules(RootOf(context, group.Key), [.. group.Distinct().OrderBy(rule => rule.Name, StringComparer.Ordinal)]));
@@ -870,6 +891,9 @@ public static partial class PostgresRowAccess
         }
 
         statements.Append(ContributedPolicyStatements(prepared, policies, permissive, secured, writing, policyNames, privileges));
+
+        // Only for a context with column rules, so a script of a context without is as it was.
+        statements.Append(ColumnTriggerStatements(columnTriggers, writing));
 
         // Before the contributions' own statements, so a contribution may give what the policies cannot say.
         if (privileges is not null)
@@ -907,10 +931,19 @@ public static partial class PostgresRowAccess
     /// </summary>
     /// <exception cref="InvalidOperationException">The model gives the shared table no discriminator.</exception>
     private static string OfItsType(IEntityType root, StoreObjectIdentifier table, string condition, string? alias)
+        => TypeCondition(root, table, alias) is { } ofType ? $"({Parenthesized(condition)} AND {ofType})" : condition;
+
+    /// <summary>
+    /// Whether a row of <paramref name="root"/>'s table, <paramref name="alias"/> or the policy's own, is of
+    /// <paramref name="root"/>'s type or one derived from it, as the table's discriminator says; null where the
+    /// table holds no other type's rows, and every row is.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The model gives the shared table no discriminator.</exception>
+    private static string? TypeCondition(IEntityType root, StoreObjectIdentifier table, string? alias)
     {
         if (root.BaseType is not { } baseType || TableOf(baseType) != table)
         {
-            return condition;
+            return null;
         }
 
         var discriminator = root.FindDiscriminatorProperty()
@@ -924,14 +957,12 @@ public static partial class PostgresRowAccess
             .ToList();
         var column = (alias is null ? "" : alias + ".") + Quote(discriminator.GetColumnName(table)!);
 
-        var ofType = values.Count switch
+        return values.Count switch
         {
             0 => "FALSE",
             1 => $"{column} = {values[0]}",
             _ => $"{column} IN ({string.Join(", ", values)})",
         };
-
-        return $"({Parenthesized(condition)} AND {ofType})";
     }
 
     /// <summary>An aggregate root and the rules that guard it, by name.</summary>
@@ -1842,6 +1873,12 @@ public static partial class PostgresRowAccess
         /// <summary>The entities an <c>{exists}</c> is looking at, by their alias.</summary>
         private readonly Dictionary<string, (IEntityType Entity, StoreObjectIdentifier Table)> _aliases = new(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Whether what was filled in so far reads a column of the row besides its key: a rule that reads only the
+        /// key, or nothing of the row, answers the same of a row before and after a change that keeps the key.
+        /// </summary>
+        public bool ReadsBeyondTheKey { get; private set; }
+
         public string Fill(string template)
         {
             var filled = new StringBuilder(template.Length * 2);
@@ -1884,6 +1921,7 @@ public static partial class PostgresRowAccess
             switch (parts[0])
             {
                 case "col" when parts.Length == 2:
+                    ReadsBeyondTheKey |= !PropertyOf(root, table, parts[1]).IsPrimaryKey();
                     return Qualified(rootAlias, ColumnOf(root, table, parts[1]));
                 case "col" when parts.Length == 3:
                     var (entity, entityTable) = Alias(parts[1], token);

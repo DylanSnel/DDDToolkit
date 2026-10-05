@@ -422,6 +422,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - DDD00051 reports an argument of a set-shaped question that reads the row, which would make the database
   ask the set once per row, and DDD00052 a function named without its schema in an assembly that declares
   no module, on a class without an `[AccessFunctions]` owner.
+- **Column rules: a stricter key for one column.** A policy cannot see which column a statement changes, so a
+  rule for changing a row has to let through whoever holds any key that changes it, and whoever holds one then
+  changes every column. `Columns` on a row access rule, `[RowAccess<Project>(RowOperations.Change, Columns =
+  [nameof(Project.State)])]`, makes it a column rule: one condition more, for a change of those columns alone.
+  The rule is written where the other rules are, and nothing goes on the aggregate. The export writes it as a
+  trigger, `BEFORE UPDATE OF` the columns, firing only where one of them changes, that asks the rule of the row as
+  it was and as it is about to be, as a policy for `UPDATE` asks a rule, and raises `42501` with a message that
+  names the rule. The row's policies still apply: a column rule allows nothing they refuse. Several column rules
+  on one column add up, and the columns the same rules hold share one trigger. A value object is every column
+  it is stored in, and `"Planned.From"` one of them. Every role a caller's statement runs as is held, the roles
+  the rules are for, the user's, the anonymous caller's, each mapped token role's and any other role a policy
+  lets change the table, and a held role no column rule is for may not change the column; the application's own
+  work, the scoped system role and the bookkeeping role, passes unless a rule names it, and so does the tables'
+  owner. A rule that reads only the row's key, as a set-shaped question about its id does, is asked once per
+  changed row while the key stays, rather than twice; a trigger runs per row, so a statement that changes the
+  column in many rows asks a set once for each, where a policy asks it once per statement. The trigger's
+  function has an empty search path: DDD00038 reports a `Sql.Call` in a column rule that names its function
+  without a schema, and a `Sql.Raw` there names every table and function with one. A column rule's
+  `RowAccessSql` starts with `{columns}`: `RowAccessRule.ForColumns` makes one from it for a script of your own,
+  `RowAccessRule.For` refuses it, and an export of an earlier version stops at the placeholder it does not know
+  rather than write the rule as a policy for the whole row. `RowAccessRule.Columns` and `IsColumnRule` say what
+  a rule is; the Supabase build lists a rule's columns from its attribute. DDD00038 reports `Columns` with an
+  operation besides `Change`, and a name that is no property of the aggregate or of a value object it holds, or
+  is a collection of its entities; a collection of values stored in the row, such as an array of strings, is one
+  column. The export refuses a property the model stores in no column of the aggregate's table, naming the
+  rule. See [Column rules](docs/row-level-security.md#column-rules).
 - **Row access contributions: policies a package ships.** A package or a module offers a class that implements
   `IRowAccessContribution` with `[assembly: RowAccessContribution(typeof(X))]`, and a host writes it into its
   migrations by listing it with `[assembly: UseRowAccessContribution(typeof(X))]` in the project that runs the
@@ -1452,7 +1478,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the Projects module, `UnitChangesWithItsKeys`, written into the module's exported access file, holds a
   project's unit closer than the policy does: it changes only to a unit of its tenant, for a seat with
   `projects.edit` on the project and `projects.open` where it goes; its owner changes only with
-  `projects.owner.change` on it, by the Membership package's lock;
+  `projects.owner.change` on it, by the Membership package's lock; its name and planned days only with
+  `projects.edit`, and its state only with `projects.close`, by two column rules,
+  `NameAndPlanChangeWithTheEditKey` and `StateChangesWithTheCloseKey`, so a seat that only manages a crew or
+  only names owners, or only opens projects at the project's unit, renames, plans, closes and reopens nothing,
+  by a statement of its own, an insert that turns into an update, or a handler that skipped its check, and
+  neither does one whose role lost the key between the check and the handler;
   [What stays in C#](docs/tenancy.md#what-stays-in-c) lists what the policy still lets a statement do that goes
   round the application. A statement that runs for a signed-in user has a timeout of ten seconds
   (`StatementTimeouts[CallerKind.User]`). At start-up the host checks that
@@ -1602,6 +1633,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
   and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up
   check does.
+- **The drop at the start of every script of policies takes the triggers of column rules away too,** found by
+  the comment each carries, `PostgresRowAccess.ColumnRuleComment`, as the policies are found by theirs, so a
+  column rule taken out loses its trigger with the next script, and a migration of a module with rules may
+  drop or change a column a column rule holds. The next build of an application that exports its migrations
+  writes a new access file for every module that has one; a migration exported before is compared without its
+  drop, as it always was.
 - **Supabase Auth: two kinds of token, each checked with its own kind of key.** Auth signs a user's token
   with a signing key whose public half it publishes (ES256 or RS256), or with the project's JWT secret
   (HS256). A host given the secret, with `UseSupabaseJwtSecret` or `SupabaseAuthOptions.JwtSecret`, used to

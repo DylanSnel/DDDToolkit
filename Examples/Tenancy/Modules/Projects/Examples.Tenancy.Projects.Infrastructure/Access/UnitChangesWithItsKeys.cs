@@ -19,14 +19,15 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// </summary>
 /// <remarks>
 /// The policy for changing a project is coarser than the application on purpose: a row knows no command, so it
-/// asks whether the seat holds any key that changes a project (<c>SeatsChangeTheProjectsTheyWorkOn</c>). For most
-/// columns that is the second lock it is meant to be. For the unit it is not enough, because the unit decides who
-/// reaches the project at all: every organization role reaches a project through its unit. A statement that went
-/// round the application could put a project at a unit of no tenant, where no rule of the application finds it
-/// again, or move it to wherever the seat happens to hold some key. So the unit changes only to a unit of the
-/// project's own tenant, for a seat that may edit the project as it was (<see cref="ProjectKeys.Edit"/>, however it
-/// holds it) and may open projects at the unit it arrives at (<see cref="ProjectKeys.Open"/>): what
-/// <c>MoveProjectToUnit</c> asks.
+/// asks whether the seat holds any key that changes a project (<c>SeatsChangeTheProjectsTheyWorkOn</c>). The
+/// columns whose commands ask a stricter key are held closer, the name, the planned days and the state by column
+/// rules (<see cref="NameAndPlanChangeWithTheEditKey"/>, <see cref="StateChangesWithTheCloseKey"/>). The unit is
+/// held closer still, because the unit decides who reaches the project at all: every organization role reaches a
+/// project through its unit. A statement that went round the application could put a project at a unit of no
+/// tenant, where no rule of the application finds it again, or move it to wherever the seat happens to hold some
+/// key. So the unit changes only to a unit of the project's own tenant, for a seat that may edit the project as it
+/// was (<see cref="ProjectKeys.Edit"/>, however it holds it) and may open projects at the unit it arrives at
+/// (<see cref="ProjectKeys.Open"/>): what <c>MoveProjectToUnit</c> asks.
 /// <para>
 /// The owner is held the same way, by the Membership package's lock: the projects' rules name the key that names
 /// an owner (<see cref="ProjectMembership"/>), and the package writes a trigger of its own from it. Only a signed-in
@@ -36,8 +37,10 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// </para>
 /// <para>
 /// It lives beside the module's row rules because it is one more of them, the one the module writes as SQL of its
-/// own: a rule is asked of a row as it is, and this one compares a row with what it was. The project that exports
-/// uses it with <c>[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]</c>.
+/// own. A column rule asks one question of the row as it was and the same question of the row as it is about to
+/// be; this one asks two different ones, the key to edit where the project was and the key to open where it goes,
+/// so it is no column rule. The project that exports uses it with
+/// <c>[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]</c>.
 /// </para>
 /// </remarks>
 public sealed class UnitChangesWithItsKeys : IRowAccessContribution

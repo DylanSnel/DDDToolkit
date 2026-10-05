@@ -16,7 +16,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// translate as an error on that expression. <c>DDDToolkit.EntityFramework.Postgres</c> turns the rule into
 /// Postgres policies, for the aggregate's table and every table of its entities, and
 /// <c>DDDToolkit.EntityFramework.Supabase</c> writes those into <c>supabase/migrations</c> as part of the
-/// build. The method stays an ordinary method, so a handler can ask the same rule in C#.
+/// build. The method stays an ordinary method, so a handler can ask the same rule in C#. A rule that names
+/// <see cref="Columns"/> holds a change of those columns alone, and becomes a trigger rather than a policy.
 /// </summary>
 /// <typeparam name="TAggregate">The aggregate root the rule guards. Its entities follow it.</typeparam>
 /// <param name="operations">What the rule lets a caller do with a row it allows.</param>
@@ -37,6 +38,26 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// <c>PUBLIC</c> is refused when the policies are written.
     /// </summary>
     public string[] To { get; set; } = [];
+
+    /// <summary>
+    /// The properties of <typeparamref name="TAggregate"/> whose change the rule holds, which makes it a column
+    /// rule: <c>Columns = [nameof(Project.State)]</c>. A row's own rules let a caller change a row, whichever of
+    /// its columns the change is to; a column rule is one condition more, for a change of these columns alone,
+    /// where one of them takes a stricter key than the rest of the row. It goes with
+    /// <see cref="RowOperations.Change"/> and no other operation. A value object stored in the aggregate's row
+    /// is every column it is stored in, and <c>"Planned.From"</c> is one of them. Left empty, the rule is about
+    /// whole rows, as it always was.
+    /// </summary>
+    /// <remarks>
+    /// A policy cannot see which column a statement changes, so the export writes a trigger, before an update of
+    /// those columns, that asks <c>Allows</c> of the row as it was and as it is about to be, as a policy for
+    /// <c>UPDATE</c> asks a rule, and refuses the statement when either answer is no. The row's own policy for
+    /// <c>UPDATE</c> still applies first. Several column rules on one column add up: a change one of them allows
+    /// is allowed. A caller's role that none of them is for may not change the column. The application's own
+    /// work, the scoped system role and the bookkeeping role, and the tables' owner are not held, unless a
+    /// column rule names the role in <see cref="To"/>.
+    /// </remarks>
+    public string[] Columns { get; set; } = [];
 }
 
 /// <summary>What a row access rule lets a caller do with the rows it allows.</summary>
@@ -49,7 +70,10 @@ public enum RowOperations
     /// <summary>Add a row the rule allows: <c>INSERT</c>, checked against the new row.</summary>
     Create = 2,
 
-    /// <summary>Change a row the rule allows, into one it still allows: <c>UPDATE</c>.</summary>
+    /// <summary>
+    /// Change a row the rule allows, into one it still allows: <c>UPDATE</c>. With
+    /// <see cref="RowAccessAttribute{TAggregate}.Columns"/>, a change of those columns of such a row.
+    /// </summary>
     Change = 4,
 
     /// <summary>Remove the row: <c>DELETE</c>.</summary>

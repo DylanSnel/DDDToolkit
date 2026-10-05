@@ -556,7 +556,8 @@ is written before the files of the modules that call them:
 
 ```sql
 -- Written by DDDToolkit from the row access rules of OrderingContext.
-DO $ddd$ ... $ddd$;   -- drops the policies the previous file made on the module's tables
+DO $ddd$ ... $ddd$;   -- drops the policies the previous file made on the module's tables, and the triggers
+                      -- of its column rules
 
 DO $ddd$ ... $ddd$;   -- makes what the policies below ask, where the database lacks it:
                       -- the ddd schema, ddd.written_in_this_transaction(xid), the scoped system role when a
@@ -583,7 +584,8 @@ CREATE POLICY "OrderLine (insert) for anon" ON ordering."OrderLine" FOR INSERT T
 
 The file says what the rules are now: it drops every policy an earlier one made, found by the comment each
 carries, and makes them all again, so a rule taken out disappears and a policy you wrote by hand is left
-alone. A file already written is never written again, because Supabase may have applied it. A rule that
+alone. A [column rule](row-level-security.md#column-rules) is a trigger rather than a policy, and goes the same
+way, after the policies. A file already written is never written again, because Supabase may have applied it. A rule that
 changes, or a migration of the module that comes after the last file, gets a new file, numbered after
 everything else in the directory, and `Check` in CI fails until it is there.
 

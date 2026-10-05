@@ -27,6 +27,11 @@ namespace DDDToolkit.Analyzers;
 /// depends on the database, so it is <c>{caller:uid}</c>, <c>{caller:signedin}</c>, <c>{caller:role}</c> or
 /// <c>{caller:claim:path}</c>. Braces in a string constant are doubled.
 /// <para>
+/// A column rule, one with <c>Columns</c>, is translated as every rule is, and its SQL starts with
+/// <c>{columns}</c>: an export that knows no column rules stops at the placeholder it does not know, rather than
+/// write the rule as a policy for the whole row, which would let whoever it allows change every column.
+/// </para>
+/// <para>
 /// An <c>[AccessFunction]</c> is translated the same way, and may also ask the aggregate's entities:
 /// <c>project.Members.Any(member =&gt; ...)</c> is <c>{exists:Members:e1}...{/exists}</c>, the entity's
 /// properties inside it <c>{col:e1:Path}</c>, the entities of that entity
@@ -141,11 +146,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
         FunctionName? name = null;
         var shape = isFunction ? ShapeOf(attribute) : Shape.Row;
+        var columnRule = false;
         if (isFunction)
         {
             var written = NameOf(FunctionNameOf(attribute), OwnerOf(symbol));
             ReportName(written, symbol.Name, LocationInfo.From(syntax.Identifier), diagnostics);
             name = written;
+        }
+        else
+        {
+            columnRule = ReportColumns(attribute, aggregate, symbol.Name, LocationInfo.From(syntax.Identifier), diagnostics, cancellationToken);
         }
 
         var allows = symbol.GetMembers("Allows").OfType<IMethodSymbol>().ToList();
@@ -207,14 +217,16 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var model = attributed.SemanticModel.Compilation.GetSemanticModel(declaration.SyntaxTree);
-        var sql = new Translator(model, method.Parameters[0], method.Parameters[1], extras, isFunction, diagnostics).Translate(body);
+        var sql = new Translator(model, method.Parameters[0], method.Parameters[1], extras, isFunction, columnRule ? symbol.Name : null, diagnostics).Translate(body);
 
         if (diagnostics.HasErrorsIn())
         {
             return RowAccessDefinition.Failed(type, diagnostics);
         }
 
-        List<string> members = [SqlConstant(sql)];
+        // A column rule's SQL says so first, so an export that knows no column rules stops at it rather than write it
+        // as a policy for the whole row.
+        List<string> members = [SqlConstant(columnRule ? KnownTypes.ColumnRuleSqlMarker + sql : sql)];
         if (isFunction && name is { Logical: { } logical } resolved)
         {
             members.Add(NameConstant(logical, contract: false));
@@ -245,6 +257,151 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// </summary>
     private static bool IsAggregateRoot(INamedTypeSymbol type)
         => EntityDeclarations.IsAggregateRoot(type) && !EntityDeclarations.IsBase(type);
+
+    /// <summary>What <c>RowOperations.Change</c> is, the one operation a column rule goes with.</summary>
+    private const int ChangeOperation = 4;
+
+    /// <summary>
+    /// Whether the rule is a column rule, one that names <c>Columns = [...]</c>, after reporting what is wrong
+    /// with them as DDD00038 on that argument: a column rule with an operation besides <c>Change</c>, since
+    /// reading, adding and removing are about whole rows; and a name that is no property of the aggregate, through
+    /// its value objects, or is a collection of its entities, whose rows are in a table of their own and follow the
+    /// rules about the aggregate's row. Whether the model maps a property to a column of the row only the export
+    /// knows, which refuses one it does not.
+    /// </summary>
+    private static bool ReportColumns(AttributeData attribute, INamedTypeSymbol aggregate, string rule, LocationInfo? fallback, List<DiagnosticInfo> diagnostics, CancellationToken cancellationToken)
+    {
+        if (attribute.NamedArguments.FirstOrDefault(static argument => argument.Key == "Columns").Value is not { Kind: TypedConstantKind.Array } columns
+            || columns.Values.Length == 0)
+        {
+            return false;
+        }
+
+        var argument = attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) is AttributeSyntax { ArgumentList: { } arguments }
+            ? arguments.Arguments.FirstOrDefault(static each => each.NameEquals?.Name.Identifier.Text == "Columns")
+            : null;
+        var location = argument is null ? fallback : LocationInfo.From(argument);
+
+        var operations = attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int value ? value : 0;
+        if (operations != ChangeOperation)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                location,
+                rule,
+                "RowOperations.Change and no other operation with Columns: a column rule holds a change of those columns, and reading, adding and removing a row are about the whole row"));
+        }
+
+        foreach (var column in columns.Values.Select(static each => each.Value as string))
+        {
+            if (ColumnProblem(aggregate, column) is { } problem)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, rule, problem));
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// What is wrong with <paramref name="column"/> as a column of a column rule about <paramref name="aggregate"/>,
+    /// or null: it is a property of the aggregate, its parent or the parent of its template, or a property of the
+    /// value object such a property holds, <c>Planned.From</c>, and no collection of entities. A collection of
+    /// values, strings, numbers or ids, is stored in the row as one column, an array or JSON, and may be held
+    /// whole, but nothing inside it is a column.
+    /// </summary>
+    private static string? ColumnProblem(INamedTypeSymbol aggregate, string? column)
+    {
+        var expected = $"Columns that name properties of {aggregate.Name} stored in its row, such as nameof({aggregate.Name}.{ExampleProperty(aggregate)}), or a property of a value object it holds, written with a dot, such as \"{ExampleValueObjectPath(aggregate) ?? "Value.Property"}\"";
+        if (string.IsNullOrWhiteSpace(column))
+        {
+            return expected + ": an empty name is none";
+        }
+
+        ITypeSymbol type = aggregate;
+        var parts = column!.Split('.');
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (FindProperty(type, parts[i]) is not { } property)
+            {
+                return $"{expected}: '{column}' is none, since {type.Name} has no property '{parts[i]}'";
+            }
+
+            type = property.Type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable ? nullable.TypeArguments[0] : property.Type;
+            if (ElementOf(type) is not { } element)
+            {
+                continue;
+            }
+
+            if (element is INamedTypeSymbol named && EntityDeclarations.IsEntityOrAggregateRoot(named))
+            {
+                return $"{expected}: '{column}' is a collection of entities, whose rows are in a table of their own and are written as the rules about the {aggregate.Name} let a caller write its row";
+            }
+
+            if (i < parts.Length - 1)
+            {
+                return $"{expected}: '{column}' goes into {parts[i]}, a collection, which is stored whole and is held whole";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>What a collection holds: the element type of an array or of an <c>IEnumerable&lt;T&gt;</c>; null for a string or anything else.</summary>
+    private static ITypeSymbol? ElementOf(ITypeSymbol type)
+    {
+        if (type.SpecialType == SpecialType.System_String)
+        {
+            return null;
+        }
+
+        if (type is IArrayTypeSymbol array)
+        {
+            return array.ElementType;
+        }
+
+        static bool IsEnumerable(INamedTypeSymbol contract) => contract.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T;
+
+        return type is INamedTypeSymbol named && IsEnumerable(named)
+            ? named.TypeArguments[0]
+            : type.AllInterfaces.FirstOrDefault(IsEnumerable)?.TypeArguments[0];
+    }
+
+    /// <summary>
+    /// A property of a value object <paramref name="aggregate"/> declares, to name in an example: <c>Total.Amount</c>,
+    /// the first such property and the first property of its value object; or null where it declares none.
+    /// </summary>
+    private static string? ExampleValueObjectPath(INamedTypeSymbol aggregate)
+    {
+        static bool Public(IPropertySymbol property) => !property.IsStatic && !property.IsIndexer && property.DeclaredAccessibility == Microsoft.CodeAnalysis.Accessibility.Public;
+
+        return aggregate.GetMembers().OfType<IPropertySymbol>()
+            .Where(Public)
+            .Where(static property => property.Type.GetAttributes().Any(static attribute => attribute.AttributeClass?.ToDisplayString() == KnownTypes.ValueObjectAttribute))
+            .Select(property => property.Type.GetMembers().OfType<IPropertySymbol>().FirstOrDefault(Public) is { } inner ? property.Name + "." + inner.Name : null)
+            .FirstOrDefault(static path => path is not null);
+    }
+
+    /// <summary>The instance property <paramref name="name"/> of <paramref name="type"/>, its base types or the parent of its template, or null.</summary>
+    private static IPropertySymbol? FindProperty(ITypeSymbol type, string name)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetMembers(name).OfType<IPropertySymbol>().FirstOrDefault(static property => !property.IsStatic && !property.IsIndexer) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return type is INamedTypeSymbol named && EntityDeclarations.TemplateParentOf(named) is { } parent ? FindProperty(parent, name) : null;
+    }
+
+    /// <summary>A property of <paramref name="aggregate"/> to name in an example: the first one it declares that is no collection, or <c>Name</c>.</summary>
+    private static string ExampleProperty(INamedTypeSymbol aggregate)
+        => aggregate.GetMembers().OfType<IPropertySymbol>()
+            .FirstOrDefault(static property => !property.IsStatic && !property.IsIndexer && property.DeclaredAccessibility == Microsoft.CodeAnalysis.Accessibility.Public
+                && (property.Type.SpecialType == SpecialType.System_String || !property.Type.AllInterfaces.Any(static contract => contract.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)))
+            ?.Name ?? "Name";
 
     /// <summary>The name an access function, a contract or a question gives its function, as written, or null.</summary>
     private static string? FunctionNameOf(AttributeData attribute)
@@ -811,13 +968,18 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         public static FunctionName Invalid(string written) => new(written, null, null, Qualified: false, IsInvalid: true);
     }
 
-    /// <summary>C# in, SQL out; anything it does not know is DDD00039 on that expression.</summary>
+    /// <summary>
+    /// C# in, SQL out; anything it does not know is DDD00039 on that expression. <c>columnRule</c> names the rule
+    /// when it is a column rule, whose SQL is asked in a trigger with an empty search path rather than in a policy,
+    /// so a function it calls by name has to carry its schema.
+    /// </summary>
     private sealed class Translator(
         SemanticModel model,
         IParameterSymbol aggregate,
         IParameterSymbol caller,
         IReadOnlyList<IParameterSymbol> extras,
         bool isFunction,
+        string? columnRule,
         List<DiagnosticInfo> diagnostics)
     {
         /// <summary>The entity an <c>Any</c> is looking at, by the lambda parameter that names it: its alias in the SQL.</summary>
@@ -1236,6 +1398,19 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             if (arguments.Count == 0 || StringConstant(arguments[0].Expression) is not { } function || !IsFunctionName(function))
             {
                 return Fail(arguments.Count == 0 ? invocation : arguments[0].Expression);
+            }
+
+            // A policy finds a name without a schema when it is made, on the search path of the script that makes it.
+            // A column rule is asked in a trigger whose search path is empty, as it runs, where such a name finds
+            // Postgres's own functions alone: one of the host's would fail every change of the column rather than
+            // refuse it. Which functions are Postgres's own the generator cannot tell, so every name carries a schema.
+            if (columnRule is not null && function.IndexOf('.') < 0)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(
+                    DiagnosticDescriptors.RowAccessRuleShape,
+                    LocationInfo.From(arguments[0].Expression),
+                    columnRule,
+                    $"a Sql.Call that names its function with its schema, such as \"public.{function}\", or \"pg_catalog.{function}\" for one of Postgres's own: a column rule is asked in a trigger whose search path is empty, where a name without a schema finds Postgres's own functions alone"));
             }
 
             var translated = new List<string>();

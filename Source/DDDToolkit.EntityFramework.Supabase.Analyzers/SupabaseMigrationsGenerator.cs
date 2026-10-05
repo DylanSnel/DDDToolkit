@@ -356,12 +356,19 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         }
 
         var operations = attribute.ConstructorArguments.Length > 0 && attribute.ConstructorArguments[0].Value is int value ? value : 0;
-        var roles = attribute.NamedArguments.FirstOrDefault(static argument => argument.Key == "To").Value is { Kind: TypedConstantKind.Array } to
-            ? to.Values.Select(static role => role.Value as string).Where(static role => !string.IsNullOrWhiteSpace(role)).Select(static role => role!).ToArray()
-            : [];
+        var roles = Strings(attribute, "To");
 
-        return new Rule(ClrName(aggregate), Humanize(type.Name), operations, new EquatableArray<string>(roles), sql);
+        // A column rule's columns, as its attribute names them: the core generator wrote no SQL for one it refused.
+        var columns = Strings(attribute, "Columns");
+
+        return new Rule(ClrName(aggregate), Humanize(type.Name), operations, new EquatableArray<string>(roles), sql, new EquatableArray<string>(columns));
     }
+
+    /// <summary>The strings of the attribute's array argument <paramref name="name"/>, without the empty ones; none when it has no such argument.</summary>
+    private static string[] Strings(AttributeData attribute, string name)
+        => attribute.NamedArguments.FirstOrDefault(argument => argument.Key == name).Value is { Kind: TypedConstantKind.Array } values
+            ? values.Values.Select(static each => each.Value as string).Where(static each => !string.IsNullOrWhiteSpace(each)).Select(static each => each!).ToArray()
+            : [];
 
     /// <summary>The name <see cref="Type.FullName"/> gives the type: namespace, then outer types with <c>+</c>.</summary>
     private static string ClrName(INamedTypeSymbol type)
@@ -500,7 +507,9 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             : string.Join(
                 "\n",
                 rules.Select(rule =>
-                    $"            {Postgres}.RowAccessRule.For({Literal(rule.Aggregate)}, {Literal(rule.Name)}, (global::{KnownTypes.AttributesNamespace}.RowOperations){rule.Operations}, {Literal(rule.Sql)}"
+                    (rule.Columns.Count == 0
+                        ? $"            {Postgres}.RowAccessRule.For({Literal(rule.Aggregate)}, {Literal(rule.Name)}, (global::{KnownTypes.AttributesNamespace}.RowOperations){rule.Operations}, {Literal(rule.Sql)}"
+                        : $"            {Postgres}.RowAccessRule.ForColumns({Literal(rule.Aggregate)}, {Literal(rule.Name)}, new string[] {{ {string.Join(", ", rule.Columns.Select(Literal))} }}, {Literal(rule.Sql)}")
                     + string.Concat(rule.Roles.Select(role => ", " + Literal(role))) + "),"));
 
         var functionEntries = functions.Count == 0
@@ -584,8 +593,11 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
     /// <summary>One marked factory: its context, itself, and the module its assembly declares, if any.</summary>
     private sealed record Source(string Context, string Factory, string? Module);
 
-    /// <summary>One row access rule: the aggregate's CLR name, the policy's name, what it allows, for whom, and its SQL.</summary>
-    private sealed record Rule(string Aggregate, string Name, int Operations, EquatableArray<string> Roles, string Sql);
+    /// <summary>
+    /// One row access rule: the aggregate's CLR name, the policy's name, what it allows, for whom, its SQL, and the
+    /// columns of a column rule, none for a rule about whole rows.
+    /// </summary>
+    private sealed record Rule(string Aggregate, string Name, int Operations, EquatableArray<string> Roles, string Sql, EquatableArray<string> Columns);
 
     /// <summary>
     /// One access function: the aggregate's CLR name, the function's name, its SQL, the SQL types of the

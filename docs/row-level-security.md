@@ -777,10 +777,15 @@ order, and writes one when the order's write rules let it; see
 up: a row one of them allows is allowed. Each policy is for one role; see
 [One policy per command and role](#one-policy-per-command-and-role).
 
+**A stricter key for one column.** A rule with `Columns = [nameof(Order.Status)]` holds a change of those
+columns alone, beside the rules for the row, for a column whose change takes more than changing the row does;
+see [Column rules](#column-rules).
+
 [DDD00038](diagnostics.md#ddd00038) to [DDD00041](diagnostics.md#ddd00041), [DDD00051](diagnostics.md#ddd00051)
-and [DDD00052](diagnostics.md#ddd00052) are the rules the generator enforces: the class's shape, what it
-can translate, that the type is an aggregate root, that a rule asks an access function about the
-aggregate's entities, that a set is asked once per statement, and that a function's name has an owner.
+and [DDD00052](diagnostics.md#ddd00052) are the rules the generator enforces: the class's shape and the
+columns a column rule names, what it can translate, that the type is an aggregate root, that a rule asks an
+access function about the aggregate's entities, that a set is asked once per statement, and that a function's
+name has an owner.
 
 ### One policy per command and role
 
@@ -1307,6 +1312,163 @@ Framework quotes the schema it creates. So the schema a relative name lands in, 
 schema or its aggregate table's, is lower case letters, digits and underscores; a script refuses a
 function it would create in `"Desk"`.
 
+### Column rules
+
+A policy is asked of a row and a command, and never of a column: Postgres cannot tell it which columns a
+statement changes. Where every change to a row takes the same key, that is all a rule needs. Where one column
+takes a stricter key than the rest of the row, the policy for `UPDATE` has to let through whoever holds any of
+the keys, and whoever holds one of them then changes every column. A project shows it: renaming one takes the
+key to edit it, closing it the key to close it, its crew the key to manage the crew and its owner the key to
+name owners, and a project that is moved has to pass at the unit it arrives at, where the key to open projects
+is what the move asks. So the policy that lets a seat change a project asks for any of those keys. A seat that
+only manages the crew, or only opens projects at the unit, could rename the project with a statement of its own,
+past the check in front of the handler.
+
+`Columns` on a rule makes it a column rule: one condition more, for a change of those columns alone.
+
+```csharp
+[RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
+public static partial class StateChangesWithTheCloseKey
+{
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id);
+}
+```
+
+It is written where the other rules are, beside your infrastructure, and nothing about it goes on the aggregate.
+The script writes it as a trigger rather than a policy, before an update of the columns it holds, that asks the
+rule and refuses the statement when the answer is no:
+
+```mermaid
+flowchart LR
+    Update["An UPDATE<br/>of a project"] --> Policy{"May the caller<br/>change the row?"}
+    Policy -->|no| Untouched["Not changed:<br/>the statement<br/>skips the row"]
+    Policy -->|"yes, the policy<br/>for UPDATE says"| Held{"Changes a column<br/>a rule holds?"}
+    Held -->|no| Check["The policy checks<br/>the new row"]
+    Held -->|"yes, as a role<br/>a caller runs as"| Rule{"A column rule<br/>for the role<br/>allows it?"}
+    Held -->|"yes, as the application's<br/>own work or the owner"| Check
+    Rule -->|"yes, before<br/>and after"| Check
+    Rule -->|no| Refused["Refused: 42501,<br/>the statement fails"]
+```
+
+- **The row's own rules still decide first.** The trigger only fires for a row the policy for `UPDATE` lets the
+  caller change, and the policy still checks the new row after it. A column rule lets nobody change anything a
+  rule for the row does not let them change: it narrows that, for its columns.
+- **It is asked as a rule for `UPDATE` is,** of the row as it was and of the row as it is about to be, and both
+  have to say yes. A rule that reads nothing of the row but its key, as a set-shaped question about the row's id
+  does, answers the same of both while the key stays what it was, which every change Entity Framework makes
+  does, so it is asked once per changed row rather than twice.
+- **It is asked once per changed row, not once per statement.** A policy asks a set once per statement; a
+  trigger runs for each row whose held column changes, and asks the set again for each. Entity Framework's saves
+  change one row per statement, so for them a column rule costs the set asked once more. A statement that
+  changes a held column of many rows, an `ExecuteUpdate` or a Data API `PATCH` with a filter, asks the set once
+  for each of them.
+- **Its SQL runs in the trigger, with an empty search path.** Every name the toolkit writes carries its schema.
+  A function the rule calls with `Sql.Call` names its schema too, `"public.is_agent"`, or `"pg_catalog.lower"`
+  for one of Postgres's own, which [DDD00038](diagnostics.md#ddd00038) holds it to: in a policy Postgres finds a
+  name when the policy is made, in a trigger only as it runs. The SQL of a `Sql.Raw` names every table and
+  function with its schema as well, and cannot read the row's columns by name, which a trigger knows only as
+  the row before and after; read the row in C# instead.
+- **Several column rules on one column add up:** a change one of them allows is allowed, as the rules of a row
+  do. The columns the same rules hold share one trigger, so a statement that changes several of them asks the
+  rules once.
+- **The roles a caller's statement runs as are held:** the roles the column rules are for, the signed-in user's
+  and the anonymous caller's, every [token role](#token-roles) you map, and any other role a policy lets change
+  the table. A held role that none of the column's rules is for may not change the column, as a role that no
+  rule grants a command may not run it. The application's own work is not held: the
+  [scoped system role](#the-scoped-system-role) and the bookkeeping role pass, unless a column rule names the
+  role in `To`, and so do the tables' owner and a role that may bypass row level security, which no policy holds
+  either.
+- **A value object is every column it is stored in:** `Columns = [nameof(Project.Planned)]` holds both columns of
+  the planned range, and `"Planned.From"` the one. A property of a value object is named with a dot, which
+  `nameof` does not write. A collection of values stored in the row, such as a list of strings kept as an array,
+  is its one column.
+- **It is found the way a policy is:** the trigger carries a comment, and the drop at the start of every script,
+  and of every migration of a module with rules, takes it away with the policies. A rule taken out loses its
+  trigger with the next script, and a migration may drop or change a column a column rule holds, which the
+  trigger would otherwise stand in the way of.
+- **The refusal is the database's:** `42501`, `insufficient_privilege`, with a message that names the rule, and
+  the trigger's name as the constraint. Through Entity Framework the save fails with a `DbUpdateException` that
+  carries it.
+
+<details>
+<summary>Show the code: two column rules of a project, and the trigger one of them becomes</summary>
+
+The project's rule for changing it asks for any key that changes one, on the project or, for the key to open
+projects, at its unit; the two column rules hold the columns whose commands ask a stricter one:
+
+```csharp
+[RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User])]
+public static partial class SeatsChangeTheProjectsTheyWorkOn
+{
+    public static bool Allows(Project project, Caller caller)
+        => ProjectsWhereIHold.Ids(ProjectKeys.Edit).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectKeys.ManageCrew).Contains(project.Id)
+            || ProjectsWhereIHold.Ids(ProjectKeys.ChangeOwner).Contains(project.Id)
+            || TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(ProjectKeys.Open).Contains(project.UnitId);
+}
+
+[RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.Name), nameof(Project.Planned)])]
+public static partial class NameAndPlanChangeWithTheEditKey
+{
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Edit).Contains(project.Id);
+}
+
+[RowAccess<Project>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Project.State)])]
+public static partial class StateChangesWithTheCloseKey
+{
+    public static bool Allows(Project project, Caller caller) => ProjectsWhereIHold.Ids(ProjectKeys.Close).Contains(project.Id);
+}
+```
+
+What the script writes for the state, shortened. The rule reads the row's key alone, so the row as it is about
+to be is asked only where the key changes:
+
+```sql
+CREATE OR REPLACE FUNCTION projects.projects_state_column_rule() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = '' AS $body$
+BEGIN
+    IF CURRENT_USER = 'authenticated' THEN
+        IF (OLD."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE
+           OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE) THEN
+            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule',
+                MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of projects."Projects".';
+        END IF;
+    ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule',
+            MESSAGE = 'No column rule is for this caller''s role, so it may not change "State" of projects."Projects".';
+    END IF;
+    RETURN NEW;
+END
+$body$;
+
+CREATE TRIGGER projects_state_column_rule BEFORE UPDATE OF "State" ON projects."Projects"
+    FOR EACH ROW WHEN (OLD."State" IS DISTINCT FROM NEW."State")
+    EXECUTE FUNCTION projects.projects_state_column_rule();
+COMMENT ON TRIGGER projects_state_column_rule ON projects."Projects" IS 'DDDToolkit column rule';
+```
+
+A script of your own writes the same from `RowAccessRule.ForColumns<Project>("State changes with the close key",
+[nameof(Project.State)], StateChangesWithTheCloseKey.RowAccessSql, RowAccessRoles.User)`. A column rule's
+`RowAccessSql` starts with `{columns}`, which `ForColumns` takes and `RowAccessRule.For` refuses: as a rule
+about whole rows, it would let whoever it allows change every column. An export of a version without column
+rules stops at the placeholder it does not know, and asks for the same version of the toolkit's packages
+everywhere, rather than write such a policy.
+
+</details>
+
+[DDD00038](diagnostics.md#ddd00038) reports a column rule for another operation than `Change`, which are about
+whole rows; a name in `Columns` that is no property of the aggregate or of a value object it holds, or is a
+collection of its entities, whose rows follow the rules for the aggregate's row; and a `Sql.Call` without a
+schema. A property the model stores in no column of the aggregate's table, one it ignores, is refused when the
+script is written, naming the rule.
+
+A column rule asks one question of the row before and after the change. A rule that asks something else of each,
+as moving a project does, the key to edit it where it was and the key to open projects where it goes, is a
+trigger of your own, written as a [contribution](#policies-a-package-ships): the sample's `UnitChangesWithItsKeys`.
+The owner column of a resource whose members the [Membership package](membership.md#who-writes-the-member-rows)
+keeps is held by the package's own lock, which it writes from the key its rules name for naming an owner.
+
 ### Policies a package ships
 
 A package, or a module of your own, can have tables that are not your aggregates, or SQL whose names
@@ -1466,12 +1628,13 @@ A context whose only row access is a contribution gets a script, and a Supabase 
 ### Writing the policies
 
 `PostgresRowAccess.Script(context, rules, accessFunctions)` returns the SQL for one context: it first drops
-every policy an earlier script made on the context's tables, found by the comment each one carries, then
-makes what its policies ask, the `ddd` schema and `ddd.written_in_this_transaction` with the grants on
-them, and the scoped system role when a policy is for it, wherever the database does not have them as
-they should be, drops the functions the context no longer writes, and then makes its functions, each after
-those it asks and granted to the roles that ask it, and the policies again. So the latest script says what
-the rules are now, a rule taken out disappears with it, and a policy you wrote by hand is left alone.
+every policy an earlier script made on the context's tables, and every trigger of a
+[column rule](#column-rules), found by the comment each one carries, then makes what its policies ask, the
+`ddd` schema and `ddd.written_in_this_transaction` with the grants on them, and the scoped system role when a
+policy is for it, wherever the database does not have them as they should be, drops the functions the context
+no longer writes, and then makes its functions, each after those it asks and granted to the roles that ask it,
+the policies again, and the column rules' triggers. So the latest script says what the rules are now, a rule
+taken out disappears with it, and a policy you wrote by hand is left alone.
 
 ```csharp
 var sql = PostgresRowAccess.Script(context,
