@@ -262,6 +262,20 @@ public static class ShopEventNames
 name in kebab case; [Stable names](domain-events.md#stable-names) has the rule, and the checks the same
 pass runs on it.
 
+## The module
+
+This sample is no module, so it gets no file for one. A project whose build declares its module, with
+`DDD_Module` and `DDD_DeclareModule` set to true, gets the attribute it would otherwise have written itself:
+
+```csharp title="Module.g.cs, shortened"
+// The module this project's build declared: its DDD_Module, with DDD_DeclareModule set to true. An
+// [assembly: Module] of the project's own would have been kept instead, and nothing written here.
+[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Ordering")]
+```
+
+It is not written where the project declares `[assembly: Module]` already, so it never declares the module
+twice. [A module named by its folder](modules.md#a-module-named-by-its-folder) has how and why.
+
 ## The access behavior
 
 One thing the core generator writes only where another library is used. In a project that references

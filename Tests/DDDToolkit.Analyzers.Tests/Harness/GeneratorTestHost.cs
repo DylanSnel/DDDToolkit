@@ -8,6 +8,7 @@ using CoreAccessBehaviorGenerator = DDDToolkit.Analyzers.AccessBehaviorGenerator
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
+using CoreModuleGenerator = DDDToolkit.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
 using CoreTemplateRegistrationGenerator = DDDToolkit.Analyzers.TemplateRegistrationGenerator;
@@ -95,7 +96,7 @@ public sealed class GeneratorTestHost
     public static GeneratorTestHost Create(string source, string path = "Source.cs")
         => new GeneratorTestHost().WithSource(source, path);
 
-    /// <summary>The eight generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
+    /// <summary>The nine generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
     public static IIncrementalGenerator[] CoreGenerators() =>
     [
         new CoreEntityIdGenerator(),
@@ -106,6 +107,7 @@ public sealed class GeneratorTestHost
         new CoreRowAccessGenerator(),
         new CoreTemplateRegistrationGenerator(),
         new CoreAccessBehaviorGenerator(),
+        new CoreModuleGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
@@ -192,7 +194,7 @@ public sealed class GeneratorTestHost
     internal IReadOnlyList<DiagnosticAnalyzer> Analyzers => _analyzers;
 
     /// <summary>The MSBuild properties as the compiler hands them to generators and analyzers alike.</summary>
-    internal AnalyzerConfigOptionsProvider OptionsProvider => new TestAnalyzerConfigOptionsProvider(_globalOptions);
+    internal AnalyzerConfigOptionsProvider OptionsProvider => new TestAnalyzerConfigOptionsProvider(GlobalOptions());
 
     /// <summary>Sets <c>build_property.DDD_Module</c>, the MSBuild property that names the generated extension methods.</summary>
     public GeneratorTestHost WithModule(string moduleName)
@@ -200,6 +202,17 @@ public sealed class GeneratorTestHost
         _globalOptions["build_property.DDD_Module"] = moduleName;
         return this;
     }
+
+    /// <summary>
+    /// Compiles the project the way the build of one that sets <c>DDD_Module</c> compiles it: with the file the targets
+    /// of the DDDToolkit.Analyzers package write into it, read from those targets (<see cref="ModuleDeclarationFile"/>),
+    /// and with the property itself, which the props file hands the generators. <paramref name="declares"/> is what
+    /// the file says of <c>DDD_DeclareModule</c>: "true" for a project that sets it to true, "false" for one that sets
+    /// it to false and for a test project, and null for a project that sets nothing, where <c>DDD_Module</c> only
+    /// names the generated code.
+    /// </summary>
+    public GeneratorTestHost WithModuleFromTheBuild(string module, string? declares = "true")
+        => WithModule(module).WithSource(ModuleDeclarationFile.For(module, declares), "obj/Debug/net10.0/" + _assemblyName + ".DDDToolkitModule.g.cs");
 
     /// <summary>Sets any MSBuild property the way <c>CompilerVisibleProperty</c> exposes it: <c>build_property.{name}</c>.</summary>
     public GeneratorTestHost WithBuildProperty(string name, string value)
@@ -420,6 +433,24 @@ public sealed class GeneratorTestHost
             parseOptions: parseOptions,
             optionsProvider: OptionsProvider,
             driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
+
+    /// <summary>
+    /// The build properties the generators see. Where the props file is imported, the project's file is among them,
+    /// as <c>MSBuildProjectFullPath</c> gives it: <see cref="ProjectFile"/>, unless a test set another.
+    /// </summary>
+    private Dictionary<string, string> GlobalOptions()
+    {
+        var options = new Dictionary<string, string>(_globalOptions, StringComparer.Ordinal);
+        if (options.ContainsKey("build_property.DDD_Module"))
+        {
+            options.TryAdd("build_property.MSBuildProjectFullPath", ProjectFile);
+        }
+
+        return options;
+    }
+
+    /// <summary>The project file a project of this name is built from, where a diagnostic about its module points when no line of its source declares one.</summary>
+    public string ProjectFile => "src/" + _assemblyName + "/" + _assemblyName + ".csproj";
 
     public CSharpParseOptions CreateParseOptions()
         => new CSharpParseOptions(LanguageVersion.Latest).WithPreprocessorSymbols(PreprocessorSymbols);

@@ -107,7 +107,8 @@ internal static class Providers
     public static IncrementalValuesProvider<RegistrationFile> TemplateRegistrationFiles(this IncrementalGeneratorInitializationContext context)
         => context.DeclaredTemplateEntities()
             .Combine(context.CompilationProvider)
-            .SelectMany(static (all, cancellationToken) => TemplateRegistrations.Resolve(all.Left, all.Right, cancellationToken));
+            .Combine(context.ProjectFile())
+            .SelectMany(static (all, cancellationToken) => TemplateRegistrations.Resolve(all.Left.Left, all.Left.Right, cancellationToken, projectFile: all.Right));
 
     /// <summary>
     /// Every class declared with a template attribute, before any is resolved: what <see cref="TemplateEntities"/>

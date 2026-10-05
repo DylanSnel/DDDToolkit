@@ -63,8 +63,12 @@ namespace DDDToolkit.Analyzers.Common;
 /// Framework, and its infrastructure project holds the context and references the registrations. That project
 /// declares no class, and gets the registrations anyway, built from the classes the module's other projects
 /// declare: the projects it references with the same <c>[assembly: Module]</c>, and only those. A project of
-/// another module, or of none, still gets nothing and hears nothing. What such a project is told, DDD00049,
-/// DDD00045 or DDD00050, is reported on its <c>[assembly: Module]</c> attribute.
+/// another module, or of none, still gets nothing and hears nothing from here; one of none that carries the name of
+/// the project whose classes it would take, in <c>DDD_Module</c>, hears DDD00064 from the toolkit's module generator
+/// (<see cref="WrittenForNobody"/>). What a project of the module is told, DDD00049,
+/// DDD00045 or DDD00050, is reported on its <c>[assembly: Module]</c> attribute, or at its project file when no file
+/// of it that somebody edits declares the module: the build declared it from <c>DDD_Module</c>, or an
+/// <c>AssemblyAttribute</c> item wrote it into <c>obj/</c>.
 /// </para>
 /// <para>
 /// Only the lowest such project gets them. A project of the module above it, such as the API project that
@@ -89,11 +93,17 @@ internal static class TemplateRegistrations
     /// of that registration were written. It reads what it is answered and leaves the reporting to the
     /// generator that writes the wrappers.
     /// </param>
+    /// <param name="projectFile">
+    /// Where a project of a module hears about the classes of the module's other projects when no
+    /// <c>[assembly: Module]</c> in a file of it says which module it is: the build declared it from
+    /// <c>DDD_Module</c>, or an <c>AssemblyAttribute</c> item did, in a file under <c>obj/</c>.
+    /// </param>
     public static ImmutableArray<RegistrationFile> Resolve(
         ImmutableArray<EntityDefinition> declared,
         Compilation compilation,
         CancellationToken cancellationToken,
-        Func<IMethodSymbol, bool>? only = null)
+        Func<IMethodSymbol, bool>? only = null,
+        LocationInfo? projectFile = null)
     {
         if (declared.IsDefaultOrEmpty)
         {
@@ -106,7 +116,7 @@ internal static class TemplateRegistrations
             }
 
             LocationInfo? moduleAttribute = null;
-            LocationInfo? ModuleAttribute() => moduleAttribute ??= ModuleAttributeOf(compilation, cancellationToken);
+            LocationInfo? ModuleAttribute() => moduleAttribute ??= ModuleBoundary.WhereTheModuleIsDeclared(compilation, projectFile, cancellationToken);
             return Collapsed(Files(compilation, method => ResolveModuleMethod(method, module, ModuleAttribute, compilation, cancellationToken), only, cancellationToken));
         }
 
@@ -139,6 +149,45 @@ internal static class TemplateRegistrations
     /// <param name="cancellationToken">Stops the work.</param>
     public static bool Registers(Compilation compilation, string templateMetadataName, CancellationToken cancellationToken)
         => MethodsIn(compilation, cancellationToken).Any(method => TakesOf(method) is { } takes && takes.Any(take => take?.MetadataName == templateMetadataName));
+
+    /// <summary>
+    /// The registrations this project can call that take a class <paramref name="referenced"/> declares with a
+    /// template, that <paramref name="referenced"/> cannot call itself, and that take a class of none of their
+    /// templates from this project: by name, each once, in order. These are the ones written for those classes
+    /// nowhere when the two are projects of no module. A project gets a registration for its own classes where it
+    /// sees the registration, and takes the classes it lacks from the projects it references; a project that
+    /// declares none of them takes them only from the projects of its own module. Empty when
+    /// <paramref name="referenced"/> declares no class with a template, which is every project built before
+    /// templates existed.
+    /// </summary>
+    /// <param name="compilation">The project.</param>
+    /// <param name="referenced">A project it references.</param>
+    /// <param name="cancellationToken">Stops the work.</param>
+    public static EquatableArray<string> WrittenForNobody(Compilation compilation, IAssemblySymbol referenced, CancellationToken cancellationToken)
+    {
+        if (!DefinitionFactory.DeclaresTemplateClasses(referenced, cancellationToken))
+        {
+            return EquatableArray<string>.Empty;
+        }
+
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var method in MethodsIn(compilation, cancellationToken))
+        {
+            var registrations = method.ContainingAssembly;
+            if (TakesOf(method) is not { } takes
+                || !takes.Any(take => take is not null && DefinitionFactory.DeclaresClassesWith(referenced, take.Key, cancellationToken))
+                || takes.Any(take => take is not null && DefinitionFactory.DeclaresClassesWith(compilation.Assembly, take.Key, cancellationToken))
+                || SymbolEqualityComparer.Default.Equals(registrations, referenced)
+                || referenced.Modules.Any(module => module.ReferencedAssemblySymbols.Any(reference => reference.Identity.Name == registrations.Identity.Name)))
+            {
+                continue;
+            }
+
+            names.Add(method.Name);
+        }
+
+        return names.ToEquatableArray();
+    }
 
     /// <summary>
     /// What the files report, said once for the project, where the methods of several files would each say the
@@ -451,8 +500,9 @@ internal static class TemplateRegistrations
     /// template: a class of another module is never taken, and neither is one of a package, which declares no
     /// module. So a project of another module gets nothing and hears nothing, and a project that references the
     /// classes of two modules is never told they are two. What it reports it reports on the project's
-    /// <c>[assembly: Module]</c> attribute, since the classes are not in this project; DDD00049 then carries
-    /// nothing for the code fix, which would declare the class in the wrong project.
+    /// <c>[assembly: Module]</c> attribute, or at its project file where none is in a file somebody edits, since the
+    /// classes are not in this project; DDD00049 then carries nothing for the code fix, which would declare the
+    /// class in the wrong project.
     /// </para>
     /// </summary>
     private static MethodClosing? ResolveModuleMethod(
@@ -1164,22 +1214,6 @@ internal static class TemplateRegistrations
     /// </summary>
     private static string ShortNameOf(ITypeSymbol type, Take take)
         => take.TakeType || take.Argument == 0 ? type.Name : type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
-
-    /// <summary>This project's <c>[assembly: Module]</c> attribute, where a project that declares none of the classes hears about them.</summary>
-    private static LocationInfo? ModuleAttributeOf(Compilation compilation, CancellationToken cancellationToken)
-    {
-        foreach (var attribute in compilation.Assembly.GetAttributes())
-        {
-            if (attribute.AttributeClass is { } attributeClass
-                && EntityDeclarations.Is(attributeClass, KnownTypes.ModuleAttribute)
-                && attribute.ApplicationSyntaxReference is { } reference)
-            {
-                return LocationInfo.From(reference.GetSyntax(cancellationToken));
-            }
-        }
-
-        return null;
-    }
 
     private static DefinitionFactory.TemplateSource SourceOf(EntityDefinition definition, bool canGenerate)
         => new(

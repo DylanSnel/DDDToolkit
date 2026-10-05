@@ -31,7 +31,11 @@ namespace Examples.Tenancy.Tests.Architecture;
 /// </remarks>
 public sealed partial class SourceTreeTests
 {
-    /// <summary>The files every project may have at its root, next to its registration: the module's name and the usings.</summary>
+    /// <summary>
+    /// The files every project may have at its root, next to its registration: the usings, and in an API project a
+    /// Module.cs with HotChocolate's module attribute. The toolkit's module is declared by the folder, in
+    /// Modules/Directory.Build.props, and by no file of a project.
+    /// </summary>
     private static readonly string[] EntryFiles = ["Module.cs", "GlobalUsings.cs"];
 
     /// <summary>The folders an aggregate keeps what belongs to it in, beside its own file.</summary>

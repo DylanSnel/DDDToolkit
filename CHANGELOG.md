@@ -252,6 +252,44 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   in an `async` method that then calls the handler, as the generated behavior does; a dispatcher of your own is
   written that way, and the message of DDD00057 now says so. The toolkit asks it when the policies refuse a save,
   below. See [Access requirements](docs/access-requirements.md#what-answers-it).
+- **A module declared by its folder: `DDD_DeclareModule`.** Set to true beside `DDD_Module`, the build declares
+  the project's module, as `[assembly: Module]` does, so a `Directory.Build.props` that names the module of every
+  project below a folder replaces a `Module.cs` in each project of a module in layers. The build writes the two
+  properties into the project as `AssemblyMetadata`, which every generator of it reads, and the toolkit's
+  generator writes `[assembly: Module("Ordering")]` from them, which the analyzers, the runtime and every project
+  that references the assembly read: the referencing project's generators take it for one of the module's
+  projects, and `modelBuilder.AddTenancy()` and the converters are written there. The attribute is written only
+  where the project declares none, in a file of its own or through an `AssemblyAttribute` item, so it is never
+  declared twice (no CS0579), and one the project declares always wins. A test project is never declared a module
+  this way, and `DDD_DeclareModule` set to false says a project carries a module's name and is no module. Without
+  the switch `DDD_Module` alone still only names generated code, so a project that sets it keeps its event names
+  and its migration file names. What the build does add to every C# project that sets `DDD_Module`, switch or
+  not, is `[assembly: AssemblyMetadata("DDD_Module", ...)]` (with `"DDD_DeclareModule"` beside it when the
+  project or the build decided, `"false"` for a test project), in `obj/<Project>.DDDToolkitModule.g.cs`: that is
+  how a project that references it tells two projects of one name apart (DDD00064). The build step ships in the
+  `DDDToolkit.Analyzers` package, as `build/` and `buildTransitive/` targets beside its props file. See
+  [A module named by its folder](docs/modules.md#a-module-named-by-its-folder).
+
+  **Moving from an `<AssemblyAttribute>` item** that writes `[assembly: Module]` from `DDD_Module`: replace the
+  item with `<DDD_DeclareModule>true</DDD_DeclareModule>`. Deleting the item alone makes its projects no module:
+  their events are stored and published without the module's prefix, their Supabase migration files are renamed,
+  the boundary is no longer checked, and a package's registration such as `AddTenancy()` is no longer written for
+  the module, which is the only one of these DDD00064 can report.
+- DDD00064 reports two projects named after one module by `DDD_Module` that the generators do not take together,
+  in the one that references the other, at the project file, naming the other. Only the referenced one declares
+  the module: this one is left out of what the generators write for it. Only this one declares it: the other's
+  ids, domain events and template classes are left out here. Neither declares it, and a package's registration
+  this project can call and the other cannot is written for the other's template classes nowhere. Each used to
+  be found out by a call that did not compile (CS1061, CS0411, CS0234). Projects without templates that share a
+  `DDD_Module` and declare no module, how an application without modules names its code, are not reported.
+- What a project of a module hears about the module's other projects, DDD00033 about their domain events and
+  DDD00045, DDD00049 or DDD00050 about their template classes, points at the project file where no file of the
+  project that somebody edits declares the module: a module the build declared, which has no attribute to point
+  at, and one an `<AssemblyAttribute>` item declares, where it pointed at the `AssemblyInfo.cs` that item writes
+  into `obj/`. A project with a `Module.cs` is told on its `[assembly: Module]` as before. The project file is
+  outside every source file, so a `[*.cs]` section of `.editorconfig` does not set the severity of these or of
+  DDD00064: `<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig` with `is_global = true` does. A `[*.cs]`
+  severity that reached the file in `obj/` moves there.
 
 #### Entity Framework and row level security
 
@@ -1736,6 +1774,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyPermissionsOfModules.All` of the catalogue's project, which no longer lists the modules' keys.
   `ModuleKeysTests` holds the host to one contribution of every module's keys, and every list a module declares
   to its mark; the exported access files are unchanged.
+
+- **The Tenancy sample declares its modules by folder.** `Examples/Tenancy/Modules/Directory.Build.props` names
+  every project's module after the folder it is in and declares it with `DDD_DeclareModule`, and holds
+  DDD00022 and DDD00023 as errors for all of them; the projects' `Module.cs` files are gone, and an API project's
+  keeps only HotChocolate's attributes. `LayerReferenceTests` holds every project to the module of its folder,
+  declared by the build and by no file of its own.
 
 #### Docs
 

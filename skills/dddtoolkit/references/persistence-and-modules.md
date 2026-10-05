@@ -68,8 +68,9 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   a seat, a unit or a role is called is asked of Tenancy's directory by id (`SeatsByIdAsync`,
   `UnitsByIdAsync`, `RolesByIdAsync`), by whoever shows it. Never map a type of the module's own onto one of
   Tenancy's tables to read a name; `TenancyModel.ReadsBeyondAccessFacts(model)` in a test finds it.
-- `DDD_Module` only names generated code, in a project that is no module. What makes an assembly a module is
-  `[assembly: Module("Ordering")]`, below. The `DDDToolkit.Analyzers` package declares the property to
+- `DDD_Module` alone only names generated code, in a project that is no module. What makes an assembly a module
+  is `[assembly: Module("Ordering")]`, below, or `DDD_Module` with `<DDD_DeclareModule>true</DDD_DeclareModule>`
+  beside it, which has the build write that attribute. The `DDDToolkit.Analyzers` package declares the property to
   the compiler; a build that warns DDD00014 is ignoring it, see `diagnostics.md`.
 - Mapped with no configuration: identifiers and single value objects as their raw value (generated
   converters), `[Entity<T>]` children as owned types, `[ValueObject]` records inline as complex types,
@@ -177,8 +178,10 @@ service. See `entity-framework.md`.
 
 ## Modules
 
-A module is an assembly: `[assembly: Module("Ordering")]` in any file of the project. Two assemblies
-with the same name, such as `Ordering` and `Ordering.Contracts`, are one module. Full pages:
+A module is an assembly: `[assembly: Module("Ordering")]` in any file of the project, or
+`<DDD_Module>Ordering</DDD_Module>` with `<DDD_DeclareModule>true</DDD_DeclareModule>` in its project or a
+`Directory.Build.props`, which has the build write the attribute. Two assemblies with the same name, such as
+`Ordering` and `Ordering.Contracts`, are one module. Full pages:
 `modules.md`, `module-contracts.md`.
 
 - Everything a module declares is private to it, `public` or not, unless it is marked
@@ -190,11 +193,19 @@ with the same name, such as `Ordering` and `Ordering.Contracts`, are one module.
   `<WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>`.
 - A common layout is a `*.Contracts` project per module holding the published ids and integration
   events; other modules reference only that project.
-- A module in layers is a project per layer, every one with the same `[assembly: Module]`: Contracts,
-  Domain, Application, Infrastructure (the context, the migrations, the adapters, and the generated
-  registrations) and Api (the routes and the module's entry, which the host references alone). Inside a
-  project the thing comes first and the kind second, and a root holds only `Module.cs`, `GlobalUsings.cs`
-  and the class that registers the project:
+- A module in layers is a project per layer, every one declaring the same module: Contracts, Domain,
+  Application, Infrastructure (the context, the migrations, the adapters, and the generated registrations) and
+  Api (the routes and the module's entry, which the host references alone). Declare it once for the folder
+  rather than with a `Module.cs` per project: a `Modules/Directory.Build.props` that imports the one above it
+  and sets `<DDD_Module>` to the folder's name,
+  `$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))`, and
+  `<DDD_DeclareModule>true</DDD_DeclareModule>`. The build then writes `[assembly: Module]` into every project
+  below that declares none; a project that does keep one is not given a second. A project of the module that
+  is left out is DDD00064. Do not add an `<AssemblyAttribute>` item for the module: that is what the switch
+  replaces, so swap an existing one for the switch; deleting it alone makes the projects no module, and their
+  events lose the module's prefix. Inside a project the thing comes first and the kind second, and a root holds only
+  `GlobalUsings.cs`, the class that registers the project, and in an API project a `Module.cs` with
+  HotChocolate's own assembly attributes:
 
   ```
   Projects.Domain/

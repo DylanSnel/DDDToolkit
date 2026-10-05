@@ -1,0 +1,65 @@
+<Project>
+  <!--
+    DDD_DeclareModule. Set to true beside DDD_Module, the build declares the project a project of that module, as
+    [assembly: Module] does, so a Directory.Build.props that names the module of every project below a folder makes
+    them that module's projects without a file in each that says so. Without it DDD_Module only names the code the
+    generators write, as it always has, and a project that sets it is no module.
+
+    Packed as build/<package id>.targets and buildTransitive/<package id>.targets, beside the props file, so it
+    reaches every project the generators run in. Directory.Build.targets imports it for the projects in this
+    repository, which reference the generators as projects and never restore the package.
+
+    The build declares the module in a file of its own, compiled with the project:
+
+      [assembly: AssemblyMetadata("DDD_Module", "Ordering")]
+      [assembly: AssemblyMetadata("DDD_DeclareModule", "true")]
+
+    because that is what every generator of the project sees. A generator never sees what another generator
+    writes, and the generators ask the project's attributes which module it is in. The toolkit's own generator then
+    writes [assembly: Module("Ordering")] from it, for the analyzers, the runtime and reflection, unless the
+    project's source declares a module already: a generator can see that, and the build cannot, which is why the
+    attribute is the generator's to write and is never declared twice. [assembly: Module] in the source wins, as it
+    always does over DDD_Module.
+
+    DDD_Module is written for every project that sets it, declared or not, so a project that references it can tell
+    when two projects carry one module's name and only one of them declares it (DDD00064). DDD_DeclareModule is
+    written as false for a project that sets it to false, which says it is no module on purpose, and for a test
+    project, which the build never declares a module: it tests the modules from outside, and names what they do not
+    publish.
+
+    A target, not items, so it reads what the project file and the targets imported after this one set,
+    IsTestProject and IsTestingPlatformApplication among them. It runs where the SDK writes AssemblyInfo.cs: before
+    BeforeCompile, so the file is among the inputs the build compares to tell whether to compile again, and before
+    CoreCompile, which a design-time build runs alone. It rewrites the file only when what it says changes, so it
+    never makes the project compile again by itself. ".g.cs" tells the analyzers it is generated code.
+  -->
+  <Target Name="DDDToolkitWriteModuleDeclaration"
+          BeforeTargets="BeforeCompile;CoreCompile"
+          DependsOnTargets="PrepareForBuild"
+          Condition="'$(Language)' == 'C#' and '$(DDD_Module.Trim())' != ''">
+
+    <PropertyGroup>
+      <_DDDToolkitModuleFile>$(IntermediateOutputPath)$(MSBuildProjectName).DDDToolkitModule.g.cs</_DDDToolkitModuleFile>
+      <!-- The name as a C# string literal holds it, and as an item holds it: MSBuild reads ; * ? % @ $ in an item. -->
+      <_DDDToolkitModuleName>$([MSBuild]::Escape($(DDD_Module.Trim().Replace('\', '\\').Replace('"', '\"'))))</_DDDToolkitModuleName>
+      <_DDDToolkitDeclaresModule />
+      <_DDDToolkitDeclaresModule Condition="'$(DDD_DeclareModule.Trim())' == 'true'">true</_DDDToolkitDeclaresModule>
+      <_DDDToolkitDeclaresModule Condition="'$(DDD_DeclareModule.Trim())' == 'false' or '$(IsTestProject)' == 'true' or '$(IsTestingPlatformApplication)' == 'true'">false</_DDDToolkitDeclaresModule>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_DDDToolkitModuleLine Include="// &lt;auto-generated/&gt;" />
+      <_DDDToolkitModuleLine Include="// Written by the build from DDD_Module and DDD_DeclareModule, the DDDToolkit.Analyzers package's targets." />
+      <_DDDToolkitModuleLine Include="[assembly: global::System.Reflection.AssemblyMetadata(&quot;DDD_Module&quot;, &quot;$(_DDDToolkitModuleName)&quot;)]" />
+      <_DDDToolkitModuleLine Include="[assembly: global::System.Reflection.AssemblyMetadata(&quot;DDD_DeclareModule&quot;, &quot;$(_DDDToolkitDeclaresModule)&quot;)]" Condition="'$(_DDDToolkitDeclaresModule)' != ''" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(_DDDToolkitModuleFile)" Lines="@(_DDDToolkitModuleLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+
+    <ItemGroup>
+      <Compile Include="$(_DDDToolkitModuleFile)" />
+      <FileWrites Include="$(_DDDToolkitModuleFile)" />
+      <_DDDToolkitModuleLine Remove="@(_DDDToolkitModuleLine)" />
+    </ItemGroup>
+  </Target>
+</Project>

@@ -473,6 +473,11 @@ One assembly, one module:
 
 *[`Ordering/Module.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Module.cs)*
 
+A module of several projects, one per layer, says it in each of them, or once for all of them: a
+`Directory.Build.props` in the module's folder that sets `DDD_Module` and `DDD_DeclareModule` declares the
+module for every project below it, and no project needs a file of its own for it
+([A module named by its folder](modules.md#a-module-named-by-its-folder)).
+
 Nothing happens until a second assembly says it is a module too. From then on, everything an assembly
 declares is its own business unless it publishes it, and the analyzer reports another module naming an
 unpublished type ([DDD00022](diagnostics.md#ddd00022)) or storing another module's entity

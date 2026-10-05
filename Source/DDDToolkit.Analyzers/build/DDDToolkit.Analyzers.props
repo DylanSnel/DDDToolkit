@@ -14,6 +14,9 @@
     declared does not reach it at all, which is how the generator tells that this file was not
     imported (DDD00014).
 
+    DDD_DeclareModule is read by the build, not by a generator, so it is not declared here: the package's targets
+    file writes what it says into the project, where every generator sees it. See DDDToolkit.Analyzers.targets.
+
     The property declared elsewhere is SupabaseMigrationsExport, which switches on a build step:
     DDDToolkit.EntityFramework.Supabase declares it in the targets file that holds the step, with
     IsTestProject and IsTestingPlatformApplication, which keep that step out of test projects, so the step
@@ -27,6 +30,12 @@
       Add{Module}GraphQlRuntimeBindings in a project that declares no [assembly: Module]. The attribute wins.
     -->
     <CompilerVisibleProperty Include="DDD_Module" />
+
+    <!--
+      Where a diagnostic about the project's module points when no line of its source declares the module: the
+      build declared it from DDD_Module and DDD_DeclareModule, and the file it wrote that into is no one's to edit.
+    -->
+    <CompilerVisibleProperty Include="MSBuildProjectFullPath" />
   </ItemGroup>
 
   <ItemGroup>

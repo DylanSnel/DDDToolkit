@@ -61,3 +61,4 @@ DDD00059 | DDDToolkit.Membership | Warning | The member list of a resource is wr
 DDD00060 | DDDToolkit.Membership | Warning | A member class names an aggregate root whose members it is
 DDD00061 | DDDToolkit.Access | Warning | A request that declares its access is sent, not handed to its handler
 DDD00063 | DDDToolkit.Tenancy | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read
+DDD00064 | DDDToolkit.Modules | Warning | Every project named after a module declares it

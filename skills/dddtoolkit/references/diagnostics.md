@@ -470,6 +470,19 @@ internal, though not private or protected.
 Do not also pass the list to `services.AddTenancyPermissions(...)`: the host's generated
 `services.AddTenancyPermissionsOfModules()` adds it, and the catalogue refuses a list added twice.
 
+## DDD00064
+
+Warning, at the project file. Two projects carry one module's name in `<DDD_Module>` and the generators do not
+take them together: no `AddTenancy()` or converters written in the infrastructure project from the domain
+project's classes and ids. Reported in the project that references the other, naming it, when only one of the two
+declares the module, or when neither does and a package's registration is written for the referenced project's
+template classes nowhere (what deleting an `<AssemblyAttribute>` item that declared the module, without adding the
+switch, comes to). Declare the module where the message says: `<DDD_DeclareModule>true</DDD_DeclareModule>` next
+to `<DDD_Module>`, best in the `Directory.Build.props` that sets the name for the whole folder, or
+`[assembly: Module("Name")]` in the project. A project that carries the name and must stay no module sets
+`<DDD_DeclareModule>false</DDD_DeclareModule>`. Do not silence it with `NoWarn`: the missing registrations are real.
+An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

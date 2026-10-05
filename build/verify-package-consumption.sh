@@ -24,7 +24,9 @@
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
 #      Tenancy's package and writes the modules' keys into the host and nowhere else; and the packages
-#      carry their Dutch texts.
+#      carry their Dutch texts. Its module is declared by DDD_DeclareModule, from a Directory.Build.props,
+#      and not by a file in either project: the package's targets declare it, and its generator writes the
+#      attribute. Without the switch the two projects only share the name, and the build reports DDD00064.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
@@ -165,15 +167,17 @@ for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
 done
 
 # The props file that declares the properties the generators read, in the package that carries the
-# generators. Both folders, and under the package's id, because NuGet imports no other name: build/ for
-# a client that knows nothing of buildTransitive/, and buildTransitive/ for every project that does not
-# reference the package itself. The consumers below prove it is imported; this says which file was
-# missing or misnamed when they fail.
+# generators, and the targets file whose build step DDD_DeclareModule switches on. Both folders, and under
+# the package's id, because NuGet imports no other name: build/ for a client that knows nothing of
+# buildTransitive/, and buildTransitive/ for every project that does not reference the package itself. The
+# consumers below prove they are imported; this says which file was missing or misnamed when they fail.
 for folder in build buildTransitive; do
-  if [ ! -f "$analyzers_package/$folder/$analyzers_id.props" ]; then
-    echo "FAILED: $folder/$analyzers_id.props is missing from the $analyzers_id package." >&2
-    exit 1
-  fi
+  for extension in props targets; do
+    if [ ! -f "$analyzers_package/$folder/$analyzers_id.$extension" ]; then
+      echo "FAILED: $folder/$analyzers_id.$extension is missing from the $analyzers_id package." >&2
+      exit 1
+    fi
+  done
 done
 
 echo "==> Building the consumer"
@@ -400,6 +404,34 @@ for project in Domain Infrastructure; do
   fi
 done
 
+# The module, Press, is declared by the build: DDD_Module and DDD_DeclareModule in SupportingDomains'
+# Directory.Build.props, and no Module.cs. The build above compiled only because the infrastructure project took
+# the domain project for one of its module's projects; this says which half did not arrive when it does not. The
+# package's targets wrote the declaration into each project's obj/, and its generator wrote [assembly: Module]
+# from it. The host sets neither and is given neither.
+for project in Domain Infrastructure; do
+  folder="$work/package-consumers/SupportingDomains/$project/obj"
+
+  declaration="$(find "$folder" -name '*.DDDToolkitModule.g.cs' | head -n 1)"
+  if [ -z "$declaration" ] || ! grep -q 'AssemblyMetadata("DDD_DeclareModule", "true")' "$declaration"; then
+    echo "FAILED: SupportingDomains/$project: the targets of $analyzers_id did not declare the module DDD_DeclareModule asks for." >&2
+    exit 1
+  fi
+
+  attribute="$(find "$folder" -path '*generated*' -name 'Module.g.cs' | head -n 1)"
+  if [ -z "$attribute" ] || ! grep -q 'ModuleAttribute("Press")' "$attribute"; then
+    echo "FAILED: SupportingDomains/$project: the generator wrote no [assembly: Module(\"Press\")] from the build's declaration." >&2
+    exit 1
+  fi
+
+  echo "    SupportingDomains/$project: module Press, declared by the build"
+done
+
+if [ -n "$(find "$work/package-consumers/SupportingDomains/Host/obj" \( -name '*.DDDToolkitModule.g.cs' -o -name 'Module.g.cs' \))" ]; then
+  echo "FAILED: SupportingDomains/Host: a module was declared in the host, which sets no DDD_Module." >&2
+  exit 1
+fi
+
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership.EntityFramework" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll
@@ -536,6 +568,25 @@ if [ "$granted" != "anon authenticated ddd_system_in" ]; then
 fi
 
 echo "    SupportingDomains/Host: $(basename "$login_role_file")"
+
+# The same two projects without the switch, as a folder has them that deleted the AssemblyAttribute item it
+# declared its module with and did not set DDD_DeclareModule in its place: given empty on the command line,
+# which wins over the Directory.Build.props for both. They carry the name Press and are no module, so the
+# registrations the infrastructure project calls are written over the domain project's classes nowhere, and the
+# build has to say why (DDD00064, an error here) rather than leave it to the call that does not compile.
+echo "==> SupportingDomains without DDD_DeclareModule: DDD00064"
+clean_supporting_domains
+if build_consumer SupportingDomains/Infrastructure/Acme.Press.Infrastructure.csproj "-p:DDD_DeclareModule=" > /dev/null; then
+  echo "FAILED: SupportingDomains/Infrastructure built without its module, so the registrations it calls were written anyway." >&2
+  exit 1
+fi
+
+if ! grep -q "DDD00064: This project and project 'Acme.Press.Domain', which it references, set DDD_Module to 'Press', and neither declares the module" "$build_log"; then
+  echo "FAILED: SupportingDomains/Infrastructure: the two projects named Press and declaring no module were not reported, DDD00064." >&2
+  exit 1
+fi
+
+echo "    SupportingDomains/Infrastructure: DDD00064 names the domain project and the switch"
 
 for mode in Check Write ""; do
   echo "==> SupabaseMigrationsExport='$mode' for the whole build, on the command line"

@@ -67,7 +67,9 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
 
         // Read off the compilation, so it runs again on every edit; the walk of each referenced assembly is cached,
         // and what comes out compares equal when nothing it names changed.
-        var referenced = context.CompilationProvider.Select(static (compilation, cancellationToken) => ModuleEvents(compilation, cancellationToken));
+        var referenced = context.CompilationProvider
+            .Combine(context.ProjectFile())
+            .Select(static (pair, cancellationToken) => ModuleEvents(pair.Left, pair.Right, cancellationToken));
 
         var registration = found
             .Combine(referenced)
@@ -109,7 +111,10 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
     /// The domain events of this module's referenced projects that have no registration of their own, and DDD00033
     /// for each one this project cannot see. Nothing when this project declares no module.
     /// </summary>
-    private static ReferencedEvents ModuleEvents(Compilation compilation, CancellationToken cancellationToken)
+    /// <param name="compilation">The project.</param>
+    /// <param name="projectFile">Where DDD00033 is reported when no <c>[assembly: Module]</c> in a file of the project says which module it is.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    private static ReferencedEvents ModuleEvents(Compilation compilation, LocationInfo? projectFile, CancellationToken cancellationToken)
     {
         if (ModuleBoundary.ModuleOf(compilation.Assembly) is not { } module)
         {
@@ -137,7 +142,7 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                moduleAttribute ??= ModuleAttributeOf(compilation, cancellationToken);
+                moduleAttribute ??= ModuleBoundary.WhereTheModuleIsDeclared(compilation, projectFile, cancellationToken);
                 problems.Add(DiagnosticInfo.Create(
                     DiagnosticDescriptors.IntegrationEventClassNotConstructible,
                     moduleAttribute,
@@ -176,21 +181,6 @@ public sealed class IntegrationEventsGenerator : IIncrementalGenerator
     }
 
     private static readonly ConditionalWeakTable<IAssemblySymbol, INamedTypeSymbol[]> DomainEventsByAssembly = new();
-
-    /// <summary>Where a problem with another project of the module is reported: this project's <c>[assembly: Module]</c>.</summary>
-    private static LocationInfo? ModuleAttributeOf(Compilation compilation, CancellationToken cancellationToken)
-    {
-        foreach (var attribute in compilation.Assembly.GetAttributes())
-        {
-            if (attribute.AttributeClass?.ToDisplayString() == KnownTypes.ModuleAttribute
-                && attribute.ApplicationSyntaxReference is { } reference)
-            {
-                return LocationInfo.From(reference.GetSyntax(cancellationToken));
-            }
-        }
-
-        return null;
-    }
 
     private static FoundType? Describe(GeneratorSyntaxContext syntaxContext, CancellationToken cancellationToken)
     {

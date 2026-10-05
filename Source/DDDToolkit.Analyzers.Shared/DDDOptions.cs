@@ -31,6 +31,19 @@ internal static class DDDOptionsProvider
         });
 
     /// <summary>
+    /// The project file, as a location for what is said about the project's module when nothing in its source
+    /// declares it: a module the build declared from <c>DDD_Module</c> has no <c>[assembly: Module]</c> to point
+    /// at, and the file the build wrote the declaration into is one nobody edits. Null when
+    /// <c>MSBuildProjectFullPath</c> did not reach the compiler; the diagnostic then has no location, as one about
+    /// the whole project has.
+    /// </summary>
+    public static IncrementalValueProvider<LocationInfo?> ProjectFile(this IncrementalGeneratorInitializationContext context)
+        => context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>
+            provider.GlobalOptions.TryGetValue("build_property.MSBuildProjectFullPath", out var path) && !string.IsNullOrWhiteSpace(path)
+                ? new LocationInfo(path.Trim(), default, default)
+                : null);
+
+    /// <summary>
     /// The name in the generated registration methods, <c>Add{Module}Converters</c> and the others, as a
     /// cacheable value. See <see cref="ResolveModuleName(DDDOptions, string?, string?)"/> for where it
     /// comes from.
@@ -47,7 +60,8 @@ internal static class DDDOptionsProvider
     /// <summary>
     /// The name generated code is given. The module the assembly declares with <c>[assembly: Module]</c>
     /// always wins. <c>DDD_Module</c> is the default beneath it, which a <c>Directory.Build.props</c> can
-    /// set for a whole folder, and the assembly name is what is left when a project has neither.
+    /// set for a whole folder, and the assembly name is what is left when a project has neither. A module the
+    /// build declared from <c>DDD_Module</c> arrives here as the module, so it is spelled as one.
     /// </summary>
     public static string ResolveModuleName(this DDDOptions options, string? module, string? assemblyName)
     {

@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Attributes;
 
 // The ids in this folder are Tenancy's, published here so Projects and Inspections can store them without
 // referencing any other project of Tenancy. This project declares the same module as the rest of Tenancy (see
-// Module.cs), so they are one module.
+// Modules/Directory.Build.props), so they are one module.
 namespace Examples.Tenancy.Tenants.Contracts.ValueObjects;
 
 /// <summary>

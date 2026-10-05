@@ -333,6 +333,7 @@ csharp_style_prefer_top_level_statements = true:silent
 #   MSBuild property        code generation for the project that sets it, for example DDD_Module.
 #                           Set it in the project file or in Directory.Build.props.
 #   [assembly: Module]      facts another project must be able to read from the compiled assembly.
+#                           DDD_DeclareModule has the build write it from DDD_Module, for a folder.
 #   .editorconfig           diagnostic severity, per folder, applied by Roslyn itself.
 #
 # Nothing here is a DDDToolkit invention: dotnet_diagnostic is how every Roslyn analyzer is
@@ -372,6 +373,11 @@ csharp_style_prefer_top_level_statements = true:silent
 # dotnet_diagnostic.DDD00021.severity = warning # reference another aggregate by its id
 # dotnet_diagnostic.DDD00022.severity = warning # use only what another module publishes
 # dotnet_diagnostic.DDD00023.severity = warning # do not hold another module's entity
+#
+# DDD00064, every project named after a module declares it, is a warning as well, and is not steered
+# here: it is reported at the project file, which no [*.cs] section reaches. So are DDD00033, DDD00045,
+# DDD00049 and DDD00050 in a project whose module no file of its own declares. Set their severity with
+# <NoWarn> or <WarningsAsErrors>, or in a .globalconfig file with is_global = true.
 
 # Invariants, where the failure worth catching is a rule that is written, tested and never run. The
 # last is an error because the generator drops a rule it cannot construct, and a dropped rule is the

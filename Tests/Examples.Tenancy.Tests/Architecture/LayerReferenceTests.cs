@@ -86,6 +86,27 @@ public sealed class LayerReferenceTests
     }
 
     [Theory]
+    [MemberData(nameof(Projects))]
+    public void Every_project_is_declared_its_module_by_the_folder_it_is_in_and_by_no_file_of_its_own(string project)
+    {
+        // Modules/Directory.Build.props names the module after the folder and declares it, so the folder is the one
+        // place that says which module a project is of: a project moved to another module's folder is that module's.
+        var listed = SampleLayout.Project(project);
+        var directory = SampleLayout.DirectoryOf(listed);
+
+        Path.GetFileName(Path.GetDirectoryName(directory)).Should().Be(listed.Module, "{0} is in its module's folder", project);
+        listed.Anchor.Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .Where(metadata => metadata.Key is "DDD_Module" or "DDD_DeclareModule")
+            .Select(metadata => metadata.Key + "=" + metadata.Value)
+            .Should().BeEquivalentTo(["DDD_Module=" + listed.Module, "DDD_DeclareModule=true"], "the build declared {0}'s module from its folder", project);
+
+        SampleLayout.SourceFilesIn(directory)
+            .Where(file => File.ReadAllText(Path.Combine(directory, file)) is var text
+                && (text.Contains("[assembly: Module(", StringComparison.Ordinal) || text.Contains("Abstractions.Attributes.Module", StringComparison.Ordinal)))
+            .Should().BeEmpty("no file of {0} declares the module its folder gives it", project);
+    }
+
+    [Theory]
     [MemberData(nameof(InnerProjects))]
     public void Contracts_domain_and_application_reach_neither_storage_nor_HTTP(string project)
     {

@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    The application's module, Press, declared for its domain and its infrastructure project here rather than with a
+    Module.cs in each: DDD_Module names it, and DDD_DeclareModule has the build of the packed DDDToolkit.Analyzers
+    package declare it, which writes [assembly: Module("Press")] into both. The infrastructure project gets
+    modelBuilder.AddTenancy() and the rest written over the domain project's classes only because the two are one
+    module, so this build fails if the package's targets did not arrive or did not declare it. The host is no module.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' != 'Acme.Press.Host'">
+    <DDD_Module>Press</DDD_Module>
+    <DDD_DeclareModule>true</DDD_DeclareModule>
+  </PropertyGroup>
+</Project>

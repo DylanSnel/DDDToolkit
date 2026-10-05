@@ -61,12 +61,14 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
 | [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
 | [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
+| [DDD00064](#ddd00064) | Warning | Every project named after a module declares it |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
 reads well and does not do what it looks like it does. [DDD00021](#ddd00021) is about the boundary
 between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the boundary
-between two [modules](modules.md) and say nothing at all until a project declares itself one;
+between two [modules](modules.md) and say nothing at all until a project declares itself one, and
+[DDD00064](#ddd00064) about a project of a module that does not declare it;
 [DDD00024](#ddd00024) to [DDD00027](#ddd00027) are about [invariants](invariants.md), where the
 failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
@@ -472,6 +474,9 @@ Two ways it happens, and the fix for each:
     <CompilerVisibleProperty Include="DDD_Module" />
   </ItemGroup>
   ```
+
+  Such a project gets no build step from the package either, so `DDD_DeclareModule` declares nothing there:
+  declare its module with `[assembly: Module]`.
 
 It is reported once per project and has no line to point at, since no line of your code is wrong. An
 assembly that declares `[assembly: Module]` is not reported: the module names its generated code, and
@@ -1067,7 +1072,12 @@ you. Give the class a constructor the registration can call, or register it by h
 The registration also names the domain events of the module's projects that do not reference Entity
 Framework, such as a domain project next to the infrastructure project that holds the outbox. One of those
 that this project cannot see, an `internal` event, is left out the same way, and reported on the project's
-`[assembly: Module]` attribute:
+`[assembly: Module]` attribute. Where no file of the project that somebody edits declares the module, it is
+reported at the project file instead: the build declared the module from `DDD_Module` and `DDD_DeclareModule`,
+or an `<AssemblyAttribute>` item wrote the attribute into `obj/`
+([A module named by its folder](modules.md#a-module-named-by-its-folder)). Set its severity there with
+`<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig`; a `[*.cs]` section of `.editorconfig` does not reach the
+project file.
 
 ```
 'Sales.Domain.OrderAudited' is left out of the generated integration event registration: a domain event of
@@ -1539,7 +1549,12 @@ classes the projects of its module declare, the ones with the same `[assembly: M
 When those projects declare a class with one of the method's templates and none with another, this is
 reported on the infrastructure project's `[assembly: Module]` attribute, with no code fix: the class belongs
 in the project that declares the others. [DDD00045](#ddd00045) and [DDD00050](#ddd00050) are reported there
-too, for such a project.
+too, for such a project. Where no file of the project that somebody edits declares the module, they are
+reported at the project file: the build declared the module from `DDD_Module` and `DDD_DeclareModule`, or an
+`<AssemblyAttribute>` item wrote the attribute into `obj/`
+([A module named by its folder](modules.md#a-module-named-by-its-folder)). Their severity is then set with
+`<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig`, since a `[*.cs]` section of `.editorconfig` does not
+reach the project file.
 
 ---
 
@@ -2112,6 +2127,59 @@ would throw. That is why it is an error, reported where the list is declared. A 
 when it declares no module, as a module project that leaves its `[assembly: Module]` out: the host references
 it all the same. Only an application, the program itself, may keep a list of its own internal: it collects that
 list itself, and no other project composes from it.
+
+## DDD00064
+
+**Every project named after a module declares it.**
+
+```xml
+<!-- Modules/Ordering/Ordering.Domain: declares module Ordering -->
+<DDD_Module>Ordering</DDD_Module>
+<DDD_DeclareModule>true</DDD_DeclareModule>
+
+<!-- Modules/Ordering/Ordering.Infrastructure: carries the name, and declares nothing -->
+<DDD_Module>Ordering</DDD_Module>   <!-- DDD00064 -->
+```
+
+A module may be several projects, one per layer, and the generators take the projects that declare the same
+module together: the project that holds the context gets the converters of the module's ids, its domain events
+under their names, and a package's registrations closed over the module's classes, such as
+`modelBuilder.AddTenancy()`. A project that carries the module's name in `DDD_Module` and declares no module is
+left out of all of that, because `DDD_Module` alone only names generated code. Without this warning the build
+went on without a word, and the first sign was a call that did not compile, CS1061 or CS0234, or a converter
+missing when the model was built.
+
+It is reported about two projects that set the same `DDD_Module`, in the one that references the other, which
+it names:
+
+```
+This project and project 'Ordering.Domain', which it references, set DDD_Module to 'Ordering', and only that
+project declares the module, so the generators do not take this project for one of the module's projects, and
+nothing is written here from what the others declare. Declare module 'Ordering' in this project:
+<DDD_DeclareModule>true</DDD_DeclareModule> beside DDD_Module, or [assembly: Module("Ordering")].
+```
+
+- **Only the referenced project declares the module**, as above: nothing is written here from what the module's
+  other projects declare.
+- **Only this project declares it**: the referenced project's ids, domain events and template classes are left
+  out of what is written here.
+- **Neither declares it**, and a package's registration is written for nobody: the referenced project declares
+  classes with the package's templates, this project can call the registration, and that project cannot. This is
+  what removing an `<AssemblyAttribute>` item that declared the module, without setting `DDD_DeclareModule` in its
+  place, comes to. Two projects without templates that set one `DDD_Module` and declare no module are not
+  reported: that is how an application without modules names its generated code.
+
+The name the two share is what makes it certain, so nothing is reported about projects that only belong
+together. Declare the module where the message says: with `DDD_DeclareModule` set to true beside `DDD_Module`,
+which a `Directory.Build.props` does for a whole folder, or with `[assembly: Module("Ordering")]`
+([A module named by its folder](modules.md#a-module-named-by-its-folder)). A project that carries the name and
+is no module on purpose says so with `DDD_DeclareModule` set to false, and a test project is never reported.
+
+It is reported at the project file, since no line of code is wrong. That is outside every source file, so a
+severity in an `.editorconfig` section for `*.cs` files does not reach it: set it with `<NoWarn>` or `<WarningsAsErrors>` in the project file or a
+`Directory.Build.props`, or in a `.globalconfig` file with `is_global = true`. A project is only told about a
+project the toolkit's build wrote its `DDD_Module` into, so one built by an earlier version, or without the
+`DDDToolkit.Analyzers` package's build assets, is not reported against.
 
 ## Building the model fails: the owned type must carry the key part
 
