@@ -77,12 +77,20 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 builder.Services.AddRequestTracing();
 
 // The modules, each through the one entry its API project has. Tenancy brings the application's catalogue with
-// it; the other modules add their keys to it, and ask Tenancy's answers, so Tenancy comes first. Projects is
-// given the starter project roles the application declares for its tenants' crews, which its rules are made with.
-// Inspections asks Projects' gate, so it follows Projects.
+// it, and the other modules ask Tenancy's answers, so Tenancy comes first. Projects is given the starter project
+// roles the application declares for its tenants' crews, which its rules are made with. Inspections asks
+// Projects' gate, so it follows Projects.
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);
 builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles);
 builder.Services.AddInspectionsModule(host);
+
+// Every module's permission keys, in one call that names no module. Each module states its keys once, on the
+// list it marks with [TenancyPermissions]; Tenancy's generator finds those lists in the modules this host
+// references, and wrote this call into it, in the namespace named after the host's assembly, which the using of
+// Examples.Tenancy.Host above brings in. A module that is added reaches the host with no change here. The program
+// that exports the policies builds its catalogue from the list the same generator writes into the catalogue's
+// project, so the new module's keys reach the export once that project references the module as well.
+builder.Services.AddTenancyPermissionsOfModules();
 
 // One GraphQL schema over the modules: the gateway composes the source schemas the modules registered, in this
 // process, and calls them in memory. A module names another's entity by its id, and the gateway asks the owner

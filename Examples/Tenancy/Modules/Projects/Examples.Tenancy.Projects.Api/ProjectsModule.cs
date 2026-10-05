@@ -44,8 +44,9 @@ namespace Examples.Tenancy.Projects.Api;
 public static class ProjectsModule
 {
     /// <summary>
-    /// Registers Projects: how it is stored, its keys in the catalogue, the projects' rules, the checks its
-    /// commands and queries pass, and the gate other modules ask. The host says where its tables live and where
+    /// Registers Projects: how it is stored, the projects' rules, the checks its commands and queries pass, and the
+    /// gate other modules ask. Its keys are not registered here: the host adds them with every module's, from the
+    /// list the module marks with <c>[TenancyPermissions]</c>. The host says where its tables live and where
     /// what it publishes goes (see <see cref="ModuleHost"/>), and hands over the starter roles the application
     /// declares for its tenants' crews, which the projects' rules are made with. Tenancy must be registered first:
     /// Projects asks Tenancy's answers, and its context checks its saves with Tenancy's interceptor.

@@ -26,7 +26,8 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// </param>
 /// <param name="Permissions">
 /// The keys the application owns itself, besides Tenancy's and the modules' contributions. A module's keys are
-/// contributed by the module, next to the code that asks for them, and are not listed here.
+/// stated by the module, next to the code that asks for them, on a list it marks with
+/// <see cref="TenancyPermissionsAttribute"/>, and are not listed here.
 /// </param>
 /// <param name="AccessManagingKeys">
 /// Keys that manage access besides those marked where they are declared (<see cref="Permission.ManagesAccess"/>):

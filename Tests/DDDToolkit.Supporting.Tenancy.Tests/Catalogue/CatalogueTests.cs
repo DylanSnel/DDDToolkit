@@ -63,6 +63,21 @@ public class CatalogueTests
     }
 
     [Fact]
+    public void One_declaration_added_twice_is_refused_once_for_its_whole_list()
+    {
+        // The same list contributed twice, as a module's own registration beside the host's generated one adds it.
+        Permission[] gauges = [new("gauges.read", "Gauges", "Read gauges"), new("gauges.lock", "Gauges", "Lock gauges")];
+
+        Problems(Application(), [.. gauges, .. gauges]).Should().ContainSingle().Which.Should().Be(
+            "The same declaration of 'gauges.read', 'gauges.lock' is added more than once. A module whose list is marked [TenancyPermissions] has it "
+            + "added by the host's AddTenancyPermissionsOfModules(), and adds it with AddTenancyPermissions no more; and either is called once.");
+
+        // Two declarations of one key that are not one and the same are refused as a duplicate, as before.
+        Problems(Application(), [.. gauges, new Permission("gauges.read", "Gauges", "Read gauges")])
+            .Should().ContainSingle().Which.Should().Be("'gauges.read' is declared more than once.");
+    }
+
+    [Fact]
     public void A_pack_naming_an_unknown_or_retired_key_is_refused()
     {
         var problems = Problems(Application(
@@ -72,6 +87,28 @@ public class CatalogueTests
         problems.Should().BeEquivalentTo(
             "The pack 'painter' lists 'widget.old', which is retired.",
             "The pack 'painter' lists 'widget.paint', which is unknown to the catalogue.");
+    }
+
+    [Fact]
+    public void A_key_unknown_to_the_catalogue_is_told_with_how_a_modules_keys_reach_it()
+    {
+        // What a host that leaves out services.AddTenancyPermissionsOfModules() meets: a pack names a module's key
+        // that never reached the catalogue, or, with no pack naming one, the first question about it.
+        const string Cure = "*[TenancyPermissions]*services.AddTenancyPermissionsOfModules()*";
+        var refused = FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, new RolePack("viewer", "Viewer", "Looks", ["orders.view"])]), []))
+            .Should().Throw<TenancyCatalogueException>().Which;
+
+        refused.Problems.Should().ContainSingle().Which.Should().Be(
+            "The pack 'viewer' lists 'orders.view', which is unknown to the catalogue.", "the problems stay what is wrong, one sentence each");
+        refused.Message.Should().Match(Cure, "the cure is said once, after the problems")
+            .And.EndWith("in a project that references the module.");
+
+        FluentActions.Invoking(() => TenancyCatalogue.Build([]).RequireAskable("orders.view"))
+            .Should().Throw<ArgumentException>().WithMessage("'orders.view' is not a key of the permission catalogue. " + Cure);
+
+        // A catalogue that names no unknown key hears nothing about modules.
+        FluentActions.Invoking(() => TenancyCatalogue.Build(Application(packs: [Administrators, Administrators]), []))
+            .Should().Throw<TenancyCatalogueException>().Which.Message.Should().NotContain("[TenancyPermissions]");
     }
 
     [Fact]

@@ -59,4 +59,13 @@
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
   </ItemGroup>
 
+  <!--
+    Tenancy's generator, which a NuGet consumer gets with the Tenancy package and this repository wires by hand. The
+    host declares no module and references every one, so the generator writes the modules' keys into it, with the
+    call that registers them: AddTenancyPermissionsOfModules, in Program.cs.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

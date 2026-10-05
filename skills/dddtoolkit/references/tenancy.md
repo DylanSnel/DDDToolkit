@@ -113,8 +113,14 @@ public sealed partial class ShopSeat
    ```
 
 6. A module's own tables: `modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId)`; the
-   start-up check `AddTenancy` brings holds every context to `UseTenancy`. A module's keys:
-   `services.AddTenancyPermissions(ProjectCatalogue.Permissions)`.
+   start-up check `AddTenancy` brings holds every context to `UseTenancy`. A module's keys, stated once:
+   `[TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = [...];` on the module's
+   list, and in the host, which references every module, `services.AddTenancyPermissionsOfModules()`, generated
+   by Tenancy's generator in every project that declares no `[assembly: Module]`, in the namespace named after the
+   project's assembly (a top-level `Program.cs` needs `using <HostAssembly>;`). The Postgres export builds its catalogue
+   from the same generated list, `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`. Do not
+   also call `AddTenancyPermissions` with a marked list: the catalogue refuses it twice (DDD00063 is a marked
+   list that is not public, static and a sequence of `Permission`).
 7. Provisioning, seeding and jobs are system work, begun on purpose:
    `using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, actingSeat)) { ... }`. A request is never
    system work. With `services.RequireExplicitCallers()` work that named no caller fails instead of running

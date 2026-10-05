@@ -96,6 +96,22 @@ public class RegistrationTests
     }
 
     [Fact]
+    public void A_modules_list_added_by_the_host_and_by_the_module_as_well_stops_the_catalogue_with_what_to_remove()
+    {
+        // What an application upgrading to [TenancyPermissions] can leave behind: the host's generated
+        // AddTenancyPermissionsOfModules() adds the module's list, and the module's own registration still adds it too.
+        IReadOnlyList<Permission> gauges = [new Permission("gauges.read", "Gauges", "Read gauges"), new Permission("gauges.lock", "Gauges", "Lock gauges")];
+        var services = new ServiceCollection().AddTenancyPermissions(gauges).AddTenancyPermissions(gauges);
+        AddTenancyCore(services, EveryOption);
+        using var provider = services.BuildServiceProvider();
+
+        FluentActions.Invoking(() => provider.GetRequiredService<TenancyCatalogue>())
+            .Should().Throw<TenancyCatalogueException>().Which.Problems.Should().ContainSingle().Which.Should()
+            .Contain("'gauges.read', 'gauges.lock'", "one problem for the list, naming its keys")
+            .And.Contain("AddTenancyPermissionsOfModules()").And.Contain("AddTenancyPermissions no more");
+    }
+
+    [Fact]
     public void An_application_without_a_catalogue_of_its_own_runs_on_its_modules_keys_and_the_default_administrators()
     {
         var services = new ServiceCollection().AddTenancyPermissions([new Permission("gauges.read", "Gauges", "Read gauges")]);

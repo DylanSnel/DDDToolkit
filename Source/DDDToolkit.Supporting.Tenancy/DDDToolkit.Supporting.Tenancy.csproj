@@ -27,4 +27,15 @@
     <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!--
+    The generator that collects the keys every module marks with [TenancyPermissions] into the project that
+    composes the modules. It runs in the application, so it ships inside this package, in analyzers/dotnet/cs, the
+    way Membership's generator ships inside Membership's: built first, referenced by nothing, and no package of its
+    own, so it never arrives at another version than the attribute it reads.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\DDDToolkit.Supporting.Tenancy.Analyzers\bin\$(Configuration)\netstandard2.0\DDDToolkit.Supporting.Tenancy.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
 </Project>

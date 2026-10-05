@@ -82,7 +82,9 @@ public sealed partial class TenancyCatalogue
     /// Builds the catalogue of an application that adds nothing to it, from the modules' contributions alone, as
     /// the registration does when <c>TenancyOptions.Catalogue</c> is not set: Tenancy's keys, the modules' keys,
     /// and <see cref="TenancyPacks.DefaultAdministrators"/> as the one pack. What an export that runs without the
-    /// registration builds the same catalogue with.
+    /// registration builds the same catalogue with: <c>TenancyCatalogue.Build(TenancyPermissionsOfModules.All)</c>, the
+    /// list Tenancy's generator writes into a project that composes the modules, from the lists they mark with
+    /// <see cref="TenancyPermissionsAttribute"/>.
     /// </summary>
     /// <param name="contributed">The keys the modules contribute.</param>
     /// <exception cref="TenancyCatalogueException">Something does not hold together; every problem found is listed.</exception>
@@ -97,7 +99,10 @@ public sealed partial class TenancyCatalogue
     /// The application's packs, keys and marks. An application that adds none builds with
     /// <see cref="Build(IEnumerable{Permission})"/>, which passes <c>new ApplicationCatalogue()</c>.
     /// </param>
-    /// <param name="contributed">The keys the modules contribute.</param>
+    /// <param name="contributed">
+    /// The keys the modules contribute: in an export, <c>TenancyPermissionsOfModules.All</c>, which Tenancy's generator
+    /// writes into a project that composes the modules, as the host registers them.
+    /// </param>
     /// <exception cref="TenancyCatalogueException">Something does not hold together; every problem found is listed.</exception>
     public static TenancyCatalogue Build(ApplicationCatalogue application, IEnumerable<Permission> contributed)
     {
@@ -122,7 +127,11 @@ public sealed partial class TenancyCatalogue
 
         if (problems.Count > 0)
         {
-            throw new TenancyCatalogueException(problems);
+            // A key the catalogue does not know is most often one that never reached it, which the problems cannot
+            // say: so the cure is said once, after them.
+            throw new TenancyCatalogueException(
+                problems,
+                problems.Any(problem => problem.EndsWith(UnknownToTheCatalogue, StringComparison.Ordinal)) ? UnknownKeyAdvice : null);
         }
 
         // A mark the application lists shows on the key itself, as a pack shows the keys it was built with.
@@ -194,16 +203,20 @@ public sealed partial class TenancyCatalogue
         => PacksFor(shape).Single(pack => pack.Administers);
 
     /// <summary>
-    /// Checks a key that code is about to ask about. A key the catalogue does not know is a typo in code, not
-    /// something a caller did, so it is an <see cref="ArgumentException"/> rather than a refusal. A retired key
-    /// may be asked about, and holds nowhere.
+    /// Checks a key that code is about to ask about. A key the catalogue does not know is a mistake in code, not
+    /// something a caller did, so it is an <see cref="ArgumentException"/> rather than a refusal: a typo, or a
+    /// module's key that never reached the catalogue, which the message names the cure of. A retired key may be
+    /// asked about, and holds nowhere.
     /// </summary>
     /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
     public void RequireAskable(string key)
     {
         if (!Knows(key))
         {
-            throw new ArgumentException("'" + key + "' is not a key of the permission catalogue.", nameof(key));
+            throw new ArgumentException(
+                "'" + key + "' is not a key of the permission catalogue. A module's keys reach it from the static list the module marks with "
+                + "[TenancyPermissions], when the host calls services.AddTenancyPermissionsOfModules().",
+                nameof(key));
         }
     }
 
@@ -212,6 +225,19 @@ public sealed partial class TenancyCatalogue
     /// <summary>What every one of Tenancy's keys starts with, and no other key does.</summary>
     private const string TenancyPrefix = "tenancy.";
 
+    /// <summary>How each problem about a key the catalogue does not know ends.</summary>
+    private const string UnknownToTheCatalogue = "unknown to the catalogue.";
+
+    /// <summary>
+    /// Said once after problems about keys the catalogue does not know: the usual cause is a module's keys that never
+    /// reached it, such as a host that does not add them, or an export built in a project that does not reference
+    /// the module.
+    /// </summary>
+    private const string UnknownKeyAdvice =
+        "A key unknown to the catalogue is most often a module's that never reached it. A module states its keys on the static list it marks with "
+        + "[TenancyPermissions]; the host adds every module's list with services.AddTenancyPermissionsOfModules(), and an export builds with "
+        + "TenancyPermissionsOfModules.All, in a project that references the module.";
+
     [GeneratedRegex("^[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+$", RegexOptions.CultureInvariant)]
     private static partial Regex KeyPattern();
 
@@ -219,11 +245,18 @@ public sealed partial class TenancyCatalogue
     /// Tenancy's keys first, then the application's and the contributions', each checked on its own and against
     /// the others. A key longer than <see cref="Permission.MaxKeyLength"/> is refused here: a stored right keeps
     /// it in a column of that length, and a database that enforces it would refuse the first grant instead.
+    /// <para>
+    /// A key declared twice is refused. When it is one and the same declaration both times, the same list was
+    /// added twice, and the problem says so once for all of its keys: a module that marks its list with
+    /// <see cref="TenancyPermissionsAttribute"/> and still adds it with <c>AddTenancyPermissions</c>, beside the
+    /// host's <c>AddTenancyPermissionsOfModules</c>, is how that happens.
+    /// </para>
     /// </summary>
     private static List<Permission> CheckPermissions(IReadOnlyList<Permission> application, IReadOnlyList<Permission> contributed, List<string> problems)
     {
         var declared = new List<Permission>(TenancyKeys.Permissions);
-        var seen = declared.Select(permission => permission.Key).ToHashSet(StringComparer.Ordinal);
+        var seen = declared.ToDictionary(permission => permission.Key, StringComparer.Ordinal);
+        var addedTwice = new List<string>();
 
         foreach (var (permission, source) in application.Select(permission => (permission, "The application"))
                      .Concat(contributed.Select(permission => (permission, "A contribution"))))
@@ -257,13 +290,29 @@ public sealed partial class TenancyCatalogue
                 problems.Add("'" + permission.Key + "' names no module.");
             }
 
-            if (!seen.Add(permission.Key))
+            if (seen.TryGetValue(permission.Key, out var first))
             {
-                problems.Add("'" + permission.Key + "' is declared more than once.");
+                if (ReferenceEquals(first, permission))
+                {
+                    addedTwice.Add(permission.Key);
+                }
+                else
+                {
+                    problems.Add("'" + permission.Key + "' is declared more than once.");
+                }
+
                 continue;
             }
 
+            seen.Add(permission.Key, permission);
             declared.Add(permission);
+        }
+
+        if (addedTwice.Count > 0)
+        {
+            problems.Add("The same declaration of " + string.Join(", ", addedTwice.Distinct(StringComparer.Ordinal).Select(key => "'" + key + "'"))
+                         + " is added more than once. A module whose list is marked [TenancyPermissions] has it added by the host's AddTenancyPermissionsOfModules(),"
+                         + " and adds it with AddTenancyPermissions no more; and either is called once.");
         }
 
         return declared;
@@ -291,7 +340,7 @@ public sealed partial class TenancyCatalogue
             }
             else if (!byKey.ContainsKey(key))
             {
-                problems.Add("The application marks '" + key + "' as managing access, which is unknown to the catalogue.");
+                problems.Add("The application marks '" + key + "' as managing access, which is " + UnknownToTheCatalogue);
             }
             else if (!seen.Add(key))
             {
@@ -329,7 +378,7 @@ public sealed partial class TenancyCatalogue
                 }
                 else if (target is null || !byKey.ContainsKey(target))
                 {
-                    problems.Add("'" + permission.Key + "' implies '" + target + "', which is unknown to the catalogue.");
+                    problems.Add("'" + permission.Key + "' implies '" + target + "', which is " + UnknownToTheCatalogue);
                 }
                 else if (!permission.Key.StartsWith(TenancyPrefix, StringComparison.Ordinal) && target.StartsWith(TenancyPrefix, StringComparison.Ordinal))
                 {
@@ -428,7 +477,7 @@ public sealed partial class TenancyCatalogue
             foreach (var offender in offenders)
             {
                 problems.Add("The pack '" + pack.Key + "' lists '" + offender + "', which is "
-                             + (byKey.ContainsKey(offender) ? "retired." : "unknown to the catalogue."));
+                             + (byKey.ContainsKey(offender) ? "retired." : UnknownToTheCatalogue));
             }
 
             if (pack.Administers)

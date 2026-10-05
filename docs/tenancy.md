@@ -69,8 +69,9 @@ that manage access, so whoever holds it can give the next role: a tenant cannot 
 not declare it. When your catalogue declares no administrators' pack at all, `TenancyCatalogue.Build` adds
 Tenancy's own, `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every
 shape, seeded when a tenant is provisioned. It lists no keys, so it holds every live key, one a module adds
-later included. So the smallest application declares no catalogue at all: its modules contribute their keys,
-and `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
+later included. So the smallest application declares no catalogue at all: its modules mark their keys, the
+host adds them with one generated call ([A module states its keys once](#a-module-states-its-keys-once)), and
+`options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
 one.
 
 ```mermaid
@@ -145,7 +146,9 @@ Tenancy becomes a module of your application, like any other. In the order you w
 2. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
    a migration of your own, and `services.AddTenancy<TContext>(...)` with how your ids are made
    ([Your tenancy module](#your-tenancy-module)).
-3. **Write your catalogue, when you need one.** Each module contributes its own keys. Your part adds the role
+3. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
+   `[TenancyPermissions]`, and the host adds every module's with one generated call
+   ([A module states its keys once](#a-module-states-its-keys-once)). Your part adds the role
    packs a tenant starts with, keys no module owns, and a mark on every key that manages access
    ([What the catalogue is for](#what-the-catalogue-is-for)). Declare no administrators' pack, and every tenant
    starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)); need none of the rest, and
@@ -285,8 +288,9 @@ explains how the calls without your classes come about.
 
 Tenancy asks the application only what it needs to decide something, and its catalogue is what it decides
 access with: which keys exist, which of them manage access, and which roles a new tenant starts with. Tenancy
-brings its own keys, and every module contributes its keys next to the code that asks for them, with
-`AddTenancyPermissions`. What is left for your `ApplicationCatalogue` is what neither can say:
+brings its own keys, and every module states its keys next to the code that asks for them, once
+([A module states its keys once](#a-module-states-its-keys-once)). What is left for your
+`ApplicationCatalogue` is what neither can say:
 
 | Part | What it decides | Without it |
 |---|---|---|
@@ -295,10 +299,115 @@ brings its own keys, and every module contributes its keys next to the code that
 | `AccessManagingKeys` | A key a module declares that should manage access in your application | A key manages access only where it is declared so ([Which keys manage access](#who-may-give-a-role)) |
 
 Every part is optional, and so is the catalogue: leave `options.Catalogue` unset and Tenancy builds it from
-`new ApplicationCatalogue()`, its own keys and the contributions. The export on Postgres, which builds the
-catalogue without the registration, does the same with `TenancyCatalogue.Build(contributed)`
+`new ApplicationCatalogue()`, its own keys and the modules'. The export on Postgres, which builds the
+catalogue without the registration, does the same with `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)`
 ([Setting it up](#setting-it-up)). Nothing else is asked for: what kind of unit a unit is decides nothing, so
 it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
+
+### A module states its keys once
+
+A module's keys are needed by two programs that cannot ask each other: the host, which builds its catalogue
+from its services, and the program that exports the database's policies, which builds the same catalogue
+without any. Both compose the modules, so both see every module's assembly, and Tenancy's generator, which
+comes with the package, reads the keys there.
+
+```mermaid
+flowchart LR
+    Ordering["Ordering.Application<br/>OrderingKeys.Permissions<br/>[TenancyPermissions]"]
+    Billing["Billing.Application<br/>BillingKeys.Permissions<br/>[TenancyPermissions]"]
+    Generator{{"Tenancy's generator,<br/>in each project that<br/>declares no module"}}
+    Host["the host<br/>AddTenancyPermissionsOfModules()"]
+    Export["the export<br/>TenancyPermissionsOfModules.All"]
+    Running(["the catalogue<br/>the host runs with"])
+    Written(["the catalogue the<br/>policies are written from"])
+    Check{"start-up check<br/>on Postgres:<br/>the same?"}
+    Ordering --> Generator
+    Billing --> Generator
+    Generator --> Host --> Running --> Check
+    Generator --> Export --> Written --> Check
+```
+
+A module states its keys on the static list where it declares them, and marks that list with
+`[TenancyPermissions]`. That is the only place: its registration adds nothing, and no other project lists them.
+In every project that references Tenancy and declares no module, the generator writes
+`TenancyPermissionsOfModules`, an internal class with the project's own marked lists and those of every project
+it references. Its namespace is named after the project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever
+the project's `RootNamespace` says:
+
+- **`TenancyPermissionsOfModules.All`**: every module's keys, one list after the other, in the order of the
+  lists' names. The export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, or
+  `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)` without a part of your own.
+- **`services.AddTenancyPermissionsOfModules()`**: adds `All` to the catalogue, as one contribution. The host
+  calls it once. A top-level `Program.cs` is in no namespace, so it needs `using Shop.Host;` for the call.
+
+Neither call names a module, so a module that is added, or a key a module adds, reaches both programs with the
+next build, and nothing in the host changes. While no module marks a list, before the first one does or after
+the last one is taken out, `All` is empty, and both calls compile all the same.
+
+Declaring a module means `[assembly: Module]` ([Modules](modules.md)). A module's own projects get no class: a
+module states its own keys and composes no other module's. A module project that does not carry the attribute
+yet gets one as well, and leaves it alone: the host's call is the one that counts.
+
+The list is a static property or field, readable, declared in a class that is not generic (nor nested in one),
+whose type is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>` or an array.
+In a library it is public as well, in public types, because the project that composes the modules reads it from
+outside, whether the library declares a module or not. A list that cannot be read that way is the error
+[DDD00063](diagnostics.md#ddd00063) where it is declared, because the module's keys would otherwise be missing
+from the catalogue with nothing to say so. Only an application, the program itself, may keep a list of its own
+internal: it collects that list itself, and no other project composes the modules from it.
+
+`AddTenancyPermissions` stays, for keys you add by hand. A module that marks its list does not call it as well:
+the same list added twice stops the catalogue at start-up, with one problem that names its keys and says which
+call to take out.
+
+A host that leaves `AddTenancyPermissionsOfModules()` out runs without any module's keys. A pack that names one
+of them stops the catalogue at start-up; with no such pack, as with Tenancy's default administrators' pack, the
+first question about one of them throws. Both messages say how a module's keys reach the catalogue: the list
+marked `[TenancyPermissions]`, and the host's call.
+
+The two programs build the same catalogue as long as they reference the same modules, and add no keys by hand
+that the other does not. The export can be the host itself, and then there is one list. Where it is a program
+of its own, as in the sample, it references the modules the host does, and the start-up check on Postgres
+stays the guard: it compares the functions the export wrote with the catalogue the host runs with, and refuses
+a host whose policies were written from another catalogue ([Setting it up](#setting-it-up)).
+
+<details>
+<summary>Show the code: a module's keys, the host's one call, the export, and what the generator writes</summary>
+
+```csharp
+// Ordering.Application: the keys, stated once
+public static class OrderingKeys
+{
+    [TenancyPermissions]
+    public static IReadOnlyList<Permission> Permissions { get; } =
+    [
+        new("orders.view", "Ordering", "See the orders"),
+        new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
+    ];
+}
+
+// The host's Program.cs: the host references every module, and the class is in the namespace of its assembly
+using Shop.Host;
+
+builder.Services.AddTenancyPermissionsOfModules();
+
+// The project that runs the export, or one the host shares with it
+public sealed class ShopTenancyRowAccess()
+    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
+
+// What the generator writes into each of those projects, in the namespace of its assembly
+internal static class TenancyPermissionsOfModules
+{
+    public static IReadOnlyList<Permission> All { get; } = Join(
+        global::Shop.Billing.BillingKeys.Permissions,
+        global::Shop.Ordering.OrderingKeys.Permissions);
+
+    public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
+        => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
+}
+```
+
+</details>
 
 ### Calling a use case
 
@@ -1657,7 +1766,7 @@ the same token roles to your contribution:
 
 ```csharp
 public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, [.. OrderingCatalogue.Permissions]), ["operator"]);
+    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
 ```
 
 The contribution then writes, for that role:
@@ -1905,8 +2014,8 @@ services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProject
 services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, OrganizationUnitId, RoleId>(membership.Rules);   // the crews, by the Membership package
 services.AddProjectMemberAccess<IProjectsRequest>();                         // its check, for a key on a project
 
-// Projects.Application: the keys, the rules, the check for a key at a unit, and the generated behavior
-services.AddTenancyPermissions(ProjectCatalogue.Permissions);
+// Projects.Application: the rules, the check for a key at a unit, and the generated behavior. No keys: the module
+// marks their list, ProjectCatalogue.Permissions, with [TenancyPermissions], and the host adds every module's
 services.AddSingleton(membership);
 services.AddScoped<ProjectAccess>();
 services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
@@ -3274,6 +3383,7 @@ builder.Services.AddRequestTracing();                                           
 builder.Services.AddTenantsModule(host, SampleCatalogue.Application);              // each module's entry, from its API project
 builder.Services.AddProjectsModule(host, SampleCatalogue.ProjectRoles);            // with the starter project roles
 builder.Services.AddInspectionsModule(host);
+builder.Services.AddTenancyPermissionsOfModules();                                      // every module's keys, written by Tenancy's generator
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<RefusalProblems>();                             // refusals as problem+json
 
@@ -3423,6 +3533,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
+| A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. What composes the modules, the host and the catalogue's project, gets every module's list from Tenancy's generator: the host registers the keys with one call, and the export builds its catalogue from the same lists | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyPermissionsOfModules.g.cs` is under its `obj` folder<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `StartupTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
 | The feature comes first and the kind second: a folder per feature with `Commands` and `Queries` in it, and the same feature names in the API project with `Rest` and `GraphQL` | **Code:** [`AllCrewMembers.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Queries/AllCrewMembers.cs), [`CrewEndpoints.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/Rest/CrewEndpoints.cs), [`CrewMutations.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMutations.cs)<br/>**Try it:** juno reads Pier 7's crew, in the `.http` file<br/>**Test:** `FeatureFolderTests`, `AllCrewMembersScenarios` |
 | Folders are deep, and in the sample the namespace of a type is its folder. The packages have the same folders and keep few namespaces | **Code:** [`Aggregates/Projects`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects), [`Aggregates`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates)<br/>**Try it:** Nothing to run: [Folders inside the layers](modules.md#folders-inside-the-layers) has the tree<br/>**Test:** `SourceTreeTests`, `StoredNameTests` |
@@ -3549,11 +3660,11 @@ services.RunStartupChecks();
 // The project that runs the export: Tenancy's functions, policies and triggers go into its migrations
 [assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
 
-// The catalogue as your registration builds it: your part, and the keys your modules add with AddTenancyPermissions.
-// An application without a part of its own builds from its modules' keys alone:
-// TenancyCatalogue.Build([.. OrderingCatalogue.Permissions]).
+// The catalogue as your registration builds it: your part, and the keys your modules mark with [TenancyPermissions],
+// which Tenancy's generator collects into this project. An application without a part of its own builds from its
+// modules' keys alone: TenancyCatalogue.Build(TenancyPermissionsOfModules.All).
 public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, [.. OrderingCatalogue.Permissions]));
+    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
 ```
 
 - **`AddTenancyPostgres()`** carries the tenant to Postgres, turns the refusal of the trigger that keeps a
@@ -3565,7 +3676,10 @@ public sealed class ShopTenancyRowAccess()
   Your contexts use `UsePostgresRowLevelSecurity` as well as `UseTenancy`.
 - **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships).
   Which keys manage access is yours to say, so its SQL is written from your catalogue: derive a class that
-  builds it as your registration does, from your part and your modules' keys, and list that class. On a
+  builds it as your registration does, from your part and your modules' keys, `TenancyPermissionsOfModules.All`,
+  and list that class. Declare it in a project that declares no module, where the generator writes that list
+  ([A module states its keys once](#a-module-states-its-keys-once)): the project that runs the export, or one
+  it shares with the host. On a
   Postgres of your own, pass it to `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The
   functions go into the default schema of the context that maps Tenancy's tables, so give it one in lower
   case, such as `tenancy`.

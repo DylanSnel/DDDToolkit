@@ -33,7 +33,8 @@ namespace Examples.Tenancy.Inspections.Api;
 public static class InspectionsModule
 {
     /// <summary>
-    /// Registers Inspections: how it is stored, its key in the catalogue and its use cases. The host says where
+    /// Registers Inspections: how it is stored and its use cases. Its key is not registered here: the host adds it
+    /// with every module's, from the list the module marks with <c>[TenancyPermissions]</c>. The host says where
     /// its tables live and where what it publishes goes (see <see cref="ModuleHost"/>). Register it after Tenancy
     /// and Projects: Inspections asks Tenancy's answers and Projects' gate, and its context checks its saves with
     /// Tenancy's interceptor.

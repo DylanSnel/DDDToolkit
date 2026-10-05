@@ -457,6 +457,19 @@ decorator that hands its inner handler the message it was given, or for construc
 A generic dispatcher over an unconstrained message type parameter is not seen: send through `ISender` there. A call that is meant elsewhere gets `#pragma warning disable DDD00061` with
 the reason. Do not hide it by calling a method of the handler's own instead: the check is skipped all the same.
 
+## DDD00063
+
+Error, on a property or field marked `[TenancyPermissions]` (`DDDToolkit.Supporting.Tenancy.Catalogue`) that the
+project composing the modules cannot read as `Type.Member`, so the module's keys would be missing from the
+catalogue. Make it `public static`, readable (a field or a property with a getter), declared in a class that is
+not generic (nor nested in one), not in an extension block or a file-local type, not a static virtual or abstract
+interface member, and of a type that is a sequence of `Permission`:
+`[TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = [...];`. Every library's list
+is public, whether the library declares a module or not; only an application (an `Exe`) may keep its own list
+internal, though not private or protected.
+Do not also pass the list to `services.AddTenancyPermissions(...)`: the host's generated
+`services.AddTenancyPermissionsOfModules()` adds it, and the catalogue refuses a list added twice.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

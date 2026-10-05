@@ -11,7 +11,9 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <summary>
 /// Registration of Tenancy's storage-agnostic parts. The storage package registers the rest, the store and
 /// the seat directory, and calls <see cref="AddTenancyCore"/> itself; an application calls the storage
-/// package's registration, and <see cref="AddTenancyPermissions"/> from every module that owns keys.
+/// package's registration, and adds its modules' keys once, from the host: <c>services.AddTenancyPermissionsOfModules()</c>,
+/// which Tenancy's generator writes from the lists the modules mark with <see cref="TenancyPermissionsAttribute"/>.
+/// <see cref="AddTenancyPermissions"/> adds a list by hand.
 /// </summary>
 public static class TenancyServiceCollectionExtensions
 {
@@ -139,9 +141,16 @@ public static class TenancyServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Adds a module's permission keys to the catalogue, next to the code that asks for them. Call it from
-    /// any module, as often as needed: contributions add up. A key may be declared only once in the whole
-    /// catalogue, and never under <c>tenancy.</c>.
+    /// Adds permission keys to the catalogue by hand. Contributions add up. A key may be declared only once in
+    /// the whole catalogue, and never under <c>tenancy.</c>.
+    /// <para>
+    /// A module states its keys once, on a static list it marks with <see cref="TenancyPermissionsAttribute"/>,
+    /// and the host adds every module's list with the call Tenancy's generator writes into it,
+    /// <c>services.AddTenancyPermissionsOfModules()</c>, which calls this; an export builds the same catalogue from
+    /// <c>TenancyPermissionsOfModules.All</c>. So a module that marks its list does not call this as well: the same
+    /// list added twice stops the catalogue when it is built. This is for keys no generator collects, such as
+    /// those of a module the host composes by hand.
+    /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="permissions">The module's keys.</param>

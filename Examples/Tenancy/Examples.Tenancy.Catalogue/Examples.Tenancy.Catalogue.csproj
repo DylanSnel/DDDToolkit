@@ -21,8 +21,9 @@
   <!--
     The application's permission catalogue, and the starter project roles of its tenants' crews, in a project of
     its own because two programs need them: the host, which runs with them, and the program that exports the
-    database's policies, which are written from them. It is no module and declares none: it names the modules'
-    keys, which their contracts and application projects publish, and nothing of how any module is stored.
+    database's policies, which are written from them. It is no module and declares none: its packs name the
+    modules' keys, which their contracts and application projects publish, and it knows nothing of how any module
+    is stored. The keys themselves it does not list: Tenancy's generator collects them, below.
 
     Next to them is what this application's two supporting domains write into the exported access files:
     SampleTenancyContribution, Tenancy's, and ProjectMembershipFunctions, Membership's for the projects, both
@@ -39,6 +40,15 @@
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
     <!-- MembershipRowAccessContribution, which the contribution here closes over the projects' rules. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
+  </ItemGroup>
+
+  <!--
+    Tenancy's generator, which a NuGet consumer gets with the Tenancy package and this repository wires by hand. It
+    writes TenancyPermissionsOfModules into this project, which declares no module: every key the modules referenced
+    above mark with [TenancyPermissions], what the catalogue the export writes from is built with.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

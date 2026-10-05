@@ -15,9 +15,11 @@ namespace Examples.Tenancy.Catalogue;
 /// This is the application's data, not a module's, so it lives in a project of its own that every program of the
 /// application references: the host, which runs with it, and the program that exports the database's policies,
 /// which are written from it (<see cref="Built"/>). The keys are not declared here: Tenancy brings its own
-/// (<see cref="TenancyKeys"/>), and every other module adds its keys next to the code that asks for them, with
-/// <c>services.AddTenancyPermissions(...)</c>. The packs only name them. The catalogue is built and checked
-/// once, when the host starts, and a catalogue that does not hold together stops the start.
+/// (<see cref="TenancyKeys"/>), and every other module states its keys next to the code that asks for them, once,
+/// on the list it marks with <c>[TenancyPermissions]</c>. Tenancy's generator collects those lists into this
+/// project and into the host, as <c>TenancyPermissionsOfModules</c>, so neither names a module's keys, and a module
+/// that is added changes nothing here. The packs only name them. The catalogue is built and checked once, when the
+/// host starts, and a catalogue that does not hold together stops the start.
 /// <para>
 /// There are two administrators' packs, one for each shape of tenant, and a tenant's first seat is granted the
 /// one of its shape. A flat tenant has one unit and usually a handful of people, so its administrator does
@@ -156,12 +158,16 @@ public static class SampleCatalogue
 
     /// <summary>
     /// The whole catalogue as the host runs with it, the application's part and the keys of every module, built
-    /// without the host's services: for a program that has none, such as the one that exports the policies.
+    /// without the host's services: for a program that has none, such as the one that exports the policies. The
+    /// modules' keys are the lists they mark, which Tenancy's generator wrote into this project.
     /// </summary>
     /// <remarks>
-    /// The host builds its own from the same parts, as its modules register them, and a test holds the two to the
-    /// same keys, marks and packs: policies written from another catalogue than the one the host runs with would
-    /// contain other grants than the application gives.
+    /// The host builds its own from the same parts: this application's part, which it hands Tenancy's registration,
+    /// and the modules' lists, which the same generator wrote into the host, where one call registers them. The two
+    /// lists agree as long as the host and this project reference the same modules. A test holds the two catalogues
+    /// to the same keys, marks and packs, and on Postgres the host's start-up check compares the database's
+    /// functions with the catalogue the host runs with: policies written from another catalogue would contain other
+    /// grants than the application gives.
     /// </remarks>
-    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, [.. ProjectCatalogue.Permissions, .. InspectionCatalogue.Permissions]);
+    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, TenancyPermissionsOfModules.All);
 }

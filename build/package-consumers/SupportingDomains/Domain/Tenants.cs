@@ -53,7 +53,11 @@ public static class PressCatalogue
     /// <summary>Heads an imprint: reads and edits its manuscripts.</summary>
     public const string ImprintHeadPack = "imprint-head";
 
-    /// <summary>The keys of the manuscripts that a role of the organization can hold.</summary>
+    /// <summary>
+    /// The keys of the manuscripts that a role of the organization can hold, stated once and marked: the host, which
+    /// declares no module, gets them from Tenancy's generator, and registers them with the one call it writes there.
+    /// </summary>
+    [TenancyPermissions]
     public static IReadOnlyList<Permission> Permissions { get; } =
     [
         new(ManuscriptKeys.Read, "Manuscripts", "Read manuscripts", Order: 10),
@@ -71,7 +75,10 @@ public static class PressCatalogue
             new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptKeys.Read, ManuscriptKeys.Edit], Order: 20),
         ]);
 
-    /// <summary>The catalogue as the application runs with it.</summary>
+    /// <summary>
+    /// The catalogue as the application runs with it: the house has one module with keys, this one, so the list
+    /// above is every module's, as the host's generated list has it.
+    /// </summary>
     public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, Permissions);
 }
 

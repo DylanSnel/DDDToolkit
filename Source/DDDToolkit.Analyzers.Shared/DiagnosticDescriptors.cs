@@ -19,6 +19,7 @@ internal static class DiagnosticDescriptors
     private const string Events = "DDDToolkit.Events";
     private const string Access = "DDDToolkit.Access";
     private const string Membership = "DDDToolkit.Membership";
+    private const string Tenancy = "DDDToolkit.Tenancy";
 
     /// <summary>
     /// The reference page of docs/diagnostics.md on the docs site, where every id is a heading of its own.
@@ -529,4 +530,13 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "For a class declared with the Membership package's member template, [Member<TId, TMemberId, TRoleId, TResource>], the toolkit writes the member list on the resource the template names: a private property Members, of MemberList<TMember, TId, TMemberId, TRoleId>, which the resource's own methods change its members through. It is written from four things the resource declares, and only when each can be told without a guess. The members: exactly one get-only partial property of IReadOnlyList<TMember>, IReadOnlyCollection<TMember> or IEnumerable<TMember>, which the toolkit backs with a list. The owner: exactly one property of TMemberId on the resource. New rows: TId is an [EntityId<Guid>], and a new one is made in time order. The codes: exactly one static property or field of MembershipCodes on the resource, the codes its member rules refuse under. And the resource has no member called Members of its own, and the member class's types are ones the generator can see: the id of an [AggregateRoot<Guid>] is written by another generator, which no generator sees, so an id a member is known by is declared with [EntityId<Guid>]. A resource that declares a MemberList itself, under whatever name, is left alone and hears nothing: that is the form for every other shape, a resource with two properties of the member's id, a member row keyed by something else than a Guid, or codes kept elsewhere. This warning is for a resource that has no member list at all: its members could not be changed, so say what is missing, or write the property by hand. A member class that names no aggregate root, or names one whose members are another class, is DDD00060 on the member class instead.");
+
+    public static readonly DiagnosticDescriptor TenancyPermissionsUnreadable = Create(
+        id: "DDD00063",
+        title: "A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read",
+        messageFormat: "'{0}' is marked [TenancyPermissions] and {1}, so its keys reach no catalogue. Make it a public static property or field with a getter, declared in a class that is not generic, whose type is a sequence of Permission.",
+        category: Tenancy,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A module states its permission keys once, on a static list marked [TenancyPermissions], and Tenancy's generator collects every marked list into each project that declares no module with [assembly: Module], such as the host: TenancyPermissionsOfModules.All, which an export builds the catalogue from, and services.AddTenancyPermissionsOfModules(), which the host registers them with. It reads a list as the expression Type.Member, so the list is a static property or field, readable, declared in a class that is not generic (nor nested in one) and that code can name, and its type is a sequence of Permission: IReadOnlyList<Permission>, IEnumerable<Permission> or an array. A static virtual or abstract member of an interface, and a member of an extension block or of a file-local type, cannot be read that way. In a library the list is also public, in public types: the projects that reference the library, the one that composes the modules among them, see nothing less of it, whether the library declares a module or not. Only an application, the program the modules are composed in, may keep a list of its own internal, since it collects that one itself; not private or protected, though, since the class it is collected into reads it from outside its type. A list that is none of these is left out of every collection, and nothing else would say so: the module's keys would be missing from the catalogue the host runs with, and asking about one would throw when it is asked. It is an error for that reason.");
 }

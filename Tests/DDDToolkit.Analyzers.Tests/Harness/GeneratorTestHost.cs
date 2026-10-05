@@ -21,6 +21,7 @@ using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.
 using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
 using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
+using TenancyPermissionsGenerator = DDDToolkit.Supporting.Tenancy.Analyzers.TenancyPermissionsGenerator;
 
 namespace DDDToolkit.Analyzers.Tests.Harness;
 
@@ -130,6 +131,12 @@ public sealed class GeneratorTestHost
 
     /// <summary>The generator in DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.</summary>
     public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];
+
+    /// <summary>
+    /// The generator in DDDToolkit.Supporting.Tenancy.Analyzers, which collects the keys the modules a project references
+    /// mark with <c>[TenancyPermissions]</c>, and reports a marked list it could not read where it is declared.
+    /// </summary>
+    public static IIncrementalGenerator[] TenancyGenerators() => [new TenancyPermissionsGenerator()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer()];

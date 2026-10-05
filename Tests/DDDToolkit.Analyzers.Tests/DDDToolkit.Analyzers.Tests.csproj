@@ -37,6 +37,7 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" />
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers\DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" />
   </ItemGroup>
 
   <!-- Runtime assemblies the generated code compiles against inside the tests. -->

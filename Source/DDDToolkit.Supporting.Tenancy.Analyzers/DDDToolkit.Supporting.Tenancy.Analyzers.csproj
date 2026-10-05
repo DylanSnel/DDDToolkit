@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The source generator of DDDToolkit.Supporting.Tenancy: in a project that composes modules, it collects the
+    permission keys every module it references marks with [TenancyPermissions], and writes the list and the
+    registration of them. It ships inside the DDDToolkit.Supporting.Tenancy package, in analyzers/dotnet/cs, and
+    is not a package of its own.
+
+    It is the package's because the attribute is, and it sits apart from the package's other projects so that it
+    can move with the attribute: to a package of the layer that composes an application, should Tenancy ever be
+    split by layer, without a change to what it writes.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    It runs in every project that references the package, a module's included, since NuGet hands a package's
+    generators on to every project above it. It writes where the modules are composed, and reports a marked list
+    it could not read where that list is declared. It knows the package's types by their names, as text.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Import Project="..\DDDToolkit.Analyzers.Shared\DDDToolkit.Analyzers.Shared.props" />
+
+  <ItemGroup>
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+  </ItemGroup>
+
+</Project>

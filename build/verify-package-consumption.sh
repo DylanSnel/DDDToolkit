@@ -22,8 +22,9 @@
 #   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
-#      inside Membership's packages and write nothing in the host; and the packages carry their Dutch
-#      texts.
+#      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
+#      Tenancy's package and writes the modules' keys into the host and nowhere else; and the packages
+#      carry their Dutch texts.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
@@ -388,13 +389,25 @@ done
 
 echo "    SupportingDomains/Host: handed both of Membership's generators, and written nothing by either"
 
+# Tenancy's generator is the other way round: the host, which declares no module and references the module that
+# marks its keys with [TenancyPermissions], is where it writes the list of them and the call that registers them,
+# which PressStartup makes, and the module's own projects get nothing of it.
+expect_generators_wrote SupportingDomains/Host "DDDToolkit.Supporting.Tenancy.Analyzers"
+for project in Domain Infrastructure; do
+  if grep -qxF "DDDToolkit.Supporting.Tenancy.Analyzers" <<< "$(generators_that_wrote "SupportingDomains/$project")"; then
+    echo "FAILED: SupportingDomains/$project: Tenancy's generator wrote into a project of the module, which composes no module's keys." >&2
+    exit 1
+  fi
+done
+
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership.EntityFramework" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" analyzers/dotnet/cs/DDDToolkit.Supporting.Tenancy.Analyzers.dll
 expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" lib/net10.0/nl/DDDToolkit.Supporting.Tenancy.resources.dll
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" lib/net10.0/nl/DDDToolkit.Supporting.Membership.resources.dll
 
-for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers DDDToolkit.Supporting.Tenancy.Analyzers; do
   if [ -f "$feed/$prefix$generator.$version.nupkg" ]; then
     echo "FAILED: $prefix$generator was packed as a package of its own. It ships inside the package that needs it." >&2
     exit 1

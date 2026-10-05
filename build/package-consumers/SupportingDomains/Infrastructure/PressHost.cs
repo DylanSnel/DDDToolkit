@@ -11,9 +11,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Acme.Press;
 
 /// <summary>
-/// The module's registration, which the host calls. Each call below but <c>AddTenancyPermissions</c> and
-/// <c>AddTenancyPostgres</c>, which the packages declare, is written into this project by a generator, so this
-/// does not compile when one of them did not arrive.
+/// The module's registration, which the host calls. Each call below but <c>AddTenancyPostgres</c>, which the
+/// package declares, is written into this project by a generator, so this does not compile when one of them did
+/// not arrive. The module's keys are not registered here: the host registers them, with the call Tenancy's
+/// generator writes into it from the list they are marked on.
 /// </summary>
 public static class PressHost
 {
@@ -30,7 +31,6 @@ public static class PressHost
             options.NewUnitId = OrganizationUnitId.CreateSequential;
             options.NewRoleId = RoleId.CreateSequential;
         });
-        services.AddTenancyPermissions(PressCatalogue.Permissions);
 
         // Membership's Entity Framework generator, which notices Tenancy here: a manuscript's members are seats.
         services.AddManuscriptMembershipWithTenancy<PressContext>(ManuscriptMembership.Rules);

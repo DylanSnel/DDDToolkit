@@ -46,9 +46,14 @@
     <PackageReference Include="GreenDonut.Data.Primitives" />
   </ItemGroup>
 
-  <!-- The generator. A NuGet consumer gets it through the packages above; inside this repository it is wired by hand. -->
+  <!--
+    The generators. A NuGet consumer gets them through the packages above; inside this repository they are wired by
+    hand. Tenancy's holds the list of keys this module marks with [TenancyPermissions] to what the project that
+    composes the modules can read, and writes nothing here: a module composes no other module's keys.
+  -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

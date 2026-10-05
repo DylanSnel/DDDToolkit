@@ -752,6 +752,13 @@ the package's docs has to have explained. Three kinds can be the package's to wr
   - **What it cannot write it says.** A class that has no line and cannot be given one is told what stands
     in the way, as a warning, since the class compiles and is only of no use yet:
     [DDD00059](diagnostics.md#ddd00059).
+- **What every module states, collected where the modules are composed.** Tenancy's generator reads the lists
+  of keys the modules mark with `[TenancyPermissions]`, in the assemblies a project references, and writes them
+  into each project that declares no module with `[assembly: Module]`, the host among them, with the call that
+  registers them ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). So a module says a
+  thing once that two programs need, and no project lists the modules. It writes nothing in a module's own
+  projects, and a list it could not read from outside is an error where the list is declared:
+  [DDD00063](diagnostics.md#ddd00063).
 
 A generator of the package's own ships inside the package it belongs to, in `analyzers/dotnet/cs`, and is no
 package of its own, so it never arrives at another version than the types it names as text. The package
@@ -768,10 +775,11 @@ An application that references only a package above it, the storage package or t
 generator all the same: the compiler is handed the analyzers of every package the application depends on.
 So the generator also runs in every project above the one it is meant for, an application's infrastructure
 and its host, and has to write nothing there: it writes for what the project itself declares, or where the
-registration it belongs to is written. Membership's two generators ship this way. What proves they arrive,
-and write nowhere else, is a build from the packed packages of an application in three projects: a domain
-project on the two domain packages, an infrastructure project on the two Postgres packages, and a host
-above them that is handed both generators and gets nothing from either.
+registration it belongs to is written. Membership's two generators ship this way, and so does Tenancy's, which
+writes in the host because the host is where the modules are composed. What proves they arrive, and write
+nowhere else, is a build from the packed packages of an application in three projects: a domain project on the
+two domain packages, an infrastructure project on the two Postgres packages, and a host above them that is
+handed every generator, gets nothing from Membership's, and gets the modules' keys from Tenancy's.
 
 ## Requirements
 

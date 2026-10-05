@@ -1230,7 +1230,8 @@ What the written class answers:
   `MemberAdmission` asks Tenancy. A seat of another tenant is no seat there.
 - **A key held in the organization reaches the resource from above:** held at the unit the resource sits at,
   or at one above it. `Via` says `Above`. Only a key of Tenancy's catalogue can be held there, so add the
-  resource's keys to it, `services.AddTenancyPermissions(...)`. A key you leave out, one that is the owner's
+  resource's keys to it: mark the module's list of them with `[TenancyPermissions]`, and the host adds it
+  ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). A key you leave out, one that is the owner's
   alone say, is held by nobody from above, and asking about it is no mistake. A role given in the
   organization for a while reaches the resource until the moment it ends. The hold does not name that
   moment, as [beside any organization](#beside-an-organization), so a rule of yours that reads the hold's

@@ -60,6 +60,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00059](#ddd00059) | Warning | The member list of a resource is written from what the resource declares |
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
 | [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
+| [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -88,6 +89,8 @@ is a message that reaches its handler with nothing having asked what it requires
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
+[DDD00063](#ddd00063) is about [a module's permission keys](tenancy.md#a-module-states-its-keys-once), where it
+is a module whose keys never reach the catalogue the host runs with.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
@@ -2068,6 +2071,47 @@ the call that hands it a handler: such a dispatcher sends through the sender, or
 module whose behavior is not in the pipeline is stopped when the host starts, by the
 [start-up check](startup-checks.md) `access.behaviors-registered`; see
 [When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
+
+## DDD00063
+
+**A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read.**
+
+```csharp
+[assembly: Module("Ordering")]
+
+public static class OrderingKeys
+{
+    [TenancyPermissions]
+    internal static IReadOnlyList<Permission> Permissions { get; } = [...];   // DDD00063: not public
+
+    [TenancyPermissions]
+    public static IReadOnlyList<string> Codes { get; } = [...];               // DDD00063: no sequence of Permission
+}
+```
+
+A module states its permission keys once, on the static list it marks with `[TenancyPermissions]`
+([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). Tenancy's generator collects every
+marked list into the project that composes the modules, a project that declares no module, such as your host:
+`TenancyPermissionsOfModules.All`, and `services.AddTenancyPermissionsOfModules()`. It reads a list as
+`Type.Member`, from another project, so the list is:
+
+| The list is | Reported as |
+|---|---|
+| static | is not static |
+| readable: a field, or a property with a getter | has no getter |
+| no static virtual or abstract member of an interface | is a static virtual or abstract member of an interface |
+| declared in a class that is not generic, nor nested in one | is declared in the generic type |
+| declared in a type code can name: not in an extension block, nor in a file-local type | is declared in '...', which code cannot name; is declared in the file-local type |
+| of a type that is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>`, an array | is of type ..., which is no sequence of Permission |
+| public, in public types, when its project is a library, whether it declares a module or not | is not public, and its project is a library |
+| readable outside its own type, in an application: not private or protected | cannot be read outside the type it is declared in |
+
+A list the composing project cannot read is left out of what it collects, and nothing else would say so: the
+module's keys would be missing from the catalogue the host runs with, and the first question about one of them
+would throw. That is why it is an error, reported where the list is declared. A library is public about it even
+when it declares no module, as a module project that leaves its `[assembly: Module]` out: the host references
+it all the same. Only an application, the program itself, may keep a list of its own internal: it collects that
+list itself, and no other project composes from it.
 
 ## Building the model fails: the owned type must carry the key part
 

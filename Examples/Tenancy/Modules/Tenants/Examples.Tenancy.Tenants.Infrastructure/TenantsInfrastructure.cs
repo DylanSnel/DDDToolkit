@@ -32,8 +32,9 @@ public static class TenantsInfrastructure
     /// Registers how Tenancy is stored. The host says where its tables live and where what it publishes goes (see
     /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the packs a new tenant's
     /// roles are copied from, and the keys of other modules it marks as managing access. It is the application's
-    /// data, so it lives in the composition root, not here; the other modules add their keys to the catalogue
-    /// themselves, with <c>services.AddTenancyPermissions(...)</c>.
+    /// data, so it lives in the composition root, not here; the other modules state their keys themselves, on the
+    /// lists they mark with <c>[TenancyPermissions]</c>, and the host adds them all with
+    /// <c>services.AddTenancyPermissionsOfModules()</c>, which Tenancy's generator writes into it.
     /// <para>
     /// The module runs on Postgres and on nothing else, so the host is one built on its connections
     /// (<see cref="ModuleHost.OnPostgres"/>), and has registered row level security first, with

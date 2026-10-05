@@ -35,6 +35,7 @@
     <Project Path="Source/DDDToolkit.NewtonSoft.Json/DDDToolkit.NewtonSoft.Json.csproj" />
     <Project Path="Source/DDDToolkit.Testing/DDDToolkit.Testing.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy/DDDToolkit.Supporting.Tenancy.csproj" />
+    <Project Path="Source/DDDToolkit.Supporting.Tenancy.Analyzers/DDDToolkit.Supporting.Tenancy.Analyzers.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy.EntityFramework/DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Tenancy.Postgres/DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
     <Project Path="Source/DDDToolkit.Supporting.Membership/DDDToolkit.Supporting.Membership.csproj" />

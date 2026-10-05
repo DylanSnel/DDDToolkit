@@ -18,13 +18,16 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// [assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
 ///
 /// public sealed class ShopTenancyRowAccess()
-///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, ShopModules.Permissions));
+///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
 /// </code>
 /// The catalogue is the one the application runs with, the application's part and every module's keys: its
 /// marks decide which roles manage access, and so which grants the policies contain, and its packs which roles a
 /// settings manager may add. When either changes, a key added to a pack or to the administrators' pack included,
 /// the next export writes the access file again. The export makes the class with <c>new</c> before the application starts,
-/// so it builds the catalogue without the application's services.
+/// so it builds the catalogue without the application's services. <c>TenancyPermissionsOfModules.All</c> is every
+/// module's keys, which Tenancy's generator writes into a project that declares no module from the lists the
+/// modules mark with <see cref="TenancyPermissionsAttribute"/>, as the host registers them: so the class is
+/// declared in such a project, the one that exports or one it shares with the host.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -148,7 +151,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution
     /// out, and then nothing is written for operators.
     /// <code>
     /// public sealed class ShopTenancyRowAccess()
-    ///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, ShopModules.Permissions), ["operator"]);
+    ///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
     /// </code>
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="catalogue"/> is null.</exception>

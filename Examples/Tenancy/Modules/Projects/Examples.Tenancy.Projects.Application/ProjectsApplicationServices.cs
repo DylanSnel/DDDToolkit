@@ -1,24 +1,29 @@
 using DDDToolkit.Localization;
-using DDDToolkit.Supporting.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Projects.Application;
 
 /// <summary>
-/// Registers what this project adds to the host: Projects' keys, the projects' rules with their starter roles, the
-/// access rules with the gate other modules ask, the check of the requirement that is the module's own, and the
-/// texts of its refusals in English and Dutch. The module's entry, <c>AddProjectsModule</c> in the API project,
-/// calls it next to the infrastructure project's registration, which registers the ports and the projects with the
-/// Membership package, so the host still makes one call per module.
+/// Registers what this project adds to the host: the projects' rules with their starter roles, the access rules
+/// with the gate other modules ask, the check of the requirement that is the module's own, and the texts of its
+/// refusals in English and Dutch. The module's entry, <c>AddProjectsModule</c> in the API project, calls it next
+/// to the infrastructure project's registration, which registers the ports and the projects with the Membership
+/// package, so the host still makes one call per module.
 /// </summary>
+/// <remarks>
+/// Projects' keys are not registered here: the module states them once, on the list it marks with
+/// <c>[TenancyPermissions]</c> (<see cref="ProjectCatalogue.Permissions"/>), and the host adds every module's list
+/// with the one call Tenancy's generator writes into it. A second registration here would add the keys twice,
+/// which the catalogue refuses.
+/// </remarks>
 public static class ProjectsApplicationServices
 {
     /// <summary>
-    /// Registers Projects' keys in the catalogue; <paramref name="membership"/>, the rules and starter roles the
-    /// handlers read; the rules, the gate and what the handlers share, per scope; the check that decides the
-    /// module's own requirement (<see cref="ProjectsAccessCheck"/>);
-    /// <see cref="ProjectsAccessBehavior{TMessage, TResponse}"/> in the pipeline of this module's requests; and the
-    /// resource files of <see cref="ProjectFailures"/> with the toolkit's localizer.
+    /// Registers <paramref name="membership"/>, the rules and starter roles the handlers read; the rules, the gate
+    /// and what the handlers share, per scope; the check that decides the module's own requirement
+    /// (<see cref="ProjectsAccessCheck"/>); <see cref="ProjectsAccessBehavior{TMessage, TResponse}"/> in the
+    /// pipeline of this module's requests; and the resource files of <see cref="ProjectFailures"/> with the
+    /// toolkit's localizer.
     /// </summary>
     /// <remarks>
     /// The behavior is the one the toolkit's generator writes for <see cref="IProjectsRequest"/>, and
@@ -50,10 +55,6 @@ public static class ProjectsApplicationServices
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(membership);
-
-        // Projects' keys, next to the code that asks for them. The application's catalogue lists the packs that
-        // hold them; an administrators' pack that lists no keys holds them as it holds every key.
-        services.AddTenancyPermissions(ProjectCatalogue.Permissions);
 
         // The one instance of the projects' rules: what the role commands hold a role to, and what the projects
         // are registered with in the infrastructure project.

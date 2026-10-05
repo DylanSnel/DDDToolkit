@@ -49,9 +49,15 @@ public sealed class PackagesStayApartTests
         TenancyPackages.Select(package => package.GetName().Name).Should().BeEquivalentTo(
             "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres");
 
+        // What the projects say they reference, the generator the core package ships included: the one that collects
+        // the keys the modules mark, which references nothing but the compiler.
         var projects = PackageProjects("DDDToolkit.Supporting.Tenancy*");
-        projects.Should().HaveCount(3);
+        projects.Select(Path.GetFileNameWithoutExtension).Should().BeEquivalentTo(
+            "DDDToolkit.Supporting.Tenancy", "DDDToolkit.Supporting.Tenancy.EntityFramework", "DDDToolkit.Supporting.Tenancy.Postgres",
+            "DDDToolkit.Supporting.Tenancy.Analyzers");
         ReferencesOf(projects).Should().NotContain(reference => IsMembership(reference) || IsADispatcher(reference));
+        ReferencesOf(projects.Where(project => Path.GetFileNameWithoutExtension(project).EndsWith(".Analyzers", StringComparison.Ordinal)))
+            .Should().OnlyContain(reference => reference.StartsWith("Microsoft.CodeAnalysis", StringComparison.Ordinal));
 
         foreach (var package in TenancyPackages)
         {

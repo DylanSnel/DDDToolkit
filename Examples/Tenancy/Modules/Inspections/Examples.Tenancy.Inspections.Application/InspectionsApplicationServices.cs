@@ -1,22 +1,27 @@
 using DDDToolkit.Localization;
-using DDDToolkit.Supporting.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Inspections.Application;
 
 /// <summary>
-/// Registers what this project adds to the host: Inspections' key, the check every one of its commands and
-/// queries passes before its handler, and the texts of its own refusals in English and Dutch. The module's entry,
+/// Registers what this project adds to the host: the check every one of its commands and queries passes before
+/// its handler, and the texts of its own refusals in English and Dutch. The module's entry,
 /// <c>AddInspectionsModule</c> in the API project, calls it next to the infrastructure project's
 /// registration, which registers the ports, so the host still makes one call per module.
 /// </summary>
+/// <remarks>
+/// Inspections' key is not registered here: the module states it once, on the list it marks with
+/// <c>[TenancyPermissions]</c> (<see cref="InspectionCatalogue.Permissions"/>), and the host adds every module's
+/// list with the one call Tenancy's generator writes into it. A second registration here would add the key twice,
+/// which the catalogue refuses.
+/// </remarks>
 public static class InspectionsApplicationServices
 {
     /// <summary>
-    /// Registers Inspections' key in the catalogue; the check that decides the module's own requirements
-    /// (<see cref="InspectionsAccessCheck"/>); <see cref="InspectionsAccessBehavior{TMessage, TResponse}"/> in the
-    /// pipeline of this module's requests, per scope like the handlers it runs before; and the resource files of
-    /// <see cref="InspectionFailures"/> with the toolkit's localizer.
+    /// Registers the check that decides the module's own requirements (<see cref="InspectionsAccessCheck"/>);
+    /// <see cref="InspectionsAccessBehavior{TMessage, TResponse}"/> in the pipeline of this module's requests, per
+    /// scope like the handlers it runs before; and the resource files of <see cref="InspectionFailures"/> with the
+    /// toolkit's localizer.
     /// </summary>
     /// <remarks>
     /// The behavior is the one the toolkit's generator writes for <see cref="IInspectionsRequest"/>, and
@@ -44,10 +49,6 @@ public static class InspectionsApplicationServices
     public static IServiceCollection AddInspectionsApplication(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
-
-        // Inspections' key, next to the code that asks for it. The application's catalogue lists the packs that
-        // hold it; the administrators' pack holds it as it holds every key.
-        services.AddTenancyPermissions(InspectionCatalogue.Permissions);
 
         // The check for the cases that take Projects' gate, and the behavior that asks the module's checks before
         // every handler. A handler takes nothing from them: it acts on the project its request names, which is the

@@ -3,8 +3,10 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace Examples.Tenancy.Projects.Application.Access;
 
 /// <summary>
-/// Projects' part of the permission catalogue: the keys it asks for, declared next to the code that asks, and
-/// added to the application's catalogue by the module's registration.
+/// Projects' part of the permission catalogue: the keys it asks for, declared next to the code that asks, once.
+/// The list is marked with <see cref="TenancyPermissionsAttribute"/>, so what composes the modules finds it: the
+/// host registers it and the program that exports the database's policies builds the catalogue with it, and
+/// neither names it.
 /// </summary>
 /// <remarks>
 /// A role of the organization holding one of these keys at a unit holds it for every project at that unit and
@@ -17,7 +19,12 @@ public static class ProjectCatalogue
     /// <summary>The module the keys are listed under.</summary>
     public const string Module = "Projects";
 
-    /// <summary>The keys, as the catalogue lists them.</summary>
+    /// <summary>
+    /// The keys, as the catalogue lists them: the one place the module states them. Tenancy's generator writes
+    /// this list into each project that composes the modules, the host and the catalogue's project, as one of
+    /// <c>TenancyPermissionsOfModules.All</c>; the module's own registration names it no more.
+    /// </summary>
+    [TenancyPermissions]
     public static IReadOnlyList<Permission> Permissions { get; } =
     [
         new(ProjectKeys.View, Module, "See a project and its crew", Order: 10),
