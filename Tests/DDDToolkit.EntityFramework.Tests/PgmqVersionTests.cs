@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using DDDToolkit.Messaging.Postgres;
+using DDDToolkit.Startup;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -145,8 +146,10 @@ public sealed class PgmqVersionTests(PgmqVersionTests.Servers servers) : IClassF
         services.AddPgmqConsumer(queues, "storefront", consumer => consumer.BindTopics = true);
         services.AddPgmqConsumer(queues, "audit");
 
-        services.Where(service => service.ServiceType == typeof(IHostedService) && service.ImplementationType?.Name == "PgmqStartupCheck")
+        services.GetStartupChecks().Registered.Where(check => check.Name == PgmqQueue.ExtensionInstalledCheck)
             .Should().ContainSingle("the check groups its requirements by database and reads each one once");
+        services.Where(service => service.ServiceType == typeof(IHostedService) && service.ImplementationType?.Name == "StartupCheckRunner")
+            .Should().ContainSingle("the host's one runner runs it, before any hosted service starts, the consumers included");
     }
 
     [Fact]

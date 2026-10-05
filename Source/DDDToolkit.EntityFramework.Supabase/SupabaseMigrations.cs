@@ -68,6 +68,15 @@ public static partial class SupabaseMigrations
     /// <summary>The provider whose SQL Supabase can run.</summary>
     public const string NpgsqlProviderName = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
+    /// <summary>
+    /// The start-up check <c>AddSupabaseMigrations</c> brings, by the name a host turns it off with
+    /// (<c>services.SkipStartupCheck(...)</c>): every registered context has every one of its migrations applied
+    /// (<c>EnsureSupabaseMigrationsAppliedAsync</c>). It runs in the stage of the migrations, after the login role
+    /// was found to be able to switch to the system caller's role, which it asks as, and before the checks of the
+    /// database's policies and functions, which a missing migration would leave missing too.
+    /// </summary>
+    public const string AppliedCheck = "supabase.migrations-applied";
+
     // The first line of every exported file. It names the context as well as the migration, because
     // several contexts can export into one directory, and a file belongs to exactly one of them.
     private static readonly Regex Header = new(

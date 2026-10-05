@@ -100,9 +100,11 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   Entity Framework throws when a save would change it, and a policy script written with
   `RowAccessExport.WriteGrants` leaves its column out of the `UPDATE` privilege. Write the tables'
   privileges from the policies that way rather than by hand; see `row-level-security.md`.
-- At start-up, `EntityFrameworkChecks.EnsureToolkitWired(context)` for every type in
-  `EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider)` throws for a context built without
-  `UseDDDToolkit`, which would otherwise save without invariants, versions or events.
+- At start-up, `builder.Services.RunStartupChecks()` runs every check the registrations brought, before the
+  server binds its port: `AddDDDToolkitEntityFramework` brings the one that refuses a context built without
+  `UseDDDToolkit`, which would otherwise save without invariants, versions or events; row level security, the
+  Supabase migrations, Tenancy and Membership on Postgres bring theirs. Write no start-up class of your own for
+  them; turn one off with `SkipStartupCheck(name, reason: ...)`. See `startup-checks.md`.
 
 ## Delivering domain events
 

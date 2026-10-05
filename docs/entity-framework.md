@@ -628,7 +628,17 @@ interceptors by hand.
 
 A context built without `UseDDDToolkit` saves, and simply checks no invariant, bumps no version and
 stores no event. Nothing fails, so nobody notices. `EntityFrameworkChecks` says so at start-up, before the
-first request:
+first request. `AddDDDToolkitEntityFramework` registers it as the [start-up check](startup-checks.md)
+`entity-framework.toolkit-wired`, and one call runs it with every other check the host's registrations brought:
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.RunStartupChecks();
+```
+
+It looks at every context the host registers that maps one of the toolkit's classes: an entity or an aggregate,
+or the table of the outbox, the inbox or the event log. A context a library brings for its own tables needs none
+of the interceptors, and is passed over. By hand, it is:
 
 ```csharp
 var app = builder.Build();

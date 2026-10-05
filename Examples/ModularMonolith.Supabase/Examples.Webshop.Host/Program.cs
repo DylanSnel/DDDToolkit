@@ -1,4 +1,5 @@
 using DDDToolkit.Auth.Supabase.AspNetCore;
+using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework;
 using Examples.Webshop.Catalog.Api;
@@ -16,6 +17,7 @@ using DDDToolkit.HotChocolate.Fusion.InMemory;
 using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Postgres;
+using DDDToolkit.Startup;
 using Npgsql;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes
@@ -70,6 +72,14 @@ if (signedIn)
 
     builder.Services.AddSupabaseRowLevelSecurity();
     database = database.WithRowLevelSecurity();
+
+    // Row level security brings start-up checks of the role the host logs in as, and one is that it owns nothing.
+    // This host logs in as postgres, which owns the modules' tables, as the Supabase page starts out: the policies
+    // hold each request to its caller, and the work outside a request runs as the owner on purpose. So that one
+    // check is off, with the reason. The Tenancy sample logs in as a role that owns nothing, and runs it.
+    builder.Services.SkipStartupCheck(
+        PostgresRowAccessChecks.LoginRoleOwnsNothingCheck,
+        reason: "the host logs in as postgres, the owner of the modules' tables, and its background work runs as that owner on purpose");
 }
 
 // How the modules hear from each other. No module names another here or anywhere: each one says what it
@@ -93,6 +103,13 @@ builder.Services.AddShippingModule(host);
 // /graphql next to the REST endpoints.
 builder.Services.AddInMemoryFusionGateway();
 
+// Before the server binds its port, every check the registrations above brought: every module's context is
+// wired through the toolkit, and on Supabase every module that registered its migrations has them all applied.
+// The migrations are Supabase's to apply, from supabase/migrations; the host applies none, and refuses to start
+// while one is missing. With row level security, the role the host logs in as may also become every caller. On
+// SQLite no module registers any migrations, and each creates its file itself, before the checks run.
+builder.Services.RunStartupChecks();
+
 var app = builder.Build();
 
 app.UseWebSockets();
@@ -101,11 +118,6 @@ if (signedIn)
 {
     app.UseAuthentication();
 }
-
-// On Supabase the migrations are Supabase's to apply, from supabase/migrations. The application only
-// checks, over every module that registered its migrations, and refuses to start while one is missing.
-// On SQLite no module registers any, and the modules create their files themselves.
-await app.Services.EnsureSupabaseMigrationsAppliedAsync();
 
 // Each module brings its own endpoints, so a host that runs a different selection of modules serves
 // exactly their part of the API.

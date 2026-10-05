@@ -50,7 +50,8 @@ public sealed class PackageReferenceTests
         var assembly = typeof(MembershipPostgresChecks).Assembly;
 
         assembly.GetExportedTypes().Select(type => type.Namespace).Distinct().Should().Equal("DDDToolkit.Supporting.Membership.Postgres");
-        assembly.GetExportedTypes().Select(type => type.Name).Should().BeEquivalentTo("MembershipPostgresChecks", "MembershipRowAccessContribution`1");
+        assembly.GetExportedTypes().Select(type => type.Name).Should().BeEquivalentTo(
+            "MembershipPostgresChecks", "MembershipRowAccessContribution`1", "MembershipPostgresServiceCollectionExtensions");
 
         // Offered open, so the class an application closes over its own member class, with its rules, counts as using it.
         assembly.GetCustomAttributes<DDDToolkit.Abstractions.Attributes.RowAccessContributionAttribute>().Select(offer => offer.Contribution)

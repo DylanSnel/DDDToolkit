@@ -1,3 +1,4 @@
+using DDDToolkit.Startup;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Mvc.Testing.Handlers;
@@ -69,11 +70,12 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     /// Docker, so such a test runs in every build.
     /// </summary>
     /// <remarks>
-    /// The host is given a connection string nothing answers, and what would use it at start-up is taken out:
-    /// every hosted service of the sample and of the toolkit's Entity Framework package, which are the start-up
-    /// checks, the seeding and the outbox pollers. ASP.NET Core's own hosted services stay, and so does the
-    /// in-memory gateway's check that the modules' schemas compose. Nothing else of the host is changed, so a
-    /// request that needs a row fails here, which is what such a test should never send.
+    /// The host is given a connection string nothing answers, and what would use it at start-up is taken out or
+    /// turned off: every hosted service of the sample and of the toolkit's Entity Framework package, which are the
+    /// seeding and the outbox pollers, are taken out, and the start-up checks are turned off, with the reason, the
+    /// way a host does without them. ASP.NET Core's own hosted services stay, and so does the in-memory gateway's
+    /// check that the modules' schemas compose. Nothing else of the host is changed, so a request that needs a row
+    /// fails here, which is what such a test should never send.
     /// </remarks>
     /// <param name="services">
     /// Changes to its services, made after the host's own registrations and before the hosted services are taken
@@ -94,7 +96,12 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
                 {
                     registered.Remove(hosted);
                 }
+
+                registered.SkipStartupChecks(WithoutADatabase);
             });
+
+    /// <summary>Why the host <see cref="WithoutDatabase"/> makes runs none of its start-up checks.</summary>
+    public const string WithoutADatabase = "the host is composed for tests that read what it registers, and nothing answers at the database it is given";
 
     /// <summary>
     /// The host as <c>dotnet run</c> in its folder starts it, with nothing configured: in Development, and with no

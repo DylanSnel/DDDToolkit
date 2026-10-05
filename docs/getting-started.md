@@ -396,6 +396,17 @@ saving. A [context pool](entity-framework.md#contexts-from-a-pool) hands its cal
 provider, and takes the same call: there the scope is the one that rents the context. See
 [Entity Framework](entity-framework.md).
 
+A context that forgot `UseDDDToolkit` would save all the same, and check nothing. The registration brings a check
+for that, which the host runs before it serves anything, with the checks every other registration brings: that
+the database has every migration, say, once the module is on Supabase. One line asks for them:
+
+```csharp
+builder.Services.RunStartupChecks();
+```
+
+The first that finds something wrong stops the start, and says what puts it right. See
+[Start-up checks](startup-checks.md).
+
 ## Refuse bad input without throwing
 
 An endpoint turns a request into an order. The address in the body came from outside and may be junk.

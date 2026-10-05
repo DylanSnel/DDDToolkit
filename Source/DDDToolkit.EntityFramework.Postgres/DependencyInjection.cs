@@ -25,6 +25,10 @@ public static class DependencyInjection
     /// (<see cref="AmbientCallerAccessor"/>), which is what an Azure Function, a worker service or a test wants.
     /// With <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>, outside any it is nobody,
     /// and the context's first command fails instead of running as the system.
+    /// <para>
+    /// It brings the start-up checks of <see cref="PostgresRowAccessChecks"/>, over every registered context on
+    /// Postgres, which a host runs with <c>services.RunStartupChecks()</c>.
+    /// </para>
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="configure">
@@ -143,6 +147,10 @@ public static class DependencyInjection
         // Replace, not add: registering twice means the second one's roles.
         services.Replace(ServiceDescriptor.Singleton(options));
         services.TryAddSingleton<PostgresRowLevelSecurityInterceptor>();
+
+        // What the lock relies on in the database and in the contexts, checked before the host starts once it
+        // runs its start-up checks.
+        PostgresRowAccessChecks.AddStartupChecks(services);
 
         return services;
     }

@@ -112,8 +112,8 @@ public sealed partial class ShopSeat
    }
    ```
 
-6. A module's own tables: `modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId)`, and
-   `TenancyChecks.EnsureWired(context)` at start-up for every context. A module's keys:
+6. A module's own tables: `modelBuilder.Entity<Project>().ScopeToTenant(project => project.TenantId)`; the
+   start-up check `AddTenancy` brings holds every context to `UseTenancy`. A module's keys:
    `services.AddTenancyPermissions(ProjectCatalogue.Permissions)`.
 7. Provisioning, seeding and jobs are system work, begun on purpose:
    `using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, actingSeat)) { ... }`. A request is never
@@ -169,8 +169,8 @@ public sealed partial class ShopSeat
   in the infrastructure project, keys and the access check in the application project.
 
 On Postgres, `services.AddTenancyPostgres()` with a class derived from `TenancyRowAccessContribution`
-puts the same rules in row level security under the application's checks, and the `TenancyPostgresChecks`
-run at start-up. A module's rule asks through `TenancyRowAccess.UnitsWhereIHold<TUnitId>(key)`, which is
+puts the same rules in row level security under the application's checks, and brings the `TenancyPostgresChecks`
+as start-up checks, which `services.RunStartupChecks()` runs with the others. A module's rule asks through `TenancyRowAccess.UnitsWhereIHold<TUnitId>(key)`, which is
 set-shaped: once per statement, never per row. See `tenancy.md`, "On Postgres: the second lock".
 
 ## A module on Tenancy, as the sample lays it out

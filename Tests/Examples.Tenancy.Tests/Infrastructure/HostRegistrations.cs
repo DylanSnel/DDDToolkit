@@ -26,8 +26,8 @@ public sealed record HandledRequest(Type Type, Type Response, Type Handler, bool
 /// <remarks>
 /// The host is built once, without a database (<see cref="SampleFactory.WithoutDatabase"/>), and stopped again:
 /// only its registrations are kept. They are copied before that host takes out the hosted services it cannot
-/// start, so every hosted service the host registers is in the list, the start-up checks, the seeding and the
-/// outbox pollers included.
+/// start, so every hosted service the host registers is in the list, the runner of the start-up checks, the seeding
+/// and the outbox pollers included.
 /// </remarks>
 public static class HostRegistrations
 {

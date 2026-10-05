@@ -16,8 +16,9 @@ namespace Examples.Tenancy.Tenants.Infrastructure;
 /// <summary>
 /// Everything of the application's tenancy that knows how it is stored, registered by the module: its context,
 /// the Tenancy package closed over this module's classes, the adapter of the application project's port, the
-/// answer to the one question other modules put to this one, its outbox with the poller that empties it, and the
-/// check that tenancy holds together when the host starts.
+/// answer to the one question other modules put to this one, and its outbox with the poller that empties it. The
+/// checks that tenancy holds together and that the database is set up for it come with the packages'
+/// registrations, and the host runs them before it starts.
 /// </summary>
 /// <remarks>
 /// Half of the module's composition. The other half is the application project's own registration, and the
@@ -63,16 +64,17 @@ public static class TenantsInfrastructure
             .UseTenancy(application));
 
         // The tenant of Tenancy's caller on every connection, the rights left to the database, whose trigger
-        // writes them, and every flow of work required to say who it runs as.
+        // writes them, and every flow of work required to say who it runs as. It brings Tenancy's start-up checks
+        // of the database: the scoped system role stays in its tenant, the reads across tenants answer, and the
+        // policies, functions and the index on a tenant's root are the ones this catalogue writes. The host runs
+        // them, with the checks the row level security and the migrations brought, before it starts.
         services.AddTenancyPostgres();
-
-        // Before anything else starts: every migration is applied, the role the host logs in as holds nothing,
-        // and the database is set up as Tenancy's policies rely on.
-        services.AddHostedService<PostgresStartupCheck>();
 
         // Generated into this project and closed over the module's classes, like modelBuilder.AddTenancy(): the use
         // cases, the access questions, tenant selection, the store over this context and the save interceptor. Every
-        // id is the application's to make; these are time-ordered Guids.
+        // id is the application's to make; these are time-ordered Guids. It brings the start-up checks that the
+        // catalogue builds, that every context that keeps rows to a tenant checks its saves, and the warning for a
+        // key a role holds that the catalogue has lost.
         services.AddTenancy<TenantsContext>(options =>
         {
             options.Catalogue = catalogue;
@@ -104,12 +106,6 @@ public static class TenantsInfrastructure
         // Who is asking. The host registers the accessor that reads the request's bearer token before this, and
         // TryAdd lets it win; without one, as in a test that begins its callers by hand, the ambient caller answers.
         services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
-
-        // Before the host takes a request: the catalogue builds, every context that keeps rows to a tenant checks
-        // its saves, and no role holds a key the catalogue has lost. Hosted services start in the order they are
-        // added, so this runs after the check of the database above, before the outbox below is polled and before
-        // anything the host adds after its modules, such as its seeding.
-        services.AddHostedService<TenancyStartupCheck>();
 
         // Tenancy's domain events are stored with the change that raised them, and none of them leaves: they are
         // the package's, not a contract, so each is kept off the sinks. An integration event mapped before

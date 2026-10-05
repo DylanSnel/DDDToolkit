@@ -276,8 +276,10 @@ never merged with the rules' and no rule can widen it. As statements, the trigge
 see, such as a rule about rows other than the one written, checked at commit. A contribution the host forgets
 to list writes nothing, and the build only warns, so the package also ships a start-up check that its policies
 are in the database and were written from what the application runs with: a function written from the
-catalogue of subscription plans the application is configured with, say, answers as that catalogue does.
-[Tenancy's](tenancy.md#on-postgres-the-second-lock) does all four.
+catalogue of subscription plans the application is configured with, say, answers as that catalogue does. Its
+registration for Postgres registers that check with `services.AddStartupCheck(...)`, in the stage of the
+database, so a host that runs its [start-up checks](startup-checks.md#a-check-of-your-own) gets it without
+naming it. [Tenancy's](tenancy.md#on-postgres-the-second-lock) does all four.
 
 A package that keeps rows a customer makes, in a class of the application's, knows no customer: whose a row
 is, is a column the application adds and a rule the application writes. Its functions run as their owner and

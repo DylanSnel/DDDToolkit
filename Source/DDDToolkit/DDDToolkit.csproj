@@ -18,6 +18,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!--
+      For the start-up checks (Startup/): the runner is a hosted lifecycle service, so that it runs before the
+      server binds its port in every kind of host, and it logs what it ran and what was turned off. Both are
+      abstractions only, which the shared framework of an ASP.NET Core host has already.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

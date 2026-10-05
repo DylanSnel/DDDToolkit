@@ -16,6 +16,11 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// access rules ask about the members of its resources, as the rules it runs with say them. It throws
 /// <see cref="InvalidOperationException"/> naming what is wrong and how to put it right, so a host whose
 /// second lock would answer from other rules than its first does not start.
+/// <para>
+/// <see cref="MembershipPostgresServiceCollectionExtensions.AddMembershipPostgres"/> registers it as a start-up
+/// check, <see cref="FunctionsInPlaceCheck"/>, which a host runs with <c>services.RunStartupChecks()</c>. The
+/// method stays for a host that runs it by hand:
+/// </para>
 /// <code>
 /// var app = builder.Build();
 /// await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(app.Services, cancellationToken);
@@ -23,6 +28,13 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// </summary>
 public static class MembershipPostgresChecks
 {
+    /// <summary>
+    /// The start-up check that the database has the functions and the lock of every registered resource's
+    /// membership, written from the rules the resource is registered with (<see cref="EnsureFunctionsAreInPlaceAsync"/>).
+    /// It asks the database, so it runs with the checks of the database, once the migrations are found applied.
+    /// </summary>
+    public const string FunctionsInPlaceCheck = "membership.functions-in-place";
+
     /// <summary>The category the check logs what it remarks on under.</summary>
     private const string LogCategory = "DDDToolkit.Supporting.Membership.Postgres";
 

@@ -42,6 +42,11 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// method with the classes and ids filled in; the context is still the caller's to name. This method can be
     /// called as well, with all ten.
     /// </para>
+    /// <para>
+    /// It brings the start-up checks of <see cref="TenancyChecks"/>, which a host runs with
+    /// <c>services.RunStartupChecks()</c>: the catalogue builds, every context that keeps rows to a tenant checks
+    /// its saves, and a key a role holds that the catalogue has lost is logged.
+    /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Sets Tenancy's options; every one is required.</param>
@@ -97,6 +102,10 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         // the flow of work, so a context taken from a pool asks them like any other.
         TenancyActedByAccessor.Decorate(services);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IEventLogFields, TenancyEventLogFields>());
+
+        // Before the host serves anything, once it runs its checks: the catalogue holds together, every context is
+        // wired, and no role holds a key the catalogue has lost.
+        TenancyChecks.AddStartupChecks<TRole, TRoleId, TTenantId, TContext>(services);
 
         return services;
     }

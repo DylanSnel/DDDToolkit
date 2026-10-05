@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using DDDToolkit.EntityFramework;
+using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -71,6 +72,12 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
         logs.Entries.Where(entry => entry.Level >= LogLevel.Warning).Select(entry => entry.Category + ": " + entry.Message)
             .Should().BeEmpty("a first start, and a crew changed as its lead may, give nothing to warn about");
         logs.Entries.Should().Contain(entry => entry.Category == typeof(DemoSeeder).FullName, "the host's logs are the ones read here");
+
+        // The host has no start-up class of its own: every check its registrations brought ran, in their order,
+        // and passed, before it served anything.
+        var checks = host.Services.GetRequiredService<StartupChecks>().InOrder().Select(check => check.Name).ToList();
+        logs.Entries.Should().ContainSingle(entry => entry.Category == "DDDToolkit.Startup.StartupCheckRunner" && entry.Level == LogLevel.Information)
+            .Which.Message.Should().EndWith(": " + string.Join(", ", checks) + ".", "the runner names every check that passed, in the order it ran them");
     }
 
     [Fact]

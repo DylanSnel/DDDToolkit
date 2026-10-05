@@ -1655,7 +1655,20 @@ configured is refused, naming it.
 > a role that bypasses the policies is refused as a bookkeeping role when the script runs.
 
 Three checks say at start-up, before the first request, whether the database and the context are as this
-relies on:
+relies on. `AddPostgresRowLevelSecurity`, and so `AddSupabaseRowLevelSecurity`, registers them, with the check of
+the functions [below](#forcing-row-level-security), as [start-up checks](startup-checks.md) over every context the
+host registers on Postgres, and the host runs them with one call, before the server binds its port:
+
+```csharp
+builder.Services.AddPostgresRowLevelSecurity();
+builder.Services.RunStartupChecks();
+```
+
+They are `postgres.login-role-may-switch-to-callers`, `postgres.login-role-owns-nothing` and
+`postgres.row-level-security-wired`, each named by a constant of `PostgresRowAccessChecks`. A host turns one off
+only by name and with a reason in its code, as [Turning a check off](startup-checks.md#turning-a-check-off) shows,
+and the login role's checks are the last it should want to. A host that runs them by hand, from a class of its own,
+calls the methods behind them, the switch first:
 
 ```csharp
 await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
@@ -1670,7 +1683,8 @@ application starts, so a grant left out passes the start and fails the first req
 role nobody holds while testing, or the background work. Where the settings travel per transaction, it also
 asks whether the login role may call `ddd.use_caller`. It asks as the login role itself, on the context's
 connection opened past the interceptor, since the system caller's role is one of those it asks about; so it
-comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them. It
+comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them, and
+the runner runs it in a stage of its own, before them. It
 throws naming the login role, and each role it may not switch to, or that does not exist, with the `GRANT` that
 fixes it, and the pair of `SupabaseRowAccessRoles` that maps the role, the fix for a host whose Supabase build
 writes the login role's migration: that file grants what the property maps, so there a missing role is a missing
@@ -1694,7 +1708,8 @@ and every finding with the statement that fixes it. A login role that owns a sch
 the role the migrations run as: then the one finding is that, with the one fix, to log in as a role of its
 own and keep that one for the migrations. The third opens nothing: it throws unless the context runs its commands
 through the row level security interceptor, without which every command runs as the login role, and is
-refused outright where that role holds nothing.
+refused outright where that role holds nothing. As a start-up check it runs first, with the checks that read the
+services: a context without the interceptor would fail the other two without saying why.
 
 ### Forcing row level security
 
@@ -1717,8 +1732,9 @@ that moves data runs as one.
 > owner may bypass row level security. A function owned by any other role reads the tables under that
 > role's policies, finds no row, and answers that nobody may do anything, without a word.
 
-`PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, cancellationToken)` checks it at
-start-up: it throws unless every function that runs as its owner, in the schemas of the context's model
+The start-up check `postgres.definer-owners-bypass`, which `AddPostgresRowLevelSecurity` brings with the three
+above, checks it, and `PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(context, cancellationToken)` does
+the same by hand: it throws unless every function that runs as its owner, in the schemas of the context's model
 and in `ddd`, is owned by a role that bypasses row level security or is a superuser, and names each
 function, its owner and the fix. While no table in those schemas is forced it passes, whoever owns the
 functions, so it can stand next to the three checks above in a host that forces nothing yet. On Supabase the

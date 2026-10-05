@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,9 +14,11 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// // in each module
 /// services.AddSupabaseMigrations&lt;OrderingContext, OrderingContextFactory&gt;();
 ///
-/// // in the host, after Build()
-/// await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+/// // in the host: the check runs with every other start-up check, before the server binds its port
+/// builder.Services.RunStartupChecks();
 /// </code>
+/// A host that runs its checks by hand calls <see cref="EnsureSupabaseMigrationsAppliedAsync"/> after <c>Build()</c>
+/// instead, as before.
 /// And, for applications that want Supabase's row level security to apply to their own queries, the
 /// registrations in <c>DependencyInjection.RowLevelSecurity.cs</c>.
 /// </summary>
@@ -25,6 +28,10 @@ public static partial class DependencyInjection
     /// Registers <paramref name="source"/> as a context whose migrations Supabase applies, so
     /// <see cref="EnsureSupabaseMigrationsAppliedAsync"/> checks it. Registering the same context twice
     /// registers it once.
+    /// <para>
+    /// It brings the start-up check <see cref="SupabaseMigrations.AppliedCheck"/>, once however many contexts are
+    /// registered, which a host runs with <c>services.RunStartupChecks()</c>.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="source"/> is null.</exception>
     public static IServiceCollection AddSupabaseMigrations(this IServiceCollection services, SupabaseMigrationSource source)
@@ -41,6 +48,11 @@ public static partial class DependencyInjection
         {
             services.AddSingleton(source);
         }
+
+        services.AddStartupCheck(new StartupCheck(
+            SupabaseMigrations.AppliedCheck,
+            StartupCheckStage.Migrations,
+            static (provider, cancellationToken) => provider.EnsureSupabaseMigrationsAppliedAsync(cancellationToken)));
 
         return services;
     }

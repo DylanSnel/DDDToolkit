@@ -28,7 +28,8 @@ public static class TenancyPostgresServiceCollectionExtensions
     /// </code>
     /// The policies themselves come with the access files the export writes, from a class of the application's
     /// derived from <see cref="TenancyRowAccessContribution"/>; <see cref="TenancyPostgresChecks"/> checks at
-    /// start-up that the database and the host are set up as they rely on. Calling it more than once is harmless.
+    /// start-up that the database and the host are set up as they rely on. This registers those checks as start-up
+    /// checks, which the host runs with <c>services.RunStartupChecks()</c>. Calling it more than once is harmless.
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
@@ -44,6 +45,10 @@ public static class TenancyPostgresServiceCollectionExtensions
         // trigger writes them, and its functions answer what the store asks about other seats, and what is
         // read across tenants.
         services.Configure<TenancyStoreOptions>(options => options.DatabaseKeepsRights = true);
+
+        // That the database and the host are set up as the policies rely on, before the host serves anything, once
+        // it runs its checks.
+        TenancyPostgresChecks.AddStartupChecks(services);
         return services;
     }
 }

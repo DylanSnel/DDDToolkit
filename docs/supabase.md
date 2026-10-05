@@ -62,8 +62,7 @@ And the host refuses to start against a database that lacks a migration:
 services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
 
 // in the host
-var app = builder.Build();
-await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+builder.Services.RunStartupChecks();
 ```
 
 </details>
@@ -214,25 +213,51 @@ If a database already has these migrations from `dotnet ef database update`, tel
 
 On Supabase the migrations are the CLI's to apply, so the application must not call
 `Database.Migrate()`. It can still refuse to run against an older schema. Each module registers its
-source, and the host checks them all once it is built:
+source, which brings the [start-up check](startup-checks.md) `supabase.migrations-applied`, and the host runs it
+with its other checks, before the server binds its port:
 
 ```csharp
 // in the module
 services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
 
 // in the host
-var app = builder.Build();
-await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+builder.Services.RunStartupChecks();
 ```
 
 It asks each context's own migration history and throws a `SupabaseMigrationsPendingException` that
 names every context with migrations missing, and each missing migration. Registering the same context
-twice registers it once; with no sources registered it does nothing, which is what a module running on
-something other than Supabase wants.
+twice registers it once, and the check once however many contexts there are; with no sources registered there is
+no check, which is what a module running on something other than Supabase wants.
+
+A host that runs its checks by hand calls the method behind it once the host is built, as before:
+
+```csharp
+var app = builder.Build();
+await app.Services.EnsureSupabaseMigrationsAppliedAsync();
+```
+
+A deployment that checks the migrations itself before it starts the host turns the check off, and says so:
+`builder.Services.SkipStartupCheck(SupabaseMigrations.AppliedCheck, reason: "...")`.
 
 It asks as the system caller, so it switches to `SystemRole`. An application that logs in as a role of its own
 checks first that the role may switch to it, as
-[The role the application logs in as](#the-role-the-application-logs-in-as) shows.
+[The role the application logs in as](#the-role-the-application-logs-in-as) shows; the runner does that in the
+stage before the migrations'.
+
+With [row level security for your own queries](#row-level-security-for-your-own-queries), the same call also runs
+the checks `AddSupabaseRowLevelSecurity` brings, and one of them is that the role the host logs in as owns
+nothing. Logged in as `postgres`, as this page starts out, the host owns its tables, so
+`postgres.login-role-owns-nothing` stops it, with a message that says to log in as a role of its own:
+[the role the application logs in as](#the-role-the-application-logs-in-as). Until it does, it turns that one
+check off, and says why:
+
+```csharp
+builder.Services.AddSupabaseRowLevelSecurity();
+builder.Services.RunStartupChecks();
+builder.Services.SkipStartupCheck(
+    PostgresRowAccessChecks.LoginRoleOwnsNothingCheck,
+    reason: "logs in as postgres, which owns the tables, until it has a login role of its own");
+```
 
 ## Several modules, one Supabase project
 
@@ -386,7 +411,8 @@ policy asks the root's write rules about its order, so a caller who may only rea
 change or remove its lines. Rules written in C# do both for you, as the next section shows.
 
 **Background work** runs as `SystemRole`, or, left unset, as the role the application logged in as.
-Logged in as `postgres`, that is the owner, as before. For an application that should not be able to see
+Logged in as `postgres`, that is the owner, as before, and the host's
+[start-up checks](#checking-at-start-up) say so. For an application that should not be able to see
 everything by accident, log in as a role of its own that may do nothing but switch roles, as PostgREST's
 `authenticator` does, and set `SystemRole = SupabaseRowLevelSecurity.ServiceRole`. The build writes the
 migration that makes the role, without a login or a password, since it is kept in the repository, when the
@@ -817,7 +843,17 @@ written and every other file is what it was. By hand, it is `SupabaseMigrationOp
 application logged in as may switch to every role its options name, which is what the file grants. It comes
 before [the migrations' check](#checking-at-start-up), which runs as the system caller and so switches to
 `SystemRole`: a login role that may not would fail there, on the switch, without saying why. Once per context
-the host registers:
+the host registers, and in that order, is what the [start-up checks](startup-checks.md) do with one call:
+`AddSupabaseRowLevelSecurity` brings `postgres.login-role-may-switch-to-callers`, which runs in the stage before
+the migrations'.
+
+```csharp
+builder.Services.AddSupabaseRowLevelSecurity(options => options.SystemRole = "ddd_system");
+builder.Services.RunStartupChecks();
+```
+
+<details>
+<summary>Show the code: the same two checks, by hand</summary>
 
 ```csharp
 var app = builder.Build();
@@ -833,6 +869,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 await app.Services.EnsureSupabaseMigrationsAppliedAsync();
 ```
+
+</details>
 
 Where the build writes this file, a role the check names is one the host's options switch to and
 `SupabaseRowAccessRoles` leaves out, `system=ddd_system` set in code and not in the exporter for one, or one

@@ -1,10 +1,13 @@
+using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.EntityFramework;
@@ -13,6 +16,11 @@ namespace DDDToolkit.EntityFramework;
 /// Checks an application runs at start-up, before its first request: that every context is wired the way the
 /// toolkit needs it. What they catch is silent otherwise: a context built without the toolkit's interceptors
 /// saves, and simply checks no invariant, bumps no version and stores no event.
+/// <para>
+/// <c>AddDDDToolkitEntityFramework</c> registers the check as <see cref="ToolkitWiredCheck"/>, which a host runs
+/// with every other start-up check with <c>services.RunStartupChecks()</c>. The method stays for a host that runs
+/// it by hand:
+/// </para>
 /// <code>
 /// await using var scope = services.CreateAsyncScope();
 /// foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
@@ -23,6 +31,29 @@ namespace DDDToolkit.EntityFramework;
 /// </summary>
 public static class EntityFrameworkChecks
 {
+    /// <summary>
+    /// The start-up check <c>AddDDDToolkitEntityFramework</c> brings, by the name a host turns it off with
+    /// (<c>services.SkipStartupCheck(...)</c>): <see cref="EnsureToolkitWired"/> for every registered context that maps
+    /// one of the toolkit's classes, an entity or aggregate, or a table of the outbox, the inbox or the event log.
+    /// A context that maps none of them, one a library brings for its own tables, needs none of the interceptors,
+    /// and is passed over. It opens no connection, so it runs with the checks of the services, first.
+    /// </summary>
+    public const string ToolkitWiredCheck = "entity-framework.toolkit-wired";
+
+    /// <summary>The check <see cref="ToolkitWiredCheck"/> names.</summary>
+    internal static StartupCheck ToolkitWired { get; } = new(ToolkitWiredCheck, StartupCheckStage.Services, async (services, _) =>
+    {
+        await using var scope = services.CreateAsyncScope();
+        foreach (var contextType in RegisteredContexts(scope.ServiceProvider))
+        {
+            var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
+            if (MapsTheToolkit(context.Model))
+            {
+                EnsureToolkitWired(context);
+            }
+        }
+    });
+
     /// <summary>
     /// Throws when <paramref name="context"/> was built without <c>UseDDDToolkit</c>: its domain events would
     /// stay on their aggregates, its invariants would not be checked and its versions not bumped, without a
@@ -131,6 +162,13 @@ public static class EntityFrameworkChecks
             .Distinct()
             .OrderBy(type => type.FullName, StringComparer.Ordinal)];
     }
+
+    /// <summary>
+    /// Whether <paramref name="model"/> maps a class the toolkit's interceptors act on: an entity or an aggregate
+    /// root, or one of the toolkit's own tables, the outbox, the inbox and the event log.
+    /// </summary>
+    private static bool MapsTheToolkit(IModel model)
+        => model.GetEntityTypes().Any(entity => typeof(IEntity).IsAssignableFrom(entity.ClrType) || entity.ClrType.Assembly == typeof(EntityFrameworkChecks).Assembly);
 
     private static int IndexOf<TInterceptor>(List<IInterceptor> interceptors)
     {

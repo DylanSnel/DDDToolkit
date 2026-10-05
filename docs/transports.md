@@ -303,9 +303,10 @@ The extension has to be on the server first. `ghcr.io/pgmq/pg17-pgmq` is an imag
 managed Postgres that offers queues generally has it already.
 
 That failure comes when the application starts, not with the first message. `AddPgmqSink` and
-`AddPgmqConsumer` register a check that runs before any hosted service starts, the consumers and the
-outbox processor included. It reads the installed version once per database, however many sinks and
-consumers share it:
+`AddPgmqConsumer` register a [start-up check](startup-checks.md), `pgmq.extension-installed`, that runs before
+any hosted service starts, the consumers and the outbox processor included. Unlike most start-up checks it is on
+by default: it runs whether or not the host calls `RunStartupChecks()`, as it did before the checks were run
+together. It reads the installed version once per database, however many sinks and consumers share it:
 
 ```sql
 select extversion from pg_extension where extname = 'pgmq';
@@ -328,12 +329,17 @@ UseQueue or UseQueues instead of UseTopics, and leave BindTopics off. ...
 The check needs the database when the application starts. It runs in `StartingAsync`, and the host calls
 that for its services in the order they were registered, unless it starts them concurrently. A migration
 applied before `RunAsync` is done by then. Something that installs the extension as the host starts, a
-hosted service running a migration with `CREATE EXTENSION` for instance, has to be registered before the
-sink and the consumer. Where neither fits, turn the check off on the sink and on the consumer:
+hosted service running a migration with `CREATE EXTENSION` for instance, has to be registered before
+`RunStartupChecks()`, which moves the checks to where it is called, or, in a host that does not call it, before
+the first sink or consumer. Where neither fits, turn the check off on the sink and on the consumer, or by its name:
 
 ```csharp
 builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.CheckExtensionOnStart = false);
 builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.CheckExtensionOnStart = false);
+
+// or
+builder.Services.SkipStartupCheck(
+    PgmqQueue.ExtensionInstalledCheck, reason: "the host's own migration installs the extension");
 ```
 
 ### Settings from configuration

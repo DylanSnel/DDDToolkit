@@ -3,6 +3,7 @@ using DDDToolkit.EntityFramework.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using DDDToolkit.Startup;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -221,11 +222,12 @@ public static class DependencyInjection
 
     /// <summary>
     /// Adds what one registration needs to the start-up check, and the check itself the first time. One
-    /// check for the process, so a sink and a consumer on the same database cost one query between them.
+    /// check for the process, so a sink and a consumer on the same database cost one query between them. It is
+    /// on by default, so it runs whether the host asked for its start-up checks or not.
     /// </summary>
     private static void AddPgmqStartupCheck(this IServiceCollection services, PgmqRequirement requirement)
     {
         services.AddSingleton(requirement);
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, PgmqStartupCheck>());
+        services.AddStartupCheck(PgmqStartupCheck.Check);
     }
 }

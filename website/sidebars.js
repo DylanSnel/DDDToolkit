@@ -21,7 +21,7 @@ const sidebars = {
       type: 'category',
       label: 'Persistence',
       collapsed: false,
-      items: ['entity-framework', 'composite-keys', 'event-delivery', 'row-level-security', 'supabase'],
+      items: ['entity-framework', 'composite-keys', 'event-delivery', 'row-level-security', 'supabase', 'startup-checks'],
     },
     {
       type: 'category',

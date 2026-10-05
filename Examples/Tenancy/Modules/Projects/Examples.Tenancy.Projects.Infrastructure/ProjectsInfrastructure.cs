@@ -1,6 +1,7 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
+using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Examples.Hosting;
 using Examples.Tenancy.Projects.Infrastructure.IntegrationEvents;
@@ -10,8 +11,8 @@ namespace Examples.Tenancy.Projects.Infrastructure;
 
 /// <summary>
 /// Everything of Projects that knows how it is stored, registered by Projects: its context, the adapters over it
-/// that implement the application project's two ports, the projects with the Membership package, its outbox and
-/// the poller that empties it.
+/// that implement the application project's two ports, the projects with the Membership package and its check of
+/// the database, its outbox and the poller that empties it.
 /// </summary>
 /// <remarks>
 /// Half of the module's composition. The other half is the application project's own registration, and the
@@ -71,8 +72,11 @@ public static class ProjectsInfrastructure
         services.AddProjectMembershipWithTenancy<ProjectsContext, TenantId, OrganizationUnitId, RoleId>(membership.Rules);
         services.AddProjectMemberAccess<IProjectsRequest>();
 
-        // Before the host takes a request: the database answers the projects' membership as the rules say it.
-        services.AddHostedService<ProjectFunctionsCheck>();
+        // The Membership package's start-up check: the database answers the projects' membership as the rules
+        // say it, with the four functions the policies of this module and of others ask, and the lock on the
+        // crew's tables and on a project's owner. A database written from other rules does not let the host start;
+        // the host runs the check with the others, before it takes a request.
+        services.AddMembershipPostgres();
 
         // Projects' domain events are stored with the change that raised them, and delivered wherever the host
         // sends what modules publish. Generated when the module compiles: every domain event of the domain

@@ -167,6 +167,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   it. DDD00058 reports a notification of the library that implements such an interface: a notification is
   published through no pipeline, so nothing would ask what it requires. It is reported once, a partial type
   at the part that lists what it implements.
+- **Start-up checks, brought by the registrations and run with one call.** Every registration that brings
+  something to check at start-up now registers the check with it (`services.AddStartupCheck(...)`), and
+  `services.RunStartupChecks()` runs them all with one runner, so a host writes no start-up class of its own and a
+  check a package adds later reaches it without a change. The runner is a hosted lifecycle service that does its
+  work in `StartingAsync`, so the checks run before any hosted service starts and before the server binds its
+  port, in a `WebApplication` and a generic host alike. Among the lifecycle services it sits where
+  `RunStartupChecks()` is called, so one the host registers before the call, its own migration say, starts
+  first. Each check runs as `Caller.System`, begun for that check alone, in four stages
+  (`StartupCheckStage`): what the services say, then whether the login role may become every caller, then the
+  migrations, then the database, each before the next because a failure of the earlier hides the cause of the
+  later; within a stage as registered, and a check may say by name which checks of its stage it runs before
+  (`StartupCheck.RunsBefore`). The first that fails stops the start with what it threw, unchanged, and its name in
+  the exception's `Data` and the log. `SkipStartupCheck(name, reason)` turns one off and `SkipStartupChecks(reason)`
+  every one, each with a reason the log repeats. The registrations' checks: `entity-framework.toolkit-wired`
+  (`AddDDDToolkitEntityFramework`); `postgres.row-level-security-wired`, `postgres.login-role-may-switch-to-callers`,
+  `postgres.login-role-owns-nothing` and `postgres.definer-owners-bypass` (`AddPostgresRowLevelSecurity`, and so
+  `AddSupabaseRowLevelSecurity`); `supabase.migrations-applied` (`AddSupabaseMigrations`); Tenancy's and
+  Membership's below; and `pgmq.extension-installed` (`AddPgmqSink`, `AddPgmqConsumer`). The methods behind them
+  stay, for a host that calls them by hand; one that keeps its own class and asks for the runner too runs those
+  checks twice, which reads the catalogs twice and changes nothing. The checks are off until the host asks for
+  them: an application upgrading within 3.x would otherwise stop at a check it never ran, the login role that
+  owns its tables for one. pgmq's check, which ran by itself since 3.0.0, stays on by default
+  (`StartupCheck.OnByDefault`). The core package now depends on `Microsoft.Extensions.Hosting.Abstractions` and
+  `Microsoft.Extensions.Logging.Abstractions` for it. See [Start-up checks](docs/startup-checks.md).
 
 #### Entity Framework and row level security
 
@@ -602,6 +626,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
+- **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
+  and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
+  brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
+  `tenancy.system-reads-across-tenants` and `tenancy.policies-in-place`, the last three before the read of the stored
+  keys whatever order the two were registered in. A host runs them with `RunStartupChecks()`; the methods of
+  `TenancyChecks` and `TenancyPostgresChecks` stay. See [Setting it up](docs/tenancy.md#setting-it-up).
 - **The supporting domains are published**: Tenancy as `Temp.DDDToolkit.Supporting.Tenancy`, `.EntityFramework` and
   `.Postgres`, Membership as `Temp.DDDToolkit.Supporting.Membership`, `.EntityFramework` and `.Postgres`, at the
   toolkit's version. Membership's two generators ship inside its packages, not as packages of their own.
@@ -901,6 +931,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Membership
 
+- **`AddMembershipPostgres()`.** It registers the package's start-up check, `membership.functions-in-place`, which
+  a host runs with its other checks (`RunStartupChecks()`): the functions and the lock of every registered
+  resource's membership are written from its rules. `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` stays
+  for a host that calls it by hand. See [On Postgres: the second lock](docs/membership.md#on-postgres-the-second-lock).
 - **Membership**, the toolkit's second supporting domain. `DDDToolkit.Supporting.Membership` is access to one
   resource through its members: a document shared with people, a folder with staff on it. An application
   declares a member class with `[Member<TId, TMemberId, TRoleId, TResource>]`, naming the resource it is a
@@ -1052,6 +1086,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The Tenancy sample has no start-up class of its own.** `PostgresStartupCheck`, `TenancyStartupCheck` and
+  `ProjectFunctionsCheck` are gone: the host calls `RunStartupChecks()`, and the checks are the ones the
+  registrations of its modules bring, Membership's through `AddMembershipPostgres()` in the Projects module. The
+  tests that start it on a database made wrong in one respect, a policy written from another catalogue among them,
+  now say which check stopped it.
+- **The webshop's Supabase host runs its start-up checks with `RunStartupChecks()`**, where it called
+  `EnsureSupabaseMigrationsAppliedAsync` by hand. Signed in with row level security, it logs in as `postgres`,
+  the owner of its tables, so it turns `postgres.login-role-owns-nothing` off, with that reason: the one opt-out
+  the Supabase page shows, until a host logs in as a role of its own.
 - `Examples/Tenancy`, a second sample, on Tenancy: crews that work on projects, in two tenants, in three modules
   that share one Postgres database. Its host signs seeded people in with a dev login that issues Supabase access
   tokens and picks the tenant from a header, and its Blazor UI shows each person what they may do and lets them
@@ -1425,6 +1468,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: Start-up checks, a page of its own.** [Start-up checks](docs/startup-checks.md) says what each
+  registration brings, the order and why, how to turn one off, why they wait for the host to ask, and how a
+  package registers one of its own. Row level security, Supabase, Tenancy, Membership, Entity Framework, Transports
+  and Getting started show the one call where they showed the methods, and the methods by hand after it.
 - **Docs: Access requirements, a page of its own.** [Access requirements](docs/access-requirements.md) says
   what a request declares, what answers it, how the checks are asked without a dispatcher and the behavior
   written for Mediator, once, and the Tenancy and Membership pages link to it for their own cases. Its
@@ -1439,6 +1486,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
+  others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
+  and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up
+  check does.
 - **Supabase Auth: two kinds of token, each checked with its own kind of key.** Auth signs a user's token
   with a signing key whose public half it publishes (ES256 or RS256), or with the project's JWT secret
   (HS256). A host given the secret, with `UseSupabaseJwtSecret` or `SupabaseAuthOptions.JwtSecret`, used to

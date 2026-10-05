@@ -558,8 +558,11 @@ public static partial class UsersReadTheDocumentsTheySee
     public static bool Allows(Document document, Caller caller) => DocumentQuestions.Seen().Contains(document.Id);
 }
 
-// At start-up, before the host serves anything
-await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(app.Services, cancellationToken);
+// Where the resources are registered: the package's start-up check of the database
+services.AddMembershipPostgres();
+
+// The host, before it serves anything: every check the registrations brought, this one among them
+services.RunStartupChecks();
 ```
 
 - **The class is yours to list** because the export writes into your migrations only what the project that
@@ -573,7 +576,13 @@ await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(app.Services, canc
   name may ask them (`grantTo`, signed-in users unless you say otherwise). Whether a period applies is asked
   of the database's clock. The application's own work in a scope the rules name is answered every resource,
   as in C#, where that work's role is one of `grantTo` (`RowAccessRoles.SystemIn`).
-- **The check** refuses a database that lacks a function of any registered resource, or has one that does
+- **The check** is the [start-up check](startup-checks.md) `membership.functions-in-place`, which
+  `AddMembershipPostgres()` brings and the host runs with its other checks, after the migrations';
+  `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` is the same by hand. The call is the only thing that
+  brings it: what the package writes reaches the database through the export, so nothing else of it is
+  registered at run time, and a host that leaves the call out runs its other checks and not this one, without a
+  word. Make it where the resources are registered, next to the registration of each. It refuses a database that
+  lacks a function of any registered resource, or has one that does
   not run as its owner, has no empty search path, answers no set, was written from other rules than the
   resource is registered with or by another version of the package, may be executed by every role or by one
   the rules do not name, or may not be executed by a role the rules name. It reads the line of a function's

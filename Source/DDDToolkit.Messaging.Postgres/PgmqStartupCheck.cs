@@ -1,6 +1,6 @@
+using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -66,24 +66,33 @@ internal sealed record PgmqRequirement(
 /// extension shows up when the first message is sent, and a pgmq too old for topics when the first one is
 /// sent or the consumer binds its queue: after the application reported itself started.
 /// <para>
-/// <c>StartingAsync</c> runs for every lifecycle service before any hosted service's <c>StartAsync</c>, so
-/// the check comes before the consumers and the outbox processor. Lifecycle services start in the order
-/// they were registered, which matters for one that installs the extension itself, such as a migration
-/// with <c>CREATE EXTENSION</c> run at start-up: register that one first, or turn the check off with
-/// <see cref="PgmqSinkOptions.CheckExtensionOnStart"/> and <see cref="PgmqConsumerOptions.CheckExtensionOnStart"/>.
+/// It is one of the host's start-up checks, <see cref="PgmqQueue.ExtensionInstalledCheck"/>, and one that is on
+/// by default, as it was before the host's checks were run together: every host with a sink or a consumer runs
+/// it, whether it asked for its checks or not. The runner runs the checks in <c>StartingAsync</c>, which the host
+/// calls for every lifecycle service before any hosted service's <c>StartAsync</c>, so the check comes before the
+/// consumers and the outbox processor. Lifecycle services start in the order they were registered, which matters
+/// for one that installs the extension itself, such as a migration with <c>CREATE EXTENSION</c> run at start-up:
+/// register that one before <c>RunStartupChecks()</c>, which moves the runner to where it is called, or, in a host
+/// that does not call it, before the first sink or consumer, where the runner then stays; or turn the check off with
+/// <see cref="PgmqSinkOptions.CheckExtensionOnStart"/> and <see cref="PgmqConsumerOptions.CheckExtensionOnStart"/>,
+/// or by its name.
 /// </para>
 /// </summary>
-internal sealed class PgmqStartupCheck(
-    IEnumerable<PgmqRequirement> requirements,
-    IServiceProvider services,
-    ILogger<PgmqStartupCheck>? logger = null) : IHostedLifecycleService
+internal static class PgmqStartupCheck
 {
-    private readonly ILogger _logger = logger ?? NullLogger<PgmqStartupCheck>.Instance;
+    /// <summary>The category it logs the version it found under, which is the one it had as a hosted service.</summary>
+    private const string LogCategory = "DDDToolkit.Messaging.Postgres.PgmqStartupCheck";
 
-    public async Task StartingAsync(CancellationToken cancellationToken)
+    /// <summary>The check, on by default, in the stage of the database.</summary>
+    public static StartupCheck Check { get; } = new(PgmqQueue.ExtensionInstalledCheck, StartupCheckStage.Database, RunAsync) { OnByDefault = true };
+
+    /// <summary>Reads the version of every database a sink or a consumer registered, once per database.</summary>
+    private static async Task RunAsync(IServiceProvider services, CancellationToken cancellationToken)
     {
+        var logger = services.GetService<ILoggerFactory>()?.CreateLogger(LogCategory) ?? NullLogger.Instance;
+
         // One query per database, however many sinks and consumers share it.
-        foreach (var database in requirements.GroupBy(requirement => requirement.Database))
+        foreach (var database in services.GetServices<PgmqRequirement>().GroupBy(requirement => requirement.Database))
         {
             var (name, version) = await database.First().ReadAsync(services, cancellationToken).ConfigureAwait(false);
 
@@ -97,17 +106,9 @@ internal sealed class PgmqStartupCheck(
                 throw new PgmqTopicsNotSupportedException(name, version);
             }
 
-            _logger.LogInformation("pgmq {Version} is installed in database '{Database}'.", version, name);
+#pragma warning disable CA1848 // One line per database, once, at start-up.
+            logger.LogInformation("pgmq {Version} is installed in database '{Database}'.", version, name);
+#pragma warning restore CA1848
         }
     }
-
-    public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

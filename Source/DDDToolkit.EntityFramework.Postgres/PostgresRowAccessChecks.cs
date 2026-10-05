@@ -3,9 +3,11 @@ using System.Text;
 using System.Transactions;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DDDToolkit.EntityFramework.Postgres;
 
@@ -14,6 +16,12 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// as its row level security relies on: the role it logs in as holds nothing and reaches no role that does,
 /// and may switch to every role its callers run as; the functions that run as their owner still answer where
 /// row level security is forced; and a context runs its commands as the caller.
+/// <para>
+/// <c>AddPostgresRowLevelSecurity</c>, and so <c>AddSupabaseRowLevelSecurity</c>, registers each of them as a
+/// start-up check over every registered context on Postgres, which a host runs with
+/// <c>services.RunStartupChecks()</c> and turns off one by one by the names below. The methods stay for a host
+/// that runs them by hand, the switch first:
+/// </para>
 /// <code>
 /// await PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, cancellationToken);
 /// await PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync(context, cancellationToken);
@@ -31,6 +39,37 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </remarks>
 public static class PostgresRowAccessChecks
 {
+    /// <summary>
+    /// The start-up check that every registered context on Postgres runs its commands as the caller
+    /// (<see cref="EnsureRowLevelSecurityWired"/>). It opens nothing, so it runs with the checks of the services,
+    /// first: a context without the interceptor would fail the questions the other checks put through it.
+    /// </summary>
+    public const string RowLevelSecurityWiredCheck = "postgres.row-level-security-wired";
+
+    /// <summary>
+    /// The start-up check that the role the host logs in as may become every caller of every context that runs as
+    /// its caller (<see cref="EnsureLoginRoleMaySwitchToCallersAsync"/>). It runs in the stage of the login, before
+    /// every check that asks as the system caller and so switches to the system caller's role.
+    /// </summary>
+    public const string LoginRoleMaySwitchToCallersCheck = "postgres.login-role-may-switch-to-callers";
+
+    /// <summary>
+    /// The start-up check that the role the host logs in as owns and holds nothing in the schemas of every
+    /// registered context on Postgres (<see cref="EnsureLoginRoleOwnsNothingAsync"/>). A host that logs in as the
+    /// role that owns its tables by design, a sample on the database's own superuser say, turns this one off by
+    /// name, with that reason.
+    /// </summary>
+    public const string LoginRoleOwnsNothingCheck = "postgres.login-role-owns-nothing";
+
+    /// <summary>
+    /// The start-up check that every function that runs as its owner, in the schemas of every registered context
+    /// on Postgres, is owned by a role the forced policies let through (<see cref="EnsureDefinerOwnersBypassAsync"/>).
+    /// </summary>
+    public const string DefinerOwnersBypassCheck = "postgres.definer-owners-bypass";
+
+    /// <summary>The name Npgsql's provider for Entity Framework gives itself: what a context on Postgres reports.</summary>
+    private const string NpgsqlProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+
     /// <summary>The toolkit's own schema, which every check looks at next to the context's.</summary>
     private const string ToolkitSchema = "ddd";
 
@@ -386,6 +425,60 @@ public static class PostgresRowAccessChecks
         if (InterceptorOf(context) is null)
         {
             throw NotWired(context);
+        }
+    }
+
+    /// <summary>
+    /// Registers the four checks above as start-up checks: once, however many times row level security is
+    /// registered. Each takes every context the services register, on Postgres, in a scope of its own; the switch
+    /// takes only those that run as their caller, since another switches to nobody.
+    /// </summary>
+    internal static void AddStartupChecks(IServiceCollection services)
+    {
+        services.AddStartupCheck(new StartupCheck(RowLevelSecurityWiredCheck, StartupCheckStage.Services, (provider, cancellationToken) =>
+            EachContextAsync(provider, runsAsCaller: false, (context, _) =>
+            {
+                EnsureRowLevelSecurityWired(context);
+                return Task.CompletedTask;
+            }, cancellationToken)));
+
+        services.AddStartupCheck(new StartupCheck(LoginRoleMaySwitchToCallersCheck, StartupCheckStage.Login, (provider, cancellationToken) =>
+            EachContextAsync(provider, runsAsCaller: true, EnsureLoginRoleMaySwitchToCallersAsync, cancellationToken)));
+
+        services.AddStartupCheck(new StartupCheck(LoginRoleOwnsNothingCheck, StartupCheckStage.Database, (provider, cancellationToken) =>
+            EachContextAsync(provider, runsAsCaller: false, EnsureLoginRoleOwnsNothingAsync, cancellationToken)));
+
+        services.AddStartupCheck(new StartupCheck(DefinerOwnersBypassCheck, StartupCheckStage.Database, (provider, cancellationToken) =>
+            EachContextAsync(provider, runsAsCaller: false, EnsureDefinerOwnersBypassAsync, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Runs <paramref name="check"/> on every context <paramref name="services"/> register that is on Postgres, and
+    /// with <paramref name="runsAsCaller"/> only on those with the row level security interceptor: by the name of
+    /// its type, in a scope of its own. Every context the container knows, not a list of them, so a module added
+    /// later is checked without anyone remembering to add it. Entity Framework registers the options of each
+    /// context once more as the non-generic <see cref="DbContextOptions"/>, and those name the context they are
+    /// for.
+    /// </summary>
+    private static async Task EachContextAsync(IServiceProvider services, bool runsAsCaller, Func<DbContext, CancellationToken, Task> check, CancellationToken cancellationToken)
+    {
+        var scope = services.CreateAsyncScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var contextTypes = scope.ServiceProvider.GetServices<DbContextOptions>()
+                .Select(options => options.ContextType)
+                .Distinct()
+                .OrderBy(type => type.FullName, StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var contextType in contextTypes)
+            {
+                var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
+                if (context.Database.ProviderName == NpgsqlProvider && (!runsAsCaller || InterceptorOf(context) is not null))
+                {
+                    await check(context, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
     }
 

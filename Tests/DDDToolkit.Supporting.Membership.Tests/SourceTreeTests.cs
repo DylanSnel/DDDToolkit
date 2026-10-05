@@ -48,7 +48,7 @@ public sealed partial class SourceTreeTests
             "Mapping",
             "Registration");
 
-        FoldersOf(Postgres).Should().Equal("Checks", "Policies", "Sql");
+        FoldersOf(Postgres).Should().Equal("Checks", "Policies", "Registration", "Sql");
     }
 
     [Theory]

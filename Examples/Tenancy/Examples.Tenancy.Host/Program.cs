@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DDDToolkit.Access;
+using DDDToolkit.Startup;
 using Examples.Tenancy.Host;
 using DDDToolkit.HotChocolate.Fusion.InMemory;
 
@@ -100,8 +101,15 @@ builder.Services.AddExceptionHandler<RefusalProblems>();
 // exception handler as a 500, the outbox, or the host when the seeding fails.
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Critical);
 
-// Hosted services start in the order they are added. The start-up checks were added with the Tenants module, so
-// the database has been found complete, and tenancy to hold together, by the time the seeding starts. With
+// Before anything of the host starts, the server's port and the seeding included: every check the registrations
+// above brought. The contexts are wired through the toolkit, row level security and Tenancy; the role the host
+// logs in as may become every caller; every migration is applied; and that role holds nothing, and the database's
+// policies, functions and grants are the ones the modules' code writes, Tenancy's and Membership's among them.
+// They run in that order, as the application itself, and the first that finds something wrong stops the start and
+// says what puts it right. A module added later brings its own, and no class of the host lists them.
+builder.Services.RunStartupChecks();
+
+// Hosted services start in the order they are added, all of them after the checks above. With
 // Sample:SeedAuthUsers on, the demonstration people are made users of Supabase Auth first, under the ids their
 // seats are found by, so they sign in there with a password as well as through the dev login.
 DemoAuthUsers.AddTo(builder.Services, builder.Configuration, builder.Environment);

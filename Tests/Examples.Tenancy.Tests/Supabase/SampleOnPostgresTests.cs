@@ -3,7 +3,13 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework.Postgres;
+using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Startup;
+using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+using DDDToolkit.Supporting.Tenancy.Postgres;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using Examples.Tenancy.Tenants.Contracts.TokenRoles;
 using FluentAssertions;
@@ -18,6 +24,8 @@ namespace Examples.Tenancy.Tests.Supabase;
 /// The host on Postgres, started the way a deployment starts it: against a database the exported files made, as
 /// the login role that owns nothing. What is held here is that it starts at all, with every start-up check
 /// passed, and that the exported policies and privileges let a seat do its work and nothing of another tenant's.
+/// The host has no start-up class of its own: the checks are the ones its registrations brought, run by the
+/// toolkit's runner, so a host that does not start here was stopped by them.
 /// The scenario classes ask what a request is answered; these ask the database beside it, and the host's start.
 /// </summary>
 /// <remarks>
@@ -46,9 +54,10 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
     /// <summary>
     /// A database made wrong, one way for each check the host makes of it before it takes a request, with what the
-    /// check says. Each is something a deployment can do by hand, and each would leave a hole no request shows.
+    /// check says and the name the check goes by. Each is something a deployment can do by hand, and each would
+    /// leave a hole no request shows.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, (string Sql, string Says)> MadeWrong = new Dictionary<string, (string, string)>
+    private static readonly IReadOnlyDictionary<string, (string Sql, string Says, string Check)> MadeWrong = new Dictionary<string, (string, string, string)>
     {
         // Every migration is applied: the host applies none itself.
         ["a migration that was never applied"] = (
@@ -56,7 +65,8 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             DELETE FROM {ProjectsContext.Schema}."{HistoryRepository.DefaultTableName}"
             WHERE "MigrationId" = (SELECT max("MigrationId") FROM {ProjectsContext.Schema}."{HistoryRepository.DefaultTableName}")
             """,
-            "The database is missing migrations:"),
+            "The database is missing migrations:",
+            SupabaseMigrations.AppliedCheck),
 
         // Every function that runs as its owner is owned by a role the forced policies let through: owned by any
         // other, it would read no row and answer that nobody may do anything.
@@ -68,38 +78,45 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             CREATE FUNCTION {InspectionsContext.Schema}.made_wrong() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS 'SELECT 1';
             ALTER FUNCTION {InspectionsContext.Schema}.made_wrong() OWNER TO {HeldToThePolicies};
             """,
-            "their owner is held to row level security"),
+            "their owner is held to row level security",
+            PostgresRowAccessChecks.DefinerOwnersBypassCheck),
 
         // System work in a tenant cannot leave it, and nobody without a seat asks what Tenancy answers about one.
         ["a function of Tenancy's the anonymous role may ask"] = (
             $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.caller_seat() TO anon",
-            $"anon may execute {TenantsContext.Schema}.caller_seat()"),
+            $"anon may execute {TenantsContext.Schema}.caller_seat()",
+            TenancyPostgresChecks.SystemInRoleConfinedCheck),
 
         // The few reads across tenants are the application's own, and no signed-in user's.
         ["a read across tenants a signed-in user may ask"] = (
             $"GRANT EXECUTE ON FUNCTION {TenantsContext.Schema}.role_keys_in_use() TO authenticated",
-            $"authenticated may execute {TenantsContext.Schema}.role_keys_in_use()"),
+            $"authenticated may execute {TenantsContext.Schema}.role_keys_in_use()",
+            TenancyPostgresChecks.SystemReadsAcrossTenantsCheck),
 
         // The second lock on a tenant's single root: the policies hold a seat, and the index holds everyone.
         ["no unique index on a tenant's root"] = (
             $"""DROP INDEX {TenantsContext.Schema}."IX_OrganizationUnits_TenantId_WhereRoot" """,
-            "no unique index that keeps a tenant's organization to a single root"),
+            "no unique index that keeps a tenant's organization to a single root",
+            TenancyPostgresChecks.PoliciesInPlaceCheck),
 
         // The Membership package's lock on a crew, written from the projects' rules: a role given on a crew is one
         // of the tenant's, whoever writes the row.
         ["a crew's roles not held to the roles the caller sees"] = (
             $"""DROP POLICY "Members hold roles the caller sees (insert) for authenticated" ON {ProjectsContext.Schema}."{ProjectsContext.CrewRolesTable}" """,
-            $"{ProjectsContext.Schema}.\"{ProjectsContext.CrewRolesTable}\" (authenticated is not held to the roles it sees)"),
+            $"{ProjectsContext.Schema}.\"{ProjectsContext.CrewRolesTable}\" (authenticated is not held to the roles it sees)",
+            MembershipPostgresChecks.FunctionsInPlaceCheck),
 
         // The crew lead's project role stays in use, whatever statement archives it.
         ["the trigger that keeps the crew lead's role in use disabled"] = (
             $"""ALTER TABLE {ProjectsContext.Schema}."{ProjectsContext.ProjectRolesTable}" DISABLE TRIGGER projects_owner_role_stays""",
-            "projects_owner_role_stays, is missing, disabled, or written from other rules"),
+            "projects_owner_role_stays, is missing, disabled, or written from other rules",
+            MembershipPostgresChecks.FunctionsInPlaceCheck),
 
         // A project's owner changes only for a seat that holds the key that names one.
         ["no lock on a project's owner"] = (
             $"""DROP TRIGGER projects_owner_stays ON {ProjectsContext.Schema}."{ProjectsContext.ProjectsTable}" """,
-            "(its owner column is not held to the key that changes the owner)"),
+            "(its owner column is not held to the key that changes the owner)",
+            MembershipPostgresChecks.FunctionsInPlaceCheck),
     };
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
@@ -872,28 +889,51 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
         var refused = sample.Host.RefusedStart();
 
-        refused.OfType<InvalidOperationException>().Select(failure => failure.Message)
-            .Should().Contain(message => message.Contains("is meant to hold nothing", StringComparison.Ordinal), "the host gave up with {0}", string.Join(" / ", refused.Select(failure => failure.Message)));
+        refused.OfType<InvalidOperationException>().Where(failure => CheckOf(failure) == PostgresRowAccessChecks.LoginRoleOwnsNothingCheck).Select(failure => failure.Message)
+            .Should().Contain(message => message.Contains("is meant to hold nothing", StringComparison.Ordinal), "the host gave up with {0}", Described(refused));
     }
 
     /// <summary>
     /// The other checks of the start, each proven the way a deployment would meet it: a database the exported
-    /// files made, then changed by its owner in one respect, and a host that does not start on it and says why.
-    /// A host that stopped calling one of them would start here.
+    /// files made, then changed by its owner in one respect, and a host that does not start on it and says why,
+    /// in the words of the check that found it. A host that turned one of them off would start here.
     /// </summary>
     [Theory]
     [MemberData(nameof(DatabasesMadeWrong))]
     public async Task A_host_does_not_start_on_a_database_with(string what)
     {
-        var (sql, says) = MadeWrong[what];
+        var (sql, says, check) = MadeWrong[what];
         await using var sample = await SampleOnPostgres.CreateAsync(stack, Cancellation);
         await sample.AsOwnerAsync(sql, Cancellation);
 
         var refused = sample.Host.RefusedStart();
 
-        refused.Select(failure => failure.Message)
-            .Should().Contain(message => message.Contains(says, StringComparison.Ordinal), "the host gave up with {0}", string.Join(" / ", refused.Select(failure => failure.Message)));
+        refused.Where(failure => CheckOf(failure) == check).Select(failure => failure.Message)
+            .Should().Contain(message => message.Contains(says, StringComparison.Ordinal), "the check {0} stops the start, and the host gave up with {1}", check, Described(refused));
     }
+
+    [Fact]
+    public async Task A_host_whose_catalogue_the_policies_were_not_written_from_does_not_start()
+    {
+        // The application's code has a key the access files in the database were not written with: a module added
+        // one, and nobody has exported and applied the files since. The policies would still answer from the
+        // catalogue they were written from, which no longer says what the application's own checks say.
+        await using var sample = await SampleOnPostgres.CreateAsync(stack, Cancellation, services: services => services.AddTenancyPermissions(
+        [
+            new Permission("inspections.sign-off", "Inspections", "Sign an inspection off"),
+        ]));
+
+        var refused = sample.Host.RefusedStart();
+
+        refused.Where(failure => CheckOf(failure) == TenancyPostgresChecks.PoliciesInPlaceCheck).Select(failure => failure.Message)
+            .Should().Contain(message => message.Contains("was written from another catalogue", StringComparison.Ordinal), "the host gave up with {0}", Described(refused));
+    }
+
+    /// <summary>The start-up check an exception stopped the start with, as the runner marks it; null for any other.</summary>
+    private static string? CheckOf(Exception failure) => failure.Data[StartupChecks.FailedCheckKey] as string;
+
+    /// <summary>Every message a host gave up with, for the reason of an assertion.</summary>
+    private static string Described(IEnumerable<Exception> refused) => string.Join(" / ", refused.Select(failure => (CheckOf(failure) ?? "-") + ": " + failure.Message));
 
     /// <summary>The host, started on the demonstration the run seeded once, with the database's clock past the moment it started.</summary>
     private async Task<SampleOnPostgres> StartedAsync()

@@ -4,6 +4,7 @@ using System.Transactions;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
+using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -21,6 +22,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// Checks a host runs at start-up, before it serves anything, that the database and the host are set up the way
 /// Tenancy's policies rely on. Each throws <see cref="InvalidOperationException"/> naming what is wrong and how to
 /// put it right, so a host that would run with a hole in its second lock does not start.
+/// <para>
+/// <see cref="TenancyPostgresServiceCollectionExtensions.AddTenancyPostgres"/> registers each of them as a start-up
+/// check, by the names below, which a host runs with <c>services.RunStartupChecks()</c>. The methods stay for a
+/// host that runs them by hand:
+/// </para>
 /// <code>
 /// var app = builder.Build();
 /// TenancyPostgresChecks.EnsureExplicitCallers(app.Services);
@@ -37,6 +43,33 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// </summary>
 public static class TenancyPostgresChecks
 {
+    /// <summary>The start-up check that the host still requires explicit callers (<see cref="EnsureExplicitCallers"/>).</summary>
+    public const string ExplicitCallersCheck = "tenancy.explicit-callers";
+
+    /// <summary>
+    /// The start-up check that every token role Tenancy seats reaches the database as a signed-in user
+    /// (<see cref="EnsureSeatedTokenRolesAreSignedInUsers"/>).
+    /// </summary>
+    public const string SeatedTokenRolesCheck = "tenancy.seated-token-roles";
+
+    /// <summary>
+    /// The start-up check that the scoped system role cannot leave the tenant its work is in
+    /// (<see cref="EnsureSystemInRoleIsConfinedAsync"/>).
+    /// </summary>
+    public const string SystemInRoleConfinedCheck = "tenancy.system-in-role-confined";
+
+    /// <summary>
+    /// The start-up check that Tenancy's reads across tenants answer, with nothing running past the policies
+    /// (<see cref="EnsureSystemReadsAcrossTenantsAsync"/>).
+    /// </summary>
+    public const string SystemReadsAcrossTenantsCheck = "tenancy.system-reads-across-tenants";
+
+    /// <summary>
+    /// The start-up check that Tenancy's policies, functions, triggers and the unique index on a tenant's root are in
+    /// the database, written from the catalogue the application runs with (<see cref="EnsurePoliciesAreInPlaceAsync"/>).
+    /// </summary>
+    public const string PoliciesInPlaceCheck = "tenancy.policies-in-place";
+
     /// <summary>The role PostgREST, and so Supabase's Data API, logs in as before it switches to a caller's role.</summary>
     public const string DataApiLoginRole = "authenticator";
 
@@ -737,6 +770,33 @@ public static class TenancyPostgresChecks
                     "Export the access files with Tenancy's contribution, and apply them.");
             }
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Registers the five checks above as start-up checks: the two that read the services with the checks of the
+    /// services, first, and the three that ask the database with the checks of the database. Those three run before
+    /// <see cref="TenancyChecks.UnknownStoredKeysCheck"/>, whatever order Tenancy and this were registered in: it
+    /// reads the keys through a function the reads across tenants prove, and a function that is missing is better
+    /// said by them, with its fix.
+    /// </summary>
+    internal static void AddStartupChecks(IServiceCollection services)
+    {
+        services.AddStartupCheck(new StartupCheck(ExplicitCallersCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
+        {
+            EnsureExplicitCallers(provider);
+            return Task.CompletedTask;
+        }));
+
+        services.AddStartupCheck(new StartupCheck(SeatedTokenRolesCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
+        {
+            EnsureSeatedTokenRolesAreSignedInUsers(provider);
+            return Task.CompletedTask;
+        }));
+
+        string[] beforeTheStoredKeys = [TenancyChecks.UnknownStoredKeysCheck];
+        services.AddStartupCheck(new StartupCheck(SystemInRoleConfinedCheck, StartupCheckStage.Database, EnsureSystemInRoleIsConfinedAsync) { RunsBefore = beforeTheStoredKeys });
+        services.AddStartupCheck(new StartupCheck(SystemReadsAcrossTenantsCheck, StartupCheckStage.Database, EnsureSystemReadsAcrossTenantsAsync) { RunsBefore = beforeTheStoredKeys });
+        services.AddStartupCheck(new StartupCheck(PoliciesInPlaceCheck, StartupCheckStage.Database, EnsurePoliciesAreInPlaceAsync) { RunsBefore = beforeTheStoredKeys });
     }
 
     /// <summary>

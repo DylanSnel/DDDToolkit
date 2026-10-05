@@ -61,6 +61,7 @@ public partial class Order { }
 | [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, and how to choose |
 | [Row level security](docs/row-level-security.md) | Running a context's queries as the caller, and row access rules written in C# as Postgres policies |
 | [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
+| [Start-up checks](docs/startup-checks.md) | What the registrations check before the host serves anything, run with one call, in a fixed order, and turned off by name |
 | [Modules](docs/modules.md) | `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |

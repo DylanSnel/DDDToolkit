@@ -1,19 +1,52 @@
 using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Interceptors;
+using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 
 /// <summary>
 /// Checks an application can run against its Tenancy storage: that a context is wired so its saves are
 /// checked, and which keys stored on roles the catalogue no longer knows.
+/// <para>
+/// <c>AddTenancy</c> registers them as start-up checks, by the names below, which a host runs with
+/// <c>services.RunStartupChecks()</c>: the catalogue builds, every registered context is wired as
+/// <see cref="EnsureWired"/> asks, and every key a role holds that the catalogue does not know is logged as a
+/// warning. The methods stay for a host that runs them by hand.
+/// </para>
 /// </summary>
 public static class TenancyChecks
 {
+    /// <summary>
+    /// The start-up check that the catalogue builds: asked for the first time at start-up, so a catalogue that does
+    /// not hold together, two modules that declare one key say, stops the start rather than the first request that
+    /// needs it. Every module has added its keys by then, whatever order they were registered in.
+    /// </summary>
+    public const string CatalogueBuildsCheck = "tenancy.catalogue-builds";
+
+    /// <summary>
+    /// The start-up check that every registered context that keeps rows to a tenant checks its saves
+    /// (<see cref="EnsureWired"/>). Every context the container knows, so a module added later is checked without
+    /// anyone remembering to add it; one without such rows passes as it is.
+    /// </summary>
+    public const string ContextsWiredCheck = "tenancy.contexts-wired";
+
+    /// <summary>
+    /// The start-up check that logs, as a warning, every key a role holds that the catalogue does not know
+    /// (<see cref="UnknownStoredKeysAsync"/>): removed from the code rather than retired. Such a key gives nothing
+    /// and does no harm, so it refuses no start. It reads what is stored, so it runs with the checks of the
+    /// database, and after those of Tenancy's own that prove it may read it.
+    /// </summary>
+    public const string UnknownStoredKeysCheck = "tenancy.unknown-stored-keys";
+
     /// <summary>
     /// Throws when <paramref name="context"/> has entity types kept to a tenant, Tenancy's own or those of
     /// <c>ScopeToTenant</c>, and its saves would not be checked: <c>UseTenancy</c> was not called, or was called
@@ -140,6 +173,59 @@ public static class TenancyChecks
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>
+    /// Registers the three checks above as start-up checks, the last over <typeparamref name="TContext"/>, the
+    /// context whose model maps Tenancy's tables: once, however many times Tenancy is registered.
+    /// </summary>
+    internal static void AddStartupChecks<TRole, TRoleId, TTenantId, TContext>(IServiceCollection services)
+        where TRole : RoleAggregate<TRoleId, TTenantId>
+        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+        where TContext : DbContext
+    {
+        services.AddStartupCheck(new StartupCheck(CatalogueBuildsCheck, StartupCheckStage.Services, static (provider, cancellationToken) =>
+        {
+            // Built the first time it is asked for, here; a catalogue that does not hold together throws.
+            provider.GetRequiredService<TenancyCatalogue>();
+            return Task.CompletedTask;
+        }));
+
+        services.AddStartupCheck(new StartupCheck(ContextsWiredCheck, StartupCheckStage.Services, static async (provider, _) =>
+        {
+            var scope = provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+            {
+                foreach (var contextType in EntityFrameworkChecks.RegisteredContexts(scope.ServiceProvider))
+                {
+                    EnsureWired((DbContext)scope.ServiceProvider.GetRequiredService(contextType));
+                }
+            }
+        }));
+
+        services.AddStartupCheck(new StartupCheck(UnknownStoredKeysCheck, StartupCheckStage.Database, static async (provider, cancellationToken) =>
+        {
+            var catalogue = provider.GetRequiredService<TenancyCatalogue>();
+            var scope = provider.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+            {
+                var tenancy = scope.ServiceProvider.GetRequiredService<TContext>();
+                var unknown = await UnknownStoredKeysAsync<TRole, TRoleId, TTenantId>(tenancy, catalogue, cancellationToken).ConfigureAwait(false);
+                if (unknown.Count == 0)
+                {
+                    return;
+                }
+
+                var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(typeof(TenancyChecks).FullName!) ?? NullLogger.Instance;
+                foreach (var key in unknown)
+                {
+                    logger.LogWarning(
+                        "A role holds the key {Key}, which the catalogue does not know. It gives no rights. Retire a key rather than removing it from the code, or take it off the roles that hold it.",
+                        key);
+                }
+            }
+        }));
     }
 
     private static int IndexOf<TInterceptor>(List<IInterceptor> interceptors)

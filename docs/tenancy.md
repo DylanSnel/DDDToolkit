@@ -1148,7 +1148,9 @@ The save check is what `UseTenancy` adds, and it belongs after `UseDDDToolkit`. 
 what the domain event handlers changed, and only aggregates that passed their invariants; added before,
 it would check rows that are still to change. Tenancy's store checks its own context before every save,
 and `TenancyChecks.EnsureWired(context)` checks any other, so a forgotten or misplaced `UseTenancy` fails
-loudly rather than writing unchecked rows. The sample calls it at start-up for every context it registers.
+loudly rather than writing unchecked rows. `AddTenancy` registers it as the [start-up check](startup-checks.md)
+`tenancy.contexts-wired`, over every context the host registers, with `tenancy.catalogue-builds` and
+`tenancy.unknown-stored-keys`; a host runs them with `services.RunStartupChecks()`.
 
 ```csharp
 // A module's context that keeps its own rows to a tenant
@@ -3081,7 +3083,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A seat reads only its own rights, and the database writes them | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs)<br/>**Try it:** Start the sample: it runs no other way ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `RightsVisibilityTests`, `DatabaseKeepsRightsTests`, `SampleOnPostgresTests` |
 | A read across tenants goes through a function, never past the policies. Functions that take the tenant serve a policy on a stored file or a channel | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`TenancySystemReads.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/ReadFunctions/TenancySystemReads.cs)<br/>**Try it:** Not in the sample: it stores no files and has no channels<br/>**Test:** `SystemReadFunctionTests`, `TenantArgumentFunctionTests` |
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
-| The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`PostgresStartupCheck.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/PostgresStartupCheck.cs)<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
+| The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
 | The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
@@ -3161,13 +3163,16 @@ forget a condition. It is not a boundary against SQL someone else runs on your c
 
 ### Setting it up
 
-Register it next to row level security, list its contribution where the export runs, and check both at
-start-up:
+Register it next to row level security, list its contribution where the export runs, and run the checks both
+bring at start-up:
 
 ```csharp
 // The host
 services.AddSupabaseRowLevelSecurity();   // or AddPostgresRowLevelSecurity() on a Postgres of your own
 services.AddTenancyPostgres();
+
+// Before the host serves anything: every check the registrations brought, Tenancy's among them
+services.RunStartupChecks();
 
 // The project that runs the export: Tenancy's functions, policies and triggers go into its migrations
 [assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
@@ -3175,13 +3180,6 @@ services.AddTenancyPostgres();
 // The catalogue as your registration builds it: your part, and the keys your modules add with AddTenancyPermissions
 public sealed class ShopTenancyRowAccess()
     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, [.. OrderingCatalogue.Permissions]));
-
-// At start-up, before the host serves anything
-TenancyPostgresChecks.EnsureExplicitCallers(app.Services);
-TenancyPostgresChecks.EnsureSeatedTokenRolesAreSignedInUsers(app.Services);
-await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(app.Services, cancellationToken);
-await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(app.Services, cancellationToken);
-await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(app.Services, cancellationToken);
 ```
 
 - **`AddTenancyPostgres()`** carries the tenant to Postgres, turns the refusal of the trigger that keeps a
@@ -3197,7 +3195,13 @@ await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(app.Services, cancella
   Postgres of your own, pass it to `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The
   functions go into the default schema of the context that maps Tenancy's tables, so give it one in lower
   case, such as `tenancy`.
-- **The checks** each throw naming what is wrong and the statement that puts it right. The first proves
+- **The checks** are [start-up checks](startup-checks.md): `AddTenancyPostgres()` brings them, and the host runs
+  them with every other check it has, before the server binds its port, in an order that says the cause before
+  its effects. A host that runs them by hand calls `TenancyPostgresChecks.EnsureExplicitCallers`,
+  `EnsureSeatedTokenRolesAreSignedInUsers`, `EnsureSystemInRoleIsConfinedAsync`,
+  `EnsureSystemReadsAcrossTenantsAsync` and `EnsurePoliciesAreInPlaceAsync`, in that order, as the system caller,
+  after the checks of the login role and of the migrations. Each throws naming what is wrong and the statement
+  that puts it right. The first proves
   that the host still requires explicit callers. The second, that every token role Tenancy seats reaches the
   database as a signed-in user, the role the policies are written for
   ([below](#how-the-tenant-reaches-a-policy)). The third, that the scoped system role cannot escape its

@@ -6,6 +6,7 @@ using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
+using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -46,6 +47,11 @@ public static class DependencyInjection
     /// // inside AddOrderingModule
     /// services.AddDDDToolkitEntityFramework(options => options.UseOutbox&lt;OrderingContext&gt;(outbox => ...));
     /// </code>
+    /// <para>
+    /// It brings the start-up check <see cref="EntityFrameworkChecks.ToolkitWiredCheck"/>, which a host runs with
+    /// <c>services.RunStartupChecks()</c>: every registered context that maps the toolkit's classes is wired
+    /// through <see cref="UseDDDToolkit"/>.
+    /// </para>
     /// </summary>
     public static IServiceCollection AddDDDToolkitEntityFramework(this IServiceCollection services, Action<DDDEntityFrameworkOptions>? configure = null)
     {
@@ -70,6 +76,9 @@ public static class DependencyInjection
             // Who is acting, which an event log writes on every row: the toolkit's own caller, unless a package
             // or the host registered an accessor that knows more. A singleton, asked once per save.
             services.TryAddSingleton<IActedByAccessor, CallerActedByAccessor>();
+
+            // Every context saves through the interceptors above, or the host does not start, once it runs its checks.
+            services.AddStartupCheck(EntityFrameworkChecks.ToolkitWired);
         }
 
         configure?.Invoke(options);
