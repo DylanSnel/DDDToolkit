@@ -104,7 +104,7 @@ public class TemplateWiringTests
     public void The_organization_walks_the_hosts_units()
     {
         var organization = New.Organization();
-        var north = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", "region", TenantShape.Hierarchical);
+        var north = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", TenantShape.Hierarchical);
         north.Should().BeOfType<HostUnit>();
 
         north.SetCostCentre("NL-001");

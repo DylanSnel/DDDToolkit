@@ -81,6 +81,7 @@ public sealed class RequestBodyTests(SampleHosts sample) : IClassFixture<SampleH
     [Theory]
     [InlineData("POST", "/tenancy/shape", """{"shape":{}}""", "$.shape")]
     [InlineData("POST", "/projects", """{"number":7,"name":"Harbor wall","unitId":"b0000000-0000-4000-8000-000000000101"}""", "$.number")]
+    [InlineData("POST", "/tenancy/units", """{"parentId":"b0000000-0000-4000-8000-000000000101","name":"Harbor wall","kind":"galaxy"}""", "$.kind")]
     public async Task A_body_that_does_not_read_says_where_and_names_no_type_of_the_servers(string method, string path, string body, string where)
     {
         using var ada = await sample.ClientAsync("ada", Harbor.Slug);

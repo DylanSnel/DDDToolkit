@@ -305,8 +305,8 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
             await owner.ExecuteAsync(
                 $"""
                 INSERT INTO tenancy."Organizations" ("Id", "Version", "Name") VALUES (7, 0, 'Seventh');
-                INSERT INTO tenancy."OrganizationUnits" ("Id", "TenantId", "ParentId", "Name", "Kind", "Status") VALUES
-                    ('{yard}', 7, NULL, 'Yard', 'company', 'A'), ('{shed}', 7, '{yard}', 'Shed', 'site', 'X');
+                INSERT INTO tenancy."OrganizationUnits" ("Id", "TenantId", "ParentId", "Name", "Status") VALUES
+                    ('{yard}', 7, NULL, 'Yard', 'A'), ('{shed}', 7, '{yard}', 'Shed', 'X');
                 INSERT INTO tenancy."OrganizationUnitPaths" ("AncestorId", "DescendantId", "TenantId", "Distance") VALUES
                     ('{yard}', '{yard}', 7, 0), ('{shed}', '{shed}', 7, 0), ('{yard}', '{shed}', 7, 1);
                 INSERT INTO tenancy."Seats" ("Id", "Version", "TenantId", "Identity", "DisplayName", "Status") VALUES
@@ -447,7 +447,7 @@ public abstract class ReadFunctionTests(TenancyPostgres postgres, TenancyNaming 
         (string Function, string Column)[] shown =
         [
             (TenancyFunctionNames.TenantSeats, "DisplayName"), (TenancyFunctionNames.TenantSeats, "Identity"),
-            (TenancyFunctionNames.TenantUnits, "Name"), (TenancyFunctionNames.TenantUnits, "Kind"),
+            (TenancyFunctionNames.TenantUnits, "Name"), (TenancyFunctionNames.TenantUnits, "CostCentre"),
             (TenancyFunctionNames.TenantRoles, "Name"), (TenancyFunctionNames.TenantRoles, "Description"),
         ];
 

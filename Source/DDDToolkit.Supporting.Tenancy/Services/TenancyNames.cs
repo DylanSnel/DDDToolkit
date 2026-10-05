@@ -17,9 +17,6 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </summary>
 internal static class TenancyNames
 {
-    /// <summary>The longest unit kind, shared by the unit and the catalogue's unit kinds, which is what a unit stores.</summary>
-    public const int MaxUnitKindLength = 64;
-
     /// <summary>The longest role name, shared by the role and the catalogue's packs, which roles are made from.</summary>
     public const int MaxRoleNameLength = 120;
 

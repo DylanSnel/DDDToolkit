@@ -55,14 +55,14 @@ public sealed partial class ShopSeat
    }
    ```
 
-3. Register it, with the catalogue and how ids are made. `UseTenancy` goes after `UseDDDToolkit`, on this
-   context and on every context that keeps rows to a tenant.
+3. Register it, with how ids are made, and the catalogue when the application has one. `UseTenancy` goes after
+   `UseDDDToolkit`, on this context and on every context that keeps rows to a tenant.
 
    ```csharp
    services
        .AddTenancy<ShopTenancyContext>(options =>
        {
-           options.Catalogue = ShopCatalogue.Application;   // packs, unit kinds, keys that manage access
+           options.Catalogue = ShopCatalogue.Application;   // optional: packs, keys of its own, keys that manage access
            options.NewSeatId = SeatId.CreateSequential;     // and NewTenantId, NewUnitId, NewRoleId
        })
        .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
@@ -91,7 +91,7 @@ public sealed partial class ShopSeat
            {
                await tenants.ProvisionAsync(
                    new ShopTenancy.TenantToProvision(
-                       "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", identity, "Ada"),
+                       "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity, "Ada"),
                    cancellationToken);
            }
        }

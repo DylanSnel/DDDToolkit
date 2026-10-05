@@ -134,7 +134,7 @@ public static class PolicyMatrix
         yield return new("Organizations", "DELETE", "no one", AdaCaller, "DELETE FROM tenancy.\"Organizations\" WHERE \"Id\" = 1", Expectation.NoRows);
 
         // Units: read by the tenant's members; added, renamed and moved with the units key where the use case asks it.
-        const string AddUnit = "INSERT INTO tenancy.\"OrganizationUnits\" (\"Id\", \"TenantId\", \"ParentId\", \"Name\", \"Kind\", \"Status\") VALUES (gen_random_uuid(), {0}, {1}, 'Dock', 'site', 'Active')";
+        const string AddUnit = "INSERT INTO tenancy.\"OrganizationUnits\" (\"Id\", \"TenantId\", \"ParentId\", \"Name\", \"Status\") VALUES (gen_random_uuid(), {0}, {1}, 'Dock', 'Active')";
         yield return new("OrganizationUnits", "SELECT", "a seat of the tenant", OliCaller, "SELECT count(*) FROM tenancy.\"OrganizationUnits\" WHERE \"TenantId\" = 1", Expectation.Rows);
         yield return new("OrganizationUnits", "SELECT", "seated in another tenant", OdetteCaller, "SELECT count(*) FROM tenancy.\"OrganizationUnits\" WHERE \"TenantId\" = 1", Expectation.NoRows);
         yield return new("OrganizationUnits", "INSERT", "units at the parent", SethCaller, Args(AddUnit, 1, "{North}"), Expectation.Rows);

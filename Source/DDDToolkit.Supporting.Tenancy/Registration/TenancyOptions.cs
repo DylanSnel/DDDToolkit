@@ -6,11 +6,11 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// What the application tells Tenancy: its catalogue, and how to make a new id of each kind. Every one is
-/// required. The ids are the application's, of whatever key type it chose, so Tenancy never guesses how to
-/// make one; a command that is given an id (an import, fixed seed data) uses that one instead.
-/// <see cref="TenantSelection"/> has a default and <see cref="OperatorTokenRoles"/> is empty unless the application
-/// has operators: those two are not required.
+/// What the application tells Tenancy: how to make a new id of each kind, which is required, and what it adds to
+/// the catalogue, which is not. The ids are the application's, of whatever key type it chose, so Tenancy never
+/// guesses how to make one; a command that is given an id (an import, fixed seed data) uses that one instead.
+/// <see cref="Catalogue"/> and <see cref="TenantSelection"/> have defaults, and <see cref="OperatorTokenRoles"/> is
+/// empty unless the application has operators.
 /// </summary>
 public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -18,7 +18,11 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
-    /// <summary>The application's packs, unit kinds and keys. Required.</summary>
+    /// <summary>
+    /// What the application adds to the catalogue: role packs, keys of its own and marks on keys that manage
+    /// access. Left unset, it adds none: the keys are Tenancy's and what the modules contribute, and every tenant
+    /// starts with the default administrators' role (<see cref="TenancyPacks.DefaultAdministrators"/>).
+    /// </summary>
     public ApplicationCatalogue? Catalogue { get; set; }
 
     /// <summary>Makes a new tenant id. Required.</summary>
@@ -75,11 +79,6 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     internal IReadOnlyList<string> Missing()
     {
         var missing = new List<string>();
-        if (Catalogue is null)
-        {
-            missing.Add(nameof(Catalogue));
-        }
-
         if (NewTenantId is null)
         {
             missing.Add(nameof(NewTenantId));
@@ -111,6 +110,6 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     }
 
     internal static InvalidOperationException MissingOptions(IReadOnlyList<string> missing)
-        => new("Tenancy needs every one of its options, and these are not set: " + string.Join(", ", missing)
+        => new("Tenancy makes the application's ids the way it is told, and is not told for these: " + string.Join(", ", missing)
                + ". Set them in the configure callback of AddTenancy.");
 }

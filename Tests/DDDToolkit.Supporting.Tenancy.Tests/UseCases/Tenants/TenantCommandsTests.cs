@@ -12,7 +12,7 @@ public class TenantCommandsTests
     private static readonly Guid Ada = Guid.NewGuid();
 
     private static HostTenancy.TenantToProvision Harbor(TenantShape shape = TenantShape.Hierarchical, string slug = "harbor")
-        => new(slug, "Harbor Works", shape, "Harbor Works", "company", Ada, "Ada");
+        => new(slug, "Harbor Works", shape, "Harbor Works", Ada, "Ada");
 
     private static async Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
         => await harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));
@@ -32,7 +32,7 @@ public class TenantCommandsTests
 
         var organization = harness.Store.Organization(provisioned.Tenant);
         organization.Name.Should().Be("Harbor Works");
-        organization.Units.Should().ContainSingle().Which.Should().Match<HostUnit>(root => root.Id == provisioned.RootUnit && root.Kind == "company" && root.IsRoot);
+        organization.Units.Should().ContainSingle().Which.Should().Match<HostUnit>(root => root.Id == provisioned.RootUnit && root.Name == "Harbor Works" && root.IsRoot);
 
         var seat = harness.Store.Seat(provisioned.AdminSeat);
         seat.Identity.Should().Be(Ada);
@@ -231,7 +231,6 @@ public class TenantCommandsTests
         refusal.Arguments["Slug"].Should().Be("harbor");
         harness.Store.SaveCount.Should().Be(1);
         await FluentActions.Awaiting(() => Provision(harness, Harbor(slug: "-harbor"))).Should().ThrowAsync<InvalidValueObjectException>();
-        await Refused.WithCodeAsync(TenancyRefusals.UnknownUnitKind, () => Provision(harness, Harbor(slug: "wharf") with { RootKind = "galaxy" }));
     }
 
     [Fact]
@@ -321,7 +320,7 @@ public class TenantCommandsTests
         var supervisors = RoleId.CreateSequential();
 
         await Refused.WithCodeAsync(TenancyRefusals.FlatTenant, () => harness.Run(administrator,
-            h => h.Organization.AddUnitAsync(provisioned.RootUnit, "North", "region", default)));
+            h => h.Organization.AddUnitAsync(provisioned.RootUnit, "North", default)));
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(
             TenantShape.Hierarchical, new Dictionary<string, RoleId> { [HostCatalogue.SupervisorPack] = supervisors }, language: null, default));
@@ -334,7 +333,7 @@ public class TenantCommandsTests
         harness.Store.Seat(provisioned.AdminSeat).Placements.SelectMany(placement => placement.Grants)
             .Should().BeEquivalentTo(grantsBefore);
 
-        await harness.Run(administrator, h => h.Organization.AddUnitAsync(provisioned.RootUnit, "North", "region", default));
+        await harness.Run(administrator, h => h.Organization.AddUnitAsync(provisioned.RootUnit, "North", default));
         await Refused.WithCodeAsync(TenancyRefusals.ShapeChange, () => harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Flat, roleIds: null, language: null, default)));
     }
 

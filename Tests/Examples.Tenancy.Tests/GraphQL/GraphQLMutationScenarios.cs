@@ -168,8 +168,8 @@ public sealed class GraphQLMutationScenarios(SampleHosts sample) : IClassFixture
         var added = (await ada.GraphQLDataAsync(
             $$"""
             mutation($parent: UUID!) {
-              organizationUnitAdd(input: { parentId: $parent, name: "North Harbor", kind: "area" }) {
-                organizationUnit { id parentId name path depth status }
+              organizationUnitAdd(input: { parentId: $parent, name: "North Harbor", kind: area }) {
+                organizationUnit { id parentId name kind path depth status }
                 {{SampleGraphQLCalls.Errors}}
               }
             }
@@ -181,8 +181,22 @@ public sealed class GraphQLMutationScenarios(SampleHosts sample) : IClassFixture
         unit.GetProperty("path").GetString().Should().Be("Harbor Works / North / North Harbor");
         unit.GetProperty("depth").GetInt32().Should().Be(3);
         unit.GetProperty("status").GetString().Should().Be("active");
+        unit.GetProperty("kind").GetString().Should().Be("area", "the kind is the application's own field, set in the save that added the unit");
 
-        var listed = (await ada.GraphQLDataAsync("{ organizationUnits { id name } }")).GetProperty("organizationUnits").EnumerateArray();
-        listed.Should().Contain(row => row.GetProperty("id").GetGuid() == unit.GetProperty("id").GetGuid() && row.GetProperty("name").GetString() == "North Harbor");
+        // The kind is the application's to require or not: this one leaves it out, and the unit has none.
+        var plain = (await ada.GraphQLDataAsync(
+            """
+            mutation($parent: UUID!) {
+              organizationUnitAdd(input: { parentId: $parent, name: "North Shed" }) { organizationUnit { id kind } }
+            }
+            """,
+            new { parent = Harbor.UnitNamed("North").Value })).GetProperty("organizationUnitAdd").GetProperty("organizationUnit");
+        plain.GetProperty("kind").ValueKind.Should().Be(JsonValueKind.Null);
+
+        var listed = (await ada.GraphQLDataAsync("{ organizationUnits { id name kind } }")).GetProperty("organizationUnits").EnumerateArray().ToList();
+        listed.Should().Contain(row => row.GetProperty("id").GetGuid() == unit.GetProperty("id").GetGuid() && row.GetProperty("name").GetString() == "North Harbor"
+                                       && row.GetProperty("kind").GetString() == "area");
+        listed.Should().Contain(row => row.GetProperty("id").GetGuid() == Harbor.Root.Value && row.GetProperty("kind").GetString() == "company",
+            "the root's kind was set when the tenant was provisioned");
     }
 }

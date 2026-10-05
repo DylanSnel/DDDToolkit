@@ -224,9 +224,6 @@ public static class TenancyRefusals
     /// </summary>
     public const string NameInvalid = "tenancy.name-invalid";
 
-    /// <summary>A unit kind is blank or too long. Arguments: <c>Kind</c>, <c>Max</c>, and <c>Field</c>, which is <c>kind</c>.</summary>
-    public const string KindInvalid = "tenancy.kind-invalid";
-
     /// <summary>A slug does not follow the pattern. Argument: <c>Field</c>, which is <c>slug</c>.</summary>
     public const string InvalidSlug = "tenancy.invalid-slug";
 
@@ -241,9 +238,6 @@ public static class TenancyRefusals
     /// refused, and <c>Field</c>, which is <c>keys</c>.
     /// </summary>
     public const string UnknownPermission = "tenancy.unknown-permission";
-
-    /// <summary>A unit kind is not one the application declares. Arguments: <c>Kind</c>, and <c>Field</c>, which is <c>kind</c>.</summary>
-    public const string UnknownUnitKind = "tenancy.unknown-unit-kind";
 
     /// <summary>A seat would have no verified identity. Argument: <c>Field</c>, which is <c>identity</c>.</summary>
     public const string IdentityRequired = "tenancy.identity-required";
@@ -343,12 +337,10 @@ public static class TenancyRefusals
             [InvitationUnbacked] = (RefusalKind.Conflict, "Whoever sent this invitation may no longer give what it offers. Ask for a new one."),
 
             [NameInvalid] = (RefusalKind.Invalid, "Enter {Min} to {Max} characters."),
-            [KindInvalid] = (RefusalKind.Invalid, "A unit kind takes 1 to {Max} characters."),
             [InvalidSlug] = (RefusalKind.Invalid, "A slug has 2 to 63 characters, each a lowercase letter, a digit or a dash, and does not begin with a dash."),
             [InvalidPeriod] = (RefusalKind.Invalid, "A grant's end must come after its start."),
             [ReasonRequired] = (RefusalKind.Invalid, "Give a reason to suspend or close a tenant."),
             [UnknownPermission] = (RefusalKind.Invalid, "These keys are unknown or retired: {Keys}."),
-            [UnknownUnitKind] = (RefusalKind.Invalid, "The application has no unit kind {Kind}."),
             [IdentityRequired] = (RefusalKind.Invalid, "A seat needs the verified identity of the person it belongs to."),
             [KeysNotNormalized] = (RefusalKind.Invalid, "A role's keys must be expanded, without duplicates, in ordinal order."),
             [TooManyIds] = (RefusalKind.Invalid, "Ask for at most {Max} ids at a time."),
@@ -372,12 +364,10 @@ public static class TenancyRefusals
     private static readonly IReadOnlyDictionary<string, string> Fields =
         new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            [KindInvalid] = "kind",
             [InvalidSlug] = "slug",
             [InvalidPeriod] = "until",
             [ReasonRequired] = "reason",
             [UnknownPermission] = "keys",
-            [UnknownUnitKind] = "kind",
             [IdentityRequired] = "identity",
             [KeysNotNormalized] = "keys",
             [TooManyIds] = "ids",

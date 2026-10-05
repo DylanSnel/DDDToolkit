@@ -47,17 +47,11 @@ public sealed partial class Seat;
 [RoleAggregate<RoleId>]
 public sealed partial class Role;
 
-/// <summary>The roles a publishing house starts with, the kinds of unit it has, and the keys of its manuscripts a role of the organization can hold.</summary>
+/// <summary>The roles a publishing house starts with, and the keys of its manuscripts a role of the organization can hold.</summary>
 public static class PressCatalogue
 {
     /// <summary>Heads an imprint: reads and edits its manuscripts.</summary>
     public const string ImprintHeadPack = "imprint-head";
-
-    /// <summary>The kind of the root: the house's head office.</summary>
-    public const string HeadOffice = "head-office";
-
-    /// <summary>An imprint of the house.</summary>
-    public const string Imprint = "imprint";
 
     /// <summary>The keys of the manuscripts that a role of the organization can hold.</summary>
     public static IReadOnlyList<Permission> Permissions { get; } =
@@ -75,8 +69,7 @@ public static class PressCatalogue
         Packs:
         [
             new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptKeys.Read, ManuscriptKeys.Edit], Order: 20),
-        ],
-        UnitKinds: [new(HeadOffice, "Head office", 10), new(Imprint, "Imprint", 20)]);
+        ]);
 
     /// <summary>The catalogue as the application runs with it.</summary>
     public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, Permissions);

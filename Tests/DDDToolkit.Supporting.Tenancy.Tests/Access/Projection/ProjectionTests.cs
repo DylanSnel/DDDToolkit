@@ -34,7 +34,7 @@ public class ProjectionTests
     {
         var harbor = new HarborBuilder().Build();
         var organization = harbor.Organization;
-        var southBay = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), harbor.South, "South Bay", "site", TenantShape.Hierarchical).Id;
+        var southBay = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), harbor.South, "South Bay", TenantShape.Hierarchical).Id;
         var before = Pairs(organization);
 
         organization.MoveUnit<SeatId>(harbor.North, southBay);

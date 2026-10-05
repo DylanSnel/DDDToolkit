@@ -18,6 +18,7 @@ global using Examples.Tenancy.Catalogue;
 // the API projects alone, and names nothing of a module's infrastructure project: no context, no store.
 global using Examples.Tenancy.Tenants.Api;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
+global using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
 global using Examples.Tenancy.Projects.Api;
 global using Examples.Tenancy.Projects.Contracts.Keys;
 global using Examples.Tenancy.Projects.Contracts.ValueObjects;

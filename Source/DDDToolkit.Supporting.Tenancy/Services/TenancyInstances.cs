@@ -45,7 +45,8 @@ public static class TenancyInstances
 
     /// <summary>
     /// A new organization with its root, through the application's own unit class, and
-    /// <see cref="OrganizationUnitAdded{TTenantId, TUnitId, TSeatId}"/> raised for the root.
+    /// <see cref="OrganizationUnitAdded{TTenantId, TUnitId, TSeatId}"/> raised for the root. A field the application
+    /// added to its unit class is set on <c>organization.Root</c> afterwards.
     /// </summary>
     /// <typeparam name="TOrganization">The application's organization class.</typeparam>
     /// <typeparam name="TTenantId">The application's tenant id, which the organization shares.</typeparam>
@@ -56,11 +57,10 @@ public static class TenancyInstances
     /// <param name="name">The tenant's name.</param>
     /// <param name="rootId">The root's id.</param>
     /// <param name="rootName">The root's name.</param>
-    /// <param name="rootKind">The root's kind; whether the application knows it is the caller's to check.</param>
     /// <param name="by">Who makes it, for its creation event; <see langword="null"/> when nobody is named.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>tenancy.name-invalid</c> or <c>tenancy.kind-invalid</c>.</exception>
+    /// <exception cref="Exceptions.RefusalException"><c>tenancy.name-invalid</c>, for the tenant's name or the root's.</exception>
     public static TOrganization NewOrganization<TOrganization, TTenantId, TUnit, TUnitId, TSeatId>(
-        TTenantId id, string name, TUnitId rootId, string rootName, string rootKind, TenancyActor<TSeatId>? by = null)
+        TTenantId id, string name, TUnitId rootId, string rootName, TenancyActor<TSeatId>? by = null)
         where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TUnit : OrganizationUnitEntity<TUnitId>
@@ -68,7 +68,7 @@ public static class TenancyInstances
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     {
         var organization = HostInstances<TOrganization>.New();
-        organization.InitializeNew(id, name, rootId, rootName, rootKind, by);
+        organization.InitializeNew(id, name, rootId, rootName, by);
         return organization;
     }
 

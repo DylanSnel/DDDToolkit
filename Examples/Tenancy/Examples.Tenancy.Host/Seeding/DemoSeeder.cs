@@ -92,7 +92,8 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     /// <summary>
     /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per pack of its shape,
     /// and its administrator's seat, placed at the root and granted the administrators' role of that shape there.
-    /// <see langword="false"/> when its slug is taken.
+    /// The root's kind is the application's own field, so the package hands the root to a callback that sets it, in
+    /// the save that provisions. <see langword="false"/> when its slug is taken.
     /// </summary>
     private async Task<bool> ProvisionAsync(DemoTenant tenant, CancellationToken cancellationToken)
     {
@@ -104,13 +105,13 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
                     tenant.Name,
                     tenant.Shape,
                     tenant.Name,
-                    DemoTenant.RootKind,
                     tenant.Administrator.Person.Id,
                     tenant.Administrator.Person.Name,
                     TenantId: tenant.Id,
                     RootId: tenant.Root,
                     AdminSeatId: tenant.Administrator.Id,
-                    RoleIds: tenant.Roles),
+                    RoleIds: tenant.Roles,
+                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
                 cancellationToken));
             return true;
         }
@@ -174,10 +175,11 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         // the module has a command of its own for it, which only system work in the tenant may send.
         await SendAsync(new MarkTenantAsDemo(), cancellationToken);
 
+        // Each with its kind, set on the new unit in the save that adds it, as the module's command sets it.
         foreach (var unit in tenant.Units)
         {
             await RunAsync<SampleTenancy.OrganizationCommands>(organization
-                => organization.AddUnitAsync(unit.Parent, unit.Name, unit.Kind, cancellationToken, unit.Id));
+                => organization.AddUnitAsync(unit.Parent, unit.Name, cancellationToken, unit.Id, added => added.SetKind(unit.Kind)));
         }
 
         foreach (var seat in tenant.Seats)

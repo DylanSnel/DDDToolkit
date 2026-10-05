@@ -752,8 +752,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the organization tree as a closure table and the access questions as Entity Framework queries, on every
   provider; and `DDDToolkit.Supporting.Tenancy.Postgres` holds the same questions as SQL functions and row level
   security policies. An application declares its own ids and a class of its own for each of the package's
-  aggregates, the tenant, the organization, the seat and the role, and supplies a catalogue: the permission
-  keys, the role packs a tenant starts with and the kinds of unit. The use cases provision a tenant, place
+  aggregates, the tenant, the organization, the seat and the role, and may add to the catalogue: the role packs
+  a tenant starts with, keys of its own and marks on keys that manage access. The use cases provision a tenant, place
   seats, give roles and change them, each held to who may give a role, and a tenant keeps an administrator.
   `TenantSelection` finds the seat a request's verified identity has in the tenant the request names,
   `ScopeToTenant` and `UseTenancy` keep an entity's rows to a tenant with a filter and a save check, and a
@@ -773,11 +773,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy: an administrators' pack when the application declares none.** A catalogue that declares no
   administrators' pack at all gets `TenancyPacks.DefaultAdministrators` from `TenancyCatalogue.Build`: key
   `administrator`, named Administrator, for every shape, seeded on provision and listed first, with no keys, so
-  it holds every live key, one a module adds later included. A tenant's first seat is given its role, so the
-  smallest catalogue is the kinds of unit and the keys:
-  `new ApplicationCatalogue(UnitKinds: [...], Permissions: ...)`, through a new constructor without packs, or
-  `Packs: []` as before; calls that name packs are unchanged, and only `new([], [])`, which names no kind of
-  unit and was refused by `Build` anyway, no longer compiles. A catalogue that declares an administrators' pack
+  it holds every live key, one a module adds later included. A tenant's first seat is given its role, so a
+  catalogue need not name a pack: `new ApplicationCatalogue(Permissions: ...)`, or `Packs: []` as before, and
+  calls that name packs are unchanged. A catalogue that declares an administrators' pack
   for one shape and not the other is still refused, and the problem now says the default is added only when
   none is declared. While the default is added, a pack of the application's that has its key, or one of its
   names ignoring case, Administrator or the Dutch Beheerder, is refused, with the fix: rename the pack, or
@@ -788,6 +786,46 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   key and `EnsurePoliciesAreInPlaceAsync` agrees with the catalogue the application runs. An application that
   switches to it keeps its tenants' old administrators' roles; a change of shape then copies the default, and
   is refused while the tenant has a role of the same name.
+- **Tenancy: a unit has no kind, and an application needs no catalogue.** No access rule read a unit's kind:
+  Tenancy only checked that it was one of the catalogue's and kept it. So the package keeps none, and an
+  application that tells its units apart adds a field of its own to its unit class, an enum say, set in a
+  callback of the use case that makes the unit: `TenantToProvision.ConfigureRoot` for the root, next to
+  `ConfigureTenant` and `ConfigureFirstSeat`, and the new `configure` of `OrganizationCommands.AddUnitAsync`
+  (and of `OrganizationAggregate.AddUnit`) for every other unit. Each runs on the application's own class
+  before the save, so the field is written with the unit, the class's rules judge it there, and a callback
+  that throws saves nothing; `configure` runs before the organization takes the unit in, so one that throws
+  leaves the organization as it was, for a later save in the same scope too. The directory's `ListUnitsAsync`
+  and `UnitsByIdAsync` take a view, `(UnitSummary, TUnit) => TView`, so an application answers its own field
+  beside what Tenancy keeps from the units the directory read, with no read more; the forms without one still
+  answer `UnitSummary`. With the kinds gone, and the default administrators' pack above, every part of
+  `ApplicationCatalogue` is optional, `new ApplicationCatalogue()` included, and so is
+  `TenancyOptions.Catalogue`: left unset, Tenancy builds the catalogue from its own keys and the modules'
+  contributions, and every tenant starts with the default administrators' role. An export that builds the
+  catalogue without the registration calls `TenancyCatalogue.Build(contributed)`, the same catalogue. A
+  catalogue is for what Tenancy decides access with and cannot know by itself: the packs a tenant starts with,
+  keys no module owns, and marks on keys that manage access. See
+  [What the catalogue is for](docs/tenancy.md#what-the-catalogue-is-for) and
+  [The kind of a unit](docs/tenancy.md#the-kind-of-a-unit). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  - Drop `UnitKinds` from `ApplicationCatalogue`, and the `UnitKind` records with it; `Packs` may go too when
+    it is empty. A positional `new ApplicationCatalogue(packs, kinds, ...)` becomes `new(packs, ...)`.
+  - Drop the root's kind from `TenantToProvision` (the fifth argument, `RootKind`) and the kind from
+    `AddUnitAsync(parent, name, kind, ...)`, `OrganizationAggregate.AddUnit` and
+    `TenancyInstances.NewOrganization`. To keep a kind, add the field to your unit class and set it with
+    `ConfigureRoot: root => root.SetKind(...)` and `configure: unit => unit.SetKind(...)`.
+  - `OrganizationUnitEntity.Kind`, `MaxKindLength`, its rule `KindIsSet`, `UnitSummary.Kind`,
+    `OrganizationUnitAdded.Kind`, `TenancyCatalogue.UnitKinds` and `KnowsUnitKind`, and the refusals
+    `tenancy.kind-invalid` and `tenancy.unknown-unit-kind` are gone. An event already stored keeps its `Kind`
+    in its payload.
+  - `AddTenancy()` no longer maps the units' `Kind` column, which holds your catalogue's keys. Add a migration.
+    Without a field of that name on your unit class, it drops the column and the kinds with it. To keep them,
+    add a field named `Kind` and map it as text (`HaveConversion<string>()` or a converter of your own): mapped
+    as a number, the migration cannot turn the stored keys into integers. Then make every stored key read as a
+    member of the field's enum, because Entity Framework refuses a value the enum has none for, and with it
+    every load of that tenant's organization. Either store the enum by the keys you had, as the sample's
+    `UnitKindKeyConverter` does for keys that are its members' names in lower case (a read ignores case), or
+    have the migration rewrite the keys to the members' names before the column changes
+    (`UPDATE ... SET "Kind" = 'HeadOffice' WHERE "Kind" = 'head-office'`), as a role that row level security
+    lets through: on Postgres the package's export forces it on the table, so its owner is held to it as well.
 - `TenancyUseCases<…>.IStore` is what the use cases ask of a storage; the Entity Framework store implements it,
   and so does a store of your own. Among its members: `ListSeatsAsync(tenant, only, ...)`, the tenant's seats as
   the directory shows them, all or the ones among the ids given, read from the seats themselves and never with
@@ -1655,6 +1693,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyAccess.RequiresOperator()`. `AccessDeclarationTests` holds every request to what it declares, finds no
   request anyone may send, and holds every request handed to the package to a requirement the use case asks
   first; `RequestPipelineTests` holds the door and the use case to refusing a caller alike.
+- **The Tenancy sample keeps a unit's kind itself.** Its `OrganizationUnit` has a `UnitKind` enum (company,
+  region, area, site), stored by its key in lower case (`UnitKindKeyConverter`), as the rows from before hold
+  it and as REST spells it; `AddOrganizationUnit` sets it in the package's callback, and the seeder sets the
+  root's when it provisions. Its queries answer a `UnitListing`, made by the view the directory's unit queries
+  take from the units the directory read, so `GET /tenancy/units`, the directory's `/tenancy/directory/units`
+  and GraphQL's `OrganizationUnit` still carry `kind`, with no read more; in GraphQL it is now the enum
+  `UnitKind`, and `organizationUnitAdd` takes it as one, optional. A kind the enum does not have is a 400
+  `invalid-request` where it was `tenancy.unknown-unit-kind`, and the catalogue's answer has no `unitKinds`.
+  The migration `UnitKindAsEnum` makes the column the enum's, nullable, and leaves the stored keys as they are;
+  its exported file follows.
 
 #### Docs
 

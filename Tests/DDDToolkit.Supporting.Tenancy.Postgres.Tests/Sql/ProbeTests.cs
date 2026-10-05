@@ -442,7 +442,6 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                     "Harbor Works",
                     TenantShape.Hierarchical,
                     "Harbor",
-                    "company",
                     TenancySeed.Ada.Identity,
                     TenancySeed.Ada.Name,
                     TenantId: TenancySeed.Harbor,

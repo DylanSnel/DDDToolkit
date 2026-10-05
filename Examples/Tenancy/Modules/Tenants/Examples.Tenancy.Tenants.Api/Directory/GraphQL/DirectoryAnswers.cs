@@ -1,4 +1,5 @@
 using Examples.Tenancy.Tenants.Application.Directory.Queries;
+using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Mediator;
 
@@ -18,8 +19,8 @@ internal static class DirectoryAnswers
     public static async Task<SampleTenancy.SeatSummary?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
         => (await sender.Send(new SeatsById([id]), cancellationToken)).FirstOrDefault();
 
-    /// <summary>The unit as the directory answers it now.</summary>
-    public static async Task<SampleTenancy.UnitSummary?> UnitNowAsync(this ISender sender, OrganizationUnitId id, CancellationToken cancellationToken)
+    /// <summary>The unit as the directory answers it now, with its kind.</summary>
+    public static async Task<UnitListing?> UnitNowAsync(this ISender sender, OrganizationUnitId id, CancellationToken cancellationToken)
         => (await sender.Send(new OrganizationUnitsById([id]), cancellationToken)).FirstOrDefault();
 
     /// <summary>The role as the directory answers it now, with what the tenant uses it for.</summary>

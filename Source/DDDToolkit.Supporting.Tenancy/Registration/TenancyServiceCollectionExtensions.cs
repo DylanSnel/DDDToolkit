@@ -19,16 +19,16 @@ public static class TenancyServiceCollectionExtensions
     /// Registers the catalogue, the access answers, tenant selection and the use cases, everything except
     /// the store and the seat directory.
     /// <list type="bullet">
-    /// <item>The catalogue is built once, from <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.Catalogue"/>
-    /// and every <see cref="PermissionContribution"/>, the first time it is asked for; resolve it at start-up to
-    /// have a catalogue that does not hold together stop the application there.</item>
+    /// <item>The catalogue is built once, from <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.Catalogue"/>,
+    /// or from none when it is not set, and every <see cref="PermissionContribution"/>, the first time it is asked
+    /// for; resolve it at start-up to have a catalogue that does not hold together stop the application there.</item>
     /// <item>The answers are one for the application; selection and the use cases are made per scope.</item>
     /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
     /// <item>A <see cref="TimeProvider"/> registered before stays; otherwise the system clock is used.</item>
     /// </list>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets the options; every one but the token roles that hold seats is required.</param>
+    /// <param name="configure">Sets the options; the ways to make each id are required, the rest have defaults.</param>
     /// <exception cref="InvalidOperationException">
     /// An option is not set, and every missing one is named; or a token role is an operator's and seated as well.
     /// </exception>
@@ -75,7 +75,7 @@ public static class TenancyServiceCollectionExtensions
         // an operator's. A host that knows its callers registered its own already.
         services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
         services.AddSingleton(serviceProvider => TenancyCatalogue.Build(
-            options.Catalogue!,
+            options.Catalogue ?? new ApplicationCatalogue(),
             serviceProvider.GetServices<PermissionContribution>().SelectMany(contribution => contribution.Permissions)));
         services.AddSingleton<ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>>();
         services.AddScoped<TenantSelection<TTenantId, TSeatId>>();

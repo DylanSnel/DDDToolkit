@@ -7,8 +7,8 @@ using Microsoft.AspNetCore.Routing;
 namespace Examples.Tenancy.Tenants.Api.Catalogue.Rest;
 
 /// <summary>
-/// The permission catalogue over HTTP: the keys, the role packs and the kinds of unit the application knows. The
-/// route sends the one query of the application project's <c>Catalogue</c> feature.
+/// The permission catalogue over HTTP: the keys and the role packs the application knows. The route sends the one
+/// query of the application project's <c>Catalogue</c> feature.
 /// </summary>
 /// <remarks>
 /// Like every route of this project, it decides nothing and takes only the sender;
@@ -48,6 +48,5 @@ internal static class CatalogueEndpoints
             pack.Shape,
             pack.Administers,
         }),
-        unitKinds = catalogue.UnitKinds.Select(kind => new { kind.Key, kind.Name }),
     };
 }

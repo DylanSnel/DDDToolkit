@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
 using Examples.Tenancy.Tenants.Infrastructure.Converters;
 using Examples.Hosting;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -15,8 +16,9 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// <remarks>
 /// A plain context. Every table comes from one generated call, <c>AddTenancy()</c>, closed over this module's
 /// classes and ids, which the domain and contracts projects declare; the fields and rules the classes add
-/// (<see cref="OrganizationUnit.CostCentre"/>, <see cref="Seat.JobTitle"/>) are mapped by the toolkit's
-/// conventions like any aggregate's. Tenant isolation, the save check and the rights writer arrive through
+/// (<see cref="OrganizationUnit.Kind"/>, <see cref="OrganizationUnit.CostCentre"/>, <see cref="Seat.JobTitle"/>)
+/// are mapped by the toolkit's conventions like any aggregate's, the kind by its key
+/// (<see cref="UnitKindKeyConverter"/>). Tenant isolation, the save check and the rights writer arrive through
 /// <c>UseTenancy</c> on the options, which the module passes to
 /// <see cref="PostgresPools.AddContext{TContext,TFactory}"/>.
 /// <para>
@@ -84,5 +86,11 @@ public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : D
         // The four ids. The contracts project declares them without Entity Framework, so this project's generated
         // registration stores them, through SingleValueConverter, as the module's own.
         configurationBuilder.AddTenantsConverters();
+
+        // What kind of unit a unit is, the unit class's own field, by its key: a row read by hand says region, not 1,
+        // a kind added later never renumbers the ones before it, and the rows written while the kind was a key of
+        // the package's catalogue read the same as the rows written since. A new application that has no such rows
+        // writes HaveConversion<string>() here, and stores the name.
+        configurationBuilder.Properties<UnitKind>().HaveConversion<UnitKindKeyConverter>().HaveMaxLength(16);
     }
 }

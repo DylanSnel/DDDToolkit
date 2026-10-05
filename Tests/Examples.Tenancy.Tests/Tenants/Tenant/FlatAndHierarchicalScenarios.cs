@@ -50,8 +50,11 @@ public sealed class FlatAndHierarchicalScenarios(SampleHosts sample) : IClassFix
         var id = (await added.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("id").GetGuid();
 
         var units = await tove.GetFromJsonAsync<JsonElement>("/tenancy/units", Cancellation);
-        units.EnumerateArray().Should().ContainSingle(unit => unit.GetProperty("id").GetGuid() == id)
-            .Which.GetProperty("path").GetString().Should().Be("Meadow Gardens / Greenhouse");
+        var greenhouse = units.EnumerateArray().Should().ContainSingle(unit => unit.GetProperty("id").GetGuid() == id).Which;
+        greenhouse.GetProperty("path").GetString().Should().Be("Meadow Gardens / Greenhouse");
+        greenhouse.GetProperty("kind").GetString().Should().Be("site", "the kind the request gave is the application's own field, saved with the unit");
+        units.EnumerateArray().Should().ContainSingle(unit => unit.GetProperty("id").GetGuid() == Meadow.Root.Value)
+            .Which.GetProperty("kind").GetString().Should().Be("company", "the root's kind was set when the tenant was provisioned");
 
         var me = await tove.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("tenant").GetProperty("shape").GetString().Should().Be("hierarchical");

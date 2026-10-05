@@ -1,4 +1,5 @@
 using Examples.Tenancy.Tenants.Api.Directory.GraphQL;
+using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using HotChocolate;
 using HotChocolate.CostAnalysis.Types;
@@ -34,7 +35,7 @@ internal static partial class InvitationType
 
     /// <summary>The unit the seat would be placed in.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<SampleTenancy.UnitSummary?> GetUnitAsync(
+    public static async Task<UnitListing?> GetUnitAsync(
         [Parent] SampleTenancy.OpenInvitation<InvitationId> invitation,
         IOrganizationUnitByIdDataLoader units,
         CancellationToken cancellationToken)

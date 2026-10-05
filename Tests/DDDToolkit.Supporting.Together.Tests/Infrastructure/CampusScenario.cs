@@ -251,7 +251,7 @@ public sealed class CampusScenario
 
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
             new CampusTenancy.TenantToProvision(
-                InAlder, "Alder College", TenantShape.Hierarchical, "Alder College", CampusCatalogue.College, Ada.Identity, Ada.Name,
+                InAlder, "Alder College", TenantShape.Hierarchical, "Alder College", Ada.Identity, Ada.Name,
                 TenantId: Alder,
                 RootId: AlderRoot,
                 AdminSeatId: AdaSeat,
@@ -264,16 +264,16 @@ public sealed class CampusScenario
             cancellation));
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
             new CampusTenancy.TenantToProvision(
-                InBirch, "Birch College", TenantShape.Flat, "Birch College", CampusCatalogue.College, Bea.Identity, Bea.Name,
+                InBirch, "Birch College", TenantShape.Flat, "Birch College", Bea.Identity, Bea.Name,
                 TenantId: Birch,
                 RootId: BirchRoot,
                 AdminSeatId: BeaSeat,
                 RoleIds: new Dictionary<string, RoleId> { [CampusCatalogue.LabChiefPack] = BirchLabChief }),
             cancellation));
 
-        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Science", CampusCatalogue.Faculty, cancellation, Science));
-        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(Science, "Physics", CampusCatalogue.Institute, cancellation, Physics));
-        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Arts", CampusCatalogue.Faculty, cancellation, Arts));
+        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Science", cancellation, Science));
+        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(Science, "Physics", cancellation, Physics));
+        await services.BySystemInAsync(Alder, provider => provider.Organization().AddUnitAsync(AlderRoot, "Arts", cancellation, Arts));
 
         await GiveASeatAsync(services, Alder, Dee, DeeSeat, Science, AlderDean);
         await GiveASeatAsync(services, Alder, Owen, OwenSeat, Physics);

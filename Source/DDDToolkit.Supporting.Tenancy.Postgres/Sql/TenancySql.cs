@@ -751,7 +751,7 @@ internal static class TenancySql
                 Answered.Whole(paths, "Distance"),
             ]);
 
-        // Not the name and not the kind: no access rule reads either.
+        // Not the name, and no column the application added: no access rule reads them.
         yield return (
             TenancyFunctionNames.TenantUnits,
             units,

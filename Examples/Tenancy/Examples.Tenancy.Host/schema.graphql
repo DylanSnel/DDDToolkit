@@ -161,7 +161,6 @@ type BrokenRulesError implements CodedError {
 type Catalogue {
   packs: [RolePack!]!
   permissions: [Permission!]!
-  unitKinds: [UnitKind!]!
 }
 
 type ChangedBy {
@@ -325,7 +324,7 @@ type KeyOfMine {
 type OrganizationUnit {
   depth: Int
   id: UUID!
-  kind: String
+  kind: UnitKind
   name: String
   parentId: UUID
   path: String
@@ -688,11 +687,6 @@ type TenantShapeChangePayload {
   shape: TenantShape
 }
 
-type UnitKind {
-  key: String!
-  name: String!
-}
-
 type UnitPath {
   id: UUID!
   path: String!
@@ -973,7 +967,7 @@ input InvitationCancelInput {
 }
 
 input OrganizationUnitAddInput {
-  kind: String!
+  kind: UnitKind
   name: String!
   parentId: UUID!
 }
@@ -1215,6 +1209,13 @@ enum TenantStatus {
   suspended
   "Stopped for good, with a reason. Nothing changes a closed tenant."
   closed
+}
+
+enum UnitKind {
+  company
+  region
+  area
+  site
 }
 
 """

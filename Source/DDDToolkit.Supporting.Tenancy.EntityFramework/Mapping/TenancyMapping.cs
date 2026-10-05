@@ -18,7 +18,7 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// keyless row in a consumer's.
 /// <para>
 /// A row has fewer columns than its table: it carries what an access rule reads, and no text that is shown to
-/// people. So a seat's display name, a unit's name and kind and a role's name are mapped with the tables alone,
+/// people. So a seat's display name, a unit's name and a role's name are mapped with the tables alone,
 /// and the shared settings name only what both have.
 /// </para>
 /// <list type="bullet">
@@ -121,7 +121,6 @@ internal static class TenancyMapping
             unit.HasIndex(TenantColumn);
             unit.HasIndex(row => row.ParentId);
             unit.Property(row => row.Name).HasMaxLength(OrganizationUnitEntity<TUnitId>.MaxNameLength);
-            unit.Property(row => row.Kind).HasMaxLength(OrganizationUnitEntity<TUnitId>.MaxKindLength);
             UnitColumns<TTenantId, TUnitId>(name => unit.Property(name));
 
             // Last, once the table and its columns have their names: the index's condition names a column.
@@ -356,7 +355,7 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The units, read as rows, without their names and kinds: from a view over the units' table, or from
+    /// The units, read as rows, without their names: from a view over the units' table, or from
     /// Tenancy's function.
     /// </summary>
     internal static void UnitRows<TTenantId, TUnitId>(EntityTypeBuilder<OrganizationUnitRow<TTenantId, TUnitId>> unit, TenancyTableNames tables, ReadModel read)
@@ -476,7 +475,8 @@ internal static class TenancyMapping
         => row.HasNoKey().ToTable((string?)null).ToView(null);
 
     /// <summary>
-    /// The columns a unit's owned type and its row share: the status. The name and the kind are the table's alone.
+    /// The columns a unit's owned type and its row share: the status. The name is the table's alone, and so is
+    /// every column of the application's own unit class.
     /// </summary>
     private static void UnitColumns<TTenantId, TUnitId>(Func<string, PropertyBuilder> column)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>

@@ -196,13 +196,13 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
                     harbor.Name,
                     harbor.Shape,
                     harbor.Name,
-                    DemoTenant.RootKind,
                     harbor.Administrator.Person.Id,
                     harbor.Administrator.Person.Name,
                     TenantId: harbor.Id,
                     RootId: harbor.Root,
                     AdminSeatId: harbor.Administrator.Id,
-                    RoleIds: harbor.Roles),
+                    RoleIds: harbor.Roles,
+                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
                 Cancellation);
         }
 

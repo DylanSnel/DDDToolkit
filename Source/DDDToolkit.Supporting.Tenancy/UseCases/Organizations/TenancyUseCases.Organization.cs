@@ -14,7 +14,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// </para>
     /// </summary>
     /// <param name="store">Where the organization is loaded and saved.</param>
-    /// <param name="catalogue">The unit kinds, and the keys asked for.</param>
+    /// <param name="catalogue">The keys asked for.</param>
     /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     public sealed class OrganizationCommands(
@@ -26,29 +26,40 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <summary>Adds a unit below <paramref name="parent"/>.</summary>
         /// <param name="parent">The unit it hangs under.</param>
         /// <param name="name">Its name.</param>
-        /// <param name="kind">Its kind, one of the application's unit kinds.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <param name="id">Its id, for imports and seeding; a new one otherwise.</param>
+        /// <param name="configure">
+        /// Sets the fields the application added to its unit class, such as what kind of unit it is, on the new
+        /// unit once the caller and the tree are checked and before the organization takes the unit in, so they are
+        /// saved in the same transaction and the class's own rules judge them there. When it throws, the unit is not
+        /// added: nothing is saved, by this call or by a later save in the same scope.
+        /// </param>
         /// <returns>The new unit's id.</returns>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.UnitsManage"/> at the parent,
-        /// <c>tenancy.unknown-unit-kind</c>, and what the organization refuses, <c>tenancy.flat-tenant</c> first.
+        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.UnitsManage"/> at the parent, and what the
+        /// organization refuses, <c>tenancy.flat-tenant</c> first.
         /// </exception>
         /// <exception cref="ArgumentException">
         /// <paramref name="id"/> is already a unit's: a mistake in the import or seeding that gave it, not a
         /// refusal.
         /// </exception>
-        public async Task<TUnitId> AddUnitAsync(TUnitId parent, string name, string kind, CancellationToken cancellationToken, TUnitId? id = null)
+        public async Task<TUnitId> AddUnitAsync(
+            TUnitId parent,
+            string name,
+            CancellationToken cancellationToken,
+            TUnitId? id = null,
+            Action<TUnit>? configure = null)
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
             await gate.RequireAtAsync(TenancyKeys.UnitsManage, parent, cancellationToken).ConfigureAwait(false);
-            RequireUnitKind(catalogue, kind);
 
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var unit = organization.AddUnit(id ?? options.Checked().NewUnitId!(), parent, name, kind, tenant.Shape, gate.By);
-
+            // The organization runs the callback before it takes the unit in: one that throws leaves the tracked
+            // organization as it was, so no later save in this scope writes the unit without the application's
+            // fields. What it sets is written with the unit.
+            var unit = organization.AddUnit(id ?? options.Checked().NewUnitId!(), parent, name, tenant.Shape, gate.By, configure);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
             return unit.Id;
         }

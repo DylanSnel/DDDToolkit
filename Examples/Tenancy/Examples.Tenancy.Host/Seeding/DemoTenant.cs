@@ -31,8 +31,8 @@ public sealed record DemoTenant(
     IReadOnlyList<DemoPerson> Suspended,
     IReadOnlyList<DemoProject> Projects)
 {
-    /// <summary>The kind of the root unit.</summary>
-    public const string RootKind = "company";
+    /// <summary>The kind of the root unit, which provisioning sets through its callback for the root.</summary>
+    public const UnitKind RootKind = UnitKind.Company;
 
     /// <summary>
     /// The key of the administrators' pack of this tenant's shape: the pack whose role provisioning grants the

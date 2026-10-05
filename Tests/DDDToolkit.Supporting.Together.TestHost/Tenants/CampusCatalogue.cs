@@ -7,8 +7,8 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace Campus.Tenants;
 
 /// <summary>
-/// The application's catalogue: the roles a college starts with, the kinds of unit it has, and the keys of its
-/// courses and labs that a role of the organization can hold. A key that is in it can be put into a role of
+/// The application's catalogue: the roles a college starts with, and the keys of its courses and labs that a
+/// role of the organization can hold. A key that is in it can be put into a role of
 /// the organization, and so be held at a faculty for every course or lab below it; a key that is not, such as
 /// dissolving a course, is never held that way.
 /// </summary>
@@ -28,15 +28,6 @@ public static class CampusCatalogue
     /// college's access history, which is no key a lab's member gets by it.
     /// </summary>
     public const string LabDemonstratorPack = "lab-demonstrator";
-
-    /// <summary>The kind of the root: the college itself.</summary>
-    public const string College = "college";
-
-    /// <summary>A faculty of the college.</summary>
-    public const string Faculty = "faculty";
-
-    /// <summary>An institute of a faculty.</summary>
-    public const string Institute = "institute";
 
     /// <summary>
     /// The keys of the courses and the labs that the organization's roles can hold: what the module adds to
@@ -60,8 +51,7 @@ public static class CampusCatalogue
             new(DeanPack, "Dean", "Runs a faculty", [CourseKeys.See, CourseKeys.Grade, LabKeys.See, LabKeys.Equip], Order: 20),
             new(LabChiefPack, "Lab chief", "Is responsible for a lab", [LabKeys.See, LabKeys.Equip, LabKeys.Calibrate], Order: 30),
             new(LabDemonstratorPack, "Lab demonstrator", "Shows a lab's equipment", [LabKeys.See, LabKeys.Equip, TenancyKeys.HistoryView], Order: 40),
-        ],
-        UnitKinds: [new(College, "College", 10), new(Faculty, "Faculty", 20), new(Institute, "Institute", 30)]);
+        ]);
 
     /// <summary>The catalogue as the application runs with it, for whatever is written before its services exist.</summary>
     public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, Permissions);

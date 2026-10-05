@@ -16,7 +16,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// </para>
     /// </summary>
     /// <param name="store">Where the tenant is loaded and saved.</param>
-    /// <param name="catalogue">The packs a new tenant is given, and the unit kinds.</param>
+    /// <param name="catalogue">The packs a new tenant is given.</param>
     /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     /// <param name="packTexts">
@@ -46,9 +46,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <see cref="TenantToProvision.Language"/> and an <see cref="IRolePackTexts"/> registered, in that
         /// language. The role of <see cref="TenancyPacks.DefaultAdministrators"/>, for an application that declares
         /// no administrators' pack, is named in that language by the application's texts, or else by the package's
-        /// own, in English or Dutch. The fields the application added to its tenant and seat classes are set by
-        /// <see cref="TenantToProvision.ConfigureTenant"/> and <see cref="TenantToProvision.ConfigureFirstSeat"/>,
-        /// before the tenant is activated and in the same save.
+        /// own, in English or Dutch. The fields the application added to its tenant, unit and seat classes are set
+        /// by <see cref="TenantToProvision.ConfigureTenant"/>, <see cref="TenantToProvision.ConfigureRoot"/> and
+        /// <see cref="TenantToProvision.ConfigureFirstSeat"/>, before the tenant is activated and in the same save.
         /// </para>
         /// <para>
         /// Only system work outside any tenant provisions one, and it does not do so with that power: once it
@@ -62,10 +62,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <param name="command">What to provision.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>access.system-only</c> for a seat, <c>tenancy.slug-taken</c>, <c>tenancy.unknown-unit-kind</c>
-        /// for the root's kind, <c>tenancy.role-name-taken</c> when two packs are named alike in the tenant's
-        /// language, and what the aggregates refuse: an invalid name, a pack's translated one included, or an
-        /// empty identity.
+        /// <c>access.system-only</c> for a seat, <c>tenancy.slug-taken</c>, <c>tenancy.role-name-taken</c> when two
+        /// packs are named alike in the tenant's language, and what the aggregates refuse: an invalid name, a pack's
+        /// translated one included, or an empty identity.
         /// </exception>
         /// <exception cref="Exceptions.InvalidValueObjectException">The slug does not follow <see cref="TenantSlug.Pattern"/>.</exception>
         /// <exception cref="ArgumentException"><see cref="TenantToProvision.RoleIds"/> names a pack the tenant is not given, or gives one id twice.</exception>
@@ -110,12 +109,10 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
                 throw TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", slug.Value));
             }
 
-            RequireUnitKind(catalogue, command.RootKind);
-
             var rootId = command.RootId ?? ids.NewUnitId!();
             var tenant = TenancyInstances.NewTenant<TTenant, TTenantId, TSeatId>(tenantId, slug, command.Shape, by);
             var organization = TenancyInstances.NewOrganization<TOrganization, TTenantId, TUnit, TUnitId, TSeatId>(
-                tenantId, command.Name, rootId, command.RootName, command.RootKind, by);
+                tenantId, command.Name, rootId, command.RootName, by);
 
             // The catalogue keeps its packs' own names apart. Names in another language are the application's,
             // so they are held apart here, the way a role made by hand is held apart from the others.
@@ -141,6 +138,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
             // The application's own fields, before anything is handed to the store: a callback that throws
             // leaves nothing to save, and what it sets is written with everything else.
             command.ConfigureTenant?.Invoke(tenant);
+            command.ConfigureRoot?.Invoke(organization.Root);
             command.ConfigureFirstSeat?.Invoke(seat);
             tenant.Activate<TSeatId>(by);
 
@@ -351,18 +349,6 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
                         + string.Join(", ", group.Select(pair => pair.Key).Order(StringComparer.Ordinal)))) + ". Each role needs an id of its own.",
                     nameof(roleIds));
             }
-        }
-    }
-
-    /// <summary>
-    /// A unit kind must be one the application declares. A blank kind is left to the organization, which says
-    /// it is not a valid kind at all.
-    /// </summary>
-    private static void RequireUnitKind(TenancyCatalogue catalogue, string kind)
-    {
-        if (!string.IsNullOrWhiteSpace(kind) && !catalogue.KnowsUnitKind(kind))
-        {
-            throw TenancyRefusals.Of(TenancyRefusals.UnknownUnitKind, ("Kind", kind));
         }
     }
 }

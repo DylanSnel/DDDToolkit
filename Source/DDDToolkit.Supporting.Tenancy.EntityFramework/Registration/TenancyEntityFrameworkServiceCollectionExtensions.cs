@@ -23,9 +23,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <code>
     /// services.AddTenancy&lt;TenancyContext&gt;(options =&gt;
     /// {
-    ///     options.Catalogue = ShopCatalogue.Application;
     ///     options.NewTenantId = TenantId.CreateSequential;
     ///     // and the other three ids
+    ///     options.Catalogue = ShopCatalogue.Application;   // optional: packs, keys of its own, marks
     /// });
     /// services.AddDbContext&lt;TenancyContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
@@ -49,9 +49,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets Tenancy's options; every one is required.</param>
+    /// <param name="configure">Sets Tenancy's options; the ways to make each id are required, the rest have defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">An option is not set; every missing one is named.</exception>
+    /// <exception cref="InvalidOperationException">A required option is not set; every missing one is named.</exception>
     [TemplateRegistration]
     public static IServiceCollection AddTenancy<
         [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,

@@ -60,7 +60,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", "company", Guid.NewGuid(), "Dan", TenantId: Estuary),
+                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", Guid.NewGuid(), "Dan", TenantId: Estuary),
                 Cancellation));
         }
 
@@ -94,7 +94,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", "company", Guid.NewGuid(), "Dan", TenantId: Estuary),
+                    new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), "Dan", TenantId: Estuary),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -297,10 +297,11 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         {
             provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision(
-                    "estuary", "Estuary Works", TenantShape.Flat, "Estuary", "company", dan, "Dan",
+                    "estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan, "Dan",
                     TenantId: Estuary,
                     Language: dutch,
                     ConfigureTenant: tenant => tenant.MarkAsDemo(),
+                    ConfigureRoot: root => root.SetCostCentre("ES-001"),
                     ConfigureFirstSeat: seat => seat.ChangeJobTitle("Harbor master")),
                 Cancellation));
         }
@@ -312,6 +313,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
             (await scoped.Tenancy().Set<HostTenant>().AsNoTracking().SingleAsync(Cancellation)).IsDemo.Should().BeTrue();
             (await scoped.Tenancy().Set<HostSeat>().AsNoTracking().SingleAsync(seat => seat.Id == provisioned.AdminSeat, Cancellation))
                 .JobTitle.Should().Be("Harbor master");
+            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).Root.CostCentre.Should().Be("ES-001");
         });
 
         // A seat that manages the settings and no roles: the policy lets it add a role only as a copy of a pack, by the
@@ -329,6 +331,13 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
             .Should().ContainSingle(role => role.FromPack == HostCatalogue.SupervisorPack).Which;
         supervisor.Name.Should().Be("Afdelingshoofd");
         supervisor.Keys.Should().Equal(TenancyPostgres.Catalogue.Packs.Single(pack => pack.Key == HostCatalogue.SupervisorPack).Keys);
+
+        // A unit the administrator adds, under the policy a seat inserts a unit by, carries the application's own
+        // column as its callback set it.
+        var quay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Organization().AddUnitAsync(
+            provisioned.RootUnit, "Quay", Cancellation, configure: unit => unit.SetCostCentre("QY-001")));
+        await services.BySeat(dan, Estuary, provisioned.AdminSeat, async scoped =>
+            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(Cancellation)).FindUnit(quay)!.CostCentre.Should().Be("QY-001"));
     }
 
     /// <summary>The TestHost's packs in Dutch, as an application would read them from its own resources.</summary>
@@ -383,7 +392,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             return await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", shape, "Estuary", "company", administrator, "Dan", TenantId: Estuary),
+                new HostTenancy.TenantToProvision("estuary", "Estuary Works", shape, "Estuary", administrator, "Dan", TenantId: Estuary),
                 Cancellation));
         }
     }

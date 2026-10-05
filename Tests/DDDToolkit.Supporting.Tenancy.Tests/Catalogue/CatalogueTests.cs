@@ -18,9 +18,8 @@ public class CatalogueTests
 
     private static ApplicationCatalogue Application(
         IReadOnlyList<RolePack>? packs = null,
-        IReadOnlyList<UnitKind>? unitKinds = null,
         IReadOnlyList<Permission>? permissions = null)
-        => new(packs ?? [Administrators], unitKinds ?? [new UnitKind("company", "Company")], permissions ?? HostCatalogue.Permissions);
+        => new(packs ?? [Administrators], permissions ?? HostCatalogue.Permissions);
 
     private static IReadOnlyList<string> Problems(ApplicationCatalogue application, params Permission[] contributed)
         => FluentActions.Invoking(() => TenancyCatalogue.Build(application, contributed))
@@ -125,15 +124,15 @@ public class CatalogueTests
             catalogue.PacksFor(shape).Should().Equal([administrators], "a new tenant of every shape gets a copy");
         }
 
-        // The application leaves the packs out altogether, and names its kinds of unit and its keys.
-        var withoutPacks = TenancyCatalogue.Build(new ApplicationCatalogue(UnitKinds: [new UnitKind("company", "Company")], Permissions: HostCatalogue.Permissions), []);
+        // The application leaves the packs out altogether, and names its keys.
+        var withoutPacks = TenancyCatalogue.Build(new ApplicationCatalogue(Permissions: HostCatalogue.Permissions), []);
         withoutPacks.Packs.Should().BeEquivalentTo(catalogue.Packs, options => options.ComparingByMembers<RolePack>());
         withoutPacks.LiveKeys.Should().Equal(catalogue.LiveKeys).And.Contain(HostCatalogue.WidgetCreate);
 
-        var marked = new ApplicationCatalogue([new UnitKind("company", "Company")], HostCatalogue.Permissions, [HostCatalogue.WidgetCreate]);
+        var marked = new ApplicationCatalogue(Permissions: HostCatalogue.Permissions, AccessManagingKeys: [HostCatalogue.WidgetCreate]);
         marked.Packs.Should().BeEmpty();
         marked.Permissions.Should().BeSameAs(HostCatalogue.Permissions);
-        TenancyCatalogue.Build(marked, []).AccessManagingKeys.Should().Contain(HostCatalogue.WidgetCreate, "the keys it marks reach the catalogue as through the other constructor");
+        TenancyCatalogue.Build(marked, []).AccessManagingKeys.Should().Contain(HostCatalogue.WidgetCreate, "the keys it marks reach the catalogue without a pack of its own");
 
         New.Catalogue().HasDefaultAdministrators.Should().BeFalse("the host declares an administrators' pack of its own");
         New.Catalogue().Packs.Should().NotContain(pack => pack.Key == TenancyPacks.DefaultAdministratorsKey);
@@ -416,18 +415,24 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void Unit_kinds_are_present_and_unique()
+    public void An_application_that_adds_nothing_builds_from_the_empty_catalogue_and_its_modules_keys()
     {
-        Problems(Application(unitKinds: [])).Should().ContainSingle().Which.Should().Contain("no unit kind");
-        Problems(Application(unitKinds: [new UnitKind("site", "Site"), new UnitKind("site", "Place")]))
-            .Should().ContainSingle().Which.Should().Contain("more than once");
-        Problems(Application(unitKinds: [new UnitKind(" ", "Blank"), new UnitKind(new string('k', 65), "Too long")]))
-            .Should().HaveCount(2);
+        var gadgets = new Permission("gadget.use", "Gadgets", "Use gadgets");
 
-        var catalogue = New.Catalogue();
-        catalogue.UnitKinds.Select(kind => kind.Key).Should().Equal("company", "region", "site");
-        catalogue.KnowsUnitKind(" region ").Should().BeTrue();
-        catalogue.KnowsUnitKind("galaxy").Should().BeFalse();
+        var catalogue = TenancyCatalogue.Build(new ApplicationCatalogue(), [gadgets]);
+
+        catalogue.LiveKeys.Should().BeEquivalentTo([.. TenancyKeys.Permissions.Select(permission => permission.Key), gadgets.Key]);
+        catalogue.Packs.Should().ContainSingle().Which.Key.Should().Be(TenancyPacks.DefaultAdministratorsKey);
+        catalogue.Packs[0].Keys.Should().Contain(gadgets.Key, "the default administrators' pack holds every live key, a module's included");
+        catalogue.HasDefaultAdministrators.Should().BeTrue();
+        new ApplicationCatalogue().Packs.Should().BeEmpty("every part of it is optional, and a pack list that is not given is empty");
+
+        // An export that builds the catalogue without the registration names the modules' keys alone, and gets the same.
+        var fromTheModules = TenancyCatalogue.Build([gadgets]);
+        fromTheModules.LiveKeys.Should().Equal(catalogue.LiveKeys);
+        fromTheModules.AccessManagingKeys.Should().Equal(catalogue.AccessManagingKeys);
+        fromTheModules.Packs.Select(pack => (pack.Key, pack.Keys.Count)).Should().Equal(catalogue.Packs.Select(pack => (pack.Key, pack.Keys.Count)));
+        fromTheModules.HasDefaultAdministrators.Should().BeTrue();
     }
 
     [Fact]
@@ -457,13 +462,12 @@ public class CatalogueTests
                         new RolePack("watcher", "Watcher", "Looks", ["widget.fly"]),
                         new RolePack("flat-admin", "Flat administrator", "Runs a flat tenant", [], Shape: TenantShape.Flat, Administers: true),
                     ],
-                    UnitKinds: [],
                     Permissions: [new Permission("tenancy.extra", "Tenancy", "Taken")]),
                 [new Permission("Bad Key", "Gadgets", "Bad")]))
             .Should().Throw<TenancyCatalogueException>().Which;
 
-        exception.Problems.Should().HaveCount(5, "a tenancy key, a malformed key, an unknown pack key, no administrators' pack for a hierarchical tenant, and no unit kind");
-        exception.Message.Should().StartWith("The Tenancy catalogue has 5 problems:");
+        exception.Problems.Should().HaveCount(4, "a tenancy key, a malformed key, an unknown pack key, and no administrators' pack for a hierarchical tenant");
+        exception.Message.Should().StartWith("The Tenancy catalogue has 4 problems:");
         foreach (var problem in exception.Problems)
         {
             exception.Message.Should().Contain(problem);

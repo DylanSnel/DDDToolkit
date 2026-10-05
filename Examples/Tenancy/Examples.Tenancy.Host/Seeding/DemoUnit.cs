@@ -4,5 +4,5 @@ namespace Examples.Tenancy.Host.Seeding;
 /// <param name="Id">Its fixed id.</param>
 /// <param name="Parent">The unit it hangs below.</param>
 /// <param name="Name">Its name.</param>
-/// <param name="Kind">One of the catalogue's unit kinds.</param>
-public sealed record DemoUnit(OrganizationUnitId Id, OrganizationUnitId Parent, string Name, string Kind);
+/// <param name="Kind">What kind of unit it is: the application's own field, set by the callback of the use case that adds it.</param>
+public sealed record DemoUnit(OrganizationUnitId Id, OrganizationUnitId Parent, string Name, UnitKind Kind);

@@ -32,7 +32,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", "company", Guid.NewGuid(), "Someone", TenantId: new TenantId(40)),
+                    new HostTenancy.TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", Guid.NewGuid(), "Someone", TenantId: new TenantId(40)),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -53,7 +53,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         await using (var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
         {
             refused = (await FluentActions.Awaiting(() => system.ExecuteAsync(
-                    "INSERT INTO tenancy.\"OrganizationUnits\" (\"Id\", \"TenantId\", \"ParentId\", \"Name\", \"Kind\", \"Status\") VALUES (gen_random_uuid(), 1, NULL, 'Second', 'company', 'Active')",
+                    "INSERT INTO tenancy.\"OrganizationUnits\" (\"Id\", \"TenantId\", \"ParentId\", \"Name\", \"Status\") VALUES (gen_random_uuid(), 1, NULL, 'Second', 'Active')",
                     Cancellation))
                 .Should().ThrowAsync<PostgresException>()).Which;
         }

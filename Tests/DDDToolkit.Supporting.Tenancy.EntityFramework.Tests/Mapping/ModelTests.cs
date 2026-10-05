@@ -64,7 +64,8 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Owner(unit).Should().Be("HostOrganization Id <- TenantId");
         Column(unit, "TenantId").IsShadowProperty().Should().BeTrue();
         Column(unit, "Name").GetMaxLength().Should().Be(200);
-        Column(unit, "Kind").GetMaxLength().Should().Be(64);
+        unit.FindProperty("Kind").Should().BeNull("the package keeps no kind of unit: an application that tells them apart adds a field of its own");
+        Column(unit, "CostCentre").IsNullable.Should().BeTrue("a field of the application's own class is mapped with the package's");
         Named(Column(unit, "Status"));
         FieldAccess(organization, "Units", "_units");
 

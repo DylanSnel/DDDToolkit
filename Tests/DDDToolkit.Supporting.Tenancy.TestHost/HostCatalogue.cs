@@ -3,8 +3,8 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy.TestHost;
 
 /// <summary>
-/// The application's part of the catalogue: its keys, its packs and its unit kinds. Widgets stand in for
-/// whatever the application's own module works on.
+/// The application's part of the catalogue: its keys and its packs. Widgets stand in for whatever the
+/// application's own module works on.
 /// </summary>
 public static class HostCatalogue
 {
@@ -48,6 +48,5 @@ public static class HostCatalogue
             new(OperatorPack, "Operator", "Works with widgets", [WidgetChange, WidgetCreate], Order: 30),
             new(WatcherPack, "Watcher", "Looks at widgets", [WidgetRead], Order: 40),
         ],
-        UnitKinds: [new("company", "Company", 10), new("region", "Region", 20), new("site", "Site", 30)],
         Permissions: Permissions);
 }

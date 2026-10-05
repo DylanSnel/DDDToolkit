@@ -126,9 +126,6 @@
   <data name="tenancy.name-invalid" xml:space="preserve">
     <value>Vul {Min} tot {Max} tekens in.</value>
   </data>
-  <data name="tenancy.kind-invalid" xml:space="preserve">
-    <value>Een soort eenheid telt 1 tot {Max} tekens.</value>
-  </data>
   <data name="tenancy.invalid-slug" xml:space="preserve">
     <value>Een slug telt 2 tot 63 tekens, elk een kleine letter, een cijfer of een streepje, en begint niet met een streepje.</value>
   </data>
@@ -140,9 +137,6 @@
   </data>
   <data name="tenancy.unknown-permission" xml:space="preserve">
     <value>Deze sleutels zijn onbekend of buiten gebruik: {Keys}.</value>
-  </data>
-  <data name="tenancy.unknown-unit-kind" xml:space="preserve">
-    <value>De applicatie kent geen soort eenheid {Kind}.</value>
   </data>
   <data name="tenancy.identity-required" xml:space="preserve">
     <value>Een plaats heeft de geverifieerde identiteit nodig van de persoon van wie hij is.</value>

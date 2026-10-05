@@ -272,7 +272,7 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         _harbor = await _services.ProvisionAsync("harbor");
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
-        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast", "site");
+        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
         _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
         _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast, HostCatalogue.OperatorPack);
 

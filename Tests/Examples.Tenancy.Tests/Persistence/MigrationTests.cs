@@ -153,7 +153,7 @@ public sealed partial class MigrationTests
     {
         var expected = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved"],
+            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved", "20261005214244_UnitKindAsEnum"],
             ["Projects"] = ["20261001215453_Initial", "20261003012507_ProjectRoles"],
             ["Inspections"] = ["20261001215456_Initial"],
         };
@@ -195,6 +195,27 @@ public sealed partial class MigrationTests
         // migrations create nothing for them: exactly the tables, and the migration history.
         TablesOf(context.Model).Should().BeEquivalentTo(TenancyTables.Select(table => $"{TenantsContext.Schema}.{table}"));
         TablesCreatedBy(context).Should().BeEquivalentTo(TablesOf(context.Model));
+    }
+
+    [Fact]
+    public void A_units_kind_is_stored_by_the_key_the_rows_from_before_the_enum_hold()
+    {
+        using var context = DesignTimeContexts["Tenants"]();
+        var kind = context.Model.FindEntityType(typeof(OrganizationUnit))!.FindProperty(nameof(OrganizationUnit.Kind))!;
+        var converter = kind.GetTypeMapping().Converter!;
+        var change = context.GetService<IMigrator>().GenerateScript(fromMigration: "20261003012526_RoleUseRemoved", toMigration: "20261005214244_UnitKindAsEnum");
+
+        // The migration that made the column the enum's changes its type and nothing in it: a row written while the
+        // kind was a key of the package's catalogue holds that key, and the enum is written and read by it.
+        change.Should().Contain("ALTER COLUMN \"Kind\"").And.NotContain("UPDATE ");
+        kind.IsNullable.Should().BeTrue("the package asks no kind, so a unit may be added without one");
+        kind.GetMaxLength().Should().Be(16);
+        converter.ConvertToProvider(UnitKind.Region).Should().Be("region", "a new row is written as the rows before it, and as a request spells it");
+        converter.ConvertFromProvider("company").Should().Be(UnitKind.Company);
+        converter.ConvertFromProvider("Site").Should().Be(UnitKind.Site, "a row written by hand reads whatever its case");
+        Enum.GetValues<UnitKind>().Select(value => converter.ConvertFromProvider(converter.ConvertToProvider(value)))
+            .Should().Equal(Enum.GetValues<UnitKind>().Cast<object>(), "every kind reads back as itself");
+        FluentActions.Invoking(() => converter.ConvertFromProvider("galaxy")).Should().Throw<ArgumentException>("a key the enum has no member for is a row to correct");
     }
 
     [Fact]

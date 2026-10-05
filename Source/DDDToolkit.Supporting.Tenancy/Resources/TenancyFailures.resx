@@ -126,9 +126,6 @@
   <data name="tenancy.name-invalid" xml:space="preserve">
     <value>Enter {Min} to {Max} characters.</value>
   </data>
-  <data name="tenancy.kind-invalid" xml:space="preserve">
-    <value>A unit kind takes 1 to {Max} characters.</value>
-  </data>
   <data name="tenancy.invalid-slug" xml:space="preserve">
     <value>A slug has 2 to 63 characters, each a lowercase letter, a digit or a dash, and does not begin with a dash.</value>
   </data>
@@ -140,9 +137,6 @@
   </data>
   <data name="tenancy.unknown-permission" xml:space="preserve">
     <value>These keys are unknown or retired: {Keys}.</value>
-  </data>
-  <data name="tenancy.unknown-unit-kind" xml:space="preserve">
-    <value>The application has no unit kind {Kind}.</value>
   </data>
   <data name="tenancy.identity-required" xml:space="preserve">
     <value>A seat needs the verified identity of the person it belongs to.</value>

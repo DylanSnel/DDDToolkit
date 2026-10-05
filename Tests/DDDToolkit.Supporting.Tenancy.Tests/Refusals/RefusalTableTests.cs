@@ -224,11 +224,9 @@ public partial class RefusalTableTests
             (TenancyRefusals.NameInvalid, "description", await Refusing(TenancyRefusals.NameInvalid, h => h.Roles.CreateAsync("Clerk", tooLong, [], default))),
             (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Seats.GrantAsync(ada, root, watcher, until: null, tooLong, default))),
             (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Tenants.SuspendAsync(tooLong, default))),
-            (TenancyRefusals.KindInvalid, "kind", await Refusing(TenancyRefusals.KindInvalid, h => h.Organization.AddUnitAsync(root, "East", " ", default))),
             (TenancyRefusals.InvalidPeriod, "until", await Refusing(TenancyRefusals.InvalidPeriod, h => h.Seats.GrantAsync(ada, root, watcher, until: h.Clock.Now, reason: null, default))),
             (TenancyRefusals.ReasonRequired, "reason", await Refusing(TenancyRefusals.ReasonRequired, h => h.Tenants.CloseAsync(" ", default))),
             (TenancyRefusals.UnknownPermission, "keys", await Refusing(TenancyRefusals.UnknownPermission, h => h.Roles.CreateAsync("Clerk", "Files widgets", ["widget.polish"], default))),
-            (TenancyRefusals.UnknownUnitKind, "kind", await Refusing(TenancyRefusals.UnknownUnitKind, h => h.Organization.AddUnitAsync(root, "East", "galaxy", default))),
             (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddSeatAsync(Guid.Empty, "Bert", default))),
             (TenancyRefusals.TooManyIds, "ids", await Refusing(TenancyRefusals.TooManyIds, h => h.Directory.SeatsByIdAsync(tooMany, default))),
             (TenancyRefusals.PageSizeInvalid, "size", await RefusingAnOperator(TenancyRefusals.PageSizeInvalid, h => h.TenantDirectory.ListAsync(after: null, size: 0, default))),
@@ -241,7 +239,7 @@ public partial class RefusalTableTests
 
         // A slug is a value object, so a wrong one is a validation failure with the same code, and it names its input too.
         var slug = (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", "company", Guid.NewGuid(), "Bert"), default)))
+                new HostTenancy.TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid(), "Bert"), default)))
             .Should().ThrowAsync<InvalidValueObjectException>()).Which.Errors.Should().ContainSingle().Which;
         slug.Code.Should().Be(TenancyRefusals.InvalidSlug);
         thrown.Add((TenancyRefusals.InvalidSlug, "slug", slug.Arguments));

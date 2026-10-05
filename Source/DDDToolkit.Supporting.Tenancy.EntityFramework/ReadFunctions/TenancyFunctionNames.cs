@@ -37,7 +37,7 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The units, as rows of <see cref="Access.OrganizationUnitRow{TTenantId, TUnitId}"/>: <c>"Id"</c>,
-    /// <c>"TenantId"</c>, <c>"ParentId"</c> and <c>"Status"</c>; never the name or the kind.
+    /// <c>"TenantId"</c>, <c>"ParentId"</c> and <c>"Status"</c>; never the name, nor a column the application added.
     /// </summary>
     public const string TenantUnits = "tenant_units";
 

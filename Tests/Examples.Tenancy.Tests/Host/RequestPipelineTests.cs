@@ -229,11 +229,11 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                     Harbor.Name,
                     Harbor.Shape,
                     Harbor.Name,
-                    DemoTenant.RootKind,
                     Harbor.Administrator.Person.Id,
                     Harbor.Administrator.Person.Name,
                     TenantId: Harbor.Id,
-                    AdminSeatId: Harbor.Administrator.Id),
+                    AdminSeatId: Harbor.Administrator.Id,
+                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
                 Cancellation);
         }
 

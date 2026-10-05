@@ -65,7 +65,7 @@ public class OtherSeatsRightsTests
         // would be hers for good.
         await harness.Place(di, harness.Harbor.South);
         await harness.Grant(di, harness.Harbor.South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(7));
-        var pier = await harness.As(di, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", "site", default));
+        var pier = await harness.As(di, h => h.Organization.AddUnitAsync(harness.Harbor.South, "South Pier", default));
         var longer = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => harness.As(di, h => h.Organization.MoveUnitAsync(pier, harness.Harbor.North, default)));
         longer.Arguments["Missing"].As<string>().Should().Contain(TenancyKeys.UnitsManage);
         await harness.As(di, h => h.Organization.MoveUnitAsync(harness.Harbor.NorthCoast, harness.Harbor.South, default));

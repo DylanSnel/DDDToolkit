@@ -1,16 +1,20 @@
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// The fields an application adds to its tenant and seat classes are set while the tenant is provisioned:
+/// The fields an application adds to its tenant, unit and seat classes are set while the tenant is provisioned:
 /// after the instances are made and before the tenant is activated, so they are saved with everything else,
 /// and a callback that throws leaves nothing behind.
 /// </summary>
 public class ProvisioningHooksTests
 {
-    private static HostTenancy.TenantToProvision Harbor(Action<HostTenant>? configureTenant = null, Action<HostSeat>? configureFirstSeat = null)
+    private static HostTenancy.TenantToProvision Harbor(
+        Action<HostTenant>? configureTenant = null,
+        Action<HostSeat>? configureFirstSeat = null,
+        Action<HostUnit>? configureRoot = null)
         => new(
-            "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", Guid.NewGuid(), "Ada",
+            "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada",
             ConfigureTenant: configureTenant,
+            ConfigureRoot: configureRoot,
             ConfigureFirstSeat: configureFirstSeat);
 
     private static Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
@@ -27,7 +31,8 @@ public class ProvisioningHooksTests
                 tenant.MarkAsDemo();
                 tenant.AddNote("Seeded for the demonstration.");
             },
-            seat => seat.ChangeJobTitle("Harbor master")));
+            seat => seat.ChangeJobTitle("Harbor master"),
+            root => root.SetCostCentre("NL-001")));
 
         harness.Store.SaveCount.Should().Be(1, "the application's fields go in the save that provisions");
         var tenant = harness.Store.Tenant(provisioned.Tenant);
@@ -35,6 +40,7 @@ public class ProvisioningHooksTests
         tenant.Notes.Should().ContainSingle().Which.Text.Should().Be("Seeded for the demonstration.");
         tenant.Status.Should().Be(TenantStatus.Active);
         harness.Store.Seat(provisioned.AdminSeat).JobTitle.Should().Be("Harbor master");
+        harness.Store.Organization(provisioned.Tenant).Root.Should().Match<HostUnit>(root => root.Id == provisioned.RootUnit && root.CostCentre == "NL-001");
     }
 
     [Fact]
@@ -45,11 +51,12 @@ public class ProvisioningHooksTests
 
         var provisioned = await Provision(harness, Harbor(
             tenant => seen.Add("tenant " + tenant.Slug.Value + " " + tenant.Status),
-            seat => seen.Add("seat " + seat.DisplayName + " with " + seat.Placements.Single().Grants.Count + " grant at its " + seat.Placements.Count + " placement")));
+            seat => seen.Add("seat " + seat.DisplayName + " with " + seat.Placements.Single().Grants.Count + " grant at its " + seat.Placements.Count + " placement"),
+            root => seen.Add("root " + root.Name + (root.IsRoot ? " at the top" : " below another"))));
 
         seen.Should().Equal(
-            ["tenant harbor Provisioning", "seat Ada with 1 grant at its 1 placement"],
-            "the tenant's callback runs first, each runs once, and neither sees a tenant in use yet");
+            ["tenant harbor Provisioning", "root Harbor Works at the top", "seat Ada with 1 grant at its 1 placement"],
+            "the callbacks run in the order the instances are made, each once, and none sees a tenant in use yet");
         harness.Store.Tenant(provisioned.Tenant).Status.Should().Be(TenantStatus.Active);
     }
 
@@ -76,10 +83,13 @@ public class ProvisioningHooksTests
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such plan");
         await FluentActions.Awaiting(() => Provision(harness, Harbor(configureFirstSeat: _ => throw new InvalidOperationException("no such title"))))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such title");
+        await FluentActions.Awaiting(() => Provision(harness, Harbor(configureRoot: _ => throw new InvalidOperationException("no such kind"))))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such kind");
 
         harness.Store.SaveCount.Should().Be(0);
         harness.Store.HasTenant(new TenantId(101)).Should().BeFalse();
         harness.Store.HasTenant(new TenantId(102)).Should().BeFalse();
+        harness.Store.HasTenant(new TenantId(103)).Should().BeFalse();
 
         // The slug was never taken: the same tenant is provisioned once the callback holds.
         var provisioned = await Provision(harness, Harbor(tenant => tenant.MarkAsDemo()));
@@ -106,5 +116,6 @@ public class ProvisioningHooksTests
 
         harness.Store.Tenant(provisioned.Tenant).IsDemo.Should().BeFalse();
         harness.Store.Seat(provisioned.AdminSeat).JobTitle.Should().BeNull();
+        harness.Store.Organization(provisioned.Tenant).Root.CostCentre.Should().BeNull();
     }
 }

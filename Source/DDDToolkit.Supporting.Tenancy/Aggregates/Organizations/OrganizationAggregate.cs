@@ -61,18 +61,18 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
     /// application's own unit class, raising <see cref="OrganizationUnitAdded{TTenantId, TUnitId, TSeatId}"/> for
     /// it. Called once, by <see cref="TenancyInstances"/>, right after the instance is made.
     /// </summary>
-    internal void InitializeNew<TSeatId>(TTenantId id, string name, TUnitId rootUnitId, string rootName, string rootKind, TenancyActor<TSeatId>? by)
+    internal void InitializeNew<TSeatId>(TTenantId id, string name, TUnitId rootUnitId, string rootName, TenancyActor<TSeatId>? by)
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     {
         var validName = TenancyNames.Required(name, TenancyNames.TenantNameToken, MaxNameLength);
         var root = HostInstances<TUnit>.New();
-        root.InitializeNew(rootUnitId, null, rootName, rootKind);
+        root.InitializeNew(rootUnitId, null, rootName);
 
         Id = id;
         Name = validName;
         _units.Add(root);
 
-        RaiseDomainEvent(new OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>(id, rootUnitId, null, root.Kind, by));
+        RaiseDomainEvent(new OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>(id, rootUnitId, null, by));
     }
 
     /// <summary>Renames the organization. The same name again changes nothing and raises nothing.</summary>
@@ -93,25 +93,38 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
         RaiseDomainEvent(new OrganizationRenamed<TTenantId, TSeatId>(Id, by));
     }
 
-    /// <summary>Adds a unit below an active one, in a hierarchical tenant.</summary>
+    /// <summary>
+    /// Adds a unit below an active one, in a hierarchical tenant. A field the application added to its unit class
+    /// starts at its default unless <paramref name="configure"/> sets it.
+    /// </summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: an organization does not know it by itself.</typeparam>
     /// <param name="id">The new unit's id.</param>
     /// <param name="parentId">The unit it hangs under.</param>
     /// <param name="name">Its name, 1 to <see cref="OrganizationUnitEntity{TUnitId}.MaxNameLength"/> characters.</param>
-    /// <param name="kind">Its kind. Whether the application knows the kind is the use case's to check.</param>
     /// <param name="shape">The tenant's shape: a flat tenant has only its root.</param>
     /// <param name="by">Who makes the change, for the event; <see langword="null"/> when nobody is named.</param>
+    /// <param name="configure">
+    /// Sets the application's own fields on the new unit, after every check here and before the organization takes
+    /// the unit in. When it throws, the organization is as it was: no unit and no event, so a later save in the
+    /// same unit of work has nothing of it to write.
+    /// </param>
     /// <returns>The new unit, an instance of the application's own class.</returns>
     /// <exception cref="RefusalException">
     /// In this order: <c>tenancy.flat-tenant</c>, <c>tenancy.unit-not-found</c> for the parent,
     /// <c>tenancy.unit-not-active</c> when the parent is archived, <c>tenancy.depth-exceeded</c>,
-    /// <c>tenancy.name-invalid</c>, <c>tenancy.kind-invalid</c>.
+    /// <c>tenancy.name-invalid</c>.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// A unit with <paramref name="id"/> exists. Ids are made to be new, and one is given only by an import or
     /// seeding, so a clash is a mistake in that code rather than something a caller did.
     /// </exception>
-    public TUnit AddUnit<TSeatId>(TUnitId id, TUnitId parentId, string name, string kind, TenantShape shape, TenancyActor<TSeatId>? by = null)
+    public TUnit AddUnit<TSeatId>(
+        TUnitId id,
+        TUnitId parentId,
+        string name,
+        TenantShape shape,
+        TenancyActor<TSeatId>? by = null,
+        Action<TUnit>? configure = null)
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     {
         if (shape == TenantShape.Flat)
@@ -136,10 +149,14 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
         }
 
         var unit = HostInstances<TUnit>.New();
-        unit.InitializeNew(id, parentId, name, kind);
+        unit.InitializeNew(id, parentId, name);
+
+        // The application's fields before the unit is the organization's: a callback that throws leaves the
+        // organization untouched, even where it is tracked and the caller goes on to save something else.
+        configure?.Invoke(unit);
         _units.Add(unit);
 
-        RaiseDomainEvent(new OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>(Id, id, parentId, unit.Kind, by));
+        RaiseDomainEvent(new OrganizationUnitAdded<TTenantId, TUnitId, TSeatId>(Id, id, parentId, by));
         return unit;
     }
 

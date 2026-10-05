@@ -117,7 +117,7 @@ public class TenancyWorkTests
         {
             harness.Store.BeginUnitOfWork();
             provisioned = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada"),
                 TestContext.Current.CancellationToken);
         }
 
@@ -139,7 +139,7 @@ public class TenancyWorkTests
         {
             harness.Store.BeginUnitOfWork();
             harbor = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", "company", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid(), "Ada"),
                 TestContext.Current.CancellationToken);
         }
 
@@ -149,9 +149,9 @@ public class TenancyWorkTests
 
         await BySystemIn(harness, tenant, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
         await BySystemIn(harness, tenant, h => h.Tenants.RenameOrganizationAsync("Harbor Works Ltd", default));
-        var north = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "North", "region", default));
-        var south = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "South", "region", default));
-        var coast = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(north, "Coast", "site", default));
+        var north = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "North", default));
+        var south = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(root, "South", default));
+        var coast = await BySystemIn(harness, tenant, h => h.Organization.AddUnitAsync(north, "Coast", default));
         await BySystemIn(harness, tenant, h => h.Organization.RenameUnitAsync(coast, "North Coast", default));
         await BySystemIn(harness, tenant, h => h.Organization.MoveUnitAsync(coast, south, default));
 

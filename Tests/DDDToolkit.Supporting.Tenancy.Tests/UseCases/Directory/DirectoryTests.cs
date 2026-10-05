@@ -82,7 +82,7 @@ public class DirectoryTests
         all.Select(unit => (unit.Path, unit.Depth)).Should().Equal(
             ("Harbor Works", 1), ("Harbor Works / North", 2), ("Harbor Works / North / North Coast", 3), ("Harbor Works / South", 2));
         all.Single(unit => unit.Id == harness.Harbor.NorthCoast).Should().Match<HostTenancy.UnitSummary>(
-            unit => unit.Status == UnitStatus.Archived && unit.ParentId == harness.Harbor.North && unit.Kind == "site");
+            unit => unit.Status == UnitStatus.Archived && unit.ParentId == harness.Harbor.North);
 
         var mine = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
         mine.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast");
@@ -167,13 +167,40 @@ public class DirectoryTests
             [harness.Harbor.South, harness.Harbor.NorthCoast, harness.Harbor.Root, orchard.North, OrganizationUnitId.CreateSequential(), harness.Harbor.South], default));
 
         named.Should().Equal(
-            new HostTenancy.UnitSummary(harness.Harbor.Root, null, "Harbor Works", "company", UnitStatus.Active, "Harbor Works", 1),
-            new HostTenancy.UnitSummary(harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", "site", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
-            new HostTenancy.UnitSummary(harness.Harbor.South, harness.Harbor.Root, "South", "region", UnitStatus.Active, "Harbor Works / South", 2));
+            new HostTenancy.UnitSummary(harness.Harbor.Root, null, "Harbor Works", UnitStatus.Active, "Harbor Works", 1),
+            new HostTenancy.UnitSummary(harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
+            new HostTenancy.UnitSummary(harness.Harbor.South, harness.Harbor.Root, "South", UnitStatus.Active, "Harbor Works / South", 2));
         harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.Contain("FindOrganizationAsync", "the names are the organization's own units'");
 
         (await harness.As(bert, h => h.Directory.UnitsByIdAsync([orchard.North, orchard.Root], default)))
             .Should().BeEmpty("another tenant's units are left out without a word");
+    }
+
+    [Fact]
+    public async Task A_view_answers_the_applications_own_field_beside_the_summary_from_the_units_the_directory_read()
+    {
+        var harness = Harness.OfHarbor();
+        var orchard = harness.Seed(2, "orchard");
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North);
+        var bay = await harness.BySystemWork(h => h.Organization.AddUnitAsync(
+            harness.Harbor.North, "North Bay", default, configure: unit => unit.SetCostCentre("NB-104")));
+
+        // The units the caller reads, as the form without a view answers them, each with its cost centre.
+        var summaries = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
+        var asked = harness.Store.Calls.ToList();
+        var listed = await harness.As(bert, h => h.Directory.ListUnitsAsync((unit, own) => (Summary: unit, own.CostCentre), default));
+
+        listed.Select(unit => unit.Summary).Should().Equal(summaries, "the view is handed the summary the directory answers anyway");
+        listed.Select(unit => (unit.Summary.Name, unit.CostCentre)).Should().Equal(("North", null), ("North Bay", "NB-104"), ("North Coast", null));
+        harness.Store.Calls.Should().Equal(asked, "the field comes from the units the directory read, with no read more");
+
+        // By id, whichever unit of the tenant the caller is placed under; another tenant's are left out as before.
+        var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync(
+            [harness.Harbor.South, bay, orchard.North], (unit, own) => (unit.Path, own.CostCentre), default));
+        named.Should().Equal(("Harbor Works / North / North Bay", "NB-104"), ("Harbor Works / South", null));
+
+        await FluentActions.Awaiting(() => harness.As(bert, h => h.Directory.ListUnitsAsync<string>(null!, default))).Should().ThrowAsync<ArgumentNullException>();
+        await FluentActions.Awaiting(() => harness.As(bert, h => h.Directory.UnitsByIdAsync<string>([bay], null!, default))).Should().ThrowAsync<ArgumentNullException>();
     }
 
     [Fact]

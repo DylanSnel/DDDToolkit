@@ -317,7 +317,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         var berth = OrganizationUnitId.CreateSequential();
 
         // A unit below North Pier, so the move takes a subtree along.
-        await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().AddUnitAsync(NorthPier, "Berth", "site", Cancellation, berth));
+        await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().AddUnitAsync(NorthPier, "Berth", Cancellation, berth));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Organization().MoveUnitAsync(NorthPier, South, Cancellation));
         await services.BySystemIn(Harbor, scoped => scoped.Organization().MoveUnitAsync(NorthPier, North, Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Organization().MoveUnitAsync(NorthPier, HarborRoot, Cancellation));

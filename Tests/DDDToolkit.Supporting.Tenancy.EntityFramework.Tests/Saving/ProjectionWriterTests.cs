@@ -31,7 +31,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
 
         var north = await _services.AddUnitAsync(harbor.Tenant, root, "North");
         var south = await _services.AddUnitAsync(harbor.Tenant, root, "South");
-        var coast = await _services.AddUnitAsync(harbor.Tenant, north, "Coast", "site");
+        var coast = await _services.AddUnitAsync(harbor.Tenant, north, "Coast");
 
         (await PathsAsync(harbor.Tenant)).Should().BeEquivalentTo(
         [
@@ -209,7 +209,7 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             var organization = await context.Set<HostOrganization>().SingleAsync(TestContext.Current.CancellationToken);
 
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
-            coast = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), north, "Coast", "site", TenantShape.Hierarchical).Id;
+            coast = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), north, "Coast", TenantShape.Hierarchical).Id;
 
             context.SaveChanges();
         });

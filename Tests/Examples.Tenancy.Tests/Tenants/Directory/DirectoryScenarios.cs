@@ -53,7 +53,7 @@ public sealed class DirectoryScenarios(SampleHosts sample) : IClassFixture<Sampl
         units.EnumerateArray()
             .Select(unit => (unit.GetProperty("id").GetGuid(), unit.Text("name"), unit.Text("kind"), unit.Text("status"), unit.Text("path"), unit.GetProperty("depth").GetInt32()))
             .Should().Equal(
-                (Harbor.Root.Value, "Harbor Works", DemoTenant.RootKind, "active", "Harbor Works", 1),
+                (Harbor.Root.Value, "Harbor Works", "company", "active", "Harbor Works", 1),
                 (Harbor.UnitNamed("North Coast").Value, "North Coast", "area", "active", "Harbor Works / North / North Coast", 3));
         units[1].GetProperty("parentId").GetGuid().Should().Be(Harbor.UnitNamed("North").Value);
         units[0].GetProperty("parentId").ValueKind.Should().Be(JsonValueKind.Null);

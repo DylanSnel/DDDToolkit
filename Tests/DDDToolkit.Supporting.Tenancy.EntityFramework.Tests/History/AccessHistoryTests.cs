@@ -42,7 +42,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var orchard = await _services.ProvisionAsync("orchard");
 
         // A seat changes its tenant, and an operator has another tenant suspended.
-        await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Organization().AddUnitAsync(harbor.RootUnit, "North", "region", Cancellation));
+        await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Organization().AddUnitAsync(harbor.RootUnit, "North", Cancellation));
         await using (var scope = _services.Scope())
         using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(orchard.Tenant, Odette))
         {
@@ -99,8 +99,8 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
 
         // Every other command a seat gives, the four that only rename something among them.
         await AsAda(services => services.Tenants().RenameOrganizationAsync("Harbor Yards", Cancellation));
-        var east = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "East", "region", Cancellation));
-        var pier = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Pier", "site", Cancellation));
+        var east = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "East", Cancellation));
+        var pier = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Pier", Cancellation));
         await AsAda(services => services.Organization().RenameUnitAsync(pier, "Long Pier", Cancellation));
         await AsAda(services => services.Organization().MoveUnitAsync(pier, east, Cancellation));
         await AsAda(services => services.Organization().ArchiveUnitAsync(pier, Cancellation));
@@ -175,7 +175,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         {
             var tenancy = scope.ServiceProvider.Tenancy();
             await using var transaction = await tenancy.Database.BeginTransactionAsync(Cancellation);
-            await scope.ServiceProvider.Organization().AddUnitAsync(harbor.RootUnit, "North", "region", Cancellation);
+            await scope.ServiceProvider.Organization().AddUnitAsync(harbor.RootUnit, "North", Cancellation);
 
             // Inside the transaction the row is there, next to the unit it is about: the save wrote both.
             var inside = await tenancy.Set<EventLogEntry>().Select(entry => entry.EventName).ToListAsync(Cancellation);
@@ -197,7 +197,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var harbor = await _services.ProvisionAsync("harbor", administratorName: "Ada Lovelace");
         var ada = harbor.AdminSeat;
 
-        var wharf = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Farthing Wharf", "region", Cancellation));
+        var wharf = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Farthing Wharf", Cancellation));
         var lamplighter = await _services.BySeat(harbor.Tenant, ada, services =>
             services.Roles().CreateAsync("Lamplighter", "Tends the lamps", [HostCatalogue.WidgetRead], Cancellation));
         await _services.BySeat(harbor.Tenant, ada, services => services.Roles().SetKeysAsync(lamplighter, [HostCatalogue.WidgetCreate], Cancellation));
@@ -248,7 +248,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
         {
             quay = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", "company", Guid.NewGuid(), "Quin"),
+                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid(), "Quin"),
                 Cancellation);
         }
 

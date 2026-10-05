@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Organization.Queries;
 using HotChocolate;
 using Mediator;
@@ -8,10 +9,10 @@ namespace Examples.Tenancy.Tenants.Api.Organization.GraphQL;
 internal static class OrganizationQueries
 {
     /// <summary>
-    /// The units the caller sees: those it is placed in, and every unit below them. A list, not pages: the
-    /// package's directory answers a tenant's units whole, and a tenant has few.
+    /// The units the caller sees: those it is placed in, and every unit below them, each with its kind. A list, not
+    /// pages: the package's directory answers a tenant's units whole, and a tenant has few.
     /// </summary>
     [Query]
-    public static async Task<IReadOnlyList<SampleTenancy.UnitSummary>> GetOrganizationUnitsAsync([Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<UnitListing>> GetOrganizationUnitsAsync([Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new OrganizationUnits(), cancellationToken);
 }

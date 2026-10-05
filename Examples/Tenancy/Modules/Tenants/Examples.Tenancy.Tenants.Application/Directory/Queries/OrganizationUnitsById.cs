@@ -1,10 +1,11 @@
+using Examples.Tenancy.Tenants.Application.Organization;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 
 /// <summary>
-/// What the units with these ids are called, each by its path from the root, whichever of them the caller is
-/// placed under. What a screen asks once another module answered it unit ids.
+/// What the units with these ids are called, each by its path from the root and with its kind, whichever of them the
+/// caller is placed under. What a screen asks once another module answered it unit ids.
 /// </summary>
 /// <remarks>
 /// It requires a caller who works in the tenant, and the package's directory answers such a caller about any unit
@@ -14,20 +15,23 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// are refused.
 /// </remarks>
 /// <param name="Ids">The units asked about.</param>
-public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<SampleTenancy.UnitSummary>>, ITenantsRequest
+public sealed record OrganizationUnitsById(IReadOnlyList<OrganizationUnitId> Ids) : IQuery<IReadOnlyList<UnitListing>>, ITenantsRequest
 {
     /// <inheritdoc />
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
 }
 
-/// <summary>Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's directory.</summary>
+/// <summary>
+/// Answers <see cref="OrganizationUnitsById"/> from the Tenancy package's directory, each unit with the kind its own
+/// class keeps (<see cref="UnitListing.Of"/>).
+/// </summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class OrganizationUnitsByIdHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnitsById, IReadOnlyList<SampleTenancy.UnitSummary>>
+public sealed class OrganizationUnitsByIdHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnitsById, IReadOnlyList<UnitListing>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// The caller's own refusal when it is nobody, or <c>tenancy.too-many-ids</c>.
     /// </exception>
-    public async ValueTask<IReadOnlyList<SampleTenancy.UnitSummary>> Handle(OrganizationUnitsById query, CancellationToken cancellationToken)
-        => await reads.AskDirectoryAsync(directory => directory.UnitsByIdAsync(query.Ids, cancellationToken));
+    public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnitsById query, CancellationToken cancellationToken)
+        => await reads.AskDirectoryAsync(directory => directory.UnitsByIdAsync(query.Ids, UnitListing.Of, cancellationToken));
 }

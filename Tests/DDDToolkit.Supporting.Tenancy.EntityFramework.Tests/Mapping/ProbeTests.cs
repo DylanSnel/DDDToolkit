@@ -128,7 +128,7 @@ public abstract class ProbeTests(TestDatabases databases) : IAsyncLifetime
         var harbor = await _services.ProvisionAsync("harbor");
         var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North");
         var south = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "South");
-        var coast = await _services.AddUnitAsync(harbor.Tenant, north, "Coast", "site");
+        var coast = await _services.AddUnitAsync(harbor.Tenant, north, "Coast");
         var units = _services.Database.TenancyTable("OrganizationUnits");
 
         await using var scope = _services.Scope();

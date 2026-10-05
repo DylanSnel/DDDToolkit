@@ -4,12 +4,12 @@ using DDDToolkit.Exceptions;
 namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 
 /// <summary>
-/// Every permission key, role pack and unit kind the application has, checked once and then only read:
-/// Tenancy's keys, the application's own, and what its modules contribute.
+/// Every permission key and role pack the application has, checked once and then only read: Tenancy's keys and
+/// the default administrators' pack, the application's own keys and packs, and what its modules contribute.
 /// <para>
-/// It lives in code, not in a table. <see cref="Build"/> checks it as a whole and reports every problem at
-/// once, so a catalogue that does not hold together stops the application at start-up rather than half way
-/// through provisioning a tenant.
+/// It lives in code, not in a table. <see cref="Build(ApplicationCatalogue, IEnumerable{Permission})"/> checks it
+/// as a whole and reports every problem at once, so a catalogue that does not hold together stops the application
+/// at start-up rather than half way through provisioning a tenant.
 /// </para>
 /// <para>
 /// A key is retired, never removed. A retired key, and a stored key the catalogue no longer knows because it
@@ -27,7 +27,6 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 public sealed partial class TenancyCatalogue
 {
     private readonly Dictionary<string, Permission> _byKey;
-    private readonly HashSet<string> _unitKinds;
     private readonly HashSet<string> _accessManaging;
 
     private TenancyCatalogue(
@@ -35,18 +34,15 @@ public sealed partial class TenancyCatalogue
         IReadOnlyList<string> liveKeys,
         IReadOnlyList<string> accessManagingKeys,
         IReadOnlyList<RolePack> packs,
-        bool hasDefaultAdministrators,
-        IReadOnlyList<UnitKind> unitKinds)
+        bool hasDefaultAdministrators)
     {
         Permissions = permissions;
         LiveKeys = liveKeys;
         AccessManagingKeys = accessManagingKeys;
         Packs = packs;
         HasDefaultAdministrators = hasDefaultAdministrators;
-        UnitKinds = unitKinds;
 
         _byKey = permissions.ToDictionary(permission => permission.Key, StringComparer.Ordinal);
-        _unitKinds = unitKinds.Select(kind => kind.Key).ToHashSet(StringComparer.Ordinal);
         _accessManaging = accessManagingKeys.ToHashSet(StringComparer.Ordinal);
     }
 
@@ -76,20 +72,31 @@ public sealed partial class TenancyCatalogue
 
     /// <summary>
     /// Whether the application declared no administrators' pack, so that <see cref="Packs"/> holds
-    /// <see cref="TenancyPacks.DefaultAdministrators"/>, added by <see cref="Build"/>. The pack of that key is then
-    /// the package's, named in the languages the package ships; otherwise every pack is the application's.
+    /// <see cref="TenancyPacks.DefaultAdministrators"/>, added by
+    /// <see cref="Build(ApplicationCatalogue, IEnumerable{Permission})"/>. The pack of that key is then the
+    /// package's, named in the languages the package ships; otherwise every pack is the application's.
     /// </summary>
     public bool HasDefaultAdministrators { get; }
 
-    /// <summary>The kinds of unit.</summary>
-    public IReadOnlyList<UnitKind> UnitKinds { get; }
+    /// <summary>
+    /// Builds the catalogue of an application that adds nothing to it, from the modules' contributions alone, as
+    /// the registration does when <c>TenancyOptions.Catalogue</c> is not set: Tenancy's keys, the modules' keys,
+    /// and <see cref="TenancyPacks.DefaultAdministrators"/> as the one pack. What an export that runs without the
+    /// registration builds the same catalogue with.
+    /// </summary>
+    /// <param name="contributed">The keys the modules contribute.</param>
+    /// <exception cref="TenancyCatalogueException">Something does not hold together; every problem found is listed.</exception>
+    public static TenancyCatalogue Build(IEnumerable<Permission> contributed) => Build(new ApplicationCatalogue(), contributed);
 
     /// <summary>
     /// Builds the catalogue from the application's part and the modules' contributions, and checks it as a
     /// whole. An application that declares no administrators' pack gets
     /// <see cref="TenancyPacks.DefaultAdministrators"/>, for every shape.
     /// </summary>
-    /// <param name="application">The application's packs, unit kinds and keys.</param>
+    /// <param name="application">
+    /// The application's packs, keys and marks. An application that adds none builds with
+    /// <see cref="Build(IEnumerable{Permission})"/>, which passes <c>new ApplicationCatalogue()</c>.
+    /// </param>
     /// <param name="contributed">The keys the modules contribute.</param>
     /// <exception cref="TenancyCatalogueException">Something does not hold together; every problem found is listed.</exception>
     public static TenancyCatalogue Build(ApplicationCatalogue application, IEnumerable<Permission> contributed)
@@ -112,7 +119,6 @@ public sealed partial class TenancyCatalogue
         // for another reason included: once it declares one, it declares them for every shape.
         var declaresAdministrators = (application.Packs ?? []).Any(pack => pack is { Administers: true });
         var packs = CheckPacks(application.Packs ?? [], byKey, live, managing, declaresAdministrators, problems);
-        CheckUnitKinds(application.UnitKinds ?? [], problems);
 
         if (problems.Count > 0)
         {
@@ -127,7 +133,7 @@ public sealed partial class TenancyCatalogue
             .ThenBy(permission => permission.Key, StringComparer.Ordinal)
             .ToArray();
 
-        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators, [.. application.UnitKinds!]);
+        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators);
     }
 
     /// <summary>Whether the catalogue declares <paramref name="key"/>, retired or not.</summary>
@@ -186,9 +192,6 @@ public sealed partial class TenancyCatalogue
     /// </summary>
     public RolePack AdministratorPackFor(TenantShape shape)
         => PacksFor(shape).Single(pack => pack.Administers);
-
-    /// <summary>Whether the application has a unit kind with this key.</summary>
-    public bool KnowsUnitKind(string kind) => kind is not null && _unitKinds.Contains(kind.Trim());
 
     /// <summary>
     /// Checks a key that code is about to ask about. A key the catalogue does not know is a typo in code, not
@@ -538,28 +541,6 @@ public sealed partial class TenancyCatalogue
                 problems.Add("The administrators' pack '" + pack + "' lists keys but not '" + key + "', which "
                              + (own ? "is one of Tenancy's own" : "manages access")
                              + ": an administrator holds every key that manages access, and Tenancy's own.");
-            }
-        }
-    }
-
-    /// <summary>There is at least one unit kind, and their keys are unique, not blank and at most 64 characters.</summary>
-    private static void CheckUnitKinds(IReadOnlyList<UnitKind> unitKinds, List<string> problems)
-    {
-        if (unitKinds.Count == 0)
-        {
-            problems.Add("The application declares no unit kind; the root needs one.");
-        }
-
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var kind in unitKinds)
-        {
-            if (kind is null || string.IsNullOrWhiteSpace(kind.Key) || kind.Key.Length > TenancyNames.MaxUnitKindLength)
-            {
-                problems.Add("The unit kind '" + kind?.Key + "' is blank or longer than " + TenancyNames.MaxUnitKindLength + " characters.");
-            }
-            else if (!seen.Add(kind.Key))
-            {
-                problems.Add("The unit kind '" + kind.Key + "' is declared more than once.");
             }
         }
     }

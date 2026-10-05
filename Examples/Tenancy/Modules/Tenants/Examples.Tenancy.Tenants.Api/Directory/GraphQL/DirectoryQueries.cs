@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using HotChocolate;
 using HotChocolate.CostAnalysis.Types;
@@ -38,7 +39,7 @@ internal static class DirectoryQueries
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
-    public static async Task<SampleTenancy.UnitSummary?> GetOrganizationUnitAsync(OrganizationUnitId id, IOrganizationUnitByIdDataLoader units, CancellationToken cancellationToken)
+    public static async Task<UnitListing?> GetOrganizationUnitAsync(OrganizationUnitId id, IOrganizationUnitByIdDataLoader units, CancellationToken cancellationToken)
         => await units.LoadAsync(id, cancellationToken);
 
     /// <summary>A role by its id, or nothing.</summary>

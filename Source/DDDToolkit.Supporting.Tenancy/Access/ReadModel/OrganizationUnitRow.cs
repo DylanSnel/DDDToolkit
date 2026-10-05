@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
-/// <summary>A unit of a tenant's organization, as a row to read: where it hangs and whether it is in use, never its name or kind.</summary>
+/// <summary>A unit of a tenant's organization, as a row to read: where it hangs and whether it is in use, never its name.</summary>
 public sealed class OrganizationUnitRow<TTenantId, TUnitId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>

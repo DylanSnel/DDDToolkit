@@ -234,7 +234,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         using (TenancyWork.BeginOperator<TenantId, SeatId>(operatorIdentity))
         {
             harbor = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", "company", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid(), "Ada"),
                 TestContext.Current.CancellationToken);
         }
 

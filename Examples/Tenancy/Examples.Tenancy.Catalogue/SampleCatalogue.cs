@@ -8,7 +8,7 @@ namespace Examples.Tenancy.Catalogue;
 
 /// <summary>
 /// The application's part of the permission catalogue: the role packs a new tenant's roles of the organization are
-/// copied from, and the kinds of unit its organization is made of; and next to it the starter project roles every
+/// copied from, and the keys of a module it marks as managing access; and next to it the starter project roles every
 /// tenant's crews begin with.
 /// </summary>
 /// <remarks>
@@ -112,8 +112,9 @@ public static class SampleCatalogue
     public static ProjectMembership Projects { get; } = new(ProjectRoles);
 
     /// <summary>
-    /// The application's packs and unit kinds, and the keys of a module it marks as managing access: naming a
-    /// project's owner and managing a crew, which Projects declares.
+    /// The application's packs, and the keys of a module it marks as managing access: naming a project's owner and
+    /// managing a crew, which Projects declares. What kind of unit a unit is, a company, a region, an area or a site,
+    /// is not the catalogue's: no access rule reads it, so it is a field of the application's own unit class.
     /// </summary>
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
@@ -150,13 +151,6 @@ public static class SampleCatalogue
             new(Surveyor, "Surveyor", "Records inspections", [ProjectKeys.View, InspectionKeys.Record], Order: 40),
             new(Observer, "Observer", "Looks", [ProjectKeys.View], Order: 50),
             new(PeopleOffice, "People office", "Gives people their roles", [TenancyKeys.GrantsManage], Order: 60),
-        ],
-        UnitKinds:
-        [
-            new("company", "Company", Order: 10),
-            new("region", "Region", Order: 20),
-            new("area", "Area", Order: 30),
-            new("site", "Site", Order: 40),
         ],
         AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew]);
 

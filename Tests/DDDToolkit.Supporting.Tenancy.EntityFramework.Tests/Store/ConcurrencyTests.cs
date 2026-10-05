@@ -231,7 +231,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
 
         var conflict = await RaceAsync(
             interrupted: services => services.Organization().RenameUnitAsync(_north, "North Shore", TestContext.Current.CancellationToken),
-            interrupting: async services => west = await services.Organization().AddUnitAsync(_harbor.RootUnit, "West", "region", TestContext.Current.CancellationToken));
+            interrupting: async services => west = await services.Organization().AddUnitAsync(_harbor.RootUnit, "West", TestContext.Current.CancellationToken));
 
         conflict.AggregateType.Should().Be<HostOrganization>("a rename does not take the access revision; the organization's version keeps the edits apart");
         await _services.BySystemIn(_harbor.Tenant, async services =>
@@ -267,7 +267,7 @@ public abstract class ConcurrencyTests(TestDatabases databases) : IAsyncLifetime
         _harbor = await _services.ProvisionAsync("harbor");
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
-        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast", "site");
+        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
         _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
         _lin = await _services.SeatAtAsync(_harbor, "Lin", _north);
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().PlaceAsync(_lin, _coast, primary: false, TestContext.Current.CancellationToken));

@@ -1,4 +1,5 @@
 using Examples.Tenancy.Tenants.Application.Directory.Queries;
+using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
 using GreenDonut;
 using Mediator;
@@ -41,14 +42,14 @@ internal static class DirectoryDataLoaders
         return seats;
     }
 
-    /// <summary>The units with these ids, by id.</summary>
+    /// <summary>The units with these ids, by id, each with its kind.</summary>
     [DataLoader]
-    public static async Task<IReadOnlyDictionary<OrganizationUnitId, SampleTenancy.UnitSummary>> GetOrganizationUnitByIdAsync(
+    public static async Task<IReadOnlyDictionary<OrganizationUnitId, UnitListing>> GetOrganizationUnitByIdAsync(
         IReadOnlyList<OrganizationUnitId> ids,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var units = new Dictionary<OrganizationUnitId, SampleTenancy.UnitSummary>();
+        var units = new Dictionary<OrganizationUnitId, UnitListing>();
         foreach (var part in ids.Chunk(SampleTenancy.TenancyDirectory.MostIds))
         {
             foreach (var unit in await sender.Send(new OrganizationUnitsById(part), cancellationToken))

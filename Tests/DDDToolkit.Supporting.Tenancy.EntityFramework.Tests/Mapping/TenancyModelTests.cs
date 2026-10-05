@@ -199,14 +199,14 @@ public sealed class TenancyModelTests : IDisposable
             modelBuilder.Entity<RoleRow<TenantId, RoleId>>().Property<string>("Name");
             modelBuilder.Entity<SeatRow<TenantId, SeatId>>().Property<string>("DisplayName");
             modelBuilder.Entity<SeatRow<TenantId, SeatId>>().Property<Guid>("Identity");
-            modelBuilder.Entity<OrganizationUnitRow<TenantId, OrganizationUnitId>>().Property<string>("Kind");
+            modelBuilder.Entity<OrganizationUnitRow<TenantId, OrganizationUnitId>>().Property<string>("Name");
         });
 
         TenancyModel.ReadsBeyondAccessFacts(module.Model, TestTenancyContext.Schema).Select(finding => finding[..finding.IndexOf(", which", StringComparison.Ordinal)]).Should().BeEquivalentTo(
             "RoleRow<TenantId, RoleId> has the property Name",
             "SeatRow<TenantId, SeatId> has the property DisplayName",
             "SeatRow<TenantId, SeatId> has the property Identity",
-            "OrganizationUnitRow<TenantId, OrganizationUnitId> has the property Kind");
+            "OrganizationUnitRow<TenantId, OrganizationUnitId> has the property Name");
 
         // The one shadow property the package gives a row itself is the placements' tenant; any other is reported.
         using var functions = new Module(modelBuilder =>

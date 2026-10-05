@@ -14,7 +14,9 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// (<see cref="ITenancyReadSource{TTenantId, TSeatId, TUnitId, TRoleId}"/>) carry no text that is shown to
     /// people, so a module that reads them next to its own tables answers ids, and whoever shows them asks here
     /// what they are called: <see cref="SeatsByIdAsync"/>, <see cref="RolesByIdAsync"/> and
-    /// <see cref="UnitsByIdAsync"/>. The names are read from Tenancy's own seats, roles and units.
+    /// <see cref="UnitsByIdAsync(IReadOnlyCollection{TUnitId}, CancellationToken)"/>. The names are read from
+    /// Tenancy's own seats, roles and units; a field the application added to its unit class is answered beside
+    /// them through the overloads that take a view of the unit.
     /// </para>
     /// <para>
     /// Whoever works in a tenant reads its names: a seat of it, or system work in it. No key is asked, for a list
@@ -35,7 +37,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// <summary>How many ids one question by id takes.</summary>
         public const int MostIds = 200;
 
-        /// <summary>Every permission key, role pack and unit kind of the application.</summary>
+        /// <summary>Every permission key and role pack of the application.</summary>
         public TenancyCatalogue Catalogue => catalogue;
 
         /// <summary>
@@ -199,8 +201,27 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<UnitSummary>> ListUnitsAsync(CancellationToken cancellationToken)
+        public Task<IReadOnlyList<UnitSummary>> ListUnitsAsync(CancellationToken cancellationToken)
+            => ListUnitsAsync(static (summary, _) => summary, cancellationToken);
+
+        /// <summary>
+        /// The units the caller reads, as <see cref="ListUnitsAsync(CancellationToken)"/> answers them, each
+        /// answered as <paramref name="view"/> makes it of the package's summary and the application's own unit.
+        /// That is how a field the application added to its unit class, such as what kind of unit it is, is
+        /// answered beside what Tenancy keeps: from the units the directory read anyway, with no statement more.
+        /// </summary>
+        /// <typeparam name="TView">What the application answers of a unit.</typeparam>
+        /// <param name="view">
+        /// Makes the answer of one unit, once for each, by path. The unit is the organization's own, read for this
+        /// answer: read it, and change nothing on it.
+        /// </param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
+        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+        public async Task<IReadOnlyList<TView>> ListUnitsAsync<TView>(Func<UnitSummary, TUnit, TView> view, CancellationToken cancellationToken)
         {
+            ArgumentNullException.ThrowIfNull(view);
+
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
 
@@ -210,7 +231,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
                 ? units.Ids
                 : await store.Queries.ListAsync(gate.Questions.ReadableUnits(), cancellationToken).ConfigureAwait(false);
 
-            return units.Summaries(readable);
+            return units.Summaries(readable, view);
         }
 
         /// <summary>
@@ -224,9 +245,33 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<UnitSummary>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<UnitSummary>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
+            => UnitsByIdAsync(ids, static (summary, _) => summary, cancellationToken);
+
+        /// <summary>
+        /// The units among <paramref name="ids"/>, as <see cref="UnitsByIdAsync(IReadOnlyCollection{TUnitId}, CancellationToken)"/>
+        /// answers them, each answered as <paramref name="view"/> makes it of the package's summary and the
+        /// application's own unit: a field the application added to its unit class, beside what Tenancy keeps,
+        /// with no statement more.
+        /// </summary>
+        /// <typeparam name="TView">What the application answers of a unit.</typeparam>
+        /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
+        /// <param name="view">
+        /// Makes the answer of one unit, once for each, by path. The unit is the organization's own, read for this
+        /// answer: read it, and change nothing on it.
+        /// </param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        /// <exception cref="Exceptions.RefusalException">
+        /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+        public async Task<IReadOnlyList<TView>> UnitsByIdAsync<TView>(
+            IReadOnlyCollection<TUnitId> ids,
+            Func<UnitSummary, TUnit, TView> view,
+            CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
+            ArgumentNullException.ThrowIfNull(view);
 
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
@@ -238,7 +283,7 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
 
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
-            return units.Summaries(asked);
+            return units.Summaries(asked, view);
         }
 
         /// <summary>
@@ -340,14 +385,18 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         public IReadOnlyList<UnitRef> Refs(IEnumerable<TUnitId> ids)
             => ids.Distinct().Select(Ref).OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase).ToArray();
 
-        /// <summary>The units among <paramref name="ids"/> that the organization has, each once, by path.</summary>
-        public IReadOnlyList<UnitSummary> Summaries(IEnumerable<TUnitId> ids)
+        /// <summary>
+        /// The units among <paramref name="ids"/> that the organization has, each once, by path, each answered as
+        /// <paramref name="view"/> makes it of its summary and the unit itself.
+        /// </summary>
+        public IReadOnlyList<TView> Summaries<TView>(IEnumerable<TUnitId> ids, Func<UnitSummary, TUnit, TView> view)
             => ids
                 .Distinct()
                 .Select(Unit)
                 .OfType<TUnit>()
-                .Select(unit => new UnitSummary(unit.Id, unit.ParentId, unit.Name, unit.Kind, unit.Status, PathOf(unit.Id), DepthOf(unit.Id)))
-                .OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(unit => (Summary: new UnitSummary(unit.Id, unit.ParentId, unit.Name, unit.Status, PathOf(unit.Id), DepthOf(unit.Id)), Unit: unit))
+                .OrderBy(pair => pair.Summary.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(pair => view(pair.Summary, pair.Unit))
                 .ToArray();
     }
 }

@@ -19,10 +19,11 @@ public static class TenancyPacks
     public const string DefaultAdministratorsKey = "administrator";
 
     /// <summary>
-    /// The administrators' pack <see cref="TenancyCatalogue.Build"/> adds when the application declares none:
-    /// named "Administrator", for every shape, seeded on provision and listed first. It lists no keys, so the
-    /// role made from it holds every live key of the catalogue as built, a key a module declares later included,
-    /// as an administrators' pack of the application's own that lists none does.
+    /// The administrators' pack <see cref="TenancyCatalogue.Build(ApplicationCatalogue, IEnumerable{Permission})"/>
+    /// adds when the application declares none: named "Administrator", for every shape, seeded on provision and
+    /// listed first. It lists no keys, so the role made from it holds every live key of the catalogue as built, a
+    /// key a module declares later included, as an administrators' pack of the application's own that lists none
+    /// does.
     /// <para>
     /// Its name and description come in English and in Dutch, the languages the package ships: a tenant
     /// provisioned in Dutch gets a role called "Beheerder". An application's <see cref="IRolePackTexts"/> is

@@ -76,7 +76,7 @@ public static class EveryUseCase
 
         // The tree, by a units manager at North, who renames North itself without the key at its parent.
         var dock = OrganizationUnitId.CreateSequential();
-        await As(Seth, scoped => scoped.Organization().AddUnitAsync(North, "North Dock", "site", cancellation, dock));
+        await As(Seth, scoped => scoped.Organization().AddUnitAsync(North, "North Dock", cancellation, dock, unit => unit.SetCostCentre("ND-001")));
         await As(Seth, scoped => scoped.Organization().RenameUnitAsync(dock, "North Docks", cancellation));
         await As(Seth, scoped => scoped.Organization().MoveUnitAsync(dock, NorthPier, cancellation));
         await As(Seth, scoped => scoped.Organization().ArchiveUnitAsync(dock, cancellation));
@@ -104,7 +104,7 @@ public static class EveryUseCase
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Flat, "Estuary", "company", dan, "Dan", TenantId: Estuary),
+                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan, "Dan", TenantId: Estuary),
                 cancellation));
         }
 

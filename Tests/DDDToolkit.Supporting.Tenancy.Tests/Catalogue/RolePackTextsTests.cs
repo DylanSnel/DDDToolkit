@@ -16,7 +16,7 @@ public class RolePackTextsTests
     private static readonly CultureInfo Dutch = CultureInfo.GetCultureInfo("nl");
 
     private static HostTenancy.TenantToProvision Harbor(TenantShape shape, CultureInfo? language)
-        => new("harbor", "Harbor Works", shape, "Harbor Works", "company", Guid.NewGuid(), "Ada", Language: language);
+        => new("harbor", "Harbor Works", shape, "Harbor Works", Guid.NewGuid(), "Ada", Language: language);
 
     private static Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
         => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));

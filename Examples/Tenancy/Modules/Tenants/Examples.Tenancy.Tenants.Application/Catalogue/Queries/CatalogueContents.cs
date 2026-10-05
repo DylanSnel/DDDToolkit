@@ -4,8 +4,8 @@ using Mediator;
 namespace Examples.Tenancy.Tenants.Application.Catalogue.Queries;
 
 /// <summary>
-/// Everything the application's catalogue lists: every permission key, every role pack and every kind of unit,
-/// for the screens that make roles and add units.
+/// Everything the application's catalogue lists: every permission key and every role pack, for the screens that
+/// make roles.
 /// </summary>
 /// <remarks>
 /// Every tenant has the same catalogue, and it holds nothing of any of them, so whoever works in a tenant may
@@ -20,11 +20,9 @@ public sealed record CatalogueContents : IQuery<CatalogueOverview>, ITenantsRequ
 /// <summary>The catalogue as a client reads it.</summary>
 /// <param name="Permissions">Every permission key, retired ones included, in the catalogue's order.</param>
 /// <param name="Packs">Every role pack a tenant's roles are copied from.</param>
-/// <param name="UnitKinds">Every kind a unit of the organization can be.</param>
 public sealed record CatalogueOverview(
     IReadOnlyList<PermissionOverview> Permissions,
-    IReadOnlyList<PackOverview> Packs,
-    IReadOnlyList<UnitKindOverview> UnitKinds);
+    IReadOnlyList<PackOverview> Packs);
 
 /// <summary>A permission key.</summary>
 /// <param name="Key">The key, such as <c>projects.edit</c>.</param>
@@ -56,11 +54,6 @@ public sealed record PackOverview(
     TenantShape? Shape,
     bool Administers);
 
-/// <summary>A kind of unit.</summary>
-/// <param name="Key">The kind's key, such as <c>region</c>.</param>
-/// <param name="Name">What it is called on screen.</param>
-public sealed record UnitKindOverview(string Key, string Name);
-
 /// <summary>
 /// Answers <see cref="CatalogueContents"/> from the catalogue, which is built once when the host starts: there
 /// is nothing to read from storage.
@@ -78,6 +71,5 @@ public sealed class CatalogueContentsHandler(TenancyCatalogue catalogue) : IQuer
                 permission.Implies ?? [],
                 permission.Retired,
                 permission.ManagesAccess))],
-            [.. catalogue.Packs.Select(pack => new PackOverview(pack.Key, pack.Keys, pack.Name, pack.Description, pack.Shape, pack.Administers))],
-            [.. catalogue.UnitKinds.Select(kind => new UnitKindOverview(kind.Key, kind.Name))]));
+            [.. catalogue.Packs.Select(pack => new PackOverview(pack.Key, pack.Keys, pack.Name, pack.Description, pack.Shape, pack.Administers))]));
 }

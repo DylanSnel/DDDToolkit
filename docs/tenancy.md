@@ -39,10 +39,13 @@ The page goes in the order you need it:
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived, never deleted. |
 | **Seat** | A person in a tenant: their **Placements** in units, and the **RoleGrants** at each | One placement per unit and one primary. Only active roles are granted. The person a seat belongs to never changes. |
 | **Role** | A name and the **Permission** keys it grants | Only keys from the catalogue, with the keys they imply expanded. |
-| **Catalogue** | The permission keys, the **RolePacks** and the kinds of unit | One administrators' pack per shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
+| **Catalogue** | The permission keys and the **RolePacks** | One administrators' pack per shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
 
 Tenant, Organization, Seat and Role are aggregates, and they refer to each other by id. The catalogue is
-data your application supplies, not a class you declare. Two rules span more than one aggregate, and so
+data, not a class you declare: Tenancy's keys, the keys your modules contribute, and what your application
+adds, which may be nothing ([What the catalogue is for](#what-the-catalogue-is-for)). A unit has no kind:
+whether it is a region or a site is yours to keep, on your own unit class
+([The kind of a unit](#the-kind-of-a-unit)). Two rules span more than one aggregate, and so
 live in the use cases, guarded against concurrent changes. The last administrator of a tenant cannot be
 removed. And a role that manages access is given or taken away only by someone who holds its keys that
 manage access, there and for at least as long, and never by a seat to itself; a seat that holds one is
@@ -66,8 +69,9 @@ that manage access, so whoever holds it can give the next role: a tenant cannot 
 not declare it. When your catalogue declares no administrators' pack at all, `TenancyCatalogue.Build` adds
 Tenancy's own, `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every
 shape, seeded when a tenant is provisioned. It lists no keys, so it holds every live key, one a module adds
-later included. The smallest catalogue is your kinds of unit and your keys, and packs that administer nothing,
-such as a viewer's, sit next to the default one.
+later included. So the smallest application declares no catalogue at all: its modules contribute their keys,
+and `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
+one.
 
 ```mermaid
 flowchart TD
@@ -95,19 +99,19 @@ from the same catalogue, so `pack_keys('administrator')` answers every live key,
 compares the database's functions with the catalogue the application runs with passes.
 
 <details>
-<summary>Show the code: a catalogue that declares no packs</summary>
+<summary>Show the code: an application without a catalogue, and one with keys of its own and no packs</summary>
 
 ```csharp
-// Every tenant starts with the role of the default administrators' pack, given to its first seat
-public static ApplicationCatalogue Application { get; } = new(
-    UnitKinds: [new UnitKind("company", "Company")],
-    Permissions: ShopKeys.All);
+// No catalogue: the keys are Tenancy's and the modules', and every tenant starts with the default
+// administrators' role, given to its first seat
+services.AddTenancy<ShopTenancyContext>(options =>
+{
+    options.NewSeatId = SeatId.CreateSequential;
+    // and NewTenantId, NewUnitId and NewRoleId; no options.Catalogue
+});
 
-// The same, with the packs named and empty
-public static ApplicationCatalogue Same { get; } = new(
-    Packs: [],
-    UnitKinds: [new UnitKind("company", "Company")],
-    Permissions: ShopKeys.All);
+// Keys the application owns itself, and still no pack: the default administrators' role holds them too
+public static ApplicationCatalogue Application { get; } = new(Permissions: ShopKeys.All);
 
 // A provisioned tenant names the role by the pack's key
 var administrators = provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey];
@@ -141,10 +145,11 @@ Tenancy becomes a module of your application, like any other. In the order you w
 2. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
    a migration of your own, and `services.AddTenancy<TContext>(...)` with how your ids are made
    ([Your tenancy module](#your-tenancy-module)).
-3. **Write your catalogue.** The permission keys of your modules, the role packs a tenant starts with and the
-   kinds of unit, and a mark on every key that manages access
-   ([Which keys manage access](#who-may-give-a-role)). Declare no administrators' pack, and every tenant
-   starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)).
+3. **Write your catalogue, when you need one.** Each module contributes its own keys. Your part adds the role
+   packs a tenant starts with, keys no module owns, and a mark on every key that manages access
+   ([What the catalogue is for](#what-the-catalogue-is-for)). Declare no administrators' pack, and every tenant
+   starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)); need none of the rest, and
+   leave the catalogue out.
 4. **Say who is calling, per request.** After authentication, `TenantSelection` finds the seat the token's
    identity has in the tenant the request names, and that seat is the caller for the rest of the request
    ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy) has the middleware).
@@ -260,7 +265,7 @@ public static IServiceCollection AddShopTenancy(this IServiceCollection services
     => services
         .AddTenancy<ShopTenancyContext>(options =>
         {
-            options.Catalogue = ShopCatalogue.Application;
+            options.Catalogue = ShopCatalogue.Application;   // when you have one: packs, keys of your own, marks
             options.NewSeatId = SeatId.CreateSequential;
             // and NewTenantId, NewUnitId and NewRoleId: the ids are yours, and so is how they are made
         })
@@ -275,6 +280,25 @@ to a tenant; [Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-s
 checks it.
 [A registration closed over your classes](writing-a-supporting-domain.md#a-registration-closed-over-your-classes)
 explains how the calls without your classes come about.
+
+### What the catalogue is for
+
+Tenancy asks the application only what it needs to decide something, and its catalogue is what it decides
+access with: which keys exist, which of them manage access, and which roles a new tenant starts with. Tenancy
+brings its own keys, and every module contributes its keys next to the code that asks for them, with
+`AddTenancyPermissions`. What is left for your `ApplicationCatalogue` is what neither can say:
+
+| Part | What it decides | Without it |
+|---|---|---|
+| `Packs` | The roles a new tenant starts with, and what its first administrator holds | Every tenant starts with Tenancy's administrators' role alone ([The administrators' pack](#the-administrators-pack)) |
+| `Permissions` | Keys that belong to no module | Only Tenancy's keys and the modules' contributions |
+| `AccessManagingKeys` | A key a module declares that should manage access in your application | A key manages access only where it is declared so ([Which keys manage access](#who-may-give-a-role)) |
+
+Every part is optional, and so is the catalogue: leave `options.Catalogue` unset and Tenancy builds it from
+`new ApplicationCatalogue()`, its own keys and the contributions. The export on Postgres, which builds the
+catalogue without the registration, does the same with `TenancyCatalogue.Build(contributed)`
+([Setting it up](#setting-it-up)). Nothing else is asked for: what kind of unit a unit is decides nothing, so
+it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 
 ### Calling a use case
 
@@ -312,7 +336,7 @@ public sealed class FirstTenant(ShopTenancy.TenantCommands tenants)
         {
             await tenants.ProvisionAsync(
                 new ShopTenancy.TenantToProvision(
-                    "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", identity, "Ada"),
+                    "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity, "Ada"),
                 cancellationToken);
         }
     }
@@ -353,7 +377,7 @@ public sealed partial class OrganizationUnit
 
     public void SetCostCentre(string? costCentre) => CostCentre = costCentre;
 
-    // Runs after the package's rules about names, kinds, parents and archiving, never instead of them.
+    // Runs after the package's rules about names, parents and archiving, never instead of them.
     public sealed partial class CostCentreFormat : IInvariant<OrganizationUnit>
     {
         public string Code => "tenants.unit.cost-centre";
@@ -369,23 +393,26 @@ public sealed partial class OrganizationUnit
 }
 ```
 
-A field of yours starts at its default. For a new tenant and its first seat you set it while the tenant is
-provisioned, through two callbacks on the command:
+A field of yours starts at its default. For a new tenant, its root and its first seat you set it while the
+tenant is provisioned, through three callbacks on the command:
 
 ```csharp
 await tenants.ProvisionAsync(
     new ShopTenancy.TenantToProvision(
-        "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", identity, "Ada",
+        "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity, "Ada",
         ConfigureTenant: tenant => tenant.MarkAsDemo(),
+        ConfigureRoot: root => root.SetCostCentre("HW-001"),
         ConfigureFirstSeat: seat => seat.ChangeJobTitle("Harbor master")),
     cancellationToken);
 ```
 
-Each runs once the instance is made and before the tenant is activated: the tenant is still being
-provisioned, and the seat is placed at the root and holds the administrators' role. What they set is written
-in the save that provisions, an event your class raises there leaves with the provisioning's own, and a
-callback that throws stops the provisioning with nothing saved. For every later seat, call your method after
-`AddSeatAsync`, or handle `SeatAdded`.
+Each runs once the instance is made and before the tenant is activated, in that order: the tenant is still
+being provisioned, the root is in its organization, and the seat is placed at the root and holds the
+administrators' role. What they set is written in the save that provisions, an event your class raises there
+leaves with the provisioning's own, and a callback that throws stops the provisioning with nothing saved. For
+every later unit, `AddUnitAsync` takes the same kind of callback, `configure`
+([The kind of a unit](#the-kind-of-a-unit)). For every later seat, call your method after `AddSeatAsync`, or
+handle `SeatAdded`.
 
 An event you want another module to hear is mapped in the outbox of your Tenancy context, before the call
 that keeps the rest to itself:
@@ -395,6 +422,77 @@ services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyCo
     .PublishAs<SeatSuspended<TenantId, SeatId>, SeatSuspendedV1>(suspended => new SeatSuspendedV1(suspended.SeatId.Value))
     .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()));
 ```
+
+### The kind of a unit
+
+Tenancy keeps no kind of unit. Whether a unit is a region, an area or a site decides nothing about access: a
+key held at a unit reaches every unit below it, whatever either is called. So the package neither asks for a
+kind nor checks one, and an application that tells its units apart adds a field of its own to its unit class,
+an enum say, shown and stored like any field of its own. It sets the field in the callback of the use case
+that makes the unit:
+
+```mermaid
+flowchart LR
+    Ask["AddUnitAsync<br/>(parent, name,<br/>configure)"] --> Key{"tenancy.units.manage<br/>at the parent?"}
+    Key -- no --> Refused(["refused,<br/>nothing saved"])
+    Key -- yes --> Tree{"the tree<br/>takes it?"}
+    Tree -- "flat, archived parent,<br/>too deep, bad name" --> Refused
+    Tree -- yes --> Configure["configure(unit):<br/>your fields"]
+    Configure -- throws --> Nothing(["not added,<br/>nothing saved"])
+    Configure --> Save(["added, one save:<br/>the unit, your fields"])
+```
+
+The use case checks the caller, and the organization checks the tree and makes the unit through your own
+class. It hands the unit to `configure` before it takes the unit in, so your field is written in the same save
+as the unit and a rule of your class judges it there. A callback that throws leaves the organization as it was:
+the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
+through `ConfigureRoot` when the tenant is provisioned.
+
+To show the kind, ask the directory with a view. `ListUnitsAsync` and `UnitsByIdAsync` take a function of the
+directory's `UnitSummary`, what Tenancy keeps of a unit, and of your own unit, which the directory read anyway,
+so you answer the two side by side with no read more. The sample does all of it: a `UnitKind` enum on its unit,
+set by its command and by its seeding, and a `UnitListing` its queries answer, the summary with the kind beside
+it.
+
+<details>
+<summary>Show the code: a unit's kind as the application's own enum</summary>
+
+```csharp
+public enum UnitKind { Company, Region, Area, Site }
+
+[OrganizationUnit<OrganizationUnitId>]
+public sealed partial class OrganizationUnit
+{
+    public UnitKind? Kind { get; private set; }
+
+    public void SetKind(UnitKind? kind) => Kind = kind;
+}
+
+// The command's handler: the package's use case adds the unit, the callback sets the kind, one save writes both
+public async ValueTask<OrganizationUnitId> Handle(AddOrganizationUnit command, CancellationToken cancellationToken)
+    => await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: unit => unit.SetKind(command.Kind));
+
+// The root's, when the tenant is provisioned
+new SampleTenancy.TenantToProvision(slug, name, shape, name, identity, "Ada", ConfigureRoot: root => root.SetKind(UnitKind.Company));
+
+// The query's handler: the directory decides which units the caller reads, the view adds the kind
+public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? ParentId, string Name, UnitKind? Kind, UnitStatus Status, string Path, int Depth)
+{
+    internal static UnitListing Of(SampleTenancy.UnitSummary unit, OrganizationUnit own)
+        => new(unit.Id, unit.ParentId, unit.Name, own.Kind, unit.Status, unit.Path, unit.Depth);
+}
+
+public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
+    => await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(UnitListing.Of, cancellationToken));
+
+// Stored by its name: one line in the context's ConfigureConventions
+configurationBuilder.Properties<UnitKind>().HaveConversion<string>().HaveMaxLength(16);
+```
+
+The sample stores the kind by its key in lower case instead, with a converter of its own (`UnitKindKeyConverter`),
+because its rows from before the enum hold the keys of the catalogue the package once asked for.
+
+</details>
 
 ## Who may do what
 
@@ -769,7 +867,7 @@ function:
 |---|---|---|
 | `SeatRight` | the tenant, the seat, the unit, the role, the key, and the grant's start and end | |
 | `OrganizationUnitPath` | the tenant, the unit above, the unit at or below it, and how many levels apart they are | |
-| `OrganizationUnitRow` | the unit's id, its tenant, its parent and its status | its name and its kind |
+| `OrganizationUnitRow` | the unit's id, its tenant, its parent and its status | its name, and every field your unit class adds |
 | `RoleRow` | the role's id, its tenant, the pack it was copied from, its status and its keys | its name |
 | `PlacementRow` | the seat, the unit, and whether the placement is the primary one | |
 | `SeatRow` | the seat's id, its tenant and its status | its display name and its identity |
@@ -963,7 +1061,6 @@ declares:
 ```csharp
 public static ApplicationCatalogue Application { get; } = new(
     Packs: [/* ... */],
-    UnitKinds: [/* ... */],
     AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew]);
 
 // A key of your own, marked where it is declared
@@ -1279,7 +1376,6 @@ use cases call that input by, so a form puts the text under it:
 | Code | `Field` |
 | --- | --- |
 | `tenancy.name-invalid` | `name` for the name of a tenant, a unit or a role, `displayName` for a seat's and for the name an invitation suggests, `description` for a role's, `reason` for a reason. `What` says which of the six it is |
-| `tenancy.kind-invalid`, `tenancy.unknown-unit-kind` | `kind` |
 | `tenancy.invalid-slug` | `slug`. A slug is a value object, so this one arrives as a validation failure with the same code and argument |
 | `tenancy.invalid-period` | `until` |
 | `tenancy.reason-required` | `reason` |
@@ -1687,8 +1783,7 @@ which tenant the event is about, taken from the event, and who acted, as [above]
 caller of the save, which is the actor a use case puts on its events. An event of your own in that context
 that names no tenant gets the tenant the save runs in. The payload is the event as the outbox stores it: ids,
 keys and dates, who made the change, and the little else an event says, such as the slug a tenant was
-provisioned under, a unit's kind, the pack a role was copied from and the reason a tenant was suspended or
-closed for. It never holds what a tenant, a unit, a seat or a role is called, or why a role was given.
+provisioned under, the pack a role was copied from and the reason a tenant was suspended or closed for. It never holds what a tenant, a unit, a seat or a role is called, or why a role was given.
 
 Reading it takes a key of Tenancy's own, **`tenancy.history.view`**, asked for the whole tenant. It manages
 no access, so a role that holds it is given like any other. An administrators' pack that lists its keys holds
@@ -2148,7 +2243,7 @@ What the ids are called:
 | Route | Body | Answers |
 |---|---|---|
 | `POST /tenancy/directory/seats` | `{ "ids": [ ... ] }` | `[ { id, displayName, status } ]`, by name |
-| `POST /tenancy/directory/units` | `{ "ids": [ ... ] }` | `[ { id, parentId, name, kind, status, path, depth } ]`, by path |
+| `POST /tenancy/directory/units` | `{ "ids": [ ... ] }` | `[ { id, parentId, name, kind, status, path, depth } ]`, by path; `kind` is the sample's own field, `null` for a unit added without one |
 | `POST /tenancy/directory/roles` | `{ "ids": [ ... ] }` | `[ { id, name, fromPack, status, keys, managesAccess } ]`, the active ones first, by name |
 
 Each is a `POST` that only asks and changes nothing. Anyone seated in the tenant may send it, and is answered
@@ -3319,7 +3414,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleTenancyContribution.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleTenancyContribution.cs), `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
-| A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, `build/verify-package-consumption.sh` |
+| A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
 | A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, re-key and archive | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
 | A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. Only for the command whose check let it through, the request in hand: a handler reached around its check saves as the caller, and the database judges it. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios`, `AccessHoldScenarios` |
 
@@ -3345,6 +3440,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | No module reads Tenancy's tables. It maps the read model, as Tenancy's functions | **Code:** [`ProjectsContext.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/ProjectsContext.cs), [`TenancyModelBuilderExtensions.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Mapping/TenancyModelBuilderExtensions.cs)<br/>**Try it:** Nothing to see from outside: any list of projects asks Tenancy's functions inside its own statement ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ModuleModelTests`, `ReadFunctionTests`, `MigrationTests`, `AccessStatementTests` |
 | Key sets draw a screen, and a command asks again when it runs | **Code:** [`KeysOnProjects.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/Queries/KeysOnProjects.cs), [`ProjectAbilities.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Overview/ProjectAbilities.cs), [`ITenancyQuestions.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Questions/ITenancyQuestions.cs)<br/>**Try it:** rhea's two requests under `/access`, in the `.http` file; the actions on a project's page, filled or outlined<br/>**Test:** `KeySetScenarios`, `KeySetQuestionTests` |
+| A unit's kind is the application's: an enum on its own unit class, set by the callback of the use case that makes the unit, and answered through a view the directory hands the unit it read | **Code:** [`OrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Organizations/Entities/OrganizationUnit.cs), [`AddOrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/Commands/AddOrganizationUnit.cs), [`UnitListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/UnitListing.cs)<br/>**Try it:** `GET /tenancy/units`, each unit with its `kind`; `organizationUnits { name kind }` in GraphQL<br/>**Test:** `FlatAndHierarchicalScenarios`, `GraphQLMutationScenarios`, `OrganizationCommandsTests`, `DirectoryTests`, `AccessStatementTests`, `MigrationTests` |
 | The read model carries access facts and no name. What a seat, a unit or a role is called is asked of the directory, by id | **Code:** [`ReadModel`](../Source/DDDToolkit.Supporting.Tenancy/Access/ReadModel), [`DirectoryEndpoints.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/Rest/DirectoryEndpoints.cs), [`DirectoryNames.cs`](../Examples/Tenancy/Examples.Tenancy.Ui/Api/DirectoryNames.cs)<br/>**Try it:** Name of a seat, Path of a unit and Name of a role, on the Try it page<br/>**Test:** `StrictAnswersTests`, `DirectoryScenarios`, `DirectoryNamesTests`, `ReadModelTests` |
 | Access is asked live, and a name is asked of its owner: by id over REST, through a reference in GraphQL. A copy of names that another module keeps from events is not built | **Code:** [`DirectoryQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/GraphQL/DirectoryQueries.cs), [`ReferencedSeat.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/GraphQL/ReferencedSeat.cs)<br/>**Try it:** "A project with names", in the GraphQL part of the `.http` file<br/>**Test:** `GraphQLLookupScenarios`, `DirectoryLookupScenarios` |
 | The sample keeps the names Entity Framework gives. A database in snake_case is a host's choice | **Code:** [`TenancyTableNames.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Mapping/TenancyTableNames.cs)<br/>**Try it:** The recipe under [Your own naming](#your-own-naming); the sample's files under `Examples/Tenancy/supabase/migrations`<br/>**Test:** `TenancyNamingTests`, `MigrationTests` |
@@ -3453,7 +3549,9 @@ services.RunStartupChecks();
 // The project that runs the export: Tenancy's functions, policies and triggers go into its migrations
 [assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
 
-// The catalogue as your registration builds it: your part, and the keys your modules add with AddTenancyPermissions
+// The catalogue as your registration builds it: your part, and the keys your modules add with AddTenancyPermissions.
+// An application without a part of its own builds from its modules' keys alone:
+// TenancyCatalogue.Build([.. OrderingCatalogue.Permissions]).
 public sealed class ShopTenancyRowAccess()
     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, [.. OrderingCatalogue.Permissions]));
 ```
@@ -3824,7 +3922,7 @@ another database `AddTenancyReadModel` maps views over the tables:
 |---|---|---|
 | `caller_rights()` | the rights the caller may read: a seat's own, and for system work in a tenant, that tenant's | `"TenantId"`, `"SeatId"`, `"UnitId"`, `"RoleId"`, `"Key"`, `"StartsAt"`, `"EndsAt"` |
 | `tenant_unit_paths()` | the closure of the tenant's tree | `"TenantId"`, `"AncestorId"`, `"DescendantId"`, `"Distance"` |
-| `tenant_units()` | the tenant's units, without their names and kinds | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
+| `tenant_units()` | the tenant's units, without their names | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
 | `tenant_roles()` | the tenant's roles, without their names, with their keys as an array of text | `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"`, `"Keys"` |
 | `tenant_placements()` | where the tenant's seats are placed | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
 | `tenant_seats()` | the tenant's seats, never their identity or their display name | `"Id"`, `"TenantId"`, `"Status"` |

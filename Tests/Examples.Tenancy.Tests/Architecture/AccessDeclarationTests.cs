@@ -81,7 +81,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new RolesById([RoleId.CreateSequential()]), TenancyAccess.InTenant()),
         (new CatalogueContents(), TenancyAccess.InTenant()),
         (new UnitsWhereIHold(TenancyKeys.UnitsManage), TenancyAccess.InTenant()),
-        (new AddOrganizationUnit(TheUnit, "North", "region"), TenancyAccess.AtUnit(TenancyKeys.UnitsManage, TheUnit)),
+        (new AddOrganizationUnit(TheUnit, "North", UnitKind.Region), TenancyAccess.AtUnit(TenancyKeys.UnitsManage, TheUnit)),
         (new MoveOrganizationUnit(OrganizationUnitId.CreateSequential(), TheUnit), TenancyAccess.InTenant()),
         (new ArchiveOrganizationUnit(TheUnit), TenancyAccess.InTenant()),
         (new ChangeTenantShape(TenantShape.Hierarchical), TenancyAccess.ForTheWholeTenant(TenancyKeys.SettingsManage)),

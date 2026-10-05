@@ -165,7 +165,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         {
             Task AsSeth(Func<IServiceProvider, Task> act) => services.BySeat(Seth.Identity, Harbor, Seth.Seat, act);
             var quay = OrganizationUnitId.CreateSequential();
-            await AsSeth(scoped => scoped.Organization().AddUnitAsync(South, "South Quay", "site", Cancellation, quay));
+            await AsSeth(scoped => scoped.Organization().AddUnitAsync(South, "South Quay", Cancellation, quay));
 
             // A unit of South moved under North would be his for good.
             var longer = await RefusedAsync(TenancyRefusals.GrantExceedsOwn, () => AsSeth(scoped => scoped.Organization().MoveUnitAsync(quay, North, Cancellation)));
@@ -225,7 +225,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         // so the use case finds him to manage units at North and at North Pier, and asks what a move between them changes.
         await using (var unsecured = new TenancyServices(database, rowLevelSecurity: false))
         {
-            await unsecured.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().AddUnitAsync(North, "North Yard", "site", Cancellation, yard));
+            await unsecured.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().AddUnitAsync(North, "North Yard", Cancellation, yard));
 
             // The database answers nobody nothing. Read as "the move changes nothing", that would let every move through,
             // with nothing in the database to check it afterwards: the store takes it for no answer instead.

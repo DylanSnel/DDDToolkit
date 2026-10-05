@@ -11,8 +11,8 @@ public class OrganizationTests
 {
     private const TenantShape Tree = TenantShape.Hierarchical;
 
-    private static OrganizationUnitId Add(HostOrganization organization, OrganizationUnitId parent, string name = "Unit", string kind = "site")
-        => organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), parent, name, kind, Tree).Id;
+    private static OrganizationUnitId Add(HostOrganization organization, OrganizationUnitId parent, string name = "Unit")
+        => organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), parent, name, Tree).Id;
 
     /// <summary>A chain of <paramref name="levels"/> units below <paramref name="top"/>; returns the deepest.</summary>
     private static OrganizationUnitId Chain(HostOrganization organization, OrganizationUnitId top, int levels)
@@ -38,11 +38,11 @@ public class OrganizationTests
         root.IsRoot.Should().BeTrue();
         root.ParentId.Should().BeNull();
         root.Status.Should().Be(UnitStatus.Active);
-        root.Kind.Should().Be("company");
+        root.Name.Should().Be("Harbor Works");
 
         var added = organization.PendingEvents().RaisedExactly<OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>>()
             .SingleEvent<OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>>();
-        added.Should().Be(new OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>(new TenantId(3), root.Id, null, "company", By: null)
+        added.Should().Be(new OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>(new TenantId(3), root.Id, null, By: null)
         {
             EventId = added.EventId,
             OccurredAt = added.OccurredAt,
@@ -55,7 +55,7 @@ public class OrganizationTests
     {
         var organization = New.Organization();
 
-        Refused.With(TenancyRefusals.FlatTenant, () => organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", "region", TenantShape.Flat));
+        Refused.With(TenancyRefusals.FlatTenant, () => organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", TenantShape.Flat));
         organization.Units.Should().ContainSingle();
     }
 
@@ -63,7 +63,7 @@ public class OrganizationTests
     public void Adding_under_an_unknown_or_archived_parent_is_refused()
     {
         var organization = New.Organization();
-        var north = Add(organization, organization.Root.Id, "North", "region");
+        var north = Add(organization, organization.Root.Id, "North");
         organization.ArchiveUnit<SeatId>(north);
 
         Refused.With(TenancyRefusals.UnitNotFound, () => Add(organization, OrganizationUnitId.CreateSequential()));
@@ -71,15 +71,57 @@ public class OrganizationTests
     }
 
     [Fact]
-    public void A_blank_kind_is_kind_invalid()
+    public void A_blank_name_is_name_invalid()
     {
         var organization = New.Organization();
 
-        Refused.With(TenancyRefusals.KindInvalid, () => Add(organization, organization.Root.Id, "North", "  "));
-        Refused.With(TenancyRefusals.KindInvalid, () => Add(organization, organization.Root.Id, "North", new string('k', 65)));
-        Refused.With(TenancyRefusals.NameInvalid, () => Add(organization, organization.Root.Id, " ", "region"))
+        Refused.With(TenancyRefusals.NameInvalid, () => Add(organization, organization.Root.Id, " "))
             .Arguments["What"].Should().Be("unit-name");
         organization.Units.Should().ContainSingle("a refused unit is never added");
+    }
+
+    [Fact]
+    public void A_new_unit_is_the_applications_own_class_with_its_fields_at_their_defaults()
+    {
+        var organization = New.Organization();
+
+        var north = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", Tree);
+        north.SetCostCentre("NO-001");
+
+        north.Should().BeOfType<HostUnit>().And.BeSameAs(organization.FindUnit(north.Id));
+        organization.Root.CostCentre.Should().BeNull("a field of the application's starts at its default");
+        organization.GetInvariantViolations().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void A_unit_whose_callback_throws_leaves_the_organization_as_it_was()
+    {
+        var organization = New.Organization();
+        var events = organization.DomainEvents.Count;
+        var seen = new List<string>();
+
+        Refused.With(TenancyRefusals.FlatTenant, () => organization.AddUnit<SeatId>(
+            OrganizationUnitId.CreateSequential(), organization.Root.Id, "Refused", TenantShape.Flat, configure: unit => seen.Add(unit.Name)));
+        FluentActions.Invoking(() => organization.AddUnit<SeatId>(
+                OrganizationUnitId.CreateSequential(),
+                organization.Root.Id,
+                "Ghost",
+                Tree,
+                configure: unit =>
+                {
+                    seen.Add(unit.Name);
+                    throw new InvalidOperationException("no such kind");
+                }))
+            .Should().Throw<InvalidOperationException>().WithMessage("no such kind");
+
+        seen.Should().Equal(["Ghost"], "the callback runs after every check, and only for a unit that passed them");
+        organization.Units.Should().ContainSingle("the organization takes a unit in only once its callback returns");
+        organization.DomainEvents.Should().HaveCount(events, "and raises nothing for a unit it did not take in");
+
+        var north = organization.AddUnit<SeatId>(
+            OrganizationUnitId.CreateSequential(), organization.Root.Id, "North", Tree, configure: unit => unit.SetCostCentre("NO-001"));
+        organization.FindUnit(north.Id)!.CostCentre.Should().Be("NO-001");
+        organization.GetInvariantViolations().Should().BeEmpty();
     }
 
     [Fact]
@@ -109,7 +151,7 @@ public class OrganizationTests
     public void Moving_under_itself_or_a_descendant_is_refused()
     {
         var organization = New.Organization();
-        var north = Add(organization, organization.Root.Id, "North", "region");
+        var north = Add(organization, organization.Root.Id, "North");
         var northCoast = Add(organization, north, "North Coast");
 
         Refused.With(TenancyRefusals.Cycle, () => organization.MoveUnit<SeatId>(north, north));
@@ -130,8 +172,8 @@ public class OrganizationTests
     public void Moving_an_archived_unit_is_refused()
     {
         var organization = New.Organization();
-        var north = Add(organization, organization.Root.Id, "North", "region");
-        var south = Add(organization, organization.Root.Id, "South", "region");
+        var north = Add(organization, organization.Root.Id, "North");
+        var south = Add(organization, organization.Root.Id, "South");
         var southBay = Add(organization, south, "South Bay");
         organization.ArchiveUnit<SeatId>(southBay);
         organization.ArchiveUnit<SeatId>(south);
@@ -173,7 +215,7 @@ public class OrganizationTests
     public void Archiving_with_active_children_is_refused()
     {
         var organization = New.Organization();
-        var north = Add(organization, organization.Root.Id, "North", "region");
+        var north = Add(organization, organization.Root.Id, "North");
         var northCoast = Add(organization, north, "North Coast");
 
         Refused.With(TenancyRefusals.UnitHasActiveChildren, () => organization.ArchiveUnit<SeatId>(north));
@@ -230,12 +272,12 @@ public class OrganizationTests
         var north = OrganizationUnitId.CreateSequential();
         var south = OrganizationUnitId.CreateSequential();
 
-        scenario.When(tree => tree.AddUnit<SeatId>(north, root, "North", "region", Tree))
+        scenario.When(tree => tree.AddUnit<SeatId>(north, root, "North", Tree))
             .RaisedExactly<OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>>()
             .SingleEvent<OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>>()
             .Should().Match<OrganizationUnitAdded<TenantId, OrganizationUnitId, SeatId>>(added =>
-                added.TenantId == tenant && added.UnitId == north && added.ParentId == root && added.Kind == "region");
-        scenario.When(tree => tree.AddUnit<SeatId>(south, root, "South", "region", Tree));
+                added.TenantId == tenant && added.UnitId == north && added.ParentId == root);
+        scenario.When(tree => tree.AddUnit<SeatId>(south, root, "South", Tree));
 
         scenario.When(tree => tree.RenameUnit<SeatId>(north, "Northern"))
             .RaisedExactly<OrganizationUnitRenamed<TenantId, OrganizationUnitId, SeatId>>()
@@ -263,7 +305,7 @@ public class OrganizationTests
     public void A_tree_broken_behind_the_methods_back_is_reported_and_never_loops()
     {
         var organization = New.Organization();
-        var north = Add(organization, organization.Root.Id, "North", "region");
+        var north = Add(organization, organization.Root.Id, "North");
         var northCoast = Add(organization, north, "North Coast");
 
         // North under North Coast, which is under North: what no method allows, written as a bad import would.

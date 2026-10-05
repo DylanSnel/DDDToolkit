@@ -154,12 +154,12 @@ public sealed class UseCaseTests : IDisposable
         await BuildHarborAsync();
         var hal = await _services.SeatAtAsync(_harbor, "Hal", _north);
         await _services.GrantAsync(_harbor, hal, _north, HostCatalogue.SupervisorPack, until: _clock.Now.AddHours(1));
-        await _services.BySeat(_harbor.Tenant, hal, services => services.Organization().AddUnitAsync(_north, "Bay", "site", TestContext.Current.CancellationToken));
+        await _services.BySeat(_harbor.Tenant, hal, services => services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken));
         var stored = await _services.StoredRightsAsync(hal);
 
         _clock.Advance(TimeSpan.FromHours(2));
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, hal, services =>
-            services.Organization().AddUnitAsync(_north, "Cove", "site", TestContext.Current.CancellationToken)));
+            services.Organization().AddUnitAsync(_north, "Cove", TestContext.Current.CancellationToken)));
 
         (await _services.StoredRightsAsync(hal)).Should().BeEquivalentTo(stored, "nothing was written when the grant ended");
         var overview = await _services.BySeat(_harbor.Tenant, hal, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
@@ -174,11 +174,11 @@ public sealed class UseCaseTests : IDisposable
 
         await BySystem(services => services.Seats().SuspendAsync(_grace, TestContext.Current.CancellationToken));
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => AsGrace(services =>
-            services.Organization().AddUnitAsync(_north, "Bay", "site", TestContext.Current.CancellationToken)));
+            services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken)));
         (await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken))).Keys.Should().BeEmpty();
 
         await BySystem(services => services.Seats().ReactivateAsync(_grace, TestContext.Current.CancellationToken));
-        await AsGrace(services => services.Organization().AddUnitAsync(_north, "Bay", "site", TestContext.Current.CancellationToken));
+        await AsGrace(services => services.Organization().AddUnitAsync(_north, "Bay", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public sealed class UseCaseTests : IDisposable
         await BuildHarborAsync();
         await BySystem(services => services.Seats().PlaceAsync(_grace, _south, primary: false, TestContext.Current.CancellationToken));
         await _services.GrantAsync(_harbor, _grace, _south, HostCatalogue.SupervisorPack, until: _clock.Now.AddDays(7));
-        var pier = await AsGrace(services => services.Organization().AddUnitAsync(_south, "Pier", "site", TestContext.Current.CancellationToken));
+        var pier = await AsGrace(services => services.Organization().AddUnitAsync(_south, "Pier", TestContext.Current.CancellationToken));
 
         var refusal = await Refused.WithCodeAsync(TenancyRefusals.GrantExceedsOwn, () => AsGrace(services =>
             services.Organization().MoveUnitAsync(pier, _north, TestContext.Current.CancellationToken)));
@@ -266,7 +266,7 @@ public sealed class UseCaseTests : IDisposable
 
         // A caller that names a tenant its seat is not in holds nothing there.
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(orchard.Tenant, _harbor.AdminSeat, services =>
-            services.Organization().AddUnitAsync(orchard.RootUnit, "Grove", "region", TestContext.Current.CancellationToken)));
+            services.Organization().AddUnitAsync(orchard.RootUnit, "Grove", TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -314,8 +314,13 @@ public sealed class UseCaseTests : IDisposable
 
             _services.Commands.Reset();
             (await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], TestContext.Current.CancellationToken))
-                .Select(unit => (unit.Name, unit.Kind, unit.Path, unit.Depth)).Should().Equal(("Harbor", "company", "Harbor", 1), ("North", "region", "Harbor / North", 2));
+                .Select(unit => (unit.Name, unit.Path, unit.Depth)).Should().Equal(("Harbor", "Harbor", 1), ("North", "Harbor / North", 2));
             _services.Commands.Count.Should().Be(2, "the organization with its units, and the closure that orders a path");
+
+            _services.Commands.Reset();
+            (await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], (unit, own) => (unit.Path, Unit: own.GetType()), TestContext.Current.CancellationToken))
+                .Should().Equal(("Harbor", typeof(HostUnit)), ("Harbor / North", typeof(HostUnit)));
+            _services.Commands.Count.Should().Be(2, "a view is handed the application's own units, which the organization's statement read");
 
             _services.Commands.Reset();
             (await directory.SeatsByIdAsync([], TestContext.Current.CancellationToken)).Should().BeEmpty();
@@ -344,15 +349,57 @@ public sealed class UseCaseTests : IDisposable
         flat.RolesByPack.Should().NotContainKey(HostCatalogue.SupervisorPack, "the supervisors' pack is for hierarchical tenants");
 
         await Refused.WithCodeAsync(TenancyRefusals.FlatTenant, () => _services.BySeat(flat.Tenant, flat.AdminSeat, services =>
-            services.Organization().AddUnitAsync(flat.RootUnit, "East", "region", TestContext.Current.CancellationToken)));
+            services.Organization().AddUnitAsync(flat.RootUnit, "East", TestContext.Current.CancellationToken)));
 
         await _services.BySeat(flat.Tenant, flat.AdminSeat, services => services.Tenants().ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, TestContext.Current.CancellationToken));
         var east = await _services.BySeat(flat.Tenant, flat.AdminSeat, services =>
-            services.Organization().AddUnitAsync(flat.RootUnit, "East", "region", TestContext.Current.CancellationToken));
+            services.Organization().AddUnitAsync(flat.RootUnit, "East", TestContext.Current.CancellationToken));
 
         (await _services.BySeat(flat.Tenant, flat.AdminSeat, services => services.Directory().ListRolesAsync(TestContext.Current.CancellationToken)))
             .Select(role => role.FromPack).Should().Contain(HostCatalogue.SupervisorPack);
         (await _services.StoredPathsAsync(flat.Tenant)).Should().Contain(path => path.AncestorId == flat.RootUnit && path.DescendantId == east && path.Distance == 1);
+    }
+
+    [Fact]
+    public async Task A_field_the_application_sets_on_a_new_unit_is_written_in_the_save_that_adds_it()
+    {
+        await BuildHarborAsync();
+
+        var bay = await AsGrace(services => services.Organization().AddUnitAsync(
+            _north, "Bay", TestContext.Current.CancellationToken, configure: unit => unit.SetCostCentre("BA-001")));
+
+        // Read again, by a scope of its own: the unit's own column went with the unit.
+        await _services.BySeat(_harbor.Tenant, _grace, async scoped =>
+            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken))
+                .FindUnit(bay)!.CostCentre.Should().Be("BA-001"));
+
+        // The application's rule about its own field holds as it does on every save: nothing is added.
+        await FluentActions.Awaiting(() => AsGrace(services => services.Organization().AddUnitAsync(
+                _north, "Cove", TestContext.Current.CancellationToken, configure: unit => unit.SetCostCentre("cove"))))
+            .Should().ThrowAsync<DDDToolkit.Exceptions.InvariantViolationException>();
+        (await _services.BySeat(_harbor.Tenant, _grace, scoped => scoped.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)))
+            .Select(unit => unit.Name).Should().Contain("Bay").And.NotContain("Cove");
+    }
+
+    [Fact]
+    public async Task A_unit_whose_callback_throws_is_not_written_by_a_later_save_in_the_same_scope()
+    {
+        await BuildHarborAsync();
+        var units = _services.Database.CountRows("OrganizationUnits");
+
+        // One scope, as one request or one GraphQL operation with two mutations: the callback throws, the caller
+        // goes on, and the next command saves the organization it loaded, tracked, in the same scope.
+        await BySystem(async services =>
+        {
+            await FluentActions.Awaiting(() => services.Organization().AddUnitAsync(
+                    _north, "Ghost", TestContext.Current.CancellationToken, configure: _ => throw new InvalidOperationException("no such kind")))
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such kind");
+            await services.Organization().RenameUnitAsync(_north, "Northern", TestContext.Current.CancellationToken);
+        });
+
+        _services.Database.CountRows("OrganizationUnits").Should().Be(units, "the organization never took the unit in, so the rename's save had none to write");
+        (await BySystem(services => services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)))
+            .Select(unit => unit.Name).Should().Contain("Northern").And.NotContain("Ghost");
     }
 
     [Fact]
@@ -363,9 +410,10 @@ public sealed class UseCaseTests : IDisposable
 
         var polder = await services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionAsync(
             new HostTenancy.TenantToProvision(
-                "polder", "Polder Werken", TenantShape.Flat, "Polder", "company", Guid.NewGuid(), "Ada",
+                "polder", "Polder Werken", TenantShape.Flat, "Polder", Guid.NewGuid(), "Ada",
                 Language: dutch,
                 ConfigureTenant: tenant => tenant.MarkAsDemo(),
+                ConfigureRoot: root => root.SetCostCentre("PO-001"),
                 ConfigureFirstSeat: seat => seat.ChangeJobTitle("Dijkgraaf")),
             TestContext.Current.CancellationToken));
 
@@ -376,6 +424,7 @@ public sealed class UseCaseTests : IDisposable
                 ("Bediener", HostCatalogue.OperatorPack), ("Hoofdgebruiker", HostCatalogue.AdministratorPack), ("Toeschouwer", HostCatalogue.WatcherPack));
             (await scoped.Tenancy().Set<HostTenant>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).IsDemo.Should().BeTrue();
             (await scoped.Tenancy().Set<HostSeat>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).JobTitle.Should().Be("Dijkgraaf");
+            (await scoped.Tenancy().Set<HostOrganization>().AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)).Root.CostCentre.Should().Be("PO-001");
         });
 
         // A change of shape names the new roles in the language it is given, and the unique index on a tenant's
@@ -388,7 +437,7 @@ public sealed class UseCaseTests : IDisposable
         // A callback that throws leaves no row behind, so the slug is free for the next attempt.
         await FluentActions.Awaiting(() => services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision(
-                    "molen", "Molen Werken", TenantShape.Flat, "Molen", "company", Guid.NewGuid(), "Bert",
+                    "molen", "Molen Werken", TenantShape.Flat, "Molen", Guid.NewGuid(), "Bert",
                     ConfigureTenant: _ => throw new InvalidOperationException("no such plan")),
                 TestContext.Current.CancellationToken)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such plan");
@@ -416,7 +465,7 @@ public sealed class UseCaseTests : IDisposable
         _harbor = await _services.ProvisionAsync("harbor");
         _north = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "North");
         _south = await _services.AddUnitAsync(_harbor.Tenant, _harbor.RootUnit, "South");
-        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast", "site");
+        _coast = await _services.AddUnitAsync(_harbor.Tenant, _north, "Coast");
         _grace = await _services.SeatAtAsync(_harbor, "Grace", _north, HostCatalogue.SupervisorPack);
         _lin = await _services.SeatAtAsync(_harbor, "Lin", _coast);
         await BySystem(services => services.Seats().PlaceAsync(_lin, _south, primary: false, TestContext.Current.CancellationToken));

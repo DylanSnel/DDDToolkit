@@ -85,10 +85,10 @@ public static class TenancySeed
 
         await services.BySystemIn(Harbor, async scoped =>
         {
-            await scoped.Organization().AddUnitAsync(HarborRoot, "North", "region", cancellationToken, North);
+            await scoped.Organization().AddUnitAsync(HarborRoot, "North", cancellationToken, North);
         });
-        await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(HarborRoot, "South", "region", cancellationToken, South));
-        await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(North, "North Pier", "site", cancellationToken, NorthPier));
+        await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(HarborRoot, "South", cancellationToken, South));
+        await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(North, "North Pier", cancellationToken, NorthPier));
         await services.BySystemIn(Harbor, scoped => scoped.Roles().CreateAsync("Grants desk", "Gives roles", [TenancyKeys.GrantsManage], cancellationToken, GrantsDesk));
 
         await SeatPersonAsync(services, Harbor, Hiro, North, [(North, GrantsDesk, null, null)], cancellationToken);
@@ -180,7 +180,6 @@ public static class TenancySeed
                     char.ToUpperInvariant(slug[0]) + slug[1..] + " Works",
                     TenantShape.Hierarchical,
                     char.ToUpperInvariant(slug[0]) + slug[1..],
-                    "company",
                     administrator.Identity,
                     administrator.Name,
                     TenantId: tenant,

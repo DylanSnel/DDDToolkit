@@ -63,7 +63,7 @@ public sealed class ReadFunctionModelTests
 
             // Whatever the columns are called, none is one a seat, a unit or a role is called by.
             var columns = entityType.GetProperties().Select(ColumnOf).ToArray();
-            columns.Should().NotContain(["Name", "DisplayName", "Kind", "Description", "Identity"], "{0} reads no text that is shown to people through {1}", mapping, row.Name);
+            columns.Should().NotContain(["Name", "DisplayName", "Description", "Identity", "CostCentre"], "{0} reads no text that is shown to people, and no column the application added, through {1}", mapping, row.Name);
         }
 
         // The tables keep their names, where the model has the tables: only the rows went without.
@@ -72,7 +72,6 @@ public sealed class ReadFunctionModelTests
             context.Model.FindEntityType(typeof(HostSeat))!.FindProperty(nameof(HostSeat.DisplayName))!.GetMaxLength().Should().Be(HostSeat.MaxDisplayNameLength);
             context.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.Name))!.GetMaxLength().Should().Be(HostRole.MaxNameLength);
             context.Model.FindEntityType(typeof(HostUnit))!.FindProperty(nameof(HostUnit.Name))!.GetMaxLength().Should().Be(HostUnit.MaxNameLength);
-            context.Model.FindEntityType(typeof(HostUnit))!.FindProperty(nameof(HostUnit.Kind))!.GetMaxLength().Should().Be(HostUnit.MaxKindLength);
         }
 
         static string ColumnOf(IProperty property)

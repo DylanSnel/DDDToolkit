@@ -54,11 +54,11 @@ public static class DemoData
             },
             ProjectRolesOf(1),
             [
-                new(north, root, "North", "region"),
-                new(northCoast, north, "North Coast", "area"),
-                new(northInland, north, "North Inland", "area"),
-                new(south, root, "South", "region"),
-                new(southBay, south, "South Bay", "area"),
+                new(north, root, "North", UnitKind.Region),
+                new(northCoast, north, "North Coast", UnitKind.Area),
+                new(northInland, north, "North Inland", UnitKind.Area),
+                new(south, root, "South", UnitKind.Region),
+                new(southBay, south, "South Bay", UnitKind.Area),
             ],
             [
                 Seat(1, DemoPeople.Rhea, north),

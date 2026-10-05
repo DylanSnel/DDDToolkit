@@ -289,7 +289,7 @@ public class ActorTests
 
         // Every command a seat gives, as Harbor's administrator.
         await harness.As(ada, use => use.Tenants.RenameOrganizationAsync("Harbor Yards", Cancellation));
-        var east = await harness.As(ada, use => use.Organization.AddUnitAsync(harbor.Root, "East", "region", Cancellation));
+        var east = await harness.As(ada, use => use.Organization.AddUnitAsync(harbor.Root, "East", Cancellation));
         await harness.As(ada, use => use.Organization.RenameUnitAsync(east, "Far East", Cancellation));
         await harness.As(ada, use => use.Organization.MoveUnitAsync(east, harbor.North, Cancellation));
         await harness.As(ada, use => use.Organization.ArchiveUnitAsync(east, Cancellation));
@@ -332,7 +332,7 @@ public class ActorTests
         {
             harness.Store.BeginUnitOfWork();
             quay = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", "company", Guid.NewGuid(), "Quin"),
+                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid(), "Quin"),
                 Cancellation);
         }
 
@@ -436,7 +436,7 @@ public class ActorTests
         {
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada"),
                 Cancellation);
         }
 
@@ -489,7 +489,7 @@ public class ActorTests
     public async Task Provisioning_for_an_operator_is_recorded_as_that_operator()
     {
         var harness = new Harness(New.Catalogue());
-        var command = new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", "company", Guid.NewGuid(), "Ada");
+        var command = new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada");
 
         HostTenancy.ProvisionedTenant provisioned;
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))

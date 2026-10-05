@@ -133,14 +133,14 @@ public sealed class TestServices : IDisposable
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             return await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
-                new HostTenancy.TenantToProvision(slug, Capitalized(slug) + " Works", shape, Capitalized(slug), "company", administrator ?? Guid.NewGuid(), administratorName),
+                new HostTenancy.TenantToProvision(slug, Capitalized(slug) + " Works", shape, Capitalized(slug), administrator ?? Guid.NewGuid(), administratorName),
                 CancellationToken.None);
         }
     }
 
-    /// <summary>Adds a unit, as system work in the tenant.</summary>
-    public Task<OrganizationUnitId> AddUnitAsync(TenantId tenant, OrganizationUnitId parent, string name, string kind = "region")
-        => BySystemIn(tenant, services => services.Organization().AddUnitAsync(parent, name, kind, CancellationToken.None));
+    /// <summary>Adds a unit, as system work in the tenant, with the application's fields set by <paramref name="configure"/>.</summary>
+    public Task<OrganizationUnitId> AddUnitAsync(TenantId tenant, OrganizationUnitId parent, string name, Action<HostUnit>? configure = null)
+        => BySystemIn(tenant, services => services.Organization().AddUnitAsync(parent, name, CancellationToken.None, configure: configure));
 
     /// <summary>Adds a seat, as system work in the tenant.</summary>
     public Task<SeatId> AddSeatAsync(TenantId tenant, Guid identity, string displayName)

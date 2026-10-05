@@ -10,7 +10,6 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// <param name="Name">The tenant's name, which is its organization's.</param>
     /// <param name="Shape">Whether its organization is flat or a tree.</param>
     /// <param name="RootName">The root unit's name.</param>
-    /// <param name="RootKind">The root unit's kind, one of the application's.</param>
     /// <param name="AdminIdentity">The verified identity of the first administrator.</param>
     /// <param name="AdminDisplayName">The name the first administrator's seat is shown by.</param>
     /// <param name="TenantId">The tenant's id, for imports and seeding; a new one otherwise.</param>
@@ -30,6 +29,10 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     /// they are saved in the same transaction and a domain event the class raises there goes out with the
     /// provisioning. When it throws, nothing is saved.
     /// </param>
+    /// <param name="ConfigureRoot">
+    /// The same for the fields the application added to its unit class, on the root: what kind of unit it is,
+    /// say, when the class keeps one. A unit raises no events of its own; the organization raises the root's.
+    /// </param>
     /// <param name="ConfigureFirstSeat">
     /// The same for the first administrator's seat, which is placed at the root and holds the administrators'
     /// role by then.
@@ -39,7 +42,6 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         string Name,
         TenantShape Shape,
         string RootName,
-        string RootKind,
         Guid AdminIdentity,
         string AdminDisplayName,
         TTenantId? TenantId = null,
@@ -48,5 +50,6 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
         IReadOnlyDictionary<string, TRoleId>? RoleIds = null,
         CultureInfo? Language = null,
         Action<TTenant>? ConfigureTenant = null,
+        Action<TUnit>? ConfigureRoot = null,
         Action<TSeat>? ConfigureFirstSeat = null);
 }

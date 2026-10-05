@@ -40,10 +40,10 @@ public static class New
     public static HostTenant Tenant(TenantShape shape = TenantShape.Hierarchical, string slug = "harbor", long id = 1)
         => TenancyInstances.NewTenant<HostTenant, TenantId, SeatId>(new TenantId(id), TenantSlug.Create(slug).ToValid(), shape);
 
-    /// <summary>An organization with its root, a company.</summary>
+    /// <summary>An organization with its root.</summary>
     public static HostOrganization Organization(long tenant = 1, string name = "Harbor Works")
         => TenancyInstances.NewOrganization<HostOrganization, TenantId, HostUnit, OrganizationUnitId, SeatId>(
-            new TenantId(tenant), name, OrganizationUnitId.CreateSequential(), name, "company");
+            new TenantId(tenant), name, OrganizationUnitId.CreateSequential(), name);
 
     /// <summary>An active seat, placed nowhere yet.</summary>
     public static HostSeat Seat(long tenant = 1, string displayName = "Ada", Guid? identity = null)
@@ -101,9 +101,9 @@ public sealed class HarborBuilder
         var organization = New.Organization(tenant.Id.Value);
 
         var root = organization.Root.Id;
-        var north = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), root, "North", "region", tenant.Shape).Id;
-        var northCoast = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), north, "North Coast", "site", tenant.Shape).Id;
-        var south = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), root, "South", "region", tenant.Shape).Id;
+        var north = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), root, "North", tenant.Shape).Id;
+        var northCoast = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), north, "North Coast", tenant.Shape).Id;
+        var south = organization.AddUnit<SeatId>(OrganizationUnitId.CreateSequential(), root, "South", tenant.Shape).Id;
 
         var roles = catalogue.PacksFor(tenant.Shape).ToDictionary(
             pack => pack.Key,
