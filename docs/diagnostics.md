@@ -1826,7 +1826,9 @@ all of them were.
 
 It is an error because without the behavior the requests of the interface reach their handlers unchecked.
 Write the behavior by hand against the version you use, and take `[AccessRequests]` off the interface, which
-still says which checks a request is held to:
+still says which checks a request is held to. Write its `Handle` with `async` and `await`, as below: the check a
+request passed is kept with the flow of the method that awaited the checks, for the handler it calls next
+([the check a request passed stays with its handler](access-requirements.md#asking-the-checks-without-mediator)).
 
 ```csharp
 public sealed class BillingAccessBehavior<TMessage, TResponse>(AccessChecks<IBillingRequest> checks) : IPipelineBehavior<TMessage, TResponse>

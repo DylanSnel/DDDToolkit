@@ -40,6 +40,9 @@ public sealed class StepLog
         }
     }
 
+    /// <summary>The access check the rename handler found its request had passed, as it ran.</summary>
+    public PassedAccessCheck? PassedInHandler { get; set; }
+
     /// <summary>The steps so far, in order.</summary>
     public IReadOnlyList<string> InOrder
     {
@@ -97,6 +100,7 @@ public sealed class RenameBasketHandler(StepLog steps, Checked<BasketId> checked
     {
         steps.Add("handler");
         steps.NoteInHand();
+        steps.PassedInHandler = PassedAccessCheck.Current;
         return ValueTask.FromResult(checkedBasket.TakeFor(command));
     }
 }

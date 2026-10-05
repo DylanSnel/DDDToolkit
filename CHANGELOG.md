@@ -240,6 +240,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project: the toolkit's props now make `IsTestProject` and `IsTestingPlatformApplication` visible to its
   analyzers, and a test that calls a handler on purpose hears nothing. Elsewhere a call that is meant takes
   `#pragma warning disable DDD00061` with its reason.
+- **The check a request passed stays with its handler, to be asked again.** `AccessChecks<TRequests>.RequireAsync`
+  keeps the check it let a request through with, its requirement and the request, with the flow of work that
+  handles it: `PassedAccessCheck.Current`, in `DDDToolkit.Access`. The handler and everything it awaits find it,
+  what sent the request does not, a request the handler sends in turn has its own, and a request that requires
+  nothing, one whose check refused and a handler called directly have none. `StillPassesAsync()` asks the check
+  again, now, as the same caller: `true` when it still lets the caller through, `false` when it refuses with a
+  `RefusalException`, and whatever else the check throws comes out as it is, a `ConcurrencyConflictException`
+  too, which says nothing about the caller's rights. Asked again, a check keeps nothing for a handler:
+  `Checked<T>.KeepFor` does nothing while it is asked again. Nothing to write for it where the checks are awaited
+  in an `async` method that then calls the handler, as the generated behavior does; a dispatcher of your own is
+  written that way, and the message of DDD00057 now says so. The toolkit asks it when the policies refuse a save,
+  below. See [Access requirements](docs/access-requirements.md#what-answers-it).
 
 #### Entity Framework and row level security
 
@@ -1774,18 +1786,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   Postgres's `42501`, and an update or a delete of a row a policy hides from the statement, which finds no
   row, used to throw a `ConcurrencyConflictException`, sending a client into a retry that could never
   succeed. Both now throw a `RefusalException` with the code `access.refused` and the kind `NotPermitted`,
-  with what the save threw as its inner exception, and log a warning through the context's logger factory,
-  since the application allowed what the policies do not. To tell a denial from a lost race,
+  with what the save threw as its inner exception. To tell a denial from a lost race,
   `AggregateVersionInterceptor` reads each row the failed statement was for again, by its key and as the same
   caller: its own concurrency tokens, or its aggregate root's `Version` for a child that has none. A row
   that is gone, hidden or changed stays the `ConcurrencyConflictException` it was. That is one query for each
   row of a save that found no row, on every database, and none for a save that succeeds. A policy's denial of
   a new row is known by the routine Postgres names with the error, `ExecWithCheckOptions`, untranslated, and
   never by the words of its message, so a server whose `lc_messages` answers in another language is read the
-  same; the warning names the table the message quotes, or, where it cannot be read, the one table the failed
+  same; the log line names the table the message quotes, or, where it cannot be read, the one table the failed
   save wrote. A missing privilege, which is `42501` as well, is not a refusal and fails as before, and neither
   is a statement with `row_security` off by a role the policies hold, whose `42501` names row level security
-  too. Code that caught either exception to detect a policy's denial catches the refusal instead.
+  too. Code that caught either exception to detect a policy's denial catches the refusal instead. A refusal,
+  a policy's or a guard's, is logged through the context's logger factory, under the category of
+  `DatabaseRefusalInterceptor`, as what it was. Where the request being handled passed an access check
+  (`PassedAccessCheck`, under Added), the check is asked again first. When it refuses now, the caller's rights
+  changed between the check and the save, a key taken from its role say, and C# and the database agreed: an
+  information line says so, with no stack trace. When it still lets the caller through, or the flow passed no
+  check, the application allowed what the database does not, and that is a warning: "C# and the policies
+  disagree", or the guards, naming the request and its requirement when there is one, so whoever reads it sees
+  what was asked again. A check that gives no answer when it is asked again, a failure or a
+  `ConcurrencyConflictException`, leaves the warning, which says why. The check is asked only for a refused
+  save, and only when a logger listens. See
+  [When the policies refuse what C# allowed](docs/row-level-security.md#when-the-policies-refuse-what-c-allowed).
 - `UseDDDToolkit` adds a fourth interceptor, `DatabaseRefusalInterceptor`, after
   `AggregateVersionInterceptor`. A context that adds the toolkit's interceptors by hand adds it too, or
   keeps the failures it had.

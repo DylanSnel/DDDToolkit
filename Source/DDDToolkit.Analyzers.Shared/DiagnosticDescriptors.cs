@@ -488,7 +488,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor PipelineBehaviorShapeUnknown = Create(
         id: "DDD00057",
         title: "The Mediator library's pipeline behavior has the shape the generator writes a behavior for",
-        messageFormat: "No access behavior is written for '{0}': the Mediator library this project references declares {2} otherwise than the generator knows it, {1}. Write the behavior yourself: it calls AccessChecks<{0}>.RequireAsync(message, cancellationToken) and then the next step.",
+        messageFormat: "No access behavior is written for '{0}': the Mediator library this project references declares {2} otherwise than the generator knows it, {1}. Write the behavior yourself: its Handle is async, awaits AccessChecks<{0}>.RequireAsync(message, cancellationToken), and then awaits the next step.",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,

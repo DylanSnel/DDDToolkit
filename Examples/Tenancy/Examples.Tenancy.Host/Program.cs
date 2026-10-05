@@ -98,7 +98,12 @@ builder.Services.AddExceptionHandler<RefusalProblems>();
 // Entity Framework logs every failed save as an error with its stack trace, a save that lost a race included,
 // before the toolkit turns that race into the ConcurrencyConflictException RefusalProblems answers with 409 and
 // logs as an answer. A save that fails for any other reason is still logged, by whoever handles it: the
-// exception handler as a 500, the outbox, or the host when the seeding fails.
+// exception handler as a 500, the outbox, or the host when the seeding fails. A save the policies refused is
+// logged by the toolkit as well, after asking the request's access check again: an information line, with no stack
+// trace, when that check now refuses too, since the caller's rights changed between the check and the save, and a
+// warning when it still lets the caller through, since C# and the policies disagree. A Tenants request that leaves
+// the checking to Tenancy's use cases (DecidedByThePackage) has a check that asks nothing, and the use case's own
+// gate is not asked again: a refused save of such a request is a warning.
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Critical);
 
 // Before anything of the host starts, the server's port and the seeding included: every check the registrations

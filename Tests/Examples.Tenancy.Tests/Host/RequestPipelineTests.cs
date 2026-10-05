@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
+using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Membership;
@@ -17,6 +18,7 @@ using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Examples.Tenancy.Tests.Host;
 
@@ -903,6 +905,67 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                 var project = await projects.Projects.AsTracking().SingleAsync(candidate => candidate.Id == message.Id, cancellationToken);
                 project.TakeCrewRole(From, Role, leadRole: null);
                 await projects.SaveChangesAsync(cancellationToken);
+            }
+
+            return await next(message, cancellationToken);
+        }
+    }
+
+    [Fact]
+    public async Task A_key_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights()
+    {
+        // The same step, taking the key away from the role instead of the role from the caller. A project role is a
+        // row of its own, kept for every crew it is given on, so the project's version stays where it was and this is
+        // no lost race over the project: the handler loads what was checked, renames it and saves, and the policies,
+        // which read the role's keys as they are now, leave the statement no row to change. The caller is refused;
+        // and the toolkit asks the request's access check again, which refuses as well, so it logs that the caller's
+        // rights changed in between, not a warning that C# and the policies disagree: they agreed.
+        var logs = new RecordingLoggerProvider();
+        await using var host = await sample.StartAsync(services =>
+        {
+            services.AddSingleton<ILoggerProvider>(logs);
+            services.AddScoped<IPipelineBehavior<ChangeProjectName, Unit>, LeadRoleRekeyedMeanwhile>();
+        });
+        var pier = Harbor.ProjectNamed("Pier 7");
+        using var leo = await host.ClientAsync("leo", Harbor.Slug);
+        using var vic = await host.ClientAsync("vic", Harbor.Slug);
+
+        using (var made = await leo.GiveCrewRoleAsync(pier, LeadRoleRekeyedMeanwhile.Lead, LeadRoleRekeyedMeanwhile.Role))
+        {
+            made.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        }
+
+        using var renamed = await vic.PutAsJsonAsync($"/projects/{pier.Id.Value}/name", new { name = "Pier 7, east" }, Cancellation);
+
+        await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
+        var after = await vic.ProjectDetailAsync(pier);
+        after.GetProperty("name").GetString().Should().Be("Pier 7", "the refused save changed nothing");
+        after.GetProperty("can").GetProperty("rename").GetBoolean().Should().BeFalse("his role no longer gives the key");
+
+        var said = logs.Entries.Where(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).ToList();
+        said.Should().ContainSingle("the refusal is said once").Which.Level.Should().Be(LogLevel.Information, "a change of rights is no disagreement");
+        said[0].Message.Should().Be(
+            "The database refused a save to projects.Projects after the access check of ChangeProjectName (MemberAccess<ProjectId>.On) let the caller through. Asked again, the check refuses as well: "
+            + "the caller's rights changed between the check and the save, and the caller is refused.");
+    }
+
+    /// <summary>
+    /// Leaves the crew lead's role giving nothing but the view of a project before the handler of a
+    /// <see cref="ChangeProjectName"/> runs: in a scope of its own and as Ada, who manages the tenant's roles, as her
+    /// request arriving in between would.
+    /// </summary>
+    private sealed class LeadRoleRekeyedMeanwhile(IServiceScopeFactory scopes) : IPipelineBehavior<ChangeProjectName, Unit>
+    {
+        public static SeatId Lead => DemoData.Harbor.SeatOf(DemoPeople.Vic);
+
+        public static ProjectRoleId Role => DemoData.Harbor.ProjectRoles[SampleCatalogue.CrewLead];
+
+        public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
+        {
+            using (SampleCallers.BeginSeatOf(DemoPeople.Ada, DemoData.Harbor))
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new SetProjectRoleKeys(Role, [ProjectKeys.View]), cancellationToken);
             }
 
             return await next(message, cancellationToken);

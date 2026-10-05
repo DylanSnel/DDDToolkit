@@ -2039,6 +2039,111 @@ take the force off a table that has it: `ALTER TABLE … NO FORCE ROW LEVEL SECU
 of your own. A [contribution](#policies-a-package-ships) that turns row level security on in a statement
 of its own reads the flag from the export it is handed.
 
+## When the policies refuse what C# allowed
+
+Under row level security a command is checked twice: by the application, before its handler runs, and by the
+policies, when its statements reach the database. When the policies refuse what the application let through,
+`UseDDDToolkit` refuses the save with `access.refused` (`ToolkitRefusals.Refused`), a refusal of the kind "not
+permitted", which the Tenancy sample answers with 403, with what the save threw as its inner exception. It
+shows in two ways. An insert, or an update whose new row a policy rejects, fails with Postgres's `42501`. An
+update or a delete of a row a policy hides from the statement finds no row, exactly as a save that lost a race
+to another one does, so
+`AggregateVersionInterceptor` reads the row again first: a row somebody changed or removed is the
+`ConcurrencyConflictException` it always was, and only a row still there as the save left it is a refusal. The
+caller is told no more than that the database refused the change.
+
+Somebody else may need to hear more, and what depends on why the policies refused. There are two reasons:
+
+- **The caller's rights changed between the check and the save.** A key was taken from a role the caller holds,
+  a grant was revoked, the caller's seat was suspended: in the milliseconds between the request's access check and
+  its save, or in the seconds a slow handler takes. The check and the policies agreed, each at the moment it was
+  asked, and nothing needs fixing: an information line says what happened, with no stack trace. A change of rights
+  that changes the very row the save is about never gets this far. Taking a crew role off a project in the Tenancy
+  sample moves the project's version, so the save is the lost race it always was, a `ConcurrencyConflictException`
+  that the sample answers with 409, and the policies are not asked.
+- **The policies refuse what C# allows.** A rule is held in two places that do not hold it alike, or a handler
+  changes something its request's check never asked about. A retry gets the same answer, and a developer should
+  look: a warning says so.
+
+To tell the two apart, the toolkit asks the request's access check again, as the same caller, now. The check a
+request passed is kept with the flow of work that handles it (`PassedAccessCheck.Current`), and a save its
+handler makes runs in that flow. Asked again, the check refuses: the rights changed. It still lets the caller
+through: the policies and C# disagree. Where nothing passed a check in that flow, a handler called directly,
+work outside any request, or a request that requires nothing (`AccessRequirement.Open`), there is nothing to ask,
+and the application let through what the policies do not without asking anything: that is a warning too.
+
+```mermaid
+flowchart LR
+    Refused["the policies<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
+    Passed -- "no" --> Warning["warning:<br/>C# and the policies<br/>disagree"]
+    Passed -- "yes" --> Again{"asked again,<br/>now"}
+    Again -- "refuses" --> Information["information:<br/>the caller's rights<br/>changed meanwhile"]
+    Again -- "lets through" --> Warning
+    Again -- "fails" --> Warning
+```
+
+Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` keeps the check for every request it lets
+through, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of your own
+written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
+The lines are written through the context's logger factory under the category of `DatabaseRefusalInterceptor`,
+and name the request and its requirement by their types, never their values; a warning carries what the save
+threw. The check is asked again only for a save the policies refused, and only when a logger listens: one more
+check, which every other save does without. Asked again, a check keeps nothing for a handler (`Checked<T>`), so
+nothing of that second asking stays behind.
+
+What is asked again is the check the request declared. A rule a handler checks itself, past what its request
+declared, is not part of it. Nor is the gate inside a package's use case: a request that leaves the checking to
+the package, as the requests of Tenancy's use cases do with `TenancyRequirement.DecidedByThePackage`, declares a
+requirement whose check asks nothing of the caller, so asked again it lets the caller through. A change of rights
+against either is still a warning, and the warning names the requirement that was asked again, so it shows when
+that one asked nothing. A save made after the handler returned, by a pipeline behavior around the access
+behavior, runs outside the handler's flow and finds no check to ask: the warning without a request. A check that
+gives no answer the second time leaves the warning too, and the warning says why: its connection gone, say, or a
+`ConcurrencyConflictException` because what the request is about moved on from the version it named, which says
+nothing about the caller's rights.
+
+<details>
+<summary>Show the code: the three lines, and a rename in the Tenancy sample that loses its key on the way</summary>
+
+```text
+info: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+      The database refused a save to projects.Projects after the access check of ChangeProjectName
+      (MemberAccess<ProjectId>.On) let the caller through. Asked again, the check refuses as well: the caller's
+      rights changed between the check and the save, and the caller is refused.
+
+warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+      The database refused a save the application allowed: projects.Projects. C# and the policies disagree: asked
+      again, the access check of ChangeProjectName (MemberAccess<ProjectId>.On) still lets the caller through.
+
+warn: DDDToolkit.EntityFramework.Interceptors.DatabaseRefusalInterceptor
+      The database refused a save the application allowed: projects.Projects. C# and the policies disagree.
+```
+
+In the [Tenancy sample](../Examples/README.md#the-tenancy-sample), Vic renames a project as its crew lead. Between his request's
+check and its save, the tenant's roles manager leaves the crew lead's role giving nothing but `projects.view`.
+The project's row did not change, so the handler loads what was checked, renames it, and saves; the policy on
+`projects.Projects`, which reads the role's keys as they are now, finds no key of Vic's that writes the row and
+leaves the statement no row. The request is answered 403 `access.refused`, and the first line above is logged:
+
+```csharp
+// RequestPipelineTests.A_key_taken_from_a_crew_role_since_the_check_is_refused_by_the_database_and_logged_as_a_change_of_rights
+using var renamed = await vic.PutAsJsonAsync($"/projects/{pier.Id.Value}/name", new { name = "Pier 7, east" });
+
+await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
+logs.Entries.Single(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).Level.Should().Be(LogLevel.Information);
+```
+
+Code of your own that writes past Entity Framework, and meets a refusal of the policies itself, asks the same:
+
+```csharp
+if (PassedAccessCheck.Current is { } passed && !await passed.StillPassesAsync(cancellationToken))
+{
+    logger.LogInformation("The caller's rights changed between the access check of {Request} and the save.", passed);
+}
+```
+
+</details>
+
 ## Where to look next
 
 - [Supabase](supabase.md#row-level-security-for-your-own-queries) for Supabase Auth's tokens, and the build

@@ -68,6 +68,28 @@ public sealed class AccessBehaviorTests
     }
 
     [Fact]
+    public async Task The_handler_runs_inside_the_check_its_request_passed_and_can_ask_it_again()
+    {
+        using var host = new TestHost();
+        var basket = BasketId.CreateUnique();
+        host.StepLog.Owned.Add(basket);
+        var command = new RenameBasket(basket, "Weekend");
+
+        using var scope = host.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
+
+        var passed = host.StepLog.PassedInHandler;
+        passed.Should().NotBeNull("the generated behavior asked the checks in the flow the handler runs in");
+        passed!.Request.Should().BeSameAs(command);
+        PassedAccessCheck.Current.Should().BeNull("it does not come back out of the pipeline to what sent the request");
+
+        // What a refused save does: the caller lost the basket in the meantime, and the check now says so.
+        (await passed.StillPassesAsync(Cancellation)).Should().BeTrue();
+        host.StepLog.Owned.Remove(basket);
+        (await passed.StillPassesAsync(Cancellation)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task A_refused_request_never_reaches_its_handler()
     {
         using var host = new TestHost();

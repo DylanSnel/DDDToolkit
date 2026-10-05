@@ -69,7 +69,9 @@ public sealed class Checked<T>
     /// <summary>
     /// Keeps <paramref name="value"/> for the handler of <paramref name="request"/>, in the place of whatever
     /// an earlier pass of the same request kept and no handler took. Only the check that read it calls this,
-    /// once it has let the caller through.
+    /// once it has let the caller through. A check asked again after its request's handler ran
+    /// (<see cref="PassedAccessCheck.StillPassesAsync"/>) keeps nothing: the handler took what it acts on, and
+    /// nothing of that second asking stays behind for a later call to find.
     /// </summary>
     /// <param name="request">The very request being checked.</param>
     /// <param name="value">What the check read.</param>
@@ -88,6 +90,11 @@ public sealed class Checked<T>
             throw new ArgumentException(
                 $"{WrittenTypeNames.Of(request.GetType())} is a struct, and what a check keeps is found again by the request's reference. Declare the request as a class or a record class.",
                 nameof(request));
+        }
+
+        if (PassedAccessCheck.IsAskingAgain)
+        {
+            return;
         }
 
         _kept.GetOrCreateValue(request).Keep(value);

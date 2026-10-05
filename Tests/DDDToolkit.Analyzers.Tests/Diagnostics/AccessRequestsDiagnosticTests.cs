@@ -182,7 +182,8 @@ public class AccessRequestsDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00057");
         result.ShouldHaveDiagnostic("DDD00057", at: "IBillingRequest").GetMessage()
             .Should().Contain("declares IPipelineBehavior<,> otherwise than the generator knows it").And.Contain(says)
-            .And.Contain("AccessChecks<IBillingRequest>.RequireAsync(message, cancellationToken)", "it says what to write by hand");
+            .And.Contain("AccessChecks<IBillingRequest>.RequireAsync(message, cancellationToken)", "it says what to write by hand")
+            .And.Contain("its Handle is async", "the check a request passed is kept with the flow of the method that awaited it, for the handler");
         result.GeneratedSources.Should().BeEmpty("nothing is written rather than guessed");
         result.ShouldNotCrash();
     }

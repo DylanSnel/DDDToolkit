@@ -3962,11 +3962,16 @@ own refusal. The last is an access guard: it holds who may, and refuses as a pol
 toolkit's hint.
 
 A save a policy or that trigger denies is refused with `access.refused`, a refusal of the kind "not
-permitted", and logged as a warning, since the use case allowed what the database does not: an insert or an
-update whose new row a policy refuses, a status the calling seat lost a key for between the use case's check and
-its save, and an update or a delete of a row a policy hides from the statement. That last one changes no row,
-exactly as a lost race does, so the row is read again first; a row somebody else changed or removed stays a
-concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
+permitted": an insert or an update whose new row a policy refuses, a status the calling seat lost a key for
+between the use case's check and its save, and an update or a delete of a row a policy hides from the statement.
+That last one changes no row, exactly as a lost race does, so the row is read again first; a row somebody else
+changed or removed stays a concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
+It is logged after asking the request's access check again
+([When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed)). A
+request that requires a key, `ForTheWholeTenant` or `AtUnit`, is refused by that check as well once the seat lost
+the key, and an information line says that the seat's rights changed between the check and the save. What a use
+case of Tenancy's checks past what its request declares, behind `InTenant()` say, is not asked again: a save of
+such a request that the database denies stays a warning, which names the requirement it asked.
 
 ### What stays in C#
 

@@ -22,7 +22,9 @@ public static class ToolkitRefusals
     /// <c>42501</c> with the toolkit's hint, refused the statement. The caller may not do this, whatever the
     /// application thought, so it is <see cref="RefusalKind.NotPermitted"/>, and the same command gives the same
     /// answer until somebody's rights change. <c>DDDToolkit.EntityFramework</c> makes it of a failed save, and
-    /// logs a warning, since the application and the database then disagree about a rule.
+    /// logs what it was: a warning when the application and the database disagree about a rule, and an
+    /// information line when the caller's rights changed between the request's access check and the save, which
+    /// it tells by asking that check again (<see cref="Access.PassedAccessCheck"/>).
     /// </summary>
     public const string Refused = "access.refused";
 

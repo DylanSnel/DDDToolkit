@@ -34,8 +34,10 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 /// caller and through the context's filters: its own concurrency tokens, or its aggregate root's
 /// <c>Version</c> for a child that has none. When every one is still there, unchanged, nobody else wrote, and
 /// the save is refused with <see cref="ToolkitRefusals.Refused"/> instead, a <see cref="RefusalException"/> of
-/// kind <see cref="RefusalKind.NotPermitted"/> with the conflict as its inner exception, and a warning is logged
-/// through the context's logger factory. A row that is gone, hidden or changed is the conflict it always was.
+/// kind <see cref="RefusalKind.NotPermitted"/> with the conflict as its inner exception, and logged through the
+/// context's logger factory as <see cref="DatabaseRefusalInterceptor"/> logs a denial: an information line when
+/// the request's access check, asked again, refuses as well, since the caller's rights changed between the check
+/// and the save, and a warning otherwise. A row that is gone, hidden or changed is the conflict it always was.
 /// That costs one query for each row the failed statement was for, and none for a save that succeeds.
 /// </para>
 /// </summary>

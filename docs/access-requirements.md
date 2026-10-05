@@ -14,6 +14,7 @@ core package, free of any dispatcher and of any [supporting domain](writing-a-su
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
 | `Checked<T>` | What a check read on the way, kept for the code after it that handles the same request. |
 | `RequestInHand` | The request a flow of work is handling, once its checks let it through: what the handler and its save serve. |
+| `PassedAccessCheck` | The check the request being handled passed, kept with the flow of work that handles it, to be asked again. |
 
 Who is calling is a separate question, answered by the host: [running queries as the caller](row-level-security.md#running-queries-as-the-caller).
 
@@ -276,10 +277,21 @@ if (requirement is AccessRequirement.Anyone)                    // AllowAnonymou
 var check = checks.FirstOrDefault(candidate => candidate.Decides(requirement))
     ?? throw new InvalidOperationException("CloseInvoice declares 'BillingAccess.OnInvoice', which none of the access checks registered for IBillingRequest decides. ...");
 
-await check.RequireAsync(requirement, request, cancellationToken);
+await check.RequireAsync(requirement, request, cancellationToken);  // kept for the flow that handles the request
 ```
 
 </details>
+
+**The check a request passed stays with its handler.** `RequireAsync` keeps it with the flow of work that handles
+the request, `PassedAccessCheck.Current`: the handler and everything it awaits find it, what sent the request does
+not, and a request the handler sends in turn has its own. That holds where what sends the requests awaits the
+checks in an `async` method and calls the handler from there, as the generated behavior does and as the
+dispatcher [below](#asking-the-checks-without-mediator) does. `StillPassesAsync()` asks the check again, as the
+same caller, now, and keeps nothing for a handler while it does: `true` when it still lets the caller through,
+`false` when it refuses, and anything else the check throws comes out as it is: a `ConcurrencyConflictException`
+too, which says the resource moved on from the version the request named, not whether the caller may. The toolkit asks it when the policies refuse a save the check allowed, to tell a caller whose rights
+changed in between from a rule C# and the policies hold differently:
+[When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed).
 
 ## Asking the checks without Mediator
 
@@ -307,7 +319,10 @@ public sealed class BillingDispatcher(AccessChecks<IBillingRequest> checks, ISer
 The checks, the dispatcher and the handlers come from one scope, the request's: what a check keeps is
 taken by a handler of the same scope. Ask the checks and run the handler in one `async` method, as above: the
 request is then [in hand](#the-request-in-hand) for the handler and its save, and no longer once the method
-returned.
+returned, and the check it passed is kept with that flow too, for the handler that method calls next. A method
+without `async` that hands on the checks' task keeps it in the flow of whoever called it instead, so a request a
+handler sends that way leaves its check in that handler's flow, in the place of the check of the handler's own
+request.
 
 ## The request in hand
 

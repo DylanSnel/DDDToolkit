@@ -26,7 +26,8 @@ namespace DDDToolkit.Access;
 /// It keeps nothing between two requests and nothing during one, so requests sent side by side within one
 /// scope are checked independently, though all go through the one instance the scope has. What it leaves is
 /// the flow's: the request is in hand in the flow of work that asked (<see cref="RequestInHand"/>), for the
-/// handler that runs next and the save it ends with.
+/// handler that runs next and the save it ends with, and which check the request passed is kept with that flow
+/// too (<see cref="PassedAccessCheck.Current"/>), for a refusal of the database later in it to ask again.
 /// </para>
 /// </remarks>
 /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
@@ -111,10 +112,13 @@ public sealed class AccessChecks<TRequests>
         if (check is null)
         {
             hand.Pass();
+            PassedAccessCheck.None();
             return ValueTask.CompletedTask;
         }
 
-        return hand.PassWhen(check.RequireAsync(requirement, request, cancellationToken));
+        // The check is kept with the caller's flow as well, and so the handler's, for a refusal of the database to
+        // ask again.
+        return hand.PassWhen(PassedAccessCheck.Ask(check, requirement, request, cancellationToken));
     }
 
     private IAccessCheck? CheckFor(AccessRequirement requirement)
