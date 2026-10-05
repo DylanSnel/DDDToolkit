@@ -1386,9 +1386,11 @@ flowchart LR
   and of every migration of a module with rules, takes it away with the policies. A rule taken out loses its
   trigger with the next script, and a migration may drop or change a column a column rule holds, which the
   trigger would otherwise stand in the way of.
-- **The refusal is the database's:** `42501`, `insufficient_privilege`, with a message that names the rule, and
-  the trigger's name as the constraint. Through Entity Framework the save fails with a `DbUpdateException` that
-  carries it.
+- **The refusal is the database's, and the caller is told `access.refused`:** `42501`,
+  `insufficient_privilege`, with a message that names the rule, the trigger's name as the constraint, and the
+  toolkit's hint, as every access guard the toolkit writes refuses. Through Entity Framework the save is refused as one
+  a policy refuses is: a `RefusalException` with the code `access.refused`, and a warning that names the
+  trigger. See [When the database refuses](#when-the-database-refuses).
 
 <details>
 <summary>Show the code: two column rules of a project, and the trigger one of them becomes</summary>
@@ -1431,11 +1433,11 @@ BEGIN
     IF CURRENT_USER = 'authenticated' THEN
         IF (OLD."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE
            OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND (NEW."Id" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('projects.close')))) IS NOT TRUE) THEN
-            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule',
+            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
                 MESSAGE = 'The column rule ''State changes with the close key'' does not let this caller change "State" of projects."Projects".';
         END IF;
     ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
-        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule',
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_state_column_rule', HINT = 'ddd:access.refused',
             MESSAGE = 'No column rule is for this caller''s role, so it may not change "State" of projects."Projects".';
     END IF;
     RETURN NEW;
@@ -1621,9 +1623,138 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   `{caller:signedin}` and `{caller:claim:path}` are filled in as they are in a rule, with the export's
   caller functions; write a brace itself as `{{` or `}}`. `RowAccessModel` writes the names from the model:
   `Table`, `Column`, `ColumnType`, `Stored` for a value as its column stores it, `EntityTablesOf` for the
-  tables of an aggregate's entities and the way up to its own, and `Literal`.
+  tables of an aggregate's entities and the way up to its own, and `Literal`. `Refusal` writes the statement a
+  trigger refuses with, so a save it refuses is answered as one a policy refuses is: see
+  [When the database refuses](#when-the-database-refuses).
 
 A context whose only row access is a contribution gets a script, and a Supabase access file, all the same.
+
+### When the database refuses
+
+The check in front of a handler refuses first, with your own code and the key that is missing. The database
+refuses only what that check let through: a caller that lost a key between the check and the save, a handler
+that skipped its check, a rule the database holds more strictly than C# asks it. `UseDDDToolkit` answers each
+of those the same way. The save throws a `RefusalException` with the code `access.refused`, a refusal of the
+kind "not permitted": a 403 from a route and a `RefusalError` from a GraphQL mutation. A warning is logged as
+well, since the application allowed what the database does not.
+
+```mermaid
+flowchart LR
+    Failed["A save fails"] --> Code{"What did<br/>Postgres say?"}
+    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the warning names it"]
+    Code -->|"42501 from<br/>ExecWithCheckOptions"| Policy["A policy: access.refused"]
+    Code -->|"23505 on an index<br/>with RefusesAs"| Index["The index's own refusal"]
+    Code -->|"anything else"| Other["The failure as it was: a 500"]
+```
+
+An update or a delete whose row a policy hides fails with no error at all: the statement finds no row, as when
+somebody else changed it first. That case is told apart by reading the row again, as
+[`AggregateVersionInterceptor`](entity-framework.md) does, and is answered with the same refusal.
+
+- **A policy's refusal is known by where Postgres raised it, not by its words.** With every error Postgres sends
+  the name of the function in its own source that raised it, and that name is never translated. A new row a
+  policy refuses is refused by `ExecWithCheckOptions`, which raises nothing else as `42501`, so a server set to
+  answer in Dutch with `lc_messages` is read as one that answers in English. Only the table the warning names
+  comes from the message: the one it quotes, or, where it cannot be read, the one table the save wrote.
+- **An access guard marks its refusal.** An access guard is a trigger that holds who may change what, as a
+  policy holds who may write a row. Every `RAISE` of PL/pgSQL comes from the same function of Postgres, whatever
+  it is about, and a missing privilege is `42501` too. So an access guard says it is one: SQLSTATE `42501`, its
+  own name as the constraint, and the hint `ddd:access.refused`. Every access guard the toolkit writes does: the
+  trigger of a [column rule](#column-rules), the Membership package's lock on an owner column, and Tenancy's
+  triggers on a seat's status and on who changed a row.
+- **It stays `42501`, with a hint, rather than a code of the toolkit's own.** `42501` is what every tool already
+  reads as "not allowed": the Data API answers it with a 403, and a pgTAP test that expects a refusal expects it.
+  To those a code of the toolkit's own would be a failure of another kind. The hint of a `RAISE` is the
+  trigger's own text: Postgres hands it on as written and never translates it. Postgres gives some errors of its
+  own a hint, in the server's language, but never this one, and only this exact hint counts, so the mark means
+  the same whatever language the server answers in.
+- **Anything else is the failure it is.** A missing privilege, a role the policies hold that reads with
+  `row_security` off, a trigger that raises without the hint, a check that fails: each is the application's own
+  set-up, or a rule that holds whoever writes, and ends the request as a failure of the server, where somebody
+  will see it. The message of the second names row level security in so many words, which is why words decide
+  nothing. The toolkit's triggers that hold what may never be, whoever writes, are no access guards and raise
+  codes of their own. Tenancy's checks of a tenant's last administrator, of the rights and the paths, and of the
+  rows that stay fixed, and the Membership package's trigger that keeps an owner's role in use, raise
+  `check_violation`; an [event log](entity-framework.md#an-event-log)'s guard raises `55000`. Tenancy's store answers the last administrator
+  with a refusal of its own.
+- **Only a save is answered.** `DatabaseRefusalInterceptor` sees what a `SaveChanges` threw. A statement of your
+  own, an `ExecuteUpdate`, an `ExecuteDelete` or SQL, is no save: an access guard's refusal of it reaches you as
+  the `PostgresException` itself. `DatabaseRefusal.From(exception)` reads it as it reads a save's, if you want to
+  answer it with `access.refused` too.
+- **The caller is told `access.refused`, and no more.** Not which guard refused, nor its message. The check in
+  C# is where a refusal is specific, with the key that is missing, in the reader's language. When the database
+  refuses what that check let through, the two disagree, and the fix is in the check or in the rule. The warning
+  names the guard for whoever runs the application, and the refusal keeps the database's error as its inner
+  exception. A guard's name belongs to the schema: it changes when a table or a rule does, and has no text in any
+  language, so it would make a poor code for a client to branch on.
+- **Your own trigger refuses the same way.** From C#, in a [contribution](#policies-a-package-ships),
+  `RowAccessModel.Refusal(guard, message)` writes the statement. By hand it is one line. A trigger that should not
+  be answered as a refusal leaves the hint out. `DatabaseRefusal.From(exception)` reads what refused for a
+  translation of your own: `GuardRefused`, with the guard's name as `Constraint`.
+
+<details>
+<summary>Show the code: a trigger of your own that refuses as the toolkit's access guards do</summary>
+
+By hand, in a migration of your own: a signed-in user's pallet keeps its number.
+
+```sql
+CREATE OR REPLACE FUNCTION depot.pallets_number_stays() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = '' AS $body$
+BEGIN
+    IF CURRENT_USER = 'authenticated' THEN
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'pallets_number_stays',
+            HINT = 'ddd:access.refused', MESSAGE = 'A pallet keeps its number.';
+    END IF;
+    RETURN NEW;
+END
+$body$;
+
+CREATE TRIGGER pallets_number_stays BEFORE UPDATE OF "Number" ON depot."Pallets"
+    FOR EACH ROW WHEN (OLD."Number" IS DISTINCT FROM NEW."Number")
+    EXECUTE FUNCTION depot.pallets_number_stays();
+```
+
+From C#, in a contribution's statements, as the sample's `UnitChangesWithItsKeys` writes its trigger:
+
+```csharp
+string Refusal(string message) => RowAccessModel.Refusal(Trigger, message);
+
+// ...
+$"    IF NOT ({HeldOn(ProjectKeys.Edit, $"OLD.{id}")}) OR NOT ({HeldAt(ProjectKeys.Open, $"NEW.{unit}")}) THEN\n" +
+$"        {Refusal(MovedWithoutTheKeys)}\n" +
+"    END IF;\n" +
+```
+
+What a save that a guard refuses throws, and what is logged:
+
+```csharp
+catch (RefusalException refused) when (refused.Code == ToolkitRefusals.Refused)
+{
+    // refused.Kind is RefusalKind.NotPermitted, and refused.InnerException the DbUpdateException:
+    // DatabaseRefusal.From(refused.InnerException!) is GuardRefused, with Constraint "pallets_number_stays".
+}
+```
+
+```text
+warn: The database refused a save the application allowed: the guard pallets_number_stays on depot.Pallets.
+      C# and the guards disagree.
+```
+
+A statement of your own is no save, so its refusal reaches you as the database's exception, read the same way:
+
+```csharp
+try
+{
+    await context.Pallets.Where(pallet => pallet.Id == id)
+        .ExecuteUpdateAsync(set => set.SetProperty(pallet => pallet.Number, number), cancellationToken);
+}
+catch (PostgresException failure) when (DatabaseRefusal.From(failure)?.Kind == DatabaseRefusalKind.GuardRefused)
+{
+    throw ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
+}
+```
+
+</details>
 
 ### Writing the policies
 

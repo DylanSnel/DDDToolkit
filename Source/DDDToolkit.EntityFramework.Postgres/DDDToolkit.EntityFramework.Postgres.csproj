@@ -35,4 +35,13 @@
     <Compile Include="..\DDDToolkit.EntityFramework\Storage\KeptRows.cs" Link="Storage\KeptRows.cs" />
   </ItemGroup>
 
+  <!--
+    The hint an access guard of the database refuses with. DDDToolkit.EntityFramework reads it from a failed save
+    and answers access.refused; this package writes it into every access guard it writes, and hands it to a guard
+    of the application's own through RowAccessModel.Refusal. One file, compiled into both, as KeptRows is.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework\Interceptors\GuardMark.cs" Link="Interceptors\GuardMark.cs" />
+  </ItemGroup>
+
 </Project>

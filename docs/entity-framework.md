@@ -623,7 +623,7 @@ context catches a child entity or a collection the split left unmapped.
 | 1 | `PublishDomainEventsInterceptor` | Delivers domain events first, so whatever the handlers change is part of the same save |
 | 2 | `InvariantInterceptor` | Sees whatever those handlers changed |
 | 3 | `AggregateVersionInterceptor` | Comes after both, so a save the invariants reject leaves no version bumped |
-| 4 | `DatabaseRefusalInterceptor` | Only answers a save the database refused: the refusal a unique index declares with `RefusesAs`, or `access.refused` for a row a policy denied |
+| 4 | `DatabaseRefusalInterceptor` | Only answers a save the database refused: the refusal a unique index declares with `RefusesAs`, or `access.refused` for a row a policy or a guard denied |
 
 `AddDDDToolkitEntityFramework` registers them. The options object is a singleton, and so are
 `InvariantInterceptor`, `AggregateVersionInterceptor` and `DatabaseRefusalInterceptor`, because they

@@ -13,9 +13,10 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 
 /// <summary>
 /// Reads what a database refused in a failed save and makes the refusal the caller gets of it: the refusal a
-/// unique index declares, or <see cref="ToolkitRefusals.Refused"/> for a row a policy denied. Both interceptors
-/// that answer a failed save, <see cref="DatabaseRefusalInterceptor"/> and <see cref="AggregateVersionInterceptor"/>,
-/// work through this one place, so a policy's denial is logged and phrased the same whichever way it showed.
+/// unique index declares, or <see cref="ToolkitRefusals.Refused"/> for a row a policy or a guard denied. Both
+/// interceptors that answer a failed save, <see cref="DatabaseRefusalInterceptor"/> and
+/// <see cref="AggregateVersionInterceptor"/>, work through this one place, so a denial is logged and phrased the
+/// same whichever way it showed.
 /// </summary>
 internal static class DatabaseRefusals
 {
@@ -25,10 +26,12 @@ internal static class DatabaseRefusals
     private const int SqlServerDuplicateIndexRow = 2601;
     private const int SqlServerDuplicateConstraintKey = 2627;
 
-    /// <summary>The routine of Postgres that checks a new row against the policies, which the error names in any language.</summary>
+    /// <summary>
+    /// The routine of Postgres that checks a new row against the policies. Every error names the routine that
+    /// raised it, in the server's own source and in no language, and this one raises nothing else as
+    /// <c>42501</c>: the check of a view's <c>WITH CHECK OPTION</c>, which it makes as well, is <c>44000</c>.
+    /// </summary>
     private const string PolicyCheckRoutine = "ExecWithCheckOptions";
-
-    private const string PolicyWords = "row-level security";
 
     private static readonly MethodInfo PropertyMethod
         = typeof(EF).GetMethod(nameof(EF.Property), BindingFlags.Public | BindingFlags.Static)!;
@@ -78,10 +81,22 @@ internal static class DatabaseRefusals
                 };
 
             case InsufficientPrivilege:
-                // A missing privilege is 42501 too, and is the application's own set-up, not a rule that refused.
-                var message = Text(failure, "MessageText") ?? failure.Message;
-                return Text(failure, "Routine") == PolicyCheckRoutine || message.Contains(PolicyWords, StringComparison.Ordinal)
-                    ? new DatabaseRefusal(DatabaseRefusalKind.PolicyDenied, Constraint: null, LastQuoted(message, '"', '"'), [])
+                // An access guard says it is one in its hint: a RAISE passes its hint on as written, untranslated, and
+                // Postgres gives no error of its own this one, though it gives some a hint of their own.
+                if (string.Equals(Text(failure, "Hint"), DatabaseRefusal.GuardHint, StringComparison.Ordinal))
+                {
+                    return new DatabaseRefusal(DatabaseRefusalKind.GuardRefused, Text(failure, "ConstraintName"), Text(failure, "TableName"), [])
+                    {
+                        Schema = Text(failure, "SchemaName"),
+                    };
+                }
+
+                // A policy's refusal is known by the routine that raised it, never by its words, which the server may
+                // translate. The words would mistake the application's own set-up for a refusal besides: a missing
+                // privilege is 42501 too, and so is a read with row_security off by a role the policies hold, whose
+                // message names row level security as well.
+                return string.Equals(Text(failure, "Routine"), PolicyCheckRoutine, StringComparison.Ordinal)
+                    ? new DatabaseRefusal(DatabaseRefusalKind.PolicyDenied, Constraint: null, LastQuoted(Text(failure, "MessageText") ?? failure.Message, '"', '"'), [])
                     : null;
 
             default:
@@ -222,9 +237,16 @@ internal static class DatabaseRefusals
 
     /// <summary>
     /// The refusal <paramref name="failure"/> stands for, with the failure as its inner exception: what the unique
-    /// index it broke declares, or <see cref="ToolkitRefusals.Refused"/> for a row a policy denied, which is also
-    /// logged. <see langword="null"/> for anything else, an unmarked index among them.
+    /// index it broke declares, or <see cref="ToolkitRefusals.Refused"/> for a row a policy or a guard denied,
+    /// which is also logged. <see langword="null"/> for anything else, an unmarked index among them.
     /// </summary>
+    /// <remarks>
+    /// A guard's refusal is answered with the same code as a policy's, and no more specific one. The check in C#
+    /// is where a refusal names the key that is missing, in the reader's language; when the database refuses
+    /// what that check let through, the two disagree, which the warning tells whoever runs the application, with
+    /// the guard's name. The caller learns that it may not, and nothing of how the database is laid out: a
+    /// guard's name is the schema's, changes with a table or a rule, and has no text in any language.
+    /// </remarks>
     public static RefusalException? Translate(DbContext context, Exception failure)
     {
         // A refusal or a conflict somebody made already is theirs.
@@ -244,7 +266,11 @@ internal static class DatabaseRefusals
         switch (refused.Kind)
         {
             case DatabaseRefusalKind.PolicyDenied:
-                LogDisagreement(context, DeniedTable(context, refused, failure), failure);
+                LogDisagreement(context, DeniedTable(context, refused, failure) ?? "a table it did not name", failure);
+                return ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
+
+            case DatabaseRefusalKind.GuardRefused:
+                LogGuardDisagreement(context, refused.Constraint, DeniedTable(context, refused, failure), failure);
                 return ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
 
             case DatabaseRefusalKind.DuplicateKey:
@@ -258,21 +284,27 @@ internal static class DatabaseRefusals
     }
 
     /// <summary>
-    /// The table a policy denied a row of, for the warning: with its schema, as the model names it, where the
-    /// table Postgres quoted is one the failed save wrote, and as Postgres quoted it otherwise.
+    /// The table a policy or a guard denied a row of, for the warning: with its schema, as the model names it,
+    /// where the table the database named is one the failed save wrote, and as the database named it otherwise.
+    /// Where it named none, as a guard that names only itself does, or in words this cannot read, as a server that
+    /// answers in another language quotes a table, it is the one table the failed save wrote, where it wrote one,
+    /// and <see langword="null"/> where it wrote several: Npgsql sends a save as one batch, and the failure names
+    /// every row of it.
     /// </summary>
-    private static string DeniedTable(DbContext context, DatabaseRefusal refused, Exception failure)
+    private static string? DeniedTable(DbContext context, DatabaseRefusal refused, Exception failure)
     {
+        var failed = FailedEntries(failure).Select(entry => entry.Metadata).ToList();
         if (refused.Table is not { } table)
         {
-            return "a table it did not name";
+            var tables = failed.Select(entityType => entityType.GetSchemaQualifiedTableName()).OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+            return tables.Count == 1 ? tables[0] : null;
         }
 
-        var written = FailedEntries(failure)
-            .Select(entry => entry.Metadata)
+        var written = failed
             .Concat(context.Model.GetEntityTypes())
-            .FirstOrDefault(entityType => string.Equals(entityType.GetTableName(), table, StringComparison.Ordinal));
-        return written?.GetSchemaQualifiedTableName() ?? table;
+            .FirstOrDefault(entityType => string.Equals(entityType.GetTableName(), table, StringComparison.Ordinal)
+                                          && (refused.Schema is null || string.Equals(entityType.GetSchema(), refused.Schema, StringComparison.Ordinal)));
+        return written?.GetSchemaQualifiedTableName() ?? (refused.Schema is null ? table : refused.Schema + "." + table);
     }
 
     /// <summary>
@@ -569,5 +601,22 @@ internal static class DatabaseRefusals
     {
         var logger = context.GetService<ILoggerFactory>().CreateLogger<DatabaseRefusalInterceptor>();
         logger.LogWarning(failure, "The database refused a save the application allowed: {Table}. C# and the policies disagree.", table);
+    }
+
+    /// <summary>
+    /// The same warning for a guard of the database, which names the guard, so whoever reads it finds the trigger
+    /// that refused: what the caller is told does not name it. The table goes with it where it is known.
+    /// </summary>
+    private static void LogGuardDisagreement(DbContext context, string? guard, string? table, Exception failure)
+    {
+        var logger = context.GetService<ILoggerFactory>().CreateLogger<DatabaseRefusalInterceptor>();
+        if (table is null)
+        {
+            logger.LogWarning(failure, "The database refused a save the application allowed: the guard {Guard}. C# and the guards disagree.", guard ?? "that gave no name");
+        }
+        else
+        {
+            logger.LogWarning(failure, "The database refused a save the application allowed: the guard {Guard} on {Table}. C# and the guards disagree.", guard ?? "that gave no name", table);
+        }
     }
 }

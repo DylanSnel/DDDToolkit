@@ -51,11 +51,13 @@ public sealed class RowAccessAttribute<TAggregate>(RowOperations operations) : A
     /// <remarks>
     /// A policy cannot see which column a statement changes, so the export writes a trigger, before an update of
     /// those columns, that asks <c>Allows</c> of the row as it was and as it is about to be, as a policy for
-    /// <c>UPDATE</c> asks a rule, and refuses the statement when either answer is no. The row's own policy for
-    /// <c>UPDATE</c> still applies first. Several column rules on one column add up: a change one of them allows
-    /// is allowed. A caller's role that none of them is for may not change the column. The application's own
-    /// work, the scoped system role and the bookkeeping role, and the tables' owner are not held, unless a
-    /// column rule names the role in <see cref="To"/>.
+    /// <c>UPDATE</c> asks a rule, and refuses the statement when either answer is no, as the toolkit's access
+    /// guards refuse: <c>42501</c> with its hint, so a save through Entity Framework is refused with
+    /// <c>access.refused</c>, as one a policy refuses is. The row's own policy for <c>UPDATE</c> still applies
+    /// first. Several column rules on one column add up: a change one of them allows is allowed. A caller's role
+    /// that none of them is for may not change the column. The application's own work, the scoped system role
+    /// and the bookkeeping role, and the tables' owner are not held, unless a column rule names the role in
+    /// <see cref="To"/>.
     /// </remarks>
     public string[] Columns { get; set; } = [];
 }

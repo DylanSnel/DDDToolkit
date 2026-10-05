@@ -291,6 +291,21 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
             await context.SaveChangesAsync(Cancellation);
         })).Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
         refused.Which.GetBaseException().Should().BeOfType<Npgsql.PostgresException>().Which.SqlState.Should().Be(Npgsql.PostgresErrorCodes.InsufficientPrivilege);
+
+        // And a save that changes the owner column and nothing else, as a handler that went round its own command
+        // would: the lock refuses it, with the toolkit's hint, so the caller is told access.refused as for a policy,
+        // and the lock's name is in the failure, for the warning that names it.
+        var handedOn = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Ben), async provider =>
+        {
+            var context = provider.GetRequiredService<FilingContext>();
+            var document = await context.Documents.SingleAsync(candidate => candidate.Id == data.Minutes, Cancellation);
+            context.Entry(document).Property(nameof(Document.OwnerId)).CurrentValue = data.Ben;
+            await context.SaveChangesAsync(Cancellation);
+        })).Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
+        handedOn.Which.Code.Should().Be(DDDToolkit.Exceptions.ToolkitRefusals.Refused);
+        var locked = handedOn.Which.GetBaseException().Should().BeOfType<Npgsql.PostgresException>().Subject;
+        (locked.SqlState, locked.ConstraintName, locked.Hint).Should().Be((Npgsql.PostgresErrorCodes.InsufficientPrivilege, "documents_owner_stays", "ddd:access.refused"));
+        (await filing.Services.ReadAsync(data.Minutes)).OwnerId.Should().Be(data.Ada);
     }
 
     [Fact]

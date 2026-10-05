@@ -3,8 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy;
@@ -17,6 +19,7 @@ using Mediator;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Examples.Tenancy.Tests.Supabase;
@@ -50,8 +53,14 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
     /// </summary>
     private const string OwnerNamedWithoutTheKey = "The owner of a row of \"projects\".\"Projects\" is changed by a caller that holds projects.owner.change on it.";
 
+    /// <summary>The Membership package's lock on the owner column of the projects' table, which its refusal names.</summary>
+    private const string OwnerLock = "projects_owner_stays";
+
     /// <summary>What the database says to a statement that renames or plans a project without the key to edit it: the column rule's trigger.</summary>
     private const string NameAndPlanHeld = "The column rule 'Name and plan change with the edit key' does not let this caller change \"Name\", \"PlannedFrom\" or \"PlannedUntil\" of projects.\"Projects\".";
+
+    /// <summary>The trigger of the column rule on the name and the planned days, which its refusal names.</summary>
+    private const string NameAndPlanTrigger = "projects_name_plannedfrom_planneduntil_column_rule";
 
     /// <summary>What the database says to a statement that closes or reopens a project without the key to close it.</summary>
     private const string StateHeld = "The column rule 'State changes with the close key' does not let this caller change \"State\" of projects.\"Projects\".";
@@ -408,11 +417,17 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         string Changing(DemoPerson by, string set)
             => $"""UPDATE projects."Projects" SET {set}, "ChangedByKind" = 'seat', "ChangedBySeat" = '{Harbor.SeatOf(by).Value}', "ChangedByIdentity" = NULL WHERE "Id" = '{pier}'""";
 
-        async Task ShouldBeRefusedAsync(NpgsqlConnection connection, DemoPerson by, string set, string because)
+        // Refused by the guard named, as the toolkit's access guards refuse: 42501, the guard's name and the toolkit's
+        // hint, which is what makes a save the guard refuses access.refused rather than a failure of the server.
+        async Task ShouldBeRefusedAsync(NpgsqlConnection connection, DemoPerson by, string set, string because, string guard)
         {
             await using var command = new NpgsqlCommand(Changing(by, set), connection);
             var refused = (await FluentActions.Awaiting(() => command.ExecuteNonQueryAsync(Cancellation)).Should().ThrowAsync<PostgresException>(set)).Which;
-            (refused.SqlState, refused.MessageText).Should().Be((PostgresErrorCodes.InsufficientPrivilege, because), set);
+            (refused.SqlState, refused.MessageText, refused.ConstraintName, refused.Hint)
+                .Should().Be((PostgresErrorCodes.InsufficientPrivilege, because, guard, DatabaseRefusal.GuardHint), set);
+            var read = DatabaseRefusal.From(refused);
+            read.Should().NotBeNull(set);
+            (read!.Kind, read.Constraint).Should().Be((DatabaseRefusalKind.GuardRefused, guard), set);
         }
 
         async Task ShouldChangeAsync(NpgsqlConnection connection, DemoPerson by, string set)
@@ -429,12 +444,12 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
 
             // The unit: to no unit at all, to a unit of another tenant, and to one of his own tenant where he may
             // open no project.
-            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{Guid.NewGuid()}'", UnitChangesWithItsKeys.UnitOfAnotherTenant);
-            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{Meadow.Root.Value}'", UnitChangesWithItsKeys.UnitOfAnotherTenant);
-            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{southBay}'", UnitChangesWithItsKeys.MovedWithoutTheKeys);
+            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{Guid.NewGuid()}'", UnitChangesWithItsKeys.UnitOfAnotherTenant, UnitChangesWithItsKeys.Trigger);
+            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{Meadow.Root.Value}'", UnitChangesWithItsKeys.UnitOfAnotherTenant, UnitChangesWithItsKeys.Trigger);
+            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"UnitId\" = '{southBay}'", UnitChangesWithItsKeys.MovedWithoutTheKeys, UnitChangesWithItsKeys.Trigger);
 
             // The owner: no crew role names one.
-            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"OwnerSeatId\" = '{juno}'", OwnerNamedWithoutTheKey);
+            await ShouldBeRefusedAsync(leo, DemoPeople.Leo, $"\"OwnerSeatId\" = '{juno}'", OwnerNamedWithoutTheKey, OwnerLock);
         }
 
         // Maud administers access: she names owners and manages crews everywhere in harbor, and edits and opens
@@ -442,7 +457,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // asks for the two keys a move takes.
         await using (var maud = await AsSeatAsync(DemoPeople.Maud))
         {
-            await ShouldBeRefusedAsync(maud, DemoPeople.Maud, $"\"UnitId\" = '{northInland}'", UnitChangesWithItsKeys.MovedWithoutTheKeys);
+            await ShouldBeRefusedAsync(maud, DemoPeople.Maud, $"\"UnitId\" = '{northInland}'", UnitChangesWithItsKeys.MovedWithoutTheKeys, UnitChangesWithItsKeys.Trigger);
             await ShouldChangeAsync(maud, DemoPeople.Maud, $"\"OwnerSeatId\" = '{juno}'");
         }
 
@@ -451,7 +466,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         await using (var rhea = await AsSeatAsync(DemoPeople.Rhea))
         {
             await ShouldChangeAsync(rhea, DemoPeople.Rhea, $"\"UnitId\" = '{northInland}'");
-            await ShouldBeRefusedAsync(rhea, DemoPeople.Rhea, $"\"UnitId\" = '{southBay}'", UnitChangesWithItsKeys.MovedWithoutTheKeys);
+            await ShouldBeRefusedAsync(rhea, DemoPeople.Rhea, $"\"UnitId\" = '{southBay}'", UnitChangesWithItsKeys.MovedWithoutTheKeys, UnitChangesWithItsKeys.Trigger);
         }
 
         // What was let through is all that changed.
@@ -598,8 +613,8 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
     /// A handler that never asked the access check, as a mistake or a shortcut would write one: it loads the project
     /// as it is now, renames it and saves. The request's requirement was never asked, and the policy for changing a
     /// project lets any seat that holds a key that changes it write the row; the column rule on the name is what
-    /// refuses a seat without the key to edit. The refusal reaches the save as the database's error, which is not yet
-    /// translated into a refusal of the application's own.
+    /// refuses a seat without the key to edit. Its trigger refuses with the toolkit's hint, so the save is refused
+    /// with access.refused, as one a policy refuses is, and the database's own words stay inside it, for the log.
     /// </summary>
     [Fact]
     public async Task A_rename_whose_handler_skipped_the_access_check_is_refused_by_the_database_to_a_seat_without_the_key_to_edit()
@@ -629,10 +644,11 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         // Maud, who names owners and manages crews, and Vic, who manages its crew: what the experiment saw renamed.
         foreach (var person in new[] { DemoPeople.Maud, DemoPeople.Vic })
         {
-            var thrown = (await FluentActions.Awaiting(() => RenameAsync(person, "Pier 7, by " + person.Name)).Should().ThrowAsync<Exception>()).Which;
+            var thrown = (await FluentActions.Awaiting(() => RenameAsync(person, "Pier 7, by " + person.Name)).Should().ThrowAsync<RefusalException>()).Which;
+            (thrown.Code, thrown.Kind).Should().Be((ToolkitRefusals.Refused, RefusalKind.NotPermitted), "the database refused {0}'s save, and nothing in C# did", person.Name);
             var refused = InnerPostgresException(thrown);
-            refused.Should().NotBeNull("the database refused {0}'s save, rather than anything in C#: {1}", person.Name, thrown);
-            (refused!.SqlState, refused.MessageText).Should().Be((PostgresErrorCodes.InsufficientPrivilege, NameAndPlanHeld));
+            refused.Should().NotBeNull("the refusal keeps the database's error: {0}", thrown);
+            (refused!.SqlState, refused.MessageText, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, NameAndPlanHeld, NameAndPlanTrigger));
         }
 
         // Leo holds the key to edit it through the crew he leads, and the same handler renames it.
@@ -648,7 +664,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
     /// the key to edit and keeps the one to manage the crew. The project itself does not change, so the hold the
     /// handler loads it with still matches, and the policy for changing a project still lets a seat that manages the
     /// crew write the row. The column rule on the name asks the key renaming asks, as the save runs, and the
-    /// rename does not happen. What the caller is told is the database's error, until such a refusal is translated.
+    /// rename does not happen. The caller is told what a policy's refusal tells it: 403, access.refused.
     /// </summary>
     [Fact]
     public async Task A_rename_whose_caller_lost_the_key_to_edit_after_the_check_is_refused_by_the_database_though_the_project_did_not_change()
@@ -656,7 +672,7 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         var meanwhile = new Meanwhile();
         await using var sample = await StartedAsync(services => services
             .AddSingleton(meanwhile)
-            .AddScoped<IPipelineBehavior<ChangeProjectName, Unit>, MeanwhileBeforeTheRename>());
+            .AddScoped<IPipelineBehavior<ChangeProjectName, Unit>, MeanwhileBefore<ChangeProjectName>>());
         var project = Harbor.ProjectNamed("Pier 7");
         Guid role;
         using (var ada = await sample.Host.ClientAsync("ada", Harbor.Slug))
@@ -674,11 +690,81 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         using var renamed = await vic.PutAsJsonAsync($"/projects/{project.Id.Value}/name", new { name = "Pier 7, by Vic" }, Cancellation);
 
         meanwhile.Ran.Should().BeTrue("the role lost the key after the check and before the handler");
-        renamed.IsSuccessStatusCode.Should().BeFalse("the database refused the save: {0}", await renamed.Content.ReadAsStringAsync(Cancellation));
-        (await renamed.ProblemAsync()).Code.Should().NotBe(ProjectRefusals.NotPermitted, "the check let the rename through: it was the database that refused it");
+        await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
         await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
         await owner.OpenAsync(Cancellation);
         (await ScalarAsync<string>(owner, $"SELECT \"Name\" FROM projects.\"Projects\" WHERE \"Id\" = '{project.Id.Value}'")).Should().Be("Pier 7");
+    }
+
+    /// <summary>
+    /// What the experiment saw end as a failure of the server: an owner named by a seat that lost the key for it
+    /// between the check and the handler. Maud runs access in harbor, and names owners and manages crews everywhere
+    /// in it. As her request passes its check, the role she holds that for loses the key that names an owner and
+    /// keeps the one that manages crews: the policy for changing a project still lets her write its row, and the
+    /// crew's rows the new owner goes on. The Membership package's lock on the owner column refuses the change,
+    /// with the toolkit's hint, and the caller is told what a policy's refusal tells it, over either way in.
+    /// </summary>
+    [Fact]
+    public async Task An_owner_named_by_a_seat_that_lost_the_key_after_the_check_is_refused_with_access_refused_over_rest_and_graphql()
+    {
+        var meanwhile = new Meanwhile();
+        var logs = new RecordingLoggerProvider();
+        await using var sample = await StartedAsync(services => services
+            .AddSingleton(meanwhile)
+            .AddSingleton<ILoggerProvider>(logs)
+            .AddScoped<IPipelineBehavior<ChangeProjectOwner, Unit>, MeanwhileBefore<ChangeProjectOwner>>());
+        var pier = Harbor.ProjectNamed("Pier 7");
+        var juno = Harbor.SeatOf(DemoPeople.Juno).Value;
+        var accessAdmin = Harbor.AdministratorsRole.Value;
+
+        // Somebody who manages the tenant's roles takes the key that names owners out of hers, and her rights follow.
+        string Keys(string change) => $"""UPDATE {TenantsContext.Schema}."Roles" SET "Keys" = {change} WHERE "Id" = '{accessAdmin}'""";
+        void TakeTheKeyMeanwhile() => meanwhile.Arm(() => sample.AsOwnerAsync(Keys($"""pg_catalog.array_remove("Keys", '{ProjectKeys.ChangeOwner}')"""), Cancellation));
+
+        // What Pier 7's crew holds before: a new owner goes on the crew with the crew lead's role, and the old one loses it.
+        await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
+        await owner.OpenAsync(Cancellation);
+        var crewRoles = $"""SELECT count(*) || ':' || count(*) FILTER (WHERE "EndsAt" IS NULL) FROM projects."{ProjectsContext.CrewRolesTable}" WHERE "ProjectId" = '{pier.Id.Value}'""";
+        var before = await ScalarAsync<string>(owner, crewRoles);
+
+        using var maud = await sample.Host.ClientAsync("maud", Harbor.Slug);
+
+        // Over REST.
+        TakeTheKeyMeanwhile();
+        using (var named = await maud.PutAsJsonAsync($"/projects/{pier.Id.Value}/owner", new { seatId = juno }, Cancellation))
+        {
+            meanwhile.Ran.Should().BeTrue("the role lost the key after the check and before the handler");
+            await named.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
+        }
+
+        // Over GraphQL, with the key given back first, so the check passes again.
+        await sample.AsOwnerAsync(Keys($"""pg_catalog.array_append("Keys", '{ProjectKeys.ChangeOwner}')"""), Cancellation);
+        TakeTheKeyMeanwhile();
+        var node = await maud.ProjectNodeIdAsync(pier);
+        var payload = (await maud.GraphQLDataAsync(
+            $$"""
+            mutation($id: ID!, $seatId: UUID!) {
+              projectOwnerChange(input: { id: $id, seatId: $seatId }) {
+                project { id }
+                {{SampleGraphQLCalls.Errors}}
+              }
+            }
+            """,
+            new { id = node, seatId = juno })).GetProperty("projectOwnerChange");
+        meanwhile.Ran.Should().BeTrue("the role lost the key again, after the mutation's check and before the handler");
+        payload.GetProperty("project").ValueKind.Should().Be(JsonValueKind.Null, "a refused command answers no project");
+        var error = payload.GetProperty("errors").EnumerateArray().Should().ContainSingle().Subject;
+        error.GetProperty("__typename").GetString().Should().Be("RefusalError");
+        error.GetProperty("code").GetString().Should().Be(ToolkitRefusals.Refused);
+        error.GetProperty("kind").GetString().Should().Be("not_permitted");
+
+        // It was the lock that refused, each time, and whoever runs the application is told so: the caller is not.
+        logs.Entries.Where(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).Should().HaveCount(2)
+            .And.AllSatisfy(entry => entry.Message.Should().Be($"The database refused a save the application allowed: the guard {OwnerLock}. C# and the guards disagree."));
+
+        // Neither got through: Leo owns Pier 7 still, and its crew holds the roles it held.
+        (await ScalarAsync<Guid>(owner, $"SELECT \"OwnerSeatId\" FROM projects.\"Projects\" WHERE \"Id\" = '{pier.Id.Value}'")).Should().Be(Harbor.SeatOf(DemoPeople.Leo).Value);
+        (await ScalarAsync<string>(owner, crewRoles)).Should().Be(before, "the save that would have changed the crew's roles was refused whole");
     }
 
     /// <summary>
@@ -1282,15 +1368,22 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         return (await run.Should().ThrowAsync<PostgresException>()).Which.SqlState;
     }
 
-    /// <summary>What happens once between a rename's access check and its handler, armed by the test.</summary>
+    /// <summary>What happens once between a command's access check and its handler, armed by the test.</summary>
     private sealed class Meanwhile
     {
         private Func<Task>? _then;
 
-        /// <summary>Makes <paramref name="then"/> happen next time; once.</summary>
-        public void Arm(Func<Task> then) => _then = then;
+        /// <summary>
+        /// Makes <paramref name="then"/> happen next time; once. What was armed before is forgotten, so
+        /// <see cref="Ran"/> says whether this one happened, and a test that arms it twice proves each race.
+        /// </summary>
+        public void Arm(Func<Task> then)
+        {
+            Ran = false;
+            _then = then;
+        }
 
-        /// <summary>Whether it happened.</summary>
+        /// <summary>Whether what was armed last happened.</summary>
         public bool Ran { get; private set; }
 
         public async Task HappenAsync()
@@ -1303,10 +1396,11 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         }
     }
 
-    /// <summary>A step of a rename's pipeline after the module's access check, registered after it, right before the handler.</summary>
-    private sealed class MeanwhileBeforeTheRename(Meanwhile meanwhile) : IPipelineBehavior<ChangeProjectName, Unit>
+    /// <summary>A step of a command's pipeline after the module's access check, registered after it, right before the handler.</summary>
+    private sealed class MeanwhileBefore<TCommand>(Meanwhile meanwhile) : IPipelineBehavior<TCommand, Unit>
+        where TCommand : ICommand
     {
-        public async ValueTask<Unit> Handle(ChangeProjectName message, MessageHandlerDelegate<ChangeProjectName, Unit> next, CancellationToken cancellationToken)
+        public async ValueTask<Unit> Handle(TCommand message, MessageHandlerDelegate<TCommand, Unit> next, CancellationToken cancellationToken)
         {
             await meanwhile.HappenAsync();
             return await next(message, cancellationToken);

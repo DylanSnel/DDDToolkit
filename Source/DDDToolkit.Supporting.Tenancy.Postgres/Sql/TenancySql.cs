@@ -137,6 +137,9 @@ internal static class TenancySql
 
     internal const string AttributionIsKept = "Who wrote a row first does not change.";
 
+    /// <summary>What the trigger on a seat's status tells a statement it refuses.</summary>
+    internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.";
+
     /// <summary>The caller's verified identity, as the script fills it in: <c>(SELECT auth.uid())</c> on Supabase.</summary>
     private const string Uid = "{caller:uid}";
 
@@ -2012,6 +2015,13 @@ internal static class TenancySql
     /// owner are no seat: the function that finds the calling seat answers them nothing. How long the caller
     /// holds each key against the end of each grant stays the use case's to check.
     /// </para>
+    /// <para>
+    /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint (<see cref="RowAccessModel.Refusal"/>),
+    /// since it is an access guard, holding who may and not what may be: a use case whose seat lost a key between
+    /// its check and its save is refused with <c>access.refused</c>. The triggers that hold what may never be, a
+    /// tenant's last administrator, the rights, the paths and the rows that stay fixed, are no access guards and
+    /// refuse with <c>check_violation</c>, whoever writes.
+    /// </para>
     /// </summary>
     private static IEnumerable<string> StatusTriggers(TenancyTables tenancy, string schema)
     {
@@ -2042,8 +2052,7 @@ internal static class TenancySql
             "    END IF;\n" +
             $"    IF NOT (SELECT {Fn(HoldsTenantWide)}({RowAccessModel.Literal(SeatsKey)}))\n" +
             $"       OR EXISTS ({beyond}) THEN\n" +
-            $"        RAISE EXCEPTION USING ERRCODE = 'check_violation', CONSTRAINT = {RowAccessModel.Literal(SeatStatusIsManagedConstraint)}, " +
-            "MESSAGE = 'A seat''s status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.';\n" +
+            $"        {RowAccessModel.Refusal(SeatStatusIsManagedConstraint, SeatStatusRefusal)}\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +
             "END\n" +
@@ -2094,8 +2103,8 @@ internal static class TenancySql
         string Old(int column) => $"(as_it_was ->> TG_ARGV[{column}])";
         string NotTheCaller(int seat, int kind, int identity)
             => $"{New(kind)} IS DISTINCT FROM {seatKind} OR {New(seat)} IS DISTINCT FROM caller_seat OR {New(identity)} IS NOT NULL";
-        string Refuse(string message)
-            => $"RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = {RowAccessModel.Literal(message)};";
+        // A caller recorded as somebody else is refused as a policy refuses it, with the toolkit's hint.
+        string Refusal(string message) => RowAccessModel.Refusal(AttributionMatchesCallerTrigger, message);
 
         yield return
             $"CREATE OR REPLACE FUNCTION {function}() RETURNS trigger\n" +
@@ -2109,11 +2118,11 @@ internal static class TenancySql
             $"        caller_seat := (SELECT {Fn(CallerSeat)}())::pg_catalog.text;\n" +
             $"        IF caller_seat IS NULL OR {NotTheCaller(3, 4, 5)}\n" +
             $"           OR (TG_OP = 'INSERT' AND ({NotTheCaller(0, 1, 2)})) THEN\n" +
-            $"            {Refuse(AttributionOfASeat)}\n" +
+            $"            {Refusal(AttributionOfASeat)}\n" +
             "        END IF;\n" +
             $"    ELSIF CURRENT_USER = {RowAccessModel.Literal(written.SystemInRole)} THEN\n" +
             $"        IF {New(4)} IS NOT DISTINCT FROM {seatKind} OR (TG_OP = 'INSERT' AND {New(1)} IS NOT DISTINCT FROM {seatKind}) THEN\n" +
-            $"            {Refuse(AttributionOfSystemWork)}\n" +
+            $"            {Refusal(AttributionOfSystemWork)}\n" +
             "        END IF;\n" +
             "    ELSE\n" +
             "        RETURN NEW;\n" +
@@ -2121,7 +2130,7 @@ internal static class TenancySql
             "    IF TG_OP = 'UPDATE' THEN\n" +
             "        as_it_was := pg_catalog.to_jsonb(OLD);\n" +
             $"        IF ({New(0)}, {New(1)}, {New(2)}) IS DISTINCT FROM ({Old(0)}, {Old(1)}, {Old(2)}) THEN\n" +
-            $"            {Refuse(AttributionIsKept)}\n" +
+            $"            {Refusal(AttributionIsKept)}\n" +
             "        END IF;\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +

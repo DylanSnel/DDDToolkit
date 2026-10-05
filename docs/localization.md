@@ -431,7 +431,7 @@ The toolkit writes six messages itself, and ships them in English and Dutch:
 | --- | --- | --- |
 | `Unspecified` | a `Validate()` that returned `false` without saying why | `{ValueObject}` |
 | `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation` | `{PropertyName}`, `{ValueObject}` |
-| `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy denied, refused by `DDDToolkit.EntityFramework` | none |
+| `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy or a guard of the database denied, refused by `DDDToolkit.EntityFramework` | none |
 | `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`: a token whose role is on no list of the host's, refused by `DDDToolkit.EntityFramework.Postgres` before anything runs for it | `{Role}` |
 | `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`: a request that requires a signed-in user (`AccessRequirement.SignedIn()`), sent by anybody else | none |
 | `access.system-only` | `ToolkitRefusals.SystemOnly`: a request only the application itself sends (`AccessRequirement.RequiresSystemWork()`), sent by a user or by work nobody began a caller for, and Tenancy's use cases that only system work calls, called by a seat | none |

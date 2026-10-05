@@ -745,6 +745,11 @@ public static MembershipRules Rules { get; } = new(
   warning, and refuses nothing. That is sound where your rule admits exactly who may change the members
   and name the owner, or where no caller reaches the database past your application. Naming the key for
   the members without the one for the owner leaves a way round: whoever makes itself owner holds every key.
+- **A refusal of the lock reaches your caller as `access.refused`.** A policy's refusal is read as every
+  policy's is, and the trigger refuses as the toolkit's access guards do: `42501`, its own name as the constraint
+  (`documents_owner_stays`), and the toolkit's hint. A save it refuses, from a handler whose caller lost the key
+  between the check and the save say, is a `RefusalException` with that code, a 403, and a warning that names
+  the trigger; see [When the database refuses](row-level-security.md#when-the-database-refuses).
 - **The check holds the lock too:** a database where a policy of the lock is gone for a role, or the
   trigger is disabled, is refused at start-up. So is one where kept roles have lost the trigger that keeps
   the owner's role in use.

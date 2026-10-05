@@ -32,7 +32,7 @@ internal static class MembershipSql
     /// that still holds what an earlier version of the package wrote is found by the start-up check, although
     /// its rules have not changed. Change the SQL, and change this: a test keeps the two together.
     /// </summary>
-    internal const string SqlForm = "4";
+    internal const string SqlForm = "5";
 
     private const string Instant = "timestamp with time zone";
 
@@ -523,7 +523,8 @@ internal static class MembershipSql
     /// statement would leave a row with another owner than it had, and refuses it, as a policy refuses, unless
     /// the caller held that key on the resource before the change. A trigger, because a policy sees the row a
     /// statement leaves behind and not the one it found: only here are both at hand, and nothing a caller can
-    /// ask is added for it.
+    /// ask is added for it. It refuses as the toolkit's access guards do (<see cref="RowAccessModel.Refusal"/>), with
+    /// the lock's name as the constraint, so a save it refuses is <c>access.refused</c> and the warning names the lock.
     /// <para>
     /// It holds the database roles the rules let ask the functions, and nobody else: the application's own
     /// work and the role that owns the tables are not asked. For rules that name no such key the statements
@@ -582,7 +583,7 @@ internal static class MembershipSql
             "    -- The callers the rules name are held to this. The application's own work and the tables' owner are not.",
             $"    IF CURRENT_USER IN ({string.Join(", ", locked.Select(Text))})",
             $"       AND NOT EXISTS (SELECT 1 FROM {Asked(owner + "/" + rules.Functions.HeldOn)}({Text(key)}) AS held(id) WHERE held.id = OLD.{Column(resource, id.Name)}) THEN",
-            $"        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = {Text(message)};",
+            "        " + Braces(RowAccessModel.Refusal(name, message)),
             "    END IF;",
             "    RETURN NEW;",
             "END",

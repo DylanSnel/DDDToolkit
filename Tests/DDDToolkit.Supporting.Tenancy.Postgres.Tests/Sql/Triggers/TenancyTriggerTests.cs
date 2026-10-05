@@ -150,7 +150,9 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         static async Task<string?> StatusRefusedAsync(AsCaller caller, string change, Person seat)
         {
             var refused = (await FluentActions.Awaiting(() => caller.AttemptAsync(change, Cancellation, seat.Seat.Value)).Should().ThrowAsync<PostgresException>(change)).Which;
-            refused.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+            // Refused as a policy refuses, since it holds who may: 42501 with the toolkit's hint, which a use case's save
+            // answers with access.refused.
+            (refused.SqlState, refused.Hint).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "ddd:access.refused"));
             return refused.ConstraintName;
         }
     }

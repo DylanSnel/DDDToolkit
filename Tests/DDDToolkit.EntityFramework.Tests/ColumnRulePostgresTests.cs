@@ -1,6 +1,7 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework.Interceptors;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
@@ -56,6 +57,11 @@ public sealed class ColumnRulePostgresTests(PostgresRowAccessDatabase database) 
             var closing = () => database.RunAsAsync(Bob, """UPDATE desk."Tickets" SET "Status" = 1 WHERE "Title" = {0}""", Cancellation, AlicesTicket + ", retitled");
             var refused = (await closing.Should().ThrowAsync<PostgresException>()).Which;
             (refused.SqlState, refused.MessageText, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, StatusHeldByTheOwners, "tickets_status_column_rule"));
+
+            // With the toolkit's hint, as every access guard it writes: a save Entity Framework makes would be refused with
+            // access.refused, as one a policy refuses is, and the warning would name the trigger.
+            refused.Hint.Should().Be(DatabaseRefusal.GuardHint);
+            (DatabaseRefusal.From(refused)?.Kind, DatabaseRefusal.From(refused)?.Constraint).Should().Be((DatabaseRefusalKind.GuardRefused, "tickets_status_column_rule"));
 
             // Nor along with a column he may change: the statement is refused whole.
             var both = () => database.RunAsAsync(Bob, """UPDATE desk."Tickets" SET "Title" = 'Both', "Status" = 1 WHERE "Title" = {0}""", Cancellation, AlicesTicket + ", retitled");

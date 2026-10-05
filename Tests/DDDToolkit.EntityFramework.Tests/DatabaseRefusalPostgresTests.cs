@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.EntityFramework.Interceptors;
+using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using DDDToolkit.Exceptions;
 using FluentAssertions;
@@ -450,6 +451,83 @@ public sealed class DatabaseRefusalPostgresTests(PalletDepotDatabase database) :
 
             DatabaseRefusal.From(failure).Should().BeNull();
         }
+    }
+
+    [Fact]
+    public async Task A_save_a_guard_refuses_is_access_refused_and_one_refused_without_the_hint_fails_as_it_did()
+    {
+        database.Require();
+        using var logs = new KeptWarnings();
+        using var factory = LoggerFactory.Create(logging => logging.AddProvider(logs).SetMinimumLevel(LogLevel.Warning));
+
+        // The depot's own guard, written with the toolkit's statement: a signed-in user's pallet keeps its number.
+        // The policy lets Alice change her pallet; the guard refuses the column.
+        await database.RunAsOwnerAsync(DatabaseRefusalProbeTests.NumberStays(RowAccessModel.Refusal("pallets_number_stays", "A pallet keeps its number.")), Cancellation);
+        try
+        {
+            await using (var context = database.CreateSavingContext(Alice, factory))
+            {
+                var hers = await context.Pallets.SingleAsync(pallet => pallet.Id == PalletDepotDatabase.AlicesPallet, Cancellation);
+                hers.Renumber(9);
+
+                var refusal = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<RefusalException>()).Which;
+                refusal.Code.Should().Be(ToolkitRefusals.Refused);
+                refusal.Kind.Should().Be(RefusalKind.NotPermitted);
+                refusal.Message.Should().Be("The database refused this change.");
+                refusal.Arguments.Should().BeEmpty("the caller is told no more than that, and nothing of the guard");
+                var failure = refusal.InnerException.Should().BeOfType<DbUpdateException>().Subject;
+                failure.InnerException.Should().BeOfType<PostgresException>().Which.MessageText.Should().Be("A pallet keeps its number.");
+
+                var read = DatabaseRefusal.From(failure)!;
+                (read.Kind, read.Constraint).Should().Be((DatabaseRefusalKind.GuardRefused, "pallets_number_stays"));
+
+                FluentActions.Invoking(() => context.SaveChanges()).Should().Throw<RefusalException>().Which.Code.Should().Be(ToolkitRefusals.Refused);
+            }
+
+            var warned = logs.Of<DatabaseRefusalInterceptor>().Should().HaveCount(2).And.Subject.First();
+            warned.Level.Should().Be(LogLevel.Warning);
+            warned.Message.Should().Be("The database refused a save the application allowed: the guard pallets_number_stays on depot.Pallets. C# and the guards disagree.");
+            warned.Exception.Should().BeOfType<DbUpdateException>();
+
+            // The same trigger, raising without the hint: a 42501 the toolkit cannot tell from the application's own
+            // set-up, so it fails as it always did, and nothing is logged as a refusal.
+            logs.Clear();
+            await database.RunAsOwnerAsync(DatabaseRefusalProbeTests.NumberStays("RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = 'A pallet keeps its number.';"), Cancellation);
+            await using (var context = database.CreateSavingContext(Alice, factory))
+            {
+                var hers = await context.Pallets.SingleAsync(pallet => pallet.Id == PalletDepotDatabase.AlicesPallet, Cancellation);
+                hers.Renumber(9);
+
+                var failure = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<DbUpdateException>()).Which;
+                failure.InnerException.Should().BeOfType<PostgresException>().Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
+                DatabaseRefusal.From(failure).Should().BeNull();
+            }
+
+            logs.Of<DatabaseRefusalInterceptor>().Should().BeEmpty();
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync(DatabaseRefusalProbeTests.DropNumberStays, Cancellation);
+        }
+
+        (await database.ScalarAsOwnerAsync($"SELECT \"Number\" FROM {Pallets} WHERE \"Id\" = '{PalletDepotDatabase.AlicesPallet.Value}'", Cancellation)).Should().Be("1", "nothing was renumbered");
+    }
+
+    [Fact]
+    public async Task A_42501_that_names_row_level_security_and_refused_no_row_is_not_read_as_a_refusal()
+    {
+        database.Require();
+
+        // A read with row security turned off, by a role the policies hold: the words of a policy's refusal, from
+        // a routine that is not the check of a row, about the application's own set-up.
+        await using var context = database.CreateSavingContext(Alice);
+        await context.Database.OpenConnectionAsync(Cancellation);
+        await context.Database.ExecuteSqlRawAsync("SET row_security = off", Cancellation);
+
+        var failure = (await FluentActions.Awaiting(() => context.Pallets.CountAsync(Cancellation)).Should().ThrowAsync<PostgresException>()).Which;
+        failure.MessageText.Should().Contain("row-level security", "what the toolkit once read a refusal from");
+        DatabaseRefusal.From(failure).Should().BeNull();
+        DatabaseRefusal.From(new DbUpdateException("A save that failed so.", failure)).Should().BeNull();
     }
 
     /// <summary>Every logger of a context, keeping what it was told at warning level and above.</summary>

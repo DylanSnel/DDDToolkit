@@ -1558,11 +1558,14 @@ row, which holds callers to themselves:
 - the scoped system role never writes the kind `seat`;
 - neither changes who wrote the row first.
 
-A statement it refuses fails with SQLSTATE `42501`. The save fills every column itself, so the trigger only
-ever refuses a statement that goes around the model. Such a statement of your own, an `ExecuteUpdate` say,
-sets the last three columns itself: a change that leaves another seat's name on the row is refused too. A
-role that is no caller's, the tables' owner in a migration, is not held: it fills the columns of the rows
-that were there before them.
+A statement it refuses fails with SQLSTATE `42501`, with the trigger's name and the toolkit's hint, as every
+access guard the toolkit writes refuses: a save through Entity Framework that it refuses is refused with
+`access.refused` ([When the database refuses](row-level-security.md#when-the-database-refuses)). The save fills
+every column itself, though, so the trigger only ever refuses a statement that goes around the model. Such a
+statement of your own, an `ExecuteUpdate` say, sets the last three columns itself: a change that leaves another
+seat's name on the row is refused too. It is no save, so its refusal reaches you as the `PostgresException`
+itself, which `DatabaseRefusal.From` reads as a guard's. A role that is no caller's, the tables' owner in a
+migration, is not held: it fills the columns of the rows that were there before them.
 
 ## Access history
 
@@ -3276,7 +3279,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
-| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
 | The application's clock and the database's are expected to be in step. The policies have no tolerance for a difference | **Code:** [The functions](#the-functions) says so; nothing in the packages<br/>**Try it:** Nothing to try: it is a property of the machines' clocks<br/>**Test:** `DatabaseClock`, the clock the Postgres tests of the package run with |
 | The real sign-in stands beside the dev login. The host takes both kinds of token Supabase Auth issues, one checked with the JWT secret and one with a key Auth publishes | **Code:** [`SupabaseTokenHandler.cs`](../Source/DDDToolkit.Auth.Supabase/SupabaseTokenHandler.cs), [`SampleAuthentication.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Auth/SampleAuthentication.cs), [`SupabaseLoginClient.cs`](../Examples/Tenancy/Examples.Tenancy.Ui/Auth/SupabaseLoginClient.cs)<br/>**Try it:** The password form on the login page, with `rhea@example.test` and the password the dashboard shows under Parameters<br/>**Test:** `SampleOnSupabaseTests`, `PublishedKeyTokenTests`, `SupabaseTokenHandlerTests` |
@@ -3926,8 +3929,9 @@ to, in the caller's tenant, and written by whoever may change that row. Tenancy'
 contribution's alone: a rule or another contribution that would add a policy to one is refused.
 
 **The triggers** that check, next to the one that writes the rights, fire for every role, the tables' owner
-included, and the use cases never trip them. The first three check at commit what the transaction wrote, the
-last two as the row changes:
+included. A use case trips the first only in a race with another that takes away an administrator, and the
+last only when the calling seat loses a key between the use case's check and its save; the others it never
+trips. The first three check at commit what the transaction wrote, the last two as the row changes:
 
 - a tenant, active or suspended, keeps an administrator: a seat that holds `tenancy.roles.manage` at the root
   with no end, through an active role, and is active itself. A closed tenant needs none, and a tenant that has
@@ -3947,11 +3951,17 @@ last two as the row changes:
   suspends itself. System work and the tables' owner are no seat and are not held to it; the policies, and
   the administrator a tenant keeps, hold those.
 
-A save a policy denies is refused with `access.refused`, a refusal of the kind "not permitted", and logged
-as a warning, since the use case allowed what the policy does not: an insert or an update whose new row a
-policy refuses, and an update or a delete of a row a policy hides from the statement. That last one changes
-no row, exactly as a lost race does, so the row is read again first; a row somebody else changed or removed
-stays a concurrency conflict.
+The first four hold what may never be, whoever writes, and raise `check_violation`: a use case that trips one
+has a bug, and fails as one, except the last administrator, which Tenancy's store answers with the use case's
+own refusal. The last is an access guard: it holds who may, and refuses as a policy does, with `42501` and the
+toolkit's hint.
+
+A save a policy or that trigger denies is refused with `access.refused`, a refusal of the kind "not
+permitted", and logged as a warning, since the use case allowed what the database does not: an insert or an
+update whose new row a policy refuses, a status the calling seat lost a key for between the use case's check and
+its save, and an update or a delete of a row a policy hides from the statement. That last one changes no row,
+exactly as a lost race does, so the row is read again first; a row somebody else changed or removed stays a
+concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
 
 ### What stays in C#
 

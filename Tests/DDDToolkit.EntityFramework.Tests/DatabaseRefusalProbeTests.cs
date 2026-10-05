@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Access;
+using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Tests.Infrastructure;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
@@ -148,4 +149,80 @@ public sealed class DatabaseRefusalProbeTests(PalletDepotDatabase database) : IA
             failure.Entries.Select(entry => entry.Entity).Should().BeEquivalentTo([taken], "SQLite runs a save row by row, and Entity Framework names the one that failed");
         }
     }
+
+    [Fact]
+    public async Task A_trigger_raises_42501_from_the_routine_of_every_raise_and_says_what_it_was_told_on_npgsql()
+    {
+        database.Require();
+
+        // A guard of the depot's own, written as the toolkit writes its guards: a signed-in user's pallet keeps its number.
+        await database.RunAsOwnerAsync(NumberStays(RowAccessModel.Refusal("pallets_number_stays", "A pallet keeps its number.")), Cancellation);
+        try
+        {
+            await using var context = database.CreateContext(Alice);
+            var hers = await context.Pallets.SingleAsync(pallet => pallet.Id == PalletDepotDatabase.AlicesPallet, Cancellation);
+            hers.Renumber(9);
+
+            var failure = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<DbUpdateException>()).Which;
+            failure.Should().NotBeOfType<DbUpdateConcurrencyException>("the statement failed; it did not miss its row");
+            var refused = failure.InnerException.Should().BeOfType<PostgresException>().Subject;
+            refused.SqlState.Should().Be("42501");
+            refused.MessageText.Should().Be("A pallet keeps its number.");
+            refused.Hint.Should().Be("ddd:access.refused", "a RAISE hands over the hint it was given, untranslated");
+            refused.ConstraintName.Should().Be("pallets_number_stays");
+            refused.TableName.Should().BeNull("a RAISE names a table only where it is told to");
+            refused.Routine.Should().Be("exec_stmt_raise", "every RAISE of PL/pgSQL comes from this one routine, so where it came from tells no guard apart");
+            failure.Entries.Should().ContainSingle().Which.Entity.Should().BeSameAs(hers);
+
+            // Without the hint, the same statement says nothing that is not said by any other RAISE.
+            await database.RunAsOwnerAsync(NumberStays("RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = 'A pallet keeps its number.';"), Cancellation);
+            var unmarked = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<DbUpdateException>()).Which
+                .InnerException.Should().BeOfType<PostgresException>().Subject;
+            (unmarked.SqlState, unmarked.Hint, unmarked.ConstraintName, unmarked.Routine).Should().Be(("42501", null, null, "exec_stmt_raise"));
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync(DropNumberStays, Cancellation);
+        }
+    }
+
+    [Fact]
+    public async Task A_read_with_row_security_off_is_42501_naming_row_level_security_from_another_routine_on_npgsql()
+    {
+        database.Require();
+
+        // A role the policies hold that turns row security off, as a dump tool does: Postgres refuses the read, and
+        // the message names row level security, though no policy refused a row.
+        await using var context = database.CreateContext(Alice);
+        await context.Database.OpenConnectionAsync(Cancellation);
+        await context.Database.ExecuteSqlRawAsync("SET row_security = off", Cancellation);
+
+        var refused = (await FluentActions.Awaiting(() => context.Pallets.CountAsync(Cancellation)).Should().ThrowAsync<PostgresException>()).Which;
+        refused.SqlState.Should().Be("42501");
+        refused.MessageText.Should().Be("query would be affected by row-level security policy for table \"Pallets\"");
+        refused.Routine.Should().Be("check_enable_rls", "not the check of a new row against the policies");
+        refused.Hint.Should().BeNull();
+    }
+
+    /// <summary>
+    /// The depot's trigger that keeps a signed-in user's pallet at its number, refusing with <paramref name="raise"/>. The
+    /// application's own work, which restores the depot, is not held.
+    /// </summary>
+    internal static string NumberStays(string raise) => $$"""
+        CREATE OR REPLACE FUNCTION {{PalletContext.Schema}}.pallets_number_stays() RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $body$
+        BEGIN
+            IF CURRENT_USER = 'authenticated' THEN
+                {{raise}}
+            END IF;
+            RETURN NEW;
+        END
+        $body$;
+        DROP TRIGGER IF EXISTS pallets_number_stays ON {{Pallets}};
+        CREATE TRIGGER pallets_number_stays BEFORE UPDATE OF "Number" ON {{Pallets}}
+            FOR EACH ROW WHEN (OLD."Number" IS DISTINCT FROM NEW."Number") EXECUTE FUNCTION {{PalletContext.Schema}}.pallets_number_stays();
+        """;
+
+    /// <summary>Takes the trigger of <see cref="NumberStays"/> away again.</summary>
+    internal static string DropNumberStays
+        => $"DROP TRIGGER IF EXISTS pallets_number_stays ON {Pallets}; DROP FUNCTION IF EXISTS {PalletContext.Schema}.pallets_number_stays()";
 }

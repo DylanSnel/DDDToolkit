@@ -18,10 +18,11 @@ public static class ToolkitRefusals
 {
     /// <summary>
     /// The database refused a change the application's own checks let through: a row level security policy
-    /// denied the row a save would insert, change or delete. The caller may not do this, whatever the
+    /// denied the row a save would insert, change or delete, or a guard of the database, a trigger that raises
+    /// <c>42501</c> with the toolkit's hint, refused the statement. The caller may not do this, whatever the
     /// application thought, so it is <see cref="RefusalKind.NotPermitted"/>, and the same command gives the same
     /// answer until somebody's rights change. <c>DDDToolkit.EntityFramework</c> makes it of a failed save, and
-    /// logs a warning, since the application and the policies then disagree about a rule.
+    /// logs a warning, since the application and the database then disagree about a rule.
     /// </summary>
     public const string Refused = "access.refused";
 

@@ -1,4 +1,5 @@
 using System.Globalization;
+using DDDToolkit.EntityFramework.Interceptors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -95,6 +96,37 @@ public static class RowAccessModel
         ArgumentNullException.ThrowIfNull(text);
 
         return "'" + text.Replace("'", "''", StringComparison.Ordinal) + "'";
+    }
+
+    /// <summary>
+    /// The refusal of an access guard, a trigger of your own that holds who may say: the PL/pgSQL statement it
+    /// raises, so that a save it refuses through Entity Framework is refused with <c>access.refused</c>, as one a
+    /// policy refuses is. SQLSTATE <c>42501</c>, the guard's name as the constraint, and the toolkit's hint,
+    /// <c>DatabaseRefusal.GuardHint</c> of <c>DDDToolkit.EntityFramework</c>.
+    /// <code>
+    /// $"IF NOT ({held}) THEN {RowAccessModel.Refusal("projects_unit_is_held", "A project is moved by a seat that may open projects where it goes.")} END IF;"
+    /// // RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'projects_unit_is_held',
+    /// //     HINT = 'ddd:access.refused', MESSAGE = 'A project is moved by a seat that may open projects where it goes.';
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// The message is the database's, for a log and for whoever runs the statement by hand: a caller of the
+    /// application is told <c>access.refused</c> and no more, and the warning the refusal is logged with names
+    /// the guard. Every access guard the toolkit writes refuses with this statement: a column rule's trigger, the
+    /// Membership package's lock on an owner column, Tenancy's guards of a seat's status and of who changed a row.
+    /// A trigger that holds what may never be, whoever writes, is no access guard and raises a code of its own.
+    /// In the SQL of an <see cref="IRowAccessContribution"/>, where a brace opens a place the script fills in, a
+    /// brace in the name or the message is doubled first.
+    /// </remarks>
+    /// <param name="guard">The guard's name, the trigger's say, which the warning names.</param>
+    /// <param name="message">What the statement is told: the rule it broke, in a sentence.</param>
+    /// <exception cref="ArgumentException"><paramref name="guard"/> or <paramref name="message"/> is null, empty or white space.</exception>
+    public static string Refusal(string guard, string message)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(guard);
+        ArgumentException.ThrowIfNullOrWhiteSpace(message);
+
+        return $"RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = {Literal(guard)}, HINT = {Literal(GuardMark.Hint)}, MESSAGE = {Literal(message)};";
     }
 
     /// <summary>An identifier in double quotes, a quote in it doubled.</summary>

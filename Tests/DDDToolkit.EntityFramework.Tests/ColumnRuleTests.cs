@@ -41,7 +41,7 @@ public sealed class ColumnRuleTests
             "    IF CURRENT_USER IN ('anon', 'authenticated') THEN\n" +
             "        IF (((SELECT ddd.caller_id()) IS NOT NULL) AND (OLD.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))) IS NOT TRUE" +
             " OR (((SELECT ddd.caller_id()) IS NOT NULL) AND (NEW.\"Owner\" IS NOT DISTINCT FROM (SELECT ddd.caller_id()))) IS NOT TRUE THEN\n" +
-            "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tickets_status_column_rule', MESSAGE = 'The column rule ''Owners close their tickets'' does not let this caller change \"Status\" of desk.\"Tickets\".';\n" +
+            "            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tickets_status_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Owners close their tickets'' does not let this caller change \"Status\" of desk.\"Tickets\".';\n" +
             "        END IF;\n" +
             "    END IF;\n" +
             "    RETURN NEW;\n" +
@@ -93,7 +93,7 @@ public sealed class ColumnRuleTests
             "a rule that reads nothing of the row is asked once");
         Function(script, "crates_label_column_rule").Should().Contain(
             "    ELSIF CURRENT_USER = 'shelf_auditor' THEN\n" +
-            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
+            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
             "a mapped token role is a caller's, and no rule for it lets it change the column");
         Function(script, "crates_label_column_rule").Should().NotContain("ddd_system_in", "the scoped system role is the application's own work, and passes");
 
@@ -175,7 +175,7 @@ public sealed class ColumnRuleTests
 
         Function(script, "crates_label_column_rule").Should().Contain(
             "    ELSIF CURRENT_USER IN ('anon', 'shelf_auditor', 'shelf_clerk', 'shelf_keeper', 'shelf_mover') THEN\n" +
-            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
+            "        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'crates_label_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change \"Label\" of shelf.\"Crates\".';\n",
             "a role that a rule for Change, a contribution's policy for UPDATE or for ALL lets change a crate is a caller's, and no column rule is for it");
         Function(script, "crates_label_column_rule").Should().NotContain("shelf_counter", "a role that only reads changes no column")
             .And.NotContain("shelf_inspector", "a restrictive policy lets nobody change anything");

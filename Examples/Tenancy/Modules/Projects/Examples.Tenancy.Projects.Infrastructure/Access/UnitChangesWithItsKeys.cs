@@ -36,6 +36,13 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// projects' own, so it reads no table of Tenancy's.
 /// </para>
 /// <para>
+/// It is an access guard, holding who may, so it refuses the way the toolkit's access guards do, with
+/// <see cref="RowAccessModel.Refusal"/>: SQLSTATE <c>42501</c>, the trigger's name, and the toolkit's hint. A save
+/// it refuses, from a handler whose caller lost a key after the check say, is then answered as a policy's refusal
+/// is, <c>access.refused</c>, where a trigger that raised without the hint would end the request as a failure of
+/// the server.
+/// </para>
+/// <para>
 /// It lives beside the module's row rules because it is one more of them, the one the module writes as SQL of its
 /// own. A column rule asks one question of the row as it was and the same question of the row as it is about to
 /// be; this one asks two different ones, the key to edit where the project was and the key to open where it goes,
@@ -85,7 +92,9 @@ public sealed class UnitChangesWithItsKeys : IRowAccessContribution
         // seat holds a key, and the projects' set of projects it holds one on, however it holds it.
         string HeldAt(string key, string where) => $"{where} = ANY (ARRAY(SELECT {{fn:tenancy/units_where_i_hold}}({RowAccessModel.Literal(key)})))";
         string HeldOn(string key, string project) => $"{project} = ANY (ARRAY(SELECT {{fn:{ProjectsWhereIHold.Name}}}({RowAccessModel.Literal(key)})))";
-        string Refuse(string message) => $"RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', MESSAGE = {RowAccessModel.Literal(message)};";
+        // Refused as the toolkit's own access guards refuse, with its hint and the trigger's name: a save the trigger
+        // refuses is access.refused to the caller, a 403, and the warning in the log names the trigger.
+        string Refusal(string message) => RowAccessModel.Refusal(Trigger, message);
 
         return new RowAccessContributionResult(
             [],
@@ -102,10 +111,10 @@ public sealed class UnitChangesWithItsKeys : IRowAccessContribution
                 "        RETURN NEW;\n" +
                 "    END IF;\n" +
                 $"    IF NOT EXISTS (SELECT 1 FROM {{fn:tenancy/tenant_units}}() u WHERE u.\"Id\" = NEW.{unit} AND u.\"TenantId\" = NEW.{tenant}) THEN\n" +
-                $"        {Refuse(UnitOfAnotherTenant)}\n" +
+                $"        {Refusal(UnitOfAnotherTenant)}\n" +
                 "    END IF;\n" +
                 $"    IF NOT ({HeldOn(ProjectKeys.Edit, $"OLD.{id}")}) OR NOT ({HeldAt(ProjectKeys.Open, $"NEW.{unit}")}) THEN\n" +
-                $"        {Refuse(MovedWithoutTheKeys)}\n" +
+                $"        {Refusal(MovedWithoutTheKeys)}\n" +
                 "    END IF;\n" +
                 "    RETURN NEW;\n" +
                 "END\n" +

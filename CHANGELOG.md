@@ -448,6 +448,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   is a collection of its entities; a collection of values stored in the row, such as an array of strings, is one
   column. The export refuses a property the model stores in no column of the aggregate's table, naming the
   rule. See [Column rules](docs/row-level-security.md#column-rules).
+- **An access guard of the database refuses as a policy does.** A trigger that raises SQLSTATE `42501` with the
+  hint `ddd:access.refused` (`DatabaseRefusal.GuardHint`) is an access guard's refusal: through `UseDDDToolkit`
+  a save it refuses throws a `RefusalException` with the code `access.refused` and the kind `NotPermitted`, a
+  403 from a route and a `RefusalError` from a mutation, with what the save threw as its inner exception, where
+  it ended as a `DbUpdateException`, a 500. The warning names the guard by the constraint it raised with, and the table
+  where it is known: "the guard projects_owner_stays". `RowAccessModel.Refusal(guard, message)` writes the
+  statement for a trigger written in a contribution, `RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege',
+  CONSTRAINT = ..., HINT = 'ddd:access.refused', MESSAGE = ...;`, and a trigger written by hand says the same;
+  one that raises `42501` without the hint fails as before. Every access guard the toolkit writes raises it: the
+  trigger of a column rule, the Membership package's lock on an owner column, and Tenancy's triggers on a seat's
+  status and on who changed a row; the triggers that hold what may never be, whoever writes, keep their codes.
+  The code stays `42501`, which the Data API answers with a 403 and a pgTAP test expects, and the caller learns
+  nothing of the guard: its name belongs to the schema, and the warning carries it. The mark is the hint, which
+  a `RAISE` hands on as written and Postgres never translates, so it reads the same in any server language.
+  `DatabaseRefusal.From` reads such a failure as `DatabaseRefusalKind.GuardRefused`, with the guard's name as
+  `Constraint`, for a save and for a statement of your own, such as an `ExecuteUpdate`, which no interceptor
+  answers. The Membership start-up check refuses a database whose owner lock was written without the hint,
+  until the new access file is applied. The other guards are not compared at start-up: a database whose access
+  files an earlier build wrote refuses without the hint, a failure of the server, until the new ones are
+  applied. See [When the database refuses](docs/row-level-security.md#when-the-database-refuses).
 - **Row access contributions: policies a package ships.** A package or a module offers a class that implements
   `IRowAccessContribution` with `[assembly: RowAccessContribution(typeof(X))]`, and a host writes it into its
   migrations by listing it with `[assembly: UseRowAccessContribution(typeof(X))]` in the project that runs the
@@ -927,7 +947,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   key writes a new access file, after which no question in SQL answers for it, the rights rows written before
   notwithstanding. A seat's status, which the rights follow, changes only by a seat that holds
   `tenancy.seats.manage` for the whole tenant and, at each grant of the seat that has not ended, the keys that
-  manage access of its role (the trigger `tenancy_seat_status_is_managed`); and a unit that has a parent is
+  manage access of its role (the trigger `tenancy_seat_status_is_managed`, which refuses with `42501` and the
+  toolkit's hint, so a use case whose seat lost a key between its check and its save is refused with
+  `access.refused`; the triggers that hold what may never be raise `check_violation`); and a unit that has a parent is
   never left without one. `rewrite_tenant_rights()` writes a tenant's rights again for Tenancy's own system
   work, after rows were written past the trigger. The rule that a tenant keeps an administrator and the check of
   a move ask the database about other seats through `tenant_administrators()` and `rights_a_move_changes(...)`,
@@ -1094,7 +1116,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   change a resource write its member rows and its owner column, past the application, the rules name the
   keys the application's commands require for that, and a lock is written from them for the database roles
   the rules name: `changeMembersKey` gives a restrictive policy on both member tables, and `changeOwnerKey`
-  a trigger that keeps the owner column as it was unless the caller held the key. Where the roles are kept
+  a trigger that keeps the owner column as it was unless the caller held the key, refusing as the toolkit's
+  access guards do, so a save it refuses is `access.refused` rather than a failure of the server. Where the roles are kept
   for the resource, `changeMembersKey` gives a second restrictive policy, on the table of the roles a member
   holds: a role added or changed there is one the caller sees in the application's role table, asked as the
   caller, so the application's own rule on that table, which shows a caller its own customer's roles, keeps
@@ -1483,7 +1506,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `NameAndPlanChangeWithTheEditKey` and `StateChangesWithTheCloseKey`, so a seat that only manages a crew or
   only names owners, or only opens projects at the project's unit, renames, plans, closes and reopens nothing,
   by a statement of its own, an insert that turns into an update, or a handler that skipped its check, and
-  neither does one whose role lost the key between the check and the handler;
+  neither does one whose role lost the key between the check and the handler. Each of these refuses with the
+  toolkit's hint, the module's trigger through `RowAccessModel.Refusal`, so a save one of them refuses is
+  `access.refused`, a 403 from a route and a `RefusalError` from a mutation, where an owner named by a seat that
+  lost the key after the check ended as a failure of the server;
   [What stays in C#](docs/tenancy.md#what-stays-in-c) lists what the policy still lets a statement do that goes
   round the application. A statement that runs for a signed-in user has a timeout of ten seconds
   (`StatementTimeouts[CallerKind.User]`). At start-up the host checks that
@@ -1719,9 +1745,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `AggregateVersionInterceptor` reads each row the failed statement was for again, by its key and as the same
   caller: its own concurrency tokens, or its aggregate root's `Version` for a child that has none. A row
   that is gone, hidden or changed stays the `ConcurrencyConflictException` it was. That is one query for each
-  row of a save that found no row, on every database, and none for a save that succeeds. A missing privilege, which
-  is `42501` as well, is not a refusal and fails as before. Code that caught either exception to detect a
-  policy's denial catches the refusal instead.
+  row of a save that found no row, on every database, and none for a save that succeeds. A policy's denial of
+  a new row is known by the routine Postgres names with the error, `ExecWithCheckOptions`, untranslated, and
+  never by the words of its message, so a server whose `lc_messages` answers in another language is read the
+  same; the warning names the table the message quotes, or, where it cannot be read, the one table the failed
+  save wrote. A missing privilege, which is `42501` as well, is not a refusal and fails as before, and neither
+  is a statement with `row_security` off by a role the policies hold, whose `42501` names row level security
+  too. Code that caught either exception to detect a policy's denial catches the refusal instead.
 - `UseDDDToolkit` adds a fourth interceptor, `DatabaseRefusalInterceptor`, after
   `AggregateVersionInterceptor`. A context that adds the toolkit's interceptors by hand adds it too, or
   keeps the failures it had.

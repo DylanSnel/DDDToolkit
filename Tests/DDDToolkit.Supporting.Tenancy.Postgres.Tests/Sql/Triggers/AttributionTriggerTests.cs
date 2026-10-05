@@ -196,6 +196,9 @@ public abstract class AttributionTriggerTests(TenancyPostgres postgres, TenancyN
         var refusal = await FluentActions.Awaiting(() => caller.AttemptAsync(sql, Cancellation)).Should().ThrowAsync<PostgresException>(sql);
         refusal.Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege, sql);
         refusal.Which.MessageText.Should().Be(message, sql);
+
+        // As the toolkit's access guards refuse: its hint, and the trigger's name, so a save is answered access.refused.
+        (refusal.Which.Hint, refusal.Which.ConstraintName).Should().Be(("ddd:access.refused", "tenancy_attribution_matches_caller"), sql);
     }
 }
 

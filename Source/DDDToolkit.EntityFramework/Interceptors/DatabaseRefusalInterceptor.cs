@@ -21,9 +21,16 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 /// warning is logged through the context's logger factory: the application allowed what the policies do not,
 /// which somebody should look at, while the caller needs no more than "you may not".
 /// </item>
+/// <item>
+/// <b>A statement a guard refuses.</b> A trigger that raises <c>42501</c> with the hint
+/// <see cref="DatabaseRefusal.GuardHint"/>, as every access guard the toolkit writes does, is answered the same
+/// way, and the warning names the guard. A statement of your own, an <c>ExecuteUpdate</c> or SQL, is no save:
+/// its failure reaches you as the database's exception, which <see cref="DatabaseRefusal.From"/> reads.
+/// </item>
 /// </list>
 /// The failure the database gave is the refusal's inner exception. Anything else goes on as it was: an index
-/// that declares nothing, a missing privilege, a foreign key, a check constraint.
+/// that declares nothing, a missing privilege, a trigger that raises without the hint, a foreign key, a check
+/// constraint.
 /// <para>
 /// An update or a delete a policy hides the row from fails differently: the statement finds no row, exactly as
 /// when somebody else changed it first. <see cref="AggregateVersionInterceptor"/> tells the two apart, and

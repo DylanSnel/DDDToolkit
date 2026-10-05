@@ -291,8 +291,8 @@ public static partial class PostgresRowAccess
             return $"{was} OR {willBe}";
         }
 
-        string Raise(string message)
-            => $"RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = {Literal(name)}, MESSAGE = {Literal(message)};";
+        // The guard's refusal, with the toolkit's hint, so a save it refuses is access.refused and the warning names the trigger.
+        string Raise(string message) => RowAccessModel.Refusal(name, message);
     }
 
     /// <summary>

@@ -98,7 +98,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
             .StartWith("CREATE OR REPLACE FUNCTION \"filing\".folders_owner_stays() RETURNS trigger\n    LANGUAGE plpgsql SET search_path = '' AS $body$\nBEGIN\n    -- Membership of folders, in form ")
             .And.Contain($"IF CURRENT_USER IN ('authenticated', '{FilingPostgres.ArchivistRole}')")
             .And.Contain("AND NOT EXISTS (SELECT 1 FROM {fn:folders/folder_ids_held}('folders.hand-over') AS held(id) WHERE held.id = OLD.\"Id\") THEN")
-            .And.Contain("RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege'")
+            .And.Contain("RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'folders_owner_stays', HINT = 'ddd:access.refused', MESSAGE = ")
             .And.NotContain("SECURITY DEFINER", "it asks as the caller, who may ask the folder's functions")
             .And.NotContain("\r");
         written[1].Should().Be("REVOKE ALL ON FUNCTION \"filing\".folders_owner_stays() FROM PUBLIC");
@@ -535,7 +535,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
     /// taken out. Kept together: the form is what tells the start-up check that a database holds what an
     /// earlier version of the package wrote, so it goes up whenever what is written changes.
     /// </summary>
-    private static readonly (string SqlForm, string Written) KeptTogether = ("4", "55d1cb49b7ba7eb91d06343601cee6b842c2e875e728250e5ba2d8cf3f6a0311");
+    private static readonly (string SqlForm, string Written) KeptTogether = ("5", "a42a6ca93a7f0f06f71e83069597c877655dc91690bd8163d148f3da8ca917eb");
 
     [Fact]
     public void What_is_written_for_the_same_rules_changes_only_together_with_the_form_it_is_written_in()
