@@ -24,9 +24,11 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// </para>
 /// </summary>
 [GraphQLName("CodedError")]
+[GraphQLDescription("What every error in a mutation's payload has in common: a code to branch on, a message to show, and the values the message was built from.")]
 public interface ICodedError
 {
     /// <summary>The rule that said no, stable across releases and languages: what a client branches on.</summary>
+    [GraphQLDescription("The rule that said no, stable across releases and languages: what a client branches on.")]
     string Code { get; }
 
     /// <summary>
@@ -38,8 +40,10 @@ public interface ICodedError
     /// from the services of the resolver that is answering it.
     /// </remarks>
     /// <param name="context">The resolver context of the <c>message</c> field.</param>
+    [GraphQLDescription(ErrorDescriptions.Message)]
     string GetMessage(IResolverContext context);
 
     /// <summary>The values the message was built from, by name, so a client can phrase it itself.</summary>
+    [GraphQLDescription(ErrorDescriptions.Arguments)]
     IReadOnlyList<FailureArgument> Arguments { get; }
 }

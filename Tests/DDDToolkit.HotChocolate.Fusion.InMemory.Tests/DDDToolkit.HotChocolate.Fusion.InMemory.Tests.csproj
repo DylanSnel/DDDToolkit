@@ -48,4 +48,9 @@
     <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\WholeBatches.cs" LinkBase="Infrastructure" />
   </ItemGroup>
 
+  <!-- What a schema says of its types, and a printed schema read without it: one file for both suites. -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\SchemaDescriptions.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
 </Project>

@@ -1616,6 +1616,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   that there was no schema: HotChocolate's in-memory connector composes in its constructor and tells only
   who is listening at that moment. The package now listens before the composer starts, stops waiting when
   the composer refuses, and lists every error it found, where the composer's own exception names the first.
+- **`DDDToolkit.HotChocolate`: the error types describe themselves in the schema.** `CodedError`, the four
+  error types, `ValueFailure`, `RuleViolation`, `FailureArgument` and `RefusalKind`, with every field and value,
+  carry a description written for the client that reads the schema, where they had none, so a schema snapshot
+  of your own changes once. The toolkit gives them itself rather than leaving them to its XML documentation,
+  which the packages now ship: that is written for the C# reader, and HotChocolate finds it only where the build
+  put the file beside the assembly, so the source schemas of one gateway could describe a type they share
+  differently. Every schema with the conventions now describes them alike, whether it reads XML documentation or
+  not. Your own types are described from your own XML documentation, as before. See
+  [Typed errors in mutation payloads](docs/graphql.md#typed-errors-in-mutation-payloads).
 
 ### Fixed
 

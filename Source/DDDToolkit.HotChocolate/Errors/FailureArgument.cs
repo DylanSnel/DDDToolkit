@@ -11,4 +11,7 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// </summary>
 /// <param name="Name">The argument's name, as a translation's template spells it between braces.</param>
 /// <param name="Value">Its value as text, or <see langword="null"/> when there was none.</param>
-public sealed record FailureArgument(string Name, string? Value);
+[GraphQLDescription("One of the values a message was built from, such as MaxLength and 40: its name, and its value as text.")]
+public sealed record FailureArgument(
+    [property: GraphQLDescription("The value's name, as a translation's template spells it between braces.")] string Name,
+    [property: GraphQLDescription("The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none.")] string? Value);

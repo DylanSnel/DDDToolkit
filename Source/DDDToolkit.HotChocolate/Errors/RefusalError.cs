@@ -21,6 +21,7 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// reaches the client as a top-level coded error instead, through <c>AddDDDToolkitErrors()</c>.
 /// </para>
 /// </summary>
+[GraphQLDescription("A command that was refused before anything changed: the refusal's code, its kind, its message and the values the message was built from.")]
 public sealed class RefusalError : ICodedError
 {
     private readonly RefusalException _refusal;
@@ -40,21 +41,26 @@ public sealed class RefusalError : ICodedError
     }
 
     /// <summary>The refusal's <see cref="RefusalException.Code"/>.</summary>
+    [GraphQLDescription("The rule that refused, stable across releases and languages: what a client branches on.")]
     public string Code => _refusal.Code;
 
     /// <summary>Which of the four answers it is, so a client tells "not allowed" from "not found" without a status code.</summary>
+    [GraphQLDescription("Which of the four answers it is, so a client tells \"not allowed\" from \"not found\" without a status code.")]
     public RefusalKind Kind => _refusal.Kind;
 
     /// <summary>
     /// The input the refusal is about, when it names one with <see cref="RefusalException.FieldArgument"/>:
     /// where a form puts the message. <see langword="null"/> for a refusal about the command as a whole.
     /// </summary>
+    [GraphQLDescription("The input the refusal is about, where a form puts the message. Null for a refusal about the command as a whole.")]
     public string? Field => FailureValues.TextOf(_refusal.Arguments, RefusalException.FieldArgument);
 
     /// <inheritdoc />
+    [GraphQLDescription(ErrorDescriptions.Arguments)]
     public IReadOnlyList<FailureArgument> Arguments { get; }
 
     /// <inheritdoc />
+    [GraphQLDescription(ErrorDescriptions.Message)]
     public string GetMessage(IResolverContext context)
         => FailureValues.Localizer(context)?.Localize(_refusal) ?? _refusal.Message;
 }

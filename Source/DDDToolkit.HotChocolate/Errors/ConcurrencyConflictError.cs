@@ -19,6 +19,7 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// <see cref="ConcurrencyConflict"/>, looked up as a refusal's code is.
 /// </para>
 /// </summary>
+[GraphQLDescription("A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again.")]
 public sealed class ConcurrencyConflictError : ICodedError
 {
     /// <summary>The code of every <see cref="ConcurrencyConflictError"/>.</summary>
@@ -37,12 +38,15 @@ public sealed class ConcurrencyConflictError : ICodedError
     }
 
     /// <summary>Always <see cref="ConcurrencyConflict"/>.</summary>
+    [GraphQLDescription($"Always \"{ConcurrencyConflict}\".")]
     public string Code => ConcurrencyConflict;
 
     /// <summary>Always empty.</summary>
+    [GraphQLDescription("Always empty.")]
     public IReadOnlyList<FailureArgument> Arguments => [];
 
     /// <inheritdoc />
+    [GraphQLDescription(ErrorDescriptions.Message)]
     public string GetMessage(IResolverContext context)
         => FailureValues.UnderCode(context, ConcurrencyConflict, RefusalKind.Conflict, _conflict.Message);
 }

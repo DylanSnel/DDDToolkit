@@ -3,6 +3,7 @@ using System.Text.Json;
 using DDDToolkit.Exceptions;
 using DDDToolkit.HotChocolate.Errors;
 using DDDToolkit.HotChocolate.Tests.Domain;
+using DDDToolkit.HotChocolate.Tests.Infrastructure;
 using DDDToolkit.HotChocolate.Tests.InternalTypes;
 using DDDToolkit.Invariants;
 using DDDToolkit.Localization;
@@ -36,6 +37,13 @@ public class MutationConventionTests
           ... on BrokenRulesError { violations { code message entity entityId arguments { name value } } }
         }
         """;
+
+    /// <summary>The types the conventions put in a schema, by their names there.</summary>
+    private static readonly string[] ToolkitTypes =
+    [
+        "CodedError", "RefusalError", "InvalidValuesError", "ValueFailure", "BrokenRulesError", "RuleViolation",
+        "ConcurrencyConflictError", "FailureArgument", "RefusalKind",
+    ];
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -414,6 +422,32 @@ public class MutationConventionTests
     }
 
     [Fact]
+    public async Task The_error_types_are_described_by_the_toolkit_whatever_the_schema_reads()
+    {
+        // HotChocolate describes a type from the XML documentation beside its assembly. The toolkit's is written for
+        // the C# reader, and whether it lies beside the assembly is the application's build to decide: here it does,
+        // in an application built from the packages it does not unless the build copies it. What a client reads of
+        // the toolkit's types is the toolkit's own, so a schema that reads XML documentation and one that does not
+        // describe them alike, and a gateway composing several source schemas meets one description of each.
+        SchemaDescriptions.ToolkitXmlDocumentationIsBeside().Should().BeTrue("the schema that reads XML documentation has the toolkit's to read");
+        var read = (await BuildAsync()).Schema;
+        var unread = (await BuildAsync(graphql => graphql.ModifyOptions(options => options.UseXmlDocumentation = false))).Schema;
+
+        foreach (var type in ToolkitTypes)
+        {
+            var described = SchemaDescriptions.Of(read, type);
+            described.Should().Equal(SchemaDescriptions.Of(unread, type), "{0} is described by the toolkit, whatever the schema reads", type);
+            described.Should().NotContain(line => line.EndsWith(": ", StringComparison.Ordinal), "the type and every field or value of {0} is described", type);
+        }
+
+        // Written for a client: none of the C# the package's documentation is about, and no type's declaration.
+        var sdl = read.ToString();
+        sdl.Should().NotContain("IFailureLocalizer").And.NotContain("HotChocolate");
+        sdl.Split("interface CodedError ").Should().HaveCount(2, "the interface is declared once and quoted nowhere");
+        sdl.Split("type RefusalError ").Should().HaveCount(2, "the type is declared once and quoted nowhere");
+    }
+
+    [Fact]
     public async Task A_schema_with_the_conventions_and_no_mutation_declares_what_the_errors_are_made_of()
     {
         // The docs say it: the conventions alone bring the kind and the three types an error's lists are made of,
@@ -560,6 +594,7 @@ public class MutationConventionTests
     /// <summary>The field lines of one type in the printed schema, without descriptions and directives.</summary>
     private static string[] Fields(string sdl, string header)
     {
+        sdl = SchemaDescriptions.RemovedFrom(sdl);
         var start = sdl.IndexOf(header + " ", StringComparison.Ordinal);
         start.Should().BeGreaterThanOrEqualTo(0, "the schema should declare '{0}'", header);
 

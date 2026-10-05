@@ -114,10 +114,15 @@ type AccessHistoryEntryEdge @shareable {
   cursor: String!
 }
 
+"An aggregate that would have broken its own rules: one error for the command, with every rule that was broken in its violations. Its code, message and arguments are those of the first."
 type BrokenRulesError implements CodedError @shareable {
+  "The first rule that was broken, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "The code of the first rule that was broken."
   code: String!
+  "The values the first violation's message was built from."
   arguments: [FailureArgument!]!
+  "Every rule that was broken, in the order the aggregate reported them, never empty."
   violations: [RuleViolation!]!
 }
 
@@ -127,14 +132,21 @@ type Catalogue {
   unitKinds: [UnitKind!]!
 }
 
+"A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
 type ConcurrencyConflictError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "Always \"concurrency-conflict\"."
   code: String!
+  "Always empty."
   arguments: [FailureArgument!]!
 }
 
+"One of the values a message was built from, such as MaxLength and 40: its name, and its value as text."
 type FailureArgument @shareable {
+  "The value's name, as a translation's template spells it between braces."
   name: String!
+  "The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none."
   value: String
 }
 
@@ -151,10 +163,15 @@ type HeldUnits {
   wholeTenant: Boolean!
 }
 
+"A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
 type InvalidValuesError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "Always \"invalid-value\". Each of the failures has the code of its own rule."
   code: String!
+  "Always empty: the values are those of each failure."
   arguments: [FailureArgument!]!
+  "Every reason the value was refused, never empty."
   failures: [ValueFailure!]!
 }
 
@@ -267,11 +284,17 @@ type PlacementWithdrawPayload {
   errors: [PlacementWithdrawError!]
 }
 
+"A command that was refused before anything changed: the refusal's code, its kind, its message and the values the message was built from."
 type RefusalError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "The rule that refused, stable across releases and languages: what a client branches on."
   code: String!
+  "Which of the four answers it is, so a client tells \"not allowed\" from \"not found\" without a status code."
   kind: RefusalKind!
+  "The input the refusal is about, where a form puts the message. Null for a refusal about the command as a whole."
   field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
   arguments: [FailureArgument!]!
 }
 
@@ -327,11 +350,17 @@ type RoleRevokePayload {
   errors: [RoleRevokeError!]
 }
 
+"One broken rule, in a BrokenRulesError. A violation in a child entity says which child it was."
 type RuleViolation @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "The rule's code."
   code: String!
+  "The type of the entity that reported the violation, when it said so."
   entity: String
+  "The id of the entity that reported the violation, as text, so a violation in a child says which one."
   entityId: String
+  "The values the message was built from, by name, so a client can phrase it itself."
   arguments: [FailureArgument!]!
 }
 
@@ -417,16 +446,25 @@ type UnitPath {
   path: String!
 }
 
+"One reason a value was refused, in an InvalidValuesError."
 type ValueFailure @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
+  "The rule's code, or \"Unspecified\" when the rule gave none."
   code: String!
+  "The property the failure belongs to, or null when it is about the whole value."
   field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
   arguments: [FailureArgument!]!
 }
 
+"What every error in a mutation's payload has in common: a code to branch on, a message to show, and the values the message was built from."
 interface CodedError {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String!
+  "The rule that said no, stable across releases and languages: what a client branches on."
   code: String!
+  "The values the message was built from, by name, so a client can phrase it itself."
   arguments: [FailureArgument!]!
 }
 
@@ -640,15 +678,26 @@ enum ApplyPolicy {
   VALIDATION
 }
 
+"Why a command was refused, in the four answers an edge maps to a response: the request was not acceptable, the caller may not do it, what it names does not exist, or the state it met does not allow it."
 enum RefusalKind {
+  "The request itself is not acceptable: a name too long, a key nobody declared. Usually a 400."
   invalid
+  "The caller may not do this. Usually a 403."
   not_permitted
+  "Something the request names does not exist, or is not the caller's to see. Usually a 404."
   not_found
+  "The state the command met does not allow it: already archived, the last one of its kind. Usually a 409."
   conflict
 }
 
+"""
+Whether a role is in use. An archived role grants nothing, wherever it is still granted, and is not
+granted again.
+"""
 enum RoleStatus {
+  "In use."
   active
+  "No longer in use. It stays, so the grants that name it still name something."
   archived
 }
 
@@ -661,26 +710,53 @@ enum ScalarSerializationType {
   LIST
 }
 
+"""
+Whether a seat's grants count. Only an active seat holds rights; a suspended one can be reactivated,
+and a deactivated one is final.
+"""
 enum SeatStatus {
+  "In use: its grants give it rights."
   active
+  "Stopped for now. Its placements and grants stay, and give it nothing until it is reactivated."
   suspended
+  "Stopped for good."
   deactivated
 }
 
+"""
+Whether a tenant's organization is a tree or only its root. A tenant starts flat or hierarchical, and a
+flat one can become hierarchical; the way back is closed, because units below the root would have to go.
+"""
 enum TenantShape {
+  "The organization is its root alone, and every seat is placed there."
   flat
+  "The organization is a tree of units below the root."
   hierarchical
 }
 
+"""
+Where a tenant is in its life. It moves one way: provisioned, then active, suspended and active again as
+often as needed, and closed once, for good.
+"""
 enum TenantStatus {
+  "Being set up; nobody works in it yet."
   provisioning
+  "In use."
   active
+  "Stopped for now, with a reason, and able to be reactivated."
   suspended
+  "Stopped for good, with a reason. Nothing changes a closed tenant."
   closed
 }
 
+"""
+Whether a unit is in use. A unit is archived, never deleted, so what still points at it keeps a unit to
+point at.
+"""
 enum UnitStatus {
+  "In use: units can be added below it and seats placed in it."
   active
+  "No longer in use. What already hangs at it keeps working; nothing new is added to it."
   archived
 }
 

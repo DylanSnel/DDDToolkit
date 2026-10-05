@@ -147,6 +147,11 @@ public static class DependencyInjection
     /// <see cref="ShareableErrorTypesInterceptor"/>, so several modules can each have the conventions.
     /// Calling it more than once on the same builder is harmless.
     /// </para>
+    /// <para>
+    /// The error types, <c>CodedError</c> and <c>RefusalKind</c> carry descriptions of their own, written for
+    /// the client that reads the schema, and not these comments: every schema with the conventions describes
+    /// them alike, whether it reads XML documentation or not, so the source schemas of a gateway agree on them.
+    /// </para>
     /// </summary>
     /// <param name="builder">The request executor builder to configure.</param>
     /// <returns>The same builder, so calls can be chained.</returns>

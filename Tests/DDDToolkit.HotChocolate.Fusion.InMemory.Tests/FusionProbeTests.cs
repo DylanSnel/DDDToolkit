@@ -9,6 +9,8 @@ using DDDToolkit.Localization;
 using DDDToolkit.Validation;
 using FluentAssertions;
 using HotChocolate;
+using HotChocolate.Execution;
+using HotChocolate.Types;
 using HotChocolate.Types.Composite;
 using Xunit;
 
@@ -30,6 +32,14 @@ public sealed class FusionProbeTests
         }
         """;
 
+    /// <summary>What every source schema with the conventions declares, and the gateway declares once.</summary>
+    private static readonly string[] SharedDeclarations =
+    [
+        "interface CodedError ", "type RefusalError ", "type InvalidValuesError ", "type ValueFailure ",
+        "type BrokenRulesError ", "type RuleViolation ", "type ConcurrencyConflictError ", "type FailureArgument ",
+        "enum RefusalKind ",
+    ];
+
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -41,16 +51,11 @@ public sealed class FusionProbeTests
 
         var sdl = await shop.Schemas.PrintGatewayAsync(Cancellation);
 
-        string[] once =
-        [
-            "interface CodedError ", "type RefusalError ", "type InvalidValuesError ", "type ValueFailure ",
-            "type BrokenRulesError ", "type RuleViolation ", "type ConcurrencyConflictError ", "type FailureArgument ",
-            "enum RefusalKind ",
-        ];
-
-        foreach (var declaration in once)
+        // Declarations are counted without the descriptions, which are text for a client and could quote one.
+        var declarations = SchemaDescriptions.RemovedFrom(sdl);
+        foreach (var declaration in SharedDeclarations)
         {
-            Occurrences(sdl, declaration).Should().Be(1, "the gateway has one '{0}'", declaration.Trim());
+            Occurrences(declarations, declaration).Should().Be(1, "the gateway has one '{0}'", declaration.Trim());
         }
 
         Values(sdl, "enum RefusalKind").Should().Equal("invalid", "not_permitted", "not_found", "conflict");
@@ -58,6 +63,43 @@ public sealed class FusionProbeTests
 
         // Each module's mutation has its own payload and its own union of the shared errors.
         sdl.Should().Contain("union ProductRenameError").And.Contain("union ProductRestockError");
+    }
+
+    [Fact]
+    public async Task Source_schemas_that_read_the_xml_documentation_differently_compose_and_describe_the_shared_types_alike()
+    {
+        // HotChocolate describes a type from the XML documentation beside its assembly, when the schema reads it.
+        // Here one module's schema reads it and the other's does not, as two modules of one gateway would differ
+        // when only one host was built with the file beside the toolkit's assembly. The toolkit describes its types
+        // itself, so both say the same of every type they share, and the gateway has one of each with that
+        // description: the composer has no two descriptions of one type to choose between.
+        SchemaDescriptions.ToolkitXmlDocumentationIsBeside().Should().BeTrue("the module that reads XML documentation has the toolkit's to read");
+        await using var shop = await GatewayHost.StartAsync(builder =>
+        {
+            builder.Services.AddShopServices();
+            builder.Services.AddCatalog();
+            builder.Services.AddInventory().ModifyOptions(options => options.UseXmlDocumentation = false);
+        });
+
+        var executors = shop.Services.GetRequiredService<IRequestExecutorProvider>();
+        var catalog = (await executors.GetExecutorAsync(ShopModules.Catalog, Cancellation)).Schema;
+        var inventory = (await executors.GetExecutorAsync(ShopModules.Inventory, Cancellation)).Schema;
+
+        foreach (var type in SharedDeclarations.Select(declaration => declaration.Split(' ')[1]))
+        {
+            SchemaDescriptions.Of(catalog, type).Should().Equal(SchemaDescriptions.Of(inventory, type), "both modules describe {0} as the toolkit does", type);
+        }
+
+        var sdl = await shop.Schemas.PrintGatewayAsync(Cancellation);
+        var declarations = SchemaDescriptions.RemovedFrom(sdl);
+        foreach (var declaration in SharedDeclarations)
+        {
+            Occurrences(declarations, declaration).Should().Be(1, "the gateway has one '{0}'", declaration.Trim());
+        }
+
+        var codedError = catalog.Types.GetType<ITypeDefinition>("CodedError").Description;
+        codedError.Should().NotBeNullOrWhiteSpace();
+        Occurrences(sdl, codedError!).Should().Be(1, "the gateway describes the interface once, as both modules do");
     }
 
     [Fact]

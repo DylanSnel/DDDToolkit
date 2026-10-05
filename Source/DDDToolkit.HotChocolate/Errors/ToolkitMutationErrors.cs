@@ -22,11 +22,13 @@ internal sealed class ToolkitMutationErrors : MutationErrorConfiguration
     ];
 
     /// <summary>
-    /// What the error types are made of, which the schema has to know before any mutation is looked at.
+    /// What the error types are made of, which the schema has to know before any mutation is looked at. The kind
+    /// is its schema type, which describes it; wherever the schema meets a <see cref="RefusalKind"/>, that type is
+    /// the one it gets.
     /// </summary>
     private static readonly Type[] MemberTypes =
     [
-        typeof(RefusalKind),
+        typeof(RefusalKindType),
         typeof(FailureArgument),
         typeof(ValueFailure),
         typeof(RuleViolation),

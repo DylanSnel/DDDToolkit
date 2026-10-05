@@ -25,6 +25,7 @@ namespace DDDToolkit.HotChocolate.Errors;
 /// back: it may be a password.
 /// </para>
 /// </summary>
+[GraphQLDescription("A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back.")]
 public sealed class InvalidValuesError : ICodedError
 {
     /// <summary>The code of every <see cref="InvalidValuesError"/>.</summary>
@@ -47,18 +48,22 @@ public sealed class InvalidValuesError : ICodedError
     }
 
     /// <summary>Always <see cref="InvalidValue"/>; each of the <see cref="Failures"/> has the code of its own rule.</summary>
+    [GraphQLDescription($"Always \"{InvalidValue}\". Each of the failures has the code of its own rule.")]
     public string Code => InvalidValue;
 
     /// <summary>Always empty: the values are those of each failure.</summary>
+    [GraphQLDescription("Always empty: the values are those of each failure.")]
     public IReadOnlyList<FailureArgument> Arguments => [];
 
     /// <summary>
     /// Every reason the value was refused, never empty: an exception thrown without detail still gives one
     /// failure, with the code <see cref="ValidationError.UnspecifiedCode"/>.
     /// </summary>
+    [GraphQLDescription("Every reason the value was refused, never empty.")]
     public IReadOnlyList<ValueFailure> Failures { get; }
 
     /// <inheritdoc />
+    [GraphQLDescription(ErrorDescriptions.Message)]
     public string GetMessage(IResolverContext context)
         => FailureValues.UnderCode(context, InvalidValue, RefusalKind.Invalid, _invalid.Message);
 }
@@ -74,6 +79,7 @@ public sealed class InvalidValuesError : ICodedError
 /// }
 /// </code>
 /// </summary>
+[GraphQLDescription("One reason a value was refused, in an InvalidValuesError.")]
 public sealed class ValueFailure
 {
     private readonly ValidationError _failure;
@@ -85,12 +91,15 @@ public sealed class ValueFailure
     }
 
     /// <summary>The rule's code, or <see cref="ValidationError.UnspecifiedCode"/> when the rule gave none.</summary>
+    [GraphQLDescription($"The rule's code, or \"{ValidationError.UnspecifiedCode}\" when the rule gave none.")]
     public string Code => _failure.Code ?? ValidationError.UnspecifiedCode;
 
     /// <summary>The property the failure belongs to, or <see langword="null"/> when it is about the whole value.</summary>
+    [GraphQLDescription("The property the failure belongs to, or null when it is about the whole value.")]
     public string? Field => string.IsNullOrEmpty(_failure.PropertyName) ? null : _failure.PropertyName;
 
     /// <summary>The values the message was built from, by name.</summary>
+    [GraphQLDescription(ErrorDescriptions.Arguments)]
     public IReadOnlyList<FailureArgument> Arguments { get; }
 
     /// <summary>
@@ -98,6 +107,7 @@ public sealed class ValueFailure
     /// in the domain's own words otherwise. The field <c>message</c>.
     /// </summary>
     /// <param name="context">The resolver context of the <c>message</c> field.</param>
+    [GraphQLDescription(ErrorDescriptions.Message)]
     public string GetMessage(IResolverContext context)
         => FailureValues.Localizer(context)?.Localize(_failure) ?? _failure.Message;
 }

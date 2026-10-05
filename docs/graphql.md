@@ -540,6 +540,13 @@ type ConcurrencyConflictError implements CodedError {
 }
 ```
 
+In the schema each of these types, each of their fields and each value of `RefusalKind` also has a description
+for the client that reads it, left out above. The toolkit gives them itself. HotChocolate would otherwise describe
+a type from the XML documentation beside its assembly, which is written for the C# reader, and which one build
+has there and another does not: the source schemas of one gateway would then describe a type they share
+differently. So every schema with the conventions describes them alike, whether it reads XML documentation or
+not. Your own types are described from your XML documentation, as HotChocolate describes any type.
+
 | Thrown | In `errors` | Reads as |
 | --- | --- | --- |
 | `RefusalException` | `RefusalError` | the refusal's code and kind. `field` is its `Field` argument (`RefusalException.FieldArgument`), the input a form puts the message under |
