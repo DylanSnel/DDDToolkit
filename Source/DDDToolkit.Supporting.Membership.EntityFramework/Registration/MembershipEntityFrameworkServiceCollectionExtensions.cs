@@ -42,6 +42,9 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
     /// <see cref="IMemberDirectory{TResourceId, TMemberId}"/> and
     /// <see cref="IMemberRolePolicy{TResourceId, TRoleId}"/> where it registered them.</item>
     /// <item>A <see cref="MembershipRegistration"/>, which a start-up check reads.</item>
+    /// <item>The <see cref="MemberHoldInterceptor"/>, one for every resource registered, which nothing uses
+    /// until a context asks for the expert hold with
+    /// <see cref="MemberHoldDbContextOptionsExtensions.UseMemberHolds"/>.</item>
     /// <item>The package's texts for what the resource refuses with, in English and Dutch, under the
     /// resource's own codes (<see cref="MembershipCodes.TextKeys"/>): offered to the application's failure
     /// localizer, so an application that localizes its failures (<c>AddDDDToolkitLocalization</c>) adds no line
@@ -160,6 +163,12 @@ public static class MembershipEntityFrameworkServiceCollectionExtensions
         }
 
         services.AddSingleton(registration);
+
+        // The expert hold, over every resource registered here, for a context that asks for it with UseMemberHolds.
+        // One for the application, made when a context first asks; nothing uses it until then.
+        services.TryAddSingleton(provider => new MemberHoldInterceptor(
+            provider.GetServices<MembershipRegistration>(),
+            provider.GetRequiredService<ICallerAccessor>()));
 
         // The texts of what this resource refuses with, under its own codes. Offered, not added: only an
         // application that localizes its failures reads them, and its own texts for these codes come first.

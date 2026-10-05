@@ -68,8 +68,8 @@ public static class ProjectsApplicationServices
         services.AddScoped<ProjectTenancy>();
 
         // The check for the case only Projects can decide, a key at a unit, and the behavior that asks the module's
-        // checks before every handler. The unit a request asked at a unit passed for it keeps for that request's
-        // handler (Checked<T>), which is registered with the checks: a handler cannot be made where they were left out.
+        // checks before every handler. A handler takes nothing from them: it acts on what its command names, which is
+        // what was checked, and the database checks the write again as the caller.
         services.AddAccessCheck<IProjectsRequest, ProjectsAccessCheck>();
         services.AddProjectsAccessBehavior();
 

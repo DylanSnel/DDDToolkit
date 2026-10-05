@@ -19,6 +19,13 @@ namespace Examples.Tenancy.Projects.Application.Crew;
 /// seat, which is what happened.
 /// </para>
 /// <para>
+/// Having checked it is something the save knows, not something it assumes: the command must be the request in
+/// hand (<see cref="RequestInHand"/>), the one whose access check let it through in this very handling. A handler
+/// reached around its check, called directly or by a transport that runs it around the pipeline, saves as the
+/// caller, and the database judges that save as it judges every other: a seat that manages no crew is refused
+/// there, its own place or not.
+/// </para>
+/// <para>
 /// What was checked is one change to one project, so that is all such a save may write: the two commands save
 /// through <see cref="IProjectStore.SaveOnlyAsync"/>, which refuses when the unit of work holds a change to
 /// anything else. A scope runs one command, so nothing else is there; a host that sent two commands in one scope
@@ -38,14 +45,16 @@ internal static class OwnPlaceOnTheCrew
 
     /// <summary>
     /// Begins the save of a change to the place of <paramref name="seat"/> on a crew: as the application's own
-    /// work for that seat when it is the caller's own seat, and as the caller, with nothing begun, otherwise.
-    /// Whoever begins it saves the one project it changed, with <see cref="IProjectStore.SaveOnlyAsync"/>.
+    /// work for that seat when it is the caller's own seat and <paramref name="command"/> passed its access check
+    /// in this handling, and as the caller, with nothing begun, otherwise. Whoever begins it saves the one project
+    /// it changed, with <see cref="IProjectStore.SaveOnlyAsync"/>.
     /// </summary>
+    /// <param name="command">The command being handled, the very one its handler was handed.</param>
     /// <param name="seat">The seat whose role is taken, or that is taken off the crew.</param>
     /// <param name="caller">The tenant the caller acts in, and its seat.</param>
     /// <returns>What ends the work when disposed; <see langword="null"/> when the save runs as the caller.</returns>
-    public static IDisposable? BeginSave(SeatId seat, TenantInScope<TenantId, SeatId> caller)
-        => caller.Seat == seat && !caller.BySystem
+    public static IDisposable? BeginSave(IProjectsRequest command, SeatId seat, TenantInScope<TenantId, SeatId> caller)
+        => caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current, command)
             ? TenancyWork.BeginSystemIn<TenantId, SeatId>(caller.Tenant, seat, Scope)
             : null;
 }

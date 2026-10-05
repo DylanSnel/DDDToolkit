@@ -1,7 +1,7 @@
 // What every feature of this project names: the module's ids and domain, its project roles, its access
 // vocabulary, the ports its features share, the ids of Tenancy's it reads, and the value objects the modules
 // share. The access vocabulary is the module's own, the toolkit's and the Membership package's requirement
-// types, which every request declares one of and every handler that acts on what was checked takes it from. A
+// types, which every request declares one of; a handler acts on its request, and takes nothing from the check. A
 // feature that names another one says so in its own file, with a using of that feature's namespace, so what leans
 // on what stays in plain sight.
 global using DDDToolkit.Access;

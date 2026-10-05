@@ -47,8 +47,9 @@ public abstract record InspectionsRequirement : AccessRequirement
     /// <summary>
     /// The request is about several projects and is refused for none of them: it acts on those of
     /// <paramref name="Projects"/> the caller may see, and passes over the others in silence, one out of reach
-    /// exactly as one that does not exist. The gate is asked once, about all of them, and what it answers about
-    /// <paramref name="Key"/> on each project the caller sees is what the handler is handed.
+    /// exactly as one that does not exist. The check asks only that the caller works in a tenant; the handler asks
+    /// the gate once, about all of them, and what it answers about <paramref name="Key"/> on each project the
+    /// caller sees is what the handler acts on.
     /// </summary>
     /// <param name="Key">The key asked about on each project.</param>
     /// <param name="Projects">The projects, from the request: the same list, so two requirements of one request are equal.</param>

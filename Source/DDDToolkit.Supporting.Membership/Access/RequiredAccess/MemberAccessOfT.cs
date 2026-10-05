@@ -10,8 +10,8 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <para>
 /// What a requirement cannot say stays in the handler, in plain sight: whether the one to be made a member is
 /// active, which roles go to a member, a second key a command's own rule asks for, a rule of the application's
-/// own about what its caller may give. The check keeps what it read for that, with until when the caller holds
-/// the key (<see cref="MemberHold{TResourceId}"/>).
+/// own about what its caller may give. A rule that needs how or until when the caller holds the key asks for it
+/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
 /// </para>
 /// </summary>
 /// <typeparam name="TResourceId">The resource's id.</typeparam>

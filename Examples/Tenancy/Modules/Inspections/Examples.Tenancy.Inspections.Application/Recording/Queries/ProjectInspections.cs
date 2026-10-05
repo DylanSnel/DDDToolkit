@@ -51,17 +51,15 @@ public sealed record InspectionList(Page<InspectionOverview> Items, bool CanReco
 /// the caller holds.
 /// </remarks>
 /// <param name="reads">Where inspections are read: a context per query.</param>
-/// <param name="gated">The project this query passed the gate for.</param>
 /// <param name="projects">Projects' answer to "may the caller do this to that project".</param>
-public sealed class ProjectInspectionsHandler(IInspectionReads reads, Checked<GatedProject> gated, IProjectGate projects)
+public sealed class ProjectInspectionsHandler(IInspectionReads reads, IProjectGate projects)
     : IQueryHandler<ProjectInspections, InspectionList>
 {
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">The query did not pass the access check: no project passed the gate for it.</exception>
     /// <exception cref="Exceptions.RefusalException"><c>inspections.page-size-invalid</c>, with <c>Max</c>; <c>inspections.page-from-both-ends</c>.</exception>
     public async ValueTask<InspectionList> Handle(ProjectInspections query, CancellationToken cancellationToken)
     {
-        var (project, _) = gated.TakeFor(query);
+        var project = query.Project;
         var paging = InspectionPages.Checked(query.Paging ?? default, ProjectInspections.DefaultPage);
 
         var record = await projects.AskAsync(project, RecordInspection.RequiredKey, cancellationToken);

@@ -48,6 +48,41 @@ public static class AggregateVersionExtensions
     /// </exception>
     public static void ExpectVersion<TAggregate>(this DbContext context, TAggregate aggregate, long version)
         where TAggregate : class, IAggregateRoot
+        => Expect(context, aggregate, version);
+
+    /// <summary>
+    /// Says that the client last saw <paramref name="aggregate"/> at <paramref name="version"/>, when it says
+    /// which version it saw: the one line a handler writes after its load for a request that may name one, such
+    /// as a command whose <c>ExpectedVersion</c> came from <c>If-Match</c>.
+    /// <code>
+    /// var project = await context.Projects.SingleAsync(project => project.Id == command.Id, cancellationToken);
+    /// context.ExpectVersion(project, command.ExpectedVersion);   // a stale one is a conflict, none compares nothing
+    /// </code>
+    /// A version is held as <see cref="ExpectVersion{TAggregate}(DbContext, TAggregate, long)"/> holds it. With
+    /// none, <see langword="null"/>, the client named nothing to compare, and the save compares against the version
+    /// the aggregate was loaded at, as it always does: a change made after the load is still a conflict, and one
+    /// made before it is the last write that wins, which is what a client that sends no version asks for. What
+    /// this refuses either way, an aggregate this context did not load, a new one, a model that would not compare
+    /// the version at the save, it refuses with none as well, so the mistake shows on the first request and not on
+    /// the first one that names a version.
+    /// </summary>
+    /// <typeparam name="TAggregate">The aggregate root's type.</typeparam>
+    /// <param name="context">The context that loaded the aggregate and will save it.</param>
+    /// <param name="aggregate">The aggregate, as this context loaded it.</param>
+    /// <param name="version">The <see cref="IAggregateRoot.Version"/> the client last saw, or <see langword="null"/> when it named none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="aggregate"/> is null.</exception>
+    /// <exception cref="ConcurrencyConflictException">The aggregate is loaded at another version than the client saw.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// This context did not load the aggregate, the aggregate is new and has no stored version yet, or the model
+    /// does not map <see cref="IAggregateRoot.Version"/> as a concurrency token.
+    /// </exception>
+    public static void ExpectVersion<TAggregate>(this DbContext context, TAggregate aggregate, long? version)
+        where TAggregate : class, IAggregateRoot
+        => Expect(context, aggregate, version);
+
+    /// <summary>Holds <paramref name="aggregate"/> to <paramref name="version"/>, or only to being loaded and compared at the save when there is none.</summary>
+    private static void Expect<TAggregate>(DbContext context, TAggregate aggregate, long? version)
+        where TAggregate : class, IAggregateRoot
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(aggregate);
@@ -78,9 +113,14 @@ public static class AggregateVersionExtensions
 
         // The original value is what the row had when it was loaded, or after this context's last save, and it
         // is what the save puts in its WHERE clause. When it is the version the client saw, there is nothing to
-        // set: the save already compares against it.
+        // set: the save already compares against it. A client that named none has nothing to compare.
+        if (version is not { } expected)
+        {
+            return;
+        }
+
         var loaded = entry.Property(nameof(IAggregateRoot.Version)).OriginalValue;
-        if (loaded is not long stored || stored != version)
+        if (loaded is not long stored || stored != expected)
         {
             throw new ConcurrencyConflictException(entry.Metadata.ClrType, IdOf(entry));
         }

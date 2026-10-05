@@ -9,8 +9,8 @@ namespace DDDToolkit.Analyzers.Tests.Docs;
 /// <summary>
 /// The examples of docs/access-requirements.md, read from the page and compiled as they stand: a module's request
 /// interface, three requests, a requirement and a check of the module's own, its registration, a handler that acts
-/// on what was checked, and a dispatcher that asks the checks. And run, so what the page says they do is what
-/// they do: a caller that holds the key passes and its handler gets what was checked, one that does not is
+/// on its request, and a dispatcher that asks the checks. And run, so what the page says they do is what they do:
+/// a caller that holds the key passes and its handler closes the invoice its request names, one that does not is
 /// refused with the module's code, a request anyone may send passes with nothing asked, and one that requires a
 /// signed-in user passes for one and refuses everyone else, with no check the module added.
 /// </summary>
@@ -84,7 +84,7 @@ public class AccessRequirementsDocsExampleTests
     }
 
     [Fact]
-    public void A_caller_that_holds_the_key_passes_and_the_handler_closes_what_was_checked()
+    public void A_caller_that_holds_the_key_passes_and_the_handler_closes_the_invoice_its_request_names()
     {
         var emitted = Run().Emit();
         using var provider = Services(emitted, holds: true);
@@ -101,9 +101,8 @@ public class AccessRequirementsDocsExampleTests
         var store = scope.ServiceProvider.GetRequiredService(emitted.Type("Billing.IInvoiceStore"));
         ((System.Collections.IEnumerable)emitted.Property(store, "Closed")!).Cast<object>().Should().Equal(invoice);
 
-        // Handed out once: a second handling of the same request has nothing to act on.
-        FluentActions.Invoking(() => Await(emitted.Call(handler, "HandleAsync", command, CancellationToken.None)!))
-            .Should().Throw<TargetInvocationException>().WithInnerException<InvalidOperationException>();
+        // The request is in hand for what runs after its checks, and the page's check kept nothing with it.
+        RequestInHand.Current.Should().BeSameAs(command);
     }
 
     [Fact]

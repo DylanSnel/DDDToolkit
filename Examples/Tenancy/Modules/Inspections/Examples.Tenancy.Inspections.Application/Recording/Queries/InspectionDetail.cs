@@ -21,16 +21,13 @@ public sealed record InspectionDetail(ProjectId Project, InspectionId Id) : IQue
 
 /// <summary>Answers <see cref="InspectionDetail"/>: the inspection in one statement, on a context of this query's own.</summary>
 /// <param name="reads">Where inspections are read: a context per query.</param>
-/// <param name="gated">The project this query passed the gate for.</param>
-public sealed class InspectionDetailHandler(IInspectionReads reads, Checked<GatedProject> gated) : IQueryHandler<InspectionDetail, InspectionOverview?>
+public sealed class InspectionDetailHandler(IInspectionReads reads) : IQueryHandler<InspectionDetail, InspectionOverview?>
 {
     /// <inheritdoc />
     public async ValueTask<InspectionOverview?> Handle(InspectionDetail query, CancellationToken cancellationToken)
     {
-        // The project the gate answered for, and only an inspection of that project: an id of another project's
-        // inspection finds nothing here.
-        var (project, _) = gated.TakeFor(query);
-
-        return await reads.OneAsync(project, query.Id, cancellationToken);
+        // The project the query names, which the gate answered for, and only an inspection of that project: an id
+        // of another project's inspection finds nothing here.
+        return await reads.OneAsync(query.Project, query.Id, cancellationToken);
     }
 }

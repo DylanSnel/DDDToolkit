@@ -86,6 +86,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 - A client that sends the version it read (`If-Match`, or a field of a mutation's input): after the load
   and before the change, `context.ExpectVersion(aggregate, version)`. Another loaded version throws
   `ConcurrencyConflictException` before anything changes; the same version leaves the save to compare.
+  A request's `long? ExpectedVersion` goes in as it is: `null` compares nothing, and the save compares the
+  version loaded.
 - Prefer `SaveChangesAsync`. Migrations are ordinary `dotnet ef migrations add`.
 - A context pool, for reads that run side by side: `AddPooledDbContextFactory<OrderingContext>(...)`
   (or `AddDbContextPool`) with the same `UseDDDToolkit(services)` in its callback, then

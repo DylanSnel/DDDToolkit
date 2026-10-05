@@ -12,8 +12,9 @@ namespace Examples.Tenancy.Projects.Application.Lifecycle.Commands;
 /// it. The owner is the caller unless the command names somebody else, and naming somebody else is the
 /// organization's decision, so it needs <see cref="OwnerKey"/> at the unit too. That second key depends on who is
 /// named, so it is not part of what the command declares: the handler asks for it, in plain sight. The unit the
-/// project is opened at is the one the check passed for (<see cref="Checked{T}"/>): a command that did not pass
-/// it opens nothing.
+/// project is opened at is the one the command names, which is the unit its check asked about; and the database,
+/// which checks every row, lets a seat open a project only at a unit where it holds <see cref="RequiredKey"/>,
+/// however the handler was reached.
 /// </remarks>
 /// <param name="Number">Its number, unique in the tenant.</param>
 /// <param name="Name">Its name.</param>
@@ -48,7 +49,6 @@ public sealed record OpenProject(string Number, string Name, OrganizationUnitId 
 /// <param name="access">Who holds which key where, for the owner rule.</param>
 /// <param name="tenancy">What the tenant allows: an active unit.</param>
 /// <param name="admission">Whether the owner may go on a crew, and which project role is the crew lead's.</param>
-/// <param name="checkedUnit">The unit this command passed its access check for.</param>
 /// <param name="answers">Tenancy's answers about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
 public sealed class OpenProjectHandler(
@@ -57,7 +57,6 @@ public sealed class OpenProjectHandler(
     ProjectAccess access,
     ProjectTenancy tenancy,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
-    Checked<OrganizationUnitId> checkedUnit,
     SampleAnswers answers,
     TimeProvider clock)
     : ICommandHandler<OpenProject, ProjectId>
@@ -70,14 +69,11 @@ public sealed class OpenProjectHandler(
     /// <c>projects.number-taken</c>, <c>projects.number-invalid</c>, <c>projects.name-invalid</c>,
     /// <c>projects.planned-range-invalid</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">
-    /// The command did not pass the access check, so no unit was checked for it; a seat chose the project's id; or
-    /// system work named no owner.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">A seat chose the project's id; or system work named no owner.</exception>
     public async ValueTask<ProjectId> Handle(OpenProject command, CancellationToken cancellationToken)
     {
-        // The unit the access check passed for, and nothing else: a command that never passed it has none.
-        var unit = checkedUnit.TakeFor(command);
+        // The unit the command names, which is the one its access check asked about.
+        var unit = command.UnitId;
         var scope = answers.RequireTenant();
 
         // The id is nobody's to choose through a client: only work the application does itself knows one beforehand.

@@ -24,7 +24,9 @@ namespace DDDToolkit.Access;
 /// </para>
 /// <para>
 /// It keeps nothing between two requests and nothing during one, so requests sent side by side within one
-/// scope are checked independently, though all go through the one instance the scope has.
+/// scope are checked independently, though all go through the one instance the scope has. What it leaves is
+/// the flow's: the request is in hand in the flow of work that asked (<see cref="RequestInHand"/>), for the
+/// handler that runs next and the save it ends with.
 /// </para>
 /// </remarks>
 /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
@@ -70,6 +72,13 @@ public sealed class AccessChecks<TRequests>
     /// <summary>
     /// Holds the caller to what <paramref name="request"/> requires: returns when the caller meets it, and
     /// throws when it does not. Call it before the handler, and only run the handler when it returned.
+    /// <para>
+    /// It also puts the request in hand (<see cref="RequestInHand"/>) for the flow of work that calls it, from the
+    /// moment the checks let it through. So call it in the <see langword="async"/> method that runs the handler
+    /// next, as the generated behavior does: the handler, and the save it ends with, then know which request they
+    /// serve without being told, and once that method returned its caller has nothing in hand. A method that is not
+    /// <see langword="async"/> gives no flow back, so its caller would go on with the request in hand.
+    /// </para>
     /// </summary>
     /// <param name="request">The very request the handler is about to be handed.</param>
     /// <param name="cancellationToken">Stops the reading a check does.</param>
@@ -89,17 +98,23 @@ public sealed class AccessChecks<TRequests>
                 $"{NameOf(request.GetType())} declares no access requirement. A request that declares nothing lets nobody through: "
                 + "answer RequiredAccess with what it requires, or with AccessRequirement.AllowAnonymous() where anyone may send it.");
 
-        if (requirement is AccessRequirement.Anyone)
+        var check = requirement is AccessRequirement.Anyone
+            ? null
+            : CheckFor(requirement)
+              ?? throw new InvalidOperationException(
+                  $"{NameOf(request.GetType())} declares '{NameOf(requirement.GetType())}', which none of the access checks registered for {NameOf(typeof(TRequests))} decides. "
+                  + $"A requirement nothing checks lets nobody through: register the check that decides it with {RegistrationOf(requirement.GetType())}.");
+
+        // In hand from here, for the flow that called. This method is not asynchronous, so what it puts in hand
+        // reaches the caller, which runs the handler next; it counts once the check let the request through.
+        var hand = RequestInHand.Take(request);
+        if (check is null)
         {
+            hand.Pass();
             return ValueTask.CompletedTask;
         }
 
-        var check = CheckFor(requirement)
-            ?? throw new InvalidOperationException(
-                $"{NameOf(request.GetType())} declares '{NameOf(requirement.GetType())}', which none of the access checks registered for {NameOf(typeof(TRequests))} decides. "
-                + $"A requirement nothing checks lets nobody through: register the check that decides it with {RegistrationOf(requirement.GetType())}.");
-
-        return check.RequireAsync(requirement, request, cancellationToken);
+        return hand.PassWhen(check.RequireAsync(requirement, request, cancellationToken));
     }
 
     private IAccessCheck? CheckFor(AccessRequirement requirement)

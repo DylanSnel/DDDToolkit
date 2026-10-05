@@ -13,10 +13,11 @@ public sealed class SqliteFiling : IDisposable
 
     /// <param name="configure">Registers what a test needs before the resources are registered.</param>
     /// <param name="ownContexts">Whether the host registers a factory for its context.</param>
-    public SqliteFiling(Action<IServiceCollection>? configure = null, bool ownContexts = false)
+    /// <param name="wiring">What a context is given besides the toolkit's interceptors.</param>
+    public SqliteFiling(Action<IServiceCollection>? configure = null, bool ownContexts = false, Action<DbContextOptionsBuilder, IServiceProvider>? wiring = null)
     {
         _connection.Open();
-        Services = new FilingServices(options => options.UseSqlite(_connection), Clock, configure, ownContexts);
+        Services = new FilingServices(options => options.UseSqlite(_connection), Clock, configure, ownContexts, wiring);
 
         using var scope = Services.Provider.CreateScope();
         scope.ServiceProvider.GetRequiredService<FilingContext>().Database.EnsureCreated();
@@ -36,9 +37,9 @@ public sealed class SqliteFiling : IDisposable
     public FilingScenario Scenario { get; }
 
     /// <summary>The application with the scenario saved, and nothing counted yet.</summary>
-    public static async Task<SqliteFiling> SeededAsync(Action<IServiceCollection>? configure = null, bool ownContexts = false)
+    public static async Task<SqliteFiling> SeededAsync(Action<IServiceCollection>? configure = null, bool ownContexts = false, Action<DbContextOptionsBuilder, IServiceProvider>? wiring = null)
     {
-        var filing = new SqliteFiling(configure, ownContexts);
+        var filing = new SqliteFiling(configure, ownContexts, wiring);
         await filing.Scenario.SaveAsync(filing.Services);
         filing.Commands.Reset();
         return filing;

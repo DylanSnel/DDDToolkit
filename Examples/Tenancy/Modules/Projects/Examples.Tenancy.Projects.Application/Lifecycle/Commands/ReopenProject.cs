@@ -17,18 +17,16 @@ public sealed record ReopenProject(ProjectId Id, long? ExpectedVersion = null) :
     AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Id, ExpectedVersion);
 }
 
-/// <summary>Handles <see cref="ReopenProject"/>: loads the project that was checked, reopens it and saves.</summary>
+/// <summary>Handles <see cref="ReopenProject"/>: loads the project its command names, reopens it and saves.</summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
-public sealed class ReopenProjectHandler(IProjectStore store, Checked<MemberHold<ProjectId>> checkedProject) : ICommandHandler<ReopenProject>
+public sealed class ReopenProjectHandler(IProjectStore store) : ICommandHandler<ReopenProject>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>projects.not-found</c>, <c>projects.not-closed</c>.</exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(ReopenProject command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         project.Reopen();

@@ -115,6 +115,58 @@ public sealed class ExpectVersionTests : IDisposable
     }
 
     [Fact]
+    public async Task A_request_that_names_no_version_compares_nothing_at_the_load_and_the_loaded_one_at_the_save()
+    {
+        // The one line a handler writes for a request whose version may be left out: ExpectedVersion is a long?.
+        var id = await SeedShelfAsync();
+        await RenameAsync(id, "Renamed meanwhile");
+        long? named = null;
+
+        using var early = _host.CreateScope();
+        using var late = _host.CreateScope();
+        var earlyContext = early.ServiceProvider.GetRequiredService<LibraryContext>();
+        var lateContext = late.ServiceProvider.GetRequiredService<LibraryContext>();
+
+        // None named: the shelf changes as it is now, version 2, though the caller never saw that one.
+        var shelf = await lateContext.Shelves.SingleAsync(s => s.Id == id, Cancellation);
+        lateContext.ExpectVersion(shelf, named);
+
+        // And from the load on, the save compares the version loaded, as every save does.
+        (await earlyContext.Shelves.SingleAsync(s => s.Id == id, Cancellation)).Rename("First");
+        await earlyContext.SaveChangesAsync(Cancellation);
+        shelf.Rename("Too late");
+        await lateContext.Invoking(c => c.SaveChangesAsync(Cancellation)).Should().ThrowAsync<ConcurrencyConflictException>();
+        (await StoredAsync(id)).Should().Be(("First", 3L));
+
+        // A version named through the same line is held as one named directly.
+        using var again = _host.CreateScope();
+        var context = again.ServiceProvider.GetRequiredService<LibraryContext>();
+        var current = await context.Shelves.SingleAsync(s => s.Id == id, Cancellation);
+        long? stale = 2;
+        long? fresh = 3;
+        context.Invoking(c => c.ExpectVersion(current, stale)).Should().Throw<ConcurrencyConflictException>();
+        context.ExpectVersion(current, fresh);
+    }
+
+    [Fact]
+    public async Task A_request_that_names_no_version_is_held_to_a_loaded_aggregate_all_the_same()
+    {
+        // The mistakes show on the first request, not on the first one that names a version.
+        var id = await SeedShelfAsync();
+        var elsewhere = await _host.InScopeAsync(async (other, _) => await other.Shelves.AsNoTracking().SingleAsync(s => s.Id == id));
+        long? named = null;
+
+        using var scope = _host.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<LibraryContext>();
+
+        context.Invoking(c => c.ExpectVersion(elsewhere, named)).Should().Throw<InvalidOperationException>().WithMessage("*not tracked*");
+
+        var added = new Shelf(ShelfId.CreateUnique(), "New", UserId.CreateUnique(), CatId.CreateUnique(), null);
+        context.Shelves.Add(added);
+        context.Invoking(c => c.ExpectVersion(added, named)).Should().Throw<InvalidOperationException>().WithMessage("*no stored version*");
+    }
+
+    [Fact]
     public async Task A_removal_with_the_expected_version_goes_through_and_a_stale_one_does_not()
     {
         var id = await SeedShelfAsync();

@@ -13,10 +13,9 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// the organization holds a key there.
 /// <para>
 /// Tenancy has a case for a key at a unit too, <c>TenancyAccess.AtUnit</c>, and a module that needs nothing
-/// more declares that one. This one is Projects' own for two things that case does not do: it refuses under the
-/// module's own code, <c>projects.not-permitted</c>, which the module's clients read for every refusal about a
-/// project, and it keeps the unit it checked for the handler (<see cref="Checked{T}"/>), which opens the project
-/// at exactly that unit.
+/// more declares that one. This one is Projects' own for what that case does not do: it refuses under the
+/// module's own code, <c>projects.not-permitted</c>, naming the key and the unit, which the module's clients read
+/// for every refusal about a project.
 /// </para>
 /// <para>
 /// A closed set: the constructor is private, so the cases below are all there are, and each is a record, so two

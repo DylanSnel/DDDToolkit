@@ -22,23 +22,26 @@ namespace Examples.Tenancy.Projects.Application.StoredProjects;
 public interface IProjectStore
 {
     /// <summary>
-    /// The project, with its crew, as the access check saw it, for a command to change and then save with
-    /// <see cref="SaveAsync"/>; or <see langword="null"/> when it is gone from the caller's tenant since.
+    /// The project, with its crew, for a command to change and then save with <see cref="SaveAsync"/>; or
+    /// <see langword="null"/> when the caller does not see it, or it is gone from the caller's tenant.
     /// </summary>
     /// <remarks>
-    /// The check and the load are two statements, and the check read the project on storage of its own. The
-    /// version ties them: a project that is no longer at the version the check saw was changed in between, by a
-    /// crew change as much as by a rename, so what the check decided may no longer hold, and the command has lost
-    /// the race like one whose save came second.
+    /// The command's requirement was checked before its handler, on the project its request names, which is the
+    /// one loaded here. The check and the load are two statements, and between them the version the caller named
+    /// is what ties them: a project that is no longer at that version was changed since the caller read it, by a
+    /// crew change as much as by a rename, and the command has lost the race like one whose save came second. A
+    /// command that names no version changes the project as it is when it is loaded. From the load on, the save
+    /// compares the version loaded; and the database, which checks every row, checks the write once more as the
+    /// caller.
     /// </remarks>
-    /// <param name="id">The project.</param>
-    /// <param name="version">
-    /// The version the access check read (<see cref="MemberHold{TResourceId}.Version"/>), which is also the version the caller
-    /// expected when its command named one: the check compared the two.
+    /// <param name="id">The project, from the command.</param>
+    /// <param name="expectedVersion">
+    /// The version the caller last read, from <c>If-Match</c> or the mutation's input, or <see langword="null"/>
+    /// when it named none.
     /// </param>
     /// <param name="cancellationToken">Cancels the query.</param>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is no longer at <paramref name="version"/>.</exception>
-    Task<Project?> LoadAsync(ProjectId id, long version, CancellationToken cancellationToken);
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is not at <paramref name="expectedVersion"/>.</exception>
+    Task<Project?> LoadAsync(ProjectId id, long? expectedVersion, CancellationToken cancellationToken);
 
     /// <summary>Whether a project of the caller's tenant already has <paramref name="number"/>.</summary>
     /// <param name="number">The number, trimmed.</param>

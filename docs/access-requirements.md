@@ -12,7 +12,8 @@ core package, free of any dispatcher and of any [supporting domain](writing-a-su
 | `IAccessCheck` | What decides the cases of one owner: a package ships one, a module writes one for its own. |
 | `CallerAccessCheck` | The core's check of who is calling, first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
-| `Checked<T>` | What a check read on the way, kept for the request's handler. |
+| `Checked<T>` | What a check read on the way, kept for the code after it that handles the same request. |
+| `RequestInHand` | The request a flow of work is handling, once its checks let it through: what the handler and its save serve. |
 
 Who is calling is a separate question, answered by the host: [running queries as the caller](row-level-security.md#running-queries-as-the-caller).
 
@@ -183,7 +184,7 @@ public interface IInvoiceAccess
     ValueTask<bool> HoldsKeyAsync(string key, InvoiceId invoice, CancellationToken cancellationToken);
 }
 
-public sealed class BillingAccessCheck(IInvoiceAccess invoices, Checked<InvoiceId> checkedInvoice) : IAccessCheck
+public sealed class BillingAccessCheck(IInvoiceAccess invoices) : IAccessCheck
 {
     public bool Decides(AccessRequirement requirement) => requirement is BillingAccess;
 
@@ -194,8 +195,6 @@ public sealed class BillingAccessCheck(IInvoiceAccess invoices, Checked<InvoiceI
         {
             throw new RefusalException("billing.not-permitted", RefusalKind.NotPermitted, "That takes a key on the invoice.");
         }
-
-        checkedInvoice.KeepFor(request, required.Invoice);      // what was checked, for the handler
     }
 }
 
@@ -218,8 +217,8 @@ exception names the package's call that adds its check, `services.AddTenancyAcce
 for Tenancy's, which the package says with `[AccessCheckRegistration]` on its requirement; a case of your own
 names `AddAccessCheck<IBillingRequest, TCheck>()`.
 
-**The handler acts on what was checked.** A check keeps what it read for the request's handler, in
-`Checked<T>`, and the handler takes it from there instead of working it out again from its request:
+**The handler acts on its request.** The check was asked about what the request names, so the handler takes
+its ids from the request, and loads what it changes as its caller may see it now:
 
 ```csharp
 public interface IInvoiceStore
@@ -227,16 +226,24 @@ public interface IInvoiceStore
     Task CloseAsync(InvoiceId invoice, CancellationToken cancellationToken);
 }
 
-public sealed class CloseInvoiceHandler(Checked<InvoiceId> checkedInvoice, IInvoiceStore store)
+public sealed class CloseInvoiceHandler(IInvoiceStore store)
 {
     public Task HandleAsync(CloseInvoice command, CancellationToken cancellationToken)
-        => store.CloseAsync(checkedInvoice.TakeFor(command), cancellationToken);
+        => store.CloseAsync(command.Invoice, cancellationToken);
 }
 ```
 
-`TakeFor` hands out what the request's latest pass kept, once. A handler reached without its request having
-passed the check, called directly rather than sent, has nothing to take, and `TakeFor` throws: that closes
-the way round the check. A request is found by reference, so declare it as a class or a record class.
+Permission is about who is calling. That what the handler changes is right is the aggregate's to keep, that
+nobody changed it since the caller read it is the version's (`ExpectVersion` at the load, and the save's own
+comparison), and where the database checks every row it checks the write again as the caller.
+
+**What a check read, for the code after it.** A check that had to work out an answer the handler needs as
+well, one it would otherwise ask a second time, keeps it in `Checked<T>`: `KeepFor(request, answer)` in the
+check, `TakeFor(request)` in the handler, which hands out what the request's latest pass kept, once, and throws
+for a request that passed no check that keeps a `T`. A request is found by reference, so declare it as a class
+or a record class. What a check keeps is kept with the [request in hand](#the-request-in-hand) as well, where
+code that is not handed the request finds it: that is how the Membership package's
+[expert hold](membership.md#the-expert-hold) holds a save to what its check read, with no line in the handler.
 
 ```mermaid
 flowchart LR
@@ -298,7 +305,41 @@ public sealed class BillingDispatcher(AccessChecks<IBillingRequest> checks, ISer
 ```
 
 The checks, the dispatcher and the handlers come from one scope, the request's: what a check keeps is
-taken by a handler of the same scope.
+taken by a handler of the same scope. Ask the checks and run the handler in one `async` method, as above: the
+request is then [in hand](#the-request-in-hand) for the handler and its save, and no longer once the method
+returned.
+
+## The request in hand
+
+`AccessChecks<TRequests>.RequireAsync(request)` puts the request in hand for the flow of work that asked, from
+the moment the checks let it through: `RequestInHand.Current` is that request, in the method that asked and in
+whatever it runs after, the handler and the save the handler ends with among it. A request the checks refused
+is in nobody's hand. What a check kept for the request is found there without it,
+`Checked<T>.TryFindInHand(out var kept)`, and left where it is.
+
+```csharp
+await checks.RequireAsync(command, cancellationToken);    // in hand from here, once it passed
+await handler.HandleAsync(command, cancellationToken);    // and here, down to the save
+// RequestInHand.Current is command; Checked<T>.TryFindInHand(out var kept) finds what its check kept
+```
+
+- **It follows the flow, as `Callers.Begin` does:** into what the method runs after the checks, into tasks
+  started there, and not back out. Once the method that asked returns, its caller has nothing in hand. So two
+  requests sent side by side each have their own, a request sent from inside another's handling, through a
+  sender of its own, is in hand for its own handling, and the other is in hand again once it returns.
+- **The method that asks is `async`.** Only an `async` method gives its caller the flow back as it was. One
+  that is not, that asks the checks and returns the task of the handling it chains on, leaves the request in
+  hand for its caller, and whatever that caller runs next, a handler it calls directly included, is taken for
+  part of the request's handling.
+- **A helper that only asks the checks** has the request in hand inside itself alone. Code that relies on the
+  request in hand, as the expert hold does, then finds none, and says so.
+- **What runs after the handling returned has nothing in hand,** so a save that relies on it happens inside:
+  a unit-of-work behavior that saves after the handler is registered after the access behavior, and an
+  endpoint does not save after `Send`.
+- **A query answered with a stream** has its request in hand until its handler hands out the first item:
+  every item after that is asked for by whoever reads the stream, in that reader's flow.
+- **It is not the scope.** A scope may handle several requests, the mutations of one GraphQL request say: what
+  is in hand is the one whose handling the code is in, and nothing a request before it left in the scope.
 
 ## The generated behavior, with Mediator
 

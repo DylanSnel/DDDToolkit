@@ -1,24 +1,28 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace DDDToolkit.Access;
 
 /// <summary>
-/// What an access check read on the way, kept for the handler of the request it checked: the tie between what
-/// was checked and what is changed.
+/// What an access check read on the way, kept for the code after it that handles the same request: the tie
+/// between what was checked and what is done.
 /// </summary>
 /// <remarks>
 /// The check runs before the handler and reads what the request is about: the thing itself, the version it is
-/// at, where it sits. The handler then takes that from here instead of working it out again from its request:
+/// at, an answer it had to work out to decide. Most handlers need none of it: they act on what their request
+/// names, which is exactly what the check was asked about. A handler that does need it, an answer it would
+/// otherwise ask for a second time, takes it from here:
 /// <code>
-/// var seen = checkedInvoice.TakeFor(command);
-/// var invoice = await store.LoadAsync(seen.Invoice, seen.Version, cancellationToken);
+/// var answer = checkedAnswers.TakeFor(query);
 /// </code>
-/// So what a command changes is what was checked, whichever field of its request names it, and something
-/// changed in between is a lost race, not a change made on the strength of a check of something else.
+/// Code that runs in the request's handling and is not handed the request, such as an interceptor of the save
+/// the handler ends with, finds what was kept through the request in hand instead (<see cref="TryFindInHand"/>,
+/// <see cref="RequestInHand"/>), and leaves it where it is. That is how a package holds a save to what its check
+/// read, with nothing written in the handler.
 /// <para>
-/// It also closes the way round the check. A handler reached without its request having passed the check,
-/// called directly rather than sent, has nothing to take, and <see cref="TakeFor"/> throws. What was kept is
-/// handed out once: the same request handed to a handler once more has nothing to take either.
+/// Taking it also closes the way round the check. A handler reached without its request having passed the
+/// check, called directly rather than sent, has nothing to take, and <see cref="TakeFor"/> throws. What was kept
+/// is handed out once: the same request handed to a handler once more has nothing to take either.
 /// </para>
 /// <para>
 /// What is kept for a request is what its latest pass read. A request that passed, never reached its
@@ -87,6 +91,32 @@ public sealed class Checked<T>
         }
 
         _kept.GetOrCreateValue(request).Keep(value);
+
+        // With the request in hand as well, while its checks run in this flow, for code of its handling that is
+        // not handed the request. What is kept for a request outside any checks, by a test say, is in no hand.
+        RequestInHand.Of(request)?.Keep(value);
+    }
+
+    /// <summary>
+    /// What a check kept of <typeparamref name="T"/> for the request in hand (<see cref="RequestInHand.Current"/>),
+    /// left where it is: for code that runs in that request's handling and is not handed the request, such as an
+    /// interceptor of the save its handler ends with. <see cref="TakeFor"/> does not take it from here: this is
+    /// what the flow's request passed with, for as long as it is in hand.
+    /// </summary>
+    /// <param name="value">What was kept, when this returns <see langword="true"/>.</param>
+    /// <returns>
+    /// <see langword="false"/> outside the handling of a request its checks let through in this flow, and where
+    /// they kept no <typeparamref name="T"/> for it.
+    /// </returns>
+    public static bool TryFindInHand([MaybeNullWhen(false)] out T value)
+    {
+        if (RequestInHand.Passed is { } hand && hand.TryFind(out value))
+        {
+            return true;
+        }
+
+        value = default;
+        return false;
     }
 
     /// <summary>What the latest pass of one request kept, until its handler takes it.</summary>

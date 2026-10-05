@@ -64,11 +64,13 @@ public sealed class PackageReferenceTests
             .Should().Equal("DDDToolkit.Supporting.Membership.EntityFramework");
 
         // And what is public is what an application writes against: the mapping, the registration, the queries, what works
-        // from the model, and the two questions an application answers inside a statement of the context.
+        // from the model, the two questions an application answers inside a statement of the context, and the one line
+        // that asks for the expert hold.
         typeof(MembershipModel).Assembly.GetExportedTypes().Select(type => type.Name).Should().BeEquivalentTo(
             "IPlacesReached`2",
             "IRolesWithKey`2",
             "MemberFound`1",
+            "MemberHoldDbContextOptionsExtensions",
             "MemberKeyOn`1",
             "MemberMapping",
             "MemberQueryableExtensions",

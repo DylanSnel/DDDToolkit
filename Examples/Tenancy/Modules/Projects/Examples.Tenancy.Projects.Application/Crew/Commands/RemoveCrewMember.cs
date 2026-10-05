@@ -18,28 +18,27 @@ public sealed record RemoveCrewMember(ProjectId Project, SeatId Seat, long? Expe
     AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Project, ExpectedVersion);
 }
 
-/// <summary>Handles <see cref="RemoveCrewMember"/>: loads the project that was checked, takes the seat off its crew and saves.</summary>
+/// <summary>Handles <see cref="RemoveCrewMember"/>: loads the project its command names, takes the seat off its crew and saves.</summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="answers">Tenancy's answers about the current caller: whether the seat is the caller's own.</param>
-public sealed class RemoveCrewMemberHandler(IProjectStore store, Checked<MemberHold<ProjectId>> checkedProject, SampleAnswers answers) : ICommandHandler<RemoveCrewMember>
+public sealed class RemoveCrewMemberHandler(IProjectStore store, SampleAnswers answers) : ICommandHandler<RemoveCrewMember>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// <c>projects.not-found</c>, <c>projects.member-not-found</c>, <c>projects.owner-protected</c>, <c>projects.closed</c>.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(RemoveCrewMember command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         project.RemoveFromCrew(command.Seat);
 
-        // The caller's own place may be what this very change was allowed by: see OwnPlaceOnTheCrew.
-        // Either way it writes this project and nothing an earlier command may have left in the unit of work.
-        using (OwnPlaceOnTheCrew.BeginSave(command.Seat, answers.RequireTenant()))
+        // The caller's own place may be what this very change was allowed by, once this command's check let it
+        // through: see OwnPlaceOnTheCrew. Either way it writes this project and nothing an earlier command may
+        // have left in the unit of work.
+        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, answers.RequireTenant()))
         {
             await store.SaveOnlyAsync(project, cancellationToken);
         }

@@ -52,7 +52,7 @@ Namespaces:
 | `DDDToolkit.Validation` | `ValidationErrorBuilder`, `ValidationError`, `TryToValid`, `Prefixed`, `ToErrorDictionary` |
 | `DDDToolkit.Exceptions` | `ConcurrencyConflictException`, `InvariantViolationException`, `InvalidValueObjectException` |
 | `DDDToolkit.Abstractions.Access` | `Caller`, the parameter of a `[RowAccess]` rule, and `Sql.Call`/`Sql.Raw` |
-| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for. And what a request requires of its caller: `IRequireAccess`, `AccessRequirement` (with the core's `AllowAnonymous()`, `SignedIn()` and `RequiresSystemWork()`, which `CallerAccessCheck` decides in every module), `IAccessCheck`, `AccessChecks<TRequests>`, `Checked<T>`; `[AccessRequests]` on a module's request interface has the Mediator pipeline behaviors written that ask the checks (one for requests, one for stream queries) |
+| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for. And what a request requires of its caller: `IRequireAccess`, `AccessRequirement` (with the core's `AllowAnonymous()`, `SignedIn()` and `RequiresSystemWork()`, which `CallerAccessCheck` decides in every module), `IAccessCheck`, `AccessChecks<TRequests>`, `Checked<T>` (an answer a check worked out, kept for the code after it), `RequestInHand` (the request whose checks let it through, in the flow its handler and save run in); a handler acts on its request and takes nothing from the check; `[AccessRequests]` on a module's request interface has the Mediator pipeline behaviors written that ask the checks (one for requests, one for stream queries) |
 
 ## Identifiers
 

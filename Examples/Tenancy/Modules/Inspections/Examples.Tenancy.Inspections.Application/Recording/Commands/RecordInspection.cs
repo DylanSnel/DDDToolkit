@@ -31,49 +31,52 @@ public sealed record RecordInspection(ProjectId Project, string Title, DateRange
 /// saves.
 /// </summary>
 /// <remarks>
-/// Recording is constructing: there is nothing to load. The project is the one the access check asked Projects'
-/// gate about; the tenant and the recording seat come from Tenancy's answers about the caller, never from the
-/// request, and the save check keeps the write to that tenant.
+/// Recording is constructing: there is nothing to load. The project is the one the command names, which the access
+/// check asked Projects' gate about; the tenant and the recording seat come from Tenancy's answers about the
+/// caller, never from the request, and the save check keeps the write to that tenant.
 /// <para>
-/// The days are held to the project's planned range, which is Projects' to know. The gate's answer carried it, the
-/// access check kept it with the project, and the inspection refuses days outside it under Inspections' own code.
-/// This module reads no table of Projects' for it and repeats no rule of Projects': it compares two ranges of a
-/// type both modules share.
+/// The days are held to the project's planned range, which is Projects' to know. The handler asks the gate for it,
+/// as the project is now, and the inspection refuses days outside it under Inspections' own code. This module
+/// reads no table of Projects' for it and repeats no rule of Projects': it compares two ranges of a type both
+/// modules share. A project the caller no longer sees by then is not found, as at the check.
 /// </para>
 /// <para>
-/// The inspection is recorded on the project as it was when the gate answered. Projects ties a command's check
-/// to its save through the project's version; this module holds no version of another module's project, so a
-/// project closed, or a crew membership ended, between the gate's answer and this save still gets the
-/// inspection. It is one more record on a project the caller could record on a moment before, and changes
-/// nothing of the project itself.
+/// Projects ties a command to its save through the project's version; this module holds no version of another
+/// module's project, so a project closed, or a crew membership ended, between that answer and this save still
+/// gets the inspection. It is one more record on a project the caller could record on a moment before, changes
+/// nothing of the project itself, and the database writes it only for a seat that holds the key to record.
 /// </para>
 /// </remarks>
 /// <param name="store">Where inspections are added and saved.</param>
-/// <param name="gated">The project this command passed the gate for.</param>
+/// <param name="projects">Projects' answer about the project: the days it is planned for.</param>
 /// <param name="answers">Tenancy's answers about the current caller.</param>
 /// <param name="clock">What "now" is.</param>
-public sealed class RecordInspectionHandler(IInspectionStore store, Checked<GatedProject> gated, SampleAnswers answers, TimeProvider clock)
+public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate projects, SampleAnswers answers, TimeProvider clock)
     : ICommandHandler<RecordInspection, InspectionId>
 {
     /// <inheritdoc />
     /// <returns>The new inspection's id.</returns>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>inspections.title-invalid</c>, <c>inspections.days-invalid</c>, <c>inspections.outside-planned-range</c>.
+    /// <c>projects.not-found</c> for a project the caller sees no longer; <c>inspections.title-invalid</c>,
+    /// <c>inspections.days-invalid</c>, <c>inspections.outside-planned-range</c>.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The command did not pass the access check: no project passed the gate for it.</exception>
     public async ValueTask<InspectionId> Handle(RecordInspection command, CancellationToken cancellationToken)
     {
-        var (project, planned) = gated.TakeFor(command);
         var scope = answers.RequireTenant();
-        var now = clock.GetUtcNow();
+        var project = await projects.AskAsync(command.Project, RecordInspection.RequiredKey, cancellationToken);
+        if (!project.Visible)
+        {
+            throw InspectionRefusals.Of(InspectionRefusals.ProjectNotFound);
+        }
 
+        var now = clock.GetUtcNow();
         var inspection = new Inspection(
             InspectionId.CreateSequential(),
             scope.Tenant,
-            project,
+            command.Project,
             command.Title,
             command.Days ?? DateRange.Of(DateOnly.FromDateTime(now.UtcDateTime)),
-            planned,
+            project.Planned,
             ActingSeat.Of(scope),
             now);
 

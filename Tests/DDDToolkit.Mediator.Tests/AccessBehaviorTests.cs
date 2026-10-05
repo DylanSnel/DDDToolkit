@@ -37,6 +37,30 @@ public sealed class AccessBehaviorTests
     }
 
     [Fact]
+    public async Task The_request_is_in_hand_in_its_handler_through_either_behavior_and_nowhere_after()
+    {
+        using var host = new TestHost();
+        var basket = BasketId.CreateUnique();
+        host.StepLog.Owned.Add(basket);
+        var command = new RenameBasket(basket, "Weekend");
+        var query = new BasketLines(basket);
+
+        using var scope = host.CreateScope();
+        var sender = scope.ServiceProvider.GetRequiredService<ISender>();
+        await sender.Send(command, Cancellation);
+        await foreach (var _ in sender.CreateStream(query, Cancellation))
+        {
+        }
+
+        // The generated behaviors ask the checks and run the handler in one method, so the handler, and the save it
+        // would end with, find the request and what its check kept without being handed either: a stream's handler
+        // until it hands out its first line, since each line after is asked for in the flow of whoever reads. And the
+        // sender's caller, once it returned, has nothing in hand.
+        host.StepLog.InHand.Should().Equal([(command, basket), (query, basket)]);
+        RequestInHand.Current.Should().BeNull();
+    }
+
+    [Fact]
     public async Task A_refused_request_never_reaches_its_handler()
     {
         using var host = new TestHost();

@@ -707,7 +707,8 @@ The host runs on Postgres, as Supabase runs it, at the connection string it is g
   application knows nothing of, and a query is withheld the rows by the database.
 - **One save is the application's work for a seat.** A seat that takes its own role on a crew, or itself off
   it, gives up the right the change was allowed by, and the database, which judges each statement of a save
-  by the rows as they are then, would refuse the seat the rest of that save
+  by the rows as they are then, would refuse the seat the rest of that save. It is that only for the command
+  whose check let it through, the request in hand; a handler reached around its check saves as the caller
   (`Crew/OwnPlaceOnTheCrew.cs` in the Projects application project).
 
 `SampleOnPostgresTests` proves it on Supabase's Postgres image: it applies the files in order as the role that
@@ -934,7 +935,8 @@ over a stub).
 | A module's entry in its API project, and its registration in the infrastructure project | `...Tenants.Api/TenantsModule.cs`, `...Tenants.Infrastructure/TenantsInfrastructure.cs` |
 | A command or a query per use case, with its feature, and routes that only send | `...Projects.Application/Crew/Commands/` and `Crew/Queries/`, `...Projects.Api/Crew/Rest/CrewEndpoints.cs`; the same for every feature, in Inspections, and in Tenants, wrapping the package's use cases; `FeatureFolderTests` |
 | What a request requires of its caller, checked in the pipeline by a behavior the toolkit generates | `[AccessRequests]` on `...Projects.Application/Access/IProjectsRequest.cs`, the module's own case and its check in `ProjectsRequirement.cs` and `ProjectsAccessCheck.cs`, `AddAccessCheck` and `AddProjectsAccessBehavior` in `ProjectsApplicationServices.cs`, `AddTenancyAccess` and `AddProjectMemberAccess` in `...Projects.Infrastructure/ProjectsInfrastructure.cs`; the same in `...Tenants.Application/Access/` and `...Inspections.Application/Access/`; `AccessDeclarationTests` |
-| A handler that acts on exactly what its request's access check read | `Checked<MemberHold<ProjectId>>` in `...Projects.Application/Lifecycle/Commands/CloseProject.cs`, kept by the Membership package's `MemberAccessCheck`, `IProjectStore.LoadAsync`, `...Inspections.Application/Access/GatedProject.cs`; `RequestPipelineTests` |
+| A handler that takes nothing from its check: it loads what its command names, with the version its caller named held at the load, and the save, the project's rules and the database hold the write | `...Projects.Application/Lifecycle/Commands/CloseProject.cs`, `IProjectStore.LoadAsync` and `...Projects.Infrastructure/Persistence/EfProjectStore.cs`; `AccessHoldScenarios`, `RequestPipelineTests` |
+| The expert hold, which ties every save of a project to the version its request's check read with one line, `UseMemberHolds`: the sample ships without it, and its tests switch it on and play the races both ways | `HoldsOnProjects` in the tests' infrastructure; `AccessHoldScenarios` |
 | A query on a context of its own, so queries can run side by side | `...Projects.Application/StoredProjects/IProjectReads.cs`, `...Tenants.Application/StoredTenancy/ITenancyReads.cs`, `...Inspections.Application/Recording/IInspectionReads.cs` and their adapters; `RequestPipelineTests` |
 | Contexts from a pool: a read's for its one query, and the request's own | `PostgresPools.AddContext` in `Shared/Examples.Hosting`, called by each module's infrastructure registration; `StartupTests`, `PooledContextScenarios` |
 | A domain laid out per aggregate, and one type per file | `...Projects.Domain/Aggregates/Projects/` with `Entities/`, `Events/`, `Invariants/` and `ValueObjects/`; `SourceTreeTests` |

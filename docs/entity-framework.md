@@ -444,6 +444,15 @@ anything changes. If the versions agree, the save compares against that version 
 change somebody makes between the load and the save is the same conflict. One exception for both, because
 the client does the same thing for both: read again, and decide again.
 
+A request whose client may leave the version out carries a `long?`, and hands it over as it is: with none,
+`null`, there is nothing to compare at the load, and the save compares the version loaded, as it always
+does. So one line serves both, and it is the line a handler writes after its load:
+
+```csharp
+var order = await context.Orders.SingleAsync(order => order.Id == command.Order, cancellationToken);
+context.ExpectVersion(order, command.ExpectedVersion);   // none named: the client asked for the order as it is
+```
+
 It reads nothing from the database and changes nothing in the context. It refuses, with an
 `InvalidOperationException`, an aggregate this context did not load, a new aggregate, which has no stored
 version yet, and a model that does not map `Version` as a concurrency token, where an expectation that

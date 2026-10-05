@@ -9,16 +9,15 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </summary>
 /// <remarks>
 /// The caller's own refusal when it is nobody comes first, then <c>projects.not-permitted</c> for a key it does not
-/// hold at the unit. Only then does the handler run. The unit the request passed for it keeps per request
-/// (<see cref="Checked{T}"/>), so a handler acts on exactly the unit that was checked.
+/// hold at the unit. Only then does the handler run, at the unit its command names, which is the one asked about
+/// here: it keeps nothing for the handler.
 /// <para>
 /// It fails closed: a case added to <see cref="ProjectsRequirement"/> without its branch here stops every request
 /// that declares it, rather than letting it through.
 /// </para>
 /// </remarks>
 /// <param name="access">Who holds which key where.</param>
-/// <param name="checkedUnit">Where the unit a request was checked at is kept for its handler.</param>
-public sealed class ProjectsAccessCheck(ProjectAccess access, Checked<OrganizationUnitId> checkedUnit) : IAccessCheck
+public sealed class ProjectsAccessCheck(ProjectAccess access) : IAccessCheck
 {
     /// <inheritdoc />
     public bool Decides(AccessRequirement requirement) => requirement is ProjectsRequirement;
@@ -36,9 +35,7 @@ public sealed class ProjectsAccessCheck(ProjectAccess access, Checked<Organizati
         switch (requirement)
         {
             case ProjectsRequirement.AtUnit required:
-                // Kept under the request itself, so its handler acts at the very unit that was checked.
                 await access.RequireAtAsync(required.Unit, required.Key, cancellationToken);
-                checkedUnit.KeepFor(request, required.Unit);
                 break;
 
             default:

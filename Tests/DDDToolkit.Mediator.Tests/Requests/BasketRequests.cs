@@ -28,6 +28,18 @@ public sealed class StepLog
     /// <summary>The baskets the caller of the test owns.</summary>
     public HashSet<BasketId> Owned { get; } = [];
 
+    /// <summary>The request in hand where each handler ran, and what the check kept of a basket there.</summary>
+    public List<(object? Request, BasketId? Kept)> InHand { get; } = [];
+
+    /// <summary>Notes what is in hand where a handler runs.</summary>
+    public void NoteInHand()
+    {
+        lock (InHand)
+        {
+            InHand.Add((RequestInHand.Current, Checked<BasketId>.TryFindInHand(out var kept) ? kept : null));
+        }
+    }
+
     /// <summary>The steps so far, in order.</summary>
     public IReadOnlyList<string> InOrder
     {
@@ -84,6 +96,7 @@ public sealed class RenameBasketHandler(StepLog steps, Checked<BasketId> checked
     public ValueTask<BasketId> Handle(RenameBasket command, CancellationToken cancellationToken)
     {
         steps.Add("handler");
+        steps.NoteInHand();
         return ValueTask.FromResult(checkedBasket.TakeFor(command));
     }
 }
@@ -120,6 +133,9 @@ public sealed class BasketLinesHandler(StepLog steps) : IStreamQueryHandler<Bask
     public async IAsyncEnumerable<string> Handle(BasketLines query, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         steps.Add("handler");
+
+        // Before the first line: each line after it is asked for by whoever reads the stream, in that reader's flow.
+        steps.NoteInHand();
         yield return "bread";
         await Task.Yield();
         yield return "milk";

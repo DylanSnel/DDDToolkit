@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// is Tenancy's, and asked by the module's access behavior.
 /// </summary>
 /// <remarks>
-/// Who may do what to a project is Projects' to answer, so every case asks its gate,
-/// <see cref="IProjectGate"/>, and maps the answer:
+/// Who may do what to a project is Projects' to answer, so every case about one project asks its gate,
+/// <see cref="IProjectGate"/>, and maps the answer (the case about several asks no gate: its handler does, once):
 /// <list type="table">
 /// <listheader><term>Answer</term><description>Refusal</description></listheader>
 /// <item><term>not visible</term><description><c>projects.not-found</c>: for a project of another tenant, one out of
@@ -23,21 +23,19 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// with this module's own texts.
 /// </para>
 /// <para>
-/// A request that passes is noted with its project and the planned range the gate answered
-/// (<see cref="GatedProject"/>, kept in <see cref="Checked{T}"/>), for its handler to act on: what is recorded
-/// on, or listed, is the project the gate answered for, and the days an inspection may cover are the ones it
-/// answered then.
+/// It keeps nothing for the handler. A request that passes is handled on the project it names, which is the one
+/// the gate answered for; what the handler needs of the project besides, the days it is planned for, it asks the
+/// gate itself, as it is when the inspection is recorded.
 /// </para>
 /// <para>
 /// A request about several projects (<see cref="InspectionsRequirement.OnProjectsInReach"/>) is refused for none
-/// of them. The gate is asked once, about all of them, and answers for those the caller may see
-/// (<see cref="GatedProjects"/>); the handler acts on those and passes over the rest, so the projects of one
-/// request cost one question and not one each.
+/// of them, so the check asks only that the caller works in a tenant: the handler asks the gate, once, about all
+/// of them, and acts on those it answers for, as a query that declares <c>MemberAccess.SeenWith</c> is filtered
+/// by its own statement. The projects of one request cost one question, not one each.
 /// </para>
 /// <para>
-/// The gate answers each question on storage of its own, and what is noted is noted per request. So two queries
-/// sent side by side within one scope are checked independently, though both go through the one instance the
-/// scope has.
+/// The gate answers each question on storage of its own. So two queries sent side by side within one scope are
+/// checked independently, though both go through the one instance the scope has.
 /// </para>
 /// <para>
 /// It fails closed: a case added to <see cref="InspectionsRequirement"/> without its branch here stops every
@@ -45,10 +43,8 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// </para>
 /// </remarks>
 /// <param name="projects">Projects' answer to "may the caller do this to that project".</param>
-/// <param name="gated">Where the project a request passed the gate for is kept for its handler.</param>
-/// <param name="gatedSeveral">Where what the gate answered about the projects of a request about several is kept for its handler.</param>
 /// <param name="answers">Tenancy's answers about the current caller.</param>
-public sealed class InspectionsAccessCheck(IProjectGate projects, Checked<GatedProject> gated, Checked<GatedProjects> gatedSeveral, SampleAnswers answers) : IAccessCheck
+public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers answers) : IAccessCheck
 {
     /// <inheritdoc />
     public bool Decides(AccessRequirement requirement) => requirement is InspectionsRequirement;
@@ -72,7 +68,6 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, Checked<GatedP
 
                 var answer = await projects.AskAsync(required.Project, required.Key, cancellationToken);
                 Require(answer, required.Key, open: false);
-                gated.KeepFor(request, new GatedProject(required.Project, answer.Planned));
                 break;
             }
 
@@ -88,19 +83,14 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, Checked<GatedP
 
                 var answer = await projects.AskAsync(required.Project, required.Key, cancellationToken);
                 Require(answer, required.Key, open: true);
-                gated.KeepFor(request, new GatedProject(required.Project, answer.Planned));
                 break;
             }
 
-            case InspectionsRequirement.OnProjectsInReach required:
-            {
+            case InspectionsRequirement.OnProjectsInReach:
+                // Nothing is refused for a project: the handler asks the gate about all of them at once, and acts on
+                // those it answers for. The others are not there for this caller.
                 answers.RequireTenant();
-
-                // One question for all of them. Nothing is refused: the handler acts on the projects the gate
-                // answered for, and the others are not there for this caller.
-                gatedSeveral.KeepFor(request, new GatedProjects(await projects.AskAsync(required.Projects, required.Key, cancellationToken)));
                 break;
-            }
 
             default:
                 throw new InvalidOperationException(

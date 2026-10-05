@@ -30,16 +30,14 @@ public sealed record ChangeProjectOwner(ProjectId Id, SeatId Seat, long? Expecte
 }
 
 /// <summary>
-/// Handles <see cref="ChangeProjectOwner"/>: loads the project that was checked, has the seat admitted and finds
+/// Handles <see cref="ChangeProjectOwner"/>: loads the project its command names, has the seat admitted and finds
 /// the crew lead's role, names the owner and saves.
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="admission">Whether the seat may go on a crew, and which project role is the crew lead's.</param>
 /// <param name="clock">What "now" is: when the new owner's membership starts to count.</param>
 public sealed class ChangeProjectOwnerHandler(
     IProjectStore store,
-    Checked<MemberHold<ProjectId>> checkedProject,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
     TimeProvider clock)
     : ICommandHandler<ChangeProjectOwner>
@@ -49,11 +47,10 @@ public sealed class ChangeProjectOwnerHandler(
     /// <c>projects.not-found</c>, <c>projects.seat-not-active</c>, <c>projects.no-lead-role</c>,
     /// <c>projects.already-owner</c>, <c>projects.closed</c>.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(ChangeProjectOwner command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         await admission.RequireMemberAsync(command.Seat, cancellationToken);

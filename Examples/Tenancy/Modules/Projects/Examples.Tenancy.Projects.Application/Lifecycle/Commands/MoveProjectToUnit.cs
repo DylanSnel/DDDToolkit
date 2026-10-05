@@ -30,17 +30,15 @@ public sealed record MoveProjectToUnit(ProjectId Id, OrganizationUnitId UnitId, 
 }
 
 /// <summary>
-/// Handles <see cref="MoveProjectToUnit"/>: loads the project that was checked, checks the destination, moves it
+/// Handles <see cref="MoveProjectToUnit"/>: loads the project its command names, checks the destination, moves it
 /// and saves.
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="reads">Where Tenancy's rows are read: one reading for everything this command asks.</param>
 /// <param name="access">Who holds which key where, for the destination.</param>
 /// <param name="tenancy">What the tenant allows: an active unit.</param>
 public sealed class MoveProjectToUnitHandler(
     IProjectStore store,
-    Checked<MemberHold<ProjectId>> checkedProject,
     IProjectReads reads,
     ProjectAccess access,
     ProjectTenancy tenancy)
@@ -51,11 +49,10 @@ public sealed class MoveProjectToUnitHandler(
     /// <c>projects.not-found</c>; <c>projects.not-permitted</c> without <see cref="MoveProjectToUnit.DestinationKey"/>
     /// at the unit; <c>projects.unit-not-active</c>, <c>projects.closed</c>.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(MoveProjectToUnit command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         // The second key, at the destination, and only then whether the destination takes anything new: both

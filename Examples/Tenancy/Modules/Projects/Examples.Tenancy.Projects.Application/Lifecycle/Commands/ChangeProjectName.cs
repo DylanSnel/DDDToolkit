@@ -18,18 +18,16 @@ public sealed record ChangeProjectName(ProjectId Id, string Name, long? Expected
     AccessRequirement IRequireAccess.RequiredAccess => MemberAccess.On(RequiredKey, Id, ExpectedVersion);
 }
 
-/// <summary>Handles <see cref="ChangeProjectName"/>: loads the project that was checked, renames it and saves.</summary>
+/// <summary>Handles <see cref="ChangeProjectName"/>: loads the project its command names, renames it and saves.</summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
-public sealed class ChangeProjectNameHandler(IProjectStore store, Checked<MemberHold<ProjectId>> checkedProject) : ICommandHandler<ChangeProjectName>
+public sealed class ChangeProjectNameHandler(IProjectStore store) : ICommandHandler<ChangeProjectName>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>projects.not-found</c>, <c>projects.closed</c>, <c>projects.name-invalid</c>.</exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(ChangeProjectName command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         project.Rename(command.Name);

@@ -1,4 +1,5 @@
 using DDDToolkit.Access;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
 using DDDToolkit.Supporting.Membership.UseCases;
@@ -12,18 +13,18 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Folders;
 /// sight: nobody puts staff on a folder for longer than they themselves hold that key.
 /// <para>
 /// The package decides nothing of the kind. It answers until when the caller holds the key
-/// (<see cref="MemberHold{TResourceId}.Until"/>), which the check kept for this request, and the rule is two
-/// lines over that answer. The keeper holds every key of a folder with no end, and so does the application's
-/// own work, so neither is held back by it.
+/// (<see cref="MemberHold{TResourceId}.Until"/>), asked here of the folders' questions in one statement, and
+/// the rule is two lines over that answer. The keeper holds every key of a folder with no end, and so does the
+/// application's own work, so neither is held back by it.
 /// </para>
 /// </summary>
-/// <param name="held">What the check read of the folder a request is about, kept for that request.</param>
+/// <param name="questions">The folders' access questions: until when the caller holds the key.</param>
 /// <param name="admission">What makes an admission well formed: a member that is known, a role there is.</param>
 /// <param name="context">The host's context.</param>
 /// <param name="callers">Who is calling, for who admitted.</param>
 /// <param name="clock">The clock an admission starts by.</param>
 public sealed class AdmitStaffHandler(
-    Checked<MemberHold<FolderId>> held,
+    IMemberQuestions<FolderId> questions,
     MemberAdmission<FolderId, StaffCode, NamedRole> admission,
     FilingContext context,
     ICallerAccessor callers,
@@ -36,14 +37,14 @@ public sealed class AdmitStaffHandler(
     /// <c>folders.longer-than-held</c> when the admission would outlast the caller's own hold of the key; or the
     /// member is not known, the role is none of a folder's, or the folder's own rules refuse the admission.
     /// </exception>
-    /// <exception cref="ConcurrencyConflictException">The folder changed since it was checked.</exception>
+    /// <exception cref="ConcurrencyConflictException">The folder is at another version than the caller named, or changed while this was saved.</exception>
     public async Task HandleAsync(AdmitStaff command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        // What the check read: the very folder it checked, at the version it checked it at, and until when the
-        // caller holds the key the request required.
-        var hold = held.TakeFor(command);
+        // Until when the caller holds the key its request required: asked of the questions, since the check let
+        // the request through and the handler takes nothing of what it read. It refuses as the check refuses.
+        var hold = await questions.RequireAsync(command.Folder, FolderKeys.Staff, cancellationToken);
 
         // The host's own rule. A hold with no end gives for as long as it likes; one that ends gives until it
         // ends at the latest, so an admission with no end is beyond it too.
@@ -59,8 +60,10 @@ public sealed class AdmitStaffHandler(
         await admission.RequireMemberAsync(command.Staff, cancellationToken);
         await admission.RequireRoleAsync(command.Role, cancellationToken);
 
-        var folder = await context.Folders.SingleOrDefaultAsync(candidate => candidate.Id == hold.Resource && candidate.Version == hold.Version, cancellationToken)
-            ?? throw new ConcurrencyConflictException(typeof(Folder), hold.Resource);
+        // The folder the request names, which its check read, at the version the caller named, if it named one.
+        var folder = await context.Folders.AsTracking().SingleOrDefaultAsync(candidate => candidate.Id == command.Folder, cancellationToken)
+            ?? throw FolderRefusals.Membership.Of(MembershipRefusals.NotFound);
+        context.ExpectVersion(folder, command.ExpectedVersion);
 
         StaffCode? by = callers.Current.Claim("app_metadata.staff") is { } code ? new StaffCode(code) : null;
         var now = clock.GetUtcNow();

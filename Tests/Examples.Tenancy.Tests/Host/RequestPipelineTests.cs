@@ -815,7 +815,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task A_project_changed_since_the_check_is_a_lost_race()
+    public async Task A_project_changed_between_the_check_and_the_load_is_a_lost_race_for_a_caller_that_named_its_version()
     {
         // A step registered after everything else runs after the access check and right before the handler: there
         // it changes the project, in a scope of its own, as another request arriving in between would.
@@ -823,11 +823,15 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             services => services.AddScoped<IPipelineBehavior<ChangeProjectName, Unit>, RenamedMeanwhile>());
         var pier = Harbor.ProjectNamed("Pier 7");
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
+        var read = (await ada.ProjectDetailAsync(pier)).GetProperty("version").GetInt64();
 
-        using var renamed = await ada.PutAsJsonAsync($"/projects/{pier.Id.Value}/name", new { name = "Pier 7, east" }, Cancellation);
+        // Ada names the version she read, which the check finds current. The handler loads the project as it is now,
+        // and holds it to her version there: what she decided was decided about another project, the same answer as
+        // a save that came second.
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/projects/{pier.Id.Value}/name") { Content = JsonContent.Create(new { name = "Pier 7, east" }) };
+        request.Headers.TryAddWithoutValidation("If-Match", $"\"{read}\"");
+        using var renamed = await ada.SendAsync(request, Cancellation);
 
-        // The handler loads the project at the version the check saw. It is no longer that version, so what was
-        // checked is not what would be changed: the same answer as a save that came second.
         await renamed.ShouldBeRefusedAsync(HttpStatusCode.Conflict, RefusalProblems.ConcurrencyConflict);
         (await ada.ProjectDetailAsync(pier)).GetProperty("name").GetString().Should().Be(RenamedMeanwhile.Name, "the request that lost the race changed nothing");
     }
@@ -852,11 +856,12 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task A_crew_role_taken_since_the_check_is_a_lost_race_too()
+    public async Task A_crew_role_taken_between_the_check_and_the_save_leaves_the_write_to_the_database_which_refuses_it()
     {
-        // The same step, taking away the crew role the caller was checked with. A role is a row two tables below
-        // the project, and still a change to the project: its version moves on, so a caller who was a lead when
-        // checked and is none when the handler runs changes nothing.
+        // The same step, taking away the crew role the caller was checked with. Who may rename was decided before the
+        // handler, about a lead; the database checks the write as the caller he is by then, who holds no key that
+        // writes the project, and refuses it, so a caller who was a lead when checked and is none when the handler
+        // runs changes nothing.
         await using var host = await sample.StartAsync(
             services => services.AddScoped<IPipelineBehavior<ChangeProjectName, Unit>, LeadRoleTakenMeanwhile>());
         var pier = Harbor.ProjectNamed("Pier 7");
@@ -870,9 +875,9 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         using var renamed = await vic.PutAsJsonAsync($"/projects/{pier.Id.Value}/name", new { name = "Pier 7, east" }, Cancellation);
 
-        await renamed.ShouldBeRefusedAsync(HttpStatusCode.Conflict, RefusalProblems.ConcurrencyConflict);
+        await renamed.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused);
         var after = await vic.ProjectDetailAsync(pier);
-        after.GetProperty("name").GetString().Should().Be("Pier 7", "the request that lost the race changed nothing");
+        after.GetProperty("name").GetString().Should().Be("Pier 7", "the request the database refused changed nothing");
         after.GetProperty("can").GetProperty("rename").GetBoolean().Should().BeFalse("and he is no lead any more");
     }
 
@@ -904,168 +909,80 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
-    public async Task A_handler_reached_past_the_mediator_has_no_project_to_load()
+    public async Task A_handler_reached_past_the_mediator_is_held_by_the_database_to_what_its_caller_may()
     {
         await using var host = await sample.StartAsync();
         var pier = Harbor.ProjectNamed("Pier 7");
 
-        using (AsSeatOf(DemoPeople.Ada))
-        {
-            await using var scope = host.Services.CreateAsyncScope();
-            var handler = new CloseProjectHandler(
-                scope.ServiceProvider.GetRequiredService<IProjectStore>(),
-                scope.ServiceProvider.GetRequiredService<Checked<MemberHold<ProjectId>>>());
-
-            // Called directly, the command passed no access check, so there is no checked project to load: though
-            // Ada may close this project, and though nothing else stands in the way.
-            var handle = async () => await handler.Handle(new CloseProject(pier.Id), Cancellation);
-            (await handle.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No MemberHold<ProjectId> was kept*");
-
-            // A check counts for the request that passed it, not for one that looks the same. Renaming is sent, and
-            // checked; an equal command handed to the handler directly was not.
-            var sent = new ChangeProjectName(pier.Id, "Pier 7, east");
-            await scope.ServiceProvider.GetRequiredService<ISender>().Send(sent, Cancellation);
-            var rename = new ChangeProjectNameHandler(
-                scope.ServiceProvider.GetRequiredService<IProjectStore>(),
-                scope.ServiceProvider.GetRequiredService<Checked<MemberHold<ProjectId>>>());
-            var again = async () => await rename.Handle(sent with { }, Cancellation);
-            (await again.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No MemberHold<ProjectId> was kept*");
-
-            // Nor does it count twice. The command that was sent was handled, once; handed to the handler again,
-            // the very same command has no checked project left to load.
-            var twice = async () => await rename.Handle(sent, Cancellation);
-            (await twice.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No MemberHold<ProjectId> was kept*");
-        }
-
-        // Opening a project is asked at a unit, with no project to check yet, and is held the same way. Vic is an
-        // observer on Pier 7's crew and holds no key at any unit: handed to the handler directly, his command passed
-        // no check, so there is no unit to open a project at, though the unit is there and the number is free.
+        // Called directly, a command passes no check, and what holds it is the database, which checks every write as
+        // the caller. Vic is an observer on Pier 7's crew: he sees the project and holds no key that writes it, nor one
+        // at any unit, so he closes nothing, and opens nothing, though the unit is there and the number is free.
         using (AsSeatOf(DemoPeople.Vic))
         {
             await using var scope = host.Services.CreateAsyncScope();
-            var open = new OpenProjectHandler(
-                scope.ServiceProvider.GetRequiredService<IProjectStore>(),
-                scope.ServiceProvider.GetRequiredService<IProjectReads>(),
-                scope.ServiceProvider.GetRequiredService<ProjectAccess>(),
-                scope.ServiceProvider.GetRequiredService<ProjectTenancy>(),
-                scope.ServiceProvider.GetRequiredService<MemberAdmission<ProjectId, SeatId, ProjectRoleId>>(),
-                scope.ServiceProvider.GetRequiredService<Checked<OrganizationUnitId>>(),
-                scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>(),
-                scope.ServiceProvider.GetRequiredService<TimeProvider>());
-            var opening = async () => await open.Handle(new OpenProject("P-901", "Past the check", Harbor.Root), Cancellation);
-            (await opening.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No OrganizationUnitId was kept*");
+            var close = ActivatorUtilities.CreateInstance<CloseProjectHandler>(scope.ServiceProvider);
+            var closing = async () => await close.Handle(new CloseProject(pier.Id), Cancellation);
+            (await closing.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.Refused);
+        }
 
-            // Sent, the same command is checked, and refused for the key he does not hold there.
+        using (AsSeatOf(DemoPeople.Vic))
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            var open = ActivatorUtilities.CreateInstance<OpenProjectHandler>(scope.ServiceProvider);
+            var opening = async () => await open.Handle(new OpenProject("P-901", "Past the check", Harbor.Root), Cancellation);
+            (await opening.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ToolkitRefusals.Refused);
+
+            // Sent, the same command is checked, and refused at the door for the key he does not hold there.
             (await RefusalOfAsync(host, new OpenProject("P-901", "Past the check", Harbor.Root))).Code.Should().Be(ProjectRefusals.NotPermitted);
         }
 
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
         var detail = await ada.ProjectDetailAsync(pier);
         detail.GetProperty("state").GetString().Should().Be("open", "the handler that was called directly closed nothing");
-        detail.GetProperty("name").GetString().Should().Be("Pier 7, east");
         (await ada.VisibleProjectsAsync()).Names().Should().NotContain("Past the check", "and the one that was called directly opened nothing");
     }
 
     [Fact]
-    public async Task A_handler_of_inspections_reached_past_the_mediator_has_no_project_to_act_on()
+    public async Task A_handler_of_inspections_reached_past_the_mediator_records_and_shows_nothing_its_caller_may_not_see()
     {
         var host = await sample.SharedAsync();
         var pier = Harbor.ProjectNamed("Pier 7").Id;
 
-        // Juno is Pier 7's surveyor: she sees it, and may record on it.
-        using (AsSeatOf(DemoPeople.Juno))
+        // Hana does not see Pier 7. Called directly, the command asked Projects' gate nothing before its handler, and
+        // the handler asks it for the project's planned range: there is no project for her to record on.
+        using (AsSeatOf(DemoPeople.Hana))
         {
             await using var scope = host.Services.CreateAsyncScope();
-            var sender = scope.ServiceProvider.GetRequiredService<ISender>();
-            var gated = scope.ServiceProvider.GetRequiredService<Checked<GatedProject>>();
-
-            // Called directly, the command asked Projects' gate nothing, so there is no project to record on:
-            // though she may record on this one, and though the title is fine.
-            var record = new RecordInspectionHandler(
-                scope.ServiceProvider.GetRequiredService<IInspectionStore>(),
-                gated,
-                scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>(),
-                scope.ServiceProvider.GetRequiredService<TimeProvider>());
+            var record = ActivatorUtilities.CreateInstance<RecordInspectionHandler>(scope.ServiceProvider);
             var recording = async () => await record.Handle(new RecordInspection(pier, "Loose railing"), Cancellation);
-            (await recording.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No GatedProject was kept*");
+            (await recording.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(ProjectRefusals.NotFound);
 
-            // The same for the query: nothing is listed for a request the gate was not asked about.
-            var list = new ProjectInspectionsHandler(
-                scope.ServiceProvider.GetRequiredService<IInspectionReads>(),
-                gated,
-                scope.ServiceProvider.GetRequiredService<IProjectGate>());
-            var listing = async () => await list.Handle(new ProjectInspections(pier), Cancellation);
-            (await listing.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No GatedProject was kept*");
-
-            // A check counts for the request that passed it, once. The query that was sent was answered; an equal
-            // one, and the very same one a second time, are not.
-            var sent = new ProjectInspections(pier);
-            (await sender.Send(sent, Cancellation)).Items.Should().BeEmpty("the handler that was called directly recorded nothing");
-            var equal = async () => await list.Handle(sent with { }, Cancellation);
-            (await equal.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No GatedProject was kept*");
-            var twice = async () => await list.Handle(sent, Cancellation);
-            (await twice.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No GatedProject was kept*");
-
-            // Sent twice at once, the one query passes the check twice and is answered twice; and then nothing is
-            // left of it for a handler called directly.
-            var atOnce = await Task.WhenAll(sender.Send(sent, Cancellation).AsTask(), sender.Send(sent, Cancellation).AsTask());
-            atOnce.Should().HaveCount(2).And.OnlyContain(answered => answered.Items.Count == 0);
-            (await twice.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*No GatedProject was kept*");
+            // And the query shows her nothing: the database answers its statement as her, and she may record nowhere.
+            var listed = await ActivatorUtilities.CreateInstance<ProjectInspectionsHandler>(scope.ServiceProvider).Handle(new ProjectInspections(pier), Cancellation);
+            listed.Items.Items.Should().BeEmpty();
+            listed.CanRecord.Should().BeFalse();
         }
     }
 
     [Fact]
-    public async Task A_host_that_leaves_a_module_s_access_check_out_runs_no_handler_unchecked()
+    public async Task A_host_that_leaves_a_module_s_access_check_out_still_has_tenancy_s_commands_ask_again()
     {
         // What a program gets that registers a module's handlers and leaves its access behavior out of the pipeline.
-        // Only the behaviors are taken out here: the checks, and what a check keeps for the handlers, are still
-        // registered, so every handler can be made, and the host starts. Nothing is seeded, since the seeder's own
-        // commands would be stopped the same way, and a handler that acted unchecked would need no data to show it.
+        // Only the behaviors are taken out here: the checks are still registered, so every handler can be made, and
+        // the host starts. Nothing is seeded, since the seeder's own commands would run unchecked the same way. What
+        // catches such a host is a check at start-up that every behavior is there; until then, what stands is what
+        // asks again past the behavior.
         Type[] checks = [typeof(ProjectsAccessBehavior<,>), typeof(InspectionsAccessBehavior<,>), typeof(TenantsAccessBehavior<,>)];
         await using var host = await sample.StartAsync(
             seeded: false,
             settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" },
-            services: services =>
-            {
-                foreach (var check in checks)
-                {
-                    services.Remove(services.Where(descriptor => descriptor.ImplementationType == check).Should().ContainSingle("{0} is in the pipeline once", check.Name).Subject);
-                }
-            });
+            services: services => RemoveAll(services, checks));
 
-        var project = ProjectId.CreateSequential();
         var seat = SeatId.CreateSequential();
         var role = ProjectRoleId.CreateSequential();
-        var unit = OrganizationUnitId.CreateSequential();
-
-        // Every request of Projects and of Inspections that acts on a project, or at a unit: its handler takes what
-        // the check kept for the request, finds nothing, and stops. A seat that could do all of it changes nothing.
-        (IMessage Request, string Stopped)[] kept =
-        [
-            (new OpenProject("P-900", "Quay wall", unit), "No OrganizationUnitId was kept"),
-            (new ChangeProjectName(project, "Quay wall, east"), "No MemberHold<ProjectId> was kept"),
-            (new PlanProject(project, Planned: null), "No MemberHold<ProjectId> was kept"),
-            (new MoveProjectToUnit(project, unit), "No MemberHold<ProjectId> was kept"),
-            (new CloseProject(project), "No MemberHold<ProjectId> was kept"),
-            (new ReopenProject(project), "No MemberHold<ProjectId> was kept"),
-            (new AddCrewMember(project, seat, role, Until: null), "No MemberHold<ProjectId> was kept"),
-            (new GiveCrewRole(project, seat, role, Until: null), "No MemberHold<ProjectId> was kept"),
-            (new TakeCrewRole(project, seat, role), "No MemberHold<ProjectId> was kept"),
-            (new RemoveCrewMember(project, seat), "No MemberHold<ProjectId> was kept"),
-            (new ChangeProjectOwner(project, seat), "No MemberHold<ProjectId> was kept"),
-            (new ProjectInspections(project), "No GatedProject was kept"),
-            (new RecordInspection(project, "Loose railing"), "No GatedProject was kept"),
-        ];
 
         using (AsSeatOf(DemoPeople.Ada))
         {
-            foreach (var (request, stopped) in kept)
-            {
-                await using var scope = host.Services.CreateAsyncScope();
-                var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
-                (await send.Should().ThrowAsync<InvalidOperationException>(request.GetType().Name)).WithMessage($"*{stopped}*");
-            }
-
             // Tenancy's check keeps nothing for its handlers, and needs to keep nothing. Every command of the
             // package's goes to a use case of the package, which asks again for what its request requires, whoever
             // calls it; the commands that are the modules' own, marking a tenant as a demonstration and those of the
@@ -1081,6 +998,62 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         // As nobody, a command of the package's is refused by the package, as it is behind the check.
         (await RefusalOfAsync(host, new SuspendTenantSeat(seat))).Code.Should().Be(TenancyRefusals.NotSeated);
+    }
+
+    [Fact]
+    public async Task A_host_that_leaves_a_module_s_access_check_out_changes_no_project_under_the_hold()
+    {
+        // The same host, on the demonstration, with the expert hold on Projects' context. No request's checks were
+        // asked, so no request is in hand, and no project is saved, whoever sends what: here Ada, who may send all of
+        // it, and Vic, who manages no crew, giving up his own place on one, which is saved as the application's work
+        // only for a command its check let through.
+        Type[] checks = [typeof(ProjectsAccessBehavior<,>), typeof(InspectionsAccessBehavior<,>), typeof(TenantsAccessBehavior<,>)];
+        await using var host = await sample.StartAsync(services =>
+        {
+            RemoveAll(services, checks);
+            services.HoldProjectSaves();
+        });
+
+        var pier = Harbor.ProjectNamed("Pier 7");
+        var vic = Harbor.SeatOf(DemoPeople.Vic);
+        var observer = Harbor.ProjectRoles[SampleCatalogue.Observer];
+        (DemoPerson Sender, IMessage Request)[] changes =
+        [
+            (DemoPeople.Ada, new ChangeProjectName(pier.Id, "Quay wall, east")),
+            (DemoPeople.Ada, new MoveProjectToUnit(pier.Id, Harbor.UnitNamed("North Inland"))),
+            (DemoPeople.Ada, new CloseProject(pier.Id)),
+            (DemoPeople.Ada, new AddCrewMember(pier.Id, Harbor.SeatOf(DemoPeople.Tove), Role: null, Until: null)),
+            (DemoPeople.Ada, new ChangeProjectOwner(pier.Id, Harbor.SeatOf(DemoPeople.Juno))),
+            (DemoPeople.Vic, new TakeCrewRole(pier.Id, vic, observer)),
+            (DemoPeople.Vic, new RemoveCrewMember(pier.Id, vic)),
+        ];
+
+        foreach (var (sender, request) in changes)
+        {
+            using (AsSeatOf(sender))
+            {
+                await using var scope = host.Services.CreateAsyncScope();
+                var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, Cancellation);
+                (await send.Should().ThrowAsync<InvalidOperationException>(request.GetType().Name)).WithMessage("*was changed with no request in hand*");
+            }
+        }
+
+        using var ada = await host.ClientAsync("ada", Harbor.Slug);
+        var detail = await ada.ProjectDetailAsync(pier);
+        detail.GetProperty("name").GetString().Should().Be("Pier 7", "no command changed the project");
+        detail.GetProperty("state").GetString().Should().Be("open");
+        (await ada.CrewAsync(pier)).EnumerateArray().Single(member => member.GetProperty("seatId").GetGuid() == vic.Value)
+            .GetProperty("roles").EnumerateArray().Select(held => held.GetProperty("roleId").GetGuid())
+            .Should().Equal([observer.Value], "Vic is on the crew still, with his role");
+    }
+
+    /// <summary>Takes <paramref name="behaviors"/> out of the pipeline, each of which is in it once.</summary>
+    private static void RemoveAll(IServiceCollection services, Type[] behaviors)
+    {
+        foreach (var behavior in behaviors)
+        {
+            services.Remove(services.Where(descriptor => descriptor.ImplementationType == behavior).Should().ContainSingle("{0} is in the pipeline once", behavior.Name).Subject);
+        }
     }
 
     [Fact]

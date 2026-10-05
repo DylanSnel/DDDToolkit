@@ -23,12 +23,13 @@ internal sealed class EfProjectStore(ProjectsContext db) : IProjectStore
 {
     /// <inheritdoc />
     /// <remarks>
-    /// A plain tracked load by id, under the tenant filter, of the whole aggregate in one statement: the project,
-    /// its crew and each member's roles, as they were at one moment. The access rules are not part of it: they
-    /// were asked by the check, whose version this compares with. Composed into this query, Tenancy's untracked
-    /// rows would make the project untracked too, and a change to it would save nothing.
+    /// A plain tracked load by id, under the tenant filter and the caller's row rules, of the whole aggregate in
+    /// one statement: the project, its crew and each member's roles, as they were at one moment. A project the
+    /// caller no longer sees is not there. The access rules are not part of it: they were asked by the check.
+    /// Composed into this query, Tenancy's untracked rows would make the project untracked too, and a change to it
+    /// would save nothing.
     /// </remarks>
-    public async Task<Project?> LoadAsync(ProjectId id, long version, CancellationToken cancellationToken)
+    public async Task<Project?> LoadAsync(ProjectId id, long? expectedVersion, CancellationToken cancellationToken)
     {
         var project = await db.Projects.AsTracking().AsSingleQuery().FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
         if (project is null)
@@ -36,10 +37,10 @@ internal sealed class EfProjectStore(ProjectsContext db) : IProjectStore
             return null;
         }
 
-        // Changed between the check and now: what the check decided was decided about another version, and so was
-        // what the caller decided, when its command named the version it had read. The same answer as a save that
-        // came second, which is what this would have become; and from here the save compares against that version.
-        db.ExpectVersion(project, version);
+        // At another version than the caller read: what it decided was decided about another project. The same
+        // answer as a save that came second, which is what this would have become; and from here the save compares
+        // against the version loaded. No version named, nothing to compare: the caller changes it as it is now.
+        db.ExpectVersion(project, expectedVersion);
         return project;
     }
 

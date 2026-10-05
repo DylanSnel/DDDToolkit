@@ -137,8 +137,8 @@ public static class FilingModule
 the resource it names. `HasMembers` adds two tables to your model, `DocumentShares` and
 `DocumentShareRoles`: add a migration for them, as for any change to it.
 
-**A request and its handler.** A request says what it requires, and its handler changes exactly what was
-checked:
+**A request and its handler.** A request says what it requires, and its handler changes the document the
+request names, which is the one that was checked:
 
 ```csharp
 public interface IFilingRequest : IRequireAccess;                   // what every request of your module implements
@@ -151,7 +151,6 @@ public sealed record ShareDocument(DocumentId Document, UserId With, string Role
 public sealed class DocumentHandlers(
     FilingContext db,
     MemberAdmission<DocumentId, UserId, NamedRole> admission,
-    Checked<MemberHold<DocumentId>> checkedDocument,
     ICallerAccessor callers,
     TimeProvider clock)
 {
@@ -172,9 +171,9 @@ public sealed class DocumentHandlers(
         var role = new NamedRole(command.Role);                                      // "contributor"
         await admission.RequireRoleAsync(role, cancellationToken);                   // one of the roles the rules declare
 
-        var seen = checkedDocument.TakeFor(command);                                 // what the check read
-        var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == seen.Resource && row.Version == seen.Version, cancellationToken)
-            ?? throw new ConcurrencyConflictException(typeof(Document), seen.Resource);
+        var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == command.Document, cancellationToken)
+            ?? throw Document.Codes.Of(MembershipRefusals.NotFound);                 // gone since the check
+        db.ExpectVersion(document, command.ExpectedVersion);                         // If-Match: a stale version is a 409
 
         var now = clock.GetUtcNow();
         document.ShareWith(command.With, role, MemberPeriod.Between(now, command.Until), now, by: new UserId(callers.Current.UserId!.Value));
@@ -197,7 +196,7 @@ flowchart LR
     Check -- "not a member now" --> NotFound["documents.not-found"]
     Check -- "member, key not held" --> NotPermitted["documents.not-permitted"]
     Check -- "key held,<br/>another version" --> Lost["a lost race"]
-    Check -- "key held" --> Handler["the handler<br/>changes what was checked"]
+    Check -- "key held" --> Handler["the handler<br/>loads the document<br/>its request names"]
 ```
 
 <details>
@@ -215,7 +214,7 @@ case MemberAccess<DocumentId>.On required:
         throw new ConcurrencyConflictException(typeof(Document), required.Resource);
     }
 
-    kept.KeepFor(request, hold);                    // what the handler takes: the document, its version, the hold
+    kept.KeepFor(request, hold);                    // for the expert hold; the handler takes nothing of it
     break;
 }
 ```
@@ -247,7 +246,7 @@ questions only as the caller your host began.
 | `IFilingRequest` | What tells your module's requests from another's: the [checks are registered for it](access-requirements.md#what-a-request-declares). |
 | `RequiredAccess`, explicitly, with `ExpectedVersion` | Which key a command takes is yours to say. Explicitly, so it is no field of the request. The version is the one the caller read, for a command that sends it: it is compared after the key, so a caller without access learns nothing from it. |
 | `RequireRoleAsync` in the handler | The member list takes any role: it cannot know which roles there are. `MemberAdmission` asks the rules, and, where you registered them, whether the one to be made a member is known (`RequireMemberAsync` and an `IMemberDirectory`) and whether a role goes to a member at all (`IMemberRolePolicy`). |
-| `TakeFor`, and the load at that version | The check and the load are two statements. Loading at the version the check read makes a change in between a lost race, rather than a change made on the strength of a check of something else. |
+| `ExpectVersion` after the load | The check and the load are two statements. The version the caller named is held again where the handler loads, so a change in between is a lost race; a caller that named none asked for the document as it is. The rest is there already ([from the check to the save](#from-the-check-to-the-save)). |
 
 ### The member list is written for you
 
@@ -299,6 +298,95 @@ private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
 `_shares` is the field the toolkit keeps `Shares` in. A resource that has no list, and cannot be given one,
 is told what stands in the way when it is built: [DDD00059](diagnostics.md#ddd00059).
 
+## From the check to the save
+
+The check runs before the handler, and the handler loads, changes and saves after it. Between the two, other
+requests go on: somebody renames the document, takes a role from the caller, revokes what reached it from
+above. What holds a change through that, on the default path, is what is already there, each doing one thing:
+
+```mermaid
+flowchart LR
+    Check["the request's check<br/>who: the key held"] -- "met" --> Load["the load by id<br/>ExpectVersion"]
+    Load -- "not the version<br/>the caller named" --> Lost["409<br/>a lost race"]
+    Load -- "not seen any more" --> NotFound["404"]
+    Load --> Change["the aggregate<br/>keeps its rules"]
+    Change --> Save["the save compares<br/>the version loaded"]
+    Save -- "changed since<br/>the load" --> Lost
+    Save --> Database["the database<br/>checks the write"]
+    Database -- "no key left<br/>that writes it" --> Refused["403<br/>access.refused"]
+    Database --> Saved["saved"]
+```
+
+1. **The request's requirement**, `MemberAccess.On(key, document, ExpectedVersion)`, before the handler: who
+   may, and, where the caller named the version it read, that the document is still at it.
+2. **The load by id.** The handler loads the document its request names, which is the one that was checked,
+   and holds it to the version the caller named, with one line: `db.ExpectVersion(document, command.ExpectedVersion)`.
+   A document changed between the check and the load is the same 409 as at the check. A caller that named no
+   version asked for the document as it is, and gets it.
+3. **The save** compares the version it loaded, so a change between the load and the save is a lost race too.
+4. **The aggregate's own rules** keep the document right, whatever version it is at: an archived document
+   takes no member, the owner stays.
+5. **The database**, where it checks every row as the caller ([on Postgres](#on-postgres-the-second-lock), with
+   row level security forced), checks the write once more. A caller that lost every key that writes the
+   document since the check is refused there, `access.refused`, 403, and nothing is written; one the
+   document is hidden from by then finds none to load, 404.
+
+So permission is about who, and the version is about what the caller read. How the caller holds the key, and
+until when, a rule of yours [asks the questions for](#who-may-give-a-role-is-yours-to-decide), in one
+statement.
+
+<details>
+<summary>Show the code: the handler, and a store that loads with the version</summary>
+
+```csharp
+// The handler, with the context: two lines for the load
+var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == command.Document, cancellationToken)
+    ?? throw Document.Codes.Of(MembershipRefusals.NotFound);
+db.ExpectVersion(document, command.ExpectedVersion);       // none named: nothing to compare
+
+// Or behind a store of yours, which the handler calls in one line:
+// var document = await store.LoadAsync(command.Document, command.ExpectedVersion, cancellationToken)
+//     ?? throw Document.Codes.Of(MembershipRefusals.NotFound);
+public async Task<Document?> LoadAsync(DocumentId id, long? expectedVersion, CancellationToken cancellationToken)
+{
+    var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == id, cancellationToken);
+    if (document is not null)
+    {
+        db.ExpectVersion(document, expectedVersion);
+    }
+
+    return document;
+}
+```
+
+</details>
+
+What happens to a rename of the Tenancy sample's projects, with a change played between its check and its
+handler, on Postgres with the policies forced (`AccessHoldScenarios`):
+
+| Between the check and the handler | The rename |
+|---|---|
+| the caller's role that gave the key is taken | 403 `access.refused`: the database refuses the write |
+| what reached the project from above is revoked, or the project moved out of reach | 404: there is none to load |
+| somebody else renamed it, and the caller named the version it read | 409, at the load |
+| somebody else renamed it, and the caller named no version | saved: the last write wins, which is what a caller that names no version asks for |
+| the project moved to a place where the caller still holds the key | saved: who the caller is did not change |
+
+What the default path does not do, in plain sight:
+
+- **The database checks what its policies say, and nothing finer.** A policy that lets any key that writes a
+  row through lets a caller through that lost the command's own key and kept another one between the check
+  and the save. Write the policy per key where that matters.
+- **A handler reached around its checks** is held by the database alone, to what its caller may: a caller
+  that may do it does it. Whatever sends your requests asks the checks; a test can hold that. A save your
+  handler runs as the application's own work is held by no row rule at all, so begin that work only for a
+  request whose check let it through: `RequestInHand.Current` is then that very request
+  ([the request in hand](access-requirements.md#the-request-in-hand)), as in the Tenancy sample's
+  `OwnPlaceOnTheCrew`.
+- **The save is not tied to the version the check read.** For a caller that named no version, a change
+  between the check and the load is the last write that wins. [The expert hold](#the-expert-hold) ties it, and
+  refuses a handler reached around its checks, with one line.
+
 ## Who may give a role is yours to decide
 
 The package keeps the members and answers who holds which key. Adding a member, giving or taking a role
@@ -310,9 +398,9 @@ Whoever holds `documents.share` on the document shares it, with anyone, in any r
 say. The owner holds every key of the resource, so the owner may. A member may when one of its roles gives
 the key, which is your rules' to say.
 
-**A rule of your own.** Anything further you write in the handler, over what the check read. The hold says
-until when the caller holds the key, so "nobody gives a role for longer than they hold the key themselves"
-is a few lines:
+**A rule of your own.** Anything further you write in the handler. The questions say until when the caller
+holds the key, in one statement, so "nobody gives a role for longer than they hold the key themselves" is a
+few lines:
 
 ```csharp
 public sealed record AdmitStaff(FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until, long? ExpectedVersion = null) : IFilingRequest
@@ -321,7 +409,7 @@ public sealed record AdmitStaff(FolderId Folder, StaffCode Staff, NamedRole Role
 }
 
 // In the handler:
-var hold = checkedFolder.TakeFor(command);                      // Checked<MemberHold<FolderId>>
+var hold = await questions.RequireAsync(command.Folder, "folders.staff", cancellationToken);   // IMemberQuestions<FolderId>
 if (hold.Until is { } mine && (command.Until is not { } theirs || theirs > mine))
 {
     throw new RefusalException("folders.longer-than-held", RefusalKind.NotPermitted,
@@ -341,6 +429,7 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
   [held from above for as long as it is seen](#beside-an-organization).
 - **The package applies no rule of its own here.** Not "no further than your own hold", and not "never to
   yourself": a caller who passes what your command requires gives what your handler lets it give.
+- **How the caller holds the key,** `MemberHold.Via`, is in the same answer, for a rule about that.
 
 ## What the package keeps
 
@@ -658,7 +747,9 @@ public static MembershipRules Rules { get; } = new(
   changed: the rows a hand-over writes after that are not its to write, under the lock or under a rule of
   yours that asks what the caller holds. Somebody who holds the key through a role, or
   [from above](#beside-an-organization), hands a resource on as itself. An owner's own hand-over is saved
-  as the application's own work, once your command's check let it through.
+  as the application's own work, once your command's check let it through: the handler knows that by the
+  [request in hand](access-requirements.md#the-request-in-hand), `RequestInHand.Current` being its command,
+  and saves as the caller otherwise.
 - **For a resource the database checks.** On a resource with no row access rules of yours the lock's
   policies would be the only ones on the member tables, and nobody would read a row of them.
 
@@ -1178,6 +1269,108 @@ package. And only for seats:
   context puts it, and the export refuses a name nothing defines. Tenancy keeps every row to its tenant;
   what a seat reads inside it is your [row access rule](#on-postgres-the-second-lock), asking the resource's
   functions.
+
+## The expert hold
+
+The default path holds a change to who its caller is, and to the version its caller named. A host that wants
+more switches the **expert hold** on, with one line on the context and none in a handler:
+
+```csharp
+services.AddDbContext<FilingContext>((serviceProvider, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(serviceProvider)
+    .UseMemberHolds(serviceProvider));             // every save of a document held to its request's check
+```
+
+From then on every save that changes a resource with members, a member or a role of one included, is held
+to what the access check of its request read of that resource: the version it read it at.
+
+| The save changes | Under the hold |
+|---|---|
+| the resource its request's check read, at that version | saved |
+| that resource, changed since the check, version named or not | 409, a lost race, whatever changed: a rename, a crew row, a move |
+| a resource no check of its request read, a handler called directly, a transport around the pipeline, a save after the request's handling returned, another resource than the request names | refused with an `InvalidOperationException`, and nothing is saved |
+| any other resource, as the application's own work that trusted code began (`Callers.Begin(Caller.System)`, or a scope the rules name) | saved: system work needs no check. A resource the request's check did read stays held to its version, whoever saves it |
+| a new resource | saved: there was nothing to check |
+
+```mermaid
+sequenceDiagram
+    participant Behavior as the access behavior
+    participant Check as MemberAccessCheck
+    participant Handler
+    participant Save as the save
+    Behavior->>Check: the request in hand
+    Check-->>Behavior: met, the hold kept with it
+    Behavior->>Handler: the request
+    Handler->>Save: SaveChanges
+    Save->>Save: each resource changed:<br/>the hold in hand?
+    Save-->>Handler: saved, 409 or refused
+```
+
+The handler is handed nothing and passes nothing on. What ties the save to the check is the **request in
+hand** ([`RequestInHand`](access-requirements.md#the-request-in-hand)): `AccessChecks.RequireAsync` puts the
+request in hand for the flow of work that asked, the method that runs the handler next, from the moment the
+checks let it through; `MemberAccessCheck` keeps what it read with it, in `Checked<MemberHold<DocumentId>>`;
+and at the save the hold finds it there, for each resource the save changes.
+
+<details>
+<summary>Show the code: what the save asks</summary>
+
+```csharp title="MemberHoldInterceptor, shortened"
+foreach (var root in ChangedRoots(context))                // changed or deleted, or a member or a role beneath it
+{
+    if (resource.HoldInHand(root.Entity) is { } hold)      // Checked<MemberHold<DocumentId>>.TryFindInHand, for this document
+    {
+        var expected = SavedBefore(root, hold) ?? hold.Version;   // once a save of this handling succeeded: the version it left
+        if (root.Property("Version").OriginalValue is not long loaded || loaded != expected)
+        {
+            throw new ConcurrencyConflictException(root.Metadata.ClrType, hold.Resource);
+        }
+
+        continue;                                          // and the save compares that version, as every save does
+    }
+
+    if (IsOwnWork(resource.Rules))                         // begun by trusted code, and the host answers it too
+    {
+        continue;
+    }
+
+    throw new InvalidOperationException("Document ... was changed with no request in hand ... Nothing was saved.");
+}
+```
+
+</details>
+
+- **Why the flow and not the scope.** A scope can handle more than one request: the mutations of one GraphQL
+  request, or a query sent before a command. A hold a query's check kept in the same scope must not let a
+  handler called directly save, and it does not: what the save finds is what the request whose handling it is
+  in passed with, and nothing of another.
+- **Ask the checks and run the handler in one `async` method.** The behavior the generator writes does, and so
+  does [a dispatcher of your own](access-requirements.md#asking-the-checks-without-mediator) that awaits
+  `RequireAsync` and then the handler. A helper that only asks the checks has the request in hand inside itself
+  alone, and every save after it is refused. A dispatcher that is not an `async` method, one that chains the
+  handler onto the checks and returns the task, leaves the request in hand for its caller, and a handler that
+  caller then calls directly would be held as part of the request.
+- **Save inside the access behavior.** What is in hand is gone once the access behavior returned, so a save
+  after that is refused, on every command. A unit-of-work behavior that saves after the handler has to run
+  inside the access behavior, so it is registered after it: where the access behavior is added with
+  `Add{Module}AccessBehavior()`, the unit of work is added after that call as well, not listed in
+  `MediatorOptions.PipelineBehaviors`, whose behaviors run first. And an endpoint does not save after `Send`.
+- **A handler may save twice.** The first save is held to the check; once it succeeded, the next is held to
+  the version that save left. A save that failed counts for nothing: tried again with the stored values
+  taken as the loaded ones, it is not at the version the check read, and is a 409 again.
+- **The save has to compare the version.** A model that does not map `Version` as a concurrency token is
+  refused at the first held save, and `UseMemberHolds` before `UseDDDToolkit` is refused where the context is
+  built: the hold runs after the domain event handlers, so it holds what they change too.
+- **What changes is held, whoever changes it in the handling.** A domain event handler that runs in the save
+  and changes another resource with members is refused, unless it begins the application's own work for it.
+- **It costs no statement.** It compares versions the context loaded already. What it adds over the default
+  path is a 409 for a change the caller's own rights did not depend on, a document moved to a place where the
+  caller still holds the key say, and a refusal for a handler reached around its checks.
+- **Off, it does nothing,** and `MemberAccessCheck` keeps what it read all the same: that costs nothing either.
+
+The Tenancy sample ships the default path. Its tests switch the hold on for Projects' context, with the same
+line through `ConfigureDbContext`, and play the races both ways: `AccessHoldScenarios`.
 
 ## What it does not do
 

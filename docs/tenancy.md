@@ -1794,9 +1794,9 @@ sequenceDiagram
     Behavior->>Check: the check that decides<br/>a key on a project
     Check->>Questions: projects.close on Pier 7?<br/>one statement, on a context of its own
     Questions-->>Check: held through the crew,<br/>read at version 7
-    Check-->>Behavior: met, and what was read is kept
+    Check-->>Behavior: met
     Behavior->>Handler: checked
-    Handler->>IProjectStore: LoadAsync(Pier 7, version 7)
+    Handler->>IProjectStore: LoadAsync(Pier 7, If-Match)
     IProjectStore-->>Handler: the project, tracked
     Handler->>Handler: project.Close()
     Handler->>IProjectStore: SaveAsync()
@@ -1828,7 +1828,7 @@ public sealed record CloseProject(ProjectId Id, long? ExpectedVersion = null) : 
 public interface IProjectsRequest : IRequireAccess;
 
 // MemberAccessCheck, the Membership package's, which AddProjectMemberAccess<IProjectsRequest>() adds: the check
-// for a key on a project. What it read is kept for this request.
+// for a key on a project. What it read it keeps with the request, for the expert hold; the handler takes none of it.
 case MemberAccess<ProjectId>.On required:
 {
     var hold = await access.RequireAsync(required.Resource, required.Key, cancellationToken);
@@ -1843,13 +1843,12 @@ case MemberAccess<ProjectId>.On required:
     break;
 }
 
-// CloseProject.cs again: the handler loads the project the check read, calls the domain, and saves
-public sealed class CloseProjectHandler(IProjectStore store, Checked<MemberHold<ProjectId>> checkedProject) : ICommandHandler<CloseProject>
+// CloseProject.cs again: the handler loads the project its command names, calls the domain, and saves
+public sealed class CloseProjectHandler(IProjectStore store) : ICommandHandler<CloseProject>
 {
     public async ValueTask<Unit> Handle(CloseProject command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);          // which project the check read, and at which version
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)   // If-Match held at the load
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         project.Close();
@@ -1874,12 +1873,16 @@ Tenancy package's cases, and its check is added to each module's set. That the c
 application itself, the toolkit decides in every set. A case no check of the module decides stops the request
 where it is sent, and a test holds every case the requests declare to having a check.
 
-The check and the load are two statements, and the check reads on a context of its own. So the handler takes
-from the check which project it read and at which version, and loads that. A project changed in between, by a
-crew change as much as by a rename, answers 409 `concurrency-conflict`, as a save that came second does, and
-nothing is changed on the strength of a check of something else. What the check kept is handed out once, to
-the handler of the request that passed it: a handler called with a request that was never sent has nothing to
-load, and throws.
+The check and the load are two statements, and the check reads on a context of its own. The handler loads the
+project its command names, which is the one that was checked, and holds it to the version the caller named
+with `If-Match`: a project changed in between, by a crew change as much as by a rename, answers 409
+`concurrency-conflict`, as a save that came second does. A command that names no version changes the project
+as it is. Who may was the check's to decide; what holds the write after it is the version the save compares,
+the project's own rules, and the database, which checks every row as the caller: a caller that lost every key
+that writes the project by then is refused, 403 `access.refused`, and one it is hidden from by then finds none
+to load. [From the check to the save](membership.md#from-the-check-to-the-save) has the whole of it, and
+[the expert hold](membership.md#the-expert-hold) what a host adds with one line to tie the save to the version
+the check read as well; the sample ships without it, and its tests play the races both ways.
 
 What each request declares, and what its handler still decides, because it depends on more than the request
 can say beforehand:
@@ -1910,15 +1913,17 @@ can say beforehand:
 | Inspections | Declares | The handler adds |
 |---|---|---|
 | `ProjectInspections`, `InspectionDetail` (queries) | `projects.view` on the project | for the list, whether the caller may record, asked with `RecordInspection`'s key |
-| `InspectionsOfProjects` (query) | `projects.view` on each of the projects: one out of reach is left out, and nobody is refused | |
-| `ProjectsOpenToRecording` (query) | `inspections.record` on each of the projects, the same way | |
-| `RecordInspection` | `inspections.record` on the project, which must be open, recorded by a seat | the title and the days, which the inspection checks itself; days outside the project's planned range, which the gate answered, are `inspections.outside-planned-range` |
+| `InspectionsOfProjects` (query) | `projects.view` on each of the projects: one out of reach is left out, and nobody is refused | which of them the caller sees, asked of Projects' gate once for all of them |
+| `ProjectsOpenToRecording` (query) | `inspections.record` on each of the projects, the same way | which of them the caller may record on and are open, asked of Projects' gate once for all of them |
+| `RecordInspection` | `inspections.record` on the project, which must be open, recorded by a seat | the title and the days, which the inspection checks itself; days outside the project's planned range, which the handler asks the gate for, are `inspections.outside-planned-range` |
 | `TenantProjectInspections` (query) | an operator, and nobody else | |
 
 Inspections cannot answer any of the keys itself. Its check asks Projects' gate, `IProjectGate`, and maps the answer: a
 project out of sight is `projects.not-found`, a closed one `projects.closed`, a key not held
-`projects.not-permitted`. Its handlers act on the project the gate answered for, which the check keeps for
-them as Projects' check keeps the project it read.
+`projects.not-permitted`. Its handlers act on the project their request names, which is the one the gate
+answered for, and ask the gate themselves for what they need of it: the planned range an inspection is held
+to, or which of a list of projects the caller sees, asked once for all of them. The check of a list asks
+nothing about a project, as a query that declares `MemberAccess.SeenWith` is filtered by its own statement.
 
 | Tenants | Declares | The package's use case asks besides |
 |---|---|---|
@@ -3233,7 +3238,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleTenancyContribution.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleTenancyContribution.cs), `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
 | A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, re-key and archive | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
-| A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios` |
+| A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. Only for the command whose check let it through, the request in hand: a handler reached around its check saves as the caller, and the database judges it. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios`, `AccessHoldScenarios` |
 
 ### Structure
 
@@ -3283,7 +3288,8 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | The seat a route inside a tenant needs is an authorization policy of the host, so a caller without one is answered before the route reads its arguments | **Code:** [`SamplePolicies.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/SamplePolicies.cs), [`SeatRequirementHandler.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/SeatRequirementHandler.cs)<br/>**Try it:** Preset `other-tenants-slug`; rhea's body that would not bind, sent to meadow, in the `.http` file<br/>**Test:** `SeatPolicyScenarios` |
 | Enum values travel by name in lower snake case, in answers and in bodies: the host's choice, made once | **Code:** [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleGraphQL.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGraphQL.cs)<br/>**Try it:** Any answer: `"state": "open"`, `"via": "crew"`<br/>**Test:** `EnumSpellingScenarios` |
-| A change may name the version its caller read. A stale one is a 409, the answer a save that came second gets, and it is compared only after access | **Code:** [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs), [`ProjectVersions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Rest/ProjectVersions.cs)<br/>**Try it:** leo renames Pier 7 with `If-Match`, then again with the old version, in the `.http` file<br/>**Test:** `VersionScenarios` |
+| A change may name the version its caller read. A stale one is a 409, the answer a save that came second gets, compared only after access, and again where the handler loads | **Code:** [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs), [`ProjectVersions.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Rest/ProjectVersions.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** leo renames Pier 7 with `If-Match`, then again with the old version, in the `.http` file<br/>**Test:** `VersionScenarios`, `AccessHoldScenarios` |
+| A handler takes nothing from its check: it loads what its command names, and the save, the project's rules and the database hold the write. The expert hold, one line, ties the save to the version the check read as well, and the sample ships without it | **Code:** [`ChangeProjectName.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/ChangeProjectName.cs), [`MemberHoldInterceptor.cs`](../Source/DDDToolkit.Supporting.Membership.EntityFramework/Saving/MemberHoldInterceptor.cs)<br/>**Try it:** a race is not played by hand: the tests play each one, with a step between the check and the handler<br/>**Test:** `AccessHoldScenarios`, `RequestPipelineTests`, `HoldsCheckedAtSaveTests` |
 | A list comes a page at a time with a cursor, is counted only when asked, and a filter narrows it and never widens it. A marker that is no cursor of the list is refused | **Code:** [`VisibleProjects.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Overview/Queries/VisibleProjects.cs), [`EfProjectReads.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectReads.cs), [`ListCursors.cs`](../Examples/Tenancy/Shared/Examples.Tenancy.Shared.Infrastructure/Paging/ListCursors.cs)<br/>**Try it:** rhea's `GET /projects?size=1&count=true` and the page after it, in the `.http` file; the filters and More on My projects<br/>**Test:** `ProjectListScenarios`, `InspectionListScenarios`, `ListCursorsTests`, `AccessStatementTests` |
 | A browser client on another origin is let in only when the host lists its origin | **Code:** [`BrowserCors.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Requests/BrowserCors.cs)<br/>**Try it:** `Sample:Cors:Origins` in the host's settings, and the `fetch` example on [the samples' page](../Examples/README.md#the-tenancy-sample)<br/>**Test:** `CorsTests` |
 

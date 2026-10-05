@@ -32,17 +32,15 @@ public sealed record AddCrewMember(ProjectId Project, SeatId Seat, ProjectRoleId
 }
 
 /// <summary>
-/// Handles <see cref="AddCrewMember"/>: loads the project that was checked, has the seat and the role admitted,
+/// Handles <see cref="AddCrewMember"/>: loads the project its command names, has the seat and the role admitted,
 /// adds the member, with the role when one was named, and saves.
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="admission">Whether the seat may go on a crew, and the role on a member: the projects' rules.</param>
 /// <param name="answers">Tenancy's answers about the current caller, for who added the member.</param>
 /// <param name="clock">What "now" is: when the membership starts.</param>
 public sealed class AddCrewMemberHandler(
     IProjectStore store,
-    Checked<MemberHold<ProjectId>> checkedProject,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
     SampleAnswers answers,
     TimeProvider clock)
@@ -54,11 +52,10 @@ public sealed class AddCrewMemberHandler(
     /// <c>projects.already-on-crew</c>, <c>projects.closed</c>, and <c>tenancy.invalid-period</c> for an end that is
     /// not after now.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(AddCrewMember command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         await admission.RequireMemberAsync(command.Seat, cancellationToken);

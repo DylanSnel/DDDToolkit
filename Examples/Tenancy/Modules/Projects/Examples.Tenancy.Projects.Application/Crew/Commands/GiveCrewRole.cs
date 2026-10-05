@@ -32,17 +32,15 @@ public sealed record GiveCrewRole(ProjectId Project, SeatId Seat, ProjectRoleId 
 }
 
 /// <summary>
-/// Handles <see cref="GiveCrewRole"/>: loads the project that was checked, has the role admitted, gives it and
+/// Handles <see cref="GiveCrewRole"/>: loads the project its command names, has the role admitted, gives it and
 /// saves.
 /// </summary>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="admission">Whether the role may go on a member: one of the tenant's project roles in use.</param>
 /// <param name="answers">Tenancy's answers about the current caller, for who gave the role.</param>
 /// <param name="clock">What "now" is: when the role starts.</param>
 public sealed class GiveCrewRoleHandler(
     IProjectStore store,
-    Checked<MemberHold<ProjectId>> checkedProject,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
     SampleAnswers answers,
     TimeProvider clock)
@@ -54,11 +52,10 @@ public sealed class GiveCrewRoleHandler(
     /// <c>projects.crew-role-held</c>, <c>projects.closed</c>, and <c>tenancy.invalid-period</c> for an end that is
     /// not after now.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(GiveCrewRole command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         await admission.RequireRoleAsync(command.Role, cancellationToken);

@@ -50,8 +50,8 @@ public static class InspectionsApplicationServices
         services.AddTenancyPermissions(InspectionCatalogue.Permissions);
 
         // The check for the cases that take Projects' gate, and the behavior that asks the module's checks before
-        // every handler. The project a request passed the gate for is kept for that request's handler
-        // (Checked<T>), which is registered with the checks: a handler cannot be made where they were left out.
+        // every handler. A handler takes nothing from them: it acts on the project its request names, which is the
+        // one the gate answered for, and asks the gate itself for what it needs of that project.
         services.AddAccessCheck<IInspectionsRequest, InspectionsAccessCheck>();
         services.AddInspectionsAccessBehavior();
 

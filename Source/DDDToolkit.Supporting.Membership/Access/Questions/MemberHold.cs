@@ -4,16 +4,23 @@ namespace DDDToolkit.Supporting.Membership.Access;
 
 /// <summary>
 /// What the access questions read of one resource the caller may see: how the caller holds the key asked
-/// about and until when, and what a command needs to act on exactly the resource that was checked.
+/// about and until when, and the version the resource was at.
 /// </summary>
-/// <param name="Resource">The resource that was read: the one a command then loads, whatever its request says.</param>
+/// <remarks>
+/// <see cref="MemberAccessCheck{TResource, TResourceId}"/> keeps the one it read for a request, in
+/// <see cref="DDDToolkit.Access.Checked{T}"/>, for the expert hold: a context that asks for it holds every save
+/// of the resource to <see cref="Version"/>. A handler on the default path takes nothing from there. A rule of
+/// its own that reads <see cref="Via"/> or <see cref="Until"/> asks the questions for a hold
+/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
+/// </remarks>
+/// <param name="Resource">The resource that was read.</param>
 /// <param name="Via">
 /// How the caller holds the key on it, or <see langword="null"/> when the caller sees the resource without
 /// holding the key. Never <see langword="null"/> on a hold a requirement let through.
 /// </param>
 /// <param name="Version">
-/// The resource's version when it was read. A command loads the resource at this version, so what it changes
-/// is what was checked, and a resource changed in between is a lost race.
+/// The resource's version when it was read. Under the expert hold a save of the resource at another version is
+/// a lost race, so what is changed is what was checked.
 /// </param>
 /// <param name="Until">
 /// The first moment the caller no longer holds the key on the resource, as its membership and its roles stand

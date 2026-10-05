@@ -29,6 +29,7 @@ public class MembershipDocsExampleTests
         using System.Threading.Tasks;
         using DDDToolkit.Abstractions.Attributes;
         using DDDToolkit.Access;
+        using DDDToolkit.EntityFramework;
         using DDDToolkit.EntityFramework.Conventions;
         using DDDToolkit.Exceptions;
         using DDDToolkit.Supporting.Membership;

@@ -149,11 +149,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   something no check of its module decides, is stopped rather than let through, with a message that names the
   call that adds the missing check: a package's own, which `[AccessCheckRegistration]` on its requirement
   says, `services.AddTenancyAccess<IBillingRequest, TContext>()` for Tenancy's cases, and otherwise
-  `AddAccessCheck<IBillingRequest, TCheck>()`. `Checked<T>` keeps what a
-  check read for the handler of that request and hands it out once, so a handler acts on what was checked
-  and one reached round the check has nothing to act on. What is kept is what the request's latest pass
-  read: a request that passed, never reached its handler and is sent again in the same scope is handed
-  what the second pass read, and nothing of the first stays behind. `services.AddAccessChecks<TRequests>()`
+  `AddAccessCheck<IBillingRequest, TCheck>()`. A handler acts on its request: the check was asked about what
+  the request names. `Checked<T>` keeps what a check worked out for the code after it that handles the same
+  request, an answer the handler would otherwise ask for a second time, and `TakeFor` hands it out once. What
+  is kept is what the request's latest pass read: a request that passed, never reached its handler and is
+  sent again in the same scope is handed what the second pass read, and nothing of the first stays behind.
+  `AccessChecks<TRequests>.RequireAsync(request)` puts the request in hand for the flow of work that asked, from
+  the moment the checks let it through: `RequestInHand.Current` is that request in the method that asked and in
+  what it runs after, the handler and its save included, and what a check kept is found there without the
+  request, `Checked<T>.TryFindInHand(out var kept)`. Ask the checks and run the handler in one `async` method,
+  as the generated behavior does: only an `async` method gives its caller the flow back as it was, and what runs
+  after it returned has nothing in hand. `services.AddAccessChecks<TRequests>()`
   registers the set alone, for whoever asks it in front of the handlers of a module that adds no check, since
   its requests require only what the core decides. All of it is in `DDDToolkit.Access`. See
   [Access requirements](docs/access-requirements.md) and [the vocabulary](docs/access-requirements.md#the-vocabulary).
@@ -243,8 +249,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **`ExpectVersion`.** `context.ExpectVersion(aggregate, version)` in `DDDToolkit.EntityFramework` says
   which version of an aggregate the client last saw: another loaded version is a
   `ConcurrencyConflictException` before anything changes, and the same version leaves the save to compare
-  as it does, so a change made after the load is the same conflict. See
-  [The version the client saw](docs/entity-framework.md#the-version-the-client-saw).
+  as it does, so a change made after the load is the same conflict. A request's `long? ExpectedVersion` goes
+  in as it is, `context.ExpectVersion(aggregate, command.ExpectedVersion)`: `null` compares nothing, and the
+  save compares the version loaded, so one line after the load serves a client that names a version and one
+  that does not. See [The version the client saw](docs/entity-framework.md#the-version-the-client-saw).
 - `IsFixedAfterInsert()`, in `DDDToolkit.EntityFramework`, says a property never changes once its row is
   saved: Entity Framework throws when a save would change it, and a script with `WriteGrants` leaves its
   column out of the `UPDATE` grant.
@@ -986,9 +994,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   who did not sign in, who reaches nothing under any rules, before the query's statement is sent. Who may
   add a member or give a role is the
   application's to decide: the package has no key of its own for it and no rule about who gives what. A
-  command requires the key the application chooses, and a hold says until when its caller holds that key
-  (`MemberHold.Until`, no end for the owner and for the application's own work), for a rule the application
-  writes itself, such as that nobody gives a role for longer than they hold the key. The application itself
+  command requires the key the application chooses, and the questions say until when its caller holds that
+  key (`HoldAsync`, `MemberHold.Until`, no end for the owner and for the application's own work), for a rule
+  the application writes itself, such as that nobody gives a role for longer than they hold the key. The application itself
   (`Caller.System`) holds every key; its work in a scope (`Caller.SystemIn`) holds nothing on a resource
   unless the resource's rules name that scope, `systemScopes`. Refusals carry the
   resource's own codes, in English and Dutch, and registering a resource offers the texts under them, so
@@ -1020,6 +1028,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   application starts, with what to register: a member id that is not what its source answers, roles the
   rules declare that are not `NamedRole`, and anything the rules have the application answer that nobody
   registered.
+- **Membership: from the check to the save.** A handler of a command on a resource with members takes nothing
+  from the check: it loads the resource its request names, which is the one that was checked, and holds it to
+  the version the caller named, `context.ExpectVersion(document, command.ExpectedVersion)`. The rest holds the
+  change already: the save compares the version it loaded, the aggregate keeps its rules, and a database that
+  checks every row checks the write again as the caller, so one who lost every key that writes the resource
+  since the check is refused, `access.refused`. Permission is about who; the version is about what the caller
+  read. A rule that needs how or until when the caller holds the key asks the questions for it, in one
+  statement. See [From the check to the save](docs/membership.md#from-the-check-to-the-save).
+- **Membership: the expert hold.** `options.UseMemberHolds(serviceProvider)`, one line on a context after
+  `UseDDDToolkit`, holds every save that changes a resource with members, a member or a role of one included,
+  to what the access check of the request in hand read of it, with nothing written in a handler: a resource
+  changed since the check is a `ConcurrencyConflictException`, whether the caller named a version or not; one
+  no check of the request in hand read, a handler called directly, a transport around the checks, another
+  resource than the request names, is refused with an `InvalidOperationException` and nothing is saved; the
+  application's own work that trusted code began, and a new resource, pass. `MemberAccessCheck` keeps what it
+  read with the request in hand, in `Checked<MemberHold<TResourceId>>`, and the interceptor finds it there at
+  the save: the request in hand, not the scope, so a hold another request of the same scope left, a query's
+  say, lets nothing through. It costs no statement and works with context pools. A handling that saves twice is
+  held to the check at its first save and, once that succeeded, to the version it left; a save that failed
+  counts for nothing, so one tried again after it lost the race loses again. A save after the request's
+  handling returned, in a unit-of-work behavior outside the access behavior or an endpoint after `Send`, has no
+  request in hand and is refused, with a message that says so. A model that does not compare `Version` is
+  refused at the first held save, and `UseMemberHolds` before `UseDDDToolkit` where the context is built. See
+  [The expert hold](docs/membership.md#the-expert-hold).
 - **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` offers
   `MembershipRowAccessContribution<TMember>`: for each kind of resource, a class the application derives
   with that resource's rules and lists with `[assembly: UseRowAccessContribution]` writes four set functions
@@ -1148,9 +1180,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[AccessRequests] public interface IProjectsRequest : IRequireAccess;`. A request declares an
   `AccessRequirement`: one of the Tenancy package's cases, which the package's check decides in every module,
   or a case of the module's own, which a check of the module decides (`ProjectsAccessCheck`,
-  `InspectionsAccessCheck`; Tenants has none). What a check read is handed to the handler through the
-  toolkit's `Checked<T>`. A request that declares a case no check of its module decides is stopped where it is
-  sent, and a test holds every declared case to having a check.
+  `InspectionsAccessCheck`; Tenants has none). A handler takes nothing from its check: it acts on what its
+  request names, loads a project with the version its caller named, and asks Projects' gate itself for what it
+  needs of a project. A request that declares a case no check of its module decides is stopped where it is
+  sent, and a test holds every declared case to having a check. The sample ships without the expert hold;
+  `AccessHoldScenarios` switches it on and plays the races between a check and its handler both ways.
 - **Tenancy sample: deep folders.** Every project of the sample is laid out with the thing first and the kind
   second, and one type per file. A domain project has a folder per aggregate, `Aggregates/Projects`, with
   `Entities`, `Events`, `Invariants` and `ValueObjects` beside the aggregate and its refusals. An application
@@ -1520,6 +1554,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **For the 3.2.0 previews: the access hold is no longer the default.** A handler on a resource with members
+  no longer takes what the check read, `Checked<MemberHold<TResourceId>>.TakeFor(command)`, to load the
+  resource at that version: it loads the resource its request names and holds it to the request's own
+  `ExpectedVersion` with `ExpectVersion`, which now takes a `long?`. A change between the check and the load is
+  then a lost race only where the caller named a version; otherwise it is the last write that wins, which is
+  what a caller that names no version asks for, and a caller that lost the key by then is refused by a database
+  that checks every row. `TakeFor` still works, and `MemberAccessCheck` still keeps the hold; a host that wants
+  the save tied to it adds `UseMemberHolds(serviceProvider)` to its context, and its handlers drop the line. The
+  Tenancy sample's handlers take nothing from their checks any more: `IProjectStore.LoadAsync(id,
+  expectedVersion)`, `ProjectsAccessCheck` keeps no unit, `InspectionsAccessCheck` keeps no project, and
+  `GatedProject` and `GatedProjects` are gone; a handler called directly is held by the database alone, where it
+  threw before, and recording an inspection asks Projects' gate a second time, in the handler, for the
+  project's planned range. A seat that gives up its own place on a crew is saved as the application's work only
+  for the command whose check let it through, the request in hand, and as the caller otherwise, so a handler
+  reached around its check is refused by the database there too. `AccessChecks.RequireAsync` puts the request in hand for the flow that asked
+  (`RequestInHand`).
 - **For the 3.2.0 previews: every request says what it requires.** `3.2.0-preview.1` and `3.2.0-preview.2`
   shipped `AccessRequirement.Open(reason)` and Tenancy's `DecidedByThePackage`, `SystemWorkInTenant` and
   `OperatorsOnly`. They are gone, so a request that still declares one no longer compiles; each maps onto the

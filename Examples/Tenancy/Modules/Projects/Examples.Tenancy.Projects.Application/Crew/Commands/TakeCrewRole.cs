@@ -25,7 +25,7 @@ public sealed record TakeCrewRole(ProjectId Project, SeatId Seat, ProjectRoleId 
 }
 
 /// <summary>
-/// Handles <see cref="TakeCrewRole"/>: loads the project that was checked, asks which role is the crew lead's when
+/// Handles <see cref="TakeCrewRole"/>: loads the project its command names, asks which role is the crew lead's when
 /// the seat is the owner's, takes the role and saves.
 /// </summary>
 /// <remarks>
@@ -34,12 +34,10 @@ public sealed record TakeCrewRole(ProjectId Project, SeatId Seat, ProjectRoleId 
 /// asked only for the owner; the project refuses what the answer rules out.
 /// </remarks>
 /// <param name="store">Where projects are loaded and saved.</param>
-/// <param name="checkedProject">What the access check read of the project.</param>
 /// <param name="admission">Which of the tenant's project roles is the crew lead's.</param>
 /// <param name="answers">Tenancy's answers about the current caller: whether the seat is the caller's own.</param>
 public sealed class TakeCrewRoleHandler(
     IProjectStore store,
-    Checked<MemberHold<ProjectId>> checkedProject,
     MemberAdmission<ProjectId, SeatId, ProjectRoleId> admission,
     SampleAnswers answers)
     : ICommandHandler<TakeCrewRole>
@@ -49,19 +47,19 @@ public sealed class TakeCrewRoleHandler(
     /// <c>projects.not-found</c>, <c>projects.member-not-found</c>, <c>projects.crew-role-not-found</c>,
     /// <c>projects.owner-protected</c>, <c>projects.closed</c>.
     /// </exception>
-    /// <exception cref="Exceptions.ConcurrencyConflictException">The project was changed since the access check, or while this was saved.</exception>
+    /// <exception cref="Exceptions.ConcurrencyConflictException">The project is at another version than the caller named, or was changed while this was saved.</exception>
     public async ValueTask<Unit> Handle(TakeCrewRole command, CancellationToken cancellationToken)
     {
-        var seen = checkedProject.TakeFor(command);
-        var project = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken)
+        var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
             ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
 
         var leadRole = command.Seat == project.OwnerSeatId ? await admission.FindOwnerRoleAsync(cancellationToken) : null;
         project.TakeCrewRole(command.Seat, command.Role, leadRole);
 
-        // A role of the caller's own may be the one this very change was allowed by: see OwnPlaceOnTheCrew.
-        // Either way it writes this project and nothing an earlier command may have left in the unit of work.
-        using (OwnPlaceOnTheCrew.BeginSave(command.Seat, answers.RequireTenant()))
+        // A role of the caller's own may be the one this very change was allowed by, once this command's check
+        // let it through: see OwnPlaceOnTheCrew. Either way it writes this project and nothing an earlier command
+        // may have left in the unit of work.
+        using (OwnPlaceOnTheCrew.BeginSave(command, command.Seat, answers.RequireTenant()))
         {
             await store.SaveOnlyAsync(project, cancellationToken);
         }

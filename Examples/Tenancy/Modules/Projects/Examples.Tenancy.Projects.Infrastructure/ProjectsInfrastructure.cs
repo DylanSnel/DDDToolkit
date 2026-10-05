@@ -45,6 +45,11 @@ public static class ProjectsInfrastructure
         // exported policies see who asks, then Tenancy's save check. The provider comes first, and is the pools'
         // to set, on the host's connections for requests or for the background. The factory is the one dotnet ef
         // and the export build the context with: its migrations are what the host is checked against.
+        //
+        // The default path, and no hold: a command's handler loads the project its request names, with the version
+        // its caller named, and the save, the project's rules and the policies hold the write. A host that also
+        // wants every save of a project tied to the version its request's check read adds .UseMemberHolds(application)
+        // after UseTenancy: the expert hold of the Membership package, which no handler writes a line for.
         host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, ProjectsContext.Schema, (application, options) => options
             .UseDDDToolkit(application)
             .UseSupabaseRowLevelSecurity(application)

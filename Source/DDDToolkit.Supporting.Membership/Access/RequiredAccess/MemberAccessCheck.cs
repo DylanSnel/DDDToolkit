@@ -27,15 +27,19 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// nothing, so its statement is never sent.
 /// </para>
 /// <para>
-/// What it read of the resource it keeps for the request's handler, as a
-/// <see cref="MemberHold{TResourceId}"/> in <see cref="Checked{T}"/>, so the handler loads the very resource
-/// that was checked, at the version it was checked at:
-/// <code>
-/// var seen = checkedDocument.TakeFor(command);
-/// var document = await store.LoadAsync(seen.Resource, seen.Version, cancellationToken);
-/// </code>
-/// It also says until when the caller holds the key (<see cref="MemberHold{TResourceId}.Until"/>), for a
-/// rule the handler adds of its own.
+/// The handler needs nothing of it. It loads the resource its request names, which is the one that was
+/// checked, with the version the caller named, <c>context.ExpectVersion(document, command.ExpectedVersion)</c>,
+/// so a resource changed since the caller read it is a lost race at the load as well as here; the save compares
+/// the version it loaded, the aggregate keeps its own rules, and a database that checks every row checks the
+/// write again. A rule that needs how or until when the caller holds the key asks the questions for it
+/// (<see cref="IMemberQuestions{TResourceId}.HoldAsync"/>).
+/// </para>
+/// <para>
+/// What it read it keeps all the same, as a <see cref="MemberHold{TResourceId}"/> in <see cref="Checked{T}"/>,
+/// with the request in hand: that costs nothing, and it is what the expert hold holds a save to, where a
+/// context asks for it (<c>UseMemberHolds</c> of the Entity Framework package). Then a save that changes the
+/// resource is refused when it is at another version than the check read, and one that changes a resource no
+/// check of the request in hand read is refused outright.
 /// </para>
 /// <para>
 /// It decides the cases of its own resource only. A module with two kinds of resource registers two, and a
@@ -45,7 +49,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <typeparam name="TResource">The resource's aggregate, which a lost race names.</typeparam>
 /// <typeparam name="TResourceId">The resource's id.</typeparam>
 /// <param name="access">The access questions of this kind of resource.</param>
-/// <param name="kept">Where what was read of a request's resource is kept for its handler.</param>
+/// <param name="kept">Where what was read of a request's resource is kept, for the expert hold.</param>
 /// <param name="callers">Who is calling: what tells a caller who did not sign in.</param>
 public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<TResourceId> access, Checked<MemberHold<TResourceId>> kept, ICallerAccessor callers) : IAccessCheck
     where TResource : class
@@ -77,7 +81,8 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
                     throw new ConcurrencyConflictException(typeof(TResource), required.Resource);
                 }
 
-                // Kept under the request itself, so its handler loads the very resource that was checked.
+                // Kept under the request, and with it in hand: what the expert hold holds the save to, where a
+                // context asks for it. The handler needs none of it.
                 kept.KeepFor(request, hold);
                 break;
             }

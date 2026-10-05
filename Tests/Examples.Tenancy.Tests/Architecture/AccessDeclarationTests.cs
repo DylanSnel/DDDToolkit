@@ -243,15 +243,17 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     [Fact]
     public void Only_a_query_declares_what_it_shows()
     {
-        // "Seen with a key" is a filter on what a query lists, checked nowhere but in the query's own statement. A
-        // command that declared it would run unchecked.
+        // "Seen with a key" is a filter on what a query lists, checked nowhere but in the query's own statement; and a
+        // requirement on the projects in reach refuses nobody either, its handler leaving out what the caller does not
+        // see. A command that declared either would run unchecked.
         var commands = Requests.Where(request => !request.IsQuery).Select(request => request.Type).ToHashSet();
 
         Declared.Where(row => commands.Contains(row.Request.GetType()))
-            .Where(row => DeclaredBy(row.Request)!.GetType().Name == "SeenWith")
+            .Where(row => DeclaredBy(row.Request) is { } declared && (declared.GetType().Name == "SeenWith" || declared is InspectionsRequirement.OnProjectsInReach))
             .Select(row => row.Request.GetType().Name)
             .Should().BeEmpty();
         Declared.Should().Contain(row => DeclaredBy(row.Request) is MemberAccess<ProjectId>.SeenWith, "queries do declare it, or this proves nothing");
+        Declared.Should().Contain(row => DeclaredBy(row.Request) is InspectionsRequirement.OnProjectsInReach, "and so do Inspections' lists");
     }
 
     [Fact]
