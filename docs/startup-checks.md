@@ -31,9 +31,9 @@ Every check runs in a stage, `StartupCheckStage`, and every check of one stage r
 stages are the order in which one failure hides another, so a host is told the cause rather than one of its
 effects:
 
-- **Services** reads the application's services and opens no connection: which options are registered, and how
-  each context is configured. A context wired wrong would fail every question put to the database through it,
-  without saying why.
+- **Services** reads the application's services and opens no connection: which options are registered, how
+  each context is configured, and whether what asks a module's access checks is in the pipeline. A context wired
+  wrong would fail every question put to the database through it, without saying why.
 - **Login** asks, as the role the host logs in as, whether it may switch to every role its callers run as. Every
   stage after it asks as the system caller, and so switches to the system caller's role first.
 - **Migrations** asks whether every migration is applied. A policy or a function a missing migration would have
@@ -54,6 +54,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 
 | Check | Constant | Brought by | Stage | What it holds the host to |
 |---|---|---|---|---|
+| `access.behaviors-registered` | `AccessBehaviorChecks.BehaviorsRegisteredCheck` | `AddAccessChecks`, and so `AddAccessCheck`, a package's registration of its check and the generated `Add{Module}AccessBehavior`, for an interface the toolkit wrote a behavior for | Services | Every command and query the host handles, of an interface the toolkit wrote a behavior for, has that behavior in its pipeline, the one for streams for a stream query, in every module ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)) |
 | `entity-framework.toolkit-wired` | `EntityFrameworkChecks.ToolkitWiredCheck` | `AddDDDToolkitEntityFramework` | Services | Every context that maps the toolkit's classes is built with `UseDDDToolkit` ([Checking the wiring](entity-framework.md#checking-the-wiring)) |
 | `postgres.row-level-security-wired` | `PostgresRowAccessChecks.RowLevelSecurityWiredCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Services | Every context on Postgres runs its commands as the caller |
 | `postgres.login-role-may-switch-to-callers` | `PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck` | the same | Login | The login role may become every caller of every such context ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)) |
@@ -211,6 +212,7 @@ and keep `OnByDefault` for a check your package ran by itself before, as pgmq's 
 
 ## Where to look next
 
+- [Access requirements](access-requirements.md#when-nothing-asks-the-checks), for the check of the access behaviors.
 - [Row level security](row-level-security.md#a-login-that-owns-nothing), for what the login role's checks ask.
 - [Supabase](supabase.md#checking-at-start-up), for the migrations' check and the login role the build writes.
 - [Tenancy](tenancy.md#setting-it-up) and [Membership](membership.md#on-postgres-the-second-lock), for what their

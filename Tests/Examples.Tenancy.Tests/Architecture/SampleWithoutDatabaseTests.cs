@@ -77,6 +77,7 @@ public sealed class SampleWithoutDatabaseTests
             "tenancy.seated-token-roles",
             "tenancy.catalogue-builds",
             "tenancy.contexts-wired",
+            "access.behaviors-registered",
             "entity-framework.toolkit-wired",
             "postgres.login-role-may-switch-to-callers",
             "supabase.migrations-applied",

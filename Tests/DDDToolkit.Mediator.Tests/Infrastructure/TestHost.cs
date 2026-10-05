@@ -26,18 +26,22 @@ namespace DDDToolkit.Mediator.Tests.Infrastructure;
 /// With <c>pooled</c> the context comes from a context pool instead: <c>AddPooledDbContextFactory</c> with
 /// the same options callback, and <c>AddScopedFromPool</c> for the context a scope asks for.
 /// </para>
+/// <para>
+/// Without <c>accessBehavior</c> the module's check is registered and the behavior that asks it is not: the host a
+/// developer composes who forgot the line, which the start-up check of the behaviors refuses.
+/// </para>
 /// </summary>
 public sealed class TestHost : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _provider;
 
-    public TestHost(Action<DDDEntityFrameworkOptions>? configure = null, bool pooled = false)
+    public TestHost(Action<DDDEntityFrameworkOptions>? configure = null, bool pooled = false, bool accessBehavior = true)
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
 
-        var services = new ServiceCollection();
+        var services = Registrations;
         services.AddSingleton(Log);
         services.AddSingleton(StepLog);
 
@@ -48,16 +52,23 @@ public sealed class TestHost : IDisposable
         // The behaviors listed here are the ones Mediator's generator registers. It reads the list when this
         // project compiles, from the code as its author wrote it, so only a behavior somebody wrote can be on
         // it: naming the one the toolkit's generator writes, BasketAccessBehavior<,>, is its error MSG0007.
+        //
+        // The second module's behaviors are listed here too, as a host lists those of a module in a class library:
+        // Mediator's generator registers each closed over every message that meets its constraints.
         services.AddMediator(options =>
         {
             options.ServiceLifetime = ServiceLifetime.Scoped;
-            options.PipelineBehaviors = [typeof(Listed<,>)];
+            options.PipelineBehaviors = [typeof(Listed<,>), typeof(StockAccess<,>)];
+            options.StreamPipelineBehaviors = [typeof(StockStreamAccess<,>)];
         });
 
         // The module's check, and the behavior the toolkit wrote for IBasketRequest, added to the container by
         // the registration written with it. After AddMediator, so it runs after the listed behaviors.
         services.AddAccessCheck<IBasketRequest, BasketAccessCheck>();
-        services.AddBasketAccessBehavior();
+        if (accessBehavior)
+        {
+            services.AddBasketAccessBehavior();
+        }
 
         services.AddDDDToolkitEntityFramework(options =>
         {
@@ -90,6 +101,9 @@ public sealed class TestHost : IDisposable
     }
 
     public EventLog Log { get; } = new();
+
+    /// <summary>What the host registered, as a start-up check reads it.</summary>
+    public IServiceCollection Registrations { get; } = new ServiceCollection();
 
     /// <summary>What the handlers, the check and the behaviors of the requests about a basket did, in order.</summary>
     public StepLog StepLog { get; } = new();

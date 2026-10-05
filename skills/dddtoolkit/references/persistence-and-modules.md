@@ -105,8 +105,10 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 - At start-up, `builder.Services.RunStartupChecks()` runs every check the registrations brought, before the
   server binds its port: `AddDDDToolkitEntityFramework` brings the one that refuses a context built without
   `UseDDDToolkit`, which would otherwise save without invariants, versions or events; row level security, the
-  Supabase migrations, Tenancy and Membership on Postgres bring theirs. Write no start-up class of your own for
-  them; turn one off with `SkipStartupCheck(name, reason: ...)`. See `startup-checks.md`.
+  Supabase migrations, Tenancy and Membership on Postgres bring theirs, and a module's access checks bring
+  `access.behaviors-registered`, which refuses a host that handles a request of an `[AccessRequests]` interface
+  without the generated access behavior in its pipeline. Write no start-up class of your own for them; turn one off with `SkipStartupCheck(name, reason: ...)`.
+  See `startup-checks.md`.
 
 ## Delivering domain events
 

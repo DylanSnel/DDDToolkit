@@ -411,13 +411,108 @@ where the interface is declared:
 
 | The interface is declared in | The generated behavior |
 |---|---|
-| a module's class library, which the project that runs Mediator's generator references | is a type of a referenced assembly like any other: add it with `services.AddBillingAccessBehavior()`, or list it. Listed, the set of checks it asks still has to be registered: `AddAccessCheck` does that, and `AddAccessChecks<IBillingRequest>()` for a module that adds no check. And listed, the second class goes in the list of the other pipeline, `typeof(BillingAccessStreamBehavior<,>)` in `MediatorOptions.StreamPipelineBehaviors`: a host that lists the first alone leaves the module's stream queries unasked |
+| a module's class library, which the project that runs Mediator's generator references | is a type of a referenced assembly like any other: add it with `services.AddBillingAccessBehavior()`, or list it. Listed, the set of checks it asks still has to be registered: `AddAccessCheck` does that, and `AddAccessChecks<IBillingRequest>()` for a module that adds no check. And listed, the second class goes in the list of the other pipeline, `typeof(BillingAccessStreamBehavior<,>)` in `MediatorOptions.StreamPipelineBehaviors`: a host that lists the first alone leaves the module's stream queries unasked, and once the module has one, [does not start](#when-nothing-asks-the-checks) |
 | the project that runs Mediator's generator itself | cannot be listed: `typeof(BillingAccessBehavior<,>)` in the list is Mediator's error MSG0007. Add it with `services.AddBillingAccessBehavior()`, after `AddMediator`, and it runs after the behaviors you did list |
 
 A host of one project that wants every behavior in that list, so that Mediator's generator registers them
 all, writes this one itself and leaves `[AccessRequests]` off the interface.
 [DDD00057](diagnostics.md#ddd00057) shows the whole class; a host that sends stream queries writes the one
 for `IStreamPipelineBehavior<,>` as well.
+
+## When nothing asks the checks
+
+The checks hold nobody to anything by themselves. The behavior asks them, in the pipeline a request passes when
+it is sent, and a request that reaches its handler some other way is asked nothing. A handler that takes what
+its check kept, `Checked<T>`, fails there for want of it. Any other handler runs, held only by what the database
+checks, and per table that is coarser than what one request requires. A policy has to let every member who may
+write a project's row write it, to close the project or to rename it, so it lets a rename through for one who may
+only close it. So the toolkit watches the two ways round the behavior it can see: a missing behavior stops the
+host when it starts, and a handler called in code is reported when the code builds.
+
+```mermaid
+flowchart LR
+    Sent["sent<br/>sender.Send(request)"] --> Behavior["the access behavior<br/>asks the checks"] --> Handler["the handler"]
+    Direct["called directly<br/>handler.Handle(request)"] -- "DDD00061, a warning<br/>when it builds" --> Handler
+    Missing["handler registered,<br/>behavior not"] -- "access.behaviors-registered<br/>when it starts" --> Stopped["the host stops"]
+```
+
+- **The behavior is not in the pipeline.** A module registers its checks and not the behavior that asks them, a
+  host forgets a module's registration altogether, or a host that lists its behaviors for Mediator's generator
+  leaves one out. The registration of the checks brings the [start-up check](startup-checks.md)
+  `access.behaviors-registered` for an interface the toolkit wrote a behavior for, and a host that calls
+  `RunStartupChecks()` does not start: the message names the behavior, its interface, and the line that adds it.
+  Nothing to write for it: `AddAccessCheck`, `AddTenancyAccess`, the generated `AddDocumentMemberAccess` and
+  `AddBillingAccessBehavior` itself all bring it.
+- **What the check reads.** Mediator registers every handler under its handler interface, closed over its
+  message, so the check reads from the host's registrations which commands and queries it can handle. For each
+  one of an interface the toolkit wrote a behavior for, in any module, the behavior has to be in its pipeline:
+  registered open, as the generated call adds it, or closed over that message, as Mediator registers a behavior a
+  host lists. A query answered with a stream needs the behavior for streams, and a module with no such query
+  needs nothing in that pipeline. A behavior registered as something no pipeline asks for, as itself say, does
+  not count, and the message says so. One registration brings the check for every module, so a module whose
+  registration was forgotten is found as long as any other registered its checks. A host that registered no
+  module's checks at all brings no check: nothing of the toolkit's access is in it to bring one.
+- **Code calls a handler.** `handler.Handle(request, cancellationToken)` with a request of a marked interface is
+  [DDD00061](diagnostics.md#ddd00061), a warning at the call, with a code fix that sends the request through an
+  `ISender` the code reaches. Constructing or injecting a handler is not reported, the call is. Neither is a
+  decorator that hands its inner handler the request it was given, which passed the pipeline on its way in, nor
+  anything in a test project, where a test calls a handler on purpose to test it alone.
+- **A transport goes round the pipeline.** A route, a GraphQL resolver or a message consumer that sends through
+  `ISender` passes the behavior like any other caller; one that calls a handler of a marked request is the case
+  above, and is reported where it is written. One that dispatches some other way altogether asks the checks
+  itself, `AccessChecks<IBillingRequest>.RequireAsync`, [as above](#asking-the-checks-without-mediator): neither
+  the build nor the start can see such a way. That includes a dispatcher that calls `Handle` on a handler of a
+  type parameter with no constraint to a marked interface: the build cannot tell which requests pass through it.
+
+<details>
+<summary>Show the code: what the start-up check says, and a call the build reports</summary>
+
+```csharp
+// A module that registers its check and forgot the behavior
+services.AddAccessCheck<IBillingRequest, BillingAccessCheck>();
+// services.AddBillingAccessBehavior();
+
+builder.Services.RunStartupChecks();
+```
+
+```text
+System.InvalidOperationException: BillingAccessBehavior<TMessage, TResponse>, the pipeline behavior the toolkit
+wrote to ask the access checks of IBillingRequest, is not in the pipeline: every command and query that implements
+IBillingRequest reaches its handler with nothing asking what it requires, held only by what the database checks.
+Add services.AddBillingAccessBehavior() where the module registers its checks.
+```
+
+A host that lists the behaviors for Mediator's generator and leaves one out is told to list it, rather than to
+call the generated registration as well, which would put the other one in the pipeline twice:
+
+```text
+System.InvalidOperationException: BillingAccessStreamBehavior<TMessage, TResponse>, the behavior the toolkit wrote
+to ask the access checks of IBillingRequest of a query answered with a stream, is not in the pipeline of streams:
+every such query that implements IBillingRequest is streamed with nothing asking what it requires. The host lists
+its behaviors for the Mediator library: list typeof(BillingAccessStreamBehavior<,>) among its
+StreamPipelineBehaviors as well.
+```
+
+```csharp
+public sealed class InvoiceReminders(CloseInvoiceHandler handler, ISender sender)
+{
+    public async Task CloseOverdueAsync(InvoiceId invoice, CancellationToken cancellationToken)
+    {
+        await handler.Handle(new CloseInvoice(invoice), cancellationToken);   // DDD00061: past the behavior
+        await sender.Send(new CloseInvoice(invoice), cancellationToken);      // through it, as the fix writes it
+    }
+}
+```
+
+The generator says which behaviors it wrote for an interface, in an attribute of the assembly that declares it,
+which is what the start-up check reads:
+
+```csharp title="BillingAccessBehavior.g.cs, its first line"
+[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior<,>),
+    StreamBehavior = typeof(BillingAccessStreamBehavior<,>), Registration = "services.AddBillingAccessBehavior()")]
+```
+
+</details>
 
 ## Holding it with a test
 

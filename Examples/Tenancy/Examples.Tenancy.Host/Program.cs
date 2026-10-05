@@ -102,9 +102,10 @@ builder.Services.AddExceptionHandler<RefusalProblems>();
 builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Update", LogLevel.Critical);
 
 // Before anything of the host starts, the server's port and the seeding included: every check the registrations
-// above brought. The contexts are wired through the toolkit, row level security and Tenancy; the role the host
-// logs in as may become every caller; every migration is applied; and that role holds nothing, and the database's
-// policies, functions and grants are the ones the modules' code writes, Tenancy's and Membership's among them.
+// above brought. Each module's access behavior is in the pipeline, so no request that is sent passes unchecked; the
+// contexts are wired through the toolkit, row level security and Tenancy; the role the host logs in as may become
+// every caller; every migration is applied; and that role holds nothing, and the database's policies, functions
+// and grants are the ones the modules' code writes, Tenancy's and Membership's among them.
 // They run in that order, as the application itself, and the first that finds something wrong stops the start and
 // says what puts it right. A module added later brings its own, and no class of the host lists them.
 builder.Services.RunStartupChecks();

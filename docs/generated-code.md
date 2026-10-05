@@ -275,6 +275,9 @@ public interface IShopRequest : IRequireAccess;
 ```
 
 ```csharp title="ShopAccessBehavior.g.cs, shortened"
+[assembly: AccessBehavior(typeof(IShopRequest), typeof(ShopAccessBehavior<,>),
+    StreamBehavior = typeof(ShopAccessStreamBehavior<,>), Registration = "services.AddShopAccessBehavior()")]
+
 public sealed class ShopAccessBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
     where TMessage : notnull, IShopRequest, IMessage
 {
@@ -318,6 +321,11 @@ public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipel
 
 The toolkit references no dispatcher: the library is noticed by its type, and how its behaviors are implemented
 is read from the version the project references. A project that does not reference it gets none of the classes.
+
+The file opens with what it wrote, as an attribute of the assembly: the interface, both behaviors and the call that
+registers them. Registering the interface's checks reads it to bring the start-up check
+`access.behaviors-registered`, which stops a host that handles a request of the interface without the behavior in
+its pipeline ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
 
 ## `DDDToolkit.EntityFramework`
 

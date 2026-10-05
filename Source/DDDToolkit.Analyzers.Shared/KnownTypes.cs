@@ -108,6 +108,12 @@ internal static class KnownTypes
     public const string AccessCheckRegistration = "DDDToolkit.Access.AccessCheckServiceCollectionExtensions";
 
     /// <summary>
+    /// The assembly attribute that says which behavior asks the checks of a request interface, which the start-up
+    /// check that the behavior is in the pipeline reads. Written beside a behavior where the project can see it.
+    /// </summary>
+    public const string AccessBehaviorAttribute = "DDDToolkit.Access.AccessBehaviorAttribute";
+
+    /// <summary>
     /// The pipeline behavior of the Mediator library (assembly Mediator.Abstractions). A project that can see it
     /// uses the library, and gets a behavior written for each of its <c>[AccessRequests]</c> interfaces.
     /// </summary>
@@ -125,6 +131,12 @@ internal static class KnownTypes
     /// notification that implements an <c>[AccessRequests]</c> interface is asked about by nothing.
     /// </summary>
     public const string MediatorNotification = "Mediator.INotification";
+
+    /// <summary>
+    /// The Mediator library's sender, through which a command or a query passes the pipeline on its way to its handler.
+    /// A project that can see it uses the library, and a handler of its called directly is DDD00061.
+    /// </summary>
+    public const string MediatorSender = "Mediator.ISender";
 
     /// <summary>The service collection a generated registration extends (assembly Microsoft.Extensions.DependencyInjection.Abstractions).</summary>
     public const string ServiceCollection = "Microsoft.Extensions.DependencyInjection.IServiceCollection";

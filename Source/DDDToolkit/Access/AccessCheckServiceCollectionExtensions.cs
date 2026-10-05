@@ -29,6 +29,13 @@ public static class AccessCheckServiceCollectionExtensions
     /// Everything is registered per scope: the set, and <see cref="Checked{T}"/> for what a check keeps for a
     /// handler. Calling it more than once is harmless.
     /// </para>
+    /// <para>
+    /// Where the toolkit wrote that behavior for <typeparamref name="TRequests"/>, this also brings the start-up
+    /// check <see cref="AccessBehaviorChecks.BehaviorsRegisteredCheck"/>, which a host runs with
+    /// <c>services.RunStartupChecks()</c>: a host that handles a request of such an interface without the behavior
+    /// in its pipeline does not start, since nothing would ask its checks. The check holds every module of the host
+    /// to that, whichever registration brought it.
+    /// </para>
     /// </summary>
     /// <typeparam name="TRequests">The module's request interface, which every command and query of the module implements.</typeparam>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
@@ -45,6 +52,10 @@ public static class AccessCheckServiceCollectionExtensions
                 .Select(static registered => registered.Check)
                 .Prepend(new CallerAccessCheck(provider.GetService<ICallerAccessor>() ?? new AmbientCallerAccessor(provider.GetService<CallerOptions>())))));
         services.TryAddScoped(typeof(Checked<>));
+
+        // The checks hold nobody to anything until something asks them. Where that is a behavior the toolkit
+        // wrote, the host is held at start-up to having it in the pipeline.
+        AccessBehaviorChecks.BringTo<TRequests>(services);
 
         return services;
     }

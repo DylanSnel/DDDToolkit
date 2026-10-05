@@ -404,6 +404,50 @@ public class AccessBehaviorGenerationTests
         result.ShouldContain(Hint, "public sealed class BillingAccessBehavior<TMessage, TResponse>");
         result.ShouldNotContain(Hint, "BillingAccessBehaviorRegistration");
         result.ShouldNotContain(Hint, "services.AddBillingAccessBehavior()", "the behavior does not point at a registration that is not there");
+        result.ShouldContain(
+            Hint,
+            "[assembly: global::DDDToolkit.Access.AccessBehaviorAttribute(typeof(global::Shop.Billing.IBillingRequest), typeof(global::Shop.Billing.BillingAccessBehavior<,>), StreamBehavior = typeof(global::Shop.Billing.BillingAccessStreamBehavior<,>))]",
+            "what was written is said all the same, without a registration to name");
+    }
+
+    // ------------------------------------------------------------------ what the file says it wrote
+
+    [Fact]
+    public void The_file_says_which_behaviors_it_wrote_and_the_call_that_registers_them()
+    {
+        // Read by the start-up check that holds a host to registering them: checks registered without the behavior
+        // that asks them hold nobody to anything.
+        var result = GeneratorTestHost.Create(Billing).WithMediator().RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain(
+            Hint,
+            "[assembly: global::DDDToolkit.Access.AccessBehaviorAttribute(typeof(global::Shop.Billing.IBillingRequest), typeof(global::Shop.Billing.BillingAccessBehavior<,>), "
+            + "StreamBehavior = typeof(global::Shop.Billing.BillingAccessStreamBehavior<,>), Registration = \"services.AddBillingAccessBehavior()\")]");
+
+        var written = result.Emit().Assembly.GetCustomAttributesData().Should()
+            .ContainSingle(attribute => attribute.AttributeType.FullName == "DDDToolkit.Access.AccessBehaviorAttribute").Subject;
+        written.ConstructorArguments.Select(argument => ((Type)argument.Value!).Name).Should().Equal("IBillingRequest", "BillingAccessBehavior`2");
+    }
+
+    [Fact]
+    public void Each_interface_says_its_own_behaviors_and_one_in_the_global_namespace_too()
+    {
+        var result = GeneratorTestHost.Create(
+                """
+                using DDDToolkit.Abstractions.Attributes;
+                using DDDToolkit.Access;
+
+                [AccessRequests]
+                public interface IBillingRequest : IRequireAccess;
+                """)
+            .WithSource(Billing.Replace("Shop.Billing", "Shop.Shipping", StringComparison.Ordinal).Replace("IBillingRequest", "IShippingRequest", StringComparison.Ordinal), "Shipping.cs")
+            .WithMediator()
+            .RunCore();
+
+        result.ShouldCompile();
+        result.ShouldContain(Hint, "typeof(global::IBillingRequest), typeof(global::BillingAccessBehavior<,>), StreamBehavior = typeof(global::BillingAccessStreamBehavior<,>)");
+        result.ShouldContain("ShippingAccessBehavior.", "typeof(global::Shop.Shipping.IShippingRequest), typeof(global::Shop.Shipping.ShippingAccessBehavior<,>)");
     }
 
     // ------------------------------------------------------------------ the library's shape is read, not assumed

@@ -14,10 +14,12 @@
     declared does not reach it at all, which is how the generator tells that this file was not
     imported (DDD00014).
 
-    The properties declared elsewhere are SupabaseMigrationsExport, which switches on a build step, and
-    IsTestProject and IsTestingPlatformApplication, which keep that step out of test projects.
-    DDDToolkit.EntityFramework.Supabase declares them in the targets file that holds the step, so the step
-    and its generator cannot arrive apart, nor decide apart where the step runs.
+    The property declared elsewhere is SupabaseMigrationsExport, which switches on a build step:
+    DDDToolkit.EntityFramework.Supabase declares it in the targets file that holds the step, with
+    IsTestProject and IsTestingPlatformApplication, which keep that step out of test projects, so the step
+    and its generator cannot arrive apart, nor decide apart where the step runs. The two marks of a test
+    project are declared here as well, for the analyzers of this package; a project that gets both files
+    declares them twice, which hands the compiler the same value twice.
   -->
   <ItemGroup>
     <!--
@@ -25,5 +27,15 @@
       Add{Module}GraphQlRuntimeBindings in a project that declares no [assembly: Module]. The attribute wins.
     -->
     <CompilerVisibleProperty Include="DDD_Module" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Mark a test project: what Microsoft.NET.Test.Sdk sets, and what Microsoft.Testing.Platform sets in a test
+      application that may lack the first. DDD00061, a handler called directly, is not reported there, where a
+      test calls a handler on purpose to test it alone.
+    -->
+    <CompilerVisibleProperty Include="IsTestProject" />
+    <CompilerVisibleProperty Include="IsTestingPlatformApplication" />
   </ItemGroup>
 </Project>

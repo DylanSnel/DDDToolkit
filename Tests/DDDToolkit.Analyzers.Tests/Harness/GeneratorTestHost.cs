@@ -70,13 +70,15 @@ public sealed class GeneratorTestHost
     private readonly List<(string Path, string Text)> _sources = [];
     private readonly List<PortableExecutableReference> _extraReferences = [];
     /// <summary>
-    /// What the DDDToolkit.Analyzers package's props file gives every project: each property a generator
-    /// reads, declared, and empty until the project sets it. <see cref="WithoutBuildProperties"/> takes
+    /// What the DDDToolkit.Analyzers package's props file gives every project: each property a generator or an
+    /// analyzer reads, declared, and empty until the project sets it. <see cref="WithoutBuildProperties"/> takes
     /// them away again.
     /// </summary>
     private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal)
     {
         ["build_property.DDD_Module"] = string.Empty,
+        ["build_property.IsTestProject"] = string.Empty,
+        ["build_property.IsTestingPlatformApplication"] = string.Empty,
     };
 
     private readonly List<string> _noWarn = [];
@@ -130,7 +132,7 @@ public sealed class GeneratorTestHost
     public static IIncrementalGenerator[] MembershipGenerators() => [new MembershipWithTenancyGenerator()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
-    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer()];
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer()];
 
     public GeneratorTestHost WithSource(string source, string path = "Source.cs")
     {
@@ -181,6 +183,9 @@ public sealed class GeneratorTestHost
 
     /// <summary>The analyzers <see cref="WithAnalyzers"/> added, run by the outcome after generation.</summary>
     internal IReadOnlyList<DiagnosticAnalyzer> Analyzers => _analyzers;
+
+    /// <summary>The MSBuild properties as the compiler hands them to generators and analyzers alike.</summary>
+    internal AnalyzerConfigOptionsProvider OptionsProvider => new TestAnalyzerConfigOptionsProvider(_globalOptions);
 
     /// <summary>Sets <c>build_property.DDD_Module</c>, the MSBuild property that names the generated extension methods.</summary>
     public GeneratorTestHost WithModule(string moduleName)
@@ -406,7 +411,7 @@ public sealed class GeneratorTestHost
             generators.Select(GeneratorExtensions.AsSourceGenerator).ToImmutableArray(),
             additionalTexts: ImmutableArray<AdditionalText>.Empty,
             parseOptions: parseOptions,
-            optionsProvider: new TestAnalyzerConfigOptionsProvider(_globalOptions),
+            optionsProvider: OptionsProvider,
             driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
 
     public CSharpParseOptions CreateParseOptions()

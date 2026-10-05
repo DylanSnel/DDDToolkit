@@ -1867,6 +1867,11 @@ The order is the same for every request: tracing, the access check, the handler.
 before the modules, and each module registers its own behavior and the checks it asks, so the host names none
 of them. A request the check refuses never reaches its handler, and the activity of a refused request is
 tagged with the refusal's code. Saving stays in the handler, through the store: one command, one unit of work.
+Nothing else in the sample reaches a handler. A module that left its behavior out would stop the host at
+start-up, since registering the checks brings the [start-up check](startup-checks.md)
+`access.behaviors-registered`, which holds every request the host handles to the behavior of its module; and a
+handler called in code instead of sent is [DDD00061](diagnostics.md#ddd00061), a warning where the call is
+written ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
 
 No module writes a behavior. Each writes its request interface, marked `[AccessRequests]`, and a check only
 for the cases that are its own: Projects for a key at a unit, Inspections for what takes Projects' gate,

@@ -188,3 +188,52 @@ public sealed class Listed<TMessage, TResponse>(StepLog steps) : IPipelineBehavi
         return await next(message, cancellationToken);
     }
 }
+
+/// <summary>
+/// What every request of a second module implements, whose behaviors the host lists for Mediator's generator, as a
+/// host may for a module in a class library. It is not marked <c>[AccessRequests]</c>: its behaviors are written here
+/// by hand, constrained as the generated ones are, and the test assembly describes them as the toolkit's generator
+/// describes the ones it writes. The module has no query answered with a stream.
+/// </summary>
+public interface IStockRequest : IRequireAccess;
+
+/// <summary>Counts the stock: the one request of the second module.</summary>
+public sealed record TakeStock : ICommand, IStockRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Anybody may count the stock.");
+}
+
+/// <summary>Handles <see cref="TakeStock"/>.</summary>
+public sealed class TakeStockHandler(StepLog steps) : ICommandHandler<TakeStock>
+{
+    public ValueTask<Unit> Handle(TakeStock command, CancellationToken cancellationToken)
+    {
+        steps.Add("handler");
+        return ValueTask.FromResult(Unit.Value);
+    }
+}
+
+/// <summary>The second module's behavior, listed for Mediator's generator, which closes it over each message of the module.</summary>
+public sealed class StockAccess<TMessage, TResponse>(StepLog steps) : IPipelineBehavior<TMessage, TResponse>
+    where TMessage : notnull, IStockRequest, IMessage
+{
+    public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+    {
+        steps.Add("stock access");
+        return await next(message, cancellationToken);
+    }
+}
+
+/// <summary>
+/// The second module's behavior for streams, listed for Mediator's generator as well, which closes it over nothing:
+/// the module has no query answered with a stream.
+/// </summary>
+public sealed class StockStreamAccess<TMessage, TResponse>(StepLog steps) : IStreamPipelineBehavior<TMessage, TResponse>
+    where TMessage : IStockRequest, IStreamMessage
+{
+    public IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+    {
+        steps.Add("stock access");
+        return next(message, cancellationToken);
+    }
+}

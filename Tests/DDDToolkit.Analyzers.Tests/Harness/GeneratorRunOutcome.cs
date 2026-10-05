@@ -36,7 +36,8 @@ public sealed class GeneratorRunOutcome
 
     /// <summary>
     /// Runs the analyzers the host was given over the post-generation compilation, which is where the
-    /// compiler runs them too. An analyzer that throws comes back as AD0001 rather than as silence.
+    /// compiler runs them too, with the same MSBuild properties the generators were handed. An analyzer that
+    /// throws comes back as AD0001 rather than as silence.
     /// </summary>
     private static ImmutableArray<Diagnostic> RunAnalyzers(GeneratorTestHost host, Compilation compilation)
     {
@@ -46,7 +47,7 @@ public sealed class GeneratorRunOutcome
         }
 
         return compilation
-            .WithAnalyzers([.. host.Analyzers], new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty))
+            .WithAnalyzers([.. host.Analyzers], new AnalyzerOptions(ImmutableArray<AdditionalText>.Empty, host.OptionsProvider))
             .GetAnalyzerDiagnosticsAsync()
             .GetAwaiter()
             .GetResult();

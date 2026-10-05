@@ -59,6 +59,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00058](#ddd00058) | Error | A notification implements no request interface |
 | [DDD00059](#ddd00059) | Warning | The member list of a resource is written from what the resource declares |
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
+| [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -81,7 +82,7 @@ it is a stored row or a message read back as the wrong type, or as the wrong sha
 [DDD00038](#ddd00038) to [DDD00041](#ddd00041), [DDD00051](#ddd00051) and [DDD00052](#ddd00052) are about
 [row access rules](row-level-security.md#row-access-rules-written-in-c), where it is a rule the database
 enforces differently from the C# that states it, asks more often than it has to, or not at all.
-[DDD00056](#ddd00056) to [DDD00058](#ddd00058) are about the
+[DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061) are about the
 [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator), where it
 is a message that reaches its handler with nothing having asked what it requires.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
@@ -1995,6 +1996,76 @@ hears the same from them, as the errors [DDD00045](#ddd00045) and [DDD00050](#dd
 and this warning is not reported beside them. Where the resource keeps a collection of both member classes,
 or of neither, there is no telling which is the extra one: that is [DDD00059](#ddd00059), once, on the
 resource.
+
+## DDD00061
+
+**A request that declares its access is sent, not handed to its handler.**
+
+```csharp
+[AccessRequests]
+public interface IBillingRequest : IRequireAccess;
+
+public sealed class InvoiceReminders(CloseInvoiceHandler handler)
+{
+    public async Task CloseOverdueAsync(InvoiceId invoice, CancellationToken cancellationToken)
+        => await handler.Handle(new CloseInvoice(invoice), cancellationToken);   // DDD00061
+}
+```
+
+The behavior written for an `[AccessRequests]` interface asks the module's checks in Mediator's pipeline, which
+a command or a query passes when it is sent. A handler called directly passes no pipeline: it runs with nothing
+having asked what the request declares, and nothing at run time notices. Where the database has
+[policies](row-level-security.md), they are all that stand in the way, and per table they are coarser than what
+one request requires: a policy has to let every caller who may write a project's row write it, to close the
+project or to rename it, so it lets a rename through for one who may only close it. So the call is reported
+where it is written: `Handle` of one of Mediator's handlers, `ICommandHandler`, `IQueryHandler`,
+`IRequestHandler` or one of their stream kinds, or of a class that implements one or derives from one, with a
+message that implements a marked interface. A reference to `Handle` that makes a delegate of it is reported too.
+
+Send it instead, and it passes the behavior on its way to the same handler:
+
+```csharp
+public sealed class InvoiceReminders(ISender sender)
+{
+    public async Task CloseOverdueAsync(InvoiceId invoice, CancellationToken cancellationToken)
+        => await sender.Send(new CloseInvoice(invoice), cancellationToken);
+}
+```
+
+A code fix does that where the call can use an `ISender`, or an `IMediator`, in a local, a parameter, a field or a
+property: not a field from a static member, say, nor a local of the method around a static lambda. A query
+answered with a stream is sent with `CreateStream`, and named arguments are put in the order of the handler's
+parameters. Where the call can use none, inject one: the fix does not change a constructor for you.
+
+What is not reported, and why:
+
+- **Constructing a handler, and injecting one.** The call is where the check is skipped, and it is reported
+  there, also when it goes through the interface the handler was injected as.
+- **Mediator's own dispatch,** which is generated code and calls every handler after the pipeline.
+- **`base.Handle`** in a handler that overrides it: that hands on the request that passed on its way in.
+- **A decorator,** a handler that wraps another of the same message and hands it the message it was given,
+  unchanged. The request passed the pipeline on its way to the decorator, and sending it again would bring it
+  back round to the decorator. A message the decorator makes itself is reported.
+- **A test project,** one with `IsTestProject` or `IsTestingPlatformApplication` set, as
+  `Microsoft.NET.Test.Sdk` and Microsoft.Testing.Platform set them. A test that calls a handler on purpose
+  tests the handler alone. A test of what a request may do sends it.
+- **A project without Mediator,** where no behavior is written: there you ask the checks yourself,
+  [in front of every handler](access-requirements.md#asking-the-checks-without-mediator).
+
+A call that is meant, outside a test project, is suppressed where it is made, with the reason beside it:
+
+```csharp
+#pragma warning disable DDD00061 // replayed from the outbox after the behavior let it through once
+await handler.Handle(replayed, cancellationToken);
+#pragma warning restore DDD00061
+```
+
+The build cannot see every way round the behavior. A helper that calls `Handle` on a handler of a type parameter
+with no constraint to a marked interface, a dispatcher of a transport's own say, is not reported, and neither is
+the call that hands it a handler: such a dispatcher sends through the sender, or asks the checks itself. A
+module whose behavior is not in the pipeline is stopped when the host starts, by the
+[start-up check](startup-checks.md) `access.behaviors-registered`; see
+[When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
 
 ## Building the model fails: the owned type must carry the key part
 

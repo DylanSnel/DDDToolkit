@@ -5,6 +5,7 @@ using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using DDDToolkit.Exceptions;
+using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Membership;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.UseCases;
@@ -965,13 +966,34 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
+    public async Task A_host_that_leaves_a_module_s_access_behavior_out_does_not_start_and_says_the_line_that_adds_it()
+    {
+        // The module's checks are registered and the behavior that asks them is not, so its requests would reach
+        // their handlers with nothing asking what they require. Registering the checks brought the start-up check
+        // that says so, which reads the module's requests from their handlers, and the host gives up before it
+        // serves anything.
+        await using var host = await sample.NotStartedAsync(services: services =>
+            services.Remove(services.Single(descriptor => descriptor.ImplementationType == typeof(ProjectsAccessBehavior<,>))));
+
+        var refused = host.RefusedStart();
+
+        refused.Where(failure => failure.Data[StartupChecks.FailedCheckKey] as string == AccessBehaviorChecks.BehaviorsRegisteredCheck)
+            .Select(failure => failure.Message)
+            .Should().Contain(
+                message => message.StartsWith("ProjectsAccessBehavior<TMessage, TResponse>, the pipeline behavior the toolkit wrote to ask the access checks of IProjectsRequest, is not in the pipeline:", StringComparison.Ordinal)
+                    && message.EndsWith("Add services.AddProjectsAccessBehavior() where the module registers its checks.", StringComparison.Ordinal),
+                "the host gave up with {0}",
+                string.Join(" / ", refused.Select(failure => failure.Message)));
+    }
+
+    [Fact]
     public async Task A_host_that_leaves_a_module_s_access_check_out_still_has_tenancy_s_commands_ask_again()
     {
         // What a program gets that registers a module's handlers and leaves its access behavior out of the pipeline.
-        // Only the behaviors are taken out here: the checks are still registered, so every handler can be made, and
-        // the host starts. Nothing is seeded, since the seeder's own commands would run unchecked the same way. What
-        // catches such a host is a check at start-up that every behavior is there; until then, what stands is what
-        // asks again past the behavior.
+        // Only the behaviors are taken out here: the checks are still registered, so every handler can be made. The
+        // start-up check of the behaviors would stop the host, as the test above shows, so it is turned off, which is
+        // what it takes to get here. Nothing is seeded, since the seeder's own commands would run unchecked the same
+        // way. What stands then is what asks again past the behavior.
         Type[] checks = [typeof(ProjectsAccessBehavior<,>), typeof(InspectionsAccessBehavior<,>), typeof(TenantsAccessBehavior<,>)];
         await using var host = await sample.StartAsync(
             seeded: false,
@@ -1047,13 +1069,18 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             .Should().Equal([observer.Value], "Vic is on the crew still, with his role");
     }
 
-    /// <summary>Takes <paramref name="behaviors"/> out of the pipeline, each of which is in it once.</summary>
+    /// <summary>
+    /// Takes <paramref name="behaviors"/> out of the pipeline, each of which is in it once, and turns off the start-up
+    /// check that would stop a host without them, so the host starts and shows what stands past the behaviors.
+    /// </summary>
     private static void RemoveAll(IServiceCollection services, Type[] behaviors)
     {
         foreach (var behavior in behaviors)
         {
             services.Remove(services.Where(descriptor => descriptor.ImplementationType == behavior).Should().ContainSingle("{0} is in the pipeline once", behavior.Name).Subject);
         }
+
+        services.SkipStartupCheck(AccessBehaviorChecks.BehaviorsRegisteredCheck, reason: "the test shows what a handler does when nothing asks its request's checks");
     }
 
     [Fact]

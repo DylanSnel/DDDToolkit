@@ -210,6 +210,36 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   owns its tables for one. pgmq's check, which ran by itself since 3.0.0, stays on by default
   (`StartupCheck.OnByDefault`). The core package now depends on `Microsoft.Extensions.Hosting.Abstractions` and
   `Microsoft.Extensions.Logging.Abstractions` for it. See [Start-up checks](docs/startup-checks.md).
+- **A request that goes round its access behavior no longer goes unnoticed.** Nothing noticed a module whose checks
+  were registered and whose generated behavior was not, nor a handler called in code instead of sent: the request
+  reached its handler with nothing asking what it requires, held only by what the database checks, which per table
+  is coarser than one request's requirement. Now `AddAccessChecks<TRequests>()`, and so `AddAccessCheck`, a
+  package's registration of its check (`AddTenancyAccess`, the generated `Add{Resource}MemberAccess`) and the
+  generated `Add{Module}AccessBehavior()`, brings the start-up check `access.behaviors-registered`
+  (`AccessBehaviorChecks.BehaviorsRegisteredCheck`, in the Services stage) for an interface the toolkit wrote a
+  behavior for. It reads from the host's registrations every command and query the host can handle, by the
+  handler Mediator registered for it, and a host that calls `RunStartupChecks()` does not start while one of an
+  interface the toolkit wrote a behavior for lacks that behavior in its pipeline, or a stream query the one for
+  streams. That holds every module, one whose registration was forgotten altogether included. The message names
+  the behavior, its interface and the line that adds it, `services.AddBillingAccessBehavior()`. A behavior counts
+  registered open, as the generated call adds it, or closed over the message, as Mediator registers one listed in
+  `MediatorOptions.PipelineBehaviors`, so a module without a stream query needs nothing in the pipeline of
+  streams, and a host that lists its behaviors is told to list the one it left out. One registered as itself, or
+  under a key, does not count. `AccessBehaviorChecks.EnsureBehaviorsAreRegistered(services)` asks the same of a
+  collection a test composes. The generator says what it wrote in a new assembly attribute beside the behavior,
+  `[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior<,>), ...)]`, which is what the
+  check reads; an interface without one, of a project without Mediator, is held to nothing. See
+  [When nothing asks the checks](docs/access-requirements.md#when-nothing-asks-the-checks).
+- DDD00061, a warning, reports a request of an `[AccessRequests]` interface handed to its handler directly:
+  `Handle` of one of Mediator's handlers (`ICommandHandler`, `IQueryHandler`, `IRequestHandler`, their stream
+  kinds, or a class that implements one or derives from one), called or made into a delegate, which passes no
+  pipeline. A code fix sends the request with an `ISender` or `IMediator` the code can use where the call is,
+  `Send`, or `CreateStream` for a stream query, with the arguments in the order of the handler's parameters.
+  Constructing or injecting a handler is not reported, nor `base.Handle` in an overriding handler, nor a
+  decorator that hands its inner handler the message it was given, nor generated code, nor anything in a test
+  project: the toolkit's props now make `IsTestProject` and `IsTestingPlatformApplication` visible to its
+  analyzers, and a test that calls a handler on purpose hears nothing. Elsewhere a call that is meant takes
+  `#pragma warning disable DDD00061` with its reason.
 
 #### Entity Framework and row level security
 
@@ -1196,6 +1226,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   registrations of its modules bring, Membership's through `AddMembershipPostgres()` in the Projects module. The
   tests that start it on a database made wrong in one respect, a policy written from another catalogue among them,
   now say which check stopped it.
+- **The Tenancy sample's host is held to its modules' access behaviors.** Its modules' registrations bring
+  `access.behaviors-registered`, which runs with its other start-up checks; a test takes the Projects behavior out
+  and reads the refusal that names `services.AddProjectsAccessBehavior()`, and the test of what a handler does
+  when nothing asks its request's checks turns the check off, with that reason, to get there.
 - **The webshop's Supabase host runs its start-up checks with `RunStartupChecks()`**, where it called
   `EnsureSupabaseMigrationsAppliedAsync` by hand. Signed in with row level security, it logs in as `postgres`,
   the owner of its tables, so it turns `postgres.login-role-owns-nothing` off, with that reason: the one opt-out

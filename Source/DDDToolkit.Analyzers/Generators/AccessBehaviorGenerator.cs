@@ -54,6 +54,13 @@ namespace DDDToolkit.Analyzers;
 /// declared in the interface's namespace and is as visible as the interface. The registration is written
 /// only where the project can see <c>IServiceCollection</c>, which the toolkit's own package brings.
 /// </para>
+/// <para>
+/// The file also says what it wrote, in an assembly attribute,
+/// <c>[assembly: AccessBehavior(typeof(IBillingRequest), typeof(BillingAccessBehavior&lt;,&gt;), ...)]</c>, where the
+/// project can see that attribute. The registration of the checks reads it to bring the start-up check
+/// <c>access.behaviors-registered</c>: checks registered without the behavior that asks them hold nobody to
+/// anything, and the host is stopped before it serves a request that way.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class AccessBehaviorGenerator : IIncrementalGenerator
@@ -137,6 +144,11 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
     {
         var behavior = requests.BehaviorName;
         var writer = new CodeWriter().Header();
+        if (requests.CanDescribe)
+        {
+            EmitDescription(writer, requests, behavior, streams is not null);
+        }
+
         if (requests.Namespace.Length > 0)
         {
             writer.Line("namespace " + requests.Namespace + ";");
@@ -196,6 +208,30 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
         }
 
         return writer.ToString();
+    }
+
+    /// <summary>
+    /// What was written, for the start-up check that holds a host to registering it: the interface, the behaviors and
+    /// the call that registers them. An assembly attribute comes before any namespace, so it opens the file.
+    /// </summary>
+    private static void EmitDescription(CodeWriter writer, AccessRequestsInterface requests, string behavior, bool streams)
+    {
+        var qualified = "global::" + (requests.Namespace.Length > 0 ? requests.Namespace + "." : string.Empty);
+        var description = "[assembly: global::" + KnownTypes.AccessBehaviorAttribute
+            + "(typeof(" + requests.FullyQualifiedName + "), typeof(" + qualified + behavior + "<,>)";
+        if (streams)
+        {
+            description += ", StreamBehavior = typeof(" + qualified + requests.StreamBehaviorName + "<,>)";
+        }
+
+        if (requests.CanRegister)
+        {
+            description += ", Registration = \"services.Add" + behavior + "()\"";
+        }
+
+        writer.Line("// Which behavior asks the checks of " + requests.Name + ", read by the start-up check that it is in the pipeline.");
+        writer.Line(description + ")]");
+        writer.Line();
     }
 
     /// <summary>One behavior: the class that implements <paramref name="pipeline"/> over the checks of the interface.</summary>
@@ -336,6 +372,7 @@ public sealed class AccessBehaviorGenerator : IIncrementalGenerator
 /// <param name="StreamPipeline">How the library's behavior for streams is implemented, or <see langword="null"/> when the library has none.</param>
 /// <param name="StreamPipelineProblem">How the library's behavior for streams differs from what the generator knows (DDD00057), or <see langword="null"/>.</param>
 /// <param name="CanRegister">Whether the project can see what the registration is written with.</param>
+/// <param name="CanDescribe">Whether the project can see the attribute that says what was written for the interface.</param>
 /// <param name="Location">Where the interface is named.</param>
 internal sealed record AccessRequestsInterface(
     string Name,
@@ -350,6 +387,7 @@ internal sealed record AccessRequestsInterface(
     PipelineShape? StreamPipeline,
     string? StreamPipelineProblem,
     bool CanRegister,
+    bool CanDescribe,
     LocationInfo? Location)
 {
     public static AccessRequestsInterface Create(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
@@ -384,6 +422,7 @@ internal sealed record AccessRequestsInterface(
                 && compilation.GetTypeByMetadataName(KnownTypes.ServiceCollectionDescriptorExtensions) is not null
                 && compilation.GetTypeByMetadataName(KnownTypes.AccessCheckRegistration) is { } registration
                 && registration.GetMembers("AddAccessChecks").Length > 0,
+            CanDescribe: compilation.GetTypeByMetadataName(KnownTypes.AccessBehaviorAttribute) is not null,
             Location: LocationInfo.From(syntax.Identifier));
     }
 

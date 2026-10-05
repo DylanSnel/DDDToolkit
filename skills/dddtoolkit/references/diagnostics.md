@@ -444,6 +444,19 @@ name the aggregate root the members belong to, or remove the extra member class.
 resource keeps is still written. In a project that also references `DDDToolkit.Supporting.Membership.EntityFramework`
 the same mistake is DDD00045 or DDD00050 instead, an error, on the same class.
 
+## DDD00061
+
+Warning, on a call to `Handle` of a Mediator handler (`ICommandHandler`, `IQueryHandler`, `IRequestHandler`, their
+stream kinds, or a class implementing one) whose message implements an `[AccessRequests]` interface, and on a
+reference to such a `Handle` made into a delegate. The call skips the pipeline, so the generated access behavior
+never asks what the request requires. Send the request instead: `await sender.Send(request, cancellationToken)`,
+or `sender.CreateStream(...)` for a stream query, with an `ISender` injected where the handler was; the code fix
+does this when an `ISender` or `IMediator` is already in reach. It is not reported in a test project
+(`IsTestProject` or `IsTestingPlatformApplication` set), for `base.Handle` in an overriding handler, for a
+decorator that hands its inner handler the message it was given, or for constructing or injecting a handler.
+A generic dispatcher over an unconstrained message type parameter is not seen: send through `ISender` there. A call that is meant elsewhere gets `#pragma warning disable DDD00061` with
+the reason. Do not hide it by calling a method of the handler's own instead: the check is skipped all the same.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

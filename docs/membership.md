@@ -188,7 +188,9 @@ writes for an interface marked `[AccessRequests]`. [Access requirements](access-
 and what `IRequireAccess`, `AccessRequirement` and `Checked<T>` are. `MemberAccess.On(key, resource)` is one
 of [the requirements every request picks from](access-requirements.md#the-vocabulary), beside the toolkit's
 `AccessRequirement.SignedIn()` and the rest, and Tenancy's `TenancyAccess.InTenant()` and the rest: a request
-of a module with members says which, and none leaves it to a package.
+of a module with members says which, and none leaves it to a package. With the behavior, `AddDocumentMemberAccess`
+also brings the start-up check that the behavior is in the pipeline, and a handler called past it is a warning;
+see [When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
 
 ```mermaid
 flowchart LR
