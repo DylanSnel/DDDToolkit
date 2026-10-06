@@ -235,7 +235,7 @@ public sealed class ShopTenancyContext(DbContextOptions<ShopTenancyContext> opti
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddTenantsConverters();   // generated: both projects declare [assembly: Module("Tenants")]
+        configurationBuilder.AddTenantsConverters();   // generated: both projects are of the module Tenants
     }
 }
 ```
@@ -416,13 +416,14 @@ Tenancy's use cases, and the records they take and answer, are nested in one gen
 `TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`, so
 your classes and ids are named once for all of them. You do not name them yourself. The toolkit's generator
 closes the class over your classes in the project that declares them, as a class named after its module:
-`[assembly: Module("Tenants")]` gives `TenantsTenancy`. Every project that references that project, the
+the module Tenants gives `TenantsTenancy`, whether `[assembly: Module("Tenants")]` declares it or
+[its folder](modules.md#a-module-named-by-its-folder) does. Every project that references that project, the
 module's application, infrastructure and API projects, the host and your tests, names everything through it,
 and none of them writes the nine types.
 
 ```mermaid
 flowchart LR
-    Classes["Shop.Tenants<br/>your five classes,<br/>[assembly: Module]"] --> Generator{{"the toolkit's<br/>generator"}}
+    Classes["Shop.Tenants<br/>your five classes,<br/>in the module Tenants"] --> Generator{{"the toolkit's<br/>generator"}}
     Generator --> Name(["TenantsTenancy,<br/>written there"])
     Name --> Application["application project<br/>TenantsTenancy.SeatCommands"]
     Name --> Api["API project<br/>TenantsTenancy.SeatOverview,<br/>in GraphQL types too"]
@@ -463,11 +464,12 @@ shows. The invitation use cases take your invitation class and its id as well:
   references it, and the generators there read it as any type: HotChocolate's, reading
   `[ObjectType<TenantsTenancy.SeatOverview>]` in an API project, sees the package's record. A generator's alias
   would be the compiler's to see and not theirs.
-- **The module names it**, as it names everything the generators write in that project: `[assembly: Module]`,
-  otherwise `DDD_Module`, otherwise the assembly's name without the dots, so `order-management` gives
-  `OrderManagementTenancy`. A host that sees the classes of two modules names each by its module.
+- **The module names it**, as it names everything the generators write in that project: the module, declared by
+  `[assembly: Module]` or by its folder, otherwise `DDD_Module`, otherwise the assembly's name without the dots,
+  so `order-management` gives `OrderManagementTenancy`. A host that sees the classes of two modules names each by
+  its module.
 - **Or you name it, in one line.** A module called Tenancy would give `TenancyTenancy`. The project that declares
-  the classes names the class itself, beside its `[assembly: Module]`, and every project above uses that name:
+  the classes names the class itself, in one line of its own, and every project above uses that name:
   `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. `{Module}` works in it as in
   the package's own name, `"{Module}UseCases"`.
 - **Only the project that declares the classes gets it.** Classes split over two projects of one module get it

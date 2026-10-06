@@ -37,8 +37,9 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <c>TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)</c>, and a module that is added changes
 /// neither: no list of the modules is written by hand anywhere.
 /// <para>
-/// <b>Where it writes.</b> Into every project that sees the package and declares no module with
-/// <c>[assembly: Module]</c>: the host, or a project the host and the export share. It collects the project's own
+/// <b>Where it writes.</b> Into every project that sees the package and declares no module, with
+/// <c>[assembly: Module]</c> or by its folder with <c>DDD_DeclareModule</c>: the host, or a project the host and the
+/// export share. It collects the project's own
 /// marked lists and those of every project it references, directly or not, and writes the class when it finds none
 /// as well, with an empty <c>All</c>, so the host's one call and the export's build stay what they are while no
 /// module, or no module any more, marks a list. A project that declares a module gets nothing: a module states its

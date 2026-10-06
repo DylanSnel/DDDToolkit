@@ -35,7 +35,7 @@ public sealed partial class ShopSeat
 - The package's rules run first and always. There is nothing to override: no virtual members, no hooks.
   Add fields, entities, invariants, and handlers of the package's domain events.
 - The package's registrations are generated closed over your classes, internal to the project that
-  declares them, or to the project of the same `[assembly: Module]` that holds the context:
+  declares them, or to the project of the same module that holds the context:
   `modelBuilder.AddTenancy(database: Database)` and `services.AddTenancy<TContext>(...)`. Do not write the
   generic form by hand, and call them from that project, not from an API project above it.
 
@@ -74,8 +74,8 @@ public sealed partial class ShopSeat
 
 4. Name the use cases through `{Module}Tenancy`, and write no alias. They are nested in one generic class,
    `TenancyUseCases<...>`, and the toolkit's generator closes it over your classes in the project that declares
-   them, as a class named after its module: `[assembly: Module("Tenants")]` gives `TenantsTenancy`, which every
-   project above sees. `TenantsTenancy.SeatCommands` is the package's own type, which `AddTenancy` registered.
+   them, as a class named after its module: the module Tenants, declared by `[assembly: Module("Tenants")]` or by
+   its folder (`DDD_DeclareModule`), gives `TenantsTenancy`, which every project above sees. `TenantsTenancy.SeatCommands` is the package's own type, which `AddTenancy` registered.
    A hand-written `global using TenantsTenancy = ...` above it is CS0576: delete it. For another name (a module
    called Tenancy would get `TenancyTenancy`), add one line in the project that declares the classes:
    `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. CS0246 for the name above:

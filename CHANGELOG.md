@@ -961,25 +961,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     have the migration rewrite the keys to the members' names before the column changes
     (`UPDATE ... SET "Kind" = 'HeadOffice' WHERE "Kind" = 'head-office'`), as a role that row level security
     lets through: on Postgres the package's export forces it on the table, so its owner is held to it as well.
-- **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys
-  on with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
+- **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
+  with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes
-  `TenancyPermissionsOfModules` into every project that references Tenancy and declares no module with
-  `[assembly: Module]`, an internal class in the namespace named after the project's assembly: `All`, every
-  module's keys, one list after the other, and `services.AddTenancyPermissionsOfModules()`, which adds them as one
-  contribution. The host makes that one call, and an export builds with
-  `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, so neither names a module, and a module
-  that is added reaches both with the next build. While no module marks a list, `All` is empty and both still
-  compile. A marked list the composing project could not read is the new error DDD00063 where it is declared:
-  one that is not static, has no getter, is a static virtual or abstract member of an interface, is declared in
-  a generic type, an extension block or a file-local type, is no sequence of `Permission`, or, in a library,
-  whether it declares a module or not, is not public. Only an application may keep a list of its own internal.
-  The same list added twice, by the host's call and by the module's own `AddTenancyPermissions`, is refused at
-  start-up with one problem that names its keys and the call to take out. A pack that names a key the catalogue
-  does not know, and a question about one, now say how a module's keys reach the catalogue, which is what a host
-  that leaves the call out meets. `AddTenancyPermissions` stays, for keys added by hand. The start-up check on
-  Postgres that compares the database's functions with the catalogue the host runs with stays as well: the host
-  and the export are two programs, and build the same catalogue only while they reference the same modules. See
+  `TenancyPermissionsOfModules` into every project that references Tenancy and declares no module, with
+  `[assembly: Module]` or by its folder with `DDD_DeclareModule`, an internal class in the namespace named after
+  the project's assembly: `All`, every module's keys, one list after the other, and
+  `services.AddTenancyPermissionsOfModules()`, which adds them as one contribution. The host makes that one call,
+  and an export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, so neither
+  names a module, and a module that is added reaches both with the next build. While no module marks a list,
+  `All` is empty and both still compile. A marked list the composing project could not read is the new error
+  DDD00063 where it is declared: one that is not static, has no getter, is a static virtual or abstract member of
+  an interface, is declared in a generic type, an extension block or a file-local type, is no sequence of
+  `Permission`, or, in a library, whether it declares a module or not, is not public. Only an application may
+  keep a list of its own internal. The same list added twice, by the host's call and by the module's own
+  `AddTenancyPermissions`, is refused at start-up with one problem that names its keys and the call to take out.
+  A pack that names a key the catalogue does not know, and a question about one, now say how a module's keys
+  reach the catalogue, which is what a host that leaves the call out meets. `AddTenancyPermissions` stays, for
+  keys added by hand. The start-up check on Postgres that compares the database's functions with the catalogue
+  the host runs with stays as well: the host and the export are two programs, and build the same catalogue only
+  while they reference the same modules. See
   [A module states its keys once](docs/tenancy.md#a-module-states-its-keys-once). From 3.2.0-preview.1 or
   3.2.0-preview.2:
   - Mark each module's list of keys with `[TenancyPermissions]`, make it public, and take
@@ -988,10 +989,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     in a top-level `Program.cs`, and build the export's catalogue from `TenancyPermissionsOfModules.All` instead
     of a list of the modules' keys, in a project that declares no module.
 - **Tenancy: no project writes the nine types.** The project that declares a module's Tenancy classes gets
-  `{Module}Tenancy` from the toolkit's generator, `TenantsTenancy` for `[assembly: Module("Tenants")]`: a class
-  that derives from `TenancyUseCases<...>` closed over them, through which every project that sees it names the
-  use cases and their records, `TenantsTenancy.SeatCommands` and `TenantsTenancy.SeatOverview`, the package's own
-  types that `AddTenancy` registers. HotChocolate's generator reads it in an API project as any type, so
+  `{Module}Tenancy` from the toolkit's generator, `TenantsTenancy` for the module Tenants: a class that derives
+  from `TenancyUseCases<...>` closed over them, through which every project that sees it names the use cases and
+  their records, `TenantsTenancy.SeatCommands` and `TenantsTenancy.SeatOverview`, the package's own types that
+  `AddTenancy` registers. HotChocolate's generator reads it in an API project as any type, so
   `[ObjectType<TenantsTenancy.SeatOverview>]` works there. `TenancyUseCases<...>` is abstract instead of static
   for it. Membership's use cases are generic over ids alone and need nothing of the kind. See
   [Calling a use case](docs/tenancy.md#calling-a-use-case). From 3.2.0-preview.1 or 3.2.0-preview.2:

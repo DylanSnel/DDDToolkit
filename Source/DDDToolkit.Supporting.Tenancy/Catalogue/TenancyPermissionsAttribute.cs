@@ -17,9 +17,9 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// Tenancy's generator collects every marked list of the modules a project references into that project, in
 /// <c>TenancyPermissionsOfModules</c>, in the namespace named after the project's assembly: <c>All</c>, every
 /// module's keys, and <c>services.AddTenancyPermissionsOfModules()</c>, which adds them to the catalogue. It writes
-/// them into every project that declares no module with <c>[assembly: Module]</c>, such as the host, which composes
-/// the modules and so sees all of them, and into no module's own projects. The host registers the keys with that
-/// one call, and an export builds the same catalogue with
+/// them into every project that declares no module, with <c>[assembly: Module]</c> or by its folder with
+/// <c>DDD_DeclareModule</c>, such as the host, which composes the modules and so sees all of them, and into no
+/// module's own projects. The host registers the keys with that one call, and an export builds the same catalogue with
 /// <c>TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)</c>, so a module that is added changes
 /// neither. Both compile while no module marks a list yet: <c>All</c> is then empty.
 /// </para>

@@ -203,6 +203,24 @@ public class TemplateFacadeTests
         above.HintNames.Should().NotContain("TemplateFacade", "the project above declares nothing, and names the class the domain project was given");
     }
 
+    [Fact]
+    public void A_module_its_folder_declares_names_the_class_as_one_its_attribute_declares()
+    {
+        // DDD_Module with DDD_DeclareModule beside it, as a Directory.Build.props sets them for a module's folder: the
+        // build declares the module, and the class is named after it in the domain project, as the sample's
+        // TenantsTenancy is, and seen by the module's projects above, which write none of their own.
+        var domain = Domain(module: null)(Project(Handler("TenantsTenancy"))).WithAssemblyName("Shop.Tenants.Domain").WithModuleFromTheBuild("Tenants").RunCore();
+        domain.ShouldCompile();
+        domain.ShouldHaveGenerated("TenantsTenancy.TemplateFacade");
+
+        var application = Project(Handler("TenantsTenancy")).WithAssemblyName("Shop.Tenants.Application").WithModuleFromTheBuild("Tenants")
+            .WithReferencedProject("Shop.Tenants.Domain", project => Domain(module: null)(project).WithModuleFromTheBuild("Tenants"))
+            .RunCore();
+        application.ShouldCompile();
+        application.HintNames.Should().NotContain("TemplateFacade", "the class is the domain project's, and every project of the module above sees that one");
+        application.OutputCompilation.GetTypeByMetadataName("TenantsTenancy")!.ContainingAssembly.Name.Should().Be("Shop.Tenants.Domain");
+    }
+
     // ------------------------------------------------------------------ every project above them
 
     [Fact]

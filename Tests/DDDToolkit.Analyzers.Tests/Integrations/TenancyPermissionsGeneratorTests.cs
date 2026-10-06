@@ -215,6 +215,19 @@ public class TenancyPermissionsGeneratorTests
     }
 
     [Fact]
+    public void A_project_of_a_module_its_folder_declares_gets_nothing_either()
+    {
+        // The same project with no [assembly: Module] of its own: a Directory.Build.props sets DDD_Module and
+        // DDD_DeclareModule for its folder, and the build declares the module, as the Tenancy sample's modules do.
+        var result = Run(GeneratorTestHost.Create("namespace Shop.Ordering.Infrastructure; public static class OrderingInfrastructure;")
+            .WithAssemblyName("Shop.Ordering.Infrastructure").WithModuleFromTheBuild("Ordering").WithTenancy().WithDependencyInjection()
+            .WithReferencedProject("Shop.Ordering", project => project.WithSource(Ordering, "Ordering.cs"), GeneratorTestHost.TenancyGenerators()));
+
+        result.ShouldCompile();
+        WrittenFiles(result).Should().BeEmpty("a module the build declares is a module, as one [assembly: Module] declares is");
+    }
+
+    [Fact]
     public void A_project_that_sees_no_marked_list_gets_an_empty_list_so_its_calls_compile_the_same()
     {
         // The host's call and the export's build name no module, so they must compile before the first module marks
