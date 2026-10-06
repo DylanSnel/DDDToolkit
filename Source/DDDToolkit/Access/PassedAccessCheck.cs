@@ -26,7 +26,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// It follows the flow the way an <see cref="AsyncLocal{T}"/> does: into the handler and everything it awaits,
 /// not back out to what sent the request. Each request a handler sends in turn passes its own check, and has its
-/// own while it is handled. A request that requires nothing (<see cref="AccessRequirement.Open"/>) passed no
+/// own while it is handled. A request anyone may send (<see cref="AccessRequirement.AllowAnonymous"/>) passed no
 /// check, and neither did a handler called directly, nor work outside any request: <see cref="Current"/> is then
 /// <see langword="null"/>, and there is nothing to ask again.
 /// </para>

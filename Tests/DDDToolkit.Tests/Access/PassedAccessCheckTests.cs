@@ -182,7 +182,7 @@ public class PassedAccessCheckTests
 
         // Sent from the handler of a request that passed: the open one is not that request.
         var seen = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), () =>
-            SendAsync(checks, new RestockShelf(4, new AccessRequirement.Open("Anybody may look at a shelf.")), () => Task.FromResult(PassedAccessCheck.Current)));
+            SendAsync(checks, new RestockShelf(4, AccessRequirement.AllowAnonymous()), () => Task.FromResult(PassedAccessCheck.Current)));
         seen.Should().BeNull("a request that requires nothing passed no check");
 
         // Asked in the handler's own flow, where a save of the handler's would look: the refused check takes the place

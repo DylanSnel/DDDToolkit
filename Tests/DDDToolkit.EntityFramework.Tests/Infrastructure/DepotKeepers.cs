@@ -31,7 +31,7 @@ public sealed record AddPallet(DepotId Depot, int Number, string Label, Guid Own
 /// <summary>Looks at a depot: anyone may.</summary>
 public sealed record LookAtDepot(DepotId Depot) : IDepotRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Every depot can be looked at.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>Who keeps which depot, as the access check reads it.</summary>

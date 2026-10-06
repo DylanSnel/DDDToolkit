@@ -257,31 +257,31 @@ public interface IShedRequest : IRequireAccess;
 /// <summary>A command of the garden.</summary>
 public sealed record PlantTree : IGardenRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Anybody may plant a tree.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>A query of the garden answered with a stream.</summary>
 public sealed record GardenBeds : IGardenRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("The beds are everybody's to see.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>A request of the pond.</summary>
 public sealed record FeedFish : IPondRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("The fish are everybody's.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>Another request of the pond.</summary>
 public sealed record CountFish : IPondRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Anybody may count them.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>A request of the shed.</summary>
 public sealed record OilHinges : IShedRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Anybody may oil a hinge.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>A pipeline, as a library declares one.</summary>

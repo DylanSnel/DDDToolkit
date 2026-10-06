@@ -204,7 +204,7 @@ public interface IStockRequest : IRequireAccess;
 /// <summary>Counts the stock: the one request of the second module.</summary>
 public sealed record TakeStock : ICommand, IStockRequest
 {
-    AccessRequirement IRequireAccess.RequiredAccess => new AccessRequirement.Open("Anybody may count the stock.");
+    AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();
 }
 
 /// <summary>Handles <see cref="TakeStock"/>.</summary>
