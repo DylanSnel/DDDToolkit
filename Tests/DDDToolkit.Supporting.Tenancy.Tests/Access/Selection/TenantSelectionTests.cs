@@ -30,6 +30,17 @@ public class TenantSelectionTests
     }
 
     [Fact]
+    public async Task The_selection_without_its_ids_answers_what_it_answers_with_them()
+    {
+        // What a host's middleware asks, and begins as it is answered, naming no id.
+        ITenantSelection selection = new TenantSelection<TenantId, SeatId>(new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor));
+
+        (await selection.ResolveAsync(Caller.User(Ada), "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.InSeat(Harbor, AdaAtHarbor));
+        (await selection.ResolveAsync(Caller.User(Ada), " ", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.TenantRequired));
+        (await selection.ResolveAsync(Caller.System, "harbor", TestContext.Current.CancellationToken)).Should().Be(HostCaller.Nobody(TenancyRefusals.NotSeated));
+    }
+
+    [Fact]
     public async Task No_header_is_tenant_required()
     {
         var seats = new ListedSeats().With(Ada, Harbor, "harbor", AdaAtHarbor);

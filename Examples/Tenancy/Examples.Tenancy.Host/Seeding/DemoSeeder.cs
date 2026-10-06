@@ -8,7 +8,6 @@ using Examples.Tenancy.Tenants.Application.Seats.Queries;
 using Examples.Tenancy.Tenants.Application.Tenant.Commands;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using GreenDonut.Data;
 using Mediator;
 
@@ -62,7 +61,8 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
             return;
         }
 
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        // System work, closed over the Tenants module's ids like its use cases, so the host names neither of them.
+        using (TenantsTenancy.BeginSystem())
         {
             foreach (var tenant in DemoData.Tenants)
             {
@@ -77,7 +77,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
 
         foreach (var tenant in DemoData.Tenants)
         {
-            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant.Id, tenant.Administrator.Id))
+            using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await SeedAsync(tenant, cancellationToken);
             }
@@ -133,7 +133,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         {
             // System work in a tenant reads all of it: every seat, role and project role, and every project.
             IReadOnlyList<string> lacking;
-            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant.Id, tenant.Administrator.Id))
+            using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();

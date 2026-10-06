@@ -953,6 +953,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
+- **Tenancy's ids are named once.** What an application calls of Tenancy, rather than names, is closed over its ids
+  as far as each kind reaches: the system work and the current caller wherever its classes are seen, the
+  registrations in the module's own projects, where Tenancy is registered. The class the use cases are named through
+  carries the system work and the current caller as static members: `TenantsTenancy.BeginSystem()`,
+  `BeginSystemIn(tenant, actingSeat, scope)`, `BeginOperator(identity)`, `BeginOperatorIn(tenant, identity, scope)`,
+  `BeginTokenIn(tenant, seat, scope)` and `CurrentCaller()`. C# finds a static member through a derived class, so they
+  reach every project that sees that class, the host and the tests, and the one that declares the classes too, since
+  a call is the compiler's to bind. `AddTenancyDomainEvents`, `AddTenancyEventLog`, `AddTenancyReadModel`,
+  `AddTenancyReadFunctions` and `AddTenancyInvitationEvents` are template registrations now, generated as
+  `AddTenancy` is, internal to the project that declares the classes or to a project of their module where the
+  context is: `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, and
+  `outbox.AddTenancyInvitationEvents<InvitationId>()`, whose invitation id is named as where invitations are
+  registered. `ITenantSelection` is tenant selection without its id types, registered per scope as the same
+  instance unless a host registered its own before, so a host's middleware names no id; and
+  `TenancyWork.BeginSystemIn(tenant, seat)` infers both ids where a seat is given. That overload yields to the one
+  for a seat that may be missing wherever the type arguments are written, so a bare `default` there still means no
+  seat. The forms generic over the ids stay, for code that sees only the ids: another module, which nothing tells
+  which of its ids are Tenancy's, writes them where they are no arguments. The types generic over the ids, the
+  answers, the questions, the records, `TenantSelection<,>` for a person's own seats and `EfTenancyReadSource<,,,>`,
+  keep their type arguments, as does `TenancySystemReads.TenantsToSweepAsync<TTenant, TTenantId>`. See
+  [Your ids, named once](docs/tenancy.md#your-ids-named-once).
 - **Tenancy makes a new id with the id's own `Create()`, and the id options are gone.** `NewTenantId`, `NewSeatId`,
   `NewUnitId` and `NewRoleId` of `TenancyOptions`, and `NewInvitationId` of `TenancyInvitationOptions`, are removed:
   a use case makes the id of a new tenant, unit, seat, role or invitation with `TTenantId.Create()` and the rest, in
@@ -1637,6 +1658,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrators read on the History page. The Tenants module has a migration for the roles' new column,
   `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
   hosted services that ask the database something.
+- **The Tenancy sample names Tenancy's ids only where nothing else can.** The host seeds in
+  `TenantsTenancy.BeginSystem()` and `BeginSystemIn(tenant, seat)`, its gates ask `TenantsTenancy.CurrentCaller()`
+  and take the caller as an `ITenancyCaller`, and its tenant header asks `ITenantSelection` and begins nobody with
+  `TenancyCallers.BeginNone()` where the lookup fails, so it names no id. The Tenants module registers its domain
+  events and its access history with `AddTenancyDomainEvents()`, `AddTenancyInvitationEvents<InvitationId>()` and
+  `AddTenancyEventLog()`, and the tests begin their system work through `TenantsTenancy`. Projects and Inspections,
+  which see the ids alone, write them where they register, and Projects' own place on a crew infers them. A source
+  test holds every project that sees the Tenants module's classes to naming no id where it begins system work,
+  asks the current caller or registers Tenancy. The Tenants module's reads still name them where they are a type's:
+  the selection asked for a person's own seats, and the source of Tenancy's rows a reading makes.
 - **The Tenancy sample's contracts projects publish every public type, and mark none.** The modules'
   `Directory.Build.props` sets `DDD_ModuleContracts` for each project whose name ends in `.Contracts`, a convention of
   the sample's own beside the `DDD_Module` it names each module with, and the thirteen `[ModuleContract]`s of the
@@ -2128,6 +2159,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: your ids, named once.** [Your ids, named once](docs/tenancy.md#your-ids-named-once) has which call of
+  Tenancy's is closed over your ids where, with a diagram, and why another module writes them; the System work,
+  Operators, Access history and tenant selection sections show the closed calls, and
+  [Use cases closed over your classes](docs/writing-a-supporting-domain.md#use-cases-closed-over-your-classes) says a
+  package may put static members on the class it asks for, which the generated class's documentation now says too.
 - **Docs: how a new id is made.** [Creating identifiers](docs/identifiers.md#creating-identifiers) and
   [The identifier](docs/generated-code.md#the-identifier) show `Create()` and `ICreatableEntityId<TSelf>`,
   [How a new id is made](docs/tenancy.md#how-a-new-id-is-made) draws how Tenancy gets one, and

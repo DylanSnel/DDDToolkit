@@ -1,5 +1,4 @@
 using Examples.Hosting;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
@@ -392,7 +391,7 @@ public sealed class SampleOnPostgres : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentNullException.ThrowIfNull(work);
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant.Id, tenant.Administrator.Id))
+        using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
         {
             await using var scope = Host.Services.CreateAsyncScope();
             return await work(scope.ServiceProvider);

@@ -98,6 +98,10 @@ public sealed partial class ShopSeat
    `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. CS0246 for the name above:
    read DDD00065 in that project. Only a module of one project with HotChocolate types over the records keeps
    one alias of exactly the class's name there, since another generator does not see a generated class.
+   The same class closes over your ids what is called: system work, `TenantsTenancy.BeginSystem()`,
+   `BeginSystemIn(tenant, actingSeat)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn`, and
+   `TenantsTenancy.CurrentCaller()`. Write no `TenancyWork.BeginSystem<TenantId, SeatId>()` where the class is
+   seen; a module that sees only the ids calls `TenancyWork`'s, which infers both from a tenant and a seat.
 
    ```csharp
    // TenantsTenancy.TenantCommands, OrganizationCommands, SeatCommands, RoleCommands, TenancyDirectory,
@@ -106,7 +110,7 @@ public sealed partial class ShopSeat
    {
        public async Task SetUpAsync(Guid identity, CancellationToken cancellationToken)
        {
-           using (TenancyWork.BeginSystem<TenantId, SeatId>())   // provisioning is system work outside any tenant
+           using (TenantsTenancy.BeginSystem())                  // provisioning is system work outside any tenant
            {
                await tenants.ProvisionAsync(
                    new TenantsTenancy.TenantToProvision(
@@ -123,8 +127,9 @@ public sealed partial class ShopSeat
    ```csharp
    using (Callers.Begin(caller))
    {
+       // ITenantSelection: the selection without its ids, so the middleware names none
        var seat = await selection.ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
-       using (TenancyCallers.Begin(seat))                    // TenantSelection<TenantId, SeatId>
+       using (TenancyCallers.Begin(seat))
        {
            await next(context);
        }
@@ -142,7 +147,7 @@ public sealed partial class ShopSeat
    TenancyPermissionsOfModules.All)`. Do not also call `AddTenancyPermissions` with a marked list: the catalogue
    refuses it twice (DDD00063 is a marked list that is not public, static and a sequence of `Permission`).
 7. Provisioning, seeding and jobs are system work, begun on purpose:
-   `using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, actingSeat)) { ... }`. A request is never
+   `using (TenantsTenancy.BeginSystemIn(tenant, actingSeat)) { ... }`. A request is never
    system work. With `services.RequireExplicitCallers()` work that named no caller fails instead of running
    as the application.
 
@@ -190,7 +195,7 @@ public sealed partial class ShopSeat
   about one input names it in its `Field` argument.
 - **Operators** are the application's own staff: a token role listed in `TenancyOptions.OperatorTokenRoles`.
   They hold no seat and only read. What one asks for is carried out by system work that names them,
-  `TenancyWork.BeginOperatorIn(tenant, identity)`.
+  `TenantsTenancy.BeginOperatorIn(tenant, identity)`.
 - **Who acted** is a seat, an operator, the system or a token, on every event of Tenancy's (`By`) and on a
   row that `RecordsWhoChanged()`. Never put whoever work acts for into the toolkit's `Caller`.
 - **Invitations** are optional (`AddTenancyInvitations`). The token is a bearer credential: show it once,

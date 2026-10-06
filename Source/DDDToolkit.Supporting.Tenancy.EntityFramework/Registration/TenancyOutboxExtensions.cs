@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.Options;
 using DDDToolkit.Interfaces;
@@ -18,9 +19,15 @@ public static class TenancyOutboxExtensions
     /// <code>
     /// options.UseOutbox&lt;TenancyContext&gt;(outbox =&gt; outbox
     ///     .PublishAs&lt;SeatAdded&lt;TenantId, SeatId&gt;, SeatJoined&gt;(added =&gt; new SeatJoined(added.TenantId.Value, added.SeatId.Value))
-    ///     .AddTenancyDomainEvents&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;());
+    ///     .AddTenancyDomainEvents());
     /// </code>
     /// Mapped after it, an event is already kept off the sinks, and the mapping throws.
+    /// <para>
+    /// The call without type arguments is generated into the project that declares the application's classes,
+    /// closed over their four ids, or into a project of the same module that declares none, such as the module's
+    /// infrastructure project, where the context is (<see cref="TemplateRegistrationAttribute"/>). This is the
+    /// method it calls, which can be called as well, with the four ids written out.
+    /// </para>
     /// <para>
     /// Every event carries who made the change as <c>By</c>, so every one of them is closed over the seat id as
     /// well, an event about a tenant, a unit or a role included: <c>TenantSuspended&lt;TenantId, SeatId&gt;</c>.
@@ -30,7 +37,12 @@ public static class TenancyOutboxExtensions
     /// </summary>
     /// <param name="outbox">The outbox of Tenancy's context.</param>
     /// <exception cref="ArgumentNullException"><paramref name="outbox"/> is null.</exception>
-    public static OutboxOptions AddTenancyDomainEvents<TTenantId, TSeatId, TUnitId, TRoleId>(this OutboxOptions outbox)
+    [TemplateRegistration]
+    public static OutboxOptions AddTenancyDomainEvents<
+        [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+        [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+        [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+        [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>(this OutboxOptions outbox)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
@@ -79,9 +91,12 @@ public static class TenancyOutboxExtensions
     /// invitations:
     /// <code>
     /// options.UseOutbox&lt;TenancyContext&gt;(outbox =&gt; outbox
-    ///     .AddTenancyDomainEvents&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;()
-    ///     .AddTenancyInvitationEvents&lt;TenantId, InvitationId, OrganizationUnitId, RoleId, SeatId&gt;());
+    ///     .AddTenancyDomainEvents()
+    ///     .AddTenancyInvitationEvents&lt;InvitationId&gt;());
     /// </code>
+    /// That call is generated as <see cref="AddTenancyDomainEvents{TTenantId, TSeatId, TUnitId, TRoleId}"/>'s is,
+    /// closed over the four ids of the application's classes; the invitation's id is named, since an application may
+    /// have no invitations, as it is named where invitations are registered.
     /// As the others, each one the application has not mapped to an integration event before this call is kept
     /// off the sinks. They carry ids and dates, and who made the change: never a token, a digest or an address.
     /// <para>
@@ -91,7 +106,13 @@ public static class TenancyOutboxExtensions
     /// </summary>
     /// <param name="outbox">The outbox of Tenancy's context.</param>
     /// <exception cref="ArgumentNullException"><paramref name="outbox"/> is null.</exception>
-    public static OutboxOptions AddTenancyInvitationEvents<TTenantId, TInvitationId, TUnitId, TRoleId, TSeatId>(this OutboxOptions outbox)
+    [TemplateRegistration]
+    public static OutboxOptions AddTenancyInvitationEvents<
+        [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+        TInvitationId,
+        [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+        [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
+        [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId>(this OutboxOptions outbox)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>

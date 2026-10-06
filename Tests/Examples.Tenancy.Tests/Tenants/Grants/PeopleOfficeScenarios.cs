@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.EntityFramework.EventLog;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using FluentAssertions;
@@ -96,7 +95,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
         // The history, read as the application's own work in harbor. The seeding gave every role as system work,
         // so the one grant a seat made is hers.
         List<(TenantId Tenant, string? By, string Payload)> grantsBySeats;
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var rows = await scope.ServiceProvider.GetRequiredService<TenantsContext>().Set<EventLogEntry>()

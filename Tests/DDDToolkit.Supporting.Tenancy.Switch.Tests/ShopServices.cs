@@ -18,8 +18,9 @@ public static class ShopServices
     /// <param name="connection">The database.</param>
     public static IServiceCollection AddShop(this IServiceCollection services, SqliteConnection connection)
     {
+        // Generated, like AddTenancy below, for the ids the switch wrote: no project names them.
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopContext>(outbox => outbox
-            .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()));
+            .AddTenancyDomainEvents()));
 
         // Generated for the classes and ids of this project: the context is the one type left to name. A new id is made
         // by the id itself, written or not: TenantId.Create(), a time-ordered Guid.

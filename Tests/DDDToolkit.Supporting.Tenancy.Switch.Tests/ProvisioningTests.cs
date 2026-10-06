@@ -1,6 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +13,8 @@ namespace Shop;
 /// An application of one project that writes <c>[assembly: GenerateTenancyClasses]</c> and no class or id of Tenancy's:
 /// it compiles, it creates its tables, and it provisions a tenant through the package's use case, on a SQLite database
 /// in memory. What the tenant, its organization, its root, its roles and its first seat are stored as is read back
-/// from that database.
+/// from that database. The system work it is done in is begun through the class the use cases are named through,
+/// closed over the ids the switch wrote, and no line here names one of them.
 /// </summary>
 public sealed class ProvisioningTests : IDisposable
 {
@@ -42,7 +42,7 @@ public sealed class ProvisioningTests : IDisposable
     {
         ShopTenancy.ProvisionedTenant provisioned;
         await using (var scope = _services.CreateAsyncScope())
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (ShopTenancy.BeginSystem())
         {
             provisioned = await scope.ServiceProvider.GetRequiredService<ShopTenancy.TenantCommands>().ProvisionAsync(
                 new ShopTenancy.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid(), "Ada"),
@@ -50,7 +50,7 @@ public sealed class ProvisioningTests : IDisposable
         }
 
         await using var read = _services.CreateAsyncScope();
-        using var inTheTenant = TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.SystemIn(provisioned.Tenant));
+        using var inTheTenant = ShopTenancy.BeginSystemIn(provisioned.Tenant);
         var context = read.ServiceProvider.GetRequiredService<ShopContext>();
 
         var tenant = await context.Set<Tenant>().SingleAsync(TestContext.Current.CancellationToken);

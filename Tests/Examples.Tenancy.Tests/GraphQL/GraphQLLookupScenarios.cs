@@ -1,5 +1,4 @@
 using System.Text.Json;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -86,7 +85,7 @@ public sealed class GraphQLLookupScenarios(SampleHosts sample) : IClassFixture<S
         await using var host = await sample.StartAsync();
         var stray = Meadow.Administrator.Id;
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();

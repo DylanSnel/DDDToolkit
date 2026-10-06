@@ -51,7 +51,12 @@ public static class TenancyCallers
         return new Scope(previous);
     }
 
-    /// <summary>The current caller with the application's ids; nobody, refused as not seated, outside any scope.</summary>
+    /// <summary>
+    /// The current caller with the application's ids; nobody, refused as not seated, outside any scope. A project that
+    /// sees the application's classes asks the same closed over them, through the class named after the module that
+    /// declares them, <c>TenantsTenancy.CurrentCaller()</c>. Code that needs only what kind of caller it is reads
+    /// <see cref="Ambient"/>, which needs no id: none there is nobody, not seated.
+    /// </summary>
     /// <exception cref="InvalidOperationException">The current caller was made with other id types: two Tenancy registrations with different ids.</exception>
     public static TenancyCaller<TTenantId, TSeatId> Current<TTenantId, TSeatId>()
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>

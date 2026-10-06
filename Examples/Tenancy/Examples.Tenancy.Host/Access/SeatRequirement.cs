@@ -27,9 +27,13 @@ public sealed class SeatRequirement : IAuthorizationRequirement
     /// named no tenant is a 400 with <c>tenancy.tenant-required</c>; any other caller who is nobody is a 403 with
     /// the reason tenant selection gave, such as <c>tenancy.not-seated</c> or <c>tenancy.seat-suspended</c>.
     /// </summary>
-    /// <remarks>One function, so whatever else guards an entrance of the host asks the same question.</remarks>
+    /// <remarks>
+    /// One function, so whatever else guards an entrance of the host asks the same question. It reads what kind of
+    /// caller it is and why nobody is nobody, which a caller says without its ids, so it takes one as
+    /// <see cref="ITenancyCaller"/>: the guards pass <c>TenantsTenancy.CurrentCaller()</c>.
+    /// </remarks>
     /// <param name="caller">The request's Tenancy caller.</param>
-    public static RefusalException? RefusalFor(TenancyCaller<TenantId, SeatId> caller)
+    public static RefusalException? RefusalFor(ITenancyCaller caller)
     {
         ArgumentNullException.ThrowIfNull(caller);
 

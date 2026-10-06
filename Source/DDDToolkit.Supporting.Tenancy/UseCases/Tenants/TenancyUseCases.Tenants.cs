@@ -51,7 +51,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <para>
         /// Only system work outside any tenant provisions one, and it does not do so with that power: once it
         /// knows the new tenant's id, everything else, the check that the slug is free and the save included,
-        /// runs as system work inside the new tenant (<see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}"/>),
+        /// runs as system work inside the new tenant (<see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>),
         /// so it writes that tenant's rows and nothing else. On a database that keeps tenants apart by itself,
         /// such as Postgres with row level security, the slug check then sees no other tenant, and the unique
         /// index on the slug is what refuses one that is taken.

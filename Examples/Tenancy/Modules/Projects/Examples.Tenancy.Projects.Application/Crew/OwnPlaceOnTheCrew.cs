@@ -26,6 +26,10 @@ namespace Examples.Tenancy.Projects.Application.Crew;
 /// there, its own place or not.
 /// </para>
 /// <para>
+/// The work names neither of Tenancy's ids: this module sees only the ids, not the classes Tenancy is closed over,
+/// and C# infers both from the tenant and the seat it is begun for.
+/// </para>
+/// <para>
 /// What was checked is one change to one project, so that is all such a save may write: the two commands save
 /// through <see cref="IProjectStore.SaveOnlyAsync"/>, which refuses when the unit of work holds a change to
 /// anything else. A scope runs one command, so nothing else is there; a host that sent two commands in one scope
@@ -55,6 +59,6 @@ internal static class OwnPlaceOnTheCrew
     /// <returns>What ends the work when disposed; <see langword="null"/> when the save runs as the caller.</returns>
     public static IDisposable? BeginSave(IProjectsRequest command, SeatId seat, TenantInScope<TenantId, SeatId> caller)
         => caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current?.Request, command)
-            ? TenancyWork.BeginSystemIn<TenantId, SeatId>(caller.Tenant, seat, Scope)
+            ? TenancyWork.BeginSystemIn(caller.Tenant, seat, Scope)
             : null;
 }

@@ -29,6 +29,12 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// <c>[assembly: TemplateFacade]</c> asks for the class. That is why this class is abstract rather than static.
 /// </para>
 /// <para>
+/// A static member is found through a derived class as a nested type is, so the same class closes over the ids what
+/// is called rather than named: system work, <c>ShopTenancy.BeginSystem()</c> and <c>ShopTenancy.BeginSystemIn(tenant)</c>,
+/// and the current caller, <c>ShopTenancy.CurrentCaller()</c>. <see cref="Access.TenancyWork"/> and
+/// <see cref="Access.TenancyCallers"/> keep them generic over the ids, for code that sees only those.
+/// </para>
+/// <para>
 /// They are plain services, not handlers: each method checks the Tenancy caller, loads what it needs
 /// through <see cref="IStore"/>, calls the aggregates, and saves once. Every command starts by asking who is
 /// calling. Nobody is refused, a seat is asked for its keys, and system work in a tenant holds every key
@@ -79,7 +85,8 @@ public abstract partial class TenancyUseCases<
 {
     /// <summary>
     /// For the class the generator writes for an application, which derives from this one closed over its classes
-    /// so that every nested type is named through it. Nothing makes an instance: everything here is a nested type.
+    /// so that every nested type and static member is named through it. Nothing makes an instance: everything here
+    /// is a nested type or a static member.
     /// </summary>
     protected TenancyUseCases()
     {

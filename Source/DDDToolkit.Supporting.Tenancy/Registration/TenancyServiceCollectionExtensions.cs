@@ -25,7 +25,9 @@ public static class TenancyServiceCollectionExtensions
     /// <item>The catalogue is built once, from <see cref="TenancyOptions{TTenantId, TSeatId, TUnitId, TRoleId}.Catalogue"/>,
     /// or from none when it is not set, and every <see cref="PermissionContribution"/>, the first time it is asked
     /// for; resolve it at start-up to have a catalogue that does not hold together stop the application there.</item>
-    /// <item>The answers are one for the application; selection and the use cases are made per scope.</item>
+    /// <item>The answers are one for the application; selection and the use cases are made per scope. Selection is
+    /// registered without its id types as well, <see cref="ITenantSelection"/>, the same instance, unless a host
+    /// registered its own before: that one stays.</item>
     /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
     /// <item>A <see cref="TimeProvider"/> registered before stays; otherwise the system clock is used.</item>
     /// <item>A new id is made by the id itself, <c>TTenantId.Create()</c>, which every id of the application's
@@ -76,6 +78,11 @@ public static class TenancyServiceCollectionExtensions
             serviceProvider.GetServices<PermissionContribution>().SelectMany(contribution => contribution.Permissions)));
         services.AddSingleton<ITenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>, TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>>();
         services.AddScoped<TenantSelection<TTenantId, TSeatId>>();
+
+        // The same selection without its id types, for the host's middleware, which only makes current the caller it
+        // is answered: one instance per scope, asked by either name. A host that answers it itself registered its
+        // own already, and that one stays.
+        services.TryAddScoped<ITenantSelection>(serviceProvider => serviceProvider.GetRequiredService<TenantSelection<TTenantId, TSeatId>>());
 
         services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.TenantCommands>();
         services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.OrganizationCommands>();

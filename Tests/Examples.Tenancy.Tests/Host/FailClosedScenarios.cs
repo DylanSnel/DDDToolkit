@@ -103,7 +103,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             // It finds no project to change, so one is put before it: loaded as harbor's own work, which reads
             // harbor's rows, and changed and saved once that work has ended and the system caller is all there is.
             Project pier;
-            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id, Harbor.Administrator.Id))
+            using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 pier = await projects.Projects.AsTracking().SingleAsync(project => project.Id == pierSeven.Id, Cancellation);
             }
@@ -124,7 +124,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         var host = onPostgres.Host;
         var gardenShed = Meadow.ProjectNamed("Garden shed");
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id, Harbor.Administrator.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             // It reads all of harbor, and nothing of meadow.
             await using (var scope = host.Services.CreateAsyncScope())
@@ -145,7 +145,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             {
                 var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
                 Project shed;
-                using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Meadow.Id, Meadow.Administrator.Id))
+                using (TenantsTenancy.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
                 {
                     shed = await projects.Projects.AsTracking().SingleAsync(project => project.Id == gardenShed.Id, Cancellation);
                 }
@@ -202,7 +202,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         IReadOnlyList<string> answered;
         JsonElement me;
         JsonElement seats;
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Meadow.Id))
+        using (TenantsTenancy.BeginSystemIn(Meadow.Id))
         {
             answered = [.. (await rhea.VisibleProjectsAsync()).Names()];
             me = await rhea.GetFromJsonAsync<JsonElement>("/me", Cancellation);
@@ -218,10 +218,10 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         answered.Should().Equal(hers).And.NotContain("Garden shed");
         me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(Harbor.SeatOf(DemoPeople.Rhea).Value);
 
-        // Her seat was looked up as nobody, not as the system work in meadow that leaked in.
+        // Her seat was looked up as nobody, with no Tenancy caller at all, not as the system work in meadow that leaked in.
         recorder.Lookups.Should().NotBeEmpty().And.OnlyContain(
-            caller => caller != null && caller.Kind == TenancyCallerKind.Nobody,
-            "tenant selection replaced the leaked Tenancy caller before it looked the seat up");
+            caller => caller == null,
+            "tenant selection replaced the leaked Tenancy caller with none, which every reader takes for nobody, before it looked the seat up");
 
         // And the toolkit's caller inside the request was her user, not the scoped system caller that leaked in.
         recorder.Seen.Should().NotBeEmpty().And.OnlyContain(

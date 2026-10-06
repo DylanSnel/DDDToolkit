@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Exceptions;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Mediator;
 using Microsoft.EntityFrameworkCore;
@@ -212,7 +211,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         await using var onPostgres = await sample.StartOnPostgresAsync(services => services.HoldProjectSaves());
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id, Harbor.Administrator.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             await new ChangeProjectNameHandler(scope.ServiceProvider.GetRequiredService<IProjectStore>())

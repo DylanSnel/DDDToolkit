@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
@@ -155,7 +154,7 @@ public sealed class OperatorScenarios(SampleHosts sample) : IClassFixture<Sample
             new TenantProjectInspections(Harbor.Id, Harbor.ProjectNamed("Pier 7").Id),
         ];
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id, Harbor.Administrator.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();

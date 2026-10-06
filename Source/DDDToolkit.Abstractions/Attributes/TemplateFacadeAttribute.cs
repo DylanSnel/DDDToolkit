@@ -24,7 +24,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <b>A name, not a second type.</b> C# finds a type nested in a class through every class that derives from it,
 /// so <c>ShopTenancy.SeatOverview</c> is the package's own <c>TenancyUseCases&lt;...&gt;.SeatOverview</c>: what the
 /// container registered, what reflection sees and what the compiler reports, with the package's documentation.
-/// The class itself is never made, and nothing derives from it.
+/// The class itself is never made, and nothing derives from it. C# finds a static member the same way, so what is
+/// generic over the classes and is called rather than named goes on the same class: Tenancy's system work is
+/// <c>ShopTenancy.BeginSystem()</c>, a call the compiler binds even in the project the class is written into.
 /// </para>
 /// <para>
 /// <b>Why a class, and not a global alias.</b> An alias holds in the project that declares it and no further, so it

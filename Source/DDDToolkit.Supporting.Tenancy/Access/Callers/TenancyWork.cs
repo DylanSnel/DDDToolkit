@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.Access;
@@ -8,11 +9,19 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// The only ways to system power in Tenancy. Nothing becomes system work in Tenancy by itself, whatever the
 /// toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here, on purpose.
 /// <code>
-/// using (TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant, actingSeat))
+/// using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 /// {
 ///     await seats.PlaceAsync(seat, unit, primary: true, cancellationToken);
 /// }
 /// </code>
+/// <para>
+/// Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as
+/// above. Where one is not, as for <see cref="BeginSystem"/> or system work in a tenant for no seat, a project that
+/// sees the application's classes calls the same method closed over them, through the class named after the module
+/// that declares them: <c>TenantsTenancy.BeginSystem()</c>, <c>TenantsTenancy.BeginSystemIn(tenant)</c>. Only a
+/// project that sees nothing but the ids, another module's, writes them:
+/// <c>TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant)</c>.
+/// </para>
 /// <para>
 /// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
 /// work here itself, in trusted code, whatever its request requires: <c>AccessRequirement.AllowAnonymous()</c>
@@ -77,6 +86,28 @@ public static class TenancyWork
         => Both(Caller.SystemIn(scope), TenancyCaller<TTenantId, TSeatId>.SystemIn(tenant, TenancyActor<TSeatId>.OfSystem(scope, actingSeat)));
 
     /// <summary>
+    /// Begins system work inside one tenant for a seat: <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>
+    /// with the seat given, so C# infers both ids from the arguments and the call names neither,
+    /// <c>TenancyWork.BeginSystemIn(tenant, seat, "projects")</c>, in a module that sees only the ids as much as in
+    /// one that sees the classes. A seat that may be missing, a <c>TSeatId?</c>, goes to that one.
+    /// <para>
+    /// It yields to that one wherever both apply, which is wherever the type arguments are written: there a bare
+    /// <c>default</c> for the seat would otherwise make an empty id the seat the work is recorded for, where it has
+    /// always meant no seat, as it does for <c>TenantsTenancy.BeginSystemIn(tenant, default)</c>. Where they are
+    /// inferred, this is the only one that applies.
+    /// </para>
+    /// </summary>
+    /// <param name="tenant">The tenant.</param>
+    /// <param name="actingSeat">The seat the work is done for, recorded as who placed or granted; it adds no rights.</param>
+    /// <param name="scope">The scope of the toolkit's scoped system caller: lower case letters, digits, <c>_</c> and <c>-</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="scope"/> is not a scope; nothing is begun then.</exception>
+    [OverloadResolutionPriority(-1)]
+    public static IDisposable BeginSystemIn<TTenantId, TSeatId>(TTenantId tenant, TSeatId actingSeat, string scope = SystemScope)
+        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
+        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+        => BeginSystemIn<TTenantId, TSeatId>(tenant, (TSeatId?)actingSeat, scope);
+
+    /// <summary>
     /// Begins system work outside any tenant that provisions a tenant for an operator: the callers of
     /// <see cref="BeginSystem"/>, recorded as the operator rather than as the system. Provisioning then makes the
     /// tenant as that operator's act.
@@ -92,7 +123,8 @@ public static class TenancyWork
 
     /// <summary>
     /// Begins system work inside one tenant that carries out what an operator asked for, such as suspending the
-    /// tenant: the callers of <see cref="BeginSystemIn"/>, recorded as the operator rather than as the system.
+    /// tenant: the callers of <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>, recorded as
+    /// the operator rather than as the system.
     /// The operator gets nothing by it: the work holds what system work in the tenant holds, and the operator is
     /// only who it is recorded as.
     /// <para>
@@ -113,7 +145,8 @@ public static class TenancyWork
 
     /// <summary>
     /// Begins system work inside one tenant that answers a link carrying a token a seat made, such as a feed only
-    /// its owner knows the address of: the callers of <see cref="BeginSystemIn"/> in the module's own scope,
+    /// its owner knows the address of: the callers of
+    /// <see cref="BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/> in the module's own scope,
     /// recorded as the token and the seat it stands for.
     /// <para>
     /// It is system work, not the seat: it holds what system work in the tenant holds, so the module that begins it

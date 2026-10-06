@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Http.Json;
 using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -91,7 +90,7 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
     /// <summary>Provisions a flat tenant as system work, the way the seeder and an operator's command do.</summary>
     private static async Task ProvisionAsync(SampleFactory host, string slug, string name)
     {
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (TenantsTenancy.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(

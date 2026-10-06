@@ -38,8 +38,8 @@ public static class TenancySystemReads
     /// <summary>
     /// The ids of the tenants a round of system work visits: the active and the suspended ones, in no order. A
     /// loop of any module asks this first, outside any tenant, and then begins its own system work in each
-    /// tenant in turn (<see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}"/>, in its own scope). The ids
-    /// are all it learns here: they name no person and no row.
+    /// tenant in turn (<see cref="TenancyWork.BeginSystemIn{TTenantId, TSeatId}(TTenantId, TSeatId?, string)"/>,
+    /// in its own scope). The ids are all it learns here: they name no person and no row.
     /// <para>
     /// Where the database keeps the rights, the read runs as <c>Caller.SystemIn(<paramref name="scope"/>)</c> in
     /// no tenant and asks the database's function <see cref="TenancyFunctionNames.TenantsToSweep"/>, which

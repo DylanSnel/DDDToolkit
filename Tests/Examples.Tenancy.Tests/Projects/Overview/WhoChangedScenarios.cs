@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using FluentAssertions;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
@@ -88,7 +87,7 @@ public sealed class WhoChangedScenarios(SampleHosts sample) : IClassFixture<Samp
 
         // What an operator asked for is carried out by the application's own work in the tenant, which names the
         // operator: the row then says an operator changed it, and no seat.
-        using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(Harbor.Id, DemoPeople.Orla.Id, scope: "projects"))
+        using (TenantsTenancy.BeginOperatorIn(Harbor.Id, DemoPeople.Orla.Id, scope: "projects"))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new ChangeProjectName(Pier.Id, "Pier 7, as support renamed it"), Cancellation);

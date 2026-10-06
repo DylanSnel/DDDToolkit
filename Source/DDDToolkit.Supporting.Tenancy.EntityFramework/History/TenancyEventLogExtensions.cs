@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 using DDDToolkit.EntityFramework.EventLog;
 
@@ -11,9 +12,13 @@ public static class TenancyEventLogExtensions
     /// history a tenant's access is answered for afterwards.
     /// <code>
     /// options.UseOutbox&lt;TenancyContext&gt;(outbox =&gt; outbox
-    ///     .AddTenancyDomainEvents&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;()
-    ///     .KeepEventLog(log =&gt; log.AddTenancyEventLog&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;()));
+    ///     .AddTenancyDomainEvents()
+    ///     .KeepEventLog(log =&gt; log.AddTenancyEventLog()));
     /// </code>
+    /// Both calls without type arguments are generated into the project that declares the application's classes,
+    /// closed over their four ids, or into a project of the same module that declares none, where the context is
+    /// (<see cref="TemplateRegistrationAttribute"/>). This is the method <c>log.AddTenancyEventLog()</c> calls, which
+    /// can be called as well, with the four ids written out.
     /// <list type="bullet">
     /// <item>A tenant provisioned, activated, suspended, reactivated or closed, and its shape changed.</item>
     /// <item>A unit added, moved or archived.</item>
@@ -45,7 +50,12 @@ public static class TenancyEventLogExtensions
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
     /// <param name="log">The event log of Tenancy's outbox, as <c>KeepEventLog</c> hands it over.</param>
     /// <exception cref="ArgumentNullException"><paramref name="log"/> is null.</exception>
-    public static EventLogOptions AddTenancyEventLog<TTenantId, TSeatId, TUnitId, TRoleId>(this EventLogOptions log)
+    [TemplateRegistration]
+    public static EventLogOptions AddTenancyEventLog<
+        [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+        [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+        [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+        [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>(this EventLogOptions log)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>

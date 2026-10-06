@@ -39,8 +39,8 @@ public static class TenancyEventLogTable
     /// modelBuilder.AddTenancyEventLogTable(Database);
     ///
     /// options.UseOutbox&lt;TenancyContext&gt;(outbox =&gt; outbox
-    ///     .AddTenancyDomainEvents&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;()
-    ///     .KeepEventLog(log =&gt; log.AddTenancyEventLog&lt;TenantId, SeatId, OrganizationUnitId, RoleId&gt;()));
+    ///     .AddTenancyDomainEvents()
+    ///     .KeepEventLog(log =&gt; log.AddTenancyEventLog()));
     /// </code>
     /// <para>
     /// Every row says which tenant its event is about, taken from the event itself, which every event of Tenancy's

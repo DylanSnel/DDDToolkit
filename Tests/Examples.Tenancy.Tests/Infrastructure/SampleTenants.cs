@@ -1,5 +1,4 @@
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -23,7 +22,7 @@ public static class SampleTenants
     public static async Task<TenantsTenancy.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (TenantsTenancy.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
@@ -37,7 +36,7 @@ public static class SampleTenants
     public static async Task<TResponse> SendAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, ICommand<TResponse> command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+        using (TenantsTenancy.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -48,7 +47,7 @@ public static class SampleTenants
     public static async Task SendAsSystemAsync(SampleFactory host, TenantId tenant, ICommand command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+        using (TenantsTenancy.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -59,7 +58,7 @@ public static class SampleTenants
     public static async Task<TResponse> AskAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, IQuery<TResponse> query)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+        using (TenantsTenancy.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(query, Cancellation);

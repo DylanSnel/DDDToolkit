@@ -3,7 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using FluentAssertions;
 using GreenDonut.Data;
@@ -137,7 +136,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
 
         // System work in the tenant reaches all of it, by neither way: the filter is left out of the statement,
         // and the tenant filter keeps it to that tenant.
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             var (reach, projects) = await ListedAsync(sample, counter);
 
@@ -207,7 +206,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         }
 
         // System work in the tenant: one statement too, and it holds every key by neither way.
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();

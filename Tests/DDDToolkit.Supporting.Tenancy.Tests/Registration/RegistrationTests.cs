@@ -154,8 +154,34 @@ public class RegistrationTests
         scope.ServiceProvider.GetRequiredService<HostTenancy.RoleCommands>().Should().NotBeNull();
         scope.ServiceProvider.GetRequiredService<HostTenancy.TenancyDirectory>().Catalogue.Knows(TenancyKeys.RolesManage).Should().BeTrue();
         scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().Should().NotBeNull();
+        scope.ServiceProvider.GetRequiredService<ITenantSelection>().Should().BeSameAs(
+            scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>(),
+            "the selection without its ids is the scope's own selection, asked by another name");
         provider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>()
             .Should().BeOfType<TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
         provider.GetRequiredService<TimeProvider>().Should().BeSameAs(clock, "a clock registered before stays");
+    }
+
+    [Fact]
+    public void A_selection_without_ids_the_host_registered_before_stays()
+    {
+        var services = new ServiceCollection();
+        var own = new OwnSelection();
+        services.AddScoped<ITenantSelection>(_ => own);
+        AddTenancyCore(services, EveryOption);
+        services.AddScoped<HostTenancy.IStore>(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
+        services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        using var scope = provider.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<ITenantSelection>().Should().BeSameAs(own, "the host's own declaration wins");
+        scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().Should().NotBeNull("the selection closed over the ids is still there");
+    }
+
+    /// <summary>A host's own answer to who a request's caller is in Tenancy: here, always nobody.</summary>
+    private sealed class OwnSelection : ITenantSelection
+    {
+        public Task<ITenancyCaller> ResolveAsync(Caller caller, string? tenantSlug, CancellationToken cancellationToken)
+            => Task.FromResult<ITenancyCaller>(HostCaller.Nobody(TenancyRefusals.NotSeated));
     }
 }

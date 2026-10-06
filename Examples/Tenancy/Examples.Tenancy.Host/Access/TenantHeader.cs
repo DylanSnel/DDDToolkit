@@ -1,7 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Auth.Supabase.AspNetCore;
-using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace Examples.Tenancy.Host.Access;
@@ -40,6 +39,10 @@ public static class TenantHeader
     /// already replaced by nobody, so the lookup does not run in the leaked tenant either. The toolkit's
     /// accessors answer a begun caller first, so the request's queries run as its own user.
     /// </para>
+    /// <para>
+    /// It names no id. The selection is asked without its id types (<see cref="ITenantSelection"/>), and what it
+    /// answers is begun as it is, so this middleware reads the same in every application, whatever its ids.
+    /// </para>
     /// </remarks>
     public static IApplicationBuilder UseTenantSelection(this IApplicationBuilder app)
     {
@@ -71,13 +74,15 @@ public static class TenantHeader
             var caller = context.SupabaseCaller();
             using (Callers.Begin(caller))
             {
-                TenancyCaller<TenantId, SeatId> seat;
-                using (leaked is null ? null : TenancyCallers.Begin(TenancyCaller<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated)))
+                ITenancyCaller? seat;
+                using (leaked is null ? null : TenancyCallers.BeginNone())
                 {
                     seat = await ResolveAsync(context, caller, logger);
                 }
 
-                using (TenancyCallers.Begin(seat))
+                // A lookup that failed leaves the request with no Tenancy caller at all, which every reader takes
+                // for nobody, not seated: never with the leaked one.
+                using (seat is null ? TenancyCallers.BeginNone() : TenancyCallers.Begin(seat))
                 {
                     await next(context);
                 }
@@ -86,21 +91,22 @@ public static class TenantHeader
     }
 
     /// <summary>
-    /// The Tenancy caller for this request. A lookup that fails makes the request nobody rather than failing
-    /// it here: a route that needs a seat then refuses it the usual way, and one that does not is unaffected.
+    /// The Tenancy caller for this request: its seat, or nobody and why. A lookup that fails answers
+    /// <see langword="null"/>, and the request runs as nobody rather than failing here: a route that needs a seat
+    /// then refuses it the usual way, and one that does not is unaffected.
     /// </summary>
-    private static async Task<TenancyCaller<TenantId, SeatId>> ResolveAsync(HttpContext context, Caller caller, ILogger logger)
+    private static async Task<ITenancyCaller?> ResolveAsync(HttpContext context, Caller caller, ILogger logger)
     {
         var slug = context.Request.Headers[Name].ToString();
         try
         {
-            var selection = context.RequestServices.GetRequiredService<TenantSelection<TenantId, SeatId>>();
+            var selection = context.RequestServices.GetRequiredService<ITenantSelection>();
             return await selection.ResolveAsync(caller, slug, context.RequestAborted);
         }
         catch (Exception exception) when (!context.RequestAborted.IsCancellationRequested)
         {
             logger.LogError(exception, "The tenant {Slug} could not be resolved for {Method} {Path}; the request runs as nobody.", slug, context.Request.Method, context.Request.Path);
-            return TenancyCaller<TenantId, SeatId>.Nobody(TenancyRefusals.NotSeated);
+            return null;
         }
     }
 }

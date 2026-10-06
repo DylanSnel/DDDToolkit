@@ -1,6 +1,5 @@
 using System.Net.Http.Json;
 using System.Text.Json;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
@@ -187,7 +186,7 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
         await using var onPostgres = await sample.StartOnPostgresAsync(
             settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" },
             seeded: false);
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (TenantsTenancy.BeginSystem())
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(

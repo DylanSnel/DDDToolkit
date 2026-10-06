@@ -13,6 +13,10 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <see cref="TenancyWork"/>, never inherited from a request.
 /// </para>
 /// <para>
+/// A host's middleware, which only makes the caller it is answered current, asks the same of
+/// <see cref="ITenantSelection"/>, the very instance without its id types, and names no id.
+/// </para>
+/// <para>
 /// Only a signed-in user whose token carries a seated role is looked up at all,
 /// <see cref="TenantSelectionOptions.SeatedTokenRoles"/>: <c>authenticated</c> unless the application lists
 /// others. A user with another token role is nobody in every tenant, and is told what a person without a seat
@@ -22,7 +26,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </summary>
 /// <param name="seats">Finds the caller's seats.</param>
 /// <param name="options">Which token roles are seated; signed-in users with the role <c>authenticated</c> when left out.</param>
-public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId, TSeatId> seats, TenantSelectionOptions? options = null)
+public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId, TSeatId> seats, TenantSelectionOptions? options = null) : ITenantSelection
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
 {
@@ -74,6 +78,10 @@ public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId
             ? TenancyCaller<TTenantId, TSeatId>.Nobody(TenancyRefusals.SeatSuspended)
             : TenancyCaller<TTenantId, TSeatId>.InSeat(seat.Tenant, seat.Seat);
     }
+
+    /// <inheritdoc />
+    async Task<ITenancyCaller> ITenantSelection.ResolveAsync(Caller caller, string? tenantSlug, CancellationToken cancellationToken)
+        => await ResolveAsync(caller, tenantSlug, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Every seat <paramref name="caller"/> has, in every tenant and in any status, for a tenant picker: looked up

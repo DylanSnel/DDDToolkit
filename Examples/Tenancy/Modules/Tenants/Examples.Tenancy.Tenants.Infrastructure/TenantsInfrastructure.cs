@@ -117,10 +117,11 @@ public static class TenantsInfrastructure
             // kept: it is how the sample tells a tenant's administrators, who read it on the History page, with the
             // keys that came in and went out. A host that mails them maps the event to a contract of its own.
             // An invitation's own events are stored and kept off the sinks like the rest, and are no part of the
-            // history: what an acceptance changes is in it as the seat's own events.
-            outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()
-                .AddTenancyInvitationEvents<TenantId, InvitationId, OrganizationUnitId, RoleId, SeatId>()
-                .KeepEventLog(log => log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>());
+            // history: what an acceptance changes is in it as the seat's own events. All three calls are generated
+            // like AddTenancy, closed over the module's four ids; the invitation's id is named, as it is above.
+            outbox.AddTenancyDomainEvents()
+                .AddTenancyInvitationEvents<InvitationId>()
+                .KeepEventLog(log => log.AddTenancyEventLog());
             host.Publish(outbox);
         }));
 

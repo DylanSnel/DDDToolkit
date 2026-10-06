@@ -814,8 +814,8 @@ public sealed class FirstTenant(TenantsTenancy.TenantCommands tenants)
 {
     public async Task SetUpAsync(Guid identity, CancellationToken cancellationToken)
     {
-        // Nobody holds a seat yet, so this is system work, begun on purpose.
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        // Nobody holds a seat yet, so this is system work, begun on purpose: closed over your ids as well.
+        using (TenantsTenancy.BeginSystem())
         {
             await tenants.ProvisionAsync(
                 new TenantsTenancy.TenantToProvision(
@@ -872,6 +872,114 @@ shows. The invitation use cases take your invitation class and its id as well:
   generator of the project reads. The generator stands back for it, and nothing else changes.
 
 The rest of this page writes `TenantsTenancy.`, the sample's name as well: its module is called Tenants too.
+
+### Your ids, named once
+
+You name your classes and ids once, where you declare them. What you call of Tenancy's generic over your ids
+comes closed over them as well, each kind as far as it can reach: system work and the current caller wherever your
+classes are seen, the registrations in your module's own projects, where Tenancy is registered. No project there
+writes the ids again to call them:
+
+| What | Generic over your ids | Closed over them | Where |
+|---|---|---|---|
+| System work | `TenancyWork.BeginSystem<TenantId, SeatId>()` and the rest | `TenantsTenancy.BeginSystem()`, `BeginSystemIn(tenant)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn` | Every project that sees your classes: their module, the host, your tests |
+| The current caller | `TenancyCallers.Current<TenantId, SeatId>()` | `TenantsTenancy.CurrentCaller()` | The same |
+| Registrations | `outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()` and the rest | `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, `outbox.AddTenancyInvitationEvents<InvitationId>()`, `modelBuilder.AddTenancyReadModel()` and `AddTenancyReadFunctions()`, beside `AddTenancy`, `AddTenancyAccess` and `AddTenancyInvitations` | The project that declares your classes, and a project of their module that registers Tenancy, where the context is; not the host or a test project above them |
+| Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which answers the caller without its ids | Every project: it names no id |
+
+```mermaid
+flowchart LR
+    Call["a call of Tenancy's,<br/>generic over your ids"] --> Kind{"what is<br/>called?"}
+    Kind -- "system work,<br/>the current caller" --> Sees{"does the project<br/>see your classes?"}
+    Kind -- "a registration" --> Own{"is it a project<br/>of their module?"}
+    Sees -- "yes: their module,<br/>the host, your tests" --> Static(["closed:<br/>TenantsTenancy.BeginSystem()"])
+    Sees -- "no: another<br/>module" --> Arguments{"are the ids<br/>arguments?"}
+    Own -- "no: another module,<br/>the host, a test" --> Arguments
+    Own -- "yes: the classes'<br/>or the context's" --> Generated(["closed:<br/>outbox.AddTenancyDomainEvents()"])
+    Arguments -- "yes" --> Inferred(["inferred:<br/>TenancyWork.BeginSystemIn(tenant, seat)"])
+    Arguments -- "no" --> Named(["written out:<br/>AddTenancyAccess with<br/>the four ids"])
+```
+
+What "seen" means differs for each kind:
+
+- **System work and the current caller** are static members of the class the use cases are named through. C#
+  finds a static member through a derived class as it finds a nested type, so they reach exactly as far as
+  `TenantsTenancy` does: the project that declares your classes and every project above it, your host and your
+  tests among them. In the project that declares the classes too, where the class is the generator's output: a
+  call is bound by the compiler, which sees what every generator wrote. Only another generator does not, reading a
+  signature or an attribute, and a call is neither.
+- **Registrations** are generated as `AddTenancy` is, into the project that declares your classes, or into the
+  lowest project of their module that references the registrations, where the context is. They are internal to
+  that project, so a project above it, the host or a test project, does not get them: a host registers a module
+  through the module's own registration, and a test project that registers Tenancy itself writes the ids, unless
+  it declares classes of its own.
+- **`ITenantSelection`** names no id at all. `AddTenancy` registers it per scope as the very selection it registers
+  closed over your ids, unless your host registered one of its own before, which stays; and what it answers, an `ITenancyCaller`, is what `TenancyCallers.Begin` takes, so a host's
+  middleware reads the same in every application ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy)).
+
+**Another module sees only your ids.** A module that refers to the organization by the ids of your contracts
+project, Billing or Projects, sees none of your classes, and nothing it sees says which of its ids are Tenancy's:
+the toolkit never takes an id for the tenant's by its name. So it writes them where it calls Tenancy and they are
+no arguments, `AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>()`
+and `AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>()`, and C# infers them where they are:
+system work for a seat, `TenancyWork.BeginSystemIn(tenant, seat, "billing")`, and a key at a unit,
+`TenancyAccess.AtUnit(key, unit)`.
+
+**Types keep their ids.** `ITenancyAnswers<...>` and `ITenancyQuestions<...>`, which a handler takes in its
+constructor, and records such as `SeatOfCaller<TenantId, SeatId>` name your ids wherever they are named. A class
+names what is nested in it, and gives no other generic type a second name; these stay apart from the use cases so
+that a module that sees only the ids can take them too. A project names such a type once, with a `global using`
+alias of its own, as each of the sample's application projects names the answers.
+
+**Three more name them, in the project that declares your classes too.** The sample's Tenants module writes two of
+them, and the third is in [System work](#system-work):
+
+- `TenantSelection<TenantId, SeatId>`, where a person's own seats are asked for a tenant picker, `SeatsOfAsync`: it
+  answers records with your ids in them, so it stays on the selection generic over them. `ITenantSelection` carries
+  only what needs no id.
+- `EfTenancyReadSource<TenantId, SeatId, OrganizationUnitId, RoleId>`, the source of Tenancy's rows a reading of
+  your own makes over its context: a type, as the answers are.
+- `TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(tenancy, scope, cancellationToken)`, the tenants a
+  round of system work visits: a method of the Entity Framework package, which the class the use cases are named
+  through does not know, and it takes Tenancy's context as any context, so no argument says which tenant it is.
+
+<details>
+<summary>Show the code: the same calls where your classes are seen, and in another module</summary>
+
+```csharp
+// The module that declares the classes, in its infrastructure project: generated, closed over the four ids
+options.UseOutbox<ShopTenancyContext>(outbox => outbox
+    .AddTenancyDomainEvents()
+    .AddTenancyInvitationEvents<InvitationId>()       // the invitation's id: an application may have none
+    .KeepEventLog(log => log.AddTenancyEventLog()));
+
+// The host, a test, or any project that sees TenantsTenancy: system work and the current caller
+using (TenantsTenancy.BeginSystemIn(tenant, administrator))
+{
+    await seeder.SeedAsync(cancellationToken);
+}
+
+var caller = TenantsTenancy.CurrentCaller();          // a TenancyCaller<TenantId, SeatId>, nobody outside any scope
+
+// The host's middleware: the selection without its ids
+var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
+    .ResolveAsync(context.SupabaseCaller(), context.Request.Headers["Tenant"], context.RequestAborted);
+
+// Another module, which sees only the ids: written out where they are no arguments, inferred where they are
+services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
+modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
+
+using (TenancyWork.BeginSystemIn(tenant, seat, "billing"))
+{
+    await invoices.SaveOnlyAsync(invoice, cancellationToken);
+}
+
+// The answers it takes in a constructor: one alias per project
+global using ShopAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
+    Shop.Contracts.TenantId, Shop.Contracts.SeatId, Shop.Contracts.OrganizationUnitId, Shop.Contracts.RoleId>;
+```
+
+</details>
 
 ## How your classes add behaviour
 
@@ -945,7 +1053,7 @@ that keeps the rest to itself:
 ```csharp
 services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .PublishAs<SeatSuspended<TenantId, SeatId>, SeatSuspendedV1>(suspended => new SeatSuspendedV1(suspended.SeatId.Value))
-    .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()));
+    .AddTenancyDomainEvents()));   // generated like AddTenancy, closed over your four ids
 ```
 
 ### The kind of a unit
@@ -1109,6 +1217,7 @@ writes `answers.Over(db)` for the same questions over the same rows.
 ```csharp
 // The context: the read model next to the module's own tables, and the tenant on its own entities.
 // On Postgres the rows come from Tenancy's read functions, anywhere else from views over its tables.
+// The module sees Tenancy's ids, not its classes, so it names them (Your ids, named once).
 if (Database.IsNpgsql())
 {
     modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>("tenancy");
@@ -1270,7 +1379,7 @@ who may send the request that provisions one is one decision, and what the work 
 handler begins the system work itself, in trusted code, whichever requirement its request declares.
 
 The request's requirement says who gets as far as the handler. Every handler below begins
-`TenancyWork.BeginSystem` and provisions as that, whoever sent the request, and the caller gets nothing more by
+`TenantsTenancy.BeginSystem()` and provisions as that, whoever sent the request, and the caller gets nothing more by
 it: what the system work does is the handler's to say, and the database's policies hold it to the tenant it
 makes. What changes with the requirement is where the handler finds what system work cannot tell it, the
 first administrator:
@@ -1283,7 +1392,7 @@ first administrator:
 
 An operator's screen is none of these. An operator is a signed-in user, whom `RequiresSystemWork()` refuses
 like any other, and what an operator asks for is carried out by system work that names the operator,
-`TenancyWork.BeginOperator(identity)` ([Operators](#operators)).
+`TenantsTenancy.BeginOperator(identity)` ([Operators](#operators)).
 
 ```mermaid
 sequenceDiagram
@@ -1325,7 +1434,7 @@ public sealed class RegisterOrganizationHandler(TenantsTenancy.TenantCommands te
         }
 
         // What it runs with: system work outside any tenant, begun here, which is what provisions a tenant.
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (TenantsTenancy.BeginSystem())
         {
             var made = await tenants.ProvisionAsync(
                 new TenantsTenancy.TenantToProvision(
@@ -1348,7 +1457,7 @@ if (made is not IdentityAccountOutcome.Created(var administrator))
     return;                                          // the address has an account: answer as if it had none
 }
 
-using (TenancyWork.BeginSystem<TenantId, SeatId>())
+using (TenantsTenancy.BeginSystem())
 {
     await tenants.ProvisionAsync(
         new TenantsTenancy.TenantToProvision(
@@ -1366,7 +1475,8 @@ module's context:
 // In the module that declares Tenancy's classes: generated like AddTenancy, closed over the four ids
 services.AddTenancyAccess<ITenancyRequest, TenancyContext>();
 
-// In any other module, which declares none of them: the four ids written out, as where the read model is mapped
+// In any other module, which sees the ids and none of the classes: the four ids written out, as where the read
+// model is mapped (Your ids, named once)
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
 ```
 
@@ -1734,10 +1844,10 @@ modelBuilder.AddTenancyInvitations<ShopInvitation, InvitationId>();
 services.AddTenancyInvitations<ShopInvitation, InvitationId, ShopTenancyContext>();
 
 // In the outbox, next to AddTenancyDomainEvents.
-outbox.AddTenancyInvitationEvents<TenantId, InvitationId, OrganizationUnitId, RoleId, SeatId>();
+outbox.AddTenancyInvitationEvents<InvitationId>();
 ```
 
-Both generated calls take your invitation class and its id, and fill in the rest of your classes. A context
+The generated calls take your invitation class and its id, or the id alone, and fill in the rest of your classes. A context
 that names its tables itself passes the same `TenancyTableNames` to `AddTenancyInvitations` as to `AddTenancy`.
 Adding invitations to a database that is in use is a migration of your own for the two tables, and on Postgres
 a new export of the access files.
@@ -2065,15 +2175,21 @@ says what it checks, and what it leaves to the use cases.
 Nothing becomes system work by itself: a person reaches Tenancy through a seat. Work nobody asked for in a
 request, such as seeding, an import or an operator's command, and work a handler does that no caller of its
 request could, such as [provisioning a tenant](#who-may-ask-and-what-the-work-runs-as), is begun on purpose
-with `TenancyWork`, and it begins two callers at once, ended together:
+with `TenancyWork`, and it begins two callers at once, ended together. `TenancyWork`'s methods are generic over
+your tenant and seat ids; a project that sees your classes calls the same ones closed over them, through the class
+your use cases are named through, and names neither ([Your ids, named once](#your-ids-named-once)):
 
 | | Tenancy's caller | The toolkit's caller |
 |---|---|---|
-| `TenancyWork.BeginSystem<TTenantId, TSeatId>()` | system work outside any tenant, which provisions tenants, and reads and writes no tenant's rows | `Caller.SystemIn("tenancy")` |
-| `TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant, actingSeat, scope)` | system work in that tenant, holding every key there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
-| `TenancyWork.BeginOperator<TTenantId, TSeatId>(identity)` | as `BeginSystem`, recorded as the operator a tenant is provisioned for | `Caller.SystemIn("tenancy")` |
-| `TenancyWork.BeginOperatorIn<TTenantId, TSeatId>(tenant, identity, scope)` | as `BeginSystemIn`, recorded as the operator the work is carried out for | `Caller.SystemIn(scope)` |
-| `TenancyWork.BeginTokenIn<TTenantId, TSeatId>(tenant, seat, scope)` | as `BeginSystemIn`, recorded as a link's token and the seat it stands for | `Caller.SystemIn(scope)`, the module's name |
+| `TenantsTenancy.BeginSystem()` | system work outside any tenant, which provisions tenants, and reads and writes no tenant's rows | `Caller.SystemIn("tenancy")` |
+| `TenantsTenancy.BeginSystemIn(tenant, actingSeat, scope)` | system work in that tenant, holding every key there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
+| `TenantsTenancy.BeginOperator(identity)` | as `BeginSystem`, recorded as the operator a tenant is provisioned for | `Caller.SystemIn("tenancy")` |
+| `TenantsTenancy.BeginOperatorIn(tenant, identity, scope)` | as `BeginSystemIn`, recorded as the operator the work is carried out for | `Caller.SystemIn(scope)` |
+| `TenantsTenancy.BeginTokenIn(tenant, seat, scope)` | as `BeginSystemIn`, recorded as a link's token and the seat it stands for | `Caller.SystemIn(scope)`, the module's name |
+
+A module that sees only your ids calls `TenancyWork`'s own: `TenancyWork.BeginSystemIn(tenant, seat, "billing")`,
+whose ids C# infers from the arguments, or `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, scope: "billing")`
+where no seat is given.
 
 Neither is the toolkit's `Caller.System`, the application itself, which
 [row level security](row-level-security.md#the-scoped-system-role) lets past every policy: the scoped
@@ -2088,7 +2204,7 @@ so one word says it wherever it comes up:
 |---|---|
 | the application itself, past every policy | `Caller.System`, on the login role or the one `SystemRole` names, such as `ddd_system` |
 | the application at work in a scope, inside the policies | `Caller.SystemIn(scope)`, on `ddd_system_in` unless the host names another |
-| begun in Tenancy, outside any tenant or in one | `TenancyWork.BeginSystem<TTenantId, TSeatId>()`, `TenancyWork.BeginSystemIn<TTenantId, TSeatId>(tenant)` |
+| begun in Tenancy, outside any tenant or in one | `TenantsTenancy.BeginSystem()`, `TenantsTenancy.BeginSystemIn(tenant)`: `TenancyWork`'s, closed over your ids |
 | a request only it sends | `AccessRequirement.RequiresSystemWork()`, which lets through system work trusted code began and refuses every user with `access.system-only` |
 
 `RequiresSystemWork()` takes system work that was begun on purpose, with `TenancyWork` or with
@@ -2103,7 +2219,7 @@ provisioning a tenant and suspending, reactivating or closing one, refuse a seat
 them.
 
 ```csharp
-using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, actingSeat))
+using (TenantsTenancy.BeginSystemIn(tenant, actingSeat))
 {
     await seats.PlaceAsync(seat, unit, primary: true, cancellationToken);
 }
@@ -2140,7 +2256,7 @@ does for the toolkit's caller, so the tenant of the work around it does not trav
 // A round of a module's own: the tenants to visit, then its system work in each, under its own scope
 foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(tenancy, "ordering", cancellationToken))
 {
-    using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, scope: "ordering"))
+    using (TenantsTenancy.BeginSystemIn(tenant, scope: "ordering"))
     {
         await orders.EndWhatHasRunOutAsync(cancellationToken);
     }
@@ -2171,8 +2287,8 @@ tenants. An operator is not an administrator of every tenant. It **holds no seat
   (`tenancy.page-size-invalid`), and the next one is asked with the marker the page before gave
   (`tenancy.cursor-invalid` for anything else). The read runs as the operator, never as the system.
 - **How it writes.** It does not. What an operator asks for is carried out by system work that names the
-  operator: `TenancyWork.BeginOperator(identity)` to provision a tenant, and
-  `TenancyWork.BeginOperatorIn(tenant, identity)` for work in one. The work holds what system work holds; the
+  operator: `TenantsTenancy.BeginOperator(identity)` to provision a tenant, and
+  `TenantsTenancy.BeginOperatorIn(tenant, identity)` for work in one. The work holds what system work holds; the
   operator is only who it is [recorded as](#who-changed-a-row). The identity is the verified `sub` of the
   request that asked, taken from the token or from a record that request wrote, never from what a caller sends.
 
@@ -2205,7 +2321,7 @@ services.AddTenancy<TenancyContext>(options =>
 var page = await tenants.ListAsync(after, size: 50, cancellationToken);
 
 // Carrying out what an operator asked for: system work in the tenant, which names the operator
-using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
+using (TenantsTenancy.BeginOperatorIn(tenant, operatorIdentity))
 {
     await tenantCommands.SuspendAsync("Asked for by the owner", cancellationToken);
 }
@@ -2310,10 +2426,11 @@ modelBuilder.AddTenancy(database: Database);
 modelBuilder.AddDomainEventOutbox(Database);
 modelBuilder.AddTenancyEventLogTable(Database);   // the event log, with a TenantId column of your tenant id
 
-// The host: keep the events that change access
+// Where Tenancy is registered, the project that declares your classes or your module's infrastructure project:
+// keep the events that change access
 options.UseOutbox<TenancyContext>(outbox => outbox
-    .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()
-    .KeepEventLog(log => log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>()));
+    .AddTenancyDomainEvents()
+    .KeepEventLog(log => log.AddTenancyEventLog()));   // both generated there, closed over your four ids
 ```
 
 `AddTenancyEventLog` keeps every event that changes who may do what, under the name the outbox stores it by:
@@ -4011,6 +4128,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
 | A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. What composes the modules, the host and the catalogue's project, gets every module's list from Tenancy's generator: the host registers the keys with one call, and the export builds its catalogue from the same lists | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyPermissionsOfModules.g.cs` is under its `obj` folder<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `StartupTests` |
 | No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`SeatOverviewType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
+| No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
 | The feature comes first and the kind second: a folder per feature with `Commands` and `Queries` in it, and the same feature names in the API project with `Rest` and `GraphQL` | **Code:** [`AllCrewMembers.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Queries/AllCrewMembers.cs), [`CrewEndpoints.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/Rest/CrewEndpoints.cs), [`CrewMutations.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMutations.cs)<br/>**Try it:** juno reads Pier 7's crew, in the `.http` file<br/>**Test:** `FeatureFolderTests`, `AllCrewMembersScenarios` |
@@ -4285,7 +4403,8 @@ app.Use(async (context, next) =>
     var caller = context.SupabaseCaller();
     using (Callers.Begin(caller))
     {
-        var seat = await context.RequestServices.GetRequiredService<TenantSelection<TenantId, SeatId>>()
+        // The selection without its id types: the middleware names no id, and reads the same in every application
+        var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
             .ResolveAsync(caller, context.Request.Headers["Tenant"], context.RequestAborted);
         using (TenancyCallers.Begin(seat))
         {

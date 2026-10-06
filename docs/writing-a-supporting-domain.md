@@ -776,7 +776,8 @@ flowchart TB
 /// <summary>
 /// SubscriptionUseCases, closed over the classes of the module Billing: ShopSubscription, SubscriptionId,
 /// ShopInvoice, InvoiceId, ShopInvoiceLine and InvoiceLineId.
-/// Every type nested in it is named through this class, and is the package's own: the type its registration added.
+/// Every type nested in it, and every static member, is named through this class and is the package's own: the type
+/// its registration added, the method it declares.
 /// The class is only that name. Nothing makes one, and nothing derives from it.
 /// </summary>
 public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<
@@ -796,6 +797,12 @@ public abstract class BillingSubscriptions : global::Acme.Subscriptions.Subscrip
   `BillingSubscriptions.Dunning` is the package's own `Dunning`, closed over the application's classes: what the
   package's registration adds to the container, with the package's documentation. The class itself is abstract,
   with a private constructor, and is never made.
+- **Calls as well as names.** C# finds a static member through a derived class as it finds a nested type, so what
+  is generic over the classes and is called rather than named goes on the same class, and the application calls it
+  without a type argument: `public static IDisposable BeginRun() => DunningRuns.Begin<TSubscriptionId>();` on
+  `SubscriptionUseCases` is `BillingSubscriptions.BeginRun()`. Tenancy puts its system work and the current caller
+  there, `TenantsTenancy.BeginSystem()`. A call is bound by the compiler, which sees every generator's output, so it
+  works in the project the class is written into as well, where another generator would not see the class.
 - **Written once, where the classes are.** A project gets the class when it declares a class with one of the
   type's templates, and fills each type parameter as a registration's is filled: from its own classes, or, for a
   template it declares none of, from the projects of its module it references. Every project above sees it

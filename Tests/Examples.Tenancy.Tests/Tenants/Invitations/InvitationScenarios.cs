@@ -4,7 +4,6 @@ using System.Text.Json;
 using DDDToolkit.Identity;
 using DDDToolkit.Security;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using FluentAssertions;
@@ -422,7 +421,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         foreach (var tenant in DemoData.Tenants)
         {
-            using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant.Id, tenant.Administrator.Id))
+            using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = host.Services.CreateAsyncScope();
                 var store = scope.ServiceProvider.GetRequiredService<TenantsTenancy.IInvitationStore<Invitation, InvitationId>>();

@@ -220,7 +220,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // A host without the demonstration: one tenant, provisioned here, which nobody has marked.
         await using var host = await sample.StartAsync(settings: new Dictionary<string, string> { [DemoSeeder.Setting] = "false" }, seeded: false);
 
-        using (TenancyWork.BeginSystem<TenantId, SeatId>())
+        using (TenantsTenancy.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
@@ -274,7 +274,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
 
         (await IsDemoAsync(host)).Should().BeFalse("a refused command changes nothing");
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(new MarkTenantAsDemo(), Cancellation);
@@ -726,7 +726,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(TenancyRefusals.NotSeated);
 
         // System work that acts for no seat is a mistake in the calling code, found before the project is asked about.
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var send = async () => await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordInspection(outOfSight, Blank), Cancellation);
@@ -1309,7 +1309,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             (await send.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*Only system work chooses a project's id*");
         }
 
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id, Harbor.Administrator.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using (var before = host.Services.CreateAsyncScope())
             {
@@ -1379,7 +1379,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     /// <summary>Whether harbor is marked as a demonstration, read as system work there.</summary>
     private static async Task<bool> IsDemoAsync(SampleFactory host)
     {
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<TenantsContext>().Tenants
@@ -1399,7 +1399,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     /// <summary>Whether harbor's project role <paramref name="role"/> is in use, read as system work there.</summary>
     private static async Task<KeptRoleStatus> StatusOfAsync(SampleFactory host, ProjectRoleId role)
     {
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(Harbor.Id))
+        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ProjectsContext>().ProjectRoles

@@ -434,6 +434,49 @@ public sealed partial class SourceTreeTests
     }
 
     /// <summary>
+    /// What is called rather than named is closed over the Tenants module's ids: the system work and the current
+    /// caller wherever its classes are seen, through <c>TenantsTenancy</c>, and the registrations in the module's
+    /// infrastructure project, where they are generated. So no file of a project that sees those classes names
+    /// Tenancy's ids where a closed form exists: the Tenants module's own, the host, the export and these tests. A type
+    /// generic over the ids keeps them, as the Tenants module's reads name the selection and the read source. Projects
+    /// and Inspections see the ids alone, which say nothing of being Tenancy's, so they name them where they register;
+    /// where the ids are arguments, C# infers them there too.
+    /// </summary>
+    [Fact]
+    public void No_project_that_sees_the_tenancy_classes_names_tenancys_ids_where_a_closed_form_exists()
+    {
+        var root = SampleLayout.RepositoryRoot();
+        var sample = Path.Combine(root, "Examples", "Tenancy");
+        string[] seeing =
+        [
+            Path.Combine(sample, "Modules", "Tenants"),
+            DirectoryOfProject("Examples.Tenancy.Host"),
+            DirectoryOfProject("Examples.Tenancy.Exporter"),
+            DirectoryOfProject(TheseTests),
+        ];
+
+        Dictionary<string, string> FilesUnder(params string[] folders)
+            => folders
+                .SelectMany(folder => Directory.GetFiles(folder, "*.cs", SearchOption.AllDirectories))
+                .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+                .Where(file => !file.Contains("/bin/", StringComparison.Ordinal) && !file.Contains("/obj/", StringComparison.Ordinal))
+                .ToDictionary(file => file, file => File.ReadAllText(Path.Combine(root, file)));
+
+        FilesUnder(seeing)
+            .SelectMany(file => NamesTenancysIdsInACall().Matches(file.Value).Select(found => file.Key + ": " + found.Value))
+            .Should().BeEmpty("TenantsTenancy.BeginSystem(), TenantsTenancy.CurrentCaller() and outbox.AddTenancyDomainEvents() name no id");
+
+        // The scan would see it: the modules that see only the ids name them where they register.
+        FilesUnder(Path.Combine(sample, "Modules", "Projects"), Path.Combine(sample, "Modules", "Inspections"))
+            .Where(file => NamesTenancysIdsInACall().IsMatch(file.Value)).Select(file => file.Key)
+            .Should().Contain(
+            [
+                "Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs",
+                "Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/InspectionsInfrastructure.cs",
+            ]);
+    }
+
+    /// <summary>
     /// Every project file under <paramref name="directory"/>, wherever it is, but for what a build wrote
     /// (<c>bin</c>, <c>obj</c>), what a package manager fetched and the folders whose name starts with a dot.
     /// </summary>
@@ -492,6 +535,13 @@ public sealed partial class SourceTreeTests
     /// </summary>
     [GeneratedRegex(@"TenancyUseCases<\s*[\w.]")]
     private static partial Regex ClosesTenancysUseCases();
+
+    /// <summary>
+    /// A call of Tenancy's that names one of its ids where a closed form of it exists: system work or the current
+    /// caller with type arguments, or a registration with an id among them.
+    /// </summary>
+    [GeneratedRegex(@"TenancyWork\.Begin\w*<|TenancyCallers\.Current<|AddTenancy\w*<[^>(]*\b(?:TenantId|SeatId|OrganizationUnitId|RoleId)\b")]
+    private static partial Regex NamesTenancysIdsInACall();
 
     /// <summary>The namespace a file declares: file-scoped, or with braces as a migration's files have it.</summary>
     [GeneratedRegex(@"^namespace\s+(?<name>[\w.]+)\s*[;{]?\s*$", RegexOptions.Multiline)]

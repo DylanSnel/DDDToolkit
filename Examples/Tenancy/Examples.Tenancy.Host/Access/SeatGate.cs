@@ -1,6 +1,5 @@
 using DDDToolkit.Access;
 using DDDToolkit.Supporting.Tenancy;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Examples.Tenancy.Tenants.Contracts.TokenRoles;
 using HotChocolate.Configuration;
 using HotChocolate.Language;
@@ -38,7 +37,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
     private static readonly FieldMiddlewareConfiguration Seated = new(next => context =>
     {
         // The caller the request's flow carries: the gateway calls a module's schema in that flow.
-        if (SeatRequirement.RefusalFor(TenancyCallers.Current<TenantId, SeatId>()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenantsTenancy.CurrentCaller()) is { } refusal)
         {
             throw refusal;
         }

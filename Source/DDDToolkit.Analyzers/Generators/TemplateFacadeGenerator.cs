@@ -41,7 +41,8 @@ public sealed class TemplateFacadeGenerator : IIncrementalGenerator
         var writer = new CodeWriter().Header();
         writer.Line("/// <summary>");
         writer.Line("/// " + file.Summary);
-        writer.Line("/// Every type nested in it is named through this class, and is the package's own: the type its registration added.");
+        writer.Line("/// Every type nested in it, and every static member, is named through this class and is the package's own: the type");
+        writer.Line("/// its registration added, the method it declares.");
         writer.Line("/// The class is only that name. Nothing makes one, and nothing derives from it.");
         writer.Line("/// </summary>");
         using (writer.Block((file.IsPublic ? "public" : "internal") + " abstract class " + file.Name + " : " + file.BaseType))

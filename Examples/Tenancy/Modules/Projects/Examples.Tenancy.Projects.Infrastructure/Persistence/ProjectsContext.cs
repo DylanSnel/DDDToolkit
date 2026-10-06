@@ -84,7 +84,9 @@ public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) :
         // Tenancy's rows, read in this context's queries: asked over them, UnitsWhereIHold(key) becomes a
         // subquery of the project statement rather than a list fetched first (see EfProjectReads). They come from
         // Tenancy's read functions and from none of its tables: what a module may read of Tenancy is what Tenancy
-        // offers it.
+        // offers it. This module sees Tenancy's ids, from the Tenants module's contracts, and none of its classes,
+        // so nothing it sees says which of its ids are Tenancy's: it names them, where the Tenants module, which
+        // declares the classes, is given its calls closed over them.
         modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyTablesSchema);
 
         modelBuilder.Entity<Project>(project =>

@@ -210,6 +210,12 @@ public static class TenancyModelBuilderExtensions
     /// file. Where they are apart, ask Tenancy's own context first and pass the answer in as a list.
     /// </para>
     /// <para>
+    /// A module that sees only the application's ids, as above, writes them: nothing it sees says which of its ids
+    /// are Tenancy's. Where the classes are visible, in the project that declares them or a project of the same
+    /// module, <c>modelBuilder.AddTenancyReadModel()</c> is generated, closed over their four ids
+    /// (<see cref="TemplateRegistrationAttribute"/>).
+    /// </para>
+    /// <para>
     /// Where the database keeps the rights itself and shows a seat only its own
     /// (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>, as on Postgres with
     /// <c>DDDToolkit.Supporting.Tenancy.Postgres</c>), a module reads no table of Tenancy's: map
@@ -221,7 +227,12 @@ public static class TenancyModelBuilderExtensions
     /// <param name="schema">The schema Tenancy's tables are in, or <see langword="null"/> for this model's default schema.</param>
     /// <param name="tables">The tables' names, the same as Tenancy's context was given; <see cref="TenancyTableNames.Default"/> when not given.</param>
     /// <exception cref="ArgumentNullException"><paramref name="modelBuilder"/> is null.</exception>
-    public static ModelBuilder AddTenancyReadModel<TTenantId, TSeatId, TUnitId, TRoleId>(
+    [TemplateRegistration]
+    public static ModelBuilder AddTenancyReadModel<
+        [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+        [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+        [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+        [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>(
         this ModelBuilder modelBuilder,
         string? schema = "tenancy",
         TenancyTableNames? tables = null)
@@ -273,11 +284,20 @@ public static class TenancyModelBuilderExtensions
     /// for the database it runs on, so choosing between the two in <c>OnModelCreating</c> by the provider, as
     /// above, is safe for a context taken from a pool as well.
     /// </para>
+    /// <para>
+    /// As for the views, a module that sees only the ids writes them, and where the classes are visible
+    /// <c>modelBuilder.AddTenancyReadFunctions()</c> is generated, closed over their four ids.
+    /// </para>
     /// </summary>
     /// <param name="modelBuilder">The consumer's model being built.</param>
     /// <param name="schema">The schema Tenancy's functions are in, that of the context that maps Tenancy's tables; <see langword="null"/> for this model's default schema.</param>
     /// <exception cref="ArgumentNullException"><paramref name="modelBuilder"/> is null.</exception>
-    public static ModelBuilder AddTenancyReadFunctions<TTenantId, TSeatId, TUnitId, TRoleId>(
+    [TemplateRegistration]
+    public static ModelBuilder AddTenancyReadFunctions<
+        [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+        [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+        [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+        [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>(
         this ModelBuilder modelBuilder,
         string? schema = "tenancy")
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
