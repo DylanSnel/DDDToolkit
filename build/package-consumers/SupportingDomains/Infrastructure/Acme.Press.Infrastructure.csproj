@@ -18,15 +18,20 @@
     <!-- dotnet ef runs this project as its own startup project, through its design-time factories. -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <!--
-      DDD00054 says a package offers row access SQL the application does not use, and it is the host that answers
-      it. It stays a warning here, so a build that hands this library the export shows what follows that first
-      sign: the build step running a library. The script holds that it is never reported at all.
+      DDD00054 says a package's row access SQL is not written for want of what the application marks, and only the
+      project that runs the export hears it. It stays a warning here, so a build that hands this library the export
+      shows what follows that first sign: the build step running a library. The script holds that it is never
+      reported at all.
     -->
     <WarningsNotAsErrors>$(WarningsNotAsErrors);DDD00054</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Domain\Acme.Press.Domain.csproj" />
+    <!--
+      These two Postgres packages declare themselves contributors of row level security: the export the host
+      runs writes their SQL because this project references them, from what the domain project marks.
+    -->
     <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Tenancy.Postgres" Version="$(DDDToolkitPackageVersion)" />
     <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Membership.Postgres" Version="$(DDDToolkitPackageVersion)" />
     <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.EntityFramework.Supabase" Version="$(DDDToolkitPackageVersion)" />

@@ -641,10 +641,12 @@ policies hold it with nothing more to write, and with [Tenancy](#with-tenancy) i
 `UseDDDToolkit` for a context it wants held.
 
 ```csharp
-// The project that runs the export: one class per resource, with the rules it is registered with
-[assembly: UseRowAccessContribution(typeof(DocumentMembershipFunctions))]
-
-public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules);
+// The rules the resource is registered with, marked as those of its member class: the export writes the functions from them
+public static class DocumentMembership
+{
+    [MembershipRules<DocumentShare>]
+    public static MembershipRules Rules { get; } = new("documents", ...);
+}
 
 // What your rules ask, a line each: the documents a caller sees, and those it holds a key on, by the document's id
 [ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]
@@ -672,10 +674,19 @@ services.AddMembershipPostgres();
 services.RunStartupChecks();
 ```
 
-- **The class is yours to list** because the export writes into your migrations only what the project that
-  runs it lists: the migrations run as the role that owns your tables, so nothing a reference offers gets
-  there without your say ([policies a package ships](row-level-security.md#policies-a-package-ships)). It
-  hands over the rules, which only your application has, and it is one line.
+- **The rules are yours to mark** because only your application has them. The package declares itself a
+  contributor, so the project that runs the export writes its functions because it references the package,
+  directly or through the module that stores the resource
+  ([policies a package ships](row-level-security.md#policies-a-package-ships)), and makes its contribution
+  once for every member marked `[MembershipRules<TMember>]`, a static property or field of type
+  `MembershipRules`, closed over the member class the mark names: two kinds of resource are two marks. The
+  rules the registration is called with are a value the build cannot read, so the mark is what tells it which
+  rules are the resource's. Two marks for one member class, or one on a member of another type, stop the build
+  ([DDD00066](diagnostics.md#ddd00066)); none at all is [DDD00054](diagnostics.md#ddd00054), and none of the
+  package's SQL is written. A mark a library keeps internal is one the exporting project does not see, so the
+  library reports it where it is declared ([DDD00070](diagnostics.md#ddd00070)). The access file names
+  `MembershipRowAccessContribution<DocumentShare>` and the package's assembly above what it writes, without a
+  version, so a release of your application leaves the file as it is.
 - **The questions are yours to declare**, a line each, because a rule is written into a policy when the
   project is built, and the generator translates `DocumentsISee.Ids().Contains(document.Id)` from a declaration
   it can read. The declaration names no function: it says the document's id and the set, and the export writes
@@ -705,10 +716,10 @@ services.RunStartupChecks();
   not run as its owner, has no empty search path, answers no set, was written from other rules than the
   resource is registered with or by another version of the package, may be executed by every role or by one
   the rules do not name, or may not be executed by a role the rules name. It reads the line of a function's
-  body that names its rules: a body rewritten by hand under that line is not found. A contribution you
-  forget to list writes nothing. With one resource the build warns
-  ([DDD00054](diagnostics.md#ddd00054)); with several, one listed class is enough for the build, and this
-  check is what finds the resource whose class is missing.
+  body that names its rules: a body rewritten by hand under that line is not found. Rules you forget to mark
+  get no functions. With none marked the build warns ([DDD00054](diagnostics.md#ddd00054)); with several
+  resources, one marked is enough for the build, and this check is what finds the resource whose rules are
+  not.
 
 ### Who writes the member rows
 
@@ -902,7 +913,8 @@ public sealed class CratesInTheDepot(DepotDesk desk, DepotContext db)
 logical name the rules give, `owner/name`: one without parameters that answers the caller's member id or
 `NULL`, and two that take a key and answer the role ids, and the places. You define them as
 [a contribution of your own](row-level-security.md#policies-a-package-ships), which the project that runs
-the export lists beside the resource's:
+the export lists, `[assembly: UseRowAccessContribution(typeof(DepotFunctions))]`, beside the resource's the
+package writes:
 
 ```csharp
 public sealed class DepotFunctions : IRowAccessContribution
@@ -1307,8 +1319,9 @@ package. And only for seats:
 - **The tenant on your rows.** Membership knows no tenant. The resource and your role class are kept to
   their tenant by Tenancy's own rule, `ScopeToTenant`, like every row of a tenant, and a tenant's starter
   roles are made when you set the tenant up.
-- **On Postgres,** the project that runs the export lists Tenancy's contribution and one for each resource.
-  The files are written together, so a function of a resource's finds Tenancy's in whatever schema its
+- **On Postgres,** the project that runs the export writes Tenancy's contribution, from the catalogue you mark
+  `[TenancyCatalogue]`, and one for each resource whose rules you mark `[MembershipRules<TMember>]`, because it
+  references both packages. The files are written together, so a function of a resource's finds Tenancy's in whatever schema its
   context puts it, and the export refuses a name nothing defines. Tenancy keeps every row to its tenant;
   what a seat reads inside it is your [row access rule](#on-postgres-the-second-lock), asking the resource's
   functions.

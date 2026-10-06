@@ -21,8 +21,9 @@ public static class ProjectCatalogue
 
     /// <summary>
     /// The keys, as the catalogue lists them: the one place the module states them. Tenancy's generator writes
-    /// this list into each project that composes the modules, the host and the catalogue's project, as one of
-    /// <c>TenancyPermissionsOfModules.All</c>; the module's own registration names it no more.
+    /// this list into the host, which composes the modules, as one of <c>TenancyPermissionsOfModules.All</c>, and
+    /// the program that exports finds it by the same mark and writes Tenancy's policies with it; the module's own
+    /// registration names it no more.
     /// </summary>
     [TenancyPermissions]
     public static IReadOnlyList<Permission> Permissions { get; } =

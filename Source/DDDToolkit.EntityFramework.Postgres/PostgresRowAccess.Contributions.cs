@@ -33,7 +33,10 @@ public static partial class PostgresRowAccess
     private sealed record Contributed(IRowAccessContribution Contribution, string Owner, RowAccessContributionResult Result)
     {
         /// <summary>The contribution's type, its assembly and the assembly's version, as the comments above what it writes name it.</summary>
-        public string Source { get; } = SourceOf(Contribution.GetType());
+        public string Source { get; } = SourceOf(Contribution);
+
+        /// <summary>The contribution's type, as a message names it: a package's, for the class the build made it in.</summary>
+        public string Name { get; } = NameOf(Contribution);
     }
 
     /// <summary>A function a context defines: the name rules ask it by, the name it has in the database, and what it is.</summary>
@@ -123,7 +126,7 @@ public static partial class PostgresRowAccess
             foreach (var function in contributed.Result.Functions)
             {
                 var logical = contributed.Owner + "/" + function.Name;
-                Define(new Named(logical, FunctionSchema(context, schema, logical) + "." + function.Name, "from the row access contribution " + contributed.Contribution.GetType().FullName));
+                Define(new Named(logical, FunctionSchema(context, schema, logical) + "." + function.Name, "from the row access contribution " + contributed.Name));
             }
         }
 
@@ -135,13 +138,13 @@ public static partial class PostgresRowAccess
             foreach (var function in contributed.Result.Functions.Where(function => function.Answers is not null))
             {
                 var name = function.Answers!.Name;
-                var type = contributed.Contribution.GetType().FullName;
+                var type = contributed.Name;
                 if (answered.TryGetValue(name, out var other))
                 {
                     throw new InvalidOperationException(
                         (ReferenceEquals(other, contributed)
                             ? $"The row access contribution {type} answers {ResourceAccessAnswer.Described(name)} with two functions for {context.GetType().Name}. "
-                            : $"The row access contributions {other.Contribution.GetType().FullName} and {type} both answer {ResourceAccessAnswer.Described(name)} for {context.GetType().Name}. ")
+                            : $"The row access contributions {other.Name} and {type} both answer {ResourceAccessAnswer.Described(name)} for {context.GetType().Name}. ")
                         + "One function answers a set for a resource, so a rule that asks it is written with that one: say Answers on one of them.");
                 }
 
@@ -168,7 +171,7 @@ public static partial class PostgresRowAccess
     /// <exception cref="InvalidOperationException">The contribution writes what it may not.</exception>
     private static Contributed Checked(DbContext context, IRowAccessContribution contribution, RowAccessContributionResult result, RowAccessRoleNames roles)
     {
-        var type = contribution.GetType().FullName;
+        var type = NameOf(contribution);
         if (string.IsNullOrWhiteSpace(contribution.Owner))
         {
             throw new InvalidOperationException($"The row access contribution {type} has no Owner, which the logical names of its functions, owner/name, start with.");
@@ -353,7 +356,7 @@ public static partial class PostgresRowAccess
                 if (keepers.TryGetValue(table, out var other))
                 {
                     throw new InvalidOperationException(
-                        $"The row access contributions {other.Contribution.GetType().FullName} and {contributed.Contribution.GetType().FullName} both keep {table.DisplayName()} to themselves. Only one of them can write its policies.");
+                        $"The row access contributions {other.Name} and {contributed.Name} both keep {table.DisplayName()} to themselves. Only one of them can write its policies.");
                 }
 
                 keepers[table] = contributed;
@@ -374,7 +377,7 @@ public static partial class PostgresRowAccess
                 if (keepers.TryGetValue(table, out var keeper))
                 {
                     throw new InvalidOperationException(
-                        $"The rule '{rule.Name}' would add a policy to {table.DisplayName()}, which the row access contribution {keeper.Contribution.GetType().FullName} keeps to itself: only it writes that table's policies. Leave the rule out, or ask the contribution for what the rule needs.");
+                        $"The rule '{rule.Name}' would add a policy to {table.DisplayName()}, which the row access contribution {keeper.Name} keeps to itself: only it writes that table's policies. Leave the rule out, or ask the contribution for what the rule needs.");
                 }
             }
         }
@@ -386,7 +389,7 @@ public static partial class PostgresRowAccess
                 if (keepers.TryGetValue(TableOf(policy.Table), out var keeper) && !ReferenceEquals(keeper, contributed))
                 {
                     throw new InvalidOperationException(
-                        $"The row access contribution {contributed.Contribution.GetType().FullName} writes the policy '{policy.Name}' on {TableOf(policy.Table).DisplayName()}, which the row access contribution {keeper.Contribution.GetType().FullName} keeps to itself: only it writes that table's policies.");
+                        $"The row access contribution {contributed.Name} writes the policy '{policy.Name}' on {TableOf(policy.Table).DisplayName()}, which the row access contribution {keeper.Name} keeps to itself: only it writes that table's policies.");
                 }
             }
         }
@@ -410,7 +413,7 @@ public static partial class PostgresRowAccess
             {
                 var logical = contributed.Owner + "/" + function.Name;
                 var resolved = writing.Names[logical];
-                var what = $"the function {logical} of the row access contribution {contributed.Contribution.GetType().FullName}";
+                var what = $"the function {logical} of the row access contribution {contributed.Name}";
                 var signature = resolved + "(" + string.Join(", ", TopLevel(function.Parameters)) + ")";
 
                 // A function to fold has no settings: with any, Postgres keeps it a step of its own.
@@ -493,7 +496,7 @@ public static partial class PostgresRowAccess
         {
             foreach (var policy in contributed.Result.Policies)
             {
-                var what = $"the policy '{policy.Name}' of the row access contribution {contributed.Contribution.GetType().FullName}";
+                var what = $"the policy '{policy.Name}' of the row access contribution {contributed.Name}";
                 var table = TableOf(policy.Table);
                 var role = ResolvedRoles([policy.Role], writing.Roles, what + " is for")[0];
                 var command = policy.Command.Trim().ToUpperInvariant();
@@ -598,7 +601,7 @@ public static partial class PostgresRowAccess
         var statements = new StringBuilder();
         foreach (var contributed in prepared.Contributions.Where(contributed => contributed.Result.Statements.Count > 0))
         {
-            var what = $"a statement of the row access contribution {contributed.Contribution.GetType().FullName}";
+            var what = $"a statement of the row access contribution {contributed.Name}";
             statements.Append('\n').Append("-- Written by the row access contribution ").Append(Commented(contributed.Source)).Append('.').Append('\n');
             foreach (var statement in contributed.Result.Statements)
             {
@@ -619,14 +622,44 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// The type, its assembly and the assembly's version, without the build metadata after <c>+</c>: that names
-    /// the commit a build came from, and would make every build of it a new access file.
+    /// the commit a build came from, and would make every build of it a new access file. For the class the Supabase
+    /// build made a package's contribution in, the package's class and its assembly, without a version: the class
+    /// the build wrote is the exporting project's, whose version changes with every release of the application,
+    /// and the package's version changes with releases that write the same SQL (see <see cref="IPackageRowAccessContribution"/>).
     /// </summary>
-    private static string SourceOf(Type type)
+    private static string SourceOf(IRowAccessContribution contribution)
     {
+        if (contribution is IPackageRowAccessContribution { Contribution: { } made })
+        {
+            return $"{Readable(made.GetType())} in {made.GetType().Assembly.GetName().Name}";
+        }
+
+        var type = contribution.GetType();
         var assembly = type.Assembly;
         var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         var version = string.IsNullOrWhiteSpace(informational) ? assembly.GetName().Version?.ToString() : informational.Split('+')[0];
         return $"{type.FullName} in {assembly.GetName().Name} {(string.IsNullOrWhiteSpace(version) ? "without a version" : version)}";
+    }
+
+    /// <summary>The contribution's type as a message names it: for the class the Supabase build made a package's in, the package's class.</summary>
+    private static string NameOf(IRowAccessContribution contribution)
+        => contribution is IPackageRowAccessContribution { Contribution: { } made } ? Readable(made.GetType()) : contribution.GetType().FullName ?? contribution.GetType().Name;
+
+    /// <summary>
+    /// A type's full name as C# writes it, a generic one with its type arguments,
+    /// <c>Shop.Ledgers.LedgerRowAccess&lt;Shop.Invoice&gt;</c>, rather than with the assemblies and versions of
+    /// its arguments, which would change the comment with every version of the application's project.
+    /// </summary>
+    private static string Readable(Type type)
+    {
+        if (!type.IsGenericType)
+        {
+            return type.FullName ?? type.Name;
+        }
+
+        var definition = type.GetGenericTypeDefinition().FullName ?? type.Name;
+        var tick = definition.IndexOf('`', StringComparison.Ordinal);
+        return (tick < 0 ? definition : definition[..tick]) + "<" + string.Join(", ", type.GetGenericArguments().Select(Readable)) + ">";
     }
 
     /// <summary>
@@ -802,7 +835,7 @@ public static partial class PostgresRowAccess
 
             foreach (var contributed in each.Contributions)
             {
-                var type = contributed.Contribution.GetType().FullName;
+                var type = contributed.Name;
                 foreach (var policy in contributed.Result.Policies)
                 {
                     Asked(

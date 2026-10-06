@@ -327,13 +327,15 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         await using (var services = new TenancyServices(plain))
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
-                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.\"Seats\",*UseRowAccessContribution*");
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.\"Seats\",*references DDDToolkit.Supporting.Tenancy.Postgres*");
         }
 
         // The application marks a key, and the access file written with the mark is not applied yet.
         await using var marked = new TenancyServices(secured, catalogue: HostCatalogue.Application with { AccessManagingKeys = [HostCatalogue.WidgetCreate] });
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(marked.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*manages_access in the database was written from another catalogue*widget.create*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage(
+                "*manages_access in the database was written from another catalogue*widget.create*marked [TenancyCatalogue]*where the project that runs the export sees it*",
+                "the way to export with the catalogue the host runs with is to mark it where the export finds it");
 
         // A pack gains a key, and the access file written with it is not applied yet.
         await using var wider = new TenancyServices(

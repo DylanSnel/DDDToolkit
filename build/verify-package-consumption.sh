@@ -35,7 +35,9 @@
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
-#      The application declares no administrators' pack, and the access file has Tenancy's default one.
+#      The application declares no administrators' pack, and the access file has Tenancy's default one. Tenancy's
+#      and Membership's SQL is written because the infrastructure project references their Postgres packages,
+#      made in the host from the catalogue and the rules the domain project marks, with no line of the host's.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -542,8 +544,9 @@ done
 # The Supabase export of the same application.
 #
 # The infrastructure project references the Supabase package, where its contexts and their marked factories
-# are, and the host turns the export on in its project file, as docs/supabase.md says; the host lists the
-# row access SQL of both packages, so the build above wrote the two contexts' access files. The package's
+# are, and the host turns the export on in its project file, as docs/supabase.md says. Both Postgres packages
+# declare themselves contributors, so the host writes their row access SQL without a line of its own, from what
+# the domain project marks, and the build above wrote the two contexts' access files. The package's
 # build step and generator reach both projects through buildTransitive, so both import them; through
 # project references only the host did, which is how a property that reached the others went unnoticed.
 #
@@ -552,7 +555,7 @@ done
 # project built, and in the infrastructure project, a library, it started the library: MissingMethodException,
 # "Entry point not found", and MSB3073. So each value the property takes is given here for the whole build:
 # Write and Check reach the host, which exports, and no other project, which hears nothing of it, not even
-# DDD00054 about what only the host lists; an empty value turns the export off in the host as well.
+# DDD00054 about what only the host makes; an empty value turns the export off in the host as well.
 # ---------------------------------------------------------------------------------------------------
 
 supabase_generator="DDDToolkit.EntityFramework.Supabase.Analyzers"
@@ -599,7 +602,7 @@ expect_exported_by_the_host_only() {
 # Nothing in the log is a warning: not DDD00054 in a project that is not the host, and not the step's own.
 expect_no_warning() {
   if grep -q 'DDD00054' "$build_log"; then
-    echo "FAILED: $1: DDD00054 was reported. Only the host lists row access contributions, and no other project may run the generator that asks for them." >&2
+    echo "FAILED: $1: DDD00054 was reported. The host makes the packages' row access contributions from what the domain project marks, and no other project may run the generator that asks for them." >&2
     exit 1
   fi
 
@@ -636,6 +639,48 @@ if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supa
 fi
 
 echo "    SupportingDomains/Host: pack_keys answers the default administrators' pack"
+
+# The packages' contributions were made where the export runs, in the file named for them, from what the domain
+# project marks: Tenancy's from the catalogue, and one of Membership's for the manuscripts, closed over their editors.
+# No other project gets the file, and the host lists nothing for either.
+packages_file="$(find "$work/package-consumers/SupportingDomains/Host/obj" -path '*generated*' -name 'DDDToolkit.RowAccessContributionsOfPackages.g.cs' | head -n 1)"
+if [ -z "$packages_file" ]; then
+  echo "FAILED: SupportingDomains/Host: the Supabase generator wrote no DDDToolkit.RowAccessContributionsOfPackages.g.cs, so the packages' row access SQL was not made from what the application marks." >&2
+  exit 1
+fi
+
+for expected in 'class TenancyRowAccessContribution ' 'application: global::Acme.Press.Tenants.PressCatalogue.Application' \
+  'class MembershipRowAccessContributionOfManuscriptEditor ' 'rules: global::Acme.Press.Manuscripts.ManuscriptMembership.Rules'; do
+  if ! grep -qF "$expected" "$packages_file"; then
+    echo "FAILED: SupportingDomains/Host: $(basename "$packages_file") has no '$expected':" >&2
+    cat "$packages_file" >&2
+    exit 1
+  fi
+done
+
+for project in Domain Infrastructure; do
+  if find "$work/package-consumers/SupportingDomains/$project/obj" -path '*generated*' -name 'DDDToolkit.RowAccessContributionsOfPackages.g.cs' | grep -q .; then
+    echo "FAILED: SupportingDomains/$project: the packages' row access contributions were made in a project that does not run the export." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: $(basename "$packages_file"), Tenancy's from the marked catalogue and Membership's for the manuscripts"
+
+# The access file names what wrote each package's SQL by the package's class and assembly, without a version: not
+# the class the build wrote into the host, whose version is the application's, nor the package's version, either of
+# which would make every release write the access file again with nothing in its SQL changed.
+for expected in \
+  '-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.' \
+  '-- Written by the row access contribution DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<Acme.Press.Manuscripts.ManuscriptEditor> in DDDToolkit.Supporting.Membership.Postgres.'; do
+  if ! grep -qxF -- "$expected" "$supabase_migrations"/*_access.press.ddd.sql; then
+    echo "FAILED: the access files in $supabase_migrations have no line '$expected'." >&2
+    grep -h -- '-- Written by the row access contribution' "$supabase_migrations"/*_access.press.ddd.sql | sort -u >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: the access file names the packages' classes, without a version"
 
 # The host names the role it logs in as with SupabaseLoginRole, which the packaged build step hands the export
 # among its variables: the export wrote the migration that makes the role, after every other file, granting it

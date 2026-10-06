@@ -53,6 +53,9 @@
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
     <!-- And the first one's Entity Framework package, which what Membership's generator writes for an application with both is compiled against. -->
     <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
+    <!-- Both on Postgres: packages that declare themselves contributors, which the Supabase export of an application makes from what it marks. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
   </ItemGroup>
 
 </Project>

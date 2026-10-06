@@ -1,16 +1,11 @@
-using Acme.Press;
-using DDDToolkit.Abstractions.Attributes;
-
-// The row access SQL the two packages offer goes into the exported access files because the host lists it: an
-// offer alone writes nothing, and one the host does not list is DDD00054 here.
-[assembly: UseRowAccessContribution(typeof(PressTenancyPolicies))]
-[assembly: UseRowAccessContribution(typeof(ManuscriptMembershipFunctions))]
-
 namespace Acme.Press.Host;
 
 /// <summary>
 /// The application. What it serves is beside the point here: when the build's export step starts it, code the
-/// Supabase package's generator wrote into it exports before <see cref="Main"/> and ends the process.
+/// Supabase package's generator wrote into it exports before <see cref="Main"/> and ends the process. Tenancy's and
+/// Membership's row access SQL comes with it: both Postgres packages declare themselves contributors, the host
+/// references them through the infrastructure project, and the generator makes their classes here from what the
+/// domain project marks, the catalogue and the manuscripts' rules. The host lists nothing.
 /// </summary>
 public static class Program
 {

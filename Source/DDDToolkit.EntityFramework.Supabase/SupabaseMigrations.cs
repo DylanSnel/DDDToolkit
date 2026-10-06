@@ -597,13 +597,13 @@ public static partial class SupabaseMigrations
                     // and a contribution answers it for the context that maps the resource, which may not be among these.
                     throw new InvalidOperationException(
                         $"{what} asks {ResourceAccessAnswer.Described(missing)}, and no row access contribution this host uses answers that set for the modules exported. " +
-                        "Use the contribution that keeps the resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution]. " +
+                        "Reference the package that keeps the resource's access, Membership on Postgres for a resource with members, and mark the resource's rules [MembershipRules<TMember>], or list a contribution of your own that answers it with [assembly: UseRowAccessContribution]. " +
                         "Where it answers for another module, the one whose context maps the resource, export the modules together, SupabaseMigrations.Export with a source for each, as the build that exports every module does.");
                 }
 
                 throw new InvalidOperationException(
                     $"{what} asks the access function {missing}, which no [AccessFunction] in the modules this host references defines. " +
-                    $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")], or use the row access contribution that writes it, with [assembly: UseRowAccessContribution].");
+                    $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")], reference the package whose row access contribution writes it, or list a contribution of your own that does with [assembly: UseRowAccessContribution].");
             }
         }
     }

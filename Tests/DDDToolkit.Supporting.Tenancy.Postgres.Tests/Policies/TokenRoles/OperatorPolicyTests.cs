@@ -330,7 +330,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(untold.Provider, Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage($"No policy lets the operators' database roles {TallyRules.OperatorRole}* read the tenants, so an operator would be answered an empty directory.*second constructor argument*");
+                .WithMessage($"No policy lets the operators' database roles {TallyRules.OperatorRole}* read the tenants, so an operator would be answered an empty directory.*[TenancyOperators]*");
         }
 
         // Without operators, the check asks nothing about them.

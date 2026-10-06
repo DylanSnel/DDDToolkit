@@ -2129,7 +2129,7 @@ public static partial class PostgresRowAccess
 
         throw new InvalidOperationException(ResourceAccessAnswer.IsName(name)
             ? $"{Capitalized(what)} asks {ResourceAccessAnswer.Described(name)}, and no row access contribution answers it for the contexts this is written with. "
-              + "Use the contribution that keeps that resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution], or in RowAccessExport.Contributions. "
+              + "Hand the script the contribution that keeps that resource's access in RowAccessExport.Contributions, the Membership package's for a resource with members, which the Supabase export makes from the rules the application marks [MembershipRules<TMember>]. "
               + "Where it answers for another context, the one that maps the resource, write the contexts together with PostgresRowAccess.Scripts, "
               + "or hand this script that context's names in RowAccessExport.FunctionNames, from PostgresRowAccess.FunctionNamesOf(contexts, functions, export)."
             : $"{Capitalized(what)} asks the function {name}, and none of the functions this is written with is called that. Define it with [AccessFunction<TAggregate>(\"{name}\")] in the module whose aggregate it is about, or name it with its schema, schema.name.");

@@ -96,3 +96,25 @@ public sealed class SpotContribution(string owner, Func<DbContext, RowAccessCont
     public static IEntityType Of<T>(DbContext context)
         => context.Model.GetEntityTypes().Single(entity => entity.ClrType == typeof(T));
 }
+
+/// <summary>A package's contribution, generic over a class of the application's, as Membership's is over a member class.</summary>
+public sealed class PackageSpot<TRow>(string owner, Func<DbContext, RowAccessContributionResult?> answer) : IRowAccessContribution
+    where TRow : class
+{
+    public string Owner => owner;
+
+    public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export) => answer(context);
+}
+
+/// <summary>
+/// The class the Supabase build writes into the project that runs the export for a package's contribution, which
+/// holds the package's class as it made it and answers for it.
+/// </summary>
+public sealed class MadeByTheBuild(IRowAccessContribution contribution) : IPackageRowAccessContribution
+{
+    public IRowAccessContribution Contribution { get; } = contribution;
+
+    public string Owner => Contribution.Owner;
+
+    public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export) => Contribution.Contribute(context, export);
+}

@@ -12,22 +12,26 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <summary>
 /// Tenancy's row level security, written from each context's model when the policies are exported: the SQL
 /// functions rules ask (<see cref="TenancyRowAccess"/>), the policies on Tenancy's own tables and on every table
-/// a module keeps to a tenant, and the triggers that check at commit what no policy can see. The application
-/// lists a class of its own, derived from this one with its catalogue, in the project that runs the export:
+/// a module keeps to a tenant, and the triggers that check at commit what no policy can see. This package declares
+/// it with <c>[assembly: RowAccessContribution]</c>, so the Supabase export of every application that references the
+/// package writes it, and the application writes nothing for it but, where it has them, two marks:
 /// <code>
-/// [assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
+/// [TenancyCatalogue]
+/// public static ApplicationCatalogue Application { get; } = new(Packs: [...]);
 ///
-/// public sealed class ShopTenancyRowAccess()
-///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
+/// [TenancyOperators]
+/// public static IReadOnlyList&lt;string&gt; OperatorTokenRoles { get; } = ["operator"];
 /// </code>
 /// The catalogue is the one the application runs with, the application's part and every module's keys: its
 /// marks decide which roles manage access, and so which grants the policies contain, and its packs which roles a
 /// settings manager may add. When either changes, a key added to a pack or to the administrators' pack included,
-/// the next export writes the access file again. The export makes the class with <c>new</c> before the application starts,
-/// so it builds the catalogue without the application's services. <c>TenancyPermissionsOfModules.All</c> is every
-/// module's keys, which Tenancy's generator writes into a project that declares no module from the lists the
-/// modules mark with <see cref="TenancyPermissionsAttribute"/>, as the host registers them: so the class is
-/// declared in such a project, the one that exports or one it shares with the host.
+/// the next export writes the access file again. The export makes the class before the application starts, so it
+/// builds the catalogue as the host's registration does, without the application's services: from the member marked
+/// <see cref="TenancyCatalogueAttribute"/>, or <c>new ApplicationCatalogue()</c> where none is, and the lists every
+/// module the exporting project references marks with <see cref="TenancyPermissionsAttribute"/>
+/// (<see cref="TenancyRowAccessContribution(IEnumerable{IEnumerable{Permission}}, ApplicationCatalogue?, IReadOnlyCollection{string}?)"/>).
+/// A script written by hand, or a test, makes it with the catalogue built
+/// (<see cref="TenancyRowAccessContribution(TenancyCatalogue, IReadOnlyCollection{string}?)"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -141,7 +145,35 @@ public class TenancyRowAccessContribution : IRowAccessContribution
     /// <summary>What was written for each model, per set of token roles the export maps.</summary>
     private readonly ConditionalWeakTable<IModel, ConcurrentDictionary<string, Answer>> _answers = new();
 
-    /// <summary>A contribution for an application whose catalogue is <paramref name="catalogue"/>.</summary>
+    /// <summary>
+    /// The contribution as the Supabase export makes it, in the project that runs the export, from what the
+    /// application marks: the catalogue built from <paramref name="application"/> and <paramref name="modules"/>, as
+    /// the host's registration builds it from <c>TenancyOptions.Catalogue</c> and the modules' keys it registers.
+    /// </summary>
+    /// <param name="modules">
+    /// Every list of keys a module marks with <see cref="TenancyPermissionsAttribute"/>, as the host registers them
+    /// with <c>AddTenancyPermissionsOfModules()</c>: those of every project the exporting project references.
+    /// </param>
+    /// <param name="application">
+    /// The application's part of the catalogue, the member it marks with <see cref="TenancyCatalogueAttribute"/>;
+    /// <c>new ApplicationCatalogue()</c> when it marks none, as when <c>TenancyOptions.Catalogue</c> is left unset.
+    /// </param>
+    /// <param name="operatorTokenRoles">
+    /// The token roles of the application's operators, the member it marks with <see cref="TenancyOperatorsAttribute"/>;
+    /// none when it marks none, and then nothing is written for operators.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="modules"/> is null.</exception>
+    /// <exception cref="TenancyCatalogueException">The catalogue does not hold together; every problem found is listed.</exception>
+    /// <exception cref="ArgumentException">An operator token role has no name.</exception>
+    public TenancyRowAccessContribution(
+        [FromApplication(typeof(TenancyPermissionsAttribute), Every = true)] IEnumerable<IEnumerable<Permission>> modules,
+        [FromApplication(typeof(TenancyCatalogueAttribute))] ApplicationCatalogue? application = null,
+        [FromApplication(typeof(TenancyOperatorsAttribute))] IReadOnlyCollection<string>? operatorTokenRoles = null)
+        : this(BuiltFrom(application, modules), operatorTokenRoles)
+    {
+    }
+
+    /// <summary>A contribution for an application whose catalogue is <paramref name="catalogue"/>, as a script written by hand makes it.</summary>
     /// <param name="catalogue">
     /// The catalogue the application runs with, built as its registration builds it: which keys are live, and
     /// which of them manage access.
@@ -151,8 +183,7 @@ public class TenancyRowAccessContribution : IRowAccessContribution
     /// each is given policies that let its database role read every tenant and write nothing. None when left
     /// out, and then nothing is written for operators.
     /// <code>
-    /// public sealed class ShopTenancyRowAccess()
-    ///     : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
+    /// var tenancy = new TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
     /// </code>
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="catalogue"/> is null.</exception>
@@ -172,6 +203,13 @@ public class TenancyRowAccessContribution : IRowAccessContribution
 
     /// <summary>The catalogue the functions are written from.</summary>
     public TenancyCatalogue Catalogue { get; }
+
+    /// <summary>The catalogue of <paramref name="application"/> and the modules' keys, one list after the other.</summary>
+    private static TenancyCatalogue BuiltFrom(ApplicationCatalogue? application, IEnumerable<IEnumerable<Permission>> modules)
+    {
+        ArgumentNullException.ThrowIfNull(modules);
+        return TenancyCatalogue.Build(application ?? new ApplicationCatalogue(), [.. modules.SelectMany(keys => keys)]);
+    }
 
     /// <summary>The token roles of the application's operators, each once, in ordinal order.</summary>
     public IReadOnlyList<string> OperatorTokenRoles { get; }

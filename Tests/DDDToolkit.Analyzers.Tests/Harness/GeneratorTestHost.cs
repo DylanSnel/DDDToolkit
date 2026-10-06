@@ -151,7 +151,7 @@ public sealed class GeneratorTestHost
     public static IIncrementalGenerator[] TenancyGenerators() => [new TenancyPermissionsGenerator()];
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
-    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer()];
+    public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
 
     public GeneratorTestHost WithSource(string source, string path = "Source.cs")
     {
@@ -392,6 +392,16 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithMembershipAlone()
     {
         _extraReferences.Add(ReferenceSets.MembershipAlone);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds Tenancy and Membership on Postgres with the Supabase export, as an application gets them by referencing
+    /// the two Postgres packages: both declare themselves contributors of row level security.
+    /// </summary>
+    public GeneratorTestHost WithSupportingDomainsOnPostgres()
+    {
+        _extraReferences.AddRange(ReferenceSets.SupportingDomainsOnPostgres);
         return this;
     }
 

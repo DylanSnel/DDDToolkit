@@ -65,15 +65,8 @@ public sealed class SupabaseMigrationsGeneratorTests
         result.ShouldContain("SupabaseMigrationSources", "SupabaseMigrationBuild.RunIfRequested(All, Rules, Functions, Contributions)");
     }
 
-    /// <summary>A module that offers two row access contributions, as a package would.</summary>
-    private static readonly string OfferingModule = OrderingModule.Replace(
-        "[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]",
-        """
-        [assembly: DDDToolkit.Abstractions.Attributes.Module("Ordering")]
-        [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.OrderAudit))]
-        [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.OrderArchive))]
-        """,
-        StringComparison.Ordinal) + """
+    /// <summary>A module with a row access contribution of its own, which declares nothing: the host lists it.</summary>
+    private static readonly string ModuleWithItsOwnSql = OrderingModule + """
 
 
         public sealed class OrderAudit : DDDToolkit.EntityFramework.Postgres.IRowAccessContribution
@@ -92,12 +85,12 @@ public sealed class SupabaseMigrationsGeneratorTests
         """;
 
     [Fact]
-    public void Only_the_contributions_the_host_uses_are_passed()
+    public void The_contributions_of_the_applications_own_the_host_lists_are_passed_as_it_lists_them()
     {
         var result = GeneratorTestHost.Create("[assembly: DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Ordering.OrderAudit))]\n" + Host)
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
-            .WithReferencedAssembly(OfferingModule, "Shop.Ordering")
+            .WithReferencedAssembly(ModuleWithItsOwnSql, "Shop.Ordering")
             .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Write")
             .Run(GeneratorTestHost.SupabaseGenerators());
@@ -111,11 +104,25 @@ public sealed class SupabaseMigrationsGeneratorTests
             "            new global::Shop.Ordering.OrderAudit(),\n" +
             "            };",
             "the initializer hands the export the contribution the host lists, created without reflection");
-        result.ShouldNotContain("SupabaseMigrationSources", "OrderArchive", "an offer alone writes nothing into the host's migrations");
+        result.ShouldNotContain("SupabaseMigrationSources", "OrderArchive", "a module's class that declares nothing is the application's own SQL, and only what the host lists is written");
+        result.ReportedDiagnostics.Should().BeEmpty("a module's own contribution is the host's to list or not");
+        result.GeneratedSources.Select(source => source.HintName).Should().NotContain(
+            hint => hint.Contains("RowAccessContributionsOfPackages", StringComparison.Ordinal),
+            "no package declares itself a contributor, so there is no class to write for one");
     }
 
+    /// <summary>A module that offers two row access contributions of its own, as a package declares one.</summary>
+    private static readonly string OfferingModule = ModuleWithItsOwnSql.Replace(
+        "[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]",
+        """
+        [assembly: DDDToolkit.Abstractions.Attributes.Module("Ordering")]
+        [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.OrderAudit))]
+        [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.OrderArchive))]
+        """,
+        StringComparison.Ordinal);
+
     [Fact]
-    public void An_offered_contribution_the_host_does_not_use_is_DDD00054()
+    public void An_offer_of_a_module_the_host_does_not_list_is_DDD00069_and_not_written()
     {
         var result = GeneratorTestHost.Create("[assembly: DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Ordering.OrderAudit))]\n" + Host)
             .WithAssemblyName("Shop.Host")
@@ -126,13 +133,19 @@ public sealed class SupabaseMigrationsGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldCompile();
-        var reported = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00054").Subject;
+        var reported = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00069").Subject;
         reported.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Warning);
         reported.GetMessage().Should().Be(
-            "'Shop.Ordering' offers the row access contribution 'Shop.Ordering.OrderArchive', which this application does not use. Add [assembly: UseRowAccessContribution(typeof(Shop.Ordering.OrderArchive))], or list a class of yours that derives from it, to write its SQL into your migrations.");
+            "'Shop.Ordering', a module, offers the row access contribution 'Shop.Ordering.OrderArchive', which this project does not list, so its SQL is not written into the "
+            + "migrations. Add [assembly: UseRowAccessContribution(typeof(Shop.Ordering.OrderArchive))], or list a class of yours that derives from it.");
+        result.ShouldContain("SupabaseMigrationSources", "            new global::Shop.Ordering.OrderAudit(),\n");
+        result.ShouldNotContain("SupabaseMigrationSources", "OrderArchive", "a module's offer is written where the host lists it, and nowhere else");
+        result.GeneratedSources.Select(source => source.HintName).Should().NotContain(
+            hint => hint.Contains("RowAccessContributionsOfPackages", StringComparison.Ordinal),
+            "an assembly that declares a module is no package, so nothing is made for it");
 
         HostReferencing(OfferingModule, export: null).Run(GeneratorTestHost.SupabaseGenerators())
-            .ShouldNotHaveDiagnostic("DDD00054");
+            .ShouldNotHaveDiagnostic("DDD00069");
     }
 
     /// <summary>
@@ -167,7 +180,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         """;
 
     [Fact]
-    public void A_class_of_the_hosts_derived_from_an_offered_contribution_or_closing_it_uses_the_offer()
+    public void A_class_of_the_hosts_derived_from_a_modules_offer_or_closing_it_lists_the_offer()
     {
         var result = GeneratorTestHost.Create(
                 """
@@ -190,81 +203,65 @@ public sealed class SupabaseMigrationsGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00054");
+        result.ReportedDiagnostics.Should().BeEmpty();
         result.ShouldContain("SupabaseMigrationSources", "            new global::Shop.Host.HostOrderAudit(),\n");
         result.ShouldContain("SupabaseMigrationSources", "            new global::Shop.Ordering.OrderArchive<global::Shop.Host.KeepForAYear>(),\n");
 
-        var unused = HostReferencing(OfferingForTheHostModule, export: "Check").Run(GeneratorTestHost.SupabaseGenerators());
-        unused.ReportedDiagnostics.Where(diagnostic => diagnostic.Id == "DDD00054").Select(diagnostic => diagnostic.GetMessage()).Should().BeEquivalentTo(
+        var unlisted = HostReferencing(OfferingForTheHostModule, export: "Check").Run(GeneratorTestHost.SupabaseGenerators());
+        unlisted.ReportedDiagnostics.Where(diagnostic => diagnostic.Id == "DDD00069").Select(diagnostic => diagnostic.GetMessage()).Should().BeEquivalentTo(
             [
-                "'Shop.Ordering' offers the row access contribution 'Shop.Ordering.OrderAudit', which this application does not use. Its constructor takes what only your application can give it, so declare a class of yours that derives from it and hands that over, public sealed class YourRowAccess() : Shop.Ordering.OrderAudit(...), and add [assembly: UseRowAccessContribution(typeof(YourRowAccess))], to write its SQL into your migrations.",
-                "'Shop.Ordering' offers the row access contribution 'Shop.Ordering.OrderArchive<TRetention>', which this application does not use. Add [assembly: UseRowAccessContribution(typeof(Shop.Ordering.OrderArchive<YourRetention>))], with a type of yours for TRetention, or list a class of yours that derives from it, to write its SQL into your migrations.",
+                "'Shop.Ordering', a module, offers the row access contribution 'Shop.Ordering.OrderAudit', which this project does not list, so its SQL is not written into the "
+                + "migrations. Its constructor takes what only your application can give it, so declare a class of yours that derives from it and hands that over, public sealed "
+                + "class YourRowAccess() : Shop.Ordering.OrderAudit(...), and add [assembly: UseRowAccessContribution(typeof(YourRowAccess))].",
+                "'Shop.Ordering', a module, offers the row access contribution 'Shop.Ordering.OrderArchive<TRetention>', which this project does not list, so its SQL is not "
+                + "written into the migrations. Add [assembly: UseRowAccessContribution(typeof(Shop.Ordering.OrderArchive<YourRetention>))], with a type of yours for TRetention, "
+                + "or list a class of yours that derives from it.",
             ],
-            "what is suggested compiles once the host's own types are put in: an offer the export cannot create as it is goes through a class of the host's");
+            "what is suggested compiles once the host's own types are put in: an offer the export cannot make as it is goes through a class of the host's");
     }
 
-    /// <summary>
-    /// A module that offers a contribution the way a package with members does: generic over the host's class,
-    /// and made with the rules of the host's resource.
-    /// </summary>
-    private static readonly string OfferingWithRulesModule = OrderingModule.Replace(
-        "[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]",
-        """
-        [assembly: DDDToolkit.Abstractions.Attributes.Module("Ordering")]
-        [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.LedgerRowAccess<>))]
-        """,
-        StringComparison.Ordinal) + """
-
-
-        public sealed record LedgerRules(string Name);
-
-        public class LedgerRowAccess<TEntry>(LedgerRules rules) : DDDToolkit.EntityFramework.Postgres.IRowAccessContribution
-            where TEntry : class
-        {
-            public LedgerRules Rules { get; } = rules;
-
-            public string Owner => "ordering";
-
-            public DDDToolkit.EntityFramework.Postgres.RowAccessContributionResult? Contribute(DbContext context, DDDToolkit.EntityFramework.Postgres.RowAccessExport export) => null;
-        }
-        """;
-
     [Fact]
-    public void An_offer_that_is_generic_and_made_with_the_hosts_rules_is_suggested_as_a_class_of_the_hosts_that_compiles()
+    public void A_modules_offer_derived_from_a_packages_contribution_is_DDD00067_and_not_DDD00069()
     {
-        var unused = HostReferencing(OfferingWithRulesModule, export: "Check").Run(GeneratorTestHost.SupabaseGenerators());
+        // What a module that once handed a package its data through a class of its own still declares.
+        const string package = """
+            using DDDToolkit.EntityFramework.Postgres;
+            using Microsoft.EntityFrameworkCore;
 
-        // Not typeof(Shop.Ordering.LedgerRowAccess<TEntry>), which names a type parameter nobody declared, and
-        // which the export could not create with new X() either.
-        unused.ReportedDiagnostics.Where(diagnostic => diagnostic.Id == "DDD00054").Select(diagnostic => diagnostic.GetMessage()).Should().Equal(
-            "'Shop.Ordering' offers the row access contribution 'Shop.Ordering.LedgerRowAccess<TEntry>', which this application does not use. Its constructor takes what only your "
-            + "application can give it, so declare a class of yours that derives from it and hands that over, public sealed class YourRowAccess() : "
-            + "Shop.Ordering.LedgerRowAccess<YourEntry>(...), with a type of yours for TEntry, and add [assembly: UseRowAccessContribution(typeof(YourRowAccess))], "
-            + "to write its SQL into your migrations.");
+            [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Audit.AuditRowAccess))]
 
-        // What it says, with the host's own type and rules put in, compiles, uses the offer, and is what the export gets.
-        var used = GeneratorTestHost.Create(
-                """
-                [assembly: DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Host.YourRowAccess))]
+            namespace Shop.Audit;
 
-                namespace Shop.Host;
+            public class AuditRowAccess : IRowAccessContribution
+            {
+                public string Owner => "audit";
 
-                public static class Program { }
+                public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export) => null;
+            }
+            """;
+        const string module = """
+            [assembly: DDDToolkit.Abstractions.Attributes.Module("Ordering")]
+            [assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.OrderingAudit))]
 
-                public sealed class Entry;
+            namespace Shop.Ordering;
 
-                public sealed class YourRowAccess() : Shop.Ordering.LedgerRowAccess<Entry>(new Shop.Ordering.LedgerRules("ledger"));
-                """)
+            public sealed class OrderingAudit : Shop.Audit.AuditRowAccess;
+            """;
+
+        var result = GeneratorTestHost.Create(Host)
             .WithAssemblyName("Shop.Host")
             .WithSupabase()
-            .WithReferencedAssembly(OfferingWithRulesModule, "Shop.Ordering")
+            .WithReferencedAssembly(package, "Shop.Audit")
+            .WithReferencedAssembly(module, "Shop.Ordering")
             .AsApplication()
             .WithBuildProperty("SupabaseMigrationsExport", "Check")
             .Run(GeneratorTestHost.SupabaseGenerators());
 
-        used.ShouldCompile();
-        used.ShouldNotHaveDiagnostic("DDD00054");
-        used.ShouldContain("SupabaseMigrationSources", "            new global::Shop.Host.YourRowAccess(),\n");
+        result.ShouldNotCrash();
+        result.ReportedDiagnostics.Should().ContainSingle().Which.GetMessage().Should().StartWith(
+            "'Shop.Ordering.OrderingAudit', which 'Shop.Ordering' declares, derives from 'Shop.Audit.AuditRowAccess', which 'Shop.Audit' writes into this application's migrations already");
+        result.ShouldContain("SupabaseMigrationSources", "new global::DDDToolkit.EntityFramework.Supabase.Generated.AuditRowAccess(),");
+        result.ShouldNotContain("SupabaseMigrationSources", "OrderingAudit");
     }
 
     [Fact]
@@ -484,13 +481,27 @@ public sealed class SupabaseMigrationsGeneratorTests
     }
 
     /// <summary>
-    /// A module that would give every diagnostic the generator has where the export runs: a contribution it offers
-    /// and nobody lists (DDD00054), a factory whose assembly declares no module (DDD00055), and a factory the
+    /// A module that would give every diagnostic the generator has where the export runs: a contribution it declares
+    /// whose plans nobody marks (DDD00054), a factory whose assembly declares no module (DDD00055), and a factory the
     /// build could not create (DDD00031).
     /// </summary>
-    private static readonly string ModuleWithEverythingToSay = OfferingModule
-        .Replace("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]", "", StringComparison.Ordinal) + """
+    private static readonly string ModuleWithEverythingToSay = OrderingModule
+        .Replace(
+            "[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]",
+            "[assembly: DDDToolkit.Abstractions.Attributes.RowAccessContribution(typeof(Shop.Ordering.PlanRowAccess))]",
+            StringComparison.Ordinal) + """
 
+
+        [System.AttributeUsage(System.AttributeTargets.Property)]
+        public sealed class PlansAttribute : System.Attribute;
+
+        public class PlanRowAccess([DDDToolkit.Abstractions.Attributes.FromApplication(typeof(PlansAttribute))] System.Collections.Generic.IReadOnlyList<string> plans)
+            : DDDToolkit.EntityFramework.Postgres.IRowAccessContribution
+        {
+            public string Owner => "ordering";
+
+            public DDDToolkit.EntityFramework.Postgres.RowAccessContributionResult? Contribute(DbContext context, DDDToolkit.EntityFramework.Postgres.RowAccessExport export) => null;
+        }
 
         [SupabaseMigrations]
         public sealed class NeedsOptions(string connectionString) : IDesignTimeDbContextFactory<OrderingContext>
@@ -529,7 +540,7 @@ public sealed class SupabaseMigrationsGeneratorTests
 
         // And the same module referenced by the host, which hears all of it.
         HostReferencing(ModuleWithEverythingToSay, export).Run(GeneratorTestHost.SupabaseGenerators())
-            .ReportedDiagnostics.Select(diagnostic => diagnostic.Id).Should().BeEquivalentTo(["DDD00054", "DDD00054", "DDD00055", "DDD00031"]);
+            .ReportedDiagnostics.Select(diagnostic => diagnostic.Id).Should().BeEquivalentTo(["DDD00054", "DDD00055", "DDD00031"]);
     }
 
     [Theory]

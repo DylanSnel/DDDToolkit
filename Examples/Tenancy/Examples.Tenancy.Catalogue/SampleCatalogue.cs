@@ -1,6 +1,8 @@
 using Examples.Tenancy.Inspections.Application.Access;
 using Examples.Tenancy.Projects.Application.Access;
 using Examples.Tenancy.Projects.Contracts.Keys;
+using Examples.Tenancy.Projects.Domain.Aggregates.Projects.Entities;
+using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 
@@ -14,12 +16,16 @@ namespace Examples.Tenancy.Catalogue;
 /// <remarks>
 /// This is the application's data, not a module's, so it lives in a project of its own that every program of the
 /// application references: the host, which runs with it, and the program that exports the database's policies,
-/// which are written from it (<see cref="Built"/>). The keys are not declared here: Tenancy brings its own
-/// (<see cref="TenancyKeys"/>), and every other module states its keys next to the code that asks for them, once,
-/// on the list it marks with <c>[TenancyPermissions]</c>. Tenancy's generator collects those lists into this
-/// project and into the host, as <c>TenancyPermissionsOfModules</c>, so neither names a module's keys, and a module
-/// that is added changes nothing here. The packs only name them. The catalogue is built and checked once, when the
-/// host starts, and a catalogue that does not hold together stops the start.
+/// which are written from it. Tenancy and Membership on Postgres write their SQL into the exported files because the
+/// modules that store them on Postgres reference them; what that SQL depends on is marked here, where it is
+/// declared: the catalogue with <c>[TenancyCatalogue]</c> (<see cref="Application"/>) and the projects' rules with
+/// <c>[MembershipRules&lt;CrewMember&gt;]</c> (<see cref="ProjectRules"/>). The keys are not declared here: Tenancy
+/// brings its own (<see cref="TenancyKeys"/>), and every other module states its keys next to the code that asks for
+/// them, once, on the list it marks with <c>[TenancyPermissions]</c>. Tenancy's generator collects those lists into
+/// the host, as <c>TenancyPermissionsOfModules</c>, and the export finds the same marked lists in the modules it
+/// references, so neither names a module's keys, and a module that is added changes nothing here. The packs only
+/// name them. The catalogue is built and checked once, when the host starts, and a catalogue that does not hold
+/// together stops the start.
 /// <para>
 /// There are two administrators' packs, each seeded for one shape of tenant (<see cref="RolePack.SeededFor"/>),
 /// and a tenant's first seat is granted the one seeded for its shape. A flat tenant has one unit and usually a
@@ -108,16 +114,37 @@ public static class SampleCatalogue
     ];
 
     /// <summary>
-    /// The projects' rules, made from <see cref="ProjectRoles"/> as the Projects module makes them from the same
-    /// starter roles when the host adds it: what the database's functions for the projects are written from.
+    /// The projects' membership, made from <see cref="ProjectRoles"/> as the Projects module makes it from the same
+    /// starter roles when the host adds it.
     /// </summary>
     public static ProjectMembership Projects { get; } = new(ProjectRoles);
+
+    /// <summary>
+    /// The projects' rules, marked as those of a project's crew members: the Membership package writes the projects'
+    /// functions and the lock on their crews into the exported files from them.
+    /// </summary>
+    /// <remarks>
+    /// The host registers the projects with rules the Projects module makes, at run time, from the starter roles the
+    /// host hands it, and the build cannot read a value the registration is called with. So the rules the export
+    /// writes from are these, made from the same starter roles; the host's start-up check holds the database to the
+    /// rules it runs with.
+    /// </remarks>
+    [MembershipRules<CrewMember>]
+    public static MembershipRules ProjectRules => Projects.Rules;
 
     /// <summary>
     /// The application's packs, and the keys of a module it marks as managing access: naming a project's owner and
     /// managing a crew, which Projects declares. What kind of unit a unit is, a company, a region, an area or a site,
     /// is not the catalogue's: no access rule reads it, so it is a field of the application's own unit class.
     /// </summary>
+    /// <remarks>
+    /// Marked, so the export writes Tenancy's policies from the catalogue the host runs with: this part, which the host
+    /// hands Tenancy's registration, and every list of keys the modules mark, which Tenancy's generator collects into
+    /// the host and the export finds in the modules it references. On Postgres the host's start-up check compares the
+    /// database's functions with the catalogue the host runs with: policies written from another catalogue would
+    /// contain other grants than the application gives.
+    /// </remarks>
+    [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
         [
@@ -155,19 +182,4 @@ public static class SampleCatalogue
             new(PeopleOffice, "People office", "Gives people their roles", [TenancyKeys.GrantsManage], Order: 60),
         ],
         AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew]);
-
-    /// <summary>
-    /// The whole catalogue as the host runs with it, the application's part and the keys of every module, built
-    /// without the host's services: for a program that has none, such as the one that exports the policies. The
-    /// modules' keys are the lists they mark, which Tenancy's generator wrote into this project.
-    /// </summary>
-    /// <remarks>
-    /// The host builds its own from the same parts: this application's part, which it hands Tenancy's registration,
-    /// and the modules' lists, which the same generator wrote into the host, where one call registers them. The two
-    /// lists agree as long as the host and this project reference the same modules. A test holds the two catalogues
-    /// to the same keys, marks and packs, and on Postgres the host's start-up check compares the database's
-    /// functions with the catalogue the host runs with: policies written from another catalogue would contain other
-    /// grants than the application gives.
-    /// </remarks>
-    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, TenancyPermissionsOfModules.All);
 }

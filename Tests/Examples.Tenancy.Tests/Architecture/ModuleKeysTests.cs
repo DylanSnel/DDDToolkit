@@ -7,13 +7,14 @@ namespace Examples.Tenancy.Tests.Architecture;
 /// <summary>
 /// A module states its permission keys once, on the list it marks with <see cref="TenancyPermissionsAttribute"/>,
 /// and what composes the modules finds them: the host registers every module's list with the one call Tenancy's
-/// generator wrote into it, and the catalogue's project builds the catalogue the policies are exported from with the
-/// list the same generator wrote there. No module registers its own, and no project names a module's keys.
+/// generator wrote into it, and the program that exports builds the catalogue the policies are written from with
+/// every list it finds marked in the modules it references. No module registers its own, and no project names a
+/// module's keys.
 /// </summary>
 /// <remarks>
-/// Read from the host's registrations as it makes them, with no database behind it, and from the catalogue's
-/// project as the export reads it, so this holds in every build. That the two catalogues agree as a whole, packs and
-/// marks included, is <see cref="Host.StartupTests"/>' to say, with the host on Supabase.
+/// Read from the host's registrations as it makes them, with no database behind it, and from the marks as the export
+/// reads them, so this holds in every build. That the two catalogues agree as a whole, packs and marks included, is
+/// <see cref="Host.StartupTests"/>' to say, with the host on Supabase.
 /// </remarks>
 public sealed class ModuleKeysTests
 {
@@ -36,9 +37,9 @@ public sealed class ModuleKeysTests
     [Fact]
     public void The_catalogue_the_policies_are_exported_from_holds_the_same_lists()
     {
-        // The export builds without the host's services, from the list the generator wrote into the catalogue's
-        // project. Tenancy's own keys and the application's part come on top; of the modules' keys, exactly these.
-        SampleCatalogue.Built.Permissions.Where(permission => permission.Module != "Tenancy").Select(permission => permission.Key)
+        // The export builds without the host's services, from the lists it finds marked. Tenancy's own keys and the
+        // application's part come on top; of the modules' keys, exactly these.
+        ExportedMarks.Tenancy().Catalogue.Permissions.Where(permission => permission.Module != "Tenancy").Select(permission => permission.Key)
             .Should().BeEquivalentTo(EveryModulesKeys.Select(permission => permission.Key));
     }
 

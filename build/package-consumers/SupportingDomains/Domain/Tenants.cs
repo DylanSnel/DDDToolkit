@@ -65,21 +65,18 @@ public static class PressCatalogue
     ];
 
     /// <summary>
-    /// What the application passes as <c>TenancyOptions.Catalogue</c>. It declares no administrators' pack, so the
+    /// What the application passes as <c>TenancyOptions.Catalogue</c>, marked so the export writes Tenancy's policies
+    /// from it, with the keys marked above: Tenancy on Postgres writes them because the infrastructure project
+    /// references it, and the host gets nothing more to write. It declares no administrators' pack, so the
     /// catalogue adds Tenancy's own, <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every key for
-    /// the whole house, and the access file the export writes from <see cref="Built"/> has it.
+    /// the whole house, and the access file the export writes has it.
     /// </summary>
+    [TenancyCatalogue]
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
         [
             new(ImprintHeadPack, "Head of imprint", "Heads an imprint", [ManuscriptKeys.Read, ManuscriptKeys.Edit], Order: 20),
         ]);
-
-    /// <summary>
-    /// The catalogue as the application runs with it: the house has one module with keys, this one, so the list
-    /// above is every module's, as the host's generated list has it.
-    /// </summary>
-    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, Permissions);
 }
 
 /// <summary>The logical names of Tenancy's functions, which a manuscript's rules name so its own functions ask them.</summary>

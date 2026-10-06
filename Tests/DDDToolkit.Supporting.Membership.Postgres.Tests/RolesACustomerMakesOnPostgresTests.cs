@@ -594,7 +594,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             .Which.Message.Should()
             .StartWith("The functions that answer the membership of Plot in the database are not as its rules, 'plots', say them: ")
             .And.Contain("gardens.plots_as_member (missing), gardens.plots_as_member_with (missing), gardens.plots_i_see (missing), gardens.plots_where_i_hold (missing)")
-            .And.Contain("MembershipRowAccessContribution<PlotGardener>");
+            .And.Contain("[MembershipRules<PlotGardener>]");
 
         // Written from rules that let a member's role give another key: the database would answer otherwise than the application.
         await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(memberKeys: MemberKeys.AllBut())), new ShedMembershipFunctions(), new GardenOwnFunctions()]));

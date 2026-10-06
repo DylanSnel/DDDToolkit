@@ -26,8 +26,8 @@ public static class TenancyPostgresServiceCollectionExtensions
     /// builder.Services.AddSupabaseRowLevelSecurity();
     /// builder.Services.AddTenancyPostgres();
     /// </code>
-    /// The policies themselves come with the access files the export writes, from a class of the application's
-    /// derived from <see cref="TenancyRowAccessContribution"/>; <see cref="TenancyPostgresChecks"/> checks at
+    /// The policies themselves come with the access files the export writes, which makes
+    /// <see cref="TenancyRowAccessContribution"/> from the catalogue the application marks; <see cref="TenancyPostgresChecks"/> checks at
     /// start-up that the database and the host are set up as they rely on. This registers those checks as start-up
     /// checks, which the host runs with <c>services.RunStartupChecks()</c>. Calling it more than once is harmless.
     /// </summary>

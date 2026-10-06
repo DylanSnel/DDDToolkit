@@ -385,12 +385,14 @@ that error and this one goes with it.
 
 ## DDD00054
 
-Warning, in the project that turns the Supabase export on. A referenced package or module offers a row
-access contribution (`[assembly: RowAccessContribution(typeof(X))]`: functions, policies and statements
-for its tables) that this project does not list, so none of its SQL reaches the migrations. Add
-`[assembly: UseRowAccessContribution(typeof(X))]` to the host, the project that runs the export, to use it;
-listing a class of the host's derived from `X`, or `X` closed with the host's types when it is generic,
-counts too. If leaving it out is deliberate, suppress the warning with `<NoWarn>`.
+Warning, in the project that turns the Supabase export on. A referenced package declares itself a contributor
+of row level security (`[assembly: RowAccessContribution(typeof(X))]`), so its SQL is written because the project
+references it, but its class takes something the application marks nothing for, so none of its SQL reaches the
+migrations. Mark the static property or field the message names with the attribute it names, where the value is
+declared: the resource's rules `[MembershipRules<TMember>]` for Membership on Postgres, one per member class. Do
+not write a class that derives from the package's, and do not list anything with `UseRowAccessContribution`
+(that is DDD00067). If the application must not have the package's SQL, add
+`[assembly: LeaveOutRowAccessContribution(typeof(X))]` to the project that runs the export instead of `<NoWarn>`.
 
 ## DDD00055
 
@@ -563,6 +565,58 @@ DDD00022 for each of its types. Reference the `DDDToolkit.Abstractions` of the s
 `DDDToolkit.Analyzers` (as `DDDToolkit` brings both, a project that references `DDDToolkit` has it). Only if the
 version cannot move, mark the published types `[ModuleContract]` and drop the property. Do not silence it with `NoWarn`.
 An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
+
+## DDD00066
+
+Error, in the project that turns the Supabase export on, at the marked member where it is in that project. A
+package's row access contribution cannot be made from what the application marks. Two members marked with an
+attribute the package takes once (two `[TenancyCatalogue]`, or two `[MembershipRules<T>]` for one member class):
+keep the one the host runs with and take the mark off the other. A marked member of the wrong type: mark the
+value the package takes, the `ApplicationCatalogue` you hand `TenancyOptions.Catalogue` and not a
+`TenancyCatalogue` built from it. A member that is not static, has no getter or sits in a generic type: make it
+a public static property or field of a public non-generic class. (One that is internal in another project is not
+seen here at all; that project reports it, DDD00070.) A message
+that ends "That is the package's to fix" is about the package's own class; report it, or leave the package out
+with `[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
+
+## DDD00067
+
+Error, on an `[assembly: UseRowAccessContribution(typeof(X))]` line, or about a class another project declares
+with `[assembly: RowAccessContribution]`. `X` is a package's contribution, a class derived from it, or its closing
+over a type the package already closes it with, and the package writes it already because the project references
+it. Delete the line and the pass-through class (`public sealed class X() : TenancyRowAccessContribution(...)`),
+and mark what the class handed over instead: `[TenancyCatalogue]` on the application's `ApplicationCatalogue`,
+`[TenancyOperators]` on the operators' token roles, `[MembershipRules<TMember>]` on each resource's rules. Only
+when the application writes the package's SQL with its own class on purpose, keep the line and add
+`[assembly: LeaveOutRowAccessContribution(typeof(PackageContribution))]`.
+
+## DDD00068
+
+Warning, at an `[assembly: LeaveOutRowAccessContribution(...)]` line in the project that turns the Supabase export
+on. The line leaves nothing out. Its `Context` is no class derived from `DbContext` (or an open generic one): name
+the context whose access file the package's SQL is kept out of. Its type is no contribution a referenced package
+declares, or a closing the application marks nothing for: take the line out. Its type is a module's own
+contribution: take that module's `[assembly: UseRowAccessContribution]` line out instead, which is the only thing
+that writes it.
+
+## DDD00069
+
+Warning, in the project that turns the Supabase export on. A module (an assembly with `DDD_Module` or
+`[assembly: Module]`) offers its own SQL with `[assembly: RowAccessContribution(typeof(X))]`, and this project
+does not list it, so the trigger or policy it writes is not in the migrations. Add
+`[assembly: UseRowAccessContribution(typeof(X))]` to the project that runs the export, as the message says (a
+class derived from it, or a generic one closed with the application's types, where the message says so). Do not
+take the module's declaration out to silence it: that declaration is what makes a forgotten line heard. Only if
+the database must not have the module's SQL, suppress it with `<NoWarn>` and say why.
+
+## DDD00070
+
+Error, at a property or field in a library. It is marked for a package's row access contribution
+(`[TenancyCatalogue]`, `[TenancyOperators]`, `[MembershipRules<TMember>]`, or another attribute that carries
+`[ApplicationMark]`) and is not public, in public types, with a public getter, so the project that runs the export
+does not see it and would make the package's contribution as if nothing were marked. Make the member public and
+static in a public class, with a public getter. Do not move the mark to a copy of the value: mark the value the
+host runs with.
 
 ## Not a diagnostic: the owned type must carry the key part
 

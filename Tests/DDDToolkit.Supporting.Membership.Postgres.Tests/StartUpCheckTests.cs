@@ -63,8 +63,8 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Document in the database are not as its rules, 'documents', say them: ")
             .And.Contain("filing.documents_as_member (missing), filing.documents_as_member_with (missing), filing.documents_i_see (missing), filing.documents_where_i_hold (missing)")
-            .And.Contain("List a class derived from MembershipRowAccessContribution<DocumentShare>")
-            .And.Contain("[assembly: UseRowAccessContribution]")
+            .And.Contain("Mark the rules the resource is registered with [MembershipRules<DocumentShare>]")
+            .And.Contain("where the project that runs the export sees them")
             .And.Contain("apply the access files");
     }
 
@@ -81,7 +81,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         refused.Which.Message.Should()
             .StartWith("The functions that answer the membership of Folder in the database are not as its rules, 'folders', say them: ")
             .And.Contain("filing.folder_ids_held (missing), filing.folder_ids_seen (missing), filing.folder_ids_staffed (missing), filing.folder_ids_staffed_with (missing)")
-            .And.Contain("MembershipRowAccessContribution<FolderMember>")
+            .And.Contain("[MembershipRules<FolderMember>]")
             .And.NotContain("documents_");
 
         // With both, it starts.

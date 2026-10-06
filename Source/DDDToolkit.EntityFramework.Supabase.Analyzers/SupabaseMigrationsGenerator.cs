@@ -30,11 +30,19 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// per factory. Nothing is found or created by reflection when the export runs.
 /// </para>
 /// <para>
-/// It hands the export the row access contributions this project lists with
-/// <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, as <c>new X()</c>, and no others: SQL a package offers
-/// with <c>[assembly: RowAccessContribution]</c> reaches the migrations only by the host's choice. An offer in
-/// the searched assemblies that the host lists neither itself, nor as a class derived from it, nor closed with
-/// its own types, is DDD00054.
+/// It hands the export the row access contributions of every package in the searched assemblies that declares
+/// itself a contributor with <c>[assembly: RowAccessContribution]</c>: referencing the package is the consent.
+/// Each is made in a class written for it into <c>DDDToolkit.RowAccessContributionsOfPackages.g.cs</c>, from the
+/// static members the application marks with the attributes the package's constructor names with
+/// <c>[FromApplication]</c>, unless the project leaves it out with <c>[assembly: LeaveOutRowAccessContribution]</c>.
+/// The class implements <c>IPackageRowAccessContribution</c>, so the comment above what it writes names the
+/// package's class and assembly, without a version: neither a release of the application nor one of the package
+/// that writes the same SQL makes an access file stale. Next to them come the application's own, which the
+/// project lists with <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, as <c>new X()</c>. An assembly that
+/// declares a module and <c>[assembly: RowAccessContribution]</c> offers its own SQL rather than writing it: one the
+/// project does not list is DDD00069. A package's contribution that misses what it cannot do without is DDD00054,
+/// one whose marks cannot be used DDD00066, one the project lists again, itself or a class derived from it,
+/// DDD00067, and a line that leaves nothing out DDD00068.
 /// </para>
 /// <para>
 /// A marked factory whose assembly and whose context's assembly both declare no <c>[assembly: Module]</c> is
@@ -42,7 +50,7 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
-public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
+public sealed partial class SupabaseMigrationsGenerator : IIncrementalGenerator
 {
     private const string ExportProperty = "build_property.SupabaseMigrationsExport";
 
@@ -79,6 +87,13 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             if (discovery.Enabled)
             {
                 production.AddSource("DDDToolkit.SupabaseMigrationSources.g.cs", Emit(discovery.Sources, discovery.Rules, discovery.Functions, discovery.Contributions));
+
+                // A file of its own, named for what it holds, and only where a package contributes: what a package
+                // reference brings into the migrations is something a developer looks for by name.
+                if (discovery.Contributions.Made.Count > 0)
+                {
+                    production.AddSource(PackagesFileName, EmitPackages(discovery.Contributions.Made));
+                }
             }
         });
     }
@@ -89,23 +104,11 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         var rules = new List<Rule>();
         var functions = new List<Function>();
         var diagnostics = new List<DiagnosticInfo>();
-        var used = ContributionsIn(compilation.Assembly, KnownTypes.UseRowAccessContributionAttribute).ToList();
+        var searched = Searched(compilation).ToList();
+        var contributions = ContributionsOf(compilation, searched, diagnostics, cancellationToken);
 
-        foreach (var assembly in Searched(compilation))
+        foreach (var assembly in searched)
         {
-            foreach (var offered in ContributionsIn(assembly, KnownTypes.RowAccessContributionAttribute))
-            {
-                if (!used.Any(type => Covers(type, offered)))
-                {
-                    diagnostics.Add(DiagnosticInfo.Create(
-                        DiagnosticDescriptors.RowAccessContributionNotUsed,
-                        null,
-                        assembly.Name,
-                        offered.OriginalDefinition.ToDisplayString(),
-                        HowToList(offered.OriginalDefinition)));
-                }
-            }
-
             foreach (var type in TypesIn(assembly.GlobalNamespace))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -174,18 +177,12 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
         functions.Sort(static (left, right) => string.CompareOrdinal(left.Name, right.Name));
 
-        var contributions = used
-            .Select(static type => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        contributions.Sort(StringComparer.Ordinal);
-
         return new Discovery(
             true,
             new EquatableArray<Source>(sources),
             new EquatableArray<Rule>(rules),
             new EquatableArray<Function>(functions),
-            new EquatableArray<string>(contributions),
+            contributions,
             new EquatableArray<DiagnosticInfo>(diagnostics));
     }
 
@@ -217,8 +214,7 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
 
     /// <summary>
     /// The types the assembly attributes named <paramref name="attributeName"/> of <paramref name="assembly"/>
-    /// name: the contributions a project lists with <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, or
-    /// those an assembly offers with <c>[assembly: RowAccessContribution(typeof(X))]</c>.
+    /// name: the contributions a package declares with <c>[assembly: RowAccessContribution(typeof(X))]</c>.
     /// </summary>
     private static IEnumerable<INamedTypeSymbol> ContributionsIn(IAssemblySymbol assembly, string attributeName)
         => assembly.GetAttributes()
@@ -227,65 +223,6 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
             .Where(static type => type is not null)
             .Select(static type => type!)
             .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-
-    /// <summary>
-    /// What DDD00054 tells the host to write for an offer it does not use, as code that compiles once the host's
-    /// own types are put in. The export creates every contribution it is handed with <c>new X()</c>, in the
-    /// generated list, so what is listed closes every type parameter and takes nothing. An offer that does both
-    /// is listed as it is. A generic one that takes nothing is closed in the attribute. One whose constructor
-    /// takes an argument, the rules of the application's resource say, is listed through a class of the host's
-    /// that derives from it and hands that over; a type parameter of such a class is closed in that line.
-    /// </summary>
-    private static string HowToList(INamedTypeSymbol offered)
-    {
-        var takesNothing = offered.InstanceConstructors.Any(static constructor => constructor.Parameters.Length == 0 && constructor.DeclaredAccessibility == Accessibility.Public);
-        var closedWithYours = offered.TypeParameters.Length == 0
-            ? offered.Name
-            : offered.Name + "<" + string.Join(", ", offered.TypeParameters.Select(static parameter => "Your" + Unprefixed(parameter.Name))) + ">";
-        var forEach = offered.TypeParameters.Length == 0
-            ? string.Empty
-            : ", with a type of yours for " + string.Join(" and ", offered.TypeParameters.Select(static parameter => parameter.Name));
-        var qualified = (offered.ContainingType is { } outer ? outer.ToDisplayString() + "."
-                            : offered.ContainingNamespace is { IsGlobalNamespace: false } space ? space.ToDisplayString() + "."
-                            : string.Empty) + closedWithYours;
-
-        if (takesNothing && offered.TypeParameters.Length == 0)
-        {
-            return "Add [assembly: UseRowAccessContribution(typeof(" + offered.ToDisplayString() + "))], or list a class of yours that derives from it";
-        }
-
-        if (takesNothing)
-        {
-            return "Add [assembly: UseRowAccessContribution(typeof(" + qualified + "))]" + forEach + ", or list a class of yours that derives from it";
-        }
-
-        return "Its constructor takes what only your application can give it, so declare a class of yours that derives from it and hands that over, "
-               + "public sealed class YourRowAccess() : " + qualified + "(...)" + forEach + ", and add [assembly: UseRowAccessContribution(typeof(YourRowAccess))]";
-    }
-
-    /// <summary>A type parameter's name without its leading <c>T</c>: <c>Member</c> of <c>TMember</c>, and a name that has none as it is.</summary>
-    private static string Unprefixed(string name)
-        => name.Length > 1 && name[0] == 'T' && char.IsUpper(name[1]) ? name.Substring(1) : name;
-
-    /// <summary>
-    /// Whether the host's <paramref name="used"/> contribution is the <paramref name="offered"/> one: the same
-    /// class, a class of the host's derived from it, or, for a generic one, the host's own closing of it. A
-    /// package whose SQL depends on what only the host knows, such as its catalogue, offers a class the host
-    /// derives from or closes with its own types.
-    /// </summary>
-    private static bool Covers(INamedTypeSymbol used, INamedTypeSymbol offered)
-    {
-        for (INamedTypeSymbol? type = used; type is not null; type = type.BaseType)
-        {
-            if (SymbolEqualityComparer.Default.Equals(type, offered)
-                || (offered.IsGenericType && SymbolEqualityComparer.Default.Equals(type.OriginalDefinition, offered.OriginalDefinition)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     /// <summary>
     /// This assembly, and every referenced assembly that references the Supabase package, where marked
@@ -490,7 +427,7 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static string Emit(EquatableArray<Source> sources, EquatableArray<Rule> rules, EquatableArray<Function> functions, EquatableArray<string> contributions)
+    private static string Emit(EquatableArray<Source> sources, EquatableArray<Rule> rules, EquatableArray<Function> functions, ContributionsToExport contributions)
     {
         const string Supabase = "global::" + KnownTypes.SupabaseNamespace;
         const string Postgres = "global::" + KnownTypes.PostgresNamespace;
@@ -523,9 +460,11 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                         : $", owner: null, parameters: {Literal(function.Parameters)}, shape: (global::{KnownTypes.AttributesNamespace}.AccessFunctionShape){function.Shape}")
                     + "),"));
 
-        var contributionEntries = contributions.Count == 0
-            ? string.Empty
-            : string.Join("\n", contributions.Select(contribution => $"            new {contribution}(),"));
+        // The packages' first, made in the classes written for them, then the application's own.
+        var contributionEntries = string.Join(
+            "\n",
+            contributions.Made.Select(made => $"            new global::{GeneratedNamespace}.{made.ClassName}(),")
+                .Concat(contributions.Listed.Select(listed => $"            new {listed}(),")));
 
         return $$"""
             // <auto-generated/>
@@ -561,8 +500,9 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
                         };
 
                     /// <summary>
-                    /// The row access contributions this project lists with [assembly: UseRowAccessContribution], which the
-                    /// export asks what they write for each context.
+                    /// The row access contributions the export asks what they write for each context: those the packages
+                    /// this project references write, made in DDDToolkit.RowAccessContributionsOfPackages.g.cs, and those
+                    /// it lists with [assembly: UseRowAccessContribution].
                     /// </summary>
                     public static global::System.Collections.Generic.IReadOnlyList<{{Postgres}}.IRowAccessContribution> Contributions()
                         => new {{Postgres}}.IRowAccessContribution[]
@@ -606,17 +546,17 @@ public sealed class SupabaseMigrationsGenerator : IIncrementalGenerator
     private sealed record Function(string Aggregate, string Name, string Sql, string Parameters, int Shape);
 
     /// <summary>
-    /// What the generator found: the sources, rules and access functions to export, the contributions the host
-    /// uses, by their fully qualified names, and the diagnostics to report.
+    /// What the generator found: the sources, rules and access functions to export, the contributions it hands the
+    /// export, the packages' and the application's own, and the diagnostics to report.
     /// </summary>
     private sealed record Discovery(
         bool Enabled,
         EquatableArray<Source> Sources,
         EquatableArray<Rule> Rules,
         EquatableArray<Function> Functions,
-        EquatableArray<string> Contributions,
+        ContributionsToExport Contributions,
         EquatableArray<DiagnosticInfo> Diagnostics)
     {
-        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<Rule>.Empty, EquatableArray<Function>.Empty, EquatableArray<string>.Empty, EquatableArray<DiagnosticInfo>.Empty);
+        public static readonly Discovery None = new(false, EquatableArray<Source>.Empty, EquatableArray<Rule>.Empty, EquatableArray<Function>.Empty, ContributionsToExport.None, EquatableArray<DiagnosticInfo>.Empty);
     }
 }

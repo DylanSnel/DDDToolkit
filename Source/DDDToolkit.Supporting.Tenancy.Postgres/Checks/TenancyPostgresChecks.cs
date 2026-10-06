@@ -529,7 +529,7 @@ public static class TenancyPostgresChecks
                 {
                     throw new InvalidOperationException(
                         "No policy lets the operators' database roles " + string.Join(", ", blind) + " read the tenants, so an operator would be answered an empty directory. " +
-                        "Give the class derived from TenancyRowAccessContribution the same operator token roles as TenancyOptions.OperatorTokenRoles, as its second constructor argument, " +
+                        "Mark the token roles TenancyOptions.OperatorTokenRoles lists [TenancyOperators], where the project that runs the export sees them, " +
                         "export the access files, and apply them.");
                 }
             }
@@ -557,7 +557,7 @@ public static class TenancyPostgresChecks
             {
                 throw new InvalidOperationException(
                     "Row level security is off on Tenancy's tables " + string.Join(", ", open) + ", so nothing holds a seat to its tenant there. " +
-                    "List a class derived from TenancyRowAccessContribution with [assembly: UseRowAccessContribution] in the project that runs the export, and apply the access files it writes.");
+                    "The project that runs the export writes them when it references DDDToolkit.Supporting.Tenancy.Postgres and does not leave its contribution out: export the access files, and apply them.");
             }
 
             // The unique index on a tenant's root. The policies keep a seat from making a second root; system work
@@ -635,7 +635,9 @@ public static class TenancyPostgresChecks
                 {
                     throw new InvalidOperationException(
                         "The function " + tenancy.Schema + "." + name + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
-                        ": " + says + ". Export the access files with the catalogue the application runs with, and apply them.");
+                        ": " + says + ". Export the access files with the catalogue the application runs with, and apply them: the export writes them from the ApplicationCatalogue " +
+                        "marked [TenancyCatalogue], the one handed to TenancyOptions.Catalogue, which is public and static where the project that runs the export sees it, " +
+                        "and from the modules' keys marked [TenancyPermissions].");
                 }
             }
 
@@ -825,7 +827,7 @@ public static class TenancyPostgresChecks
         {
             throw new InvalidOperationException(
                 "The operator token roles " + string.Join(", ", unmapped) + " are mapped to no database role of their own, so an operator's queries would run as no role that reads the tenants. " +
-                "Map each in PostgresRowLevelSecurityOptions.TokenRoles to a role that is not the role of a signed-in user, and give the same token roles to the class derived from TenancyRowAccessContribution.");
+                "Map each in PostgresRowLevelSecurityOptions.TokenRoles to a role that is not the role of a signed-in user, and mark the same token roles [TenancyOperators] for the export.");
         }
 
         return [.. operators.Select(tokenRole => options.TokenRoles[tokenRole]).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];

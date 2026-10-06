@@ -317,7 +317,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
 
         refused.Should().Throw<InvalidOperationException>().WithMessage(
             "The rule 'Users read the documents they see' asks the resources the caller sees, by the id DDDToolkit.Supporting.Membership.TestHost.DocumentId, "
-            + "and no row access contribution answers it for the contexts this is written with. Use the contribution that keeps that resource's access, the Membership package's for a resource with members*");
+            + "and no row access contribution answers it for the contexts this is written with. Hand the script the contribution that keeps that resource's access in RowAccessExport.Contributions, the Membership package's for a resource with members*");
     }
 
     [Fact]

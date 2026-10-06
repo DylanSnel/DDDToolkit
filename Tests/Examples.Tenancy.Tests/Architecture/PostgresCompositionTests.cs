@@ -1,6 +1,11 @@
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using DDDToolkit.EntityFramework.Supabase;
+using DDDToolkit.Supporting.Membership.Access;
+using DDDToolkit.Supporting.Tenancy;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
+using Examples.Tenancy.Projects.Infrastructure.Access;
 using Examples.Hosting;
 using Examples.Tenancy.Tenants.Contracts.TokenRoles;
 using FluentAssertions;
@@ -179,24 +184,31 @@ public sealed partial class PostgresCompositionTests
     }
 
     /// <summary>
-    /// An exported access file names the project a row access contribution is in, with that project's version. So
-    /// such a project has a version of its own, and keeps it against the one a release build gives every project
-    /// on the command line. With the toolkit's version there, a release would find the access file stale with
-    /// nothing in it changed but that number; and a release build only compares the files, so it would fail.
+    /// An exported access file names the project a row access contribution of the application's is in, with that
+    /// project's version. So such a project has a version of its own, and keeps it against the one a release build
+    /// gives every project on the command line. With the toolkit's version there, a release would find the access
+    /// file stale with nothing in it changed but that number; and a release build only compares the files, so it
+    /// would fail. A package's contribution is named by the package's class and assembly, without a version, so no
+    /// project of the sample keeps one for Tenancy's or Membership's. The newest access file of each module is what
+    /// the export compares, so the projects those name are held to it.
     /// </summary>
     [Fact]
     public void A_project_an_exported_access_file_names_keeps_a_version_of_its_own()
     {
         var exported = Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "supabase", "migrations");
-        var named = Directory.GetFiles(exported, "*_access.*.sql")
-            .SelectMany(file => ContributionProject().Matches(File.ReadAllText(file)))
+        var newest = Directory.GetFiles(exported, "*_access.*.sql")
+            .GroupBy(file => Path.GetFileName(file).Split('.')[1], StringComparer.Ordinal)
+            .Select(module => File.ReadAllText(module.OrderBy(file => Path.GetFileName(file), StringComparer.Ordinal).Last()))
+            .ToList();
+        var named = newest
+            .SelectMany(sql => ContributionProject().Matches(sql))
             .Select(match => (Project: match.Groups["project"].Value, Version: match.Groups["version"].Value))
             .Distinct()
             .ToList();
 
         named.Select(project => project.Project).Should().BeEquivalentTo(
-            [SampleLayout.Catalogue, SampleLayout.Project("Projects", Layer.Infrastructure).Name],
-            "Tenancy's contribution is used from the catalogue's project, and Projects holds a trigger of its own beside its row rules");
+            [SampleLayout.Project("Projects", Layer.Infrastructure).Name],
+            "Projects holds a trigger and a policy of its own beside its row rules");
         foreach (var (project, version) in named)
         {
             var file = XDocument.Load(SampleLayout.SampleProjectFiles().Single(path => Path.GetFileNameWithoutExtension(path) == project));
@@ -204,6 +216,36 @@ public sealed partial class PostgresCompositionTests
             file.Descendants("Version").Select(element => element.Value).Should().Equal([version], "{0} has the version the exported files name it with", project);
             (file.Root!.Attribute("TreatAsLocalProperty")?.Value).Should().Be("Version", "{0} keeps its version when a build gives another with -p:Version", project);
         }
+
+        string.Concat(newest).Should()
+            .Contain("-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.\n")
+            .And.Contain(
+                "-- Written by the row access contribution DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<Examples.Tenancy.Projects.Domain.Aggregates.Projects.Entities.CrewMember> in DDDToolkit.Supporting.Membership.Postgres.\n",
+                "a package's SQL is named by the package's class, closed over the sample's member class, and by its assembly, with no version that a release would change");
+    }
+
+    /// <summary>
+    /// Tenancy and Membership on Postgres write their SQL into the exported files because the modules that store them
+    /// reference those packages, so the exporter lists only what is the application's own: the trigger and the
+    /// policy of the Projects module. What the packages' SQL is written from is marked once each, and is what the
+    /// host runs with: the part of the catalogue it hands Tenancy, the operators the Tenants module tells Tenancy, and
+    /// the projects' rules, as those of a crew's members.
+    /// </summary>
+    [Fact]
+    public void The_exporter_lists_the_modules_own_sql_and_the_packages_write_theirs_from_what_the_sample_marks()
+    {
+        var program = File.ReadAllText(Path.Combine(Path.GetDirectoryName(ExporterFile)!, "Program.cs"));
+        ListedContribution().Matches(program).Select(match => match.Groups["type"].Value)
+            .Should().BeEquivalentTo([nameof(UnitChangesWithItsKeys), nameof(CrewSeatsOfTheProjectsTenant)], "a package's contribution listed again would be written twice");
+
+        ExportedMarks.Marked(typeof(TenancyCatalogueAttribute)).Should().ContainSingle()
+            .Which.GetValue(null).Should().BeSameAs(SampleCatalogue.Application, "the export writes Tenancy's policies from the part the host hands Tenancy's registration");
+        ExportedMarks.Marked(typeof(TenancyOperatorsAttribute)).Should().ContainSingle()
+            .Which.GetValue(null).Should().BeSameAs(TenantsInfrastructure.OperatorTokenRoles, "and for the operators the Tenants module tells Tenancy");
+
+        var rules = ExportedMarks.Marked(typeof(MembershipRulesAttribute<>)).Should().ContainSingle("the projects are the one resource with members").Subject;
+        rules.GetCustomAttributes().Select(attribute => attribute.GetType()).Should().Contain(typeof(MembershipRulesAttribute<CrewMember>), "Membership's contribution is closed over a crew's member class");
+        ((MembershipRules)rules.GetValue(null)!).Name.Should().Be(ProjectMembership.Name);
     }
 
     /// <summary>The names of the projects <paramref name="projectFile"/> references.</summary>
@@ -214,4 +256,8 @@ public sealed partial class PostgresCompositionTests
     /// <summary>Where an exported access file says which project a row access contribution is in, and at which version.</summary>
     [GeneratedRegex(@"row access contribution [\w.]+ in (?<project>[\w.]+) (?<version>\d+\.\d+\.\d+)")]
     private static partial Regex ContributionProject();
+
+    /// <summary>A contribution a program lists for its export: <c>[assembly: UseRowAccessContribution(typeof(X))]</c>.</summary>
+    [GeneratedRegex(@"\[assembly: UseRowAccessContribution\(typeof\((?<type>\w+)\)\)\]")]
+    private static partial Regex ListedContribution();
 }

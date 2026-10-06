@@ -197,7 +197,7 @@ public sealed class RowAccessContributionTests
 
         refused.Should().Throw<InvalidOperationException>().WithMessage(
             "The rule 'Crates of tickets I see' asks the resources the caller sees, by the id DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, "
-            + "and no row access contribution answers it for the contexts this is written with. Use the contribution that keeps that resource's access, the Membership package's for a resource with members*");
+            + "and no row access contribution answers it for the contexts this is written with. Hand the script the contribution that keeps that resource's access in RowAccessExport.Contributions, the Membership package's for a resource with members*");
     }
 
     [Fact]
@@ -293,6 +293,25 @@ public sealed class RowAccessContributionTests
             "-- Written by the row access contribution " + DutyRowAccess.Source.Replace(nameof(DutyRowAccess), nameof(SpotContribution)) + ".\n" +
             "CREATE OR REPLACE FUNCTION desk.careful() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$ BEGIN RETURN NEW; END $body$;\n",
             "a statement that pins its search path is written as it is, last, under a comment that names its contribution");
+    }
+
+    [Fact]
+    public void A_packages_contribution_the_build_made_is_named_by_the_packages_class_and_assembly_without_a_version()
+    {
+        using var desk = DeskContext.Create();
+        const string Careful = "CREATE OR REPLACE FUNCTION desk.careful() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$ BEGIN RETURN NEW; END $body$";
+        var made = new MadeByTheBuild(new PackageSpot<Ticket>("careful", _ => new([], [], [Careful])));
+
+        PostgresRowAccess.Script(desk, [], [], With(made)).Should().EndWith(
+            "-- Written by the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.PackageSpot<DDDToolkit.EntityFramework.Tests.Infrastructure.Ticket> "
+            + "in DDDToolkit.EntityFramework.Tests.\n" + Careful + ";\n",
+            "the class the build wrote is the application's, whose version changes with each of its releases: the comment names what wrote the SQL, the package's class closed "
+            + "as C# writes it, and its assembly, and a new access file follows a new version of the package only where the SQL it writes changed");
+
+        var careless = () => PostgresRowAccess.Script(desk, [], [], With(new MadeByTheBuild(new PackageSpot<Ticket>("careless", _ => new([], [], [Careful.Replace(" SET search_path = ''", "", StringComparison.Ordinal)])))));
+        careless.Should().Throw<InvalidOperationException>().WithMessage(
+            "The row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.PackageSpot<DDDToolkit.EntityFramework.Tests.Infrastructure.Ticket> has a statement*",
+            "a message names the package's class too, which is what a developer can look up");
     }
 
     [Fact]

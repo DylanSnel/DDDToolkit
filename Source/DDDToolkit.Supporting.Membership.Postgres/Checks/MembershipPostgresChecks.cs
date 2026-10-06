@@ -45,10 +45,11 @@ public static class MembershipPostgresChecks
     /// rules the resource is registered with by this version of the package, and each executable by the
     /// database roles those rules name and by no other.
     /// <para>
-    /// The functions come with the access files the export writes, from a class of the application's derived
-    /// from <see cref="MembershipRowAccessContribution{TMember}"/>. A contribution the host forgets to list
-    /// writes nothing, and one written from other rules, a role that gives another key say, would have the
-    /// database answer otherwise than the application's own check, and nothing else would say so. The rules a
+    /// The functions come with the access files the export writes, which makes
+    /// <see cref="MembershipRowAccessContribution{TMember}"/> for every resource whose rules the application marks.
+    /// Rules it does not mark get no functions, and functions written from other rules, a role that gives another
+    /// key say, would have the database answer otherwise than the application's own check, and nothing else would
+    /// say so. The rules a
     /// function was written from are read from its body, which says them in its first line. That line is what
     /// is compared: a body changed by hand below it is not found.
     /// </para>
@@ -116,8 +117,8 @@ public static class MembershipPostgresChecks
                 throw new InvalidOperationException(
                     "The functions that answer the membership of " + registration.Resource.Name + " in the database are not as its rules, '" + registration.Rules.Name
                     + "', say them: " + string.Join(", ", found.Functions) + ". A policy that asks them would fail, or answer otherwise than the application's own check. "
-                    + "List a class derived from MembershipRowAccessContribution<" + registration.Member.Name + "> with the rules the resource is registered with, "
-                    + "[assembly: UseRowAccessContribution], in the project that runs the export, and apply the access files it writes.");
+                    + "Mark the rules the resource is registered with [MembershipRules<" + registration.Member.Name + ">], where the project that runs the export sees them, "
+                    + "and apply the access files it writes.");
             }
 
             if (found.Lock.Count > 0)

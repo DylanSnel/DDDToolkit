@@ -137,7 +137,8 @@ public static partial class SupabaseMigrationBuild
     /// <param name="rules">Every rule found at compile time; only evaluated when asked.</param>
     /// <param name="functions">Every access function found at compile time; only evaluated when asked.</param>
     /// <param name="contributions">
-    /// The contributions the host lists with <c>[assembly: UseRowAccessContribution]</c>, created only when
+    /// The contributions the packages the host references write, made from what the application marks, and those
+    /// the host lists with <c>[assembly: UseRowAccessContribution]</c>, created only when
     /// asked.
     /// </param>
     public static void RunIfRequested(

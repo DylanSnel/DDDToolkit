@@ -158,6 +158,20 @@ public static class ReferenceSets
         FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
     ];
 
+    /// <summary>
+    /// Tenancy and Membership on Postgres, with the Supabase export: two real packages that declare themselves
+    /// contributors of row level security, and what the classes the export writes for them compile against.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> SupportingDomainsOnPostgres =>
+    [
+        .. Supabase,
+        .. TenancyOnEntityFramework,
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>)),
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.EntityFramework.MembershipRegistration)),
+        FromType(typeof(global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution)),
+        FromType(typeof(global::DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<>)),
+    ];
+
     /// <summary>DDDToolkit.Supporting.Membership alone: the member template and the rules, and nothing that stores them.</summary>
     public static PortableExecutableReference MembershipAlone => FromType(typeof(global::DDDToolkit.Supporting.Membership.MemberAttribute<,,,>));
 

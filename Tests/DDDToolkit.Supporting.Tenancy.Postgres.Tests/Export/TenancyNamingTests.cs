@@ -187,7 +187,7 @@ public sealed partial class TenancyNamingTests(TenancyPostgres postgres)
         var plain = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Plain, Cancellation, TenancyNaming.SnakeCase);
         await using var withoutPolicies = new TenancyServices(plain);
         await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(withoutPolicies.Provider, Cancellation))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.seat_rights,*tenancy.seats,*UseRowAccessContribution*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*Row level security is off on Tenancy's tables*tenancy.seat_rights,*tenancy.seats,*references DDDToolkit.Supporting.Tenancy.Postgres*");
     }
 
     [Fact]

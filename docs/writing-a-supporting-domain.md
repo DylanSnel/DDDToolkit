@@ -272,15 +272,97 @@ A [row access rule](row-level-security.md#row-access-rules-written-in-c) is writ
 class, and reads the parent's properties and collections like the class's own. A rule about the parent
 itself is refused, [DDD00040](diagnostics.md#ddd00040): the parent has no table.
 
+### Row level security a package writes
+
 The package's own row level security, for tables that are not the application's aggregates and for SQL
 that names the schema and id types the application chose, is a
-[row access contribution](row-level-security.md#policies-a-package-ships): a class the package offers with
-`[assembly: RowAccessContribution(typeof(SubscriptionRowAccess))]`, which writes functions, policies and
-statements from the application's model when the export asks. The application writes it into its
-migrations by listing it, `[assembly: UseRowAccessContribution(typeof(SubscriptionRowAccess))]`, in the
-project that runs the export; where the SQL depends on what only the application knows, the package offers
-a class for the application to derive from, and the application lists its own. Questions the package offers
-the application's rules, declared in an `[AccessFunctions(Owner = "subscriptions")]` class, are answered by
+[row access contribution](row-level-security.md#policies-a-package-ships): a class that writes functions,
+policies and statements from the application's model when the export asks.
+
+The package declares itself a contributor with one assembly attribute, and from then on referencing the
+package is the application's consent: the Supabase export of every application that references it writes its
+SQL, and the application writes no line and no class for it. A package that does not work without its
+policies in the database leaves the application nothing to choose. Where the SQL depends on what only the
+application knows, the package takes it in its class's constructor and says, for each parameter, which
+attribute the application marks the value with; the package ships that attribute too, next to the type the
+value has:
+
+```mermaid
+flowchart LR
+    Package["the package<br/>[assembly: RowAccessContribution]"] --> Constructor["its constructor<br/>[FromApplication(typeof(SubscriptionPlans))]"]
+    Application["the application<br/>[SubscriptionPlans] on its plans"] --> Build["the build, where<br/>the export runs"]
+    Constructor --> Build
+    Build --> Class["a class in<br/>RowAccessContributionsOfPackages.g.cs"]
+```
+
+The build makes the class in the project that runs the export, before any host exists, from the static
+property or field the application marks. A parameter with a default the application may leave unmarked, so
+give a default wherever the package can do without the value, as Tenancy does for its catalogue. One without
+is a warning when nothing is marked, [DDD00054](diagnostics.md#ddd00054), and the package's SQL is not
+written. `Every = true` hands the parameter every member so marked, as Tenancy collects every module's keys,
+and a generic attribute closes a generic contribution once for every member it marks, as Membership is made
+once for each resource.
+
+<details>
+<summary>Show the code: a package that takes the application's plans</summary>
+
+```csharp
+// In the package's Postgres project
+[assembly: RowAccessContribution(typeof(SubscriptionRowAccess))]
+
+public class SubscriptionRowAccess(
+    [FromApplication(typeof(SubscriptionPlansAttribute))] IReadOnlyList<SubscriptionPlan> plans,
+    [FromApplication(typeof(GraceDaysAttribute))] int graceDays = 14) : IRowAccessContribution
+{
+    public string Owner => "subscriptions";
+
+    public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export) { ... }
+}
+
+// In the package's domain project, which the application's own projects reference
+[ApplicationMark]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public sealed class SubscriptionPlansAttribute : Attribute;
+
+[ApplicationMark]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public sealed class GraceDaysAttribute : Attribute;
+
+// In the application
+public static class ShopPlans
+{
+    [SubscriptionPlans]
+    public static IReadOnlyList<SubscriptionPlan> All { get; } = [new("free"), new("pro")];
+}
+```
+
+</details>
+
+The class the package declares is public and not abstract, implements `IRowAccessContribution`, and has one
+public constructor whose every parameter says where it comes from, or none that takes anything: a class the
+build cannot make is [DDD00066](diagnostics.md#ddd00066) in every application that references the package,
+naming the package. Put the marker attributes where the application declares the values, the package's domain
+project rather than its Postgres one, so the project that declares them needs no reference to Postgres; the
+build searches the exporting project and every project it references that references the attribute's assembly,
+except the assembly that declares the attribute: a package may mark its own example values without them being
+taken for the application's. Put `[ApplicationMark]` on each marker attribute. Of a library the exporting
+project sees what is public and nothing else, so an application that marks an internal member would get the
+default or nothing, and hear nothing; with the attribute on the mark, the toolkit's analyzer reports that member
+where it is declared, [DDD00070](diagnostics.md#ddd00070). Test it the way the toolkit tests Tenancy's and
+Membership's: a host that references the package and marks nothing, one that marks everything, and one that
+marks a value twice.
+
+The access files name the package's class and assembly above what it writes, without a version: the class the
+build writes into the exporting project hands the export the package's through `IPackageRowAccessContribution`.
+A new version of the package that writes the same SQL leaves every application's access files as they are, and
+one that writes other SQL makes the next export write a new access file.
+
+A package is an assembly that declares no module. An application's own module that writes SQL of its own may
+declare its class the same way, `[assembly: RowAccessContribution]`, and because its assembly declares a module
+that is an offer, not a write: the host lists it with `[assembly: UseRowAccessContribution]`, since that SQL is
+the application's, and the build warns while it does not, [DDD00069](diagnostics.md#ddd00069).
+
+Questions the package offers the application's rules, declared in an `[AccessFunctions(Owner = "subscriptions")]` class, are answered by
 the functions it contributes, found by their logical names, `subscriptions/active_plans`, in the default
 schema of the context that maps the package's tables. A package that keeps the access to a resource of the
 application's, as Membership keeps a resource's members, lets the application ask it by the resource's id
@@ -308,9 +390,10 @@ What such a contribution writes follows from what the package owns. Policies on 
 to itself in `ExclusiveTables`, so no rule of the application's adds one next to them. Restrictive policies on
 the application's tables that depend on it, a table kept to a subscription say, since a restrictive policy is
 never merged with the rules' and no rule can widen it. As statements, the triggers that keep what no policy can
-see, such as a rule about rows other than the one written, checked at commit. A contribution the host forgets
-to list writes nothing, and the build only warns, so the package also ships a start-up check that its policies
-are in the database and were written from what the application runs with: a function written from the
+see, such as a rule about rows other than the one written, checked at commit. A contribution the application
+leaves out, or whose data it never marks, writes nothing, and the build at most warns, so the package also
+ships a start-up check that its policies are in the database and were written from what the application runs
+with: a function written from the
 catalogue of subscription plans the application is configured with, say, answers as that catalogue does. Its
 registration for Postgres registers that check with `services.AddStartupCheck(...)`, in the stage of the
 database, so a host that runs its [start-up checks](startup-checks.md#a-check-of-your-own) gets it without

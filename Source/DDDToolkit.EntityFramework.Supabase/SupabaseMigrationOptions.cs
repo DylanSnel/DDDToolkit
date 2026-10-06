@@ -61,7 +61,8 @@ public sealed class SupabaseMigrationOptions
     /// The row access contributions to ask, for every context, what they write into its access file: SQL
     /// functions, policies and statements of a package or a module. A context whose only row access is a
     /// contribution gets an access file too, and its migrations start by taking its policies off. The build
-    /// fills this in with the contributions the host lists with <c>[assembly: UseRowAccessContribution]</c>,
+    /// fills this in with the contributions the packages the host references write and those it lists with
+    /// <c>[assembly: UseRowAccessContribution]</c>,
     /// and no others; see <see cref="IRowAccessContribution"/>.
     /// </summary>
     public IList<IRowAccessContribution> RowAccessContributions { get; } = [];

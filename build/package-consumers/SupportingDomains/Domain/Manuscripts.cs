@@ -92,7 +92,11 @@ public static class ManuscriptMembership
     /// <summary>The codes a manuscript refuses with.</summary>
     public static MembershipCodes Codes { get; } = MembershipCodes.Under("manuscripts");
 
-    /// <summary>The rules.</summary>
+    /// <summary>
+    /// The rules, marked as those of a manuscript's editors: Membership on Postgres writes a manuscript's functions
+    /// from them because the infrastructure project references it.
+    /// </summary>
+    [MembershipRules<ManuscriptEditor>]
     public static MembershipRules Rules { get; } = new(
         "manuscripts",
         keys: [ManuscriptKeys.Read, ManuscriptKeys.Edit, ManuscriptKeys.Retract],

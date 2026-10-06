@@ -60,7 +60,8 @@ public sealed class RowAccessExport
     /// <summary>
     /// The contributions a script asks, for every context it writes, what they write there: functions,
     /// policies and statements of a package or a module of its own. Empty by default; the Supabase build fills
-    /// it in with those the host lists with <c>[assembly: UseRowAccessContribution]</c>. See
+    /// it in with those the packages the host references write and those it lists with
+    /// <c>[assembly: UseRowAccessContribution]</c>. See
     /// <see cref="IRowAccessContribution"/>.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>

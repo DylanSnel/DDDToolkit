@@ -8,6 +8,8 @@ using Examples.Tenancy.Projects.Domain.Aggregates.Projects;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using Microsoft.EntityFrameworkCore;
 
+// Offered, not written: Projects is a module, so this is the application's own SQL, which the program that exports
+// lists. The offer is what tells that program, with a warning (DDD00069), when the line is missing there.
 [assembly: RowAccessContribution(typeof(UnitChangesWithItsKeys))]
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
@@ -46,7 +48,8 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// It lives beside the module's row rules because it is one more of them, the one the module writes as SQL of its
 /// own. A column rule asks one question of the row as it was and the same question of the row as it is about to
 /// be; this one asks two different ones, the key to edit where the project was and the key to open where it goes,
-/// so it is no column rule. The project that exports uses it with
+/// so it is no column rule. It is the application's own SQL, not a package's: a module offers its contribution, and
+/// what the module offers is written where the project that exports lists it, with
 /// <c>[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]</c>.
 /// </para>
 /// </remarks>

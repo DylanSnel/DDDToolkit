@@ -128,12 +128,12 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
     public async Task The_catalogue_the_policies_are_exported_from_is_the_one_the_host_runs_with()
     {
         // The host builds its catalogue from its services: the application's part, and the modules' lists, which
-        // Tenancy's generator collected into the host. The program that exports has no host, and builds it from the
-        // same part and the lists the same generator collected into the catalogue's project. Policies written from
-        // another catalogue than the host's would let other grants through than the application gives, so the two
-        // are held to the same keys and packs.
+        // Tenancy's generator collected into the host. The program that exports has no host, and Tenancy's package
+        // builds it there from what the sample marks: the part marked [TenancyCatalogue] and every list marked
+        // [TenancyPermissions]. Policies written from another catalogue than the host's would let other grants
+        // through than the application gives, so the two are held to the same keys and packs.
         var running = (await sample.SharedAsync()).Services.GetRequiredService<TenancyCatalogue>();
-        var exported = SampleCatalogue.Built;
+        var exported = ExportedMarks.Tenancy().Catalogue;
 
         exported.Permissions.Select(permission => (permission.Key, permission.ManagesAccess, permission.Retired))
             .Should().BeEquivalentTo(running.Permissions.Select(permission => (permission.Key, permission.ManagesAccess, permission.Retired)));

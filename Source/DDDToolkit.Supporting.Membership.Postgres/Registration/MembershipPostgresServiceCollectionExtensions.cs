@@ -16,8 +16,8 @@ public static class MembershipPostgresServiceCollectionExtensions
     /// services.AddDocumentMembership&lt;FilingContext&gt;(DocumentMembership.Rules);
     /// services.AddMembershipPostgres();
     /// </code>
-    /// What the database holds comes with the access files the export writes, from a class of the application's
-    /// derived from <see cref="MembershipRowAccessContribution{TMember}"/>, and nothing at run time depends on this
+    /// What the database holds comes with the access files the export writes, which makes
+    /// <see cref="MembershipRowAccessContribution{TMember}"/> from the rules the application marks, and nothing at run time depends on this
     /// call but the check. That is also why nothing else brings the check: a host that leaves this call out runs
     /// every other start-up check and not this one, without a word. Calling it more than once is harmless.
     /// </summary>

@@ -10,19 +10,20 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// The membership of one kind of resource in the database: the four set functions that answer, for the caller
 /// of the connection, the questions the access questions answer in C#, written from the resource's rules and
 /// from the model of the context that maps it; and, where the rules name the keys that change the members
-/// and the owner, the lock that holds a caller that reaches the database to those keys. The application
-/// lists a class of its own for each kind of resource, derived from this one closed over that resource's
-/// member class, in the project that runs the export:
+/// and the owner, the lock that holds a caller that reaches the database to those keys. This package declares
+/// it with <c>[assembly: RowAccessContribution]</c>, so the Supabase export of every application that references
+/// the package writes it, once for each kind of resource whose rules the application marks, closed over the
+/// member class the mark names:
 /// <code>
-/// [assembly: UseRowAccessContribution(typeof(DocumentsMembershipFunctions))]
-///
-/// public sealed class DocumentsMembershipFunctions() : MembershipRowAccessContribution&lt;DocumentShare&gt;(DocumentMembership.Rules);
+/// [MembershipRules&lt;DocumentShare&gt;]
+/// public static MembershipRules Rules { get; } = new("documents", ...);
 /// </code>
 /// The rules are the ones the resource is registered with: the functions say what the rules say, and a
 /// start-up check holds the database to it
-/// (<see cref="MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync"/>). The export makes the class with
-/// <c>new</c> before the application starts, so the rules are a declaration the class can reach without the
-/// application's services.
+/// (<see cref="MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync"/>). The export makes the class before
+/// the application starts, so the rules are a declaration it can reach without the application's services, and
+/// the mark is how it finds them (<see cref="MembershipRulesAttribute{TMember}"/>). A script written by hand, or
+/// a test, makes it with <c>new MembershipRowAccessContribution&lt;DocumentShare&gt;(DocumentMembership.Rules)</c>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -132,7 +133,8 @@ namespace DDDToolkit.Supporting.Membership.Postgres;
 /// </para>
 /// <para>
 /// A context that does not map the member class is none of its business, so an application with several
-/// kinds of resource lists one class for each, and each writes for the context of its own resource.
+/// kinds of resource marks the rules of each, the export makes one contribution for each, and each writes for
+/// the context of its own resource.
 /// </para>
 /// </remarks>
 /// <typeparam name="TMember">The application's member class of the resource.</typeparam>
@@ -140,9 +142,12 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
     where TMember : class
 {
     /// <summary>The functions of the resource whose members are of <typeparamref name="TMember"/>, written from <paramref name="rules"/>.</summary>
-    /// <param name="rules">The resource's rules: the ones it is registered with.</param>
+    /// <param name="rules">
+    /// The resource's rules: the ones it is registered with, which the export takes from the member the application
+    /// marks <c>[MembershipRules&lt;TMember&gt;]</c>.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="rules"/> is null.</exception>
-    public MembershipRowAccessContribution(MembershipRules rules)
+    public MembershipRowAccessContribution([FromApplication(typeof(MembershipRulesAttribute<>))] MembershipRules rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
 

@@ -5,6 +5,7 @@ using DDDToolkit.Supporting.Membership.EntityFramework;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using Microsoft.EntityFrameworkCore;
 
+// Offered, not written: the program that exports lists it, and is warned (DDD00069) when it does not.
 [assembly: RowAccessContribution(typeof(CrewSeatsOfTheProjectsTenant))]
 
 namespace Examples.Tenancy.Projects.Infrastructure.Access;
@@ -25,7 +26,7 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// crew: a role the caller sees.
 /// <para>
 /// Only a signed-in user's statement is held: system work in the tenant is kept to its tenant by Tenancy's own
-/// policies. The project that exports uses it with
+/// policies. It is the application's own SQL, so the module offers it and the project that exports lists it, with
 /// <c>[assembly: UseRowAccessContribution(typeof(CrewSeatsOfTheProjectsTenant))]</c>.
 /// </para>
 /// </remarks>

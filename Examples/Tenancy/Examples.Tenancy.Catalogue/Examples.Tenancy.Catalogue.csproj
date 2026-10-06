@@ -1,21 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="Version">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!--
-      The application's own version, and not the toolkit's, which the rest of this repository takes. An exported
-      access file names the project a row access contribution is in with its version, so that a new version of
-      what writes the policies is a new file. With the toolkit's version here, every release of the toolkit
-      would write the sample's three access files anew, with nothing in them changed but that number.
-
-      TreatAsLocalProperty, on the Project element, is what keeps it this project's own in a release build. That
-      build gives the toolkit's version on the command line (-p:Version), and a property given there wins over
-      the one a project file sets, unless the project says the property is local. Without it the release build,
-      which only compares the exported files, would find the access files missing and fail.
-    -->
-    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <!--
@@ -23,32 +11,27 @@
     its own because two programs need them: the host, which runs with them, and the program that exports the
     database's policies, which are written from them. It is no module and declares none: its packs name the
     modules' keys, which their contracts and application projects publish, and it knows nothing of how any module
-    is stored. The keys themselves it does not list: Tenancy's generator collects them, below.
+    is stored. The keys themselves it does not list: each module marks its own list with [TenancyPermissions].
 
-    Next to them is what this application's two supporting domains write into the exported access files:
-    SampleTenancyContribution, Tenancy's, and ProjectMembershipFunctions, Membership's for the projects, both
-    offered here and used by the project that exports.
+    What the policies are written from is marked here, and nothing more is written for them: the catalogue with
+    [TenancyCatalogue], and the projects' rules with [MembershipRules<CrewMember>]. Tenancy's and Membership's
+    Postgres packages write their SQL into the exported files because the modules that store them on Postgres
+    reference them, so this project references neither.
   -->
   <ItemGroup>
-    <!-- The keys the packs name, and each module's own part of the catalogue. -->
+    <!-- The keys the packs name, the projects' rules and their crew members, and each module's own part of the catalogue. -->
     <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Application\Examples.Tenancy.Projects.Application.csproj" />
     <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Application\Examples.Tenancy.Inspections.Application.csproj" />
-    <!-- The token role of the application's operators. -->
-    <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
-    <!-- TenancyRowAccessContribution, which the contribution here closes over the catalogue. -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
-    <!-- MembershipRowAccessContribution, which the contribution here closes over the projects' rules. -->
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Membership.Postgres\DDDToolkit.Supporting.Membership.Postgres.csproj" />
   </ItemGroup>
 
   <!--
-    Tenancy's generator, which a NuGet consumer gets with the Tenancy package and this repository wires by hand. It
-    writes TenancyPermissionsOfModules into this project, which declares no module: every key the modules referenced
-    above mark with [TenancyPermissions], what the catalogue the export writes from is built with.
+    The toolkit's analyzer, which a NuGet consumer gets with the packages above and this repository wires by hand. It
+    holds the two marks here to what the program that exports can read: that program references this library and
+    sees nothing of it that is not public, so a mark made internal would be missed there without a word (DDD00070).
   -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

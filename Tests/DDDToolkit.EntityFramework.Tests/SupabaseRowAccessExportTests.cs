@@ -349,7 +349,7 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         var alone = () => SupabaseMigrations.Export(yard, Path.Combine(_directory, "alone"), Options(null, [cratesOfTicketsISee]));
         alone.Should().Throw<InvalidOperationException>().WithMessage(
             "The rule 'Crates of tickets I see' asks the resources the caller sees, by the id DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, "
-            + "and no row access contribution this host uses answers that set for the modules exported. Use the contribution that keeps the resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution]. *",
+            + "and no row access contribution this host uses answers that set for the modules exported. Reference the package that keeps the resource's access, Membership on Postgres for a resource with members, and mark the resource's rules [MembershipRules<TMember>]*",
             "a host that leaves out the contribution of the resource's access hears which resource, and what to use");
 
         // The contribution listed, and the yard exported without the desk, whose context maps the tickets.

@@ -668,15 +668,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   until the new access file is applied. The other guards are not compared at start-up: a database whose access
   files an earlier build wrote refuses without the hint, a failure of the server, until the new ones are
   applied. See [When the database refuses](docs/row-level-security.md#when-the-database-refuses).
-- **Row access contributions: policies a package ships.** A package or a module offers a class that implements
-  `IRowAccessContribution` with `[assembly: RowAccessContribution(typeof(X))]`, and a host writes it into its
-  migrations by listing it with `[assembly: UseRowAccessContribution(typeof(X))]` in the project that runs the
-  Supabase export; DDD00054, a warning, reports an offer the host does not list, and says what to write for
-  it: the attribute, the attribute closed over a type of the host's, or, for an offer whose constructor takes
-  what only the host knows, a class of the host's that derives from it. For every context, the export
-  asks each listed contribution for SQL functions, policies and statements written from the context's model
+- **Row access contributions: policies a package ships.** A package declares itself a contributor with
+  `[assembly: RowAccessContribution(typeof(X))]`, a class that implements `IRowAccessContribution`, and the
+  Supabase export of every application that references the package, directly or through another project, writes
+  it: referencing the package is the consent. The build makes the class in the project that runs the export, in
+  a class it writes into `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, from the static members the
+  application marks with the attributes the class's constructor names with `[FromApplication(typeof(TMark))]`:
+  exactly one member marked, or the parameter's default where none is; every member marked, `Every = true`; or,
+  with a generic mark, the class closed over the mark's type arguments once for every member so marked.
+  `[assembly: LeaveOutRowAccessContribution(typeof(X))]` leaves a package's out, or, with `Context`, out of one
+  context's access file. The application's own contributions, a module's trigger say, it lists with
+  `[assembly: UseRowAccessContribution(typeof(X))]` in that project; an assembly that declares a module offers
+  its contribution with `[assembly: RowAccessContribution]` rather than writing it, so a module's SQL is written
+  only where it is listed, and DDD00069, a warning, reports one the project does not list. DDD00054, a warning,
+  reports a package's contribution whose data the application does not mark, DDD00066 a marked member it cannot
+  use or two marked where it takes one, DDD00067 a package's contribution the project lists again, or a class
+  derived from it, and DDD00068, a warning, a line to leave out that names no contribution a package writes or a
+  `Context` that is no context. A package puts `[ApplicationMark]` on each of its marks, as Tenancy's and
+  Membership's have it, and a library that marks a member it does not make public, which the exporting project
+  would not see, is DDD00070 where the member is declared.
+  For every context, the export asks each contribution for SQL functions, policies and statements written from the context's model
   (`RowAccessModel` writes the table and column names, column types and stored values), and writes them into
-  that context's access file under a comment naming the contribution, its assembly and the assembly's version:
+  that context's access file under a comment naming the contribution, its assembly and the assembly's version,
+  and for a package's the package's class and assembly without a version (`IPackageRowAccessContribution`, which
+  the class the build writes implements), so a release that writes the same SQL leaves the file as it is:
   the functions with the access functions, in the order they ask each other; the policies with the rules', a
   permissive one merged with theirs for the same table, command and role, a restrictive one apart; and the
   statements last. A contributed function is created in the context's default schema with
@@ -686,9 +701,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   contribution can keep tables to itself, and a rule or another contribution that would add a policy to one is
   refused, as are two policies of one name on a table; a statement may make a `SECURITY DEFINER` function only
   for a trigger, with `SET search_path = ''`. A context whose only row access is a contribution gets an access
-  file, and its migrations start with the drop. A host uses an offer by listing it, a class of its own derived
-  from it, or, for a generic one, the offer closed with its own types, which is how a contribution gets what
-  only the host knows. `RowAccessExport.Contributions` and `SupabaseMigrationOptions.RowAccessContributions`
+  file, and its migrations start with the drop. `RowAccessExport.Contributions` and `SupabaseMigrationOptions.RowAccessContributions`
   hand contributions to a script of your own and to an export by hand. An access file is normalized to the
   files' own line endings before it is written or compared, so a contribution whose SQL carries the platform's
   line endings, as SQL taken from Entity Framework does on Windows, does not make every build write another
@@ -1224,7 +1237,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   tenant by slug, a page at a time, with its name, its status and its count of active seats, to an operator and
   to nobody else (`tenancy.operators-only`; `tenancy.page-size-invalid` and `tenancy.cursor-invalid` for a page
   it cannot give), read as the operator and never as the system. On Postgres, `TenancyRowAccessContribution`
-  takes the operators' token roles as a second constructor argument and writes their policies: the role each
+  takes the operators' token roles, which the application marks `[TenancyOperators]`, and writes their policies: the role each
   is mapped to reads every row of Tenancy's tables and of the access history and writes none, and on a module's
   table kept to a tenant it reads what a rule of the module admits and writes nothing. The export refuses an
   operator's token role that is mapped to no database role, to the role of a signed-in user or to a role another
@@ -1368,8 +1381,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   for the rounds of any module, which then begins its own system work in each tenant under its own scope. On
   Postgres the function `tenants_to_sweep` answers it, to scoped system work of every scope, in no tenant.
 - **Tenancy on Postgres**, in `DDDToolkit.Supporting.Tenancy.Postgres`. Tenancy's rules as row level security, a
-  second lock under the tenant filter and the save check: `TenancyRowAccessContribution`, which a host derives
-  with its catalogue and lists, writes Tenancy's questions as SQL functions, the policies on its tables and on
+  second lock under the tenant filter and the save check: `TenancyRowAccessContribution`, which every application
+  that references the package writes, from the catalogue it marks `[TenancyCatalogue]`, writes Tenancy's questions as SQL functions, the policies on its tables and on
   every table kept to a tenant, and triggers that keep a tenant's administrator, back every right with a grant,
   keep the closure to the tree, and keep a seat, a placement and a grant to what they are about. The policies
   know which keys manage access and which keys a copy of each pack holds, from functions written from the
@@ -1553,9 +1566,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   at the first held save, and `UseMemberHolds` before `UseDDDToolkit` or `UseDDDToolkitCore` where the context is
   built. It is no part `UseDDDToolkit` puts on: no registration brings it, a host writes it per context, and a
   second call adds nothing. See [The expert hold](docs/membership.md#the-expert-hold).
-- **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` offers
-  `MembershipRowAccessContribution<TMember>`: for each kind of resource, a class the application derives
-  with that resource's rules and lists with `[assembly: UseRowAccessContribution]` writes four set functions
+- **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` declares
+  `MembershipRowAccessContribution<TMember>`: for each kind of resource whose rules the application marks
+  `[MembershipRules<TMember>]`, the export of every application that references the package writes four set functions
   under the names the rules give them, the resources the caller is a member of, those where a role gives it
   a key, those it sees, as a member or as the owner, so a read rule that asks it lets an owner write the member
   rows of a resource it has just opened, and those it holds a key on, as a member, as the owner or from above.
@@ -1994,8 +2007,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   privileges written from them; without that setting it stops before it is built and says how to get one. The
   files under `Examples/Tenancy/supabase/migrations` are written by the build of a program of its own,
   `Examples.Tenancy.Exporter`; the catalogue is in `Examples.Tenancy.Catalogue`, which the exporter and the host
-  both reference, and which has a version of its own, as Projects' infrastructure project has, because
-  an access file names both and a release of the toolkit is no reason for a new one. The host's connections are
+  both reference. Projects' infrastructure project has a version of its own, because an access file names it
+  with its version and a release of the toolkit is no reason for a new one. The host's connections are
   two data sources, for requests and for background work, each with its own maximum (`PostgresPools` and
   `PostgresPoolBudget` in the samples' hosting project). Projects publishes two row access contracts,
   `ProjectsISee` and `ProjectsWhereIHold`, a line each that names the project's id and no function, which
@@ -2109,9 +2122,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   its exported file follows.
 - **The Tenancy sample states each module's keys once.** `ProjectCatalogue.Permissions` and
   `InspectionCatalogue.Permissions` are marked `[TenancyPermissions]`, and neither module's registration adds
-  them any more. The host adds both with the generated `AddTenancyPermissionsOfModules()`, and
-  `SampleCatalogue.Built`, which the export writes the policies from, is built from the generated
-  `TenancyPermissionsOfModules.All` of the catalogue's project, which no longer lists the modules' keys.
+  them any more. The host adds both with the generated `AddTenancyPermissionsOfModules()`, and the program
+  that exports finds the same marked lists and writes Tenancy's policies from them and the part of the
+  catalogue `SampleCatalogue` marks `[TenancyCatalogue]`; the catalogue's project no longer lists the modules' keys.
   `ModuleKeysTests` holds the host to one contribution of every module's keys, and every list a module declares
   to its mark; the exported access files are unchanged.
 - **The Tenancy sample declares its modules by folder.** `Examples/Tenancy/Modules/Directory.Build.props` names
@@ -2288,6 +2301,35 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     request that requires a signed-in user, where listing one's own seats answered `tenancy.not-seated` and
     accepting an invitation `tenancy.identity-required`. And in a host that requires explicit callers, a
     request that requires system work and runs as nobody fails with `NoCallerException`.
+- **For the 3.2.0 previews: a package's row access contribution is written because the application references
+  the package.** `3.2.0-preview.1` and `3.2.0-preview.2` wrote one only when the project that runs the export
+  listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned
+  (DDD00054) about one it did not list. Tenancy on Postgres and Membership on Postgres now write their SQL into
+  every application that references them, from what it marks, so the class and its line go:
+  - `public sealed class ShopTenancyRowAccess() : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"])`
+    and its `[assembly: UseRowAccessContribution(...)]`: mark the application's part `[TenancyCatalogue]`, a static
+    `ApplicationCatalogue`, and the operators' token roles `[TenancyOperators]`, a static list of strings; the
+    modules' keys are found where they are marked `[TenancyPermissions]`. With nothing marked the policies are
+    written from `new ApplicationCatalogue()`, as a host that leaves `TenancyOptions.Catalogue` unset runs with.
+  - `public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules)`
+    and its line: mark the rules `[MembershipRules<DocumentShare>]`, once for each kind of resource.
+  - A class and a line that are still there are DDD00067, an error, since the SQL would be written twice. A
+    module that offers a contribution of its own with `[assembly: RowAccessContribution]` still offers it: its
+    assembly declares a module, so its SQL is the application's and is written where the project that runs the
+    export lists it, as before, and DDD00069 (where DDD00054 was) reports one that project does not list.
+    DDD00054 now reports a package's contribution whose data the application does not mark, and is answered by
+    marking it or by leaving the package's SQL out with `[assembly: LeaveOutRowAccessContribution(typeof(X))]`,
+    not with `<NoWarn>`.
+  - The comment above what such a contribution writes names the package's class and assembly without a version,
+    `DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres`,
+    where it named the application's class with its project's version, so the next build writes each access file
+    the contribution writes into once more, with nothing but that comment changed. After that a release of the
+    application or of the package that writes the same SQL leaves the files as they are, and the project that
+    held the class needs no version of its own for them. The Tenancy sample's three are `20261006124503` to
+    `20261006124505`, and its catalogue's project keeps no version any more.
+  - The start-up checks of both packages, and the export's refusal of a rule that asks a set nothing answers,
+    say to mark the catalogue, the operators or the rules where they said to list a class; the check that finds
+    Tenancy's functions written from another catalogue names `[TenancyCatalogue]` and where the export must see it.
 
 - **For the 3.2.0 previews: `RolePack.Shape` is `RolePack.SeededFor`.** The name read as if a role had a shape,
   and a role has none: the property says which tenants are given a copy of the pack, one provisioned with that

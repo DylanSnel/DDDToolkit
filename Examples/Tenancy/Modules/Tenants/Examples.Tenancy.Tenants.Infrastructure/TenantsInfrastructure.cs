@@ -28,6 +28,15 @@ namespace Examples.Tenancy.Tenants.Infrastructure;
 public static class TenantsInfrastructure
 {
     /// <summary>
+    /// The token roles of the application's operators: its own staff, who look across tenants and hold no seat in
+    /// any. Tenancy is told them here, and the mark tells the program that exports the database's policies the same,
+    /// so the policies that let the database role of each read every tenant and write nothing are written for the
+    /// roles Tenancy runs with. The host's start-up check stops a host whose database was written for other ones.
+    /// </summary>
+    [TenancyOperators]
+    public static IReadOnlyList<string> OperatorTokenRoles { get; } = [SampleTokenRoles.Operator];
+
+    /// <summary>
     /// Registers how Tenancy is stored. The host says where its tables live and where what it publishes goes (see
     /// <see cref="ModuleHost"/>), and passes the application's part of the catalogue: the packs a new tenant's
     /// roles are copied from, and the keys of other modules it marks as managing access. It is the application's
@@ -81,9 +90,9 @@ public static class TenantsInfrastructure
         {
             options.Catalogue = catalogue;
 
-            // The application's own staff: a token with this role holds no seat anywhere, and reads every tenant.
-            // It runs as a database role of its own, which the exported policies let read and never write.
-            options.OperatorTokenRoles.Add(SampleTokenRoles.Operator);
+            // The application's own staff: a token with one of these roles holds no seat anywhere, and reads every
+            // tenant. It runs as a database role of its own, which the exported policies let read and never write.
+            options.OperatorTokenRoles.UnionWith(OperatorTokenRoles);
         });
 
         // Invitations, generated like AddTenancy and closed over the module's classes: the invitation class and

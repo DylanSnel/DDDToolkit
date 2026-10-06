@@ -187,11 +187,32 @@ internal static class KnownTypes
     /// <summary>Where <c>RowAccessRule</c> lives, which the host's generated list of rules builds.</summary>
     public const string PostgresNamespace = "DDDToolkit.EntityFramework.Postgres";
 
-    /// <summary>An assembly's offer of a class that writes row level security of its own: <c>[assembly: RowAccessContribution(typeof(X))]</c>.</summary>
+    /// <summary>
+    /// A package's declaration that it contributes row level security of its own, which every application that
+    /// references it writes into its migrations: <c>[assembly: RowAccessContribution(typeof(X))]</c>.
+    /// </summary>
     public const string RowAccessContributionAttribute = AttributesNamespace + ".RowAccessContributionAttribute";
 
-    /// <summary>A host's choice to write an offered contribution into its migrations: <c>[assembly: UseRowAccessContribution(typeof(X))]</c>.</summary>
+    /// <summary>A host's own contribution, or a module's, written into its migrations: <c>[assembly: UseRowAccessContribution(typeof(X))]</c>.</summary>
     public const string UseRowAccessContributionAttribute = AttributesNamespace + ".UseRowAccessContributionAttribute";
+
+    /// <summary>A host's choice not to write a package's contribution, or not for one context: <c>[assembly: LeaveOutRowAccessContribution(typeof(X))]</c>.</summary>
+    public const string LeaveOutRowAccessContributionAttribute = AttributesNamespace + ".LeaveOutRowAccessContributionAttribute";
+
+    /// <summary>Where a constructor parameter of a package's contribution comes from: <c>[FromApplication(typeof(TMarker))]</c>.</summary>
+    public const string FromApplicationAttribute = AttributesNamespace + ".FromApplicationAttribute";
+
+    /// <summary>What a row access contribution implements.</summary>
+    public const string RowAccessContributionInterface = PostgresNamespace + ".IRowAccessContribution";
+
+    /// <summary>What the class the Supabase build writes for a package's contribution implements, which the export names the package's class by.</summary>
+    public const string PackageRowAccessContributionInterface = PostgresNamespace + ".IPackageRowAccessContribution";
+
+    /// <summary>The attribute on an attribute an application marks a member with for a package's contribution: <c>[ApplicationMark]</c>.</summary>
+    public const string ApplicationMarkAttribute = AttributesNamespace + ".ApplicationMarkAttribute";
+
+    /// <summary>Entity Framework's context, the only thing a contribution can be left out of (assembly Microsoft.EntityFrameworkCore).</summary>
+    public const string DbContext = "Microsoft.EntityFrameworkCore.DbContext";
 
     /// <summary>Entity Framework's design-time factory (assembly Microsoft.EntityFrameworkCore).</summary>
     public const string DesignTimeDbContextFactory = "Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory`1";

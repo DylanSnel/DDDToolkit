@@ -658,17 +658,25 @@ with a message that names both and the functions, since neither file could be ap
 
 **Policies a package ships.** A package or a module can write
 [row level security of its own](row-level-security.md#policies-a-package-ships), for tables that are not
-your aggregates, from your model. The build writes it into your migrations only when the project that runs
-the export lists it:
+your aggregates, from your model. A package that declares itself a contributor, Tenancy and Membership on
+Postgres among them, is written into your migrations because the project that runs the export references it,
+from what your application marks for it, `[TenancyCatalogue]` or `[MembershipRules<TMember>]`; leave one out
+with `[assembly: LeaveOutRowAccessContribution(typeof(X))]`. A contribution of your own, one of your modules
+offers, the project that runs the export lists, and the build warns while it does not,
+[DDD00069](diagnostics.md#ddd00069):
 
 ```csharp
-[assembly: UseRowAccessContribution(typeof(AuditRowAccess))]
+[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
 ```
 
-An offer you do not list is [DDD00054](diagnostics.md#ddd00054), a warning. What a listed contribution
-writes for a module goes into that module's access file, with a comment that names the contribution, its
-assembly and the assembly's version, so upgrading the package writes a new file. A module whose only row
-access is a contribution gets an access file too, and its migrations start with the drop.
+What a contribution writes for a module goes into that module's access file, with a comment that names it.
+One of yours is named with its class, its assembly and the assembly's version, so a new version of the
+project that holds it writes a new file; give that project a version of its own, as the sample's
+[Projects infrastructure](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Examples.Tenancy.Projects.Infrastructure.csproj)
+does, if a build sets every project's version, or each release writes the access files again. A package's is
+named with the package's class and assembly and no version, so neither a release of your application nor one
+of the package that writes the same SQL changes an access file. A module whose only row access is a
+contribution gets an access file too, and its migrations start with the drop.
 
 #### Roles and caller functions of your own
 
@@ -1120,10 +1128,16 @@ A marked factory the generated code cannot create, because it is not public, has
 parameterless constructor or does not implement `IDesignTimeDbContextFactory<TContext>`, is reported as
 [DDD00031](diagnostics.md#ddd00031) instead of being skipped.
 
-The generated code also hands the export the row access contributions the project lists with
-`[assembly: UseRowAccessContribution(typeof(X))]`, each as `new X()`, and no others. A contribution a
-referenced assembly offers with `[assembly: RowAccessContribution]` and the project does not list is
-[DDD00054](diagnostics.md#ddd00054).
+The generated code also hands the export the row access contributions: first those of every referenced
+package that declares itself a contributor with `[assembly: RowAccessContribution]`, each made in a class the
+generator writes into a file of its own, `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, from the members
+the application marks, unless the project leaves it out with `[assembly: LeaveOutRowAccessContribution]`; then
+the ones the project lists with `[assembly: UseRowAccessContribution(typeof(X))]`, each as `new X()`. A
+package's contribution whose data the application does not mark is [DDD00054](diagnostics.md#ddd00054), one
+whose marks cannot be used [DDD00066](diagnostics.md#ddd00066), one the project lists again
+[DDD00067](diagnostics.md#ddd00067), and a line that leaves nothing out [DDD00068](diagnostics.md#ddd00068).
+An assembly that declares a module offers its contribution rather than writing it, and one the project does
+not list is [DDD00069](diagnostics.md#ddd00069).
 
 The package brings the generator and the build step to the host through the module that references it,
 so the host does not reference the package itself unless it uses the start-up check.
@@ -1134,4 +1148,7 @@ so the host does not reference the package itself unless it uses the start-up ch
 - [Row level security](row-level-security.md) for callers, work outside a request, and rules written in C#.
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
 - [Diagnostics](diagnostics.md#ddd00031) for the build error about an unusable factory, and
-  [DDD00054](diagnostics.md#ddd00054) for a row access contribution the host does not use.
+  [DDD00054](diagnostics.md#ddd00054), [DDD00066](diagnostics.md#ddd00066),
+  [DDD00067](diagnostics.md#ddd00067), [DDD00068](diagnostics.md#ddd00068) and
+  [DDD00070](diagnostics.md#ddd00070) for a package's row access contribution, and
+  [DDD00069](diagnostics.md#ddd00069) for a module's.

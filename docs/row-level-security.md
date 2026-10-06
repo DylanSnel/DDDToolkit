@@ -1598,8 +1598,15 @@ depend on your model: the schema you gave its tables, the column types of your i
 cannot cover those, so such a package writes its row level security itself, as a row access contribution:
 a class the script asks, for every context, what it writes there.
 
+A package declares itself a contributor with `[assembly: RowAccessContribution]`, and from then on
+referencing the package is your consent: its SQL goes into the migrations of every application that
+references it, directly or through a module, and you write no line and no class for it. A package such as
+[Tenancy on Postgres](tenancy.md#on-postgres-the-second-lock) does not work without its policies in the database, so there
+is nothing to choose.
+
 ```csharp
-// In the package: an audit trail, whose entries are read by who wrote them.
+// In the package: an audit trail, whose entries are read by who wrote them. Every application that
+// references the package writes this into its migrations.
 [assembly: RowAccessContribution(typeof(AuditRowAccess))]
 
 public sealed class AuditRowAccess : IRowAccessContribution
@@ -1631,30 +1638,123 @@ public sealed class AuditRowAccess : IRowAccessContribution
             ExclusiveTables: [entries]);
     }
 }
-
-// In the host, the project that runs the Supabase export: the package's SQL goes into its migrations.
-[assembly: UseRowAccessContribution(typeof(AuditRowAccess))]
 ```
 
-An offer alone writes nothing: the migrations run the SQL as the role that owns your tables, so it gets
-there only by your choice. The build warns about an offer you do not list,
-[DDD00054](diagnostics.md#ddd00054). On a Postgres of your own, hand the contribution to the script in
+SQL that is your application's own, a trigger one of your modules writes, is a contribution as well, and you
+list it in the project that runs the export: `[assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]`.
+That is the line for your own classes only. A module declares its class with `[assembly: RowAccessContribution]`
+as a package does, and because its assembly declares a module, that is an offer rather than a write: nothing
+is written until the exporting project lists it, and the build warns until it does,
+[DDD00069](diagnostics.md#ddd00069). So a forgotten line is heard, while your database only gets the SQL of
+your own you said it gets. On a Postgres of your own, hand every contribution to the script in
 `RowAccessExport.Contributions`.
 
-The build creates a listed contribution with `new X()` before your application starts, so a contribution
-whose SQL depends on what only your application knows, such as a list of its own, takes it from a class of
-yours. The package offers a class to derive from, or a generic one, and you list your class, which counts
-as using the offer:
+#### What a package's SQL is written from
+
+The build makes a package's contribution in the project that runs the export, before your application
+starts, so it has none of your services. What the SQL depends on that only your application knows, your
+catalogue or a resource's rules, the package takes in its class's constructor, and each parameter says with
+`[FromApplication]` which attribute you mark the value with. You mark a static property or field, where you
+declare the value anyway, and the build finds it in the exporting project and every project it references:
+
+```mermaid
+flowchart LR
+    Reference["the exporting project<br/>references the package"] --> Declared["[assembly: RowAccessContribution]<br/>in the package"]
+    Declared --> Constructor["its constructor:<br/>[FromApplication(typeof(Plans))]"]
+    Constructor --> Marked["your member<br/>marked [Plans]"]
+    Marked --> Written["a class written into<br/>RowAccessContributionsOfPackages.g.cs"]
+    Written --> Export["the export asks it<br/>for every context"]
+```
+
+A parameter is found in one of three ways. Exactly one member marked, the usual case: two are an error,
+[DDD00066](diagnostics.md#ddd00066), since the build will not guess which one your application runs with,
+and none is the parameter's default where it has one, or else a warning,
+[DDD00054](diagnostics.md#ddd00054), and the package's SQL is not written. Every member marked, for a
+parameter that says `Every = true`: an array of all of them, in the order of their names, none an empty one.
+And once for each member marked with a generic attribute, for a generic contribution: the build makes it once
+for every member so marked, closed over the type the mark is written with. A member of another type than the
+parameter takes, or one that is not static, is [DDD00066](diagnostics.md#ddd00066). Of a library, the
+exporting project sees what is public and nothing else, so a member a library marks that is internal, or
+declared in an internal class, is not found at all, and the export would go on as if nothing were marked.
+That one is reported where it is declared instead, by the library's own build,
+[DDD00070](diagnostics.md#ddd00070), for every mark whose attribute says it is one with `[ApplicationMark]`, as
+Tenancy's and Membership's do. A member marked in a project the exporting project does not reference is not
+found either: mark it where that project sees it.
+
+<details>
+<summary>Show the code: a package that takes your plans, and what the build writes for it</summary>
 
 ```csharp
 // In the package
 [assembly: RowAccessContribution(typeof(PlanRowAccess))]
-public class PlanRowAccess(IReadOnlyList<string> plans) : IRowAccessContribution { ... }
 
-// In the host
-[assembly: UseRowAccessContribution(typeof(ShopPlanRowAccess))]
-public sealed class ShopPlanRowAccess() : PlanRowAccess(ShopPlans.All);
+[ApplicationMark]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public sealed class PlansAttribute : Attribute;
+
+public class PlanRowAccess([FromApplication(typeof(PlansAttribute))] IReadOnlyList<string> plans) : IRowAccessContribution { ... }
+
+// In your application, where the plans are declared anyway
+public static class ShopPlans
+{
+    [Plans]
+    public static IReadOnlyList<string> All { get; } = ["free", "pro"];
+}
 ```
+
+```csharp title="DDDToolkit.RowAccessContributionsOfPackages.g.cs, in the project that runs the export"
+namespace DDDToolkit.EntityFramework.Supabase.Generated
+{
+    /// The row access contribution Shop.Plans.PlanRowAccess, which Shop.Plans writes into the migrations of
+    /// every application that references it, made with what this application marks:
+    /// plans: Shop.ShopPlans.All, marked [Plans].
+    internal sealed class PlanRowAccess : IPackageRowAccessContribution
+    {
+        private readonly IRowAccessContribution _contribution = new global::Shop.Plans.PlanRowAccess(
+            plans: global::Shop.ShopPlans.All);
+
+        public IRowAccessContribution Contribution => _contribution;
+
+        public string Owner => _contribution.Owner;
+
+        public RowAccessContributionResult? Contribute(DbContext context, RowAccessExport export)
+            => _contribution.Contribute(context, export);
+    }
+}
+```
+
+</details>
+
+The class is written into a file of its own, `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, among the
+exporting project's generated files, with a comment that names every member it was made from. It hands the
+export the package's class through `IPackageRowAccessContribution`, so the comment above what it writes in the
+access file names the package's class and the package's assembly, without a version:
+`-- Written by the row access contribution Shop.Plans.PlanRowAccess in Shop.Plans.` Neither a release of
+your application nor a release of the package that writes the same SQL makes an access file stale; a package
+whose SQL changed writes a new one, because the SQL differs.
+
+#### Leaving a package's SQL out
+
+For the rare application that must not write a package's SQL, because it writes those policies itself or a
+context's database is not the package's to write, say so in the project that runs the export:
+
+```csharp
+// None of it: the application writes the package's policies itself.
+[assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess))]
+
+// Not in one context's access file; every other context still gets it.
+[assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(ArchiveContext))]
+```
+
+A generic contribution is left out with its open type, every closing of it, or with one closing. To write a
+package's SQL with a class of your own instead, leave the package's out and list yours with
+`[assembly: UseRowAccessContribution]`. Listing yours without leaving the package's out would write the SQL
+twice, which [DDD00067](diagnostics.md#ddd00067) stops at build time: that is what an application still
+has that once handed a package its data through a class of its own. Take the line and the class out, and
+mark what the class handed over. What is left out is checked by nothing else: a package's start-up checks
+still expect its SQL wherever the application uses the package. A line that leaves nothing out, because it
+names no contribution a package writes or its `Context` is no class derived from `DbContext`, is a warning,
+[DDD00068](diagnostics.md#ddd00068), rather than a line that reads as if it did.
 
 A contribution may be asked about a context several times in one export, so it answers from the model
 and what it was made with, the same every time.

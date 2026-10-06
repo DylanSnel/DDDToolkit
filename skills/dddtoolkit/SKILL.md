@@ -373,6 +373,12 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
   id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,
   asked as `ProjectsISee.Ids().Contains(row.ProjectId)`. No rule and no contract names the SQL function: the
   Membership contribution says which of its functions answers.
+- Tenancy's and Membership's SQL on Postgres comes with referencing their Postgres packages, from what the
+  application marks: the catalogue `[TenancyCatalogue]`, the operators' token roles `[TenancyOperators]`, each
+  resource's rules `[MembershipRules<TMember>]`. Never write a class derived from `TenancyRowAccessContribution`
+  or `MembershipRowAccessContribution<T>`; `[assembly: UseRowAccessContribution]` lists only the application's
+  own SQL, a module's trigger say, which the module offers with `[assembly: RowAccessContribution]` (DDD00069
+  until the exporting project lists it). Marks in a library are public (DDD00070).
 - In a module whose use cases are commands and queries, a route and a GraphQL resolver only send one.
   Neither decides who may do what, and neither takes a `DbContext`.
 - A GraphQL type is `[ObjectType<T>]` over the application's own record, a list is paged by HotChocolate's

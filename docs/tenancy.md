@@ -648,7 +648,8 @@ brings its own keys, and every module states its keys next to the code that asks
 
 Every part is optional, and so is the catalogue: leave `options.Catalogue` unset and Tenancy builds it from
 `new ApplicationCatalogue()`, its own keys and the modules'. The export on Postgres, which builds the
-catalogue without the registration, does the same with `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)`
+catalogue without the registration, does the same: it writes the policies from the part you mark
+`[TenancyCatalogue]`, and from `new ApplicationCatalogue()` where you mark none
 ([Setting it up](#setting-it-up)). Nothing else is asked for: what kind of unit a unit is decides nothing, so
 it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 
@@ -656,27 +657,31 @@ it is [yours to keep](#the-kind-of-a-unit), on your own unit class.
 
 A module's keys are needed by two programs that cannot ask each other: the host, which builds its catalogue
 from its services, and the program that exports the database's policies, which builds the same catalogue
-without any. Both compose the modules, so both see every module's assembly, and Tenancy's generator, which
-comes with the package, reads the keys there.
+without any. Both compose the modules, so both see every module's assembly, and read the keys there: the host
+through Tenancy's generator, which comes with the package, and the export through the Supabase package's, which
+finds the same marked lists for Tenancy's contribution ([Setting it up](#setting-it-up)).
 
 ```mermaid
 flowchart TB
     Ordering["Ordering.Application<br/>OrderingKeys.Permissions<br/>[TenancyPermissions]"]
     Billing["Billing.Application<br/>BillingKeys.Permissions<br/>[TenancyPermissions]"]
     Generator{{"Tenancy's generator,<br/>in each project that<br/>declares no module"}}
+    Supabase{{"the Supabase export's<br/>generator, where the<br/>export runs"}}
     Host["the host<br/>AddTenancyPermissionsOfModules()"]
-    Export["the export<br/>TenancyPermissionsOfModules.All"]
+    Export["Tenancy's contribution<br/>modules: every marked list"]
     Running(["the catalogue<br/>the host runs with"])
     Written(["the catalogue the<br/>policies are written from"])
     Check{"start-up check<br/>on Postgres:<br/>the same?"}
     Ordering --> Generator
     Billing --> Generator
+    Ordering --> Supabase
+    Billing --> Supabase
     Generator --> Host --> Running --> Check
-    Generator --> Export --> Written --> Check
+    Supabase --> Export --> Written --> Check
 ```
 
 <details>
-<summary>Show the code: a module's keys, the host's one call, the export, and what the generator writes</summary>
+<summary>Show the code: a module's keys, the host's one call, and what the generators write</summary>
 
 ```csharp
 // Ordering.Application: the keys, stated once
@@ -695,11 +700,7 @@ using Shop.Host;
 
 builder.Services.AddTenancyPermissionsOfModules();
 
-// The project that runs the export, or one the host shares with it
-public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
-
-// What the generator writes into each of those projects, in the namespace of its assembly
+// What Tenancy's generator writes into each of those projects, in the namespace of its assembly
 internal static class TenancyPermissionsOfModules
 {
     public static IReadOnlyList<Permission> All { get; } = Join(
@@ -709,6 +710,16 @@ internal static class TenancyPermissionsOfModules
     public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
         => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
 }
+
+// What the Supabase package's generator writes into the project that runs the export, in
+// DDDToolkit.RowAccessContributionsOfPackages.g.cs: Tenancy's contribution, made from the same lists
+private readonly IRowAccessContribution _contribution = new global::DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution(
+    modules: new IEnumerable<Permission>[]
+    {
+        global::Shop.Billing.BillingKeys.Permissions,
+        global::Shop.Ordering.OrderingKeys.Permissions,
+    },
+    application: global::Shop.ShopCatalogue.Application);
 ```
 
 </details>
@@ -721,8 +732,10 @@ with the project's own marked lists and those of every project it references. It
 project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `RootNamespace` says:
 
 - **`TenancyPermissionsOfModules.All`**: every module's keys, one list after the other, in the order of the
-  lists' names. The export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, or
-  `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)` without a part of your own.
+  lists' names. A program of your own that builds the catalogue without the host's services builds it with
+  `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, or
+  `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)` without a part of your own. The Supabase export
+  needs neither: it hands Tenancy's contribution the same lists, found where they are marked.
 - **`services.AddTenancyPermissionsOfModules()`**: adds `All` to the catalogue, as one contribution. The host
   calls it once. A top-level `Program.cs` is in no namespace, so it needs `using Shop.Host;` for the call.
 
@@ -2330,12 +2343,18 @@ using (TenantsTenancy.BeginOperatorIn(tenant, operatorIdentity))
 </details>
 
 **On Postgres** an operator reads through a database role of its own. Map the token role to one
-(`PostgresRowLevelSecurityOptions.TokenRoles`, or `token:operator=<role>` in `SupabaseRowAccessRoles`) and give
-the same token roles to your contribution:
+(`PostgresRowLevelSecurityOptions.TokenRoles`, or `token:operator=<role>` in `SupabaseRowAccessRoles`), and mark
+the token roles you give Tenancy, so the export writes the policies for the same ones:
 
 ```csharp
-public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"]);
+public static class ShopOperators
+{
+    [TenancyOperators]
+    public static IReadOnlyList<string> TokenRoles { get; } = ["operator"];
+}
+
+// Where Tenancy is registered
+options.OperatorTokenRoles.UnionWith(ShopOperators.TokenRoles);
 ```
 
 The contribution then writes, for that role:
@@ -2350,8 +2369,8 @@ stays [closed out](#what-the-policies-check). The role is one of its own: the ex
 token role that is mapped to no database role, to the role of a signed-in user, or to a role another token role
 shares, since those policies would open every tenant to callers who are no operators.
 `EnsurePoliciesAreInPlaceAsync` checks at start-up that the options and the database agree: the options name
-the operators for your application, the contribution for the database, and with the first alone an operator
-is answered an empty directory.
+the operators for your application, the mark for the database, and with the first alone an operator is answered
+an empty directory.
 
 ## Who changed a row
 
@@ -4114,7 +4133,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
 | A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its keys that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-key`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
 | A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
-| The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleTenancyContribution.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleTenancyContribution.cs), `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
+| The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the catalogue `[TenancyCatalogue]`, `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
 | A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
 | A role made from a pack follows its pack once the host syncs the packs: what the pack gained is added and what it lost is taken out, what the tenant changed itself stays, and the tenant's administrators read it in the history. The host turns it on with a call of its own, not among its start-up checks | **Code:** [`RoleAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Roles/RoleAggregate.cs), [`TenancyUseCases.Roles.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Roles/TenancyUseCases.Roles.cs), [`EfRolePackSync.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/RolePacks/EfRolePackSync.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs)<br/>**Try it:** On [the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts), whose database stays: start the host once and stop it, add a key to a pack in [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), build `Examples.Tenancy.Exporter`, which writes a new `*_access.tenants.ddd.sql`, run `supabase migration up`, and start the host again: the role has the key, and maud reads `tenancy.role-followed-its-pack` on the History page. Under the AppHost the database is new every run, so provisioning gives the key and the sync has nothing to follow<br/>**Test:** `RoleFollowsItsPackTests`, `FollowPacksTests`, `RolePackSyncTests`, `RolePackSyncScenarios` |
@@ -4126,7 +4145,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
-| A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. What composes the modules, the host and the catalogue's project, gets every module's list from Tenancy's generator: the host registers the keys with one call, and the export builds its catalogue from the same lists | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyPermissionsOfModules.g.cs` is under its `obj` folder<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `StartupTests` |
+| A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. The host gets every module's list from Tenancy's generator and registers the keys with one call; the program that exports finds the same marked lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `TenancyPermissionsOfModules.g.cs` is under the host's `obj` folder, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
 | No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`SeatOverviewType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
 | No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
@@ -4163,7 +4182,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
-| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`ProjectMembershipFunctions.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/ProjectMembershipFunctions.cs), [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
 | A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `projects.project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
@@ -4247,8 +4266,9 @@ forget a condition. It is not a boundary against SQL someone else runs on your c
 
 ### Setting it up
 
-Register it next to row level security, list its contribution where the export runs, and run the checks both
-bring at start-up:
+Register it next to row level security, mark your part of the catalogue, and run the checks both bring at
+start-up. Tenancy's functions, policies and triggers go into your migrations because the project that runs the
+export references the package, directly or through the module that stores Tenancy:
 
 ```csharp
 // The host
@@ -4258,14 +4278,14 @@ services.AddTenancyPostgres();
 // Before the host serves anything: every check the registrations brought, Tenancy's among them
 services.RunStartupChecks();
 
-// The project that runs the export: Tenancy's functions, policies and triggers go into its migrations
-[assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]
-
-// The catalogue as your registration builds it: your part, and the keys your modules mark with [TenancyPermissions],
-// which Tenancy's generator collects into this project. An application without a part of its own builds from its
-// modules' keys alone: TenancyCatalogue.Build(TenancyPermissionsOfModules.All).
-public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
+// Your part of the catalogue, the one you hand TenancyOptions.Catalogue: the export writes the policies from it,
+// and from the keys your modules mark with [TenancyPermissions]. Mark nothing, and they are written from
+// new ApplicationCatalogue(), as a host that leaves TenancyOptions.Catalogue unset runs with.
+public static class ShopCatalogue
+{
+    [TenancyCatalogue]
+    public static ApplicationCatalogue Application { get; } = new(Packs: [...]);
+}
 ```
 
 - **`AddTenancyPostgres()`** carries the tenant to Postgres, turns the refusal of the trigger that keeps a
@@ -4276,15 +4296,20 @@ public sealed class ShopTenancyRowAccess()
   and answers what the use cases ask about other seats ([below](#what-the-policies-check)).
   With row level security registered, `UseDDDToolkit` runs your contexts as their caller and gives them
   Tenancy's save check, with nothing more to write.
-- **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships).
-  Which keys manage access is yours to say, so its SQL is written from your catalogue: derive a class that
-  builds it as your registration does, from your part and your modules' keys, `TenancyPermissionsOfModules.All`,
-  and list that class. Declare it in a project that declares no module, where the generator writes that list
-  ([A module states its keys once](#a-module-states-its-keys-once)): the project that runs the export, or one
-  it shares with the host. On a
-  Postgres of your own, pass it to `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The
-  functions go into the default schema of the context that maps Tenancy's tables, so give it one in lower
-  case, such as `tenancy`.
+- **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships) the
+  package declares, so referencing the package writes it. Which keys manage access is yours to say, so its SQL
+  is written from your catalogue, built as your registration builds it: the part you mark with
+  `[TenancyCatalogue]`, a static property or field of type `ApplicationCatalogue`, and every list your modules
+  mark with `[TenancyPermissions]` ([A module states its keys once](#a-module-states-its-keys-once)), found in
+  the projects the exporting project references. The build makes it in that project, in a class it writes into
+  `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, whose comment names what it was made from. Two members
+  marked `[TenancyCatalogue]`, or one of another type, the catalogue built already say, stop the build
+  ([DDD00066](diagnostics.md#ddd00066)); one a library keeps internal is reported where it is declared,
+  [DDD00070](diagnostics.md#ddd00070), since the exporting project would not see it and would write the policies
+  from the default catalogue. An application with [operators](#operators) marks their token roles
+  `[TenancyOperators]` too. On a Postgres of your own, pass `new TenancyRowAccessContribution(catalogue)` to
+  `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The functions go into the default schema of
+  the context that maps Tenancy's tables, so give it one in lower case, such as `tenancy`.
 - **The checks** are [start-up checks](startup-checks.md): `AddTenancyPostgres()` brings them, and the host runs
   them with every other check it has, before the server binds its port, in an order that says the cause before
   its effects. A host that runs them by hand calls `TenancyPostgresChecks.EnsureExplicitCallers`,
@@ -4309,10 +4334,9 @@ public sealed class ShopTenancyRowAccess()
   rights as the store expects: the trigger that writes them is on the grants, the seats and the roles, the
   functions the store asks, the ones [modules read through](#modules-read-through-functions) and the ones
   that [take the tenant](#where-the-connection-names-no-tenant) are there
-  as the contribution writes them, and nothing turned `DatabaseKeepsRights` off. A contribution you
-  forget to list writes
-  nothing, the build only warns ([DDD00054](diagnostics.md#ddd00054)), and a table without row level
-  security is open to every caller with privileges on it.
+  as the contribution writes them, and nothing turned `DatabaseKeepsRights` off. A contribution the
+  application leaves out with `[assembly: LeaveOutRowAccessContribution]` writes nothing, and a table without
+  row level security is open to every caller with privileges on it.
 
 What Postgres refuses reaches the caller as the refusal the use case gives for the same rule, where the
 database sees what the use case could not ask about first, such as two requests racing for one slug. Each
@@ -4943,8 +4967,8 @@ project's unit, or, for the three a crew gives, on its crew. What decides who re
 closer. A trigger of the module's own (`UnitChangesWithItsKeys`, beside the module's Postgres migrations)
 changes the unit only to a unit of the project's tenant, for a seat that may edit the project where it was and
 may open projects where it goes. The lock the Membership package writes from the projects' rules
-(`ProjectMembershipFunctions`) changes the owner only for a seat that holds `projects.owner.change` on the
-project, and writes the rows of its crew only for a seat that holds `projects.crew.manage` or
+(`SampleCatalogue.ProjectRules`, marked `[MembershipRules<CrewMember>]`) changes the owner only for a seat that
+holds `projects.owner.change` on the project, and writes the rows of its crew only for a seat that holds `projects.crew.manage` or
 `projects.owner.change` there. The rule that opens a project (`SeatsOpenProjectsWhereTheyMay`) names the seat
 itself its owner unless the seat may name owners at the unit, and a policy of the module's own
 (`CrewSeatsOfTheProjectsTenant`) puts only seats of the project's tenant on a crew. And the columns whose

@@ -13,8 +13,15 @@
     serves requests as a role that owns nothing, and has no reason to carry the design-time factories, the
     exporting generator or a build step that writes files. So the export lives here, in a program without routes,
     which references what it writes from: each module's infrastructure project, which holds its migrations, the
-    design-time factory they are found through and its row access rules, and the application's catalogue with
-    Tenancy's contribution. Nothing references this project.
+    design-time factory they are found through and its row access rules, and the application's catalogue. Nothing
+    references this project.
+
+    Tenancy's and Membership's SQL is written because the modules that store them on Postgres reference their
+    Postgres packages, and this project references those modules: each package declares itself a contributor, and
+    the build makes its class here from what the application marks, the catalogue and the projects' rules in the
+    catalogue's project and the operators' token roles in the Tenants module. The access files name each package's
+    class and assembly above what it writes, without a version, so this program keeps no version of its own: a
+    release of the toolkit that writes the same SQL leaves the files as they are.
 
     Every build writes the file of any migration that has none, and the access files when the rules, the
     catalogue or the model changed; in CI the build only compares, and fails when a file is missing or stale.
@@ -53,12 +60,13 @@
   <ItemGroup>
     <!--
       Each module's infrastructure project: its migrations, with the [SupabaseMigrations] factory the export builds
-      its context with, and its row access rules, each of which becomes a policy, a function or a trigger.
+      its context with, and its row access rules, each of which becomes a policy, a function or a trigger. Tenants'
+      brings Tenancy on Postgres, and Projects' Membership on Postgres, whose SQL comes with them.
     -->
     <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Infrastructure\Examples.Tenancy.Tenants.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Inspections\Examples.Tenancy.Inspections.Infrastructure\Examples.Tenancy.Inspections.Infrastructure.csproj" />
-    <!-- The catalogue Tenancy's policies are written from, and the contribution that writes them. -->
+    <!-- The catalogue Tenancy's policies are written from, and the projects' rules Membership's functions are written from. -->
     <ProjectReference Include="..\Examples.Tenancy.Catalogue\Examples.Tenancy.Catalogue.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>

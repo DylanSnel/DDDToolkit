@@ -18,9 +18,9 @@ public static class InspectionCatalogue
     public const string Module = "Inspections";
 
     /// <summary>
-    /// The keys, as the catalogue lists them: the one place the module states them. The host registers them, and
-    /// the export builds the catalogue with them, through the list Tenancy's generator writes into each,
-    /// <c>TenancyPermissionsOfModules.All</c>.
+    /// The keys, as the catalogue lists them: the one place the module states them. The host registers them
+    /// through the list Tenancy's generator writes into it, <c>TenancyPermissionsOfModules.All</c>, and the program
+    /// that exports finds them by the same mark and builds the catalogue the policies are written from with them.
     /// </summary>
     [TenancyPermissions]
     public static IReadOnlyList<Permission> Permissions { get; } =

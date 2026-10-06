@@ -52,7 +52,7 @@ DDD00050 | DDDToolkit.Entities | Error | A type a template registration takes me
 DDD00051 | DDDToolkit.Access | Error | A set-shaped question is asked once per statement, so its arguments do not read the row
 DDD00052 | DDDToolkit.Access | Error | A function named without its schema belongs to a module
 DDD00053 | DDDToolkit.Entities | Error | A type argument of a template meets its parent's constraints
-DDD00054 | DDDToolkit.Supabase | Warning | Use the row access contributions your references offer
+DDD00054 | DDDToolkit.Supabase | Warning | A package's row access contribution is made from what the application marks
 DDD00055 | DDDToolkit.Supabase | Warning | A context's migration files are named after its module
 DDD00056 | DDDToolkit.Access | Error | A request interface is one a behavior can be written for
 DDD00057 | DDDToolkit.Access | Error | The Mediator library's pipeline behavior has the shape the generator writes a behavior for
@@ -67,3 +67,8 @@ DDD00065 | DDDToolkit.Entities | Info | The class a package's use cases are name
 DDD00066 | DDDToolkit.Entities | Error | A package's switch writes a class or an id where its name is free and its id is known
 DDD00067 | DDDToolkit.Entities | Error | A class whose package makes its new ids is declared over an id with a Create()
 DDD00068 | DDDToolkit.Modules | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute
+DDD00066 | DDDToolkit.Supabase | Error | What a package's row access contribution is made from is found once, and is what it takes
+DDD00067 | DDDToolkit.Supabase | Error | A row access contribution a package writes is not listed again
+DDD00068 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context
+DDD00069 | DDDToolkit.Supabase | Warning | A module's row access contribution is listed by the project that runs the export
+DDD00070 | DDDToolkit.Supabase | Error | A member a library marks for a package's row access contribution is public

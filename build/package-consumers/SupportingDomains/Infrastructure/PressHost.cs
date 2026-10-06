@@ -2,7 +2,6 @@ using Acme.Press.Manuscripts;
 using Acme.Press.Persistence;
 using Acme.Press.Tenants;
 using DDDToolkit.Supporting.Membership.EntityFramework;
-using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.Postgres;
@@ -35,9 +34,3 @@ public static class PressHost
         return services;
     }
 }
-
-/// <summary>Tenancy's functions, policies and triggers, for the export to write.</summary>
-public sealed class PressTenancyPolicies() : TenancyRowAccessContribution(PressCatalogue.Built);
-
-/// <summary>A manuscript's four set functions, for the export to write.</summary>
-public sealed class ManuscriptMembershipFunctions() : MembershipRowAccessContribution<ManuscriptEditor>(ManuscriptMembership.Rules);

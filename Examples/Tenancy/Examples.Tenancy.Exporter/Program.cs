@@ -1,13 +1,13 @@
 using DDDToolkit.Abstractions.Attributes;
-using Examples.Tenancy.Catalogue;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 
-// Tenancy's functions, policies and triggers go into the exported access files because this program says so: a
-// contribution that is only offered writes nothing. So do the functions and the lock the Membership package writes
-// for the projects, from the projects' rules, and the trigger Projects holds a project's unit with and the policy it
-// holds a crew's seats to their tenant with, which are that module's own to offer.
-[assembly: UseRowAccessContribution(typeof(SampleTenancyContribution))]
-[assembly: UseRowAccessContribution(typeof(ProjectMembershipFunctions))]
+// The Projects module's own SQL: the trigger it holds a project's unit with and the policy it holds a crew's seats to
+// their tenant with. It is the application's, so the module offers it and this program lists it; without these
+// lines the build warns that the module's SQL is missing (DDD00069). Tenancy's functions, policies and triggers,
+// and the functions and the lock the Membership package writes for the projects, are not listed: the modules this
+// program references reference those packages, which write their SQL into it by themselves, from what the catalogue
+// and the Tenants module mark. The build writes the classes that make them into
+// DDDToolkit.RowAccessContributionsOfPackages.g.cs, among this project's generated files.
 [assembly: UseRowAccessContribution(typeof(UnitChangesWithItsKeys))]
 [assembly: UseRowAccessContribution(typeof(CrewSeatsOfTheProjectsTenant))]
 

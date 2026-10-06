@@ -8,8 +8,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <c>[RowAccess]</c> rules. It covers what rules cannot: tables that are not aggregates, and SQL whose names
 /// depend on the application's model, such as the schema and the column types of its ids.
 /// <code>
-/// [assembly: RowAccessContribution(typeof(AuditRowAccess))]      // the package offers it
-/// [assembly: UseRowAccessContribution(typeof(AuditRowAccess))]   // the host uses it
+/// [assembly: RowAccessContribution(typeof(AuditRowAccess))]   // in the package: every application that references it writes it
 ///
 /// public sealed class AuditRowAccess : IRowAccessContribution
 /// {
@@ -26,7 +25,9 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <remarks>
 /// <para>
 /// A script asks every contribution its <see cref="RowAccessExport.Contributions"/> holds, for every context
-/// it writes; the Supabase build hands it those the host lists with <c>[assembly: UseRowAccessContribution]</c>.
+/// it writes; the Supabase build hands it those of the packages the host references, which declare themselves
+/// contributors with <c>[assembly: RowAccessContribution]</c>, and the host's own, which it lists with
+/// <c>[assembly: UseRowAccessContribution]</c>.
 /// What a contribution answers for a context goes into that context's script: its functions with the access
 /// functions, in the order they ask each other; its policies with the rules', a permissive one merged with
 /// theirs where it is for the same table, command and role; and its statements last.
@@ -39,10 +40,12 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// the context that defines a function first.
 /// </para>
 /// <para>
-/// The Supabase build creates a contribution the host lists as <c>new X()</c>, before the application starts.
-/// A contribution whose SQL depends on what only the application knows, such as a list of its own, is a
-/// class the host derives from, or a generic one the host closes with its own types, and the host lists
-/// that: it counts as using the offer.
+/// The Supabase build makes a contribution in the project that runs the export, before the application
+/// starts: one the host lists as <c>new X()</c>, and a package's in a class it writes there, from what the
+/// application marks. A package's contribution whose SQL depends on what only the application knows, such as a
+/// list of its own, takes it in its constructor, each parameter saying with <c>[FromApplication]</c> which
+/// attribute the application marks the member with; a generic one is made once for each member marked with a
+/// generic attribute, closed over its type arguments.
 /// </para>
 /// </remarks>
 public interface IRowAccessContribution
