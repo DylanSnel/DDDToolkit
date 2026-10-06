@@ -38,11 +38,11 @@
     -->
     <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system|token:tenancy_operator=tenancy_operator</SupabaseRowAccessRoles>
 
-    <!-- The privileges of every table are written from its policies: nothing is granted by hand, so nothing drifts. -->
-    <SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>
-
-    <!-- The tables' owner is held to the policies too: the only way past them is a role that may bypass them. -->
-    <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
+    <!--
+      Nothing asks for the privileges or for forced policies, because the export writes both unless a project turns
+      them off: every table gets the privileges its policies allow, so nothing is granted by hand and nothing drifts,
+      and the tables' owner is held to the policies too, so the only way past them is a role that may bypass them.
+    -->
 
     <!--
       The role the host logs in as, which owns nothing and may only switch to the roles above: the export writes the

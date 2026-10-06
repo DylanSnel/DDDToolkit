@@ -98,23 +98,41 @@ public sealed class SupabaseMigrationOptions
     /// <summary>
     /// Whether the access files also write the privileges of the tables they write policies for, read from
     /// those policies, and of each module's outbox, inbox and event log: <see cref="RowAccessExport.WriteGrants"/>.
-    /// <see langword="false"/> by default, and then every access file is what it was. A module with an outbox,
-    /// an inbox or an event log and no rule gets an access file for them once this is on. The build takes it
-    /// from the <c>SupabaseRowAccessGrants</c> property of the project that runs the export, <c>Write</c> or
-    /// <c>None</c>.
+    /// <see langword="true"/> by default, so a policy and the privilege it needs cannot drift apart, and a module
+    /// with an outbox, an inbox or an event log and no rule gets an access file for them. The build takes it from
+    /// the <c>SupabaseRowAccessGrants</c> property of the project that runs the export, <c>Write</c> or
+    /// <c>None</c>, and keeps this default where the property is not set.
+    /// <para>
+    /// Turn it off only where the privileges are granted by hand and have to stay that way. An access file takes
+    /// back what its roles held on the tables with rules, a grant of your own among it, and gives them what the
+    /// policies allow and nothing more; and a module's outbox then takes rows only from the signed-in user, the
+    /// scoped system role and the roles its policies let write, so a caller who writes a table without a rule
+    /// under a grant of your own would have the save refused. <see cref="RowAccessExport"/>, for a Postgres of
+    /// your own, keeps it off unless asked.
+    /// </para>
     /// </summary>
-    public bool WriteGrants { get; set; }
+    public bool WriteGrants { get; set; } = true;
 
     /// <summary>
     /// Whether every table an access file turns row level security on for gets it forced as well, so the
     /// table's owner is held to the policies too: <see cref="RowAccessExport.ForceRowLevelSecurity"/>.
-    /// <see langword="false"/> by default, and then every access file is what it was. It is about the access
-    /// files alone: a migration's own <c>ENABLE ROW LEVEL SECURITY</c> for a new table of an exposed schema
-    /// (<see cref="RowLevelSecuritySchemas"/>) stays as it is, since an exported migration is never rewritten.
-    /// The build takes it from the <c>SupabaseForceRowLevelSecurity</c> property of the project that runs the
-    /// export.
+    /// <see langword="true"/> by default. It is about the access files alone: a migration's own <c>ENABLE ROW
+    /// LEVEL SECURITY</c> for a new table of an exposed schema (<see cref="RowLevelSecuritySchemas"/>) stays as
+    /// it is, since an exported migration is never rewritten. The build takes it from the
+    /// <c>SupabaseForceRowLevelSecurity</c> property of the project that runs the export, <c>true</c> or
+    /// <c>false</c>, and keeps this default where the property is not set.
+    /// <para>
+    /// On Supabase it takes nothing from the application: the tables are owned by the role the CLI runs the
+    /// migrations as, <c>postgres</c>, which may bypass row level security, so an application that logs in as
+    /// that role works as before, and so do the access functions it owns. What it closes is the owner's way past
+    /// the policies for every role that has the owner's privileges and may not bypass them, a login role that
+    /// owns a table by mistake or is granted the owner among them. Turn it off only where the tables' owner
+    /// cannot bypass row level security and the application's own work runs as that owner: forced, the policies
+    /// would hold it too, and none is for it. <see cref="RowAccessExport"/>, for a Postgres of your own, where
+    /// that is common, keeps it off unless asked.
+    /// </para>
     /// </summary>
-    public bool ForceRowLevelSecurity { get; set; }
+    public bool ForceRowLevelSecurity { get; set; } = true;
 
     /// <summary>
     /// The role the application logs in as, which the export then makes in a migration of its own,

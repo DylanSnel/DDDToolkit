@@ -52,24 +52,21 @@ public sealed class SupabaseMigrationBuildTargetTests : IDisposable
     [Fact]
     public async Task The_build_reads_the_privileges_and_the_force_switch_and_the_system_role_from_the_environment()
     {
-        var (exitCode, output) = await BuildAsync(
-            roles: "token:analyst=desk_analyst|system=desk_books",
-            callerFunctions: null,
-            grants: "Write",
-            force: "true");
+        // Left out, both switches are on.
+        var (exitCode, output) = await BuildAsync(roles: "token:analyst=desk_analyst|system=desk_books", callerFunctions: null);
 
         exitCode.Should().Be(0, output);
         var sql = File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Should().ContainSingle().Subject);
 
-        sql.Should().Contain("-- Privileges, from the policies above", "SupabaseRowAccessGrants=Write reached the export");
-        sql.Should().Contain("REVOKE ALL ON TABLE desk.\"Tickets\" FROM PUBLIC, anon, authenticated, ddd_system_in, desk_analyst, desk_books;\n", "and system=desk_books did, as one more role a table gave nothing to");
+        sql.Should().Contain("-- Privileges, from the policies above", "the access file writes the privileges unless the project says None");
+        sql.Should().Contain("REVOKE ALL ON TABLE desk.\"Tickets\" FROM PUBLIC, anon, authenticated, ddd_system_in, desk_analyst, desk_books;\n", "and system=desk_books reached the export, as one more role a table gave nothing to");
         sql.Should().Contain("GRANT SELECT ON TABLE desk.\"Tickets\" TO desk_analyst;\n", "an analyst reads, and no more");
         sql.Should().Contain("        CREATE ROLE desk_books NOLOGIN NOINHERIT;\n", "the access file makes the bookkeeping role");
-        sql.Should().Contain("ALTER TABLE desk.\"Tickets\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE desk.\"Tickets\" FORCE ROW LEVEL SECURITY;\n", "SupabaseForceRowLevelSecurity=true reached the export");
+        sql.Should().Contain("ALTER TABLE desk.\"Tickets\" ENABLE ROW LEVEL SECURITY;\nALTER TABLE desk.\"Tickets\" FORCE ROW LEVEL SECURITY;\n", "and forces the policies unless the project says false");
 
-        // Left out, both are off, and the file says nothing of either.
+        // Turned off, both reach the export, and the file says nothing of either.
         Directory.Delete(Migrations, recursive: true);
-        (await BuildAsync(roles: "token:analyst=desk_analyst", callerFunctions: null)).ExitCode.Should().Be(0);
+        (await BuildAsync(roles: "token:analyst=desk_analyst", callerFunctions: null, grants: "None", force: "false")).ExitCode.Should().Be(0);
         File.ReadAllText(Directory.GetFiles(Migrations, "*_access.desk.ddd.sql").Single()).Should().NotContain(" ON TABLE ").And.NotContain("FORCE");
     }
 

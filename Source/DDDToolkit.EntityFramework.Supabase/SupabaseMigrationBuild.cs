@@ -58,14 +58,14 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// Whether the access files write the tables' privileges from the policies, from the
-    /// <c>SupabaseRowAccessGrants</c> property: <c>Write</c> writes them, <c>None</c> or unset leaves them to
+    /// <c>SupabaseRowAccessGrants</c> property: <c>Write</c> or unset writes them, <c>None</c> leaves them to
     /// the host. See <see cref="SupabaseMigrationOptions.WriteGrants"/>.
     /// </summary>
     public const string GrantsVariable = "DDDTOOLKIT_SUPABASE_GRANTS";
 
     /// <summary>
     /// Whether the access files force row level security on every table they turn it on for, from the
-    /// <c>SupabaseForceRowLevelSecurity</c> property: <c>true</c> forces it, <c>false</c> or unset does not. See
+    /// <c>SupabaseForceRowLevelSecurity</c> property: <c>true</c> or unset forces it, <c>false</c> does not. See
     /// <see cref="SupabaseMigrationOptions.ForceRowLevelSecurity"/>.
     /// </summary>
     public const string ForceVariable = "DDDTOOLKIT_SUPABASE_FORCE";
@@ -296,8 +296,8 @@ public static partial class SupabaseMigrationBuild
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, or <c>None</c>, null or empty to write no privileges.</param>
-    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, or <c>false</c>, null or empty not to force row level security.</param>
+    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, null or empty to write the privileges, or <c>None</c> to write none.</param>
+    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, null or empty to force row level security, or <c>false</c> not to.</param>
     /// <param name="output">Where to report.</param>
     /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
     public static int Run(
@@ -331,8 +331,8 @@ public static partial class SupabaseMigrationBuild
     /// <param name="start">Where to start looking when <paramref name="directory"/> is not given.</param>
     /// <param name="roles">The <see cref="RolesVariable"/>'s value, or null or empty for the defaults.</param>
     /// <param name="callerFunctions">The <see cref="CallerFunctionsVariable"/>'s value, or null or empty for the defaults.</param>
-    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, or <c>None</c>, null or empty to write no privileges.</param>
-    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, or <c>false</c>, null or empty not to force row level security.</param>
+    /// <param name="grants">The <see cref="GrantsVariable"/>'s value: <c>Write</c>, null or empty to write the privileges, or <c>None</c> to write none.</param>
+    /// <param name="force">The <see cref="ForceVariable"/>'s value: <c>true</c>, null or empty to force row level security, or <c>false</c> not to.</param>
     /// <param name="loginRole">The <see cref="LoginRoleVariable"/>'s value: the role the application logs in as, or null or empty to write no migration for it.</param>
     /// <param name="output">Where to report.</param>
     /// <returns>0 when everything is in sync, 1 when something needs attention, 2 when the export could not run.</returns>
@@ -445,17 +445,20 @@ public static partial class SupabaseMigrationBuild
             return false;
         }
 
+        // Unset, each keeps the options' default, which writes the privileges and forces row level security: a
+        // project says only what it turns off.
         switch (grants?.Trim())
         {
             case null or "":
                 break;
             case var none when string.Equals(none, "None", StringComparison.OrdinalIgnoreCase):
+                options.WriteGrants = false;
                 break;
             case var written when string.Equals(written, "Write", StringComparison.OrdinalIgnoreCase):
                 options.WriteGrants = true;
                 break;
             default:
-                problem = $"{GrantsProperty} is '{grants}'. Use Write to have the access files write the tables' privileges from the policies, or None to grant them yourself.";
+                problem = $"{GrantsProperty} is '{grants}'. Use Write, the default, to have the access files write the tables' privileges from the policies, or None to grant them yourself.";
                 return false;
         }
 
@@ -464,12 +467,13 @@ public static partial class SupabaseMigrationBuild
             case null or "":
                 break;
             case var off when string.Equals(off, "false", StringComparison.OrdinalIgnoreCase):
+                options.ForceRowLevelSecurity = false;
                 break;
             case var on when string.Equals(on, "true", StringComparison.OrdinalIgnoreCase):
                 options.ForceRowLevelSecurity = true;
                 break;
             default:
-                problem = $"{ForceProperty} is '{force}'. Use true to force row level security on every table an access file turns it on for, or false to leave the tables' owner outside the policies.";
+                problem = $"{ForceProperty} is '{force}'. Use true, the default, to force row level security on every table an access file turns it on for, or false to leave the tables' owner outside the policies.";
                 return false;
         }
 
@@ -539,6 +543,14 @@ public static partial class SupabaseMigrationBuild
             catch (ArgumentException exception)
             {
                 problem = $"{RolesProperty} has 'system={system}'. {Reason(exception)}";
+                return false;
+            }
+
+            // Mirroring the options' SystemRole is the natural thing to write, and where that is service_role the
+            // files would fail only when they are applied: said here, when the project builds.
+            if (SupabaseMigrations.NotAnOwnBookkeepingRole(options) is { } platform)
+            {
+                problem = $"{RolesProperty} has 'system={system}'. {platform} Leave the pair out where the system caller runs as service_role, or name a role of the application's own, such as ddd_system.";
                 return false;
             }
         }

@@ -398,7 +398,11 @@ whichever server connection is free, and is refused unless the settings travel p
 [Through the transaction pooler](#through-the-transaction-pooler) shows.
 
 **The database needs to know about the application's roles.** `anon` and `authenticated` have no
-privileges in a schema of yours until you grant them some, in a migration you write by hand:
+privileges in a schema of yours until something grants them some. For the tables of an aggregate whose
+rules are written in C#, the access files the build writes do, from the policies, and they give the module's
+outbox and inbox what a caller needs there and no more; see
+[Privileges, forced policies and the bookkeeping role](#privileges-forced-policies-and-the-bookkeeping-role).
+A table without such a rule needs a migration you write by hand:
 
 ```sql
 grant usage on schema ordering to anon, authenticated;
@@ -406,8 +410,14 @@ grant select, insert, update, delete on all tables in schema ordering to anon, a
 alter default privileges in schema ordering grant select, insert, update, delete on tables to anon, authenticated;
 ```
 
-The grants take in the module's outbox and inbox tables too, which have no policies; take back what a
-caller does not need there, as [A Postgres of your own](row-level-security.md#a-postgres-of-your-own)
+Such grants take in the module's outbox and inbox tables too, which have no policies, and there the module's
+access file decides, since it writes their privileges as well: the outbox takes rows from the signed-in user,
+the scoped system role and the roles the module's policies let write, and from nobody else. So a guest who
+writes a table without a rule under these grants has the save refused, `permission denied` on the outbox, as
+soon as it raises an event. Such a module needs a rule for that table, whose policies then give the guest the
+table and the outbox both, or the privileges left to the project, with `SupabaseRowAccessGrants` set to `None`
+([Turning one off](#privileges-forced-policies-and-the-bookkeeping-role)); a project that writes them itself
+takes back what a caller does not need as [A Postgres of your own](row-level-security.md#a-postgres-of-your-own)
 shows.
 
 Keep such schemas out of the Data API's exposed schemas. Granted to `anon`, a table in an exposed schema
@@ -612,8 +622,9 @@ instance of the application, within it.
 
 [Row access rules written in C#](row-level-security.md#row-access-rules-written-in-c) go into
 `supabase/migrations` with the migrations. The build finds every `[RowAccess]` rule in the modules the
-host references and writes, for each module with rules, a file of its own,
-`{version}_access.{module}.ddd.sql`, whose policies ask `auth.uid()` and `auth.jwt()`. The
+host references and writes a file of its own, `{version}_access.{module}.ddd.sql`, for each module with
+rules, whose policies ask `auth.uid()` and `auth.jwt()`, and for each module with an outbox, an inbox or an
+event log, whose privileges the file writes as well. The
 [access functions](row-level-security.md#asking-the-aggregates-entities-access-functions) a module's
 rules call go into the file of the module that maps their aggregate, before its policies, and that file
 is written before the files of the modules that call them:
@@ -624,11 +635,12 @@ DO $ddd$ ... $ddd$;   -- drops the policies the previous file made on the module
                       -- of its column rules
 
 DO $ddd$ ... $ddd$;   -- makes what the policies below ask, where the database lacks it:
-                      -- the ddd schema, ddd.written_in_this_transaction(xid), the scoped system role when a
-                      -- policy is for it, and for every role a policy names GRANT USAGE ON SCHEMA ddd and
+                      -- the ddd schema, ddd.written_in_this_transaction(xid), the scoped system role,
+                      -- and for every role a policy names GRANT USAGE ON SCHEMA ddd and
                       -- GRANT EXECUTE ON FUNCTION ddd.written_in_this_transaction(xid)
 
 ALTER TABLE ordering."Orders" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordering."Orders" FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY "A customer has their orders (select) for anon" ON ordering."Orders" FOR SELECT TO anon
     USING (("PlacedBy" IS NULL) OR ("PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())));
@@ -637,6 +649,7 @@ COMMENT ON POLICY "A customer has their orders (select) for anon" ON ordering."O
 
 -- OrderLine belongs to the aggregate: it is read with its Orders, and written as the rules let a caller write its Orders.
 ALTER TABLE ordering."OrderLine" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ordering."OrderLine" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "OrderLine (select) for anon" ON ordering."OrderLine" FOR SELECT TO anon
     USING (EXISTS (SELECT 1 FROM ordering."Orders" parent WHERE parent."Id" = ordering."OrderLine"."OrderId"));
 CREATE POLICY "OrderLine (insert) for anon" ON ordering."OrderLine" FOR INSERT TO anon
@@ -644,7 +657,23 @@ CREATE POLICY "OrderLine (insert) for anon" ON ordering."OrderLine" FOR INSERT T
         AND (((r."PlacedBy" IS NULL) OR (r."PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())))
           OR ((r."PlacedBy" IS NOT DISTINCT FROM (SELECT auth.uid())) AND ddd.written_in_this_transaction(r.xmin)))));
 -- and the same for authenticated, and for UPDATE and DELETE, each from the rules that grant it
+
+-- Privileges, from the policies above: what a table gave the roles of this file before is taken back, and a
+-- role then gets the commands a permissive policy allows it, and no more.
+GRANT USAGE ON SCHEMA ordering TO anon, authenticated, ddd_system_in;
+REVOKE ALL ON TABLE ordering."Orders" FROM PUBLIC, anon, authenticated, ddd_system_in;
+GRANT SELECT, INSERT ON TABLE ordering."Orders" TO anon;
+GRANT UPDATE ("ConfirmedAt", "Paid", "Status", ...) ON TABLE ordering."Orders" TO anon;
+-- and the same for authenticated, and for OrderLine
+
+-- The outbox takes a row from whoever saves, and nobody but the bookkeeping reads, marks or deletes one.
+REVOKE ALL ON TABLE ordering."OutboxMessages" FROM PUBLIC, anon, authenticated, ddd_system_in;
+GRANT INSERT ON TABLE ordering."OutboxMessages" TO anon, authenticated, ddd_system_in;
+-- and the inbox, which the scoped system role reads and adds to
 ```
+
+The `FORCE` after each `ENABLE` and the privileges at the end are written unless the project turns them off;
+see [Privileges, forced policies and the bookkeeping role](#privileges-forced-policies-and-the-bookkeeping-role).
 
 The file says what the rules are now: it drops every policy an earlier one made, found by the comment each
 carries, and makes them all again, so a rule taken out disappears and a policy you wrote by hand is left
@@ -656,25 +685,31 @@ everything else in the directory, and `Check` in CI fails until it is there.
 Right after the drop, every file makes what its policies ask, where the database does not have it yet or
 has it otherwise: the `ddd` schema, `ddd.written_in_this_transaction`, which the policies of an
 aggregate's entities ask about the root row, and the right to use both for every role a policy names.
-When a policy is for the [scoped system role](row-level-security.md#the-scoped-system-role),
-`ddd_system_in`, the file makes that role too, refuses one of that name that could log in or get past row
-level security, or whose privileges `anon` or `authenticated` have, and grants it to the role that applies
-the file, `postgres` under `supabase db push`. What the file does not write is yours to write, in a
-migration of your own:
+The file makes the [scoped system role](row-level-security.md#the-scoped-system-role), `ddd_system_in`, too,
+refuses one of that name that could log in or get past row level security, or whose privileges `anon` or
+`authenticated` have, and grants it to the role that applies the file, `postgres` under `supabase db push`.
+It then writes that role's privileges on the module's tables from its policies, as it does for `anon` and
+`authenticated`; see [below](#privileges-forced-policies-and-the-bookkeeping-role).
 
-- the role's privileges on your tables, which it needs, as `anon` and `authenticated` do, before its
-  policies let it read or write a row, unless the files write them, as
-  [below](#privileges-forced-policies-and-the-bookkeeping-role);
-- a grant of the role to a role of your own that the application logs in as, when that is not the role
-  that applies the files, unless the build writes that role's migration, as
-  [further below](#the-role-the-application-logs-in-as).
+A grant of the role to a role of your own that the application logs in as, when that is not the role that
+applies the files, is yours, in a migration of your own, unless the project names that role with
+`SupabaseLoginRole`, whose migration the build writes with the grant, as
+[further below](#the-role-the-application-logs-in-as). The start-up check,
+`EnsureLoginRoleMaySwitchToCallersAsync`, asks for it wherever the role exists:
+
+```sql
+grant ddd_system_in to app;   -- app being the role the application logs in as
+```
+
+A project that sets `SupabaseRowAccessGrants` to `None` writes the privileges itself, in a migration of its
+own, and the file then makes `ddd_system_in` only where a policy is for it. Where one is, that migration gives
+the role what its policies need:
 
 ```sql
 grant usage on schema ordering to ddd_system_in;
 grant select, insert, update, delete on all tables in schema ordering to ddd_system_in;
 revoke select, update, delete on ordering."OutboxMessages" from ddd_system_in;   -- it only adds outbox rows
 revoke update, delete on ordering."InboxMessages" from ddd_system_in;
-grant ddd_system_in to app;   -- only for a login role of your own, and SupabaseLoginRole writes it
 ```
 
 Every policy is for one role, and the rules that grant a role the same command on a table share one
@@ -783,37 +818,78 @@ or `anon`: a role of its own stays one. Without the pair the export refuses the 
 role is spelled as the token spells it; `token:` itself is read in any case. A token of Supabase Auth
 carries `authenticated` unless something gives it another role, a custom access token hook for one, and a
 token whose role is on no list is [refused](row-level-security.md#token-roles) rather than run as a
-signed-in user. Give the role its privileges on the tables in a migration of your own, as for the other
-roles, or have the access files write them, as below.
+signed-in user. The access files write the role's privileges on the tables from its policies, as they write
+the other roles' (see below); a project that turns that off grants them in a migration of its own.
 
 #### Privileges, forced policies and the bookkeeping role
 
-Two more properties say what the access files write besides the policies. Both are off by default, and an
-access file written without them is what it was:
+An access file writes more than the policies. Unless the project that exports turns them off, it also writes
+the privileges of its tables, read from those policies, and forces the policies on the tables' owner:
 
-```xml
-<PropertyGroup>
-  <SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>
-  <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
-</PropertyGroup>
+```mermaid
+flowchart LR
+    Rules["the rules, in C#"] --> Policies["the policies"]
+    Policies --> Privileges["the privileges,<br/>read from the policies"]
+    Policies --> Forced["FORCE ROW LEVEL SECURITY<br/>after every ENABLE"]
+    Privileges -. "SupabaseRowAccessGrants<br/>None" .-> Yours["granted in migrations<br/>of your own"]
+    Forced -. "SupabaseForceRowLevelSecurity<br/>false" .-> Owner["the owner outside<br/>the policies"]
 ```
 
-`SupabaseRowAccessGrants` is `Write` or `None`, the default. With `Write`, each access file ends with the
+**The privileges.** Each access file ends with the
 [privileges of its tables](row-level-security.md#privileges-from-the-policies), read from the policies
 above them: every privilege the file's roles held on a table is taken back, and a role gets each command a
 permissive policy allows it, `UPDATE` on the columns that may change, and what the outbox, the inbox and an
-[event log](entity-framework.md#an-event-log) ask. A module without a rule gets an access file for those
-tables alone. The migrations you wrote to grant and revoke the same privileges can then go. On a table with
-policies a role the file does not name keeps what you gave it. On the outbox, the inbox and an event log,
-which have none, a file also takes back what a role an earlier file named still holds; a role that can log
-in or bypasses row level security keeps what you gave it there, `service_role` for one.
+[event log](entity-framework.md#an-event-log) ask. A policy and the privilege it needs come from one rule, so
+they cannot drift apart: granted by hand, a privilege beyond the policies only turns a refusal into an empty
+answer, and one short of them turns a rule that allows into `permission denied`. A module without a rule gets
+an access file for its outbox, its inbox and its event log alone. The migrations you wrote to grant and revoke
+the same privileges are not needed. On a table with policies a role the file does not name keeps what you
+gave it, and a grant of your own to one of the file's roles is narrowed to what the policies allow. A table
+without a rule is not the file's to give or take. On the outbox, the inbox and an event log, which have no
+policies, a file also takes back what a role an earlier file named still holds; a role that can log in or
+bypasses row level security keeps what you gave it there, `service_role` for one.
 
-`SupabaseForceRowLevelSecurity` is `true` or `false`, the default. With `true`, every `ENABLE ROW LEVEL
-SECURITY` of an access file is followed by `FORCE ROW LEVEL SECURITY`, so a table's owner is
-[held to its policies too](row-level-security.md#forcing-row-level-security). The exported migrations are
-not rewritten: the table an Entity Framework migration creates is forced by its module's access file, once
-a rule or a contribution covers it. The functions of an access file are owned by the role the CLI runs
-migrations as, `postgres`, which may bypass row level security, so they keep answering.
+**The forced policies.** Every `ENABLE ROW LEVEL SECURITY` of an access file is followed by `FORCE ROW LEVEL
+SECURITY`, so a table's owner is [held to its policies too](row-level-security.md#forcing-row-level-security).
+On Supabase that takes nothing from the application: the tables are owned by the role the CLI runs migrations
+as, `postgres`, which may bypass row level security, so a host that logs in as `postgres` works as it did, and
+so do the functions of an access file, which `postgres` owns. What it closes is the owner's way past the
+policies for every other role that has the owner's privileges: a login role granted `postgres`, or one that
+came to own a table. The exported migrations are not rewritten: the table an Entity Framework migration
+creates is forced by its module's access file, once a rule or a contribution covers it.
+
+**Turning one off** is rare, and only for these reasons:
+
+- `SupabaseRowAccessGrants` is `Write`, the default, or `None`. `None` is for a project that grants the
+  privileges by hand and has to keep doing so: on tables with rules, for a role that needs more than its
+  policies say, or because its callers write tables without rules under grants of its own. A module's outbox
+  takes rows from the signed-in user, the scoped system role and the roles its policies let write, so a guest
+  who writes a table no rule covers would have the save refused; a rule for that table is the other way out,
+  since its policies then give the guest the table and the outbox. `Examples/ModularMonolith.Supabase` is such
+  a project: a guest reprices a product in Catalog, which has no rules. The access files then write no
+  privilege, a module without a rule gets no access file for its outbox and inbox, and the scoped system role
+  is made only where a policy is for it. Turning it off does not give back what an access file applied before
+  took: grant that again in a migration of your own, numbered after that file.
+- `SupabaseForceRowLevelSecurity` is `true`, the default, or `false`. `false` is for a project whose tables'
+  owner may not bypass row level security while the application's own work runs as that owner: forced, the
+  policies would hold that work too, and none is for it. On Supabase the owner is `postgres`, so this is a
+  project whose migrations are applied by a role of its own. Turning it off does not take the force off a table
+  that has it: `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` does, in a migration of your own.
+
+<details>
+<summary>Show the code: both switches turned off, in the project that exports</summary>
+
+```xml
+<PropertyGroup>
+  <SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>
+  <SupabaseForceRowLevelSecurity>false</SupabaseForceRowLevelSecurity>
+</PropertyGroup>
+```
+
+</details>
+
+As with any change to what an access file says, turning one off, or on again, has the next build write a new
+access file for each module whose file it changes, and `Check` in CI fail until it is there.
 
 An application that [logs in as a role that holds nothing](row-level-security.md#a-login-that-owns-nothing)
 names the role its bookkeeping runs as with one more pair of `SupabaseRowAccessRoles`, the options'
@@ -827,14 +903,16 @@ names the role its bookkeeping runs as with one more pair of `SupabaseRowAccessR
 builder.Services.AddSupabaseRowLevelSecurity(options => options.SystemRole = "ddd_system");
 ```
 
-With `SupabaseRowAccessGrants=Write`, the access file makes that role, `NOLOGIN NOINHERIT` and without
+Unless `SupabaseRowAccessGrants` is `None`, the access file makes that role, `NOLOGIN NOINHERIT` and without
 `BYPASSRLS`, and gives it the outbox, the inbox, the migration history and the rows of an event log that
 may go, and nothing else. It is a role of its own: a pair that names the user's, the anonymous caller's or
 the scoped system role, or the role of a token role, fails the export. Leave the pair out where the system
-caller runs as `service_role`.
+caller runs as `service_role`: while the files write the privileges, the build refuses a pair that names one of
+Postgres's or Supabase's own roles, since every access file would make that role and hold it to the policies,
+and a role that may bypass row level security, as `service_role` does, fails the file where it is applied.
 
-The same three settings are `SupabaseMigrationOptions.WriteGrants`,
-`SupabaseMigrationOptions.ForceRowLevelSecurity` and `Roles.System` when you export
+The same three settings are `SupabaseMigrationOptions.WriteGrants` and
+`SupabaseMigrationOptions.ForceRowLevelSecurity`, both `true` unless set, and `Roles.System` when you export
 [by hand](#exporting-by-hand). An unknown value of either property fails the export with an `error :` line
 that names it.
 
@@ -915,9 +993,9 @@ written and every other file is what it was. By hand, it is `SupabaseMigrationOp
 
 **At start-up**, `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` says whether the role the
 application logged in as may switch to every role its options name, which is what the file grants. The scoped
-system role, `ddd_system_in`, is asked about where it exists: the access files make it only where a rule is for
-`RowAccessRoles.SystemIn` or the grants are written, and an application whose rules name it nowhere does no
-scoped system work, so it starts without one. It comes
+system role, `ddd_system_in`, is asked about where it exists: the access files make it, but where the project
+writes the privileges itself they make it only where a rule is for `RowAccessRoles.SystemIn`, and an
+application whose rules name it nowhere does no scoped system work, so it starts without one. It comes
 before [the migrations' check](#checking-at-start-up), which runs as the system caller and so switches to
 `SystemRole`: a login role that may not would fail there, on the switch, without saying why. Once per context
 the host registers, and in that order, is what the [start-up checks](startup-checks.md) do with one call:
@@ -1167,7 +1245,9 @@ SupabaseMigrations.EnsureInSync([ordering, shipping]);  // throws unless everyth
 `SupabaseMigrationSource.For(() => ...)` takes a delegate instead of a factory. The rules, the access
 functions and the row access contributions go in `SupabaseMigrationOptions`: `RowAccessRules`,
 `RowAccessFunctions` and `RowAccessContributions`, which the build fills in for you, and so does the role the
-application logs in as, `LoginRole`, whose file only the forms that take sources write. Given sources and no
+application logs in as, `LoginRole`, whose file only the forms that take sources write. Its `WriteGrants` and
+`ForceRowLevelSecurity` are `true` unless set, as the build's two properties are, so a test that compares the
+directory with what a build wrote sets them only where the project file turns one off. Given sources and no
 directory, `Export`, `Compare` and `EnsureInSync` find the Supabase project the way the CLI does: from
 the current directory upwards to the nearest `supabase/config.toml`.
 `SupabaseMigrations.FindDirectory(start)` does the same from a directory you choose. The three also

@@ -5036,16 +5036,16 @@ cannot log in or bypass row level security, so its policies keep it in its tenan
 `TenancyWork.BeginSystemIn` takes Tenancy's, `"tenancy"`, unless you pass another, and a module's own work in
 a tenant passes its module's name, so it reads Tenancy's rows and writes none.
 
-The roles need privileges before their policies let them near a row. Either grant them by hand: signed-in
-users and the scoped system role usage of Tenancy's schema and `select, insert, update, delete` on its tables,
-and nothing on Tenancy's schema to `anon`, whose policies there are `false` anyway. Its outbox and inbox tables
-have no policies: callers add outbox rows only, and the scoped system role reads and adds inbox rows, as for
-any module ([grants](row-level-security.md#a-postgres-of-your-own)). Or have the export write them, with
-`RowAccessExport.WriteGrants` (`SupabaseRowAccessGrants` in a build that exports): every policy of Tenancy's
-is one the export sees, so each of its tables gets exactly the commands its policies allow
-([Privileges from the policies](row-level-security.md#privileges-from-the-policies)). The rights are then
-read and never written by a caller, a row's tenant is left out of what may be updated, and the access
-history takes rows and changes for nobody.
+The roles need privileges before their policies let them near a row. The Supabase build writes them, unless the
+project sets `SupabaseRowAccessGrants` to `None`, and a script of your own does with `RowAccessExport.WriteGrants`:
+every policy of Tenancy's is one the export sees, so each of its tables gets exactly the commands its policies
+allow ([Privileges from the policies](row-level-security.md#privileges-from-the-policies)). The rights are then
+read and never written by a caller, a row's tenant is left out of what may be updated, and the access history
+takes rows and changes for nobody. Otherwise grant them by hand: signed-in users and the scoped system role usage
+of Tenancy's schema and `select, insert, update, delete` on its tables, and nothing on Tenancy's schema to
+`anon`, whose policies there are `false` anyway. Its outbox and inbox tables have no policies: callers add outbox
+rows only, and the scoped system role reads and adds inbox rows, as for any module
+([grants](row-level-security.md#a-postgres-of-your-own)).
 
 A few answers are needed before any tenant is known. Nothing of Tenancy's runs past the policies for them.
 Each such read runs as the scoped system role in no tenant, where the policies show it no row, and asks a

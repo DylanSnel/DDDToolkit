@@ -323,9 +323,12 @@ public static class PostgresRowAccessChecks
     /// </para>
     /// <para>
     /// The scoped system role is asked about where it exists. Supabase's exported access files make it only where a
-    /// policy is for it or the grants are written, so an application whose rules name it nowhere has no such role,
-    /// and could do no scoped system work with one: no policy can be for a role that does not exist. Such a role is
-    /// no finding. The scoped system role that is also another caller's role is asked about as that one.
+    /// policy is for it or the grants are written, as they are unless the project sets <c>SupabaseRowAccessGrants</c>
+    /// to <c>None</c>; so only an application that writes its privileges itself and whose rules name it nowhere has
+    /// no such role, and it could do no scoped system work with one: no policy can be for a role that does not
+    /// exist. Such a role is no finding. Where it exists, a login role of the application's own that may not switch
+    /// to it is one: the file <c>SupabaseLoginRole</c> writes grants it, or else a migration of the host's own.
+    /// The scoped system role that is also another caller's role is asked about as that one.
     /// </para>
     /// <para>
     /// Unlike the other checks, this one asks as the login role itself, on the context's connection opened past the

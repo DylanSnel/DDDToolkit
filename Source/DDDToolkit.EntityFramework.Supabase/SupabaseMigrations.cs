@@ -244,6 +244,7 @@ public static partial class SupabaseMigrations
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Compare(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
         => Run(context, null, directory, options, write: false, names: null, script: null);
 
@@ -259,6 +260,7 @@ public static partial class SupabaseMigrations
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Export(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
         => Run(context, null, directory, options, write: true, names: null, script: null);
 
@@ -294,7 +296,10 @@ public static partial class SupabaseMigrations
     /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file, written after all of them.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The options' login role is one of the roles callers run as.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The options' login role is one of the roles callers run as, or, while the files write the privileges, their
+    /// bookkeeping role is one of Postgres's or Supabase's own.
+    /// </exception>
     public static IReadOnlyList<SupabaseMigrationReport> Export(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: true);
 
@@ -310,7 +315,10 @@ public static partial class SupabaseMigrations
     /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The options' login role is one of the roles callers run as.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The options' login role is one of the roles callers run as, or, while the files write the privileges, their
+    /// bookkeeping role is one of Postgres's or Supabase's own.
+    /// </exception>
     public static IReadOnlyList<SupabaseMigrationReport> Compare(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: false);
 
@@ -357,6 +365,8 @@ public static partial class SupabaseMigrations
                 $"The login role '{login}' is the role of {key} among the roles callers run as. The role the application logs in as only switches to those, and is a role of its own; name another, such as {ExampleLoginRole}.");
         }
 
+        EnsureOwnBookkeepingRole(options);
+
         var all = sources.ToList();
         var contexts = new List<DbContext>(all.Count);
         try
@@ -398,6 +408,32 @@ public static partial class SupabaseMigrations
     }
 
     /// <summary>
+    /// Why <paramref name="options"/>' bookkeeping role, <see cref="RowAccessRoleNames.System"/>, is none the access
+    /// files can make; <see langword="null"/> when it is, when none is set, and while the files write no privileges.
+    /// While they write them, every file makes that role and holds it to the policies, refusing, where it is applied,
+    /// one that can log in or bypass row level security. Postgres's and Supabase's own roles are not the
+    /// application's to make, and the one a system caller most often runs as, <c>service_role</c>, bypasses row level
+    /// security: so such a name is refused before anything is written, rather than by every file at deployment.
+    /// Without the privileges a file makes the role only where something of it is for the role by its symbol, as
+    /// <see cref="RowAccessExport"/> does, and a host whose system caller runs as a role of another kind gets the
+    /// files it always got.
+    /// </summary>
+    internal static string? NotAnOwnBookkeepingRole(SupabaseMigrationOptions options)
+        => options.WriteGrants && options.Roles.System is { } system && IsPlatformRole(system)
+            ? $"'{system}' is one of Postgres's or Supabase's own roles. While the access files write the privileges, each makes the bookkeeping role, without a login and held to row level security, and gives it the outbox, the inbox and the migration history: a role of the platform's is none the application makes, and one that can log in or bypass row level security fails every file where it is applied."
+            : null;
+
+    /// <summary>Throws before anything is written when <see cref="NotAnOwnBookkeepingRole"/> has a reason.</summary>
+    private static void EnsureOwnBookkeepingRole(SupabaseMigrationOptions options)
+    {
+        if (NotAnOwnBookkeepingRole(options) is { } problem)
+        {
+            throw new InvalidOperationException(
+                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Leave it unset where the system caller runs as service_role, or name a role of the application's own, such as ddd_system.");
+        }
+    }
+
+    /// <summary>
     /// What the policies are written with: the options' roles, caller functions and contributions, where the
     /// functions of other modules live, and whether the files write privileges and force row level security.
     /// </summary>
@@ -423,6 +459,10 @@ public static partial class SupabaseMigrations
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        if (options is not null)
+        {
+            EnsureOwnBookkeepingRole(options);
+        }
 
         var files = Generate(context, module ?? ModuleNameOf(context.GetType()), options);
         var existing = ExistingFiles(directory);

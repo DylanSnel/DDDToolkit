@@ -42,7 +42,7 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
 
         exitCode.Should().Be(0);
         output.Should().Contain($"Created      {CreateShelves.Id}.supabaseshelf.ddd.sql");
-        Directory.GetFiles(Migrations).Should().HaveCount(2);
+        Directory.GetFiles(Migrations).Should().HaveCount(3, "the two migrations, and the access file that gives the module's outbox its privileges");
         Run("write", Shelves).ExitCode.Should().Be(0, "the mode is not case sensitive, and a second run finds everything unchanged");
     }
 

@@ -352,10 +352,11 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
     public void Without_the_property_every_file_is_what_it_was_byte_for_byte()
     {
         // Through the overload every build used before the property, and through the one that takes it, unset and
-        // white space: the same files, saying the same, and no login role file.
+        // white space, the privileges and the forced policies left to their defaults in both: the same files, saying
+        // the same, and no login role file.
         using (var before = new StringWriter())
         {
-            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: "Write", force: "true", before)
+            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: null, force: null, before)
                 .Should().Be(0, before.ToString());
         }
 
@@ -366,7 +367,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
         foreach (var unset in (string?[])[null, "", "  "])
         {
             using var output = new StringWriter();
-            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: "Write", force: "true", loginRole: unset, output)
+            SupabaseMigrationBuild.Run("Write", [Shelves], [ShelvesByName], [], [], _directory, start: null, Roles, callerFunctions: null, grants: null, force: null, loginRole: unset, output)
                 .Should().Be(0, output.ToString());
 
             Files().Select(VersionLess).Should().Equal(files.Select(VersionLess), "the same files, the access file's version being the moment it was written");

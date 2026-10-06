@@ -267,7 +267,10 @@ Authorization: Bearer <access token from supabase.auth.getSession()>
 ```
 
 `supabase/migrations/20260925150000_grant_modules_to_callers.sql` gives `anon` and `authenticated` the
-module schemas, which the Data API does not expose, so only the application reaches them. See
+module schemas, which the Data API does not expose, so only the application reaches them. The host's project
+file keeps those grants by setting `SupabaseRowAccessGrants` to `None`, since a guest reprices products in
+Catalog, which has no rules, and privileges written from the policies would refuse that; the access files
+still force Ordering's policies on the tables' owner, `postgres`, which may bypass them. See
 [Row level security for your own queries](../docs/supabase.md#row-level-security-for-your-own-queries).
 
 #### Through Supabase Queues
@@ -909,7 +912,7 @@ over a stub).
 | An entity with entities of its own: crew members, each with dated roles | `...Projects.Domain/Aggregates/Projects/Project.cs`, with `Entities/CrewMember.cs` beside it, the nested `OwnsMany` that `HasMembers` maps in `...Projects.Infrastructure/Persistence/ProjectsContext.cs`; `ProjectCrewTests`, `CrewMembershipScenarios` |
 | Row rules that ask a resource's members, for a database that checks rows | `...Projects.Infrastructure/Access/SeatsSeeTheProjectsTheyReach.cs`, which asks the functions the Membership package writes from the projects' rules, marked `[MembershipRules<CrewMember>]` in `Catalogue/SampleCatalogue.cs`; `ProjectRowRulesTests`, `SampleOnPostgresTests` |
 | A rule of one module asking another's, through a contract | `ProjectsISee` and `ProjectsWhereIHold` in `...Projects.Contracts/RowAccess/`, a line each that names the project's id and no function, answered by the functions the Membership package writes for the projects under the names `ProjectMembership.Functions` keeps, asked by `...Inspections.Infrastructure/Access/` and by Projects' own rules; `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
-| A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, the four properties in `Examples.Tenancy.Exporter.csproj`, `Host/Storage/SampleStorage.cs`, `Host/Program.cs`, which runs the start-up checks the registrations bring; `SampleOnPostgresTests`, `LoginRoleFileTests`, `PostgresCompositionTests` |
+| A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, the two properties in `Examples.Tenancy.Exporter.csproj`, which leaves the privileges and the forced policies to the export's defaults, `Host/Storage/SampleStorage.cs`, `Host/Program.cs`, which runs the start-up checks the registrations bring; `SampleOnPostgresTests`, `LoginRoleFileTests`, `PostgresCompositionTests` |
 | The export as a build step of a program of its own | `Tenancy/Examples.Tenancy.Exporter`, which references each module's infrastructure project and the catalogue; `PostgresCompositionTests` |
 | A module's migrations beside its context, and one factory that `dotnet ef`, the export and the host's start-up check build the context with | `...Tenants.Infrastructure/Persistence/Migrations/` and `TenantsContextFactory.cs`, marked `[SupabaseMigrations]`; the same in Projects and Inspections; `MigrationTests` |
 | A rule Postgres holds beyond a module's policies: a project's unit changes only with its keys, by a trigger of the module's own, and its owner and its crew's rows with theirs, by the Membership package's lock | `UnitChangesWithItsKeys` in `...Projects.Infrastructure/Access/`, listed by `Tenancy/Examples.Tenancy.Exporter/Program.cs`, and the lock the Membership package writes by itself from the rules `Catalogue/SampleCatalogue.cs` marks; `SampleOnPostgresTests` |

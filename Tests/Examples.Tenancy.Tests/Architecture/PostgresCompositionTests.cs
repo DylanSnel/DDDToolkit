@@ -172,10 +172,36 @@ public sealed partial class PostgresCompositionTests
             .And.Contain(["user=authenticated", "anonymous=anon", "system-in=ddd_system_in"]);
 
         var exporter = XDocument.Load(ExporterFile);
-        exporter.Descendants("SupabaseRowAccessGrants").Single().Value.Should().Be("Write", "the privileges are written from the policies, never by hand");
-        exporter.Descendants("SupabaseForceRowLevelSecurity").Single().Value.Should().Be("true", "the tables' owner is held to the policies too");
+        exporter.Descendants("SupabaseRowAccessGrants").Should().BeEmpty("the export writes the privileges from the policies unless a project turns it off, so the exporter says nothing of it");
+        exporter.Descendants("SupabaseForceRowLevelSecurity").Should().BeEmpty("and holds the tables' owner to the policies too unless a project turns it off");
         exporter.Descendants("SupabaseLoginRole").Single().Value.Should().Be(SampleOnPostgres.LoginRole, "the role the host logs in as is made by the export, a member of these roles and of nothing else");
     }
+
+    [Fact]
+    public void Every_modules_newest_access_file_writes_its_privileges_and_forces_its_policies()
+    {
+        // What the export does unless a project turns it off, in the files the database is made from: a policy and
+        // the privilege it needs come from one rule, and the tables' owner is held to the policies as every role is.
+        var exported = Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "supabase", "migrations");
+        var newest = Directory.GetFiles(exported, "*_access.*.ddd.sql")
+            .GroupBy(file => Path.GetFileName(file).Split('.')[^3])
+            .ToDictionary(module => module.Key, module => File.ReadAllText(module.Max(StringComparer.Ordinal)!));
+
+        newest.Keys.Should().BeEquivalentTo(["tenants", "projects", "inspections"]);
+        foreach (var (module, sql) in newest)
+        {
+            sql.Should().Contain("-- Privileges, from the policies above", "{0}'s access file writes the privileges of its tables", module);
+            TablesWhere(sql, "ENABLE").Should().NotBeEmpty()
+                .And.Equal(TablesWhere(sql, "FORCE"), "every table {0}'s access file turns row level security on for has it forced", module);
+        }
+    }
+
+    /// <summary>
+    /// The tables <paramref name="sql"/> alters with <c>ENABLE</c> or <c>FORCE ROW LEVEL SECURITY</c>, as
+    /// <paramref name="what"/> says, in its order.
+    /// </summary>
+    private static List<string> TablesWhere(string sql, string what)
+        => [.. RowLevelSecurityOf().Matches(sql).Where(match => match.Groups["what"].Value == what).Select(match => match.Groups["table"].Value)];
 
     [Fact]
     public void No_module_opens_connections_of_its_own()
@@ -269,6 +295,10 @@ public sealed partial class PostgresCompositionTests
     private static List<string> ReferencesOf(string projectFile)
         => [.. XDocument.Load(projectFile).Descendants("ProjectReference")
             .Select(reference => Path.GetFileNameWithoutExtension(reference.Attribute("Include")!.Value.Replace('\\', '/')))];
+
+    /// <summary>A statement of an exported access file that turns row level security on for a table, or forces it.</summary>
+    [GeneratedRegex(@"^ALTER TABLE (?<table>\S+) (?<what>ENABLE|FORCE) ROW LEVEL SECURITY;\r?$", RegexOptions.Multiline)]
+    private static partial Regex RowLevelSecurityOf();
 
     /// <summary>Where an exported access file says which project a row access contribution is in, and at which version.</summary>
     [GeneratedRegex(@"row access contribution [\w.]+ in (?<project>[\w.]+) (?<version>\d+\.\d+\.\d+)")]

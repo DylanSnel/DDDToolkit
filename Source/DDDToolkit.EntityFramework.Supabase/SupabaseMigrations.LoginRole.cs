@@ -100,10 +100,19 @@ public static partial class SupabaseMigrations
             return $"'{role}' is a word SQL keeps for itself, which names no role where the migration writes it. Use another name, such as {ExampleLoginRole}.";
         }
 
-        return PlatformRoles.Contains(role) || PlatformPrefixes.Any(prefix => role.StartsWith(prefix, StringComparison.Ordinal))
+        return IsPlatformRole(role)
             ? $"'{role}' is one of Postgres's or Supabase's own roles. The application logs in as a role of its own, which owns nothing and only switches to the roles its callers run as; use a name such as {ExampleLoginRole}."
             : null;
     }
+
+    /// <summary>
+    /// Whether <paramref name="role"/> is one of Postgres's or Supabase's own roles, as the database spells it: one of
+    /// <see cref="PlatformRoles"/>, or a name that starts with one of <see cref="PlatformPrefixes"/>. Such a role is
+    /// the platform's, which the application neither makes nor holds to its policies, so it is never a role the
+    /// export makes for the application: neither the one it logs in as nor its bookkeeping role.
+    /// </summary>
+    internal static bool IsPlatformRole(string role)
+        => PlatformRoles.Contains(role) || PlatformPrefixes.Any(prefix => role.StartsWith(prefix, StringComparison.Ordinal));
 
     /// <summary>
     /// What <paramref name="roles"/> maps to <paramref name="role"/>, as a key of <c>SupabaseRowAccessRoles</c>:

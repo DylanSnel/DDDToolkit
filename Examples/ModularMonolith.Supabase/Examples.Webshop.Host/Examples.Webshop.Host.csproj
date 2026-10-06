@@ -21,6 +21,15 @@
   <PropertyGroup>
     <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
     <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
+
+    <!--
+      The privileges stay the ones supabase/migrations/20260925150000_grant_modules_to_callers.sql grants by hand,
+      to anon and authenticated on every module's tables: a guest of this shop lists and reprices products as well
+      as ordering, and only Ordering has rules. Written from the policies, Catalog's outbox would take rows only
+      from a signed-in user and the scoped system role, so a guest's new price would be refused. The forced
+      policies are left on: the host logs in as postgres, which owns the tables and may bypass row level security.
+    -->
+    <SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>
   </PropertyGroup>
 
   <ItemGroup>

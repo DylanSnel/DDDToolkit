@@ -36,15 +36,20 @@
 
       <SupabaseRowAccessRoles>system=ddd_system</SupabaseRowAccessRoles>
 
-    Two switches say what the access files write besides the policies. Both are off unless set, and then
-    every access file is what it was:
+    It names a role of the application's own, which the access files make. Leave it out where the system
+    caller runs as service_role: the export refuses one of Postgres's or Supabase's own roles there.
 
-      <SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>
-      <SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>
+    Two switches say what the access files write besides the policies, and both are on unless a project turns
+    them off: every access file writes each table's privileges from its policies, and those of the outbox, the
+    inbox and an event log, and writes FORCE ROW LEVEL SECURITY after every ENABLE, so a table's owner is held
+    to its policies too. Turning one off is rare:
 
-    The first writes each table's privileges from its policies, and those of the outbox, the inbox and an
-    event log; None, the default, leaves them to hand-written migrations. The second writes FORCE ROW LEVEL
-    SECURITY after every ENABLE, so a table's owner is held to its policies too.
+      <SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>
+      <SupabaseForceRowLevelSecurity>false</SupabaseForceRowLevelSecurity>
+
+    None leaves the privileges to migrations written by hand, for a project that grants them itself and has to
+    keep doing so. false leaves the tables' owner outside the policies, for a project whose own work runs as an
+    owner that cannot bypass row level security; on Supabase the owner is postgres, which can.
 
     One more names the role the application logs in as, where that is a role of its own that owns nothing:
 

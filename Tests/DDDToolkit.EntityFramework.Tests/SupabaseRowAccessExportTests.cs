@@ -114,7 +114,8 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
         report.Entries.Where(entry => !entry.MigrationId.EndsWith("_access", StringComparison.Ordinal))
             .Should().OnlyContain(entry => entry.Status == SupabaseMigrationStatus.Unchanged, "a file Supabase may already have applied is never rewritten");
         migrations.Should().OnlyContain(file => File.ReadAllText(file.Key) == file.Value);
-        AccessFiles().Should().ContainSingle();
+        AccessFiles().Should().HaveCount(2, "the first export gave the module's outbox its privileges, and the rules are a file after it");
+        File.ReadAllText(Path.Combine(_directory, AccessFiles()[1])).Should().Contain("CREATE POLICY \"Shelves by name (select) for anon\"");
     }
 
     [Fact]

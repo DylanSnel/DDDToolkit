@@ -78,6 +78,8 @@ public sealed class RowAccessExport
     /// the privileges cannot drift apart: a privilege beyond the policies only turns a refusal into an empty
     /// answer, and a privilege short of them turns a rule that allows into an error. <see langword="false"/>
     /// by default: a 3.x script wrote none, and a host that grants its tables' privileges itself keeps doing so.
+    /// The Supabase export writes them unless the host turns it off (<c>SupabaseMigrationOptions.WriteGrants</c>,
+    /// <c>SupabaseRowAccessGrants</c> in its build).
     /// </summary>
     /// <remarks>
     /// <para>
@@ -113,7 +115,12 @@ public sealed class RowAccessExport
     /// Whether every table a script turns row level security on for gets it forced as well, <c>FORCE ROW LEVEL
     /// SECURITY</c> after each <c>ENABLE</c>: the tables of the rules, of the aggregates' entities and of the
     /// contributions. A table's owner is then held to its policies too, unless the owner may bypass row level
-    /// security. <see langword="false"/> by default, and then a script is byte for byte what it was.
+    /// security. <see langword="false"/> by default, and then a script is byte for byte what it was: on a
+    /// Postgres of your own the application often logs in as the tables' owner, which may not bypass row level
+    /// security, and does its own work as that owner, for which no policy is written. The Supabase export forces it
+    /// unless the host turns it off (<c>SupabaseMigrationOptions.ForceRowLevelSecurity</c>,
+    /// <c>SupabaseForceRowLevelSecurity</c> in its build): there the owner is the role the CLI runs the
+    /// migrations as, which may.
     /// </summary>
     /// <remarks>
     /// <para>

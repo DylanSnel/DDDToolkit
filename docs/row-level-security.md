@@ -2094,9 +2094,11 @@ Left alone are the tables' owner and a role that can log in, bypasses row level 
 superuser: a script refuses a bookkeeping role, a scoped system role or the role of a token role that is
 one, so what such a role holds there you gave it, the role your own background work runs as for one.
 
-`WriteGrants` is off by default, and a script without it is byte for byte what it was. `anon` and
-`authenticated` have to exist where the script runs, as they do on Supabase and after `SetupScript()`;
-the script makes the other roles it names.
+`WriteGrants` is off by default, and a script without it is byte for byte what it was. The Supabase build
+writes the privileges unless the project sets `SupabaseRowAccessGrants` to `None`; see
+[Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role). `anon` and `authenticated` have
+to exist where the script runs, as they do on Supabase and after `SetupScript()`; the script makes the other
+roles it names.
 
 ### A login that owns nothing
 
@@ -2200,8 +2202,9 @@ interceptor switches to: the user's, the anonymous caller's, the scoped system r
 role of every mapped token role. A role is switched to when a caller of its kind connects, not when the
 application starts, so a grant left out passes the start and fails the first request of that caller: a token
 role nobody holds while testing, or the background work. The scoped system role is asked about where it exists:
-Supabase's access files make it only where a rule is for it or the grants are written, and no policy can be for
-a role that does not exist, so an application without one does no scoped system work and starts. Where the settings travel per transaction, it also
+Supabase's access files make it only where a rule is for it or the grants are written, as they are unless the
+project turns that off, and no policy can be for a role that does not exist, so an application without one does
+no scoped system work and starts. Where the settings travel per transaction, it also
 asks whether the login role may call `ddd.use_caller`. It asks as the login role itself, on the context's
 connection opened past the interceptor, since the system caller's role is one of those it asks about; so it
 comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them, and
@@ -2265,7 +2268,11 @@ function, its owner and the fix. While no table in those schemas is forced it pa
 functions, so it can stand next to the three checks above in a host that forces nothing yet. On Supabase the
 migrations run as `postgres`, which may.
 
-It is off by default, and a script without it is byte for byte what it was. Turning it off again does not
+It is off by default, and a script without it is byte for byte what it was: on a Postgres of your own the
+application often logs in as the tables' owner, which may not bypass row level security, and its own work runs
+as that owner, for which no policy is written. The Supabase build forces the policies unless the project sets
+`SupabaseForceRowLevelSecurity` to `false`, since there the owner is `postgres`, which may bypass them; see
+[Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role). Turning it off again does not
 take the force off a table that has it: `ALTER TABLE … NO FORCE ROW LEVEL SECURITY` does, in a migration
 of your own. A [contribution](#policies-a-package-ships) that turns row level security on in a statement
 of its own reads the flag from the export it is handed.

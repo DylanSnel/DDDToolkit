@@ -757,9 +757,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `SELECT` and `INSERT` to the scoped system role, and a rule that lets a role change rows it may not read is
   refused when the script is written. Those three tables have no policies, so on them a script also takes
   back what a role an earlier script named still holds: every holder that cannot log in and is held to row
-  level security. The Supabase build takes it as
-  `<SupabaseRowAccessGrants>Write</SupabaseRowAccessGrants>`, and a module without a rule then gets an
-  access file for its outbox. Off by default, and then every script and access file is what it was. See
+  level security. Off by default for a script, which is then what it was. The Supabase build writes the
+  privileges unless the project sets `<SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>` (see Changed),
+  and a module without a rule then gets an access file for its outbox. See
   [Privileges from the policies](docs/row-level-security.md#privileges-from-the-policies).
 - **A login that owns nothing.** `RowAccessRoles.System`, `@system`, is the role the application's own
   bookkeeping runs as, `RowAccessRoleNames.System`, which `RowAccessRoleNames.Of(options)` takes from
@@ -783,17 +783,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   application logged in as may switch to every role the context's interceptor switches to: the user's, the
   anonymous caller's, the scoped system role, `SystemRole` and the role of every mapped token role, and, where the
   settings last one transaction, that it may call `ddd.use_caller`. The scoped system role is asked about where it
-  exists: Supabase's access files make it only where a rule is for it or the grants are written, so an
-  application whose rules name it nowhere starts without one. A role is switched to when a caller of its kind
+  exists: Supabase's access files make it only where a rule is for it or the grants are written, as they are
+  unless the project turns that off, so an application whose rules name it nowhere and that writes its privileges
+  itself starts without one. A role is switched to when a caller of its kind
   connects, so without the check a grant left out passes the start and fails that caller's first request. It
   asks as the login role itself, on the context's connection opened past the interceptor, because the system
   caller's role is one of those it asks about, and names each role that is missing or not granted with the
   statement that fixes it and, for a host whose Supabase build writes the login role's migration, the pair of
   `SupabaseRowAccessRoles` that maps the role, since there a role left out is a pair left out.
-- **Forced row level security.** `RowAccessExport.ForceRowLevelSecurity`, and
-  `<SupabaseForceRowLevelSecurity>true</SupabaseForceRowLevelSecurity>` in the Supabase build, write
-  `FORCE ROW LEVEL SECURITY` after every `ENABLE` of a script, so a table's owner is held to its policies
-  too. `PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync` checks that the functions that run as their
+- **Forced row level security.** `RowAccessExport.ForceRowLevelSecurity` writes `FORCE ROW LEVEL SECURITY`
+  after every `ENABLE` of a script, so a table's owner is held to its policies too. Off by default for a script;
+  the Supabase build forces the policies unless the project sets
+  `<SupabaseForceRowLevelSecurity>false</SupabaseForceRowLevelSecurity>` (see Changed).
+  `PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync` checks that the functions that run as their
   owner are owned by a role that may bypass it, without which they would answer that nobody may do
   anything; it passes while no table is forced. See
   [Forcing row level security](docs/row-level-security.md#forcing-row-level-security).
@@ -2425,6 +2427,39 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   drop or change a column a column rule holds. The next build of an application that exports its migrations
   writes a new access file for every module that has one; a migration exported before is compared without its
   drop, as it always was.
+- **The Supabase export writes the privileges and forces the policies unless a project turns them off.**
+  `SupabaseMigrationOptions.WriteGrants` and `SupabaseMigrationOptions.ForceRowLevelSecurity` are `true` by
+  default, and the build reads an unset `SupabaseRowAccessGrants` as `Write` and an unset
+  `SupabaseForceRowLevelSecurity` as `true`, so a project that logs in as a role that owns nothing, as the docs
+  and the Tenancy sample do, sets neither. Every access file then ends with the privileges of its tables, read
+  from its policies, forces every table it turns row level security on for, and makes the scoped system role,
+  `ddd_system_in`; a module with an outbox, an inbox or an event log and no rule gets an access file for them.
+  Forcing takes nothing from a host that logs in as `postgres`, which owns the tables Supabase's CLI makes and may
+  bypass row level security. `RowAccessExport`, for a Postgres of your own, keeps both off. The error for an
+  unknown value of either property names the default. See
+  [Privileges, forced policies and the bookkeeping role](docs/supabase.md#privileges-forced-policies-and-the-bookkeeping-role).
+  - **Breaking, for a host that exports Supabase migrations and relied on the old defaults.** 3.1.0 wrote
+    neither, and the 3.2.0 previews only when asked. The host's next build writes a new access file for every
+    module with rules, and one for every module with an outbox, an inbox or an event log. A host that grants
+    the privileges of its tables by hand and has to keep doing so sets
+    `<SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>` (`WriteGrants = false` when it exports by hand),
+    and so does one whose callers write tables without rules under such grants: with the privileges written, a
+    module's outbox takes rows only from the signed-in user, the scoped system role and the roles its policies
+    let write. A host whose tables' owner may not bypass row level security while its own work runs as that
+    owner sets `<SupabaseForceRowLevelSecurity>false</SupabaseForceRowLevelSecurity>`
+    (`ForceRowLevelSecurity = false`). A project that set `Write` and `true` may drop both lines; its files stay
+    as they are. A host that logs in as a role of its own made by hand grants that role `ddd_system_in` in a
+    migration of its own (`grant ddd_system_in to <login role>;`), or names it with `SupabaseLoginRole`, whose
+    migration does: every access file now makes the scoped system role, and
+    `EnsureLoginRoleMaySwitchToCallersAsync` asks about it wherever it exists.
+  - While the access files write the privileges, a `system=` pair of `SupabaseRowAccessRoles` that names one of
+    Postgres's or Supabase's own roles, `service_role` for one, fails the build with an `error :` line and exit
+    code 2, and `Roles.System` set so fails an export by hand before anything is written. Every file makes the
+    bookkeeping role and holds it to the policies, so such a role would fail every file where it was applied.
+    Leave the pair out where the system caller runs as `service_role`.
+  - `Examples/ModularMonolith.Supabase` keeps its grants written by hand with `SupabaseRowAccessGrants` set to
+    `None`, since a guest reprices products in Catalog, which has no rules, and its new Ordering access file
+    forces the policies. `Examples.Tenancy.Exporter` drops both properties, and its files are what they were.
 - **Supabase Auth: two kinds of token, each checked with its own kind of key.** Auth signs a user's token
   with a signing key whose public half it publishes (ES256 or RS256), or with the project's JWT secret
   (HS256). A host given the secret, with `UseSupabaseJwtSecret` or `SupabaseAuthOptions.JwtSecret`, used to
