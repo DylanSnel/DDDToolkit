@@ -13,8 +13,8 @@ public sealed class HoldsCheckedAtSaveTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    /// <summary>The one line that switches the hold on, as a host writes it after <c>UseDDDToolkit</c>.</summary>
-    private static readonly Action<DbContextOptionsBuilder, IServiceProvider> Holds = (options, provider) => options.UseMemberHolds(provider);
+    /// <summary>The context wired as a host wires it: the one call, then the one line that switches the hold on.</summary>
+    private static readonly Action<DbContextOptionsBuilder, IServiceProvider> Holds = (options, provider) => options.UseDDDToolkit(provider).UseMemberHolds(provider);
 
     private static Task<SqliteFiling> FilingAsync(bool holds, bool ownContexts) => SqliteFiling.SeededAsync(ownContexts: ownContexts, wiring: holds ? Holds : null);
 
