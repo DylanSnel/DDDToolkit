@@ -572,7 +572,7 @@ Tenancy/
     Directory.Build.props                          declares each project's module, named after its folder, with DDD_Module: no Module.cs per project
     Tenants/
       Examples.Tenancy.Tenants.Contracts           the ids, and the operators' token role
-      Examples.Tenancy.Tenants.Domain              the application's classes on the package, a folder per aggregate, and TenantsTenancy, which the generator writes here and the use cases are named through
+      Examples.Tenancy.Tenants.Domain              the application's classes on the package, a folder per aggregate it adds to; Module.cs with Tenancy's switch, which writes the organization and the role; and TenantsTenancy, which the generator writes here and the use cases are named through
       Examples.Tenancy.Tenants.Application         a command or query per use case, in a folder per feature; the request interface its access behavior is generated from; the port ITenancyReads
       Examples.Tenancy.Tenants.Infrastructure      the context, its migrations and the [SupabaseMigrations] factory the export builds it with, EfTenancyReads, AddTenantsInfrastructure
       Examples.Tenancy.Tenants.Api                 the module's entry, TenantsModule, and per feature the routes (Rest) and the GraphQL fields and types (GraphQL)
@@ -901,6 +901,7 @@ over a stub).
 | What | Where |
 |---|---|
 | A supporting domain extended by the application | `Tenancy/Modules/Tenants/...Tenants.Domain/Aggregates/`: the unit's own rule, the seat's job title |
+| The classes the application adds nothing to, written by the generator: Tenancy's switch writes the organization and the role, and the classes the module declares win | `...Tenants.Domain/Module.cs`, `[assembly: GenerateTenancyClasses]`; `SourceTreeTests`, `MigrationTests` |
 | A second supporting domain beside Tenancy: a resource's members and the roles a customer keeps for them | `Entities/CrewMember.cs` on `[Member]` and `...Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs` on `[KeptRole]`, the rules in `...Projects.Application/Access/ProjectMembership.cs` with the starter roles in `Catalogue/SampleCatalogue.cs`, `AddProjectMembershipWithTenancy` and `AddProjectMemberAccess` in `...Projects.Infrastructure/ProjectsInfrastructure.cs`; `CrewMembershipScenarios`, `ProjectRoleScenarios` |
 | An entity with entities of its own: crew members, each with dated roles | `...Projects.Domain/Aggregates/Projects/Project.cs`, with `Entities/CrewMember.cs` beside it, the nested `OwnsMany` that `HasMembers` maps in `...Projects.Infrastructure/Persistence/ProjectsContext.cs`; `ProjectCrewTests`, `CrewMembershipScenarios` |
 | Row rules that ask a resource's members, for a database that checks rows | `...Projects.Infrastructure/Access/SeatsSeeTheProjectsTheyReach.cs`, which asks the functions the Membership package writes from the projects' rules (`Catalogue/ProjectMembershipFunctions.cs`); `ProjectRowRulesTests`, `SampleOnPostgresTests` |

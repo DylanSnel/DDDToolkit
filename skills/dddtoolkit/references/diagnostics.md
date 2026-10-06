@@ -514,6 +514,20 @@ names. A type of that name in a namespace of the project: rename it, or name the
 `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` in that project. Never
 answer it by writing the nine-type alias in the projects above.
 
+## DDD00066
+
+Error, on a package's switch such as `[assembly: GenerateTenancyClasses]`: a class or an id it would write is
+not written, because something of the project is in the way. A class of the project of the class's name in the
+root namespace that is meant to be the package's class: put the template on it, `[RoleAggregate<RoleId>]`, and it
+is the package's. Any other type of that name, the project's or a referenced project's, or a namespace of it (a
+folder `Organization/` directly under the project): declare the package's class yourself under another name
+(`[RoleAggregate<RoleId>] public sealed partial class ShopRole;`) or rename what is in the way. A type of the id's
+name that is no entity id: mark it `[EntityId<Guid>]` or rename it. An id of that name the generator writes for an
+`[AggregateRoot<Guid>]` class of the project: rename that class, or declare the package's class under another name
+with an id of its own. Several ids of one name in the project or the projects of its module: keep one. The classes
+that take from the one in the way are left out with it, with no id, and nothing else reports them; DDD00049 does
+not follow it. Never answer it by deleting the switch and writing every empty class by hand.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

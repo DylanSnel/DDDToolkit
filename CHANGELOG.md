@@ -14,6 +14,29 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **A package's switch writes the classes an application adds nothing to, and their ids.** A package marks an
+  assembly attribute of its own `[TemplateDefaults(typeof(SubscriptionAttribute<>), ...)]`, and an application that
+  writes it, `[assembly: GenerateBillingClasses]`, gets a class of each template it declares none of, called after
+  the template's noun and declared with the template, and an `[EntityId<Guid>]` for each id no type of its name
+  stands for, published with `[ModuleContract]`; both public, in the project's `RootNamespace`, each documented as
+  written by the switch, with how to declare it yourself. Nothing is written without the switch, and a class or an
+  id the project declares, or a project of its module that it references, wins: the switch writes the rest around
+  it, takes an id it finds by name, and binds a class of the project's own declared over an id only the switch
+  writes. `IdsOnly = true` makes a switch for the ids alone, for a module's contracts project. A generator never
+  sees another's output, so the shared providers hand the written classes and ids on beside the declared ones:
+  they get their base class, converters, registrations and the class the use cases are named through from the
+  toolkit's generators that write those, in a project of one and in a module split by layer. A template of
+  another package that names a written id as a later type argument is closed over it too: a Membership member
+  class over the `SeatId` Tenancy's switch writes gets its registrations and its member list. Generators that are
+  not the toolkit's, HotChocolate's say, see what a switch wrote from the project above only, and code outside the
+  root namespace imports it with a `global using`. DDD00066 reports, once, on the switch, a class or an id it
+  cannot write: a type or a namespace of the class's name (a class of the project's own becomes the package's
+  with the template), a type of the id's name that is no id, an id of one name found twice, or one the generator
+  writes for an `[AggregateRoot<Guid>]` of that name. A class that takes from one kept out is kept out with it, no
+  id is written for either, and the registrations and the class the use cases are named through stand back rather
+  than report it missing.
+  See [What the application should not have to write](docs/writing-a-supporting-domain.md#what-the-application-should-not-have-to-write).
+
 - **Supporting domains.** A package can ship an abstract generic parent for aggregate roots
   (`[AggregateRootBase]`) or child entities (`[EntityBase]`), and an attribute of its own, marked
   `[AggregateRootTemplate]` or `[EntityTemplate]`, that an application declares its class with:
@@ -863,6 +886,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
+- **One line instead of the classes that add nothing.** `[assembly: GenerateTenancyClasses]` has the generator
+  write each of Tenancy's classes a project leaves out, `Tenant`, `Organization`, `OrganizationUnit`, `Role` and
+  `Seat`, as the package ships it, and `TenantId`, `OrganizationUnitId`, `RoleId` and `SeatId` where no project of
+  the module declares them; an organization shares its tenant's id. A class declared for its fields wins, and the
+  switch writes the rest: `[SeatAggregate<SeatId>] public sealed partial class Seat` with a job title is declared
+  over the `SeatId` the switch writes. `[assembly: GenerateTenancyIds]` writes the ids alone, for a module's
+  contracts project that references the package; one that does not declares the ids, and the domain project's
+  switch takes them. The invitation is never written: declaring it is what turns invitations on. See
+  [The shortest start: the switch](docs/tenancy.md#the-shortest-start-the-switch).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
   and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
   brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
@@ -1522,6 +1554,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrators read on the History page. The Tenants module has a migration for the roles' new column,
   `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
   hosted services that ask the database something.
+- **The Tenancy sample writes no class that adds nothing.** Its Tenants domain project says
+  `[assembly: GenerateTenancyClasses]` in `Module.cs`, and its `Organization` and `Role`, which added nothing to the
+  package's, are gone: the switch writes them, in the project's root namespace. The tenant, the unit, the seat and
+  the invitation stay declared, each for what it adds, and the ids stay the contracts project's, with their
+  prefixes, which the switch takes. The migrations name the two classes by their new namespace. A test application
+  of one project, `DDDToolkit.Supporting.Tenancy.Switch.Tests`, writes the switch and no class or id of Tenancy's,
+  and provisions a tenant through the use case on SQLite.
 - **Every sample context is wired with one call.** The Tenancy sample's three modules write
   `UseDDDToolkit(application)` where they wrote `UseDDDToolkit`, `UseSupabaseRowLevelSecurity` and `UseTenancy`,
   and the webshop's Supabase host registers row level security and nothing per context:

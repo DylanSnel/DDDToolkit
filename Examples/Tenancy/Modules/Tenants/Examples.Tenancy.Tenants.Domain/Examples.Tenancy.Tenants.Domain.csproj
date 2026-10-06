@@ -7,11 +7,12 @@
   </PropertyGroup>
 
   <!--
-    The application's tenancy classes: the five classes the Tenancy package's templates are closed over, with the
-    fields and rules the application adds. The package brings the rules; this project brings nothing that stores
-    them. It references neither Entity Framework nor ASP.NET Core: the context and its migrations are the
-    infrastructure project's, which gets modelBuilder.AddTenancy() closed over these classes because it declares
-    the same module.
+    The application's tenancy classes: the six classes the Tenancy package's templates are closed over. The four that
+    add fields and rules of the application's are declared under Aggregates; the organization and the role add
+    nothing, and Tenancy's switch in Module.cs has the generator write them. The package brings the rules; this
+    project brings nothing that stores them. It references neither Entity Framework nor ASP.NET Core: the context and
+    its migrations are the infrastructure project's, which gets modelBuilder.AddTenancy() closed over these classes,
+    written or declared, because it declares the same module.
   -->
   <ItemGroup>
     <ProjectReference Include="..\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />

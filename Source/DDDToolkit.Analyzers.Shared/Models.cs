@@ -332,6 +332,23 @@ internal sealed record EntityDefinition(
     /// own implements the key-part list again, and has to put the parent's in front of its own.
     /// </summary>
     public bool ParentHasKeyParts { get; init; }
+
+    /// <summary>
+    /// The name a template class's id is written with, <c>SeatId</c>, when no type of that name exists yet and that
+    /// alone keeps the class from being generated: an id the project's <c>[TemplateDefaults]</c> switch writes, which
+    /// the compilation a generator sees does not show. Null for every other class. The switch's plan binds it, or
+    /// leaves the class to the compiler's own error about the name.
+    /// </summary>
+    public string? UnboundIdName { get; init; }
+
+    /// <summary>
+    /// The positions of the template's later type arguments that name an id the project's <c>[TemplateDefaults]</c>
+    /// switch writes, <c>SeatId</c> in <c>[Member&lt;CrewMemberId, SeatId, RoleId, Project&gt;]</c>: the compiler a
+    /// generator sees could not bind them, so the switch's plan has put the id in full in
+    /// <see cref="TemplateDeclaration.Arguments"/>, and a registration closed over the class takes it from there.
+    /// Empty for every other class.
+    /// </summary>
+    public EquatableArray<int> WrittenArguments { get; init; }
 }
 
 /// <summary>

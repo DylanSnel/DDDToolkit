@@ -87,7 +87,13 @@ internal static class TemplateFacades
     /// <param name="compilation">The project.</param>
     /// <param name="moduleName">What <c>{Module}</c> is filled with: the module as every generated name of the project has it.</param>
     /// <param name="cancellationToken">Stops the work.</param>
-    public static ImmutableArray<FacadeOutcome> Resolve(ImmutableArray<EntityDefinition> declared, Compilation compilation, string moduleName, CancellationToken cancellationToken)
+    /// <param name="standingBack">The templates whose class a package's switch was asked to write and could not: DDD00066 says why, and nothing is said again here.</param>
+    public static ImmutableArray<FacadeOutcome> Resolve(
+        ImmutableArray<EntityDefinition> declared,
+        Compilation compilation,
+        string moduleName,
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<string>? standingBack = null)
     {
         // The common case, and the cheap one: only a project that declares a template class gets a class, so the
         // projects above it, which only see the classes, never read a reference's attributes for it.
@@ -108,11 +114,13 @@ internal static class TemplateFacades
 
         // The templates a class of this project takes a type from for its own parent: one missing or declared
         // twice is that class's error, DDD00044 or DDD00045, with its fix, and is not said again here.
-        // So is one a registration this project can call takes from: DDD00049 or DDD00045 is said here then.
+        // So is one a registration this project can call takes from: DDD00049 or DDD00045 is said here then. And so is
+        // one a package's switch was asked for and could not write: DDD00066 says why.
         var saidElsewhere = new HashSet<string>(
             declared.Where(static definition => definition.CanGenerate && definition.Template is not null)
                 .SelectMany(static definition => definition.Template!.Bindings)
-                .Select(static binding => binding.SourceKey),
+                .Select(static binding => binding.SourceKey)
+                .Concat(standingBack ?? []),
             StringComparer.Ordinal);
         bool SaidElsewhere(TemplateRegistrations.Take take)
             => saidElsewhere.Contains(take.Key) || TemplateRegistrations.Registers(compilation, take.MetadataName, cancellationToken);
@@ -255,8 +263,20 @@ internal static class TemplateFacades
                     return null;
                 }
 
-                var id = symbol is null ? null : EntityDeclarations.IdArgumentOf(symbol);
+                var id = TemplateRegistrations.IdSymbolOf(source, symbol, compilation);
                 (texts[position], symbols[position], shown[position]) = (source.IdType, id, id?.Name ?? TemplateRegistrations.LastNameOf(source.IdType) ?? source.IdType);
+            }
+            else if (!take.IdOfArgument
+                     && (symbol is null || EntityDeclarations.TemplateArgumentOf(symbol, take.Key, take.Argument) is null)
+                     && TemplateRegistrations.WrittenArgumentOf(source, take.Argument) is { } written)
+            {
+                // An id a package's switch writes in this project, which no generator sees as a type: a struct.
+                if (parameters[position].HasReferenceTypeConstraint)
+                {
+                    return null;
+                }
+
+                (texts[position], symbols[position], shown[position]) = (written, null, TemplateRegistrations.LastNameOf(written) ?? written);
             }
             else if (symbol is null
                      || EntityDeclarations.TemplateArgumentOf(symbol, take.Key, take.Argument) is not { } argument

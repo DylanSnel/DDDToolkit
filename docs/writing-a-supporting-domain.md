@@ -835,6 +835,33 @@ plain users, and where an application has an organization, a member is a seat.
 Each line an application writes over a package's types is a line it can get wrong, and a line a reader of
 the package's docs has to have explained. These can be the package's to write:
 
+- **The classes that add nothing, and their ids.** An application declares each class of a template even when it
+  adds nothing to it, and the id beside it. A package can ship a switch that writes them instead: an assembly
+  attribute of its own, marked `[TemplateDefaults]` with the templates whose classes it writes.
+
+  ```csharp
+  [TemplateDefaults(typeof(SubscriptionAttribute<>), typeof(InvoiceLineAttribute<>))]
+  [AttributeUsage(AttributeTargets.Assembly, Inherited = false)]
+  public sealed class GenerateBillingClassesAttribute : Attribute;
+  ```
+
+  An application that writes `[assembly: GenerateBillingClasses]` gets a `Subscription` declared
+  `[Subscription<SubscriptionId>]` and a `SubscriptionId` declared `[EntityId<Guid>]`, public, in its root
+  namespace. A class is called after its template's noun, and its id after the class, or after the parent's id
+  type parameter where that names another class, the way an organization's `TTenantId` is its tenant's. Nothing is
+  written without the switch, so nothing appears out of sight, and what the application declares wins: a class
+  of a template it declares, here or in a project of its module, is not written, and an id of the name is taken
+  rather than written. The toolkit's generator writes the declarations and hands them to the toolkit's other
+  generators through the providers the declared ones come from, so a written class and id get the base class, the
+  converters, the registrations and the class the use cases are named through, as declared ones do, and a
+  template of another package that names a written id as a later type argument is closed over it. Generators that
+  are not the toolkit's see them from the project above only, as they see the class the use cases are named
+  through. A second
+  attribute with `IdsOnly = true` writes the ids alone, for a module's contracts project. Leave out a class whose
+  declaration switches something on, as Tenancy leaves out the invitation
+  ([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)); what a switch cannot write is
+  said on it, [DDD00066](diagnostics.md#ddd00066).
+
 - **A registration for each thing, beside the main one.** A registration can take only the later type
   arguments of a template and leave the rest to the call. Membership's access check is added this way, closed
   over the resource the member template names and that resource's id, and named after the resource as the
@@ -935,6 +962,10 @@ handed every generator, gets nothing from Membership's, and gets the modules' ke
   `Name` has its braces around type parameters that carry `[TemplateType]` and is a name with them filled,
   and the declaring type is named by `[assembly: TemplateRegistrations]`. The generator passes over a method
   that is not, so the package's own tests of the call without type arguments are what show it.
+- A template a `[TemplateDefaults]` switch names is a template attribute with one type argument, the id: the
+  generator cannot tell what a later one should be, and passes over a template that is not, so the package's own
+  tests of the switch are what show it. A class or an id the switch would write where something of the
+  application is in the way is not written ([DDD00066](diagnostics.md#ddd00066)).
 - A class is declared one way only: a template, `[AggregateRoot<T>]`, `[Entity<T>]`, `[AggregateRootBase]`
   or `[EntityBase]`, never two ([DDD00047](diagnostics.md#ddd00047); `[AggregateRoot<T>]` with `[Entity<T>]`
   is [DDD00009](diagnostics.md#ddd00009)).

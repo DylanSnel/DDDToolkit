@@ -29,9 +29,20 @@ public sealed partial class ShopSeat
 }
 ```
 
-- Declare every aggregate the package asks for, even the ones you add nothing to:
-  `[RoleAggregate<RoleId>] public sealed partial class ShopRole;`. A missing one, or a class that does
-  not fit the parent's constraints, is DDD00042 to DDD00050 and DDD00053 ([diagnostics.md](diagnostics.md)).
+- Declare a class only where it adds something. `[assembly: GenerateTenancyClasses]` in the project the
+  classes belong to has the generator write every class of Tenancy's the project leaves out (`Tenant`,
+  `Organization`, `OrganizationUnit`, `Role`, `Seat`) and every id of theirs no project of the module declares
+  (`TenantId`, `OrganizationUnitId`, `RoleId`, `SeatId`, `[EntityId<Guid>]`), public, in the root namespace. A
+  class or an id you declare always wins. Never write an empty class by hand next to the switch, and never
+  copy a written one into a file: declare it only to add to it, or, in a module of one project, where another
+  generator of that project needs to see it (HotChocolate's `[ObjectType<Role>]`, a row access rule that names
+  it), since none sees what the switch wrote; a project above sees it. Code outside the root namespace imports
+  the written types with `global using <RootNamespace>;`, not a file's using. The invitation is never written; declare it
+  to have invitations. A module split by layer says `[assembly: GenerateTenancyIds]` in its contracts project
+  (which then references the package) or declares the four ids there, and `GenerateTenancyClasses` in its
+  domain project. Without the switch, every class is declared. A missing one, or a class that does not fit the
+  parent's constraints, is DDD00042 to DDD00050 and DDD00053, and what the switch cannot write is DDD00066
+  ([diagnostics.md](diagnostics.md)).
 - The package's rules run first and always. There is nothing to override: no virtual members, no hooks.
   Add fields, entities, invariants, and handlers of the package's domain events.
 - The package's registrations are generated closed over your classes, internal to the project that
@@ -41,9 +52,11 @@ public sealed partial class ShopSeat
 
 ## Adopting Tenancy
 
-1. Four ids in the contracts project (`TenantId`, `SeatId`, `OrganizationUnitId`, `RoleId`), and a class
-   for each aggregate: `[TenantAggregate<TenantId>]`, `[OrganizationAggregate<TenantId>]`,
-   `[OrganizationUnit<OrganizationUnitId>]`, `[SeatAggregate<SeatId>]`, `[RoleAggregate<RoleId>]`.
+1. `[assembly: GenerateTenancyClasses]`, and a class of your own only for an aggregate you add to, such as
+   `[SeatAggregate<SeatId>]` with a job title. Or declare all four ids (`TenantId`, `SeatId`,
+   `OrganizationUnitId`, `RoleId`) and a class for each aggregate yourself: `[TenantAggregate<TenantId>]`,
+   `[OrganizationAggregate<TenantId>]`, `[OrganizationUnit<OrganizationUnitId>]`, `[SeatAggregate<SeatId>]`,
+   `[RoleAggregate<RoleId>]`.
 2. A plain context in the module, and migrations of your own. The package has none.
 
    ```csharp

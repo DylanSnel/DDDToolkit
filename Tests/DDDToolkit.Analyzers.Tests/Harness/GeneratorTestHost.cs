@@ -11,6 +11,7 @@ using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
 using CoreModuleGenerator = DDDToolkit.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
+using CoreTemplateDefaultsGenerator = DDDToolkit.Analyzers.TemplateDefaultsGenerator;
 using CoreTemplateFacadeGenerator = DDDToolkit.Analyzers.TemplateFacadeGenerator;
 using CoreTemplateRegistrationGenerator = DDDToolkit.Analyzers.TemplateRegistrationGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
@@ -99,7 +100,7 @@ public sealed class GeneratorTestHost
     public static GeneratorTestHost Create(string source, string path = "Source.cs")
         => new GeneratorTestHost().WithSource(source, path);
 
-    /// <summary>The nine generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
+    /// <summary>The generators in DDDToolkit.Analyzers, in the order the compiler would run them.</summary>
     public static IIncrementalGenerator[] CoreGenerators() =>
     [
         new CoreEntityIdGenerator(),
@@ -110,6 +111,7 @@ public sealed class GeneratorTestHost
         new CoreRowAccessGenerator(),
         new CoreTemplateRegistrationGenerator(),
         new CoreTemplateFacadeGenerator(),
+        new CoreTemplateDefaultsGenerator(),
         new CoreAccessBehaviorGenerator(),
         new CoreModuleGenerator(),
     ];

@@ -291,9 +291,10 @@ role a seat adds names no pack, or is an exact copy of one, remembering exactly 
 
 Tenancy becomes a module of your application, like any other. In the order you would do it:
 
-1. **Declare your ids and your classes.** Four ids in your contracts project, and a class of your own for
-   each of the package's aggregates ([Your tenancy module](#your-tenancy-module)). Add fields and rules where
-   you need them ([How your classes add behaviour](#how-your-classes-add-behaviour)).
+1. **Get your classes and ids.** The shortest start is one line, `[assembly: GenerateTenancyClasses]`: the
+   generator writes each of the package's classes you leave out, as the package ships it, and its id
+   ([The shortest start: the switch](#the-shortest-start-the-switch)). Declare a class yourself where you need
+   fields and rules ([How your classes add behaviour](#how-your-classes-add-behaviour)); yours always wins.
 2. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
    a migration of your own, and `services.AddTenancy<TContext>(...)` with how your ids are made
    ([Your tenancy module](#your-tenancy-module)).
@@ -334,9 +335,131 @@ The [sample](#who-may-do-what-in-the-sample) is a small application built this w
 
 ## Your tenancy module
 
-The ids are yours, declared in your contracts project with the key type you use, and so are the classes.
-You declare each of the package's aggregates as a class of your own, extend the ones you need to, and
-keep the rest as they come:
+Tenancy's aggregates are classes of your own, each declared with one of the package's templates over an id of
+your own: the tenant, its organization with its units, the seats and the roles. Most applications add something
+to one or two of them and nothing to the rest, and the rest need not be written at all.
+
+### The shortest start: the switch
+
+One line in the project your classes belong to:
+
+```csharp
+[assembly: GenerateTenancyClasses]
+```
+
+```mermaid
+flowchart LR
+    Switch["[assembly:<br/>GenerateTenancyClasses]"] --> Class{"a class of the template,<br/>in this project or<br/>a project of its module?"}
+    Class -- "yes" --> Yours["yours,<br/>as you wrote it"]
+    Class -- "no" --> Written["written: Tenant,<br/>Organization, Role ..."]
+    Written --> Id{"a type of<br/>the id's name?"}
+    Id -- "yes" --> Taken["taken"]
+    Id -- "no" --> WrittenId["written: TenantId,<br/>RoleId ..."]
+    Yours & Taken & WrittenId --> Generators{{"every generator: base class,<br/>converters, AddTenancy(),<br/>TenantsTenancy"}}
+```
+
+The switch has the generator write each of Tenancy's classes the project leaves out, as the package ships it:
+a `Tenant`, an `Organization`, an `OrganizationUnit`, a `Role` and a `Seat`, each declared with its template, and
+a `TenantId`, an `OrganizationUnitId`, a `RoleId` and a `SeatId`, each an `[EntityId<Guid>]` without a prefix,
+published with `[ModuleContract]`. An organization shares its tenant's id, so there is no `OrganizationId`. They
+are public, in the project's root namespace, so every folder of it sees them without a using, and each says in
+its documentation that the switch wrote it and how to declare it yourself. The invitation is not written: it is
+the one class you may leave out, and declaring it is what turns [invitations](#invitations) on.
+
+Nothing is generated without the switch, and nothing you declare is replaced. A class of a template that the
+project declares, or a project of its module that it references, is yours, and the switch writes the others
+around it. An id is taken where a type of its name is found, in the project or in a project of its module, and
+written where none is. A written class that shares its id with a class you declared, as an organization shares
+its tenant's, takes that class's id: an organization written beside your `ShopTenant` over `ShopTenantId` is
+declared over `ShopTenantId`.
+
+A name the switch cannot use is said once, where the switch is, [DDD00066](diagnostics.md#ddd00066), and the
+class is not written: a type of the class's name already in the root namespace, yours or a referenced project's;
+a namespace of that name, a folder `Organization/` directly under the project, say; an id of the class's name the
+generator writes for an `[AggregateRoot<Guid>]` class of yours; or two ids of one name to choose from. A class that
+needs the one kept out, as a seat needs its role, is kept out with it, no id is written for either, and
+`AddTenancy()` and the class the use cases are named through stand back rather than say again that the class is
+missing. A class of yours that is in the way and is meant to be the package's class becomes it with the template:
+`[RoleAggregate<RoleId>] public sealed partial class Role`.
+
+A written class and id get everything the toolkit's generators write for one you declare, though no generator
+sees another's output: each provider those generators read hands the written classes and ids on beside the
+declared ones, so the base class, the converters of the ids, `modelBuilder.AddTenancy()` and the class the use
+cases are named through ([Calling a use case](#calling-a-use-case)) are written for them, in a project of one and in
+a module split by layer alike. So is what another package writes for a template that names a written id: a
+[Membership](membership.md) member class whose members are seats, `[Member<CrewMemberId, SeatId, RoleId, Project>]`,
+gets its member list and its registrations over the written `SeatId`. The compiled project carries the same
+attributes a hand-written one would, so the projects above it see the written classes as they see yours.
+
+Two things see them only from the next project up:
+
+- **Other generators of the project with the switch do not see what it wrote.** HotChocolate's, for one: an
+  `[ObjectType<Role>]` over a written `Role` does not compile in that project. Nor does a toolkit generator that
+  reads a written class by its symbol, a row access rule that names it, say. A module split by layer has those in
+  the projects above, where all is well. A module of one project that needs one declares that class or id itself,
+  one line, and it wins.
+- **Code outside the root namespace** names the written types through `global using Shop.Tenants;`, the root
+  namespace, rather than a using at the top of a file: the parts the generators write for your classes, a
+  collection of `SeatId`s say, are files of their own, which a file's using does not reach. Code inside the root
+  namespace, in any folder of it, needs neither.
+
+**In a module split by layer** the ids belong in the contracts project, which the other modules reference, and
+the classes in the domain project. Say `[assembly: GenerateTenancyIds]` in the contracts project and
+`[assembly: GenerateTenancyClasses]` in the domain project, which then takes the contracts' ids. The first needs
+the contracts project to reference the Tenancy package; a contracts project that should not, as the sample's,
+declares the four ids itself, one line each, and the domain project's switch takes those.
+
+<details>
+<summary>Show the code: what the switch writes for a class and for an id</summary>
+
+```csharp title="Role.TemplateDefault.g.cs, the comment shortened"
+namespace Shop.Tenants;
+
+/// <summary>
+/// The application's <c>Role</c>, declared <c>[RoleAggregate&lt;RoleId&gt;]</c> and nothing more: the package's class as it
+/// ships. Written by the generator, because this project says <c>[assembly: GenerateTenancyClasses]</c> and
+/// neither it nor a project it references declares a class with <c>[RoleAggregate]</c>.
+/// </summary>
+[global::DDDToolkit.Supporting.Tenancy.RoleAggregateAttribute<global::Shop.Tenants.RoleId>]
+public sealed partial class Role
+{
+}
+```
+
+```csharp title="RoleId.TemplateDefault.g.cs, the comment shortened"
+namespace Shop.Tenants;
+
+/// <summary>
+/// The id of the class declared with <c>[RoleAggregate]</c>: written by the generator, because this
+/// project says <c>[assembly: GenerateTenancyClasses]</c> and neither it nor a project it references declares <c>RoleId</c>.
+/// </summary>
+[global::DDDToolkit.Abstractions.Attributes.ModuleContract]
+[global::DDDToolkit.Abstractions.Attributes.EntityId<global::System.Guid>]
+public readonly partial record struct RoleId;
+```
+
+The base class, the constructor, the rules and the id's members come from the generators that write them for a
+declared class and id, in files of their own.
+
+</details>
+
+### Your own classes
+
+When a class needs fields, rules or behaviour of its own, declare it, and the switch writes the rest:
+
+```csharp
+// Shop.Tenants: the switch for the classes that add nothing, your own seat for its job title
+[assembly: GenerateTenancyClasses]
+
+[SeatAggregate<SeatId>]
+public sealed partial class Seat
+{
+    public string? JobTitle { get; private set; }
+}
+```
+
+The seat is declared over the `SeatId` the switch writes. Without the switch, you declare all of them, and the
+ids, which your contracts project then holds with the key type and prefix you choose:
 
 ```csharp
 // Shop.Tenants.Contracts
@@ -369,7 +492,10 @@ public sealed partial class ShopUnit
 ```
 
 The package's rules run for your classes before your own, and your classes are what Entity Framework
-maps. [Writing your own supporting domain](writing-a-supporting-domain.md) explains how that works.
+maps, written or declared. [Writing your own supporting domain](writing-a-supporting-domain.md) explains how
+that works.
+
+### The context and the registration
 
 The context is a plain `DbContext` in your module, with your conventions. `AddTenancy()` is generated for
 your classes, the way `AddDomainEventOutbox` adds the outbox:
@@ -3803,6 +3929,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
 | A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. What composes the modules, the host and the catalogue's project, gets every module's list from Tenancy's generator: the host registers the keys with one call, and the export builds its catalogue from the same lists | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyPermissionsOfModules.g.cs` is under its `obj` folder<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `StartupTests` |
 | No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`SeatOverviewType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
+| No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
 | The feature comes first and the kind second: a folder per feature with `Commands` and `Queries` in it, and the same feature names in the API project with `Rest` and `GraphQL` | **Code:** [`AllCrewMembers.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Queries/AllCrewMembers.cs), [`CrewEndpoints.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/Rest/CrewEndpoints.cs), [`CrewMutations.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMutations.cs)<br/>**Try it:** juno reads Pier 7's crew, in the `.http` file<br/>**Test:** `FeatureFolderTests`, `AllCrewMembersScenarios` |
 | Folders are deep, and in the sample the namespace of a type is its folder. The packages have the same folders and keep few namespaces | **Code:** [`Aggregates/Projects`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects), [`Aggregates`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates)<br/>**Try it:** Nothing to run: [Folders inside the layers](modules.md#folders-inside-the-layers) has the tree<br/>**Test:** `SourceTreeTests`, `StoredNameTests` |

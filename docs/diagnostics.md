@@ -64,6 +64,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 | [DDD00064](#ddd00064) | Warning | DDD_Module declares the module where the package's build step runs |
 | [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
+| [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -100,7 +101,7 @@ is a module whose keys never reach the catalogue the host runs with.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
-[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053) and [DDD00065](#ddd00065), about
+[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), [DDD00065](#ddd00065) and [DDD00066](#ddd00066), about
 [supporting domains](writing-a-supporting-domain.md), [DDD00052](#ddd00052), about a function's name, and
 [DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior,
 say what the generator could not do, and are numbered after the rest because they came later. Severity
@@ -2277,6 +2278,47 @@ class a parent of the project needs is that class's error already, [DDD00044](#d
 [DDD00049](#ddd00049) or [DDD00045](#ddd00045), so neither is said twice. What you keep in the global namespace
 yourself, an alias of the name at the top of a file, or a type or a namespace of it, is your own way of naming
 the classes, and the class stands back for it without a word.
+
+## DDD00066
+
+**A package's switch writes a class or an id where its name is free and its id is known.**
+
+```csharp
+// Shop, with the switch, and a class of its own called Role that has nothing to do with Tenancy
+[assembly: GenerateTenancyClasses]   // DDD00066: [assembly: GenerateTenancyClasses] does not write 'Role': this project has a class 'Shop.Role' already, which is not declared with [RoleAggregate]: if it is meant to be that class, declare it [RoleAggregate<RoleId>] and it is yours; ...
+
+namespace Shop;
+
+public sealed class Role;
+```
+
+```csharp
+// Two projects this one references each declare a RoleId
+[assembly: GenerateTenancyClasses]   // DDD00066: ... does not write 'Role': its id would be 'RoleId', and the projects it references declare 'Shop.One.RoleId' and 'Shop.Two.RoleId'; keep one
+```
+
+A package's switch, such as Tenancy's `[assembly: GenerateTenancyClasses]`
+([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)), has the generator write the
+package's classes your project leaves out, as the package ships them, and their ids: `Tenant`, `TenantId` and
+the rest, public, in the project's root namespace. It writes nothing that would take the place of something you
+have, and where it cannot write a class or an id it says so on the switch:
+
+| What is in the way | What to do |
+|---|---|
+| a class of yours of the class's name in the root namespace, not declared with the template | if it is meant to be the package's class, declare it with the template, `[RoleAggregate<RoleId>]`, and it is yours; if not, rename it, or declare the package's class yourself under a name of your own, `[RoleAggregate<RoleId>] public sealed partial class ShopRole` |
+| another type of that name, yours or one a project you reference declares | rename it, or declare the package's class yourself under a name of your own |
+| a namespace of that name, a folder `Organization/` directly under the project, say | declare the package's class yourself under a name of your own, or rename the namespace |
+| a type of the id's name that is no entity id | mark it `[EntityId<Guid>]`, or rename it |
+| an id of that name the generator writes for an `[AggregateRoot<Guid>]` class of yours, a `Tenant` that rents something, say | rename that class, or declare the package's class yourself under a name of your own, with an id of its own |
+| several ids of one name, in the project or in the projects of its module that it references | keep one |
+| your own classes of templates that share an id, such as the tenant and the organization, declared over two different ids | declare them over one |
+
+The cause is said once. A class that takes a type from a class the switch cannot write, or shares its id, is not
+written either, and is not reported again: the organization shares the tenant's id and the role and the seat take
+it, so a `TenantId` in the way leaves out the four of them, with one error. No id is written for a class that is
+not, and `AddTenancy()` and the class the use cases are named through stand back for what is left out, rather
+than report it missing ([DDD00049](#ddd00049), [DDD00065](#ddd00065)). A class or an id you declare yourself
+always wins, and is never reported: the switch takes it, or writes the rest around it.
 
 ## Building the model fails: the owned type must carry the key part
 

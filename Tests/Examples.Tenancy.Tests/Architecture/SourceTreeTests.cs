@@ -32,9 +32,10 @@ namespace Examples.Tenancy.Tests.Architecture;
 public sealed partial class SourceTreeTests
 {
     /// <summary>
-    /// The files every project may have at its root, next to its registration: the usings, and in an API project a
-    /// Module.cs with HotChocolate's module attribute. The toolkit's module is declared by the folder, in
-    /// Modules/Directory.Build.props, and by no file of a project.
+    /// The files every project may have at its root, next to its registration: the usings, and a Module.cs with the
+    /// project's assembly attributes, HotChocolate's module attribute in an API project and Tenancy's switch in
+    /// Tenants' domain project. The toolkit's module is declared by the folder, in Modules/Directory.Build.props, and
+    /// by no file of a project.
     /// </summary>
     private static readonly string[] EntryFiles = ["Module.cs", "GlobalUsings.cs"];
 
@@ -86,8 +87,12 @@ public sealed partial class SourceTreeTests
         var invariants = types.Where(IsInvariant).ToList();
         var values = types.Where(type => !type.IsNested && (type.IsEnum || typeof(IEntityId).IsAssignableFrom(type))).ToList();
 
+        // An aggregate Tenancy's switch wrote has no file: it is in the project's root namespace, where the switch
+        // writes it, and its documentation says so. Every other aggregate is somebody's file.
+        var written = roots.Where(root => root.Namespace == project && files.All(file => Path.GetFileName(file) != root.Name + ".cs")).ToList();
+
         roots.Should().NotBeEmpty("{0} declares an aggregate", project);
-        foreach (var root in roots)
+        foreach (var root in roots.Except(written))
         {
             FileOf(root, files).Should().MatchRegex($"^Aggregates/[^/]+/{root.Name}[.]cs$", "{0} is an aggregate: its file is right in its own folder under Aggregates", root.Name);
         }
@@ -119,18 +124,34 @@ public sealed partial class SourceTreeTests
         }
 
         // And the other way round: an aggregate's folder holds the aggregate, its refusals and the marker of their
-        // texts in English and Dutch beside it, and the four folders, and nothing else.
+        // texts in English and Dutch beside it, and the four folders, and nothing else. The folder of an aggregate the
+        // switch wrote holds what the application adds to it, such as the organization's units, and not the aggregate.
         foreach (var folder in Directory.GetDirectories(Path.Combine(directory, "Aggregates")))
         {
             var here = Directory.GetFiles(folder, "*.cs").Select(Path.GetFileNameWithoutExtension).ToList();
+            var aggregates = here.Where(file => roots.Any(root => root.Name == file)).ToList();
 
-            here.Where(file => roots.Any(root => root.Name == file)).Should().ContainSingle("{0} is the folder of one aggregate", Path.GetFileName(folder));
+            if (aggregates.Count == 0)
+            {
+                written.Select(root => root.Name + "s").Should().Contain(Path.GetFileName(folder), "{0} is the folder of an aggregate, written by the switch when it has no file", Path.GetFileName(folder));
+            }
+            else
+            {
+                aggregates.Should().ContainSingle("{0} is the folder of one aggregate", Path.GetFileName(folder));
+            }
+
             here.Where(file => roots.All(root => root.Name != file) && !file!.EndsWith("Refusals", StringComparison.Ordinal) && !file.EndsWith("Failures", StringComparison.Ordinal))
                 .Should().BeEmpty("beside an aggregate's own file there are only its refusals and the marker of their texts: everything else of it has a folder");
             FoldersOf(folder).Should().BeSubsetOf(AggregateFolders, "{0} keeps what belongs to it in these folders", Path.GetFileName(folder));
         }
 
         // Every kind is there to be found, across the sample's domain projects, or the rules above prove nothing.
+        if (project == "Examples.Tenancy.Tenants.Domain")
+        {
+            written.Should().BeEquivalentTo([typeof(Examples.Tenancy.Tenants.Domain.Organization), typeof(Examples.Tenancy.Tenants.Domain.Role)],
+                "Tenants' domain project has the switch write the two classes it adds nothing to");
+        }
+
         if (project == "Examples.Tenancy.Projects.Domain")
         {
             entities.Should().Contain(typeof(CrewMember));
@@ -401,8 +422,8 @@ public sealed partial class SourceTreeTests
         (typeof(TenantsTenancy).IsAbstract && typeof(TenantsTenancy).Namespace is null).Should().BeTrue();
         Type[] module =
         [
-            typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization), typeof(OrganizationUnit),
-            typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role), typeof(RoleId),
+            typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Organization), typeof(OrganizationUnit),
+            typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(RoleId),
         ];
         typeof(TenantsTenancy).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
         typeof(TenantsTenancy).BaseType!.GetGenericArguments().Should().Equal(module);

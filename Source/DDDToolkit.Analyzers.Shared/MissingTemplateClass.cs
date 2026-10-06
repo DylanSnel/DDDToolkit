@@ -147,7 +147,7 @@ internal static class MissingTemplateClass
             : name;
 
     /// <summary><c>TTenantId</c> is <c>TenantId</c>; a name that does not start with a <c>T</c> and a capital stays itself.</summary>
-    private static string IdName(string typeParameter)
+    internal static string IdName(string typeParameter)
         => typeParameter.Length > 1 && typeParameter[0] == 'T' && char.IsUpper(typeParameter[1])
             ? typeParameter.Substring(1)
             : typeParameter;

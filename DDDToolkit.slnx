@@ -168,6 +168,7 @@
     <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Tests/DDDToolkit.Supporting.Tenancy.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Supporting.Tenancy.EntityFramework.Tests/DDDToolkit.Supporting.Tenancy.EntityFramework.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Postgres.Tests/DDDToolkit.Supporting.Tenancy.Postgres.Tests.csproj" />
+    <Project Path="Tests/DDDToolkit.Supporting.Tenancy.Switch.Tests/DDDToolkit.Supporting.Tenancy.Switch.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Supporting.Membership.TestHost/DDDToolkit.Supporting.Membership.TestHost.csproj" />
     <Project Path="Tests/DDDToolkit.Supporting.Membership.Tests/DDDToolkit.Supporting.Membership.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Supporting.Membership.EntityFramework.Tests/DDDToolkit.Supporting.Membership.EntityFramework.Tests.csproj" />

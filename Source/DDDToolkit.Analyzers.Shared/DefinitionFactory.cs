@@ -500,6 +500,8 @@ internal static class DefinitionFactory
 
         var idType = "global::System.Object";
         var idIsEntityId = false;
+        var canGenerateApartFromTheId = canGenerate;
+        string? unbound = null;
         if (attributeClass.TypeArguments.Length > 0 && attributeClass.TypeArguments[0] is { TypeKind: not TypeKind.Error } id)
         {
             idType = id.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -514,12 +516,22 @@ internal static class DefinitionFactory
         else
         {
             // Nothing the compiler could bind, which it reports, or an attribute without a type argument,
-            // which the template check has just reported: either way it has been said.
+            // which the template check has just reported: either way it has been said. A name it could not bind
+            // may be an id this project's [TemplateDefaults] switch writes, which no generator sees: the switch's
+            // plan binds it, and the class is generated after all.
+            if (attributeClass.TypeArguments.Length > 0 && attributeClass.TypeArguments[0] is { TypeKind: TypeKind.Error, Name.Length: > 0 } missing)
+            {
+                unbound = missing.Name;
+            }
+
             canGenerate = false;
         }
 
-        return CreateEntityDefinition(
-            symbol, type, marker.IsAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate, cancellationToken,
+        // Only a class nothing else is wrong with waits for its id: it is judged as if the id were there, and then
+        // held back until the plan binds it.
+        var waitsForItsId = unbound is not null && canGenerateApartFromTheId;
+        var definition = CreateEntityDefinition(
+            symbol, type, marker.IsAggregateRoot, idType, compilation, conflictingAttributes, diagnostics, canGenerate || waitsForItsId, cancellationToken,
             template is null ? null : IsTheParent(marker, attributeClass)) with
         {
             Template = template,
@@ -527,6 +539,69 @@ internal static class DefinitionFactory
             TemplateIdIsEntityId = idIsEntityId,
             MetadataName = EntityDeclarations.MetadataNameOf(symbol),
             ParentHasKeyParts = marker.Parent is { } keyed && HasKeyParts(keyed),
+        };
+
+        return waitsForItsId
+            ? definition with { CanGenerate = false, UnboundIdName = definition.CanGenerate ? unbound : null }
+            : definition;
+    }
+
+    /// <summary>
+    /// The definition of a class nobody declared, which a <c>[TemplateDefaults]</c> switch writes: what
+    /// <see cref="CreateTemplateEntity"/> would make of <c>[TenantAggregate&lt;TenantId&gt;] public sealed partial class
+    /// Tenant;</c> with nothing in its body, had that been in the source. It has no members, so no rules, collections
+    /// or key parts of its own; its parent has all of them. Null for a template the switch cannot write, which is the
+    /// package's mistake: one that does not fit its parent, or whose parent is in this project and refused.
+    /// </summary>
+    /// <param name="attribute">The template attribute's open definition.</param>
+    /// <param name="marker">What the template's marker says.</param>
+    /// <param name="type">The class to write: its name, namespace and where what is said of it goes.</param>
+    /// <param name="idType">The id it is declared with, fully qualified: found, or written by the switch too.</param>
+    /// <param name="compilation">The project.</param>
+    /// <param name="cancellationToken">Stops the work.</param>
+    internal static EntityDefinition? CreateDefaultTemplateEntity(
+        INamedTypeSymbol attribute,
+        TemplateMarker marker,
+        TypeDeclarationInfo type,
+        string idType,
+        Compilation compilation,
+        CancellationToken cancellationToken)
+    {
+        var definition = attribute.OriginalDefinition;
+        if (marker.Parent is not { } parent
+            || TemplateProblem(marker, definition, out var bindings) is not null
+            || ParentIsRefused(parent, marker.IsAggregateRoot, cancellationToken))
+        {
+            return null;
+        }
+
+        var template = new TemplateDeclaration(
+            AttributeKey: definition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            AttributeName: AttributeNameOf(definition),
+            Parent: parent.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGenericsOptions(SymbolDisplayGenericsOptions.None)),
+            ParentMetadataName: EntityDeclarations.MetadataNameOf(parent),
+            ParentParameters: parent.TypeParameters.Select(static parameter => parameter.Name).ToEquatableArray(),
+            Arguments: new EquatableArray<string>(new[] { idType }),
+            Bindings: bindings.OrderBy(static binding => binding.Position).ToEquatableArray());
+
+        return new EntityDefinition(
+            Type: type,
+            IsAggregateRoot: marker.IsAggregateRoot,
+            IdType: idType,
+            ImplicitId: null,
+            Collections: EquatableArray<CollectionPropertyInfo>.Empty,
+            Invariants: EquatableArray<string>.Empty,
+            KeyParts: EquatableArray<string>.Empty,
+            EfBackingFieldAttributeAvailable: HasType(compilation, KnownTypes.EfBackingFieldAttribute),
+            ReadOnlySetAvailable: HasType(compilation, KnownTypes.ReadOnlySet),
+            CanGenerate: true,
+            Diagnostics: EquatableArray<DiagnosticInfo>.Empty)
+        {
+            Template = template,
+            TemplateKey = template.AttributeKey,
+            TemplateIdIsEntityId = true,
+            MetadataName = type.Namespace.Length > 0 ? type.Namespace + "." + type.Name : type.Name,
+            ParentHasKeyParts = HasKeyParts(parent),
         };
     }
 
@@ -804,6 +879,15 @@ internal static class DefinitionFactory
         public string? MetadataName { get; }
 
         public INamedTypeSymbol? Symbol { get; private set; }
+
+        /// <summary>The template's type arguments as the class's definition has them, fully qualified; null for a class of a referenced project.</summary>
+        public IReadOnlyList<string>? Arguments { get; init; }
+
+        /// <summary>
+        /// The positions of <see cref="Arguments"/> that name an id a package's switch writes in this project, which
+        /// the compiler could not bind for any generator: <see cref="EntityDefinition.WrittenArguments"/>.
+        /// </summary>
+        public IReadOnlyList<int>? WrittenArguments { get; init; }
 
         public INamedTypeSymbol? SymbolIn(Compilation compilation)
             => Symbol ??= MetadataName is null ? null : compilation.GetTypeByMetadataName(MetadataName);
@@ -1173,7 +1257,9 @@ internal static class DefinitionFactory
             .FirstOrDefault(attributeClass => attributeClass is not null && EntityDeclarations.TemplateOf(attributeClass) is not null)?.TypeArguments ?? ImmutableArray<ITypeSymbol>.Empty;
         for (var position = 0; position < attributeArguments.Length && position < arguments.Length; position++)
         {
-            arguments[position] = attributeArguments[position];
+            // An id the compiler cannot bind yet is one the project's [TemplateDefaults] switch writes: unknown, so
+            // the constraints that mention it are left unchecked, as for any argument that cannot be had.
+            arguments[position] = attributeArguments[position] is { TypeKind: TypeKind.Error } ? null : attributeArguments[position];
         }
 
         var takesTheClass = new bool[arguments.Length];

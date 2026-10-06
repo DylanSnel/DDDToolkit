@@ -47,7 +47,9 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// resource that declares none and cannot be given one is told what stands in the way (DDD00059), since its
 /// members could not be changed at all. That includes a member class over a type this generator cannot see,
 /// the id of an <c>[AggregateRoot&lt;Guid&gt;]</c> that another generator writes: the application would
-/// otherwise hear only that <c>Members</c> does not exist.
+/// otherwise hear only that <c>Members</c> does not exist. An id another package's switch writes into the
+/// project, an assembly attribute of that package's marked <c>[TemplateDefaults]</c>, is no type to this generator
+/// either, but the switch's plan says it is written and where, so the list is closed over it by its name, in full.
 /// </para>
 /// <para>
 /// <b>A member class that names the wrong resource.</b> A resource that is no aggregate root, or one that keeps
@@ -91,7 +93,13 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         // member class themselves: read off the compilation, and a plain boolean, so the output step stays cached.
         var registered = context.CompilationProvider.Select(static (compilation, cancellationToken) => TemplateRegistrations.Registers(compilation, MemberTemplate, cancellationToken));
 
-        context.RegisterSourceOutput(lists.Combine(registered), static (production, pair) => Execute(production, pair.Left, pair.Right));
+        // The ids another package's switch writes into this project, by name: no type to the compiler a generator
+        // sees, so a member class over one is closed over it by the name it was written with.
+        var written = context.TemplateDefaultsPlan().Select(static (plan, _) => plan.Ids);
+
+        context.RegisterSourceOutput(
+            lists.Combine(registered).Combine(written),
+            static (production, all) => Execute(production, all.Left.Left, all.Left.Right, all.Right));
     }
 
     // ------------------------------------------------------------------ what to write
@@ -150,30 +158,9 @@ public sealed class MemberListGenerator : IIncrementalGenerator
 
         // A type of the member class this generator cannot see: one nobody declares, which the compiler reports as
         // well, or one another generator writes, the id of an [AggregateRoot<Guid>] say, which no generator sees of
-        // another. The list cannot be closed over it, and the owner cannot be found by it, so that is all there is
-        // to say; a resource that writes its list itself has nothing to hear.
-        var unseen = attribute.TypeArguments.Take(3).Where(static argument => argument.TypeKind == TypeKind.Error).ToList();
-        if (unseen.Count > 0)
-        {
-            foreach (var argument in unseen)
-            {
-                reasons.Add("'" + argument.Name + "' is a type it cannot see, one another generator writes or nobody declares: declare it yourself, with [EntityId<T>], where the member class can see it");
-            }
-
-            return new ListOfAResource(
-                Resource: type,
-                MemberName: member.Name,
-                MemberAt: memberAt,
-                ListType: string.Empty,
-                ShortTypeArguments: string.Join(", ", shortArguments),
-                Collection: null,
-                Field: null,
-                Owner: null,
-                NewId: string.Empty,
-                Codes: null,
-                Declared: declared,
-                Reasons: reasons.ToEquatableArray());
-        }
+        // another. Which of the two it is shows only once the ids a package's switch writes are known, so the class
+        // is judged as if each were there, by its name, and what is said of it waits for those (Execute).
+        var unseen = attribute.TypeArguments.Take(3).Where(static argument => argument.TypeKind == TypeKind.Error).Select(static argument => argument.Name).ToEquatableArray();
 
         // Members are kept with the aggregate they belong to. A resource that is none is the member class's
         // mistake, said on it; nothing about the resource's own members is.
@@ -183,15 +170,16 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                 Resource: type,
                 MemberName: member.Name,
                 MemberAt: memberAt,
-                ListType: string.Empty,
+                TypeArguments: EquatableArray<string>.Empty,
                 ShortTypeArguments: string.Join(", ", shortArguments),
                 Collection: null,
                 Field: null,
                 Owner: null,
-                NewId: string.Empty,
+                OwnId: string.Empty,
                 Codes: null,
                 Declared: declared,
                 Reasons: EquatableArray<string>.Empty,
+                Unseen: unseen,
                 NotARoot: true);
         }
 
@@ -227,7 +215,9 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                                && !property.IsIndexer
                                && property.GetMethod is not null
                                && property.ExplicitInterfaceImplementations.IsEmpty
-                               && SymbolEqualityComparer.Default.Equals(property.Type, knownBy))
+                               && (knownBy.TypeKind == TypeKind.Error
+                                   ? property.Type is { TypeKind: TypeKind.Error } unbound && unbound.Name == knownBy.Name
+                                   : SymbolEqualityComparer.Default.Equals(property.Type, knownBy)))
             .ToList();
         if (owners.Count == 0)
         {
@@ -238,7 +228,8 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             reasons.Add("it declares more than one property of '" + knownBy.Name + "' (" + Listed(owners) + "), so which of them is its owner cannot be told");
         }
 
-        if (!MakesNewIdsInTimeOrder(ownId))
+        // An id this generator cannot see is either one a switch writes, over a Guid, or what is said of it instead.
+        if (ownId.TypeKind != TypeKind.Error && !MakesNewIdsInTimeOrder(ownId))
         {
             reasons.Add("'" + ownId.Name + "', the id of a member's row, is not an [EntityId<Guid>], so there is no telling how a new one is made");
         }
@@ -262,21 +253,20 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             reasons.Add("it has a member called " + PropertyName + " already, which the list would be called too");
         }
 
-        string[] typeArguments = [.. new[] { member }.Concat(attribute.TypeArguments.Take(3).Cast<INamedTypeSymbol>()).Select(Qualified)];
-
         return new ListOfAResource(
             Resource: type,
             MemberName: member.Name,
             MemberAt: memberAt,
-            ListType: "global::" + Package + ".MemberList<" + string.Join(", ", typeArguments) + ">",
+            TypeArguments: new[] { member }.Concat(attribute.TypeArguments.Take(3).Cast<INamedTypeSymbol>()).Select(Qualified).ToEquatableArray(),
             ShortTypeArguments: string.Join(", ", shortArguments),
             Collection: collection,
             Field: field,
             Owner: owners.Count == 1 ? owners[0].Name : null,
-            NewId: Qualified(ownId) + "." + NewId,
+            OwnId: Qualified(ownId),
             Codes: codes.Count == 1 ? codes[0].Name : null,
             Declared: declared,
-            Reasons: reasons.ToEquatableArray());
+            Reasons: reasons.ToEquatableArray(),
+            Unseen: unseen);
     }
 
     /// <summary>
@@ -382,12 +372,12 @@ public sealed class MemberListGenerator : IIncrementalGenerator
     /// <summary>What one member class asks for on the resource it names.</summary>
     /// <param name="Resource">The resource's class, which the list is written into.</param>
     /// <param name="MemberName">The member class's name.</param>
-    /// <param name="ListType">The list's type, closed over the member class and its three types, written out in full.</param>
+    /// <param name="TypeArguments">The four types the list is closed over, the member class and its three, written out in full; one this generator cannot see as it was written.</param>
     /// <param name="ShortTypeArguments">The same four types as an application writes them, for a message.</param>
     /// <param name="Collection">The resource's collection of members, or null when it cannot be told.</param>
     /// <param name="Field">The field the entity generator keeps that collection in, or null.</param>
     /// <param name="Owner">The resource's property that holds its owner, or null when it cannot be told.</param>
-    /// <param name="NewId">What makes the id of a new member row.</param>
+    /// <param name="OwnId">The id of a member's row, written out in full, whose factory makes the id of a new one.</param>
     /// <param name="Codes">The resource's static member that holds its codes, or null when it cannot be told.</param>
     /// <param name="Declared">Whether the resource declares a member list over this member class itself.</param>
     /// <param name="Reasons">What stands in the way of writing the list, each phrased to follow "the toolkit cannot write one:".</param>
@@ -399,15 +389,19 @@ public sealed class MemberListGenerator : IIncrementalGenerator
     /// </param>
     /// <param name="KeptIn">For such a member class, the resource's collection of the other one. Null otherwise.</param>
     /// <param name="Several">Whether the resource is named by several member classes and keeps a collection of none of them, or of more than one.</param>
+    /// <param name="Unseen">
+    /// The names of the member class's types this generator cannot see: one an application's switch writes, which
+    /// is known by its name once the switch's ids are, or one nobody declares or another generator writes.
+    /// </param>
     private sealed record ListOfAResource(
         TypeDeclarationInfo Resource,
         string MemberName,
-        string ListType,
+        EquatableArray<string> TypeArguments,
         string ShortTypeArguments,
         string? Collection,
         string? Field,
         string? Owner,
-        string NewId,
+        string OwnId,
         string? Codes,
         bool Declared,
         EquatableArray<string> Reasons,
@@ -415,12 +409,44 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         bool NotARoot = false,
         string? KeptMember = null,
         string? KeptIn = null,
-        bool Several = false);
+        bool Several = false,
+        EquatableArray<string> Unseen = default);
 
     // ------------------------------------------------------------------ writing it
 
-    private static void Execute(SourceProductionContext context, ListOfAResource list, bool registered)
+    /// <summary>Writes the list, or says why it cannot be written.</summary>
+    /// <param name="context">Where the list and the diagnostics go.</param>
+    /// <param name="list">What the member class asks for.</param>
+    /// <param name="registered">Whether the registrations of this project say what is wrong with a member class themselves.</param>
+    /// <param name="written">The ids a package's switch writes into this project, which this generator knows by their names alone.</param>
+    private static void Execute(SourceProductionContext context, ListOfAResource list, bool registered, EquatableArray<EntityIdDefinition> written)
     {
+        // A type of the member class this generator cannot see and no switch writes: one nobody declares, which the
+        // compiler reports as well, or one another generator writes, the id of an [AggregateRoot<Guid>] say. The list
+        // cannot be closed over it, and the owner cannot be found by it, so that is all there is to say; a resource
+        // that writes its list itself has nothing to hear.
+        var unseen = list.Unseen.Where(name => !written.Any(id => id.Type.Name == name)).ToList();
+        if (unseen.Count > 0)
+        {
+            if (!list.Declared)
+            {
+                DiagnosticInfo.Create(
+                        DiagnosticDescriptors.MemberListNotWritten,
+                        list.Resource.Location,
+                        list.Resource.Name,
+                        list.MemberName,
+                        string.Join("; ", unseen.Select(static name => "'" + name + "' is a type it cannot see, one another generator writes or nobody declares: declare it yourself, with [EntityId<T>], where the member class can see it")),
+                        list.ShortTypeArguments)
+                    .Report(context);
+            }
+
+            return;
+        }
+
+        // An id a switch writes is named in full, so the list compiles wherever the resource is.
+        string InFull(string text)
+            => list.Unseen.Contains(text) && written.FirstOrDefault(id => id.Type.Name == text) is { } id ? id.Type.FullyQualifiedName : text;
+
         if (list.NotARoot || list.KeptMember is not null)
         {
             // The member class's own mistake: said once, on it, unless the registrations of this project say it.
@@ -477,8 +503,8 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                 writer.Line("/// Written from what the class declares: its members in <see cref=\"" + list.Collection + "\"/>, its owner in <see cref=\"" + list.Owner
                             + "\"/>, and the codes it refuses under in <see cref=\"" + list.Codes + "\"/>.");
                 writer.Line("/// </summary>");
-                writer.Line("private " + list.ListType + " " + PropertyName);
-                writer.Line("    => new(" + Identifier(list.Field) + ", " + Identifier(list.Owner) + ", " + list.NewId + ", " + Identifier(list.Codes) + ");");
+                writer.Line("private global::" + Package + ".MemberList<" + string.Join(", ", list.TypeArguments.Select(InFull)) + "> " + PropertyName);
+                writer.Line("    => new(" + Identifier(list.Field) + ", " + Identifier(list.Owner) + ", " + InFull(list.OwnId) + "." + NewId + ", " + Identifier(list.Codes) + ");");
             }
         }
 

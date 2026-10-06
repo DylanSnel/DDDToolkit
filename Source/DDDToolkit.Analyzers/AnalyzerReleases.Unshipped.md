@@ -64,3 +64,4 @@ DDD00062 | DDDToolkit.GraphQL | Error | A class of one GraphQL schema is one the
 DDD00063 | DDDToolkit.Tenancy | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read
 DDD00064 | DDDToolkit.Modules | Warning | DDD_Module declares the module where the package's build step runs
 DDD00065 | DDDToolkit.Entities | Info | The class a package's use cases are named through is written where each of its templates has one class
+DDD00066 | DDDToolkit.Entities | Error | A package's switch writes a class or an id where its name is free and its id is known

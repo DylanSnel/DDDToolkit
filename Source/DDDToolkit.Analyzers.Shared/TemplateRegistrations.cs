@@ -97,12 +97,17 @@ internal static class TemplateRegistrations
     /// <c>[assembly: Module]</c> in a file of it says which module it is: the build declared it from
     /// <c>DDD_Module</c>, or an <c>AssemblyAttribute</c> item did, in a file under <c>obj/</c>.
     /// </param>
+    /// <param name="standingBack">
+    /// The templates whose class a package's switch was asked to write and could not, which DDD00066 says why: a
+    /// registration that misses one of them stands back behind it, as one does behind DDD00044.
+    /// </param>
     public static ImmutableArray<RegistrationFile> Resolve(
         ImmutableArray<EntityDefinition> declared,
         Compilation compilation,
         CancellationToken cancellationToken,
         Func<IMethodSymbol, bool>? only = null,
-        LocationInfo? projectFile = null)
+        LocationInfo? projectFile = null,
+        IReadOnlyCollection<string>? standingBack = null)
     {
         if (declared.IsDefaultOrEmpty)
         {
@@ -126,11 +131,13 @@ internal static class TemplateRegistrations
 
         // The templates a class of this project takes a type from for its own parent. One nobody declares is
         // DDD00044 on that class, with the fix that declares it: the registrations that need it as well stand
-        // back, rather than say the same once more for each.
+        // back, rather than say the same once more for each. So do they behind DDD00066, for a class a package's
+        // switch could not write.
         var takenByAParent = new HashSet<string>(
             declared.Where(static definition => definition.CanGenerate && definition.Template is not null)
                 .SelectMany(static definition => definition.Template!.Bindings)
-                .Select(static binding => binding.SourceKey),
+                .Select(static binding => binding.SourceKey)
+                .Concat(standingBack ?? []),
             StringComparer.Ordinal);
 
         return Collapsed(Files(compilation, method => ResolveMethod(method, declared, Resolved, takenByAParent, compilation, cancellationToken), only, cancellationToken));
@@ -975,16 +982,41 @@ internal static class TemplateRegistrations
                 }
 
                 texts[position] = source.IdType;
-                symbols[position] = symbol is null ? null : EntityDeclarations.IdArgumentOf(symbol);
+                symbols[position] = IdSymbolOf(source, symbol, compilation);
                 names[position] = symbols[position]?.Name ?? LastNameOf(source.IdType);
+
+                // An id with no symbol is one a package's switch writes in this project, and always a struct.
+                generatedIds[position] = symbols[position] is null;
             }
             else
             {
                 // A later type argument is the application's to choose. One the compiler could not bind it has
                 // reported, and one that names a type parameter is on a generic class, which its own diagnostic refuses.
-                if (symbol is null
-                    || EntityDeclarations.TemplateArgumentOf(symbol, take.Key, take.Argument) is not { } argument
-                    || MentionsATypeParameter(argument))
+                // An id a package's switch writes in this project is no type to any generator, and the switch's plan
+                // has named it in full on the class: the SeatId of a member class whose members are seats.
+                var argument = symbol is null ? null : EntityDeclarations.TemplateArgumentOf(symbol, take.Key, take.Argument);
+                if (argument is null && !take.IdOfArgument && WrittenArgumentOf(source, take.Argument) is { } written)
+                {
+                    if (parameters[position].HasReferenceTypeConstraint)
+                    {
+                        met = false;
+                        diagnostics.Add(DiagnosticInfo.Create(
+                            DiagnosticDescriptors.TemplateRegistrationMissesConstraint,
+                            locations[position],
+                            LastNameOf(written) ?? written,
+                            display,
+                            parameters[position].Name,
+                            "a class, and the id the switch writes is a struct"));
+                        continue;
+                    }
+
+                    texts[position] = written;
+                    names[position] = LastNameOf(written);
+                    generatedIds[position] = true;
+                    continue;
+                }
+
+                if (argument is null || MentionsATypeParameter(argument))
                 {
                     return null;
                 }
@@ -1177,6 +1209,30 @@ internal static class TemplateRegistrations
     private static string ShortNameOf(ITypeSymbol type, Take take)
         => take.TakeType || take.Argument == 0 ? type.Name : type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
+    /// <summary>
+    /// The id a class taken is declared with, as a symbol where one can be had: read off the class's attribute, or,
+    /// for a class a package's switch writes, which has no symbol yet, found by its name. Null for an id the switch
+    /// writes as well, which has none either, and for one the compiler could not bind.
+    /// </summary>
+    internal static ITypeSymbol? IdSymbolOf(DefinitionFactory.TemplateSource source, INamedTypeSymbol? symbol, Compilation compilation)
+        => (symbol is null ? null : EntityDeclarations.IdArgumentOf(symbol))
+           ?? (source.IdType.StartsWith("global::", StringComparison.Ordinal) && source.IdType.IndexOf('<') < 0
+               ? compilation.GetTypeByMetadataName(source.IdType.Substring("global::".Length))
+               : null);
+
+    /// <summary>
+    /// A later type argument of a class taken that the compiler could not bind and a package's switch writes, in full,
+    /// as the switch's plan named it on the class: <c>global::Campus.SeatId</c>. Null for any other argument, of which
+    /// one the compiler could not bind always shows as it was written, without <c>global::</c>.
+    /// </summary>
+    internal static string? WrittenArgumentOf(DefinitionFactory.TemplateSource source, int position)
+        => source.Arguments is { } arguments
+           && position < arguments.Count
+           && source.WrittenArguments is { } written
+           && written.Contains(position)
+            ? arguments[position]
+            : null;
+
     internal static DefinitionFactory.TemplateSource SourceOf(EntityDefinition definition, bool canGenerate)
         => new(
             definition.Type.Name,
@@ -1185,7 +1241,11 @@ internal static class TemplateRegistrations
             definition.TemplateIdIsEntityId,
             canGenerate,
             definition.MetadataName,
-            symbol: null);
+            symbol: null)
+        {
+            Arguments = definition.Template?.Arguments,
+            WrittenArguments = definition.WrittenArguments,
+        };
 
     /// <summary>
     /// What an id taken by a registration does not meet, phrased to follow "which requires", or null when it

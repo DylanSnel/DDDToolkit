@@ -131,6 +131,21 @@ public class IncrementalCachingTests
     }
 
     [Fact]
+    public void What_a_packages_switch_writes_is_cached_across_an_unrelated_edit()
+    {
+        // The switch is read off the compilation on every edit, and every provider that hands on declared classes
+        // and ids now hands on its plan too: the plan has to come out equal, or every class and id is written again.
+        var first = GeneratorTestHost.Create(Generation.TemplateDefaultsTests.Switch, "Switch.cs")
+            .WithTenancyOnEntityFramework()
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+        first.ShouldCompile();
+        first.ShouldHaveGenerated("Tenant.TemplateDefault.");
+
+        AssertNothingRegenerated(first, first.RunAgain(AppendComment));
+        AssertNothingRegenerated(first, first.RunAgain(AddUnrelatedFile));
+    }
+
+    [Fact]
     public void An_access_behavior_caches_its_output_across_an_unrelated_edit()
     {
         // The behavior is written from the library's own declaration, read off the compilation on every

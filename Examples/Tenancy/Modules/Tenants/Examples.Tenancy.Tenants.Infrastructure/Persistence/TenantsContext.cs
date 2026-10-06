@@ -15,9 +15,10 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// </summary>
 /// <remarks>
 /// A plain context. Every table comes from one generated call, <c>AddTenancy()</c>, closed over this module's
-/// classes and ids, which the domain and contracts projects declare; the fields and rules the classes add
-/// (<see cref="OrganizationUnit.Kind"/>, <see cref="OrganizationUnit.CostCentre"/>, <see cref="Seat.JobTitle"/>)
-/// are mapped by the toolkit's conventions like any aggregate's, the kind by its key
+/// classes and ids: the ids the contracts project declares, and the classes the domain project declares, or has
+/// Tenancy's switch write where they add nothing, as it does the organization and the role. The fields and rules
+/// the classes add (<see cref="OrganizationUnit.Kind"/>, <see cref="OrganizationUnit.CostCentre"/>,
+/// <see cref="Seat.JobTitle"/>) are mapped by the toolkit's conventions like any aggregate's, the kind by its key
 /// (<see cref="UnitKindKeyConverter"/>). The save check, and the writer of what a save changes of the access
 /// questions' tables, arrive with the options instead: <c>AddTenancy</c> brings them, and <c>UseDDDToolkit</c>, in
 /// the options the module passes to <see cref="PostgresPools.AddContext{TContext,TFactory}"/>, puts them on.
@@ -53,9 +54,11 @@ public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : D
         modelBuilder.HasDefaultSchema(Schema);
 
         // Generated into this project, closed over Tenant, Organization, OrganizationUnit, Seat, Role
-        // and their ids, which this project does not declare: the domain project does, and it is of the same
-        // module. The package's generic AddTenancy<…9 types…>() with the arguments filled in. Given the provider,
-        // it also makes a tenant's root and a seat's primary placement unique in the database.
+        // and their ids, which this project does not declare: the domain and contracts projects have them, and they
+        // are of the same module. Organization and Role are the ones the domain project's switch wrote, which its
+        // compiled assembly shows like the others. The package's generic AddTenancy<…9 types…>() with the arguments
+        // filled in. Given the provider, it also makes a tenant's root and a seat's primary placement unique in the
+        // database.
         modelBuilder.AddTenancy(database: Database);
 
         // The invitations, which the application chose to have: the class and its id are named, and the generated
