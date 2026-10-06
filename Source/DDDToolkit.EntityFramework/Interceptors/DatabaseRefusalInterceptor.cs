@@ -19,7 +19,7 @@ namespace DDDToolkit.EntityFramework.Interceptors;
 /// <b>A row a policy denies.</b> When row level security refuses the row an insert or an update would write,
 /// the save throws <see cref="ToolkitRefusals.Refused"/>, a <see cref="RefusalKind.NotPermitted"/>, and it is
 /// logged through the context's logger factory, while the caller needs no more than "you may not". Where the
-/// request being handled passed an access check (<see cref="DDDToolkit.Access.PassedAccessCheck"/>), the check is
+/// request being handled passed an access check (<see cref="DDDToolkit.Access.RequestInHand"/>), the check is
 /// asked again first. Refusing now, the caller's rights changed between the check and the save, and that is an
 /// information line. Letting the caller through still, or with no check to ask, the application allowed what the
 /// policies do not, which somebody should look at, and that is a warning.

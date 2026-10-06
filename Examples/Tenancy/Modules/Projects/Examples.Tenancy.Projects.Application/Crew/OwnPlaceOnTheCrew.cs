@@ -54,7 +54,7 @@ internal static class OwnPlaceOnTheCrew
     /// <param name="caller">The tenant the caller acts in, and its seat.</param>
     /// <returns>What ends the work when disposed; <see langword="null"/> when the save runs as the caller.</returns>
     public static IDisposable? BeginSave(IProjectsRequest command, SeatId seat, TenantInScope<TenantId, SeatId> caller)
-        => caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current, command)
+        => caller.Seat == seat && !caller.BySystem && ReferenceEquals(RequestInHand.Current?.Request, command)
             ? TenancyWork.BeginSystemIn<TenantId, SeatId>(caller.Tenant, seat, Scope)
             : null;
 }

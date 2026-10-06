@@ -36,12 +36,12 @@ public sealed class StepLog
     {
         lock (InHand)
         {
-            InHand.Add((RequestInHand.Current, Checked<BasketId>.TryFindInHand(out var kept) ? kept : null));
+            InHand.Add((RequestInHand.Current?.Request, Checked<BasketId>.TryFindInHand(out var kept) ? kept : null));
         }
     }
 
-    /// <summary>The access check the rename handler found its request had passed, as it ran.</summary>
-    public PassedAccessCheck? PassedInHandler { get; set; }
+    /// <summary>The request in hand where the rename handler ran, with the check it passed.</summary>
+    public RequestInHand? InHandOfRename { get; set; }
 
     /// <summary>The steps so far, in order.</summary>
     public IReadOnlyList<string> InOrder
@@ -100,7 +100,7 @@ public sealed class RenameBasketHandler(StepLog steps, Checked<BasketId> checked
     {
         steps.Add("handler");
         steps.NoteInHand();
-        steps.PassedInHandler = PassedAccessCheck.Current;
+        steps.InHandOfRename = RequestInHand.Current;
         return ValueTask.FromResult(checkedBasket.TakeFor(command));
     }
 }

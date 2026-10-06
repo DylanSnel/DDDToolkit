@@ -241,15 +241,15 @@ internal sealed class MemberHoldInterceptor : SaveChangesInterceptor
             $"Under UseMemberHolds a resource with members is saved for the request whose access check read it (MemberAccess.On(key, {name.ToLowerInvariant()})), "
             + "or as the application's own work that trusted code began (Callers.Begin(Caller.System)). Nothing was saved.";
 
-        return RequestInHand.Current is not { } request
+        return RequestInHand.Current is not { } inHand
             ? $"{what} was changed with no request in hand: no request's access checks let one through in the flow of work this save runs in. "
               + "Either the handler was reached around its checks, called directly or by a transport that runs it around them, or the save ran after "
               + "the request's handling returned: a unit-of-work behavior registered outside the access behavior, or an endpoint that saves after Send. "
               + $"Send the request through its checks, and save inside its handling. {how}"
             : resource.ResourceInHand() is { } checkedOne
-                ? $"{what} was changed in the handling of {request.GetType().Name}, whose access check read {name} {checkedOne}: "
+                ? $"{what} was changed in the handling of {inHand.Request.GetType().Name}, whose access check read {name} {checkedOne}: "
                   + $"a handler changes the {name} its request requires a key on, and no other. {how}"
-                : $"{what} was changed in the handling of {request.GetType().Name}, whose access check read no {name}: "
+                : $"{what} was changed in the handling of {inHand.Request.GetType().Name}, whose access check read no {name}: "
                   + $"a handler changes the {name} its request requires a key on, and no other. {how}";
     }
 

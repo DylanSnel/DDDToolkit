@@ -24,7 +24,7 @@ public static class ToolkitRefusals
     /// answer until somebody's rights change. <c>DDDToolkit.EntityFramework</c> makes it of a failed save, and
     /// logs what it was: a warning when the application and the database disagree about a rule, and an
     /// information line when the caller's rights changed between the request's access check and the save, which
-    /// it tells by asking that check again (<see cref="Access.PassedAccessCheck"/>).
+    /// it tells by asking that check again (<see cref="Access.RequestInHand.StillPassesAsync"/>).
     /// </summary>
     public const string Refused = "access.refused";
 

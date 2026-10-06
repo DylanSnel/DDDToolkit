@@ -5,12 +5,12 @@ using FluentAssertions;
 namespace DDDToolkit.Tests.Access;
 
 /// <summary>
-/// The check a request passed is kept with the flow of work that handles it, so that what goes wrong later in
-/// that flow can ask it again: a save the database refused, to tell a caller whose rights changed in between from
-/// a rule C# and the policies hold differently. It is the handler's flow only, never another request's, and asking
-/// again keeps nothing behind.
+/// The request in hand carries the check it passed, so that what goes wrong later in its handling can ask that
+/// check again: a save the database refused, to tell a caller whose rights changed in between from a rule C# and
+/// the policies hold differently. Asking again keeps nothing behind. Where the request is in hand, and where it is
+/// not, is <see cref="RequestInHandTests"/>'s.
 /// </summary>
-public class PassedAccessCheckTests
+public class RequestInHandAskedAgainTests
 {
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -38,9 +38,6 @@ public class PassedAccessCheckTests
 
         /// <summary>What the check throws when it is asked, in place of an answer.</summary>
         public Exception? Fails { get; set; }
-
-        /// <summary>The check this flow had passed, as the check itself saw it while it was being asked.</summary>
-        public List<PassedAccessCheck?> SeenWhileAsked { get; } = [];
     }
 
     /// <summary>Lets a caller through for the keys it holds, and keeps the shelf for the handler.</summary>
@@ -53,7 +50,6 @@ public class PassedAccessCheckTests
             lock (keys)
             {
                 keys.Asked++;
-                keys.SeenWhileAsked.Add(PassedAccessCheck.Current);
             }
 
             if (keys.Reads)
@@ -93,19 +89,18 @@ public class PassedAccessCheckTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task The_handler_finds_the_check_its_request_passed_and_what_sent_it_does_not(bool reads)
+    public async Task The_request_in_hand_carries_the_requirement_it_passed_with(bool reads)
     {
         var (checks, keys, _) = Module(reads);
         keys.Held.Add(("shelves.restock", 4));
         var request = new RestockShelf(4, new OnShelf("shelves.restock", 4));
 
-        var seen = await SendAsync(checks, request, () => Task.FromResult(PassedAccessCheck.Current));
+        var seen = await SendAsync(checks, request, () => Task.FromResult(RequestInHand.Current));
 
         seen.Should().NotBeNull();
         seen!.Request.Should().BeSameAs(request);
         seen.Requirement.Should().Be(new OnShelf("shelves.restock", 4));
-        keys.SeenWhileAsked.Should().Equal([null], "while it is being asked the check has not passed yet");
-        PassedAccessCheck.Current.Should().BeNull("it follows the flow into the handler, not back out to what sent the request");
+        RequestInHand.Current.Should().BeNull("it follows the flow into the handler, not back out to what sent the request");
     }
 
     [Fact]
@@ -116,12 +111,12 @@ public class PassedAccessCheckTests
 
         var answers = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), async () =>
         {
-            var passed = PassedAccessCheck.Current!;
-            var still = await passed.StillPassesAsync(Cancellation);
+            var inHand = RequestInHand.Current!;
+            var still = await inHand.StillPassesAsync(Cancellation);
 
             // The key is taken away between the check and what the handler does next.
             keys.Held.Clear();
-            var after = await passed.StillPassesAsync(Cancellation);
+            var after = await inHand.StillPassesAsync(Cancellation);
             return (still, after);
         });
 
@@ -139,7 +134,7 @@ public class PassedAccessCheckTests
         await SendAsync(checks, request, async () =>
         {
             kept.TakeFor(request).Should().Be(4, "the handler takes what the check kept");
-            (await PassedAccessCheck.Current!.StillPassesAsync(Cancellation)).Should().BeTrue();
+            (await RequestInHand.Current!.StillPassesAsync(Cancellation)).Should().BeTrue();
             return 0;
         });
 
@@ -155,74 +150,45 @@ public class PassedAccessCheckTests
 
         await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), async () =>
         {
-            var passed = PassedAccessCheck.Current!;
+            var inHand = RequestInHand.Current!;
 
             // A request that named a version the shelf is no longer at, the handler's own save among the ways it
             // moves on: a check that asks the version after the key has found the key still held.
             keys.Fails = new ConcurrencyConflictException(typeof(int), 4);
-            await FluentActions.Awaiting(() => passed.StillPassesAsync(Cancellation).AsTask())
+            await FluentActions.Awaiting(() => inHand.StillPassesAsync(Cancellation).AsTask())
                 .Should().ThrowAsync<ConcurrencyConflictException>("a version that moved on says nothing about the caller's rights");
 
             keys.Fails = new InvalidOperationException("The connection was lost.");
-            await FluentActions.Awaiting(() => passed.StillPassesAsync(Cancellation).AsTask())
+            await FluentActions.Awaiting(() => inHand.StillPassesAsync(Cancellation).AsTask())
                 .Should().ThrowAsync<InvalidOperationException>("a check that could not read answers neither way");
 
             keys.Fails = null;
             keys.Held.Clear();
-            (await passed.StillPassesAsync(Cancellation)).Should().BeFalse("a refusal is the one no");
+            (await inHand.StillPassesAsync(Cancellation)).Should().BeFalse("a refusal is the one no");
             return 0;
         });
     }
 
     [Fact]
-    public async Task A_request_that_requires_nothing_or_was_refused_has_no_check_to_ask_again()
+    public async Task A_request_anyone_may_send_passes_again_without_asking_anybody()
     {
         var (checks, keys, _) = Module();
         keys.Held.Add(("shelves.restock", 4));
+        var open = new RestockShelf(4, AccessRequirement.AllowAnonymous());
 
-        // Sent from the handler of a request that passed: the open one is not that request.
+        // Sent from the handler of a request that passed a check: the open one is in hand for its own handling, and
+        // it passed by asking nobody, so asking again asks nobody either.
         var seen = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), () =>
-            SendAsync(checks, new RestockShelf(4, AccessRequirement.AllowAnonymous()), () => Task.FromResult(PassedAccessCheck.Current)));
-        seen.Should().BeNull("a request that requires nothing passed no check");
-
-        // Asked in the handler's own flow, where a save of the handler's would look: the refused check takes the place
-        // of the one the handler's request passed, and is no check that passed.
-        var refused = new RestockShelf(5, new OnShelf("shelves.restock", 5));
-        var seenInHandler = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), async () =>
-        {
-            var passedBefore = PassedAccessCheck.Current;
-            try
+            SendAsync(checks, open, async () =>
             {
-                await checks.RequireAsync(refused, Cancellation);
-            }
-            catch (RefusalException)
-            {
-            }
+                var inHand = RequestInHand.Current!;
+                return (inHand.Request, inHand.Requirement, Again: await inHand.StillPassesAsync(Cancellation));
+            }));
 
-            return (Before: passedBefore, After: PassedAccessCheck.Current);
-        });
-
-        seenInHandler.Before.Should().NotBeNull("the handler's request passed its check");
-        seenInHandler.After.Should().BeNull("a check that refused was not passed, though this flow asked it");
-    }
-
-    [Fact]
-    public async Task A_request_sent_from_a_handler_has_its_own_and_the_first_has_its_own_back_after_it()
-    {
-        var (checks, keys, _) = Module(reads: true);
-        keys.Held.Add(("shelves.restock", 4));
-        keys.Held.Add(("shelves.count", 4));
-        var outer = new RestockShelf(4, new OnShelf("shelves.restock", 4));
-        var inner = new RestockShelf(4, new OnShelf("shelves.count", 4));
-
-        var seen = await SendAsync(checks, outer, async () =>
-        {
-            var during = await SendAsync(checks, inner, () => Task.FromResult(PassedAccessCheck.Current?.Request));
-            return (during, after: PassedAccessCheck.Current?.Request);
-        });
-
-        seen.during.Should().BeSameAs(inner);
-        seen.after.Should().BeSameAs(outer);
+        seen.Request.Should().BeSameAs(open);
+        seen.Requirement.Should().BeOfType<AccessRequirement.Anyone>();
+        seen.Again.Should().BeTrue();
+        keys.Asked.Should().Be(1, "only the outer request's check was asked, once");
     }
 
     [Fact]
@@ -235,19 +201,19 @@ public class PassedAccessCheckTests
         var five = new RestockShelf(5, new OnShelf("shelves.restock", 5));
         using var both = new Barrier(2);
 
-        async Task<IRequireAccess?> Handle()
+        async Task<AccessRequirement?> Handle()
         {
             // Both have passed before either looks.
             await Task.Run(() => both.SignalAndWait(TimeSpan.FromSeconds(10)), Cancellation);
-            return PassedAccessCheck.Current?.Request;
+            return RequestInHand.Current?.Requirement;
         }
 
         var seen = await Task.WhenAll(
             Task.Run(() => SendAsync(checks, four, Handle), Cancellation),
             Task.Run(() => SendAsync(checks, five, Handle), Cancellation));
 
-        seen[0].Should().BeSameAs(four);
-        seen[1].Should().BeSameAs(five);
+        seen[0].Should().Be(new OnShelf("shelves.restock", 4));
+        seen[1].Should().Be(new OnShelf("shelves.restock", 5));
     }
 
     [Fact]
@@ -256,8 +222,8 @@ public class PassedAccessCheckTests
         var (checks, keys, _) = Module();
         keys.Held.Add(("shelves.restock", 4));
 
-        var named = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), () => Task.FromResult(PassedAccessCheck.Current!.ToString()));
+        var named = await SendAsync(checks, new RestockShelf(4, new OnShelf("shelves.restock", 4)), () => Task.FromResult(RequestInHand.Current!.ToString()));
 
-        named.Should().Be("PassedAccessCheckTests.RestockShelf (PassedAccessCheckTests.OnShelf)");
+        named.Should().Be("RequestInHandAskedAgainTests.RestockShelf (RequestInHandAskedAgainTests.OnShelf)");
     }
 }

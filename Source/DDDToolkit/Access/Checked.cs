@@ -70,7 +70,7 @@ public sealed class Checked<T>
     /// Keeps <paramref name="value"/> for the handler of <paramref name="request"/>, in the place of whatever
     /// an earlier pass of the same request kept and no handler took. Only the check that read it calls this,
     /// once it has let the caller through. A check asked again after its request's handler ran
-    /// (<see cref="PassedAccessCheck.StillPassesAsync"/>) keeps nothing: the handler took what it acts on, and
+    /// (<see cref="RequestInHand.StillPassesAsync"/>) keeps nothing: the handler took what it acts on, and
     /// nothing of that second asking stays behind for a later call to find.
     /// </summary>
     /// <param name="request">The very request being checked.</param>
@@ -92,7 +92,7 @@ public sealed class Checked<T>
                 nameof(request));
         }
 
-        if (PassedAccessCheck.IsAskingAgain)
+        if (RequestInHand.IsAskingAgain)
         {
             return;
         }
@@ -117,7 +117,7 @@ public sealed class Checked<T>
     /// </returns>
     public static bool TryFindInHand([MaybeNullWhen(false)] out T value)
     {
-        if (RequestInHand.Passed is { } hand && hand.TryFind(out value))
+        if (RequestInHand.Current is { } hand && hand.TryFind(out value))
         {
             return true;
         }

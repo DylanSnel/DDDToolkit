@@ -46,7 +46,7 @@ public class RequestInHandTests
             await Task.Yield();
             lock (InHandWhileChecking)
             {
-                InHandWhileChecking.Add(RequestInHand.Current);
+                InHandWhileChecking.Add(RequestInHand.Current?.Request);
             }
 
             var invoice = ((OnInvoice)requirement).Invoice;
@@ -78,7 +78,7 @@ public class RequestInHandTests
     private static async Task<Seen> HandleAsync()
     {
         await Task.Yield();
-        return new Seen(RequestInHand.Current, Checked<SeenInvoice>.TryFindInHand(out var kept) ? kept : null);
+        return new Seen(RequestInHand.Current?.Request, Checked<SeenInvoice>.TryFindInHand(out var kept) ? kept : null);
     }
 
     /// <summary>A dispatcher: the checks, then the handler, in one method.</summary>
@@ -144,7 +144,7 @@ public class RequestInHandTests
 
         // Asked in this method, as a dispatcher asks: a request the checks let through is in hand here.
         await _checks.RequireAsync(passed, Cancellation);
-        RequestInHand.Current.Should().BeSameAs(passed);
+        (RequestInHand.Current?.Request).Should().BeSameAs(passed);
 
         // Asked the same way, a request they refuse is not, and the one before it is not in hand any more either.
         RefusalException? refusal = null;
@@ -192,7 +192,7 @@ public class RequestInHandTests
         await _checks.RequireAsync(command, Cancellation);
 
         _check.InHandWhileChecking.Should().Equal([null], "while the check runs it has not let the request through yet");
-        RequestInHand.Current.Should().BeSameAs(command);
+        (RequestInHand.Current?.Request).Should().BeSameAs(command);
     }
 
     [Fact]

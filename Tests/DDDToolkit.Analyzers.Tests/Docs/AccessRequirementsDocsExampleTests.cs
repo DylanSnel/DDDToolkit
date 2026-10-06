@@ -102,7 +102,7 @@ public class AccessRequirementsDocsExampleTests
         ((System.Collections.IEnumerable)emitted.Property(store, "Closed")!).Cast<object>().Should().Equal(invoice);
 
         // The request is in hand for what runs after its checks, and the page's check kept nothing with it.
-        RequestInHand.Current.Should().BeSameAs(command);
+        (RequestInHand.Current?.Request).Should().BeSameAs(command);
     }
 
     [Fact]

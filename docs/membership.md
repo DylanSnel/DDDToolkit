@@ -382,7 +382,7 @@ What the default path does not do, in plain sight:
 - **A handler reached around its checks** is held by the database alone, to what its caller may: a caller
   that may do it does it. Whatever sends your requests asks the checks; a test can hold that. A save your
   handler runs as the application's own work is held by no row rule at all, so begin that work only for a
-  request whose check let it through: `RequestInHand.Current` is then that very request
+  request whose check let it through: `RequestInHand.Current.Request` is then that very request
   ([the request in hand](access-requirements.md#the-request-in-hand)), as in the Tenancy sample's
   `OwnPlaceOnTheCrew`.
 - **The save is not tied to the version the check read.** For a caller that named no version, a change
@@ -765,7 +765,7 @@ public static MembershipRules Rules { get; } = new(
   yours that asks what the caller holds. Somebody who holds the key through a role, or
   [from above](#beside-an-organization), hands a resource on as itself. An owner's own hand-over is saved
   as the application's own work, once your command's check let it through: the handler knows that by the
-  [request in hand](access-requirements.md#the-request-in-hand), `RequestInHand.Current` being its command,
+  [request in hand](access-requirements.md#the-request-in-hand), `RequestInHand.Current.Request` being its command,
   and saves as the caller otherwise.
 - **For a resource the database checks.** On a resource with no row access rules of yours the lock's
   policies would be the only ones on the member tables, and nobody would read a row of them.

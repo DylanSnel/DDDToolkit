@@ -13,8 +13,7 @@ core package, free of any dispatcher and of any [supporting domain](writing-a-su
 | `CallerAccessCheck` | The core's check of who is calling, first in every module's set. |
 | `AccessChecks<TRequests>` | The checks of one module. `RequireAsync(request)` holds a request to what it declared, and fails closed. |
 | `Checked<T>` | What a check read on the way, kept for the code after it that handles the same request. |
-| `RequestInHand` | The request a flow of work is handling, once its checks let it through: what the handler and its save serve. |
-| `PassedAccessCheck` | The check the request being handled passed, kept with the flow of work that handles it, to be asked again. |
+| `RequestInHand` | The request a flow of work is handling, once its checks let it through, with the requirement it passed: what the handler and its save serve, and the check to ask again. |
 
 Who is calling is a separate question, answered by the host: [running queries as the caller](row-level-security.md#running-queries-as-the-caller).
 
@@ -277,21 +276,15 @@ if (requirement is AccessRequirement.Anyone)                    // AllowAnonymou
 var check = checks.FirstOrDefault(candidate => candidate.Decides(requirement))
     ?? throw new InvalidOperationException("CloseInvoice declares 'BillingAccess.OnInvoice', which none of the access checks registered for IBillingRequest decides. ...");
 
-await check.RequireAsync(requirement, request, cancellationToken);  // kept for the flow that handles the request
+await check.RequireAsync(requirement, request, cancellationToken);  // in hand for the flow that handles the request
 ```
 
 </details>
 
-**The check a request passed stays with its handler.** `RequireAsync` keeps it with the flow of work that handles
-the request, `PassedAccessCheck.Current`: the handler and everything it awaits find it, what sent the request does
-not, and a request the handler sends in turn has its own. That holds where what sends the requests awaits the
-checks in an `async` method and calls the handler from there, as the generated behavior does and as the
-dispatcher [below](#asking-the-checks-without-mediator) does. `StillPassesAsync()` asks the check again, as the
-same caller, now, and keeps nothing for a handler while it does: `true` when it still lets the caller through,
-`false` when it refuses, and anything else the check throws comes out as it is: a `ConcurrencyConflictException`
-too, which says the resource moved on from the version the request named, not whether the caller may. The toolkit asks it when the policies refuse a save the check allowed, to tell a caller whose rights
-changed in between from a rule C# and the policies hold differently:
-[When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed).
+**The check a request passed stays with its handler.** The request is [in hand](#the-request-in-hand) for the
+flow of work that handles it, with the requirement it passed, so the check can be
+[asked again](#asking-its-check-again) later in that flow: the toolkit does that when the policies refuse a save
+the check allowed.
 
 ## Asking the checks without Mediator
 
@@ -318,24 +311,23 @@ public sealed class BillingDispatcher(AccessChecks<IBillingRequest> checks, ISer
 
 The checks, the dispatcher and the handlers come from one scope, the request's: what a check keeps is
 taken by a handler of the same scope. Ask the checks and run the handler in one `async` method, as above: the
-request is then [in hand](#the-request-in-hand) for the handler and its save, and no longer once the method
-returned, and the check it passed is kept with that flow too, for the handler that method calls next. A method
-without `async` that hands on the checks' task keeps it in the flow of whoever called it instead, so a request a
-handler sends that way leaves its check in that handler's flow, in the place of the check of the handler's own
-request.
+request is then [in hand](#the-request-in-hand) for the handler and its save, with the check it passed, and no
+longer once the method returned. A method without `async` that hands on the checks' task leaves the request in
+hand for whoever called it instead.
 
 ## The request in hand
 
 `AccessChecks<TRequests>.RequireAsync(request)` puts the request in hand for the flow of work that asked, from
-the moment the checks let it through: `RequestInHand.Current` is that request, in the method that asked and in
-whatever it runs after, the handler and the save the handler ends with among it. A request the checks refused
+the moment the checks let it through: `RequestInHand.Current.Request` is that request, in the method that asked
+and in whatever it runs after, the handler and the save the handler ends with among it, and
+`RequestInHand.Current.Requirement` what it declared. A request the checks refused
 is in nobody's hand. What a check kept for the request is found there without it,
 `Checked<T>.TryFindInHand(out var kept)`, and left where it is.
 
 ```csharp
 await checks.RequireAsync(command, cancellationToken);    // in hand from here, once it passed
 await handler.HandleAsync(command, cancellationToken);    // and here, down to the save
-// RequestInHand.Current is command; Checked<T>.TryFindInHand(out var kept) finds what its check kept
+// RequestInHand.Current.Request is command; Checked<T>.TryFindInHand(out var kept) finds what its check kept
 ```
 
 - **It follows the flow, as `Callers.Begin` does:** into what the method runs after the checks, into tasks
@@ -355,6 +347,21 @@ await handler.HandleAsync(command, cancellationToken);    // and here, down to t
   every item after that is asked for by whoever reads the stream, in that reader's flow.
 - **It is not the scope.** A scope may handle several requests, the mutations of one GraphQL request say: what
   is in hand is the one whose handling the code is in, and nothing a request before it left in the scope.
+
+### Asking its check again
+
+`RequestInHand.Current.StillPassesAsync()` asks the check the request passed again, as the same caller, now, and
+keeps nothing for a handler while it does: `true` when it still lets the caller through, `false` when it refuses,
+and anything else the check throws comes out as it is: a `ConcurrencyConflictException` too, which says the
+resource moved on from the version the request named, not whether the caller may. A request anyone may send passed
+by asking nobody, and passes again the same way. What is asked again is the requirement the request declared: a
+rule a handler or a package's use case checks itself, past that requirement, is not part of it.
+
+The toolkit asks it when the policies or a guard refuse a save the check allowed, to tell a caller whose rights
+changed in between from a rule C# and the policies hold differently:
+[When the policies refuse what C# allowed](row-level-security.md#when-the-policies-refuse-what-c-allowed).
+`ToString()` names the request and its requirement by their types, `ChangeProjectName (MemberAccess<ProjectId>.On)`,
+never their values, for a log line.
 
 ## The generated behavior, with Mediator
 

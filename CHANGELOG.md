@@ -155,8 +155,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   is kept is what the request's latest pass read: a request that passed, never reached its handler and is
   sent again in the same scope is handed what the second pass read, and nothing of the first stays behind.
   `AccessChecks<TRequests>.RequireAsync(request)` puts the request in hand for the flow of work that asked, from
-  the moment the checks let it through: `RequestInHand.Current` is that request in the method that asked and in
-  what it runs after, the handler and its save included, and what a check kept is found there without the
+  the moment the checks let it through: `RequestInHand.Current.Request` is that request in the method that asked
+  and in what it runs after, the handler and its save included, and what a check kept is found there without the
   request, `Checked<T>.TryFindInHand(out var kept)`. Ask the checks and run the handler in one `async` method,
   as the generated behavior does: only an `async` method gives its caller the flow back as it was, and what runs
   after it returned has nothing in hand. `services.AddAccessChecks<TRequests>()`
@@ -240,18 +240,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   project: the toolkit's props now make `IsTestProject` and `IsTestingPlatformApplication` visible to its
   analyzers, and a test that calls a handler on purpose hears nothing. Elsewhere a call that is meant takes
   `#pragma warning disable DDD00061` with its reason.
-- **The check a request passed stays with its handler, to be asked again.** `AccessChecks<TRequests>.RequireAsync`
-  keeps the check it let a request through with, its requirement and the request, with the flow of work that
-  handles it: `PassedAccessCheck.Current`, in `DDDToolkit.Access`. The handler and everything it awaits find it,
-  what sent the request does not, a request the handler sends in turn has its own, and a request that requires
-  nothing, one whose check refused and a handler called directly have none. `StillPassesAsync()` asks the check
+- **The check a request passed stays with its handler, to be asked again.** The request in hand carries the
+  requirement it passed with, `RequestInHand.Current.Requirement`, and the check that decided it: the handler and
+  everything it awaits find it, what sent the request does not, a request the handler sends in turn has its own,
+  and one whose check refused and a handler called directly have none. `StillPassesAsync()` asks the check
   again, now, as the same caller: `true` when it still lets the caller through, `false` when it refuses with a
   `RefusalException`, and whatever else the check throws comes out as it is, a `ConcurrencyConflictException`
-  too, which says nothing about the caller's rights. Asked again, a check keeps nothing for a handler:
-  `Checked<T>.KeepFor` does nothing while it is asked again. Nothing to write for it where the checks are awaited
-  in an `async` method that then calls the handler, as the generated behavior does; a dispatcher of your own is
-  written that way, and the message of DDD00057 now says so. The toolkit asks it when the policies refuse a save,
-  below. See [Access requirements](docs/access-requirements.md#what-answers-it).
+  too, which says nothing about the caller's rights; a request anyone may send passes again by asking nobody.
+  Asked again, a check keeps nothing for a handler: `Checked<T>.KeepFor` does nothing while it is asked again.
+  Nothing to write for it where the checks are awaited in an `async` method that then calls the handler, as the
+  generated behavior does; a dispatcher of your own is written that way, and the message of DDD00057 now says
+  so. The toolkit asks it when the policies refuse a save, below. See
+  [Access requirements](docs/access-requirements.md#asking-its-check-again).
 - **A module declared by its folder: `DDD_DeclareModule`.** Set to true beside `DDD_Module`, the build declares
   the project's module, as `[assembly: Module]` does, so a `Directory.Build.props` that names the module of every
   project below a folder replaces a `Module.cs` in each project of a module in layers. The build writes the two
@@ -534,7 +534,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   403 from a route and a `RefusalError` from a mutation, with what the save threw as its inner exception, where
   it ended as a `DbUpdateException`, a 500. The log line names the guard by the constraint it raised with, and the
   table where it is known: "the guard projects_owner_stays"; like a policy's refusal, it is an information line when
-  the request's access check, asked again, refuses as well (`PassedAccessCheck`), and a warning otherwise. `RowAccessModel.Refusal(guard, message)` writes the
+  the request's access check, asked again, refuses as well (`RequestInHand.StillPassesAsync`), and a warning otherwise. `RowAccessModel.Refusal(guard, message)` writes the
   statement for a trigger written in a contribution, `RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege',
   CONSTRAINT = ..., HINT = 'ddd:access.refused', MESSAGE = ...;`, and a trigger written by hand says the same;
   one that raises `42501` without the hint fails as before. Every access guard the toolkit writes raises it: the
@@ -1978,7 +1978,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   too. Code that caught either exception to detect a policy's denial catches the refusal instead. A refusal,
   a policy's or a guard's, is logged through the context's logger factory, under the category of
   `DatabaseRefusalInterceptor`, as what it was. Where the request being handled passed an access check
-  (`PassedAccessCheck`, under Added), the check is asked again first. When it refuses now, the caller's rights
+  (`RequestInHand`, under Added), the check is asked again first. When it refuses now, the caller's rights
   changed between the check and the save, a key taken from its role say, and C# and the database agreed: an
   information line says so, with no stack trace. When it still lets the caller through, or the flow passed no
   check, the application allowed what the database does not, and that is a warning: "C# and the policies

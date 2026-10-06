@@ -631,7 +631,7 @@ internal static class DatabaseRefusals
 
     /// <summary>
     /// Says that the database refused what the application allowed, and which of two things that was. Where the
-    /// request this flow is handling passed an access check (<see cref="PassedAccessCheck.Current"/>), the check is
+    /// request this flow is handling passed an access check (<see cref="RequestInHand.Current"/>), the check is
     /// asked again, as the same caller. When it refuses now, the caller's rights changed between the check and the
     /// save, and C# and the database agreed, each when it was asked: an information line says what happened, with
     /// no stack trace, since nothing is wrong. When it still lets the caller through, the policies or the guard
@@ -650,7 +650,7 @@ internal static class DatabaseRefusals
             return;
         }
 
-        if (PassedAccessCheck.Current is not { } passed)
+        if (CheckedInHand() is not { } inHand)
         {
             Disagreement(logger, denied, failure);
             return;
@@ -661,15 +661,15 @@ internal static class DatabaseRefusals
         {
             // A save without await asks without it as well: on the thread pool, so a check that awaits without
             // ConfigureAwait(false) never waits for the thread this one blocks. The flow goes along, its caller too.
-            stillPasses = Task.Run(() => passed.StillPassesAsync(CancellationToken.None).AsTask()).GetAwaiter().GetResult();
+            stillPasses = Task.Run(() => inHand.StillPassesAsync(CancellationToken.None).AsTask()).GetAwaiter().GetResult();
         }
         catch (Exception asking)
         {
-            Unanswered(logger, denied, passed, asking, failure);
+            Unanswered(logger, denied, inHand, asking, failure);
             return;
         }
 
-        Answered(logger, denied, passed, stillPasses, failure);
+        Answered(logger, denied, inHand, stillPasses, failure);
     }
 
     /// <inheritdoc cref="Report"/>
@@ -681,7 +681,7 @@ internal static class DatabaseRefusals
             return;
         }
 
-        if (PassedAccessCheck.Current is not { } passed)
+        if (CheckedInHand() is not { } inHand)
         {
             Disagreement(logger, denied, failure);
             return;
@@ -690,16 +690,24 @@ internal static class DatabaseRefusals
         bool stillPasses;
         try
         {
-            stillPasses = await passed.StillPassesAsync(cancellationToken).ConfigureAwait(false);
+            stillPasses = await inHand.StillPassesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception asking) when (asking is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            Unanswered(logger, denied, passed, asking, failure);
+            Unanswered(logger, denied, inHand, asking, failure);
             return;
         }
 
-        Answered(logger, denied, passed, stillPasses, failure);
+        Answered(logger, denied, inHand, stillPasses, failure);
     }
+
+    /// <summary>
+    /// The request in hand where a check let it through, to ask again: <see langword="null"/> outside the handling
+    /// of a request, and for one anyone may send, which passed by asking nobody, so the application let through
+    /// what the database refused without asking anything.
+    /// </summary>
+    private static RequestInHand? CheckedInHand()
+        => RequestInHand.Current is { Requirement: not AccessRequirement.Anyone } inHand ? inHand : null;
 
     private static ILogger LoggerOf(DbContext context)
         => context.GetService<ILoggerFactory>().CreateLogger<DatabaseRefusalInterceptor>();
@@ -708,9 +716,9 @@ internal static class DatabaseRefusals
     private static bool Writes(ILogger logger) => logger.IsEnabled(LogLevel.Warning) || logger.IsEnabled(LogLevel.Information);
 
     /// <summary>The check was asked again, and answered.</summary>
-    private static void Answered(ILogger logger, Denial denied, PassedAccessCheck passed, bool stillPasses, Exception failure)
+    private static void Answered(ILogger logger, Denial denied, RequestInHand inHand, bool stillPasses, Exception failure)
     {
-        var request = passed.ToString();
+        var request = inHand.ToString();
         if (stillPasses)
         {
             switch (denied)
@@ -790,9 +798,9 @@ internal static class DatabaseRefusals
     }
 
     /// <summary>The check failed when it was asked again, so which of the two it was is not known, and the warning stands.</summary>
-    private static void Unanswered(ILogger logger, Denial denied, PassedAccessCheck passed, Exception asking, Exception failure)
+    private static void Unanswered(ILogger logger, Denial denied, RequestInHand inHand, Exception asking, Exception failure)
     {
-        var request = passed.ToString();
+        var request = inHand.ToString();
         var why = asking.GetType().Name + ": " + asking.Message;
         switch (denied)
         {

@@ -2059,19 +2059,21 @@ Somebody else may need to hear more, and what depends on why the policies refuse
   a grant was revoked, the caller's seat was suspended: in the milliseconds between the request's access check and
   its save, or in the seconds a slow handler takes. The check and the policies agreed, each at the moment it was
   asked, and nothing needs fixing: an information line says what happened, with no stack trace. A change of rights
-  that changes the very row the save is about never gets this far. Taking a crew role off a project in the Tenancy
-  sample moves the project's version, so the save is the lost race it always was, a `ConcurrencyConflictException`
-  that the sample answers with 409, and the policies are not asked.
+  that changes the very row the save is about ends the same way: taking a crew role off a project in the Tenancy
+  sample moves the project's version, but the handler loads the project as it is when it runs, so the save goes
+  ahead and the policies refuse it. Only a request that names the version it read (`ExpectVersion`) loses the race
+  instead, a `ConcurrencyConflictException` that the sample answers with 409, and the policies are not asked.
 - **The policies refuse what C# allows.** A rule is held in two places that do not hold it alike, or a handler
   changes something its request's check never asked about. A retry gets the same answer, and a developer should
   look: a warning says so.
 
-To tell the two apart, the toolkit asks the request's access check again, as the same caller, now. The check a
-request passed is kept with the flow of work that handles it (`PassedAccessCheck.Current`), and a save its
-handler makes runs in that flow. Asked again, the check refuses: the rights changed. It still lets the caller
-through: the policies and C# disagree. Where nothing passed a check in that flow, a handler called directly,
-work outside any request, or a request that requires nothing (`AccessRequirement.Open`), there is nothing to ask,
-and the application let through what the policies do not without asking anything: that is a warning too.
+To tell the two apart, the toolkit asks the request's access check again, as the same caller, now. The request
+is in hand for the flow of work that handles it, with the check it passed
+([`RequestInHand`](access-requirements.md#asking-its-check-again)), and a save its handler makes runs in that
+flow. Asked again, the check refuses: the rights changed. It still lets the caller through: the policies and C#
+disagree. Where nothing passed a check in that flow, a handler called directly, work outside any request, or a
+request anyone may send (`AccessRequirement.AllowAnonymous()`), there is nothing to ask, and the application let
+through what the policies do not without asking anything: that is a warning too.
 
 A [guard](#when-the-database-refuses) that refuses a statement, a trigger that raises `42501` with the toolkit's
 hint, is told apart the same way, and each line names it: `The guard projects_owner_stays refused a save after
@@ -2089,8 +2091,8 @@ flowchart LR
     Again -- "fails" --> Warning
 ```
 
-Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` keeps the check for every request it lets
-through, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of your own
+Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` puts every request it lets through in hand,
+with its check, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of your own
 written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
 The lines are written through the context's logger factory under the category of `DatabaseRefusalInterceptor`,
 and name the request and its requirement by their types, never their values; a warning carries what the save
@@ -2143,9 +2145,9 @@ logs.Entries.Single(entry => entry.Category == typeof(DatabaseRefusalInterceptor
 Code of your own that writes past Entity Framework, and meets a refusal of the policies itself, asks the same:
 
 ```csharp
-if (PassedAccessCheck.Current is { } passed && !await passed.StillPassesAsync(cancellationToken))
+if (RequestInHand.Current is { } inHand && !await inHand.StillPassesAsync(cancellationToken))
 {
-    logger.LogInformation("The caller's rights changed between the access check of {Request} and the save.", passed);
+    logger.LogInformation("The caller's rights changed between the access check of {Request} and the save.", inHand);
 }
 ```
 
