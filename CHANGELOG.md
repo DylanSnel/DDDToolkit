@@ -1504,7 +1504,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   source-generated [Mediator](https://github.com/martinothamar/Mediator) with a handler of its own, and a route
   only sends one. A request declares what it requires of its caller, a key and the project or unit it is held
   on, and its module's pipeline behavior, which the toolkit generates from the module's request interface, asks
-  the module's checks before the handler runs; the check keeps what it read for the handler to act on. Commands
+  the module's checks before the handler runs; the handler then acts on what its request names. Commands
   save through a write port on the request's context; queries read through a read port, each on a context of its
   own, so the queries of one request can run side by side: each module's contexts come from a pool.
   `PostgresPools.AddContext`, in the samples' hosting project, registers the pools and `AddScopedFromPool`: a

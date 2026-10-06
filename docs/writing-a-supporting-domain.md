@@ -827,7 +827,7 @@ plain users, and where an application has an organization, a member is a seat.
 ## What the application should not have to write
 
 Each line an application writes over a package's types is a line it can get wrong, and a line a reader of
-the package's docs has to have explained. Three kinds can be the package's to write:
+the package's docs has to have explained. These can be the package's to write:
 
 - **A registration for each thing, beside the main one.** A registration can take only the later type
   arguments of a template and leave the rest to the call. Membership's access check is added this way, closed
@@ -853,6 +853,13 @@ the package's docs has to have explained. Three kinds can be the package's to wr
   application that localizes its failures adds no line: `services.AddFailureTexts<MembershipFailures>(codes.TextKeys)`.
   An offer changes nothing for an application that does not, and the application's own texts come first
   ([texts a package's registration offers](localization.md#texts-a-packages-registration-offers)).
+- **What a context needs, put on by the one call.** A package whose storage needs an interceptor on the
+  application's contexts registers it as a part of a context, next to what it is about,
+  `services.AddContextPart(...)`, and `UseDDDToolkit` puts it on every context in its place: the application
+  names it nowhere, and a module added later gets it from the same call. Where a context cannot do without it,
+  because of what the package mapped into its model, the mapping says so, `RequireContextPart`, and a context
+  without it is refused at its first save and at start-up. Tenancy's save check does both
+  ([A part of your own](entity-framework.md#a-part-of-your-own)).
 - **A line over the application's own class.** Membership's generator writes the member list on the
   resource a member class names, from the collection, the owner and the codes the resource declares. Such a
   generator ships with the package that declares the template, not with the one that holds the
