@@ -259,8 +259,8 @@ public sealed record RoleFollowedItsPackV1(long TenantId, Guid RoleId, string Pa
 options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .PublishAs<RoleFollowedItsPack<TenantId, RoleId, SeatId>, RoleFollowedItsPackV1>(followed => new RoleFollowedItsPackV1(
         followed.TenantId.Value, followed.RoleId.Value, followed.Pack, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))
-    .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()
-    .KeepEventLog(log => log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>()));
+    .AddTenancyDomainEvents()
+    .KeepEventLog(log => log.AddTenancyEventLog()));
 
 // Where your application sends mail: who administers the tenant, and where to write to them, is yours to know
 public sealed class TellTheAdministrators(IShopAdministrators administrators, IMailer mailer)
