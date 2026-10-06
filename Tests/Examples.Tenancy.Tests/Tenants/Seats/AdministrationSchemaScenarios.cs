@@ -117,6 +117,26 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     }
 
     [Fact]
+    public async Task Past_the_mediator_rhea_reads_the_roles_in_her_region_and_none_above_it()
+    {
+        // Rhea manages seats, grants and units at North, and the request refuses her (above), since it asks the seats key
+        // for the whole tenant. Called without it, the storage reads as her seat, and the policy on the grants draws a
+        // line of its own, wider than the request's, a key reading only where it applies: Vic's role at North Inland,
+        // below North, and nothing of Maud's at the root, or Seth's at South Bay.
+        var host = await sample.SharedAsync();
+        using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, Harbor))
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            var reads = scope.ServiceProvider.GetRequiredService<ITenancyReads>();
+
+            (await reads.GrantsOfAsync(Harbor.SeatOf(DemoPeople.Vic), Cancellation)).Should().ContainSingle()
+                .Which.UnitId.Should().Be(Harbor.UnitNamed("North Inland"));
+            (await reads.GrantsOfAsync(Harbor.SeatOf(DemoPeople.Maud), Cancellation)).Should().BeEmpty("Maud's role is held at the root, above North");
+            (await reads.GrantsOfAsync(Harbor.SeatOf(DemoPeople.Seth), Cancellation)).Should().BeEmpty("Seth's is at South Bay, beside it");
+        }
+    }
+
+    [Fact]
     public async Task At_graphql_the_field_is_offered_to_nobody_and_a_seat_reads_its_own_roles_there()
     {
         // Not to Maud either: the gateway does not have the field, so the document is refused before anything runs.

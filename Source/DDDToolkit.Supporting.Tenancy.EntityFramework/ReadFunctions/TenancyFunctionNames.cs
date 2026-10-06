@@ -63,20 +63,23 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The tenant's administrators, as rows of <c>"SeatId"</c> and <c>"RoleId"</c>: no parameters. Answered to a
-    /// seat that may read other seats' grants.
+    /// seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the
+    /// whole tenant.
     /// </summary>
     public const string TenantAdministrators = "tenant_administrators";
 
     /// <summary>
     /// The rights a move of a unit changes, as rows of <c>"UnitId"</c>, <c>"Key"</c>, <c>"EndsAt"</c>,
     /// <c>"Parent"</c> and <c>"OfCaller"</c>: its parameters are the unit's parent and the parent it would get.
-    /// Answered to a seat that manages units at both.
+    /// Answered to a seat that manages units at both: its own rights, and another seat's only where it reaches one
+    /// parent and not the other, which is where the move changes it.
     /// </summary>
     public const string RightsAMoveChanges = "rights_a_move_changes";
 
     /// <summary>
     /// The seats that hold a key at a unit, as rows of <c>"SeatId"</c>: its parameters are the key and the unit.
-    /// A seat that may read other seats' grants is answered every holder, any other seat itself when it holds.
+    /// A seat is answered each holder whose grant there it may read: itself, and any other seat at a unit where it
+    /// manages grants, seats or units, or anywhere when it manages roles for the whole tenant.
     /// </summary>
     public const string SeatsHoldingAt = "seats_holding_at";
 

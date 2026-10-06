@@ -337,6 +337,8 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         await _services.GrantAsync(harbor, temporary, harbor.RootUnit, HostCatalogue.AdministratorPack, until: now.AddDays(7));
         var grace = await _services.SeatAtAsync(harbor, "Grace", north, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
         var hal = await _services.SeatAtAsync(harbor, "Hal", south, HostCatalogue.OperatorPack);
+        var acting = await _services.SeatAtAsync(harbor, "Ivy", south);
+        await _services.GrantAsync(harbor, acting, south, HostCatalogue.SupervisorPack, until: now.AddDays(7));
         var orchard = await _services.ProvisionAsync("orchard");
         var catalogue = TenancyCatalogue.Build(HostCatalogue.Application, []);
 
@@ -357,20 +359,21 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         pairs.Should().BeEquivalentTo([(harbor.AdminSeat, administrators), (second, administrators)]);
         pairs.Should().NotContain(pair => pair.Seat == orchard.AdminSeat);
 
-        // A move from under North to under South: Grace's own rights at North, whatever their key, reaching North; every
-        // seat's rights of a key that manages access at the root, reaching both; and nothing of Hal's at South, whose
-        // operator's keys manage no access.
+        // A move from under North to under South: Grace's own rights at North, whatever their key, reaching North; Ivy's
+        // of a key that manages access at South, reaching South alone, which is where the move changes them; nothing of
+        // the administrators' at the root, which reach both parents, wherever the unit hangs; and nothing of Hal's at
+        // South, whose operator's keys manage no access.
         reaches.Where(reach => reach.OfCaller).Select(reach => (reach.UnitId, reach.Key, reach.Parent)).Should().BeEquivalentTo(
         [
             (north, TenancyKeys.GrantsManage, north), (north, TenancyKeys.SeatsManage, north), (north, TenancyKeys.UnitsManage, north),
             (north, HostCatalogue.WidgetChange, north), (north, HostCatalogue.WidgetCreate, north), (north, HostCatalogue.WidgetRead, north),
             (north, HostCatalogue.WidgetRead, north),
         ], "the supervisor's keys and the watcher's, each a right of its own");
-        reaches.Where(reach => !reach.OfCaller).Should().OnlyContain(reach => reach.UnitId == harbor.RootUnit && catalogue.ManagesAccess(reach.Key))
-            .And.HaveCount(3 * catalogue.AccessManagingKeys.Count * 2, "three administrators, each key that manages access, once for each parent");
-        reaches.Where(reach => reach.EndsAt != null).Should().HaveCount(catalogue.AccessManagingKeys.Count * 2, "Bert's, which have not ended")
+        reaches.Where(reach => !reach.OfCaller).Select(reach => (reach.UnitId, reach.Key, reach.Parent)).Should().BeEquivalentTo(
+            [(south, TenancyKeys.GrantsManage, south), (south, TenancyKeys.SeatsManage, south), (south, TenancyKeys.UnitsManage, south)],
+            "the supervisor's keys that manage access, and not the administrators' at the root");
+        reaches.Where(reach => reach.EndsAt != null).Should().HaveCount(3, "Ivy's, which have not ended")
             .And.OnlyContain(reach => reach.EndsAt > now.AddDays(6));
-        reaches.Should().NotContain(reach => reach.UnitId == south);
         hal.Should().NotBe(grace);
     }
 

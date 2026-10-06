@@ -48,24 +48,44 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
     public static TheoryData<string> Seats => [.. Callers.Keys];
 
     [Fact]
-    public async Task The_administrators_are_answered_to_a_manager_and_to_nobody_else()
+    public async Task The_administrators_are_answered_to_a_seat_that_reads_the_grants_at_the_root_and_to_nobody_else()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var ada = Ada.Seat.Value + " " + HarborRoles.Administrator.Value;
 
-        // Ada administers Harbor, Seth manages units, seats and grants at North, Hiro gives roles there: each may read
-        // every grant of Harbor, and is answered who administers it.
-        foreach (var manager in new[] { Ada, Seth, Hiro })
+        // Ada administers Harbor and reads every grant of it: she is answered who administers it.
+        await using (var asAda = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
-            await using var caller = await AsCaller.PersonAsync(database, manager.Identity, Harbor, Cancellation);
-            (await caller.ListAsync<string>(Administrators, Cancellation)).Should().Equal([ada], "{0} manages access in Harbor", manager.Name);
+            (await asAda.ListAsync<string>(Administrators, Cancellation)).Should().Equal([ada]);
         }
 
-        // Oli manages nothing, Eve holds nothing now, Sue is suspended, and a stranger has no seat: each is answered nobody.
-        foreach (var identity in new[] { Oli.Identity, Eve.Identity, Sue.Identity, Stranger })
+        // Seth manages units, seats and grants at North, and Hiro gives roles there: they read the grants at North and
+        // below it, and not Ada's at the root, so neither is answered who administers Harbor. Oli manages nothing, Eve
+        // holds nothing now, Sue is suspended, and a stranger has no seat: each is answered nobody either.
+        foreach (var identity in new[] { Seth.Identity, Hiro.Identity, Oli.Identity, Eve.Identity, Sue.Identity, Stranger })
         {
             await using var caller = await AsCaller.PersonAsync(database, identity, Harbor, Cancellation);
             (await caller.ListAsync<string>(Administrators, Cancellation)).Should().BeEmpty();
+        }
+
+        // A key that reads the grants at the root is enough, whichever it is: grants, seats or units held there, or roles
+        // for the whole tenant, which is the key that makes an administrator, so Oli is then answered himself as well.
+        foreach (var key in new[] { TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage, TenancyKeys.RolesManage })
+        {
+            var keeper = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+            await HoldAtAsync(keeper, Oli, HarborRoot, [key], Cancellation);
+            await using var oli = await AsCaller.PersonAsync(keeper, Oli.Identity, Harbor, Cancellation);
+            var answered = await oli.ListAsync<string>(Administrators, Cancellation);
+            answered.Should().Contain(ada, "Oli holds {0} at the root", key);
+            var others = answered.Where(pair => pair != ada).ToList();
+            if (key == TenancyKeys.RolesManage)
+            {
+                others.Should().ContainSingle().Which.Should().StartWith(Oli.Seat.Value.ToString());
+            }
+            else
+            {
+                others.Should().BeEmpty();
+            }
         }
 
         // The tenant is the calling seat's: Odette is answered Orchard's, Oli, who watches there, nobody, and Ada, who has
@@ -283,11 +303,13 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         await HoldUntilAsync(database, Eve, HarborRoot, HarborRoles.Administrator, days: 7);
+        await HoldUntilAsync(database, Oli, South, HarborRoles.Supervisor, days: 7);
         var now = await DatabaseNowAsync(database.ConnectionString, Cancellation);
 
         // Ada manages units everywhere. What the function answers her about a move from under North to under South is
         // what the store reads from the rights themselves where the save writes them, as on any other database: her own
-        // rights that have not ended, and every seat's of a key that manages access, at North, at South and above them.
+        // rights that have not ended, at North, at South and above them, and every other seat's of a key that manages
+        // access that reaches one of the two and not the other, which is where the move changes it.
         List<string> expected;
         await using (var composed = new TenancyServices(
                          database,
@@ -303,8 +325,11 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         }
 
         expected.Should().Contain(reach => reach.EndsWith(" true", StringComparison.Ordinal)).And.Contain(reach => reach.EndsWith(" false", StringComparison.Ordinal))
-            .And.Contain(reach => !reach.Contains("no end", StringComparison.Ordinal), "Eve's rights end, and are among them");
+            .And.Contain(reach => !reach.Contains("no end", StringComparison.Ordinal), "Oli's rights at South end, and are among them");
         expected.Should().NotContain(reach => reach.Contains(" widget.", StringComparison.Ordinal) && reach.EndsWith(" false", StringComparison.Ordinal), "of other seats, only the keys that manage access");
+        expected.Should().NotContain(
+            reach => reach.StartsWith(HarborRoot.Value + " ", StringComparison.Ordinal) && reach.EndsWith(" false", StringComparison.Ordinal),
+            "Eve's rights at the root reach both parents, and the move changes nothing of them");
 
         await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
         {
@@ -318,7 +343,8 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         {
             var hers = await eve.ListAsync<string>(Reaches, Cancellation, North.Value, South.Value);
             hers.Where(reach => reach.EndsWith(" false", StringComparison.Ordinal) && reach.Contains(" tenancy.", StringComparison.Ordinal))
-                .Should().NotBeEmpty("the keys that manage access of the other seats, Ada's now among them");
+                .Should().NotBeEmpty("the keys that manage access of the other seats at North and at South")
+                .And.NotContain(reach => reach.StartsWith(HarborRoot.Value + " ", StringComparison.Ordinal), "Ada's at the root reach both parents");
             hers.Where(reach => reach.EndsWith(" true", StringComparison.Ordinal)).Should().HaveCount(expected.Count(reach => reach.EndsWith(" true", StringComparison.Ordinal)) + 3);
         }
 
@@ -332,7 +358,8 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             (await seth.ListAsync<string>(Reaches, Cancellation, HarborRoot.Value, North.Value)).Should().BeEmpty();
         }
 
-        // Hiro gives roles at North and Oli operates widgets: neither manages units, and neither is answered anything.
+        // Hiro gives roles at North, Oli operates widgets at North Pier and supervises South, and Sue is suspended: none
+        // manages units at both North and North Pier, and none is answered anything.
         foreach (var person in new[] { Hiro, Oli, Sue })
         {
             await using var caller = await AsCaller.PersonAsync(database, person.Identity, Harbor, Cancellation);
@@ -346,6 +373,37 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
 
         await using var anonymous = await AsCaller.AnonymousAsync(database, Cancellation);
         await NotExecutableAsync(anonymous, Reaches, North.Value, South.Value);
+    }
+
+    [Fact]
+    public async Task Of_other_seats_rights_a_move_is_answered_only_those_it_changes()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+
+        // Seth manages units at North. A move from under North to under North Pier changes nothing that reaches from North
+        // or above it: he is answered his own rights, and nothing of Hiro's at North, or of Ada's at the root.
+        await using (var seth = await AsCaller.PersonAsync(database, Seth.Identity, Harbor, Cancellation))
+        {
+            var reaches = await seth.ListAsync<string>(Reaches, Cancellation, North.Value, NorthPier.Value);
+            reaches.Should().NotBeEmpty().And.OnlyContain(reach => reach.EndsWith(" true", StringComparison.Ordinal), "every other seat's right there reaches both parents");
+            reaches.Should().NotContain(reach => reach.StartsWith(HarborRoot.Value + " ", StringComparison.Ordinal));
+        }
+
+        // Oli manages units at North Pier and at South. A move from under the one to under the other takes away what
+        // reaches from North, above his part of the tree, and the check weighs it: Seth's and Hiro's keys that manage
+        // access there are answered, as a unit, a key and an end, never whose. Ada's at the root reach both, and are not.
+        await HoldAtAsync(database, Oli, NorthPier, [TenancyKeys.UnitsManage], Cancellation);
+        await HoldAtAsync(database, Oli, South, [TenancyKeys.UnitsManage, HostCatalogue.WidgetRead], Cancellation);
+        await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
+        (await oli.ListAsync<string>(Reaches, Cancellation, NorthPier.Value, South.Value)).Where(reach => reach.EndsWith(" false", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(
+                [
+                    $"{North.Value} {TenancyKeys.GrantsManage} no end {NorthPier.Value} false",
+                    $"{North.Value} {TenancyKeys.SeatsManage} no end {NorthPier.Value} false",
+                    $"{North.Value} {TenancyKeys.UnitsManage} no end {NorthPier.Value} false",
+                    $"{North.Value} {TenancyKeys.GrantsManage} no end {NorthPier.Value} false",
+                ],
+                "Seth's three as a Supervisor and Hiro's one, held at North");
     }
 
     [Theory]
@@ -441,6 +499,70 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             (await services.BySystemIn(Harbor, scoped => ActiveHoldersAsync(scoped, Context(scoped)))).Should().BeEquivalentTo([Ada.Seat, Oli.Seat, Seth.Seat]);
             recorder.Sent.Should().HaveCount(3).And.Subject.Last().Text.Should().NotContain("seats_holding_at", "system work reads the rights");
             recorder.Clear();
+        }
+    }
+
+    [Fact]
+    public async Task Seats_holding_at_tells_a_manager_at_a_unit_about_the_holders_there_and_not_about_those_above()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+
+        // Seth manages units, seats and grants at North, and Hiro gives roles there. Ada holds the key at the root, Seth at
+        // North, Oli at North Pier: each of the two learns about Seth and Oli, whose grants are at North and below it,
+        // and not about Ada, whose grant at the root neither may read.
+        foreach (var manager in new[] { Seth, Hiro })
+        {
+            await using var caller = await AsCaller.PersonAsync(database, manager.Identity, Harbor, Cancellation);
+            (await caller.ListAsync<Guid>(Holders, Cancellation, "widget.read", NorthPier.Value)).Should().BeEquivalentTo([Seth.Seat.Value, Oli.Seat.Value], "{0} manages at North", manager.Name);
+            (await caller.ListAsync<Guid>(Holders, Cancellation, "widget.read", North.Value)).Should().Equal([Seth.Seat.Value]);
+            (await caller.ListAsync<Guid>(Holders, Cancellation, "widget.read", HarborRoot.Value)).Should().BeEmpty("Ada holds it there, from the root");
+        }
+
+        // Oli, given the units key at North Pier, learns about himself there, and still nothing about Seth's grant above.
+        await HoldAtAsync(database, Oli, NorthPier, [TenancyKeys.UnitsManage], Cancellation);
+        await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
+        (await oli.ListAsync<Guid>(Holders, Cancellation, "widget.read", NorthPier.Value)).Should().Equal([Oli.Seat.Value]);
+        (await oli.ListAsync<Guid>(Holders, Cancellation, TenancyKeys.UnitsManage, NorthPier.Value)).Should().Equal([Oli.Seat.Value]);
+    }
+
+    [Theory]
+    [MemberData(nameof(Seats))]
+    public async Task The_functions_tell_a_seat_about_another_only_what_the_grants_it_reads_show(string who)
+    {
+        var (identity, tenant, _, _) = Callers[who];
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
+
+        // Every seat a function answers about has a grant the caller reads by a query of its own: for the administrators
+        // one of that role at the root, for the holders one at the unit or above it. The function and the policy on the
+        // grants are written from one definition, and this holds for whoever asks.
+        await using var person = await AsCaller.PersonAsync(database, identity, tenant, Cancellation);
+        (await person.ListAsync<Guid>(
+                """
+                SELECT a.seat FROM tenancy.tenant_administrators() AS a(seat, role)
+                WHERE NOT EXISTS (SELECT 1 FROM tenancy."SeatRoleGrants" g
+                                  JOIN tenancy."OrganizationUnits" u ON u."Id" = g."UnitId" AND u."ParentId" IS NULL
+                                  WHERE g."SeatId" = a.seat AND g."RoleId" = a.role)
+                """,
+                Cancellation))
+            .Should().BeEmpty("{0} is answered no administrator whose grant at the root it does not read", who);
+
+        foreach (var key in TenancyPostgres.Catalogue.LiveKeys)
+        {
+            foreach (var unit in Units)
+            {
+                (await person.ListAsync<Guid>(
+                        """
+                        SELECT h.seat FROM tenancy.seats_holding_at($1, $2) AS h(seat)
+                        WHERE NOT EXISTS (SELECT 1 FROM tenancy."SeatRoleGrants" g
+                                          JOIN tenancy."OrganizationUnitPaths" p ON p."AncestorId" = g."UnitId"
+                                          WHERE g."SeatId" = h.seat AND p."DescendantId" = $2)
+                        """,
+                        Cancellation,
+                        key,
+                        unit.Value))
+                    .Should().BeEmpty("{0} is answered no holder of {1} at {2} whose grant there it does not read", who, key, unit);
+            }
         }
     }
 

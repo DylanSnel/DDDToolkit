@@ -42,7 +42,13 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>The tenant's organization with all its units, or <see langword="null"/> when it is not the current caller's.</summary>
         Task<TOrganization?> FindOrganizationAsync(TTenantId id, CancellationToken cancellationToken);
 
-        /// <summary>The seat, or <see langword="null"/> when it is not in the current caller's tenant.</summary>
+        /// <summary>
+        /// The seat, or <see langword="null"/> when it is not in the current caller's tenant. A storage that keeps
+        /// grants to the seats that may read them, as Tenancy's policies on Postgres do, loads it with the grants
+        /// the caller may read: all of its own seat's, and another seat's at the units where the caller manages
+        /// grants, seats or units, or every one when it manages roles for the whole tenant. Each command acts only on
+        /// grants at a unit where it asked one of those keys first, or for the whole tenant, so they are among them.
+        /// </summary>
         Task<TSeat?> FindSeatAsync(TSeatId id, CancellationToken cancellationToken);
 
         /// <summary>
@@ -71,7 +77,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// The tenant's administrators as last saved, as (seat, role) pairs: a right at the root for
         /// <c>tenancy.roles.manage</c>, with no end, applying at <paramref name="now"/>. What the rule that a tenant
         /// keeps an administrator reads. It is about every seat's rights, which a storage may keep from a seat
-        /// that reads <see cref="Reads"/>: the storage answers it whole, from wherever it can.
+        /// that reads <see cref="Reads"/>: the storage answers it from wherever it can, as far as the caller may
+        /// read the grants at the root. That is whole for every command that asks: each one that could take an
+        /// administrator away asks a key at the root first, and one that acts below the root does not ask.
         /// </summary>
         /// <param name="tenant">The tenant, which is the current caller's.</param>
         /// <param name="now">The moment a right must apply at.</param>
@@ -82,7 +90,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// Every right that has not ended at <paramref name="now"/>, one still to start included, held at a unit at
         /// or above <paramref name="parent"/> or <paramref name="newParent"/>, of <paramref name="seat"/> or of a
         /// key in <paramref name="managing"/>, once for each of the two it reaches. What the check of a move
-        /// reads. Like <see cref="AdministratorsAsync"/>, it is about every seat's rights, and the storage answers
+        /// reads. Another seat's right is answered only where it reaches one of the two and not the other, which is
+        /// a right the move changes: one that reaches both reaches the unit wherever it hangs, so the check never
+        /// weighs it, and a seat that manages only part of the tree learns nothing of the rights above that part that
+        /// stay. Like <see cref="AdministratorsAsync"/>, it is about every seat's rights, and the storage answers
         /// it whole. The use case asks once it has found <paramref name="seat"/> to hold
         /// <c>tenancy.units.manage</c> at both parents, so the seat's own rights for that key are always among the
         /// rows: a storage that cannot tell so much has no answer, and fails rather than answer with less, which

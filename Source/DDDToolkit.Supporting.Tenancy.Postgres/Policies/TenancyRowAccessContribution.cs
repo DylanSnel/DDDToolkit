@@ -42,11 +42,12 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// The database keeps the rights: a trigger on the grants, the seats and the roles writes each seat's rights as
 /// they change, from <c>key_is_live</c>, which says which keys the catalogue has live, and no caller writes one.
-/// A seat reads its own rights and no other seat's; a grant is read by its seat and by the seats that manage
-/// grants, seats or units somewhere, or roles for the whole tenant. What a seat may learn of other seats' rights,
-/// three functions answer, executable by signed-in users alone, as ids, keys and dates: <c>tenant_administrators</c>
-/// and <c>seats_holding_at</c> to a seat that may read their grants, the second to any other seat about itself,
-/// and <c>rights_a_move_changes</c> to a seat that manages units at both parents of the move. Tenancy's own
+/// A seat reads its own rights and no other seat's; a grant is read by its seat, by the seats that manage grants,
+/// seats or units at its unit, held there or above it, and by the seats that manage roles for the whole tenant. What
+/// a seat may learn of other seats' rights, three functions answer, executable by signed-in users alone, as ids,
+/// keys and dates: <c>tenant_administrators</c> and <c>seats_holding_at</c> each right whose grant the seat may read,
+/// and <c>rights_a_move_changes</c> to a seat that manages units at both parents of the move, of another seat's
+/// rights only those the move changes, which reach one parent and not the other. Tenancy's own
 /// system work in a tenant writes that tenant's rights again with <c>rewrite_tenant_rights</c>, after rows were
 /// written past the trigger.
 /// </para>

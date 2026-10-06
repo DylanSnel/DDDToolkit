@@ -288,10 +288,15 @@ public sealed class InMemoryTenancyStore
     {
         Record(nameof(RightsAMoveChangesAsync));
         var paths = _whole.UnitPaths.AsEnumerable().Where(path => path.TenantId == tenant && (path.DescendantId == parent || path.DescendantId == newParent)).ToList();
+        bool ReachesBoth(OrganizationUnitId unit)
+            => paths.Any(path => path.AncestorId == unit && path.DescendantId == parent) && paths.Any(path => path.AncestorId == unit && path.DescendantId == newParent);
+
+        // Another seat's right only where it reaches one parent and not the other, as the stores answer it.
         IReadOnlyList<MoveReach<OrganizationUnitId>> reaches =
         [
             .. from right in _whole.SeatRights.AsEnumerable()
-               where right.TenantId == tenant && (right.EndsAt is null || right.EndsAt > now) && (right.SeatId == seat || managing.Contains(right.Key))
+               where right.TenantId == tenant && (right.EndsAt is null || right.EndsAt > now)
+                     && (right.SeatId == seat || (managing.Contains(right.Key) && !ReachesBoth(right.UnitId)))
                from path in paths
                where path.AncestorId == right.UnitId
                select new MoveReach<OrganizationUnitId>(right.UnitId, right.Key, right.EndsAt, path.DescendantId, right.SeatId == seat),

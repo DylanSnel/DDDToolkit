@@ -8,15 +8,18 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 
 /// <summary>
 /// Who reads what of a tenant's access, by a query as the caller, past the use cases: a seat reads its own rights and
-/// no other seat's, whatever it manages; a grant is read by its own seat, and by the seats that manage grants, seats
-/// or units somewhere, or roles for the whole tenant; system work reads every right of its tenant; and the units, the
-/// seats, the placements, the roles and the tree stay every member's to read.
+/// no other seat's, whatever it manages; a grant is read by its own seat, by the seats that manage grants, seats or
+/// units at its unit, held there or above it, and by the seats that manage roles for the whole tenant; system work
+/// reads every right of its tenant; and the units, the seats, the placements, the roles and the tree stay every
+/// member's to read.
 /// </summary>
 public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNaming names)
 {
     private const string SeatsWithRights = "SELECT DISTINCT \"SeatId\" FROM tenancy.\"SeatRights\"";
 
     private const string SeatsWithGrants = "SELECT DISTINCT \"SeatId\" FROM tenancy.\"SeatRoleGrants\"";
+
+    private const string Grants = "SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" FROM tenancy.\"SeatRoleGrants\"";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -86,30 +89,94 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
     }
 
     [Fact]
-    public async Task A_grants_seats_or_units_manager_somewhere_reads_every_grant_of_the_tenant()
+    public async Task A_units_manager_at_a_unit_reads_the_grants_there_and_below_and_none_above_or_beside()
     {
+        // A shed below North Pier, where Eve watches. Oli manages units at North Pier, as someone who runs one pier would.
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
-        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
+        var shed = await ShedBelowNorthPierAsync(database, watcher: Eve);
         await HoldAtAsync(database, Oli, NorthPier, [TenancyKeys.UnitsManage], Cancellation);
         var harbor = await GrantsOfAsync(database, Harbor);
 
-        // Hiro gives roles at North, Eve manages seats there, and Oli units at North Pier: each reads the grants of every
-        // seat of Harbor, at the root and at South too, where they manage nothing, and none of another tenant.
-        foreach (var manager in new[] { Hiro, Eve, Oli })
+        // He reads the grants at North Pier, his own, and at the shed below it, Eve's; not Ada's at the root, nor Hiro's
+        // and Seth's at North above him, nor Sue's and Eve's other two at South beside him.
+        await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
         {
-            await using var caller = await AsCaller.PersonAsync(database, manager.Identity, Harbor, Cancellation);
-            (await caller.ListAsync<string>("SELECT \"SeatId\" || ' ' || \"UnitId\" || ' ' || \"RoleId\" FROM tenancy.\"SeatRoleGrants\"", Cancellation))
-                .Should().BeEquivalentTo(harbor, "{0} manages access somewhere in Harbor", manager.Name);
+            (await oli.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(At(harbor, NorthPier, shed));
+            (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = $1", Cancellation, Ada.Seat.Value)).Should().Be(0, "Ada's grant is at the root");
         }
 
-        // Which is what the use cases need: a seat is loaded whole, with every grant it has.
+        // A seat loaded through the store comes with the grants he may read: Ada's with none, Eve's with the shed's alone.
         await using var services = new TenancyServices(database);
-        var seth = await services.BySeat(Eve.Identity, Harbor, Eve.Seat, scoped => scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(Seth.Seat, Cancellation));
-        seth!.Placements.SelectMany(placement => placement.Grants).Should().ContainSingle().Which.RoleId.Should().Be(HarborRoles.Supervisor);
+        var (ada, eve) = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, async scoped =>
+        {
+            var store = scoped.GetRequiredService<HostTenancy.IStore>();
+            return ((await store.FindSeatAsync(Ada.Seat, Cancellation))!, (await store.FindSeatAsync(Eve.Seat, Cancellation))!);
+        });
+        ada.Placements.Should().ContainSingle("where a seat is placed, every member reads").Which.Grants.Should().BeEmpty();
+        eve.Placements.SelectMany(placement => placement.Grants).Should().ContainSingle();
+        eve.Placements.Single(placement => placement.Grants.Count > 0).UnitId.Should().Be(shed);
 
         // Acting in Orchard, where he only watches, Oli reads his own there.
         await using var inOrchard = await AsCaller.PersonAsync(database, Oli.Identity, Orchard, Cancellation);
         (await inOrchard.ListAsync<Guid>(SeatsWithGrants, Cancellation)).Should().Equal(OliInOrchard.Value);
+    }
+
+    [Fact]
+    public async Task A_grants_manager_at_a_unit_reads_the_grants_there_and_below_and_none_above_or_beside()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        var shed = await ShedBelowNorthPierAsync(database, watcher: Eve);
+        var harbor = await GrantsOfAsync(database, Harbor);
+
+        // Hiro gives roles at North: he reads the grants at North, his own and Seth's, and below it, Oli's at North Pier and
+        // Eve's at the shed; not Ada's at the root, nor any at South.
+        await using (var hiro = await AsCaller.PersonAsync(database, Hiro.Identity, Harbor, Cancellation))
+        {
+            (await hiro.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(At(harbor, North, NorthPier, shed));
+        }
+
+        // Every command he may give there finds what it needs: Seth's seat comes with his Supervisor grant at North.
+        await using var services = new TenancyServices(database);
+        var seth = await services.BySeat(Hiro.Identity, Harbor, Hiro.Seat, scoped => scoped.GetRequiredService<HostTenancy.IStore>().FindSeatAsync(Seth.Seat, Cancellation));
+        seth!.Placements.SelectMany(placement => placement.Grants).Should().ContainSingle().Which.RoleId.Should().Be(HarborRoles.Supervisor);
+    }
+
+    [Fact]
+    public async Task A_seats_manager_reads_the_grants_where_it_manages_seats_since_a_withdrawal_takes_them_with_it()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        await HoldAtAsync(database, Eve, North, [TenancyKeys.SeatsManage], Cancellation);
+        await HoldAtAsync(database, Oli, HarborRoot, [TenancyKeys.SeatsManage, HostCatalogue.WidgetRead], Cancellation);
+        var harbor = await GrantsOfAsync(database, Harbor);
+
+        // Eve manages seats at North alone. Withdrawing a placement there takes its grants with it, so she reads the
+        // grants at North and below it, and none at the root or at South but her own.
+        await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
+        {
+            var mine = harbor.Where(grant => grant.StartsWith(Eve.Seat.Value.ToString(), StringComparison.Ordinal));
+            (await eve.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(At(harbor, North, NorthPier).Union(mine));
+        }
+
+        // Which is what keeps the withdrawal contained: she does not hold the grants key at North, and Hiro's placement
+        // there has his grant, so the use case asks the key she lacks, and the database, which reads the grant as her,
+        // keeps the placement whatever she sends.
+        await using (var services = new TenancyServices(database))
+        {
+            var refusal = await FluentActions.Awaiting(() => services.BySeat(Eve.Identity, Harbor, Eve.Seat, scoped => scoped.Seats().WithdrawAsync(Hiro.Seat, North, Cancellation)))
+                .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
+            refusal.Which.Code.Should().Be(TenancyRefusals.NotPermitted);
+            refusal.Which.Arguments["Key"].Should().Be(TenancyKeys.GrantsManage);
+        }
+
+        await using (var eve = await AsCaller.PersonAsync(database, Eve.Identity, Harbor, Cancellation))
+        {
+            (await eve.ExecuteAsync("DELETE FROM tenancy.\"SeatPlacements\" WHERE \"SeatId\" = $1 AND \"UnitId\" = $2", Cancellation, Hiro.Seat.Value, North.Value)).Should().Be(0);
+        }
+
+        // Oli manages seats for the whole tenant: he reads every grant of Harbor, as the administration's overview of
+        // another person's roles needs, which asks that key for the whole tenant.
+        await using var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation);
+        (await oli.ListAsync<string>(Grants, Cancellation)).Should().BeEquivalentTo(harbor);
     }
 
     [Fact]
@@ -202,6 +269,24 @@ public abstract class RightsVisibilityTests(TenancyPostgres postgres, TenancyNam
         (await oli.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"Seats\" WHERE \"TenantId\" = 2", Cancellation)).Should().Equal(OliInOrchard.Value);
         (await oli.ScalarAsync<long>("SELECT count(*) FROM tenancy.\"Roles\" WHERE \"TenantId\" = 2", Cancellation)).Should().Be(0);
     }
+
+    /// <summary>
+    /// Adds a shed below North Pier and gives <paramref name="watcher"/> the Watcher role there, placing them there
+    /// first: system work through the use cases, committed.
+    /// </summary>
+    private static async Task<OrganizationUnitId> ShedBelowNorthPierAsync(TestDatabase database, Person watcher)
+    {
+        var shed = OrganizationUnitId.CreateSequential();
+        await using var services = new TenancyServices(database);
+        await services.BySystemIn(Harbor, scoped => scoped.Organization().AddUnitAsync(NorthPier, "Shed", Cancellation, shed));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().PlaceAsync(watcher.Seat, shed, primary: false, Cancellation));
+        await services.BySystemIn(Harbor, scoped => scoped.Seats().GrantAsync(watcher.Seat, shed, HarborRoles.Watcher, until: null, reason: null, Cancellation));
+        return shed;
+    }
+
+    /// <summary>The grants among <paramref name="grants"/>, each as its seat, unit and role, that are at one of <paramref name="units"/>.</summary>
+    private static List<string> At(IEnumerable<string> grants, params OrganizationUnitId[] units)
+        => [.. grants.Where(grant => units.Any(unit => grant.Split(' ')[1] == unit.Value.ToString()))];
 
     /// <summary>Every grant of a tenant, as its seat, unit and role, as the owner reads them.</summary>
     private static async Task<List<string>> GrantsOfAsync(TestDatabase database, TenantId tenant)

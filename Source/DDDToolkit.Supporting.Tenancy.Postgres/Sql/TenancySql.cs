@@ -287,11 +287,21 @@ internal static class TenancySql
     private static string Scope => "{caller:claim:scope} = " + RowAccessModel.Literal(TenancyWork.SystemScope);
 
     /// <summary>
-    /// The calling seat may read other seats' grants: it manages grants, seats or units somewhere, or roles for
-    /// the whole tenant. Written once, for the policy that lets grants be read and for the functions that answer
-    /// about other seats' rights, so the two cannot come to disagree.
+    /// The calling seat may read the grant of the seat in <paramref name="seat"/> at the unit in
+    /// <paramref name="unit"/>: it is the calling seat's own, or the calling seat manages grants, seats or units at
+    /// that unit, held there or at a unit above it, or manages roles for the whole tenant. A key reads only where it
+    /// applies, as it acts only there: held at a unit, it reaches the grants at that unit and below it, and none above
+    /// it or beside it. The roles key is the exception, because a change of a role reaches every seat that holds it,
+    /// wherever; held below the root it changes no role, and reads nothing.
+    /// <para>
+    /// Written once, for the policy that lets grants be read and for the functions that answer about other seats'
+    /// rights, a right being read where the grant that gives it is: the two cannot come to disagree.
+    /// </para>
     /// </summary>
-    private static string Managers() => $"({K(GrantsKey)} OR {K(SeatsKey)} OR {K(UnitsKey)} OR {W(RolesKey)})";
+    /// <param name="seat">The grant's or the right's seat, as SQL.</param>
+    /// <param name="unit">The grant's or the right's unit, as SQL.</param>
+    private static string ReadsGrantOf(string seat, string unit)
+        => $"({seat} = (SELECT {Fn(CallerSeat)}()) OR {U(GrantsKey, unit)} OR {U(SeatsKey, unit)} OR {U(UnitsKey, unit)} OR {W(RolesKey)})";
 
     /// <summary>A period of <paramref name="alias"/>'s row that applies now.</summary>
     private static string Live(IEntityType table, string alias)
@@ -506,11 +516,14 @@ internal static class TenancySql
             yield return function;
         }
 
-        // What a seat may learn of other seats' rights, which the policies keep from its own reads: answered to a
-        // seat that may read their grants, as ids, keys and dates and nothing else of anyone.
+        // What a seat may learn of other seats' rights, which the policies keep from its own reads: a right where
+        // the seat may read the grant that gives it, as ids, keys and dates and nothing else of anyone.
         var seatTenant = $"(SELECT {Fn(CallerTenant)}())";
         string[] seatCallers = [User];
+        var readable = ReadsGrantOf($"r.{C(rights, "SeatId")}", $"r.{C(rights, "UnitId")}");
 
+        // Held at the root, these are read with a key held there: by every command that could take an
+        // administrator away, which asks one there, and by no seat that manages only part of the tree.
         yield return new ContributedFunction(
             TenancyFunctionNames.TenantAdministrators,
             "",
@@ -521,14 +534,20 @@ internal static class TenancySql
             WHERE r.{C(rights, "TenantId")} = {seatTenant} AND r.{C(rights, "Key")} = {RowAccessModel.Literal(TenancyKeys.AdministratorKey)}
               AND r.{C(rights, "EndsAt")} IS NULL AND r.{C(rights, "StartsAt")} <= pg_catalog.now()
               AND u.{C(units, "ParentId")} IS NULL
-              AND {Managers()}
+              AND {readable}
             """,
             SecurityDefiner: true,
             GrantTo: seatCallers);
 
         // Every right that has not ended, the calling seat's or of a key that manages access, held at a parent or
         // above it, once for each of the two parents it reaches: answered to a seat that manages units at both.
+        // Another seat's right is answered only where it reaches one parent and not the other, which is a right the
+        // move changes: one above both reaches the unit wherever it hangs, so the check never weighs it, and the
+        // caller, who may manage only part of the tree, learns nothing of the rights above that part that stay.
+        // The caller's own rights are answered at both, so a seat that manages units at both always has a row.
         var managesUnits = $"ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}({RowAccessModel.Literal(UnitsKey)})))";
+        var otherParent = $"CASE WHEN p.{C(paths, "DescendantId")} = $1 THEN $2 ELSE $1 END";
+        var changesWithTheMove = $"NOT EXISTS (SELECT 1 FROM {Q(paths)} o WHERE o.{C(paths, "AncestorId")} = r.{C(rights, "UnitId")} AND o.{C(paths, "TenantId")} = r.{C(rights, "TenantId")} AND o.{C(paths, "DescendantId")} = {otherParent})";
         yield return new ContributedFunction(
             TenancyFunctionNames.RightsAMoveChanges,
             $"parent {unitType}, new_parent {unitType}",
@@ -540,15 +559,16 @@ internal static class TenancySql
             JOIN {Q(paths)} p ON p.{C(paths, "AncestorId")} = r.{C(rights, "UnitId")} AND p.{C(paths, "TenantId")} = r.{C(rights, "TenantId")}
             WHERE r.{C(rights, "TenantId")} = {seatTenant}
               AND (r.{C(rights, "EndsAt")} IS NULL OR r.{C(rights, "EndsAt")} > pg_catalog.now())
-              AND (r.{C(rights, "SeatId")} = {callerSeat} OR {Fn(ManagesAccess)}(r.{C(rights, "Key")}))
+              AND (r.{C(rights, "SeatId")} = {callerSeat} OR ({Fn(ManagesAccess)}(r.{C(rights, "Key")}) AND {changesWithTheMove}))
               AND p.{C(paths, "DescendantId")} IN ($1, $2)
               AND $1 = {managesUnits} AND $2 = {managesUnits}
             """,
             SecurityDefiner: true,
             GrantTo: seatCallers);
 
-        // The active seats with a right for the key that applies now, at the unit or above it: every one of them
-        // to a seat that may read their grants, and to any other seat only itself.
+        // The active seats with a right for the key that applies now, at the unit or above it: each one whose grant
+        // there the calling seat may read, which is itself, any other seat at a unit where it manages grants, seats
+        // or units, and every one when it manages roles for the whole tenant.
         yield return new ContributedFunction(
             TenancyFunctionNames.SeatsHoldingAt,
             $"key text, unit {unitType}",
@@ -560,7 +580,7 @@ internal static class TenancySql
             WHERE r.{C(rights, "TenantId")} = {seatTenant} AND r.{C(rights, "Key")} = $1 AND {Fn(KeyIsLive)}($1)
               AND {Live(rights, "r")}
               AND p.{C(paths, "DescendantId")} = $2
-              AND (r.{C(rights, "SeatId")} = {callerSeat} OR {Managers()})
+              AND {readable}
             """,
             SecurityDefiner: true,
             GrantTo: seatCallers);
@@ -1086,12 +1106,12 @@ internal static class TenancySql
 
     /// <summary>
     /// The policies on Tenancy's own tables. Signed-in users read their tenant's rows, except the rights, of which
-    /// a seat reads its own, and the grants, which their own seat and the seats that manage access read; and they
-    /// write where the use case asks the key: at the unit for units, placements and grants, and held somewhere or
-    /// for the whole tenant elsewhere; a seat also takes away its own grants and placements, as the use cases let
-    /// it. System work reads its tenant, and writes it in Tenancy's own scope. Nobody writes the rights: the
-    /// database keeps them itself. Every table is kept to its tenant for system work and closed to anonymous
-    /// callers, and kept to this contribution.
+    /// a seat reads its own, and the grants, which their own seat reads, a seat that manages grants, seats or units
+    /// where they are, and a seat that manages roles for the whole tenant; and they write where the use case asks the
+    /// key: at the unit for units, placements and grants, and held somewhere or for the whole tenant elsewhere; a seat
+    /// also takes away its own grants and placements, as the use cases let it. System work reads its tenant, and
+    /// writes it in Tenancy's own scope. Nobody writes the rights: the database keeps them itself. Every table is kept
+    /// to its tenant for system work and closed to anonymous callers, and kept to this contribution.
     /// </summary>
     private static void OwnTables(TenancyTables tenancy, List<ContributedPolicy> policies, List<IEntityType> exclusive)
     {
@@ -1155,8 +1175,9 @@ internal static class TenancySql
 
         // A placement is of a seat of the caller's tenant, and keeps its seat, unit and tenant (a trigger). It is
         // withdrawn only once its grants are gone: the database would take them with it, past their own policy.
-        // A seat takes away what is its own, as the use cases let it: the policy for its own row asks no key,
-        // since its keys may be the first rows the same save removes.
+        // Whether any are left is read as the caller, which the policy on the grants lets read them: its own, and
+        // those at a unit where it manages seats. A seat takes away what is its own, as the use cases let it: the
+        // policy for its own row asks no key, since its keys may be the first rows the same save removes.
         var placementTenant = T(C(placements, "TenantId"));
         var ownSeat = (IEntityType table) => $"{TenancyTables.Own(table, "SeatId")} = {callerSeat}";
         var seatOfTheTenant = $"EXISTS (SELECT 1 FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {TenancyTables.Own(placements, "SeatId")} AND {T("s." + C(seats, "TenantId"))})";
@@ -1186,9 +1207,14 @@ internal static class TenancySql
         var contained = Contained(roles, grants);
         var notToItself = $"(NOT EXISTS ({Managed(roles, grants)}) OR {TenancyTables.Own(grants, "SeatId")} <> {callerSeat})";
 
-        // A grant is read by its own seat, and by a seat that manages access somewhere: the use cases load a seat
-        // whole, with every grant it has, wherever the caller manages.
-        Add(grants, "Seats and managers read grants", "SELECT", Both(grantTenant, $"({ownSeat(grants)} OR {Managers()})"), null);
+        // A grant is read by its own seat, and by a seat that manages grants, seats or units at its unit, or roles
+        // for the whole tenant: a key reads only where it applies. A use case loads a seat with the grants its caller
+        // may read, which are all those it acts on: each command asks its key at the unit it changes, and a change of
+        // a seat's status, which reaches every grant of it, asks the seats key for the whole tenant. The seats key
+        // at a unit reads the grants there too: withdrawing a placement takes its grants with it, so the use case
+        // reads them to ask the grants key, and the policy on the placements reads them to keep a placement that
+        // has any.
+        Add(grants, "Seats and managers read grants", "SELECT", Both(grantTenant, ReadsGrantOf(TenancyTables.Own(grants, "SeatId"), TenancyTables.Own(grants, "UnitId"))), null);
         Add(grants, "Grants managers give at the unit", "INSERT", null, Both(grantTenant, grantUnit, activeRole, $"{C(grants, "GrantedBy")} = {callerSeat}", contained, notToItself));
         Add(grants, "Grants managers change at the unit", "UPDATE", Both(grantTenant, grantUnit, activeRole, contained), Both(grantTenant, grantUnit, activeRole, contained, notToItself));
         Add(grants, "Grants managers revoke at the unit", "DELETE", Both(grantTenant, $"({Both(grantUnit, contained)} OR {ownSeat(grants)})"), null);

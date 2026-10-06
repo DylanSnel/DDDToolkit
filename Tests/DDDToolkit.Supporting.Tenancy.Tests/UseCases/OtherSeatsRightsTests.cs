@@ -86,6 +86,8 @@ public class OtherSeatsRightsTests
         var later = await harness.SeatAt("Di", harness.Harbor.Root);
         await harness.Grant(later, harness.Harbor.Root, HostCatalogue.AdministratorPack, from: FixedClock.Start.AddDays(1));
         await harness.SeatAt("Ed", harness.Harbor.North, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
+        var acting = await harness.SeatAt("Gus", harness.Harbor.North);
+        await harness.Grant(acting, harness.Harbor.North, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddDays(7));
         await harness.SeatAt("Fay", harness.Harbor.South, HostCatalogue.OperatorPack);
 
         await harness.Run(harness.SeatCaller(harness.Administrator), async h =>
@@ -96,18 +98,19 @@ public class OtherSeatsRightsTests
             pairs.Should().BeEquivalentTo([(harness.Administrator, administrators), (second, administrators)]);
             (await h.Store.AdministratorsAsync(h.Tenant, FixedClock.Start.AddDays(2), default)).Should().HaveCount(3, "the one that was still to start has started");
 
-            // A move from under North to under South: the mover's own rights, whatever their key, and every seat's of a
-            // key that manages access, at each parent and above it, once for each parent they reach.
+            // A move from under North to under South: the mover's own rights, whatever their key, at each parent and
+            // above it, once for each parent they reach; and another seat's of a key that manages access where it
+            // reaches one parent and not the other, which is where the move changes it.
             var reaches = await h.Store.RightsAMoveChangesAsync(h.Tenant, harness.Administrator, h.Harbor.North, h.Harbor.South, h.Catalogue.AccessManagingKeys, FixedClock.Start, default);
             reaches.Where(reach => reach.OfCaller).Should().HaveCount(2 * h.Catalogue.LiveKeys.Count, "every key of the administrator, held at the root, reaches both");
-            reaches.Where(reach => !reach.OfCaller).Should().OnlyContain(reach => h.Catalogue.ManagesAccess(reach.Key));
-            reaches.Where(reach => reach.UnitId == h.Harbor.North).Select(reach => (reach.Key, reach.Parent))
-                .Should().BeEquivalentTo(
-                    [(TenancyKeys.GrantsManage, h.Harbor.North), (TenancyKeys.SeatsManage, h.Harbor.North), (TenancyKeys.UnitsManage, h.Harbor.North)],
-                    "the supervisor's keys that manage access, held at North, reach North alone, and the widget keys of the two roles are nobody's business");
+            reaches.Where(reach => !reach.OfCaller)
+                .Should().OnlyContain(
+                    reach => h.Catalogue.ManagesAccess(reach.Key) && reach.UnitId == h.Harbor.North && reach.Parent == h.Harbor.North,
+                    "the supervisors' keys that manage access, held at North, reach North alone, and the widget keys of their roles are nobody's business")
+                .And.HaveCount(6, "Ed's three and Gus's three");
             reaches.Should().NotContain(reach => reach.UnitId == h.Harbor.South, "an operator at South holds no key that manages access");
-            reaches.Should().Contain(reach => reach.EndsAt == FixedClock.Start.AddDays(7), "a right that ends later has not ended");
-            reaches.Should().Contain(reach => !reach.OfCaller && reach.UnitId == h.Harbor.Root && reach.Parent == h.Harbor.South);
+            reaches.Should().NotContain(reach => !reach.OfCaller && reach.UnitId == h.Harbor.Root, "the other administrators' rights at the root reach both parents, wherever the unit hangs");
+            reaches.Should().Contain(reach => reach.EndsAt == FixedClock.Start.AddDays(7), "Gus's, which end later, have not ended");
         });
     }
 }

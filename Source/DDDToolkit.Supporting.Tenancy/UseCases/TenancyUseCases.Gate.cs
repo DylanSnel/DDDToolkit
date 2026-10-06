@@ -337,9 +337,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             // Every grant that has not ended, of the mover's or of a key that manages access, at a parent or a
-            // unit above one, once for each parent it reaches. A unit above both parents comes back twice, and
-            // the move changes nothing that reaches from there. These are other seats' rights too, so the store
-            // answers, which reads them where a seat's own reads may not.
+            // unit above one, once for each parent it reaches. The move changes nothing that reaches from a unit
+            // above both parents: the mover's own come back twice from there, and another seat's not at all. These
+            // are other seats' rights too, so the store answers, which reads them where a seat's own reads may not.
             var rows = await _store.RightsAMoveChangesAsync(
                 Caller.Tenant!.Value, Caller.Seat!.Value, parent, newParent, _catalogue.AccessManagingKeys, Now, cancellationToken).ConfigureAwait(false);
             var aboveParent = rows.Where(row => row.Parent.Equals(parent)).Select(row => row.UnitId).ToHashSet();

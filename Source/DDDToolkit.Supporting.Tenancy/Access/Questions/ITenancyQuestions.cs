@@ -85,10 +85,12 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// Who holds <paramref name="key"/> at <paramref name="unit"/> now: the active seats with a right for it that
-    /// applies now, held at the unit or at a unit above it. A seat learns about other seats only when it may read
-    /// their grants, because it manages grants, seats or units somewhere, or roles for the whole tenant; any other
-    /// seat learns only whether it holds the key there itself. System work in a tenant learns about every seat of
-    /// that tenant, and nobody about none.
+    /// applies now, held at the unit or at a unit above it. A seat learns about another seat's right only where it
+    /// may read the grant that gives it: at a unit where it manages grants, seats or units, held there or above it,
+    /// or anywhere when it manages roles for the whole tenant. So a seat that manages one part of the tree learns
+    /// who holds the key from within that part, and not who holds it from above; a seat that manages none learns
+    /// only whether it holds the key there itself. System work in a tenant learns about every seat of that tenant,
+    /// and nobody about none.
     /// </summary>
     /// <param name="key">A key of the catalogue.</param>
     /// <param name="unit">The unit.</param>

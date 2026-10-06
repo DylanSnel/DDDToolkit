@@ -66,6 +66,7 @@ public static class PolicyMatrix
     private static readonly MatrixCaller OliActingInOrchard = new("Oli, in Orchard", Oli, Orchard);
     private static readonly MatrixCaller EveCaller = new("Eve, nothing now", Eve, Harbor);
     private static readonly MatrixCaller EveSeats = new("Eve, seats at North", Eve, Harbor, At: North, Keys: [TenancyKeys.SeatsManage]);
+    private static readonly MatrixCaller EveSeatsForTheTenant = new("Eve, seats for the whole tenant", Eve, Harbor, At: HarborRoot, Keys: [TenancyKeys.SeatsManage]);
     private static readonly MatrixCaller EveUnits = new("Eve, units at North", Eve, Harbor, At: North, Keys: [TenancyKeys.UnitsManage]);
     private static readonly MatrixCaller EveRoles = new("Eve, roles at North", Eve, Harbor, At: North, Keys: [TenancyKeys.RolesManage]);
     private static readonly MatrixCaller EveRolesForTheTenant = new("Eve, roles for the whole tenant", Eve, Harbor, At: HarborRoot, Keys: [TenancyKeys.RolesManage]);
@@ -206,27 +207,37 @@ public static class PolicyMatrix
         yield return new("SeatPlacements", "DELETE", "seats elsewhere", SethCaller, Args(Withdraw, "{Eve}", "{South}"), Expectation.NoRows);
         yield return new("SeatPlacements", "DELETE", "holding no such key", OliCaller, Args(Withdraw, "{Seth}", "{NorthPier}"), Expectation.NoRows);
         yield return new("SeatPlacements", "DELETE", "seats at the unit, a placement that has grants", SethCaller, Args(Withdraw, "{Hiro}", "{North}"), Expectation.NoRows);
+        yield return new("SeatPlacements", "DELETE", "seats alone at the unit, a placement that has grants", EveSeats, Args(Withdraw, "{Hiro}", "{North}"), Expectation.NoRows);
         yield return new("SeatPlacements", "DELETE", "seats at the unit, once its grants are gone", SethCaller, Args(Withdraw, "{Hiro}", "{North}"), Expectation.Rows, "DELETE FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Hiro} AND \"UnitId\" = {North}");
         yield return new("SeatPlacements", "DELETE", "its own, a placement that has grants", OliCaller, Args(Withdraw, "{Oli}", "{NorthPier}"), Expectation.NoRows);
         yield return new("SeatPlacements", "DELETE", "its own, once its grants are gone", OliCaller, Args(Withdraw, "{Oli}", "{NorthPier}"), Expectation.Rows, "DELETE FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Oli} AND \"UnitId\" = {NorthPier}");
 
-        // Grants: read by their own seat, and by a seat that manages grants, seats or units somewhere, or roles for the
-        // whole tenant, in the seat's tenant; given, changed and taken away with the grants key at the grant's unit, in
-        // the caller's own name when given. The roles that manage access have tests of their own.
+        // Grants: read by their own seat, and by a seat that manages grants, seats or units at the grant's unit, held there
+        // or above it, or roles for the whole tenant, in the seat's tenant: a key reads only where it applies. Given,
+        // changed and taken away with the grants key at the grant's unit, in the caller's own name when given. The roles
+        // that manage access have tests of their own.
         const string Give = "INSERT INTO tenancy.\"SeatRoleGrants\" (\"RoleId\", \"SeatId\", \"UnitId\", \"StartsAt\", \"EndsAt\", \"GrantedBy\", \"Reason\") VALUES ({Watcher}, {0}, {1}, now(), NULL, {2}, NULL)";
         const string OliOperates = " WHERE \"SeatId\" = {Oli} AND \"RoleId\" = {Operator}";
         const string EveOperates = " WHERE \"SeatId\" = {Eve} AND \"RoleId\" = {Operator}";
         const string SethSupervises = " WHERE \"SeatId\" = {Seth} AND \"RoleId\" = {Supervisor}";
         const string HiroGives = " WHERE \"SeatId\" = {Hiro} AND \"RoleId\" = {GrantsDesk}";
         const string AdasGrants = "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Ada}";
-        yield return new("SeatRoleGrants", "SELECT", "its own", OliCaller, "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Oli}", Expectation.Rows);
+        const string OlisGrants = "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Oli}";
+        const string SuesGrants = "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Sue}";
+        yield return new("SeatRoleGrants", "SELECT", "its own", OliCaller, OlisGrants, Expectation.Rows);
         yield return new("SeatRoleGrants", "SELECT", "another seat's, managing nothing", OliCaller, AdasGrants, Expectation.NoRows);
         yield return new("SeatRoleGrants", "SELECT", "another seat's, nothing that applies now", EveCaller, AdasGrants, Expectation.NoRows);
-        yield return new("SeatRoleGrants", "SELECT", "another seat's, grants held somewhere", HiroCaller, AdasGrants, Expectation.Rows);
-        yield return new("SeatRoleGrants", "SELECT", "another seat's, seats held somewhere", EveSeats, AdasGrants, Expectation.Rows);
-        yield return new("SeatRoleGrants", "SELECT", "another seat's, units held somewhere", EveUnits, AdasGrants, Expectation.Rows);
-        yield return new("SeatRoleGrants", "SELECT", "another seat's, roles for the whole tenant", EveRolesForTheTenant, AdasGrants, Expectation.Rows);
-        yield return new("SeatRoleGrants", "SELECT", "another seat's, roles below the root", EveRoles, AdasGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's below, grants held above it", HiroCaller, OlisGrants, Expectation.Rows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, grants held below it", HiroCaller, AdasGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's beside, grants held elsewhere", HiroCaller, SuesGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's below, seats held above it", EveSeats, OlisGrants, Expectation.Rows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, seats held below it", EveSeats, AdasGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's below, units held above it", EveUnits, OlisGrants, Expectation.Rows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, units held below it", EveUnits, AdasGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, seats for the whole tenant", EveSeatsForTheTenant, AdasGrants, Expectation.Rows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, roles for the whole tenant", EveRolesForTheTenant, AdasGrants, Expectation.Rows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's below, roles below the root", EveRoles, OlisGrants, Expectation.NoRows);
+        yield return new("SeatRoleGrants", "SELECT", "another seat's at the root, roles below the root", EveRoles, AdasGrants, Expectation.NoRows);
         yield return new("SeatRoleGrants", "SELECT", "seated in another tenant", OdetteCaller, AdasGrants, Expectation.NoRows);
         yield return new("SeatRoleGrants", "SELECT", "every key, a seat of another tenant of the person's", OliAdministrator, "SELECT count(*) FROM tenancy.\"SeatRoleGrants\" WHERE \"SeatId\" = {Odette}", Expectation.NoRows);
         yield return new("SeatRoleGrants", "INSERT", "grants at the unit", HiroCaller, Args(Give, "{Oli}", "{NorthPier}", "{Hiro}"), Expectation.Rows);

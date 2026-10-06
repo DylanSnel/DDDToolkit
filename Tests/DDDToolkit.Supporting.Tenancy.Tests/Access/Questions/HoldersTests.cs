@@ -2,8 +2,9 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// Who holds a key at a unit: the active seats with a right for it that applies now and reaches the unit. A
-/// seat that may read other seats' grants is answered all of them, any other seat itself alone, system work in the
-/// tenant every one, and nobody none.
+/// seat is answered each holder whose grant it may read: itself, any other seat at a unit where it manages grants,
+/// seats or units, and every one when it manages roles for the whole tenant. System work in the tenant is answered
+/// every one, and nobody none.
 /// </summary>
 public class HoldersTests
 {
@@ -68,18 +69,21 @@ public class HoldersTests
         Holders(_harness.SeatCaller(cy), TenancyKeys.UnitsManage, NorthCoast).Should().BeEmpty();
         Holders(_harness.SeatCaller(di), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
 
-        // Bert manages units, seats and grants at North: whoever manages one of those somewhere reads every grant of the
-        // tenant, and so learns every holder, at South as at North.
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy]);
-        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, South).Should().BeEquivalentTo([ada, di]);
+        // Bert manages units, seats and grants at North: he reads the grants at North and below it, and so learns who holds
+        // the key from there, Cy and himself; not Ada, whose grant is at the root above him, nor Di, beside him at South.
+        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([bert, cy]);
+        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, North).Should().Equal(bert);
+        Holders(_harness.SeatCaller(bert), HostCatalogue.WidgetRead, South).Should().BeEmpty();
 
-        // Each of the three keys does, held anywhere; the key to manage roles does for the whole tenant only.
+        // Each of the three keys does where it is held, and only there; the key to manage roles does for the whole
+        // tenant only.
         foreach (var key in new[] { TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage })
         {
             var desk = await _harness.BySystemWork(h => h.Roles.CreateAsync("Desk for " + key, string.Empty, [key], default));
             var keeper = await _harness.SeatAt("Keeper of " + key, South);
             await _harness.BySystemWork(h => h.Seats.GrantAsync(keeper, South, desk, until: null, reason: null, default));
-            Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, NorthCoast).Should().BeEquivalentTo([ada, bert, cy], "{0} is held at South", key);
+            Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, South).Should().Equal([di], "{0} is held at South, and Ada's grant is at the root", key);
+            Holders(_harness.SeatCaller(keeper), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty("{0} is held at South alone", key);
         }
 
         var roles = await _harness.BySystemWork(h => h.Roles.CreateAsync("Roles desk", string.Empty, [TenancyKeys.RolesManage], default));
@@ -95,8 +99,9 @@ public class HoldersTests
         // A key that manages access held only in the past, or only later, reads nobody's grants now.
         var former = await _harness.SeatAt("Gil", South);
         await _harness.Grant(former, South, HostCatalogue.SupervisorPack, until: FixedClock.Start.AddHours(1));
+        Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEquivalentTo([di, former], "while it lasts, Gil reads the grants at South");
         _harness.Clock.Advance(TimeSpan.FromHours(2));
-        Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, NorthCoast).Should().BeEmpty();
+        Holders(_harness.SeatCaller(former), HostCatalogue.WidgetRead, South).Should().BeEmpty();
     }
 
     [Fact]

@@ -193,22 +193,25 @@ internal sealed class TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(
                 return answered;
             }
 
-            // A seat learns about other seats where it may read their grants: it holds a key that manages
-            // grants, seats or units somewhere, or the one that manages roles for the whole tenant. Otherwise it
-            // learns about itself alone.
+            // A seat learns about another seat's right where it may read the grant that gives it: at a unit where
+            // it manages grants, seats or units, held there or above it, or anywhere once it manages roles for the
+            // whole tenant. A key reads only where it applies, so a seat that manages one part of the tree learns
+            // nothing of the grants above it or beside it. It always learns about itself.
             var me = caller.Seat!.Value;
             var mine = source.SeatRights.Where(right => right.TenantId.Equals(tenant) && right.SeatId.Equals(me)
                                                         && right.StartsAt <= moment && (right.EndsAt == null || right.EndsAt > moment));
-            var somewhere = mine
-                .Where(right => right.Key == TenancyKeys.GrantsManage || right.Key == TenancyKeys.SeatsManage || right.Key == TenancyKeys.UnitsManage)
-                .Select(right => right.Key);
+            var managed = from right in mine
+                          where right.Key == TenancyKeys.GrantsManage || right.Key == TenancyKeys.SeatsManage || right.Key == TenancyKeys.UnitsManage
+                          join path in source.UnitPaths on right.UnitId equals path.AncestorId
+                          where path.TenantId.Equals(tenant)
+                          select path.DescendantId;
             var forTheTenant = from right in mine
                                where right.Key == TenancyKeys.RolesManage
                                join root in source.Units on right.UnitId equals root.Id
                                where root.TenantId.Equals(tenant) && !root.ParentId.HasValue
                                select right.Key;
 
-            rights = rights.Where(right => right.SeatId.Equals(me) || somewhere.Any() || forTheTenant.Any());
+            rights = rights.Where(right => right.SeatId.Equals(me) || managed.Contains(right.UnitId) || forTheTenant.Any());
         }
 
         // The active seats among them whose right reaches the unit: granted there, or at a unit above it.

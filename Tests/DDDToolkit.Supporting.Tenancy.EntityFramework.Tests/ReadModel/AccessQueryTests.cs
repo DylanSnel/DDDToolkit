@@ -58,9 +58,9 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
         var sue = await _services.SeatAtAsync(_harbor, "Sue", _coast, HostCatalogue.WatcherPack);
         await _services.BySystemIn(_harbor.Tenant, services => services.Seats().SuspendAsync(sue, TestContext.Current.CancellationToken));
 
-        // Grace supervises North, and so reads every grant of Harbor: the administrator at the root, herself at North and
-        // Lin at Coast hold the key at Coast. Sue, who is suspended, holds nothing, and Hal holds it at South.
-        await _services.BySeat(_harbor.Tenant, _grace, async services =>
+        // The administrator reads every grant of Harbor: she, Grace at North and Lin at Coast hold the key at Coast. Sue,
+        // who is suspended, holds nothing, and Hal holds it at South.
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, async services =>
         {
             foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
             {
@@ -78,6 +78,20 @@ public abstract class AccessQueryTests(TestDatabases databases) : IAsyncLifetime
                 _services.Commands.Count.Should().Be(1, "the question is a subquery of the one statement");
 
                 (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_harbor.AdminSeat, hal]);
+            }
+        });
+
+        // Grace supervises North, and reads the grants at North and below it: she learns about herself and Lin at Coast,
+        // and not about the administrator, whose grant is at the root, nor about Hal at South. Still one statement.
+        await _services.BySeat(_harbor.Tenant, _grace, async services =>
+        {
+            foreach (DbContext context in new DbContext[] { services.Tenancy(), services.Widgets() })
+            {
+                var tenancy = services.Answers().Over(context);
+                _services.Commands.Reset();
+                (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _coast).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEquivalentTo([_grace, _lin], "asked in " + context.GetType().Name);
+                _services.Commands.Count.Should().Be(1);
+                (await tenancy.SeatsHoldingAt(HostCatalogue.WidgetRead, _south).ToListAsync(TestContext.Current.CancellationToken)).Should().BeEmpty();
             }
         });
 

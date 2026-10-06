@@ -1048,10 +1048,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   they ask the store, which a storage answers from wherever it can. `ITenancyReadSource.SeatsHoldingAt` is a
   default interface member, so a read source of your own need not implement it.
 - `ITenancyQuestions.SeatsHoldingAt(key, unit)`: the active seats that hold a key at a unit now, held there or
-  above it, as a query that composes into a module's own. A seat that manages grants, seats or units somewhere,
-  or roles for the whole tenant, learns every holder; any other seat learns only whether it holds the key there
-  itself; system work in a tenant learns every holder of that tenant. On Postgres the function
-  `seats_holding_at` answers it for a seat, by the same rule.
+  above it, as a query that composes into a module's own. A seat learns about each holder whose grant it may
+  read: itself, any other seat at a unit where it manages grants, seats or units, and every holder when it
+  manages roles for the whole tenant; system work in a tenant learns every holder of that tenant. On Postgres the
+  function `seats_holding_at` answers it for a seat, by the same rule.
 - **Tenancy: key sets in one statement.** `ITenancyQuestions.WhereIHold(keys)` answers every pair of a unit and
   a key the caller holds there, `RoleKeys(keys)` every pair of an active role and a key it grants, and
   `UnitsUnder(unit)` the unit and every unit below it. Each is one query, composes into a module's own, checks
@@ -1252,9 +1252,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyFunctionNames` names. `AddTenancyPostgres()` turns it on; on SQLite, and on a Postgres without the
   package, nothing changes.
 - **Tenancy on Postgres: a seat reads only its own rights, and the database writes them.** The policies let a
-  seat read its own rights and no other seat's, whatever it manages, and let a grant be read by its own seat and
-  by the seats that manage grants, seats or units somewhere, or roles for the whole tenant; units, seats,
-  placements, roles and the tree are every member's to read. No caller writes a right, system work included: a
+  seat read its own rights and no other seat's, whatever it manages, and let a grant be read by its own seat, by
+  the seats that manage grants, seats or units at the grant's unit, held there or above it, and by the seats that
+  manage roles for the whole tenant; units, seats, placements, roles and the tree are every member's to read. No
+  caller writes a right, system work included: a
   trigger on the grants, the seats and the roles writes each right as the row it follows from is written, in the
   same statement, from `key_is_live`, a function written from the catalogue like `manages_access`, so retiring a
   key writes a new access file, after which no question in SQL answers for it, the rights rows written before
@@ -1266,7 +1267,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   never left without one. `rewrite_tenant_rights()` writes a tenant's rights again for Tenancy's own system
   work, after rows were written past the trigger. The rule that a tenant keeps an administrator and the check of
   a move ask the database about other seats through `tenant_administrators()` and `rights_a_move_changes(...)`,
-  which answer ids, keys and dates to a seat that manages access, or units at both parents of the move. Where
+  which answer ids, keys and dates: the first each administrator whose grant at the root the caller may read,
+  the second to a seat that manages units at both parents of the move, of other seats' rights those the move
+  changes. Where
   the database answers nothing about a move, because it does not see the calling seat, the store fails rather
   than let the move through; where it does see the seat, a grant started or ended between the check and the
   answer, and the move is a `ConcurrencyConflictException`. `EnsurePoliciesAreInPlaceAsync` checks
@@ -2035,6 +2038,25 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   references. A library that sets it and references Tenancy no longer gets `TenancyPermissionsOfModules`; an
   application, such as a host, still does. A test project is not declared, and a project meant to be no module
   sets `<DDD_DeclareModule>false</DDD_DeclareModule>` beside the property.
+- **For the 3.2.0 previews: the keys that manage grants, seats or units read the grants only where they
+  apply.** On Postgres a seat that held `tenancy.grants.manage`, `tenancy.seats.manage` or
+  `tenancy.units.manage` anywhere read every grant of the tenant, so a seat that manages units at one unit read
+  the administrator's grants at the root, which no request of Tenancy's lets it read. Now the policy on the grants
+  lets such a seat read its own and those at the unit where it holds the key and below it, the units
+  `units_where_i_hold(key)` answers; `tenancy.roles.manage` for the whole tenant still reads every grant, and held
+  below the root nothing but its own. Every other key, `tenancy.settings.manage` and your catalogue's keys that
+  manage access included, reads no other seat's grants, as before. The seats key at a unit reads the grants there
+  because withdrawing a placement takes them with it: the use case reads them to ask for the grants key too, and
+  the policy on the placements reads them to keep a placement that has any. `tenant_administrators()`,
+  `seats_holding_at(key, unit)` and `ITenancyQuestions.SeatsHoldingAt` answer a right only where the caller may
+  read the grant that gives it, from the same definition as the policy: a seat that manages one part of the tree
+  no longer learns who holds a key from above it. `rights_a_move_changes(parent, new_parent)`, which the check of
+  a move needs wherever a right is held, answers another seat's right only where it reaches one parent and not the
+  other, which is a right the move changes; one above both parents it no longer answers, and the store does the
+  same on every database. Every use case works as before for every caller its request admits, since each command
+  asks its key where it acts, and a change of a seat's status asks `tenancy.seats.manage` for the whole tenant.
+  The next build writes the access file that changes the policy and the three functions; the start-up check
+  compares them as before. See [Who reads which grants](docs/tenancy.md#who-reads-which-grants).
 - **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
   `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
   changes with it. `UseMemberHolds` names them the same.

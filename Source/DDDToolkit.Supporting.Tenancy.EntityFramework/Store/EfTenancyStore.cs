@@ -217,11 +217,12 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
         if (AsksTheDatabase)
         {
             // The function finds the tenant from the caller, as its seat's, and reads the database's own clock. It
-            // answers a seat that may read other seats' grants, and any other seat nothing. For the use cases that
-            // is the whole answer all the same: every command that could take an administrator away first asks a
-            // key that makes its caller such a seat, the one for seats, for grants or for roles. Should the
-            // database see the caller as someone else, its own trigger still keeps the tenant's last administrator
-            // when the save commits.
+            // answers a seat that may read the grants at the root, and any other seat its own administration at
+            // most. For the use cases that is the whole answer all the same: every command that could take an
+            // administrator away first asks a key at the root that makes its caller such a seat, the one for seats
+            // or for grants there, or the one for roles for the whole tenant; and one that acts below the root takes
+            // no administrator away, and does not ask. Should the database see the caller as someone else, its own
+            // trigger still keeps the tenant's last administrator when the save commits.
             var answered = await context.Set<TenantAdministratorRow<TSeatId, TRoleId>>()
                 .FromSqlRaw(TenancyFunctionSql.Select(
                     context,
@@ -305,10 +306,16 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
             return answered;
         }
 
+        // As the function answers: another seat's right only where it reaches one parent and not the other, which is
+        // where the move changes it. One that reaches both reaches the unit wherever it hangs.
         var marked = managing.ToArray();
+        var paths = Reads.UnitPaths.Where(path => path.TenantId.Equals(tenant));
         var reaching = from right in Reads.SeatRights
                        where right.TenantId.Equals(tenant) && (right.EndsAt == null || right.EndsAt > now)
-                             && (right.SeatId.Equals(seat) || marked.Contains(right.Key))
+                             && (right.SeatId.Equals(seat)
+                                 || (marked.Contains(right.Key)
+                                     && !(paths.Any(path => path.AncestorId.Equals(right.UnitId) && path.DescendantId.Equals(parent))
+                                          && paths.Any(path => path.AncestorId.Equals(right.UnitId) && path.DescendantId.Equals(newParent)))))
                        join path in Reads.UnitPaths on right.UnitId equals path.AncestorId
                        where path.TenantId.Equals(tenant) && (path.DescendantId.Equals(parent) || path.DescendantId.Equals(newParent))
                        select new { right.SeatId, right.UnitId, right.Key, right.EndsAt, Reaches = path.DescendantId };

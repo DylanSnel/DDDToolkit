@@ -837,7 +837,7 @@ Tenancy answers questions about the organization, and nothing else:
 | `HoldsAtAsync(key, unit)` | Whether it holds the key at that unit, granted there or above it |
 | `KeysIHoldAt(unit)` | Every key it holds that reaches that unit |
 | `RolesWithKey(key)` | The active roles that grant the key |
-| `SeatsHoldingAt(key, unit)` | The active seats that hold the key at that unit now, granted there or above it. A seat that manages grants, seats or units somewhere, or roles for the whole tenant, is answered every holder, and so is system work in the tenant; any other seat learns only whether it holds the key there itself |
+| `SeatsHoldingAt(key, unit)` | The active seats that hold the key at that unit now, granted there or above it. A seat learns about another seat where it may read that seat's grant ([who reads which grants](#who-reads-which-grants)): one that manages grants, seats or units at North learns who holds the key from North or below it, and not who holds it from the root. System work in the tenant learns every holder; a seat that manages nothing learns only whether it holds the key there itself |
 | `WhereIHold(keys)` | Every pair of a unit and one of the keys the seat holds there: `UnitsWhereIHold` for several keys in one query |
 | `RoleKeys(keys)` | Every pair of an active role and one of the keys it grants: `RolesWithKey` for several keys in one query |
 | `UnitsUnder(unit)` | The unit and every unit below it, in the caller's tenant |
@@ -3831,6 +3831,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The choice | Where to see it |
 |---|---|
 | A seat reads only its own rights, and the database writes them | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs)<br/>**Try it:** Start the sample: it runs no other way ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `RightsVisibilityTests`, `DatabaseKeepsRightsTests`, `SampleOnPostgresTests` |
+| `tenancy.grants.manage`, `tenancy.seats.manage` and `tenancy.units.manage` read another seat's grants only where they apply: at the unit they are held at and below it. `tenancy.roles.manage` reads them everywhere when held for the whole tenant. The functions that answer about other seats' rights follow the same definition ([Who reads which grants](#who-reads-which-grants)) | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`TenancyQuestions.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Questions/TenancyQuestions.cs)<br/>**Try it:** Nothing in the demonstration shows it: rhea's request for another person's roles is refused at the door, because it asks `tenancy.seats.manage` for the whole tenant. Past the door, the policy shows her only the grants at North and below it, and none of ada's or maud's at the root (`AdministrationSchemaScenarios`)<br/>**Test:** `RightsVisibilityTests`, `CrossSeatQuestionTests`, `AdministrationSchemaScenarios` |
 | A read across tenants goes through a function, never past the policies. Functions that take the tenant serve a policy on a stored file or a channel | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`TenancySystemReads.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/ReadFunctions/TenancySystemReads.cs)<br/>**Try it:** Not in the sample: it stores no files and has no channels<br/>**Test:** `SystemReadFunctionTests`, `TenantArgumentFunctionTests` |
 | A token's role reaches the database only as a role the host mapped it to. A mapped role is closed out of every tenant unless it is an operator's, which reads and never writes | **Code:** [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs)<br/>**Try it:** orla's requests in the `.http` file<br/>**Test:** `TokenRoleTests`, `OperatorPolicyTests`, `TokenRolePostgresTests` |
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
@@ -4158,9 +4159,9 @@ Only Tenancy's own context reads Tenancy's tables, and what it reads there the p
 else is asked of a function:
 
 - **A seat**, through Tenancy's use cases, reads its tenant with its tree, seats, placements and roles, and of
-  what the seats hold its own: its grants and its rights. A seat that manages grants, seats or units somewhere, or
-  roles for the whole tenant, reads the other seats' grants too. Nobody reads another seat's rights
-  ([What the policies check](#what-the-policies-check)).
+  what the seats hold its own: its grants and its rights. A seat that manages grants, seats or units at a unit
+  reads the other seats' grants there and below it too, and one that manages roles for the whole tenant reads
+  them all. Nobody reads another seat's rights ([Who reads which grants](#who-reads-which-grants)).
 - **What a use case has to know of other seats' rights**, three functions answer, as ids, keys and dates:
   who administers the tenant, what a move of a unit changes, and who holds a key at a unit.
 - **A module** reads none of the tables. Its context maps six functions that answer the rows the questions
@@ -4198,7 +4199,7 @@ flowchart LR
 
     Tables[("Tenancy's tables,<br/>each under its policies")]
 
-    Seat -- "its tenant's tree, seats, placements and roles,<br/>and its own grants and rights" --> Tables
+    Seat -- "its tenant's tree, seats, placements and roles,<br/>its own grants and rights,<br/>and the grants where it manages grants, seats or units" --> Tables
     Work -- "every row of its tenant" --> Tables
     Seat -- "who administers the tenant, what a move changes,<br/>who holds a key at a unit" --> Others
     Module -- "the rows the questions read" --> Read
@@ -4242,14 +4243,16 @@ FROM "tenancy"."SeatRights" t
 $function$;
 
 -- A question about other seats, shortened: it runs as its owner, past the policies, answers ids, and
--- answers them only to a seat that may read the other seats' grants
+-- answers a right only where the caller may read the grant that gives it, as the policy on the grants does
 CREATE OR REPLACE FUNCTION tenancy.tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
 WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
   AND ... -- held at the root, with no end
-  AND ((SELECT tenancy.holds_key('tenancy.grants.manage')) OR ...) -- or seats, units, or roles for the whole tenant
+  AND (r."SeatId" = (SELECT tenancy.caller_seat())
+       OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))
+       OR ...) -- or seats or units managed at the right's unit, or roles for the whole tenant
 $function$;
 ```
 
@@ -4415,7 +4418,7 @@ tenant reads through the use cases, and writes where the use case asks the key:
 | OrganizationUnitPaths | the tenant's | with `tenancy.units.manage` held; the trigger checks the rest |
 | Seats | the tenant's, and the person's own in any tenant | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage`, or by the seat itself; its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (a trigger, below) |
 | SeatPlacements | the tenant's | placed with `tenancy.seats.manage` at the unit, for a seat of the tenant; withdrawn with it there, or by the seat itself, once the placement holds no grant; changed with it held, and made primary only where it is held at the unit, since making one primary demotes the old one wherever that is |
-| SeatRoleGrants | the seat's own; every grant of the tenant for a seat that holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage` somewhere, or `tenancy.roles.manage` for the whole tenant | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
+| SeatRoleGrants | the seat's own; another seat's where the caller manages grants, seats or units at the grant's unit or above it, or roles for the whole tenant ([who reads which grants](#who-reads-which-grants)) | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
 | SeatRights | the seat's own | by no caller: the database writes them |
 | Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant, which adds a role made by hand, naming no pack; a copy of one of your catalogue's packs, remembering exactly its keys, is added with that or with `tenancy.settings.manage`. What a role's pack gave it no seat changes (a trigger, below) |
 | TenancyAccessRevisions | the tenant's, for a person with a seat there of any status | by the same person: it is a counter every change of access takes, a seat's change of its own included |
@@ -4425,9 +4428,9 @@ tenant reads through the use cases, and writes where the use case asks the key:
 No signed-in user deletes a tenant, an organization, a unit, a seat or a role, and the use cases never do;
 Tenancy's own system work may. Every member reads the tree, the seats, where each seat is placed and the
 roles, as the use cases show them to every member. What a seat holds is its own to read: a seat reads its own
-rights and no other seat's, whatever it manages, and its own grants. The grants of other seats are read by
-the seats that manage grants, seats or units somewhere, or roles for the whole tenant, because the use cases
-load a seat with every grant it has.
+rights and no other seat's, whatever it manages, and its own grants. Another seat's grants it reads only where
+it manages grants, seats or units, or everywhere when it manages roles for the whole tenant
+([Who reads which grants](#who-reads-which-grants)).
 
 A seat takes away its own grants and placements without the keys the use cases ask for: taking away
 its own access never gives it any, and the same save removes its keys before the rows that would need them.
@@ -4461,9 +4464,9 @@ out:
 
 | Function | Answers | To |
 |---|---|---|
-| `tenant_administrators()` | the seats that administer the tenant, each with the role that makes it one | a seat that may read other seats' grants |
-| `rights_a_move_changes(parent, new_parent)` | the rights a move of a unit from under one to under the other would change: the caller's own, and anyone's for a key that manages access | a seat that holds `tenancy.units.manage` at both |
-| `seats_holding_at(key, unit)` | the active seats that hold the key live at the unit or above it | every holder to a seat that may read other seats' grants; to any other seat, itself when it holds |
+| `tenant_administrators()` | the seats that administer the tenant, each with the role that makes it one | a seat that may read the grants at the root: one that manages grants, seats or units there, or roles for the whole tenant |
+| `rights_a_move_changes(parent, new_parent)` | the rights a move of a unit from under one to under the other would change: the caller's own, and anyone's for a key that manages access that reaches one parent and not the other | a seat that holds `tenancy.units.manage` at both |
+| `seats_holding_at(key, unit)` | the active seats that hold the key live at the unit or above it | each holder whose grant there the caller may read: itself, and the others where it manages grants, seats or units, or all of them when it manages roles for the whole tenant |
 
 The use cases ask the first two through the store, for the rule that a tenant keeps an administrator and for
 the check of a move, and `ITenancyQuestions.SeatsHoldingAt` asks the third, which composes into a query of
@@ -4539,6 +4542,43 @@ request that requires a key, `ForTheWholeTenant` or `AtUnit`, is refused by that
 the key, and an information line says that the seat's rights changed between the check and the save. What a use
 case of Tenancy's checks past what its request declares, behind `InTenant()` say, is not asked again: a save of
 such a request that the database denies stays a warning, which names the requirement it asked.
+
+### Who reads which grants
+
+Three keys read other seats' grants, `tenancy.grants.manage`, `tenancy.seats.manage` and `tenancy.units.manage`,
+and each reads only where it applies, as it acts only there. Held at a unit, it reaches that unit and every unit
+below it, which is what `units_where_i_hold(key)` answers, and the grants there; never one above it or beside it.
+A fourth, `tenancy.roles.manage`, reads them all when it is held for the whole tenant. In the sample's harbor:
+
+| The calling seat holds | It reads the grants | In harbor |
+|---|---|---|
+| none of the keys below, whatever else it holds: `tenancy.settings.manage` and your catalogue's keys that manage access read no other seat's grants | its own | leo, juno and vic read their own |
+| `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage` at a unit | its own, and every grant at that unit and below it | rhea, Area manager at North: those at North, North Coast and North Inland; not ada's, maud's or hana's at the root, nor any at South Bay |
+| one of those three at the root | every grant of the tenant, the root being the whole tenant | hana, People office at the root |
+| `tenancy.roles.manage` for the whole tenant | every grant of the tenant: a change of a role reaches every seat that holds it | ada and maud, Access admins |
+| `tenancy.roles.manage` below the root | its own: held there, it changes no role | |
+
+The use cases need nothing more. Tenancy's store loads a seat with the grants its caller may read, and every
+command acts on grants it may read: one that gives, takes away or withdraws at a unit asks its key at that unit,
+and one that changes a seat's status, which reaches every grant of the seat, asks `tenancy.seats.manage` for the
+whole tenant, as does the administration's overview of another person's roles in the sample. The seats key at a
+unit reads the grants there too, because withdrawing a placement takes its grants with it: the use case reads
+them to ask for `tenancy.grants.manage` as well, and the policy on the placements reads them, as the caller, to
+keep a placement that still has any. Were they hidden from it, a seats manager without the grants key could
+withdraw a placement, and the database would take its grants with it.
+
+`tenant_administrators()` and `seats_holding_at(key, unit)` are written from the same definition as the policy,
+and answer a right only where the caller may read the grant that gives it. So rhea is answered no administrator,
+whose grant is at the root, and asked who holds `projects.view` at North Coast, she learns about the seats whose
+grants are at North and below it, and not about ada. Every command that could take an administrator away asks a
+key at the root first, so the rule that a tenant keeps one reads all of them whenever it is asked.
+
+`rights_a_move_changes(parent, new_parent)` is the one function that answers past this line, because the check
+of a move has to weigh what it takes away and what it gives, wherever that is held. It answers another seat's
+right only where it reaches one parent and not the other, as a unit, a key and an end, never whose. A seat that
+manages units at North Coast and at South Bay, moving a unit from under the one to under the other, learns that keys
+that manage access are held at North, which the unit would leave. It learns nothing of what is held at the root,
+which reaches the unit wherever it hangs, and a move within North tells rhea nothing held above North.
 
 ### What stays in C#
 
