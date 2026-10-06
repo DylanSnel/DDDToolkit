@@ -172,16 +172,16 @@ sequenceDiagram
     participant Postgres
     Context->>Interceptor: opens a connection
     Note over Interceptor: nothing is sent
-    Context->>Interceptor: a query, outside a transaction
-    Interceptor->>Pooler: the call and the query, in one round trip
-    Pooler->>Postgres: one transaction, on whichever server connection is free
-    Note over Postgres: the settings end with the transaction
+    Context->>Interceptor: a query, outside<br/>a transaction
+    Interceptor->>Pooler: the call and the query,<br/>in one round trip
+    Pooler->>Postgres: one transaction, on<br/>whichever server<br/>connection is free
+    Note over Postgres: the settings end<br/>with the transaction
     Context->>Interceptor: SaveChanges
-    Note over Interceptor: this save runs in a transaction
+    Note over Interceptor: this save runs<br/>in a transaction
     Context->>Pooler: BEGIN
-    Interceptor->>Postgres: the role, the claims and the settings, for this transaction
+    Interceptor->>Postgres: the role, the claims and the<br/>settings, for this transaction
     Context->>Postgres: the commands of the save, COMMIT
-    Context->>Interceptor: begins a transaction of its own
+    Context->>Interceptor: begins a transaction<br/>of its own
     Interceptor->>Postgres: the same statement, once
     Context->>Postgres: queries and saves, COMMIT
 ```
@@ -1360,7 +1360,7 @@ The script writes it as a trigger rather than a policy, before an update of the 
 rule and refuses the statement when the answer is no:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Update["An UPDATE<br/>of a project"] --> Policy{"May the caller<br/>change the row?"}
     Policy -->|no| Untouched["Not changed:<br/>the statement<br/>skips the row"]
     Policy -->|"yes, the policy<br/>for UPDATE says"| Held{"Changes a column<br/>a rule holds?"}
@@ -1370,48 +1370,6 @@ flowchart LR
     Rule -->|"yes, before<br/>and after"| Check
     Rule -->|no| Refused["Refused: 42501,<br/>the statement fails"]
 ```
-
-- **The row's own rules still decide first.** The trigger only fires for a row the policy for `UPDATE` lets the
-  caller change, and the policy still checks the new row after it. A column rule lets nobody change anything a
-  rule for the row does not let them change: it narrows that, for its columns.
-- **It is asked as a rule for `UPDATE` is,** of the row as it was and of the row as it is about to be, and both
-  have to say yes. A rule that reads nothing of the row but its key, as a set-shaped question about the row's id
-  does, answers the same of both while the key stays what it was, which every change Entity Framework makes
-  does, so it is asked once per changed row rather than twice.
-- **It is asked once per changed row, not once per statement.** A policy asks a set once per statement; a
-  trigger runs for each row whose held column changes, and asks the set again for each. Entity Framework's saves
-  change one row per statement, so for them a column rule costs the set asked once more. A statement that
-  changes a held column of many rows, an `ExecuteUpdate` or a Data API `PATCH` with a filter, asks the set once
-  for each of them.
-- **Its SQL runs in the trigger, with an empty search path.** Every name the toolkit writes carries its schema.
-  A function the rule calls with `Sql.Call` names its schema too, `"public.is_agent"`, or `"pg_catalog.lower"`
-  for one of Postgres's own, which [DDD00038](diagnostics.md#ddd00038) holds it to: in a policy Postgres finds a
-  name when the policy is made, in a trigger only as it runs. The SQL of a `Sql.Raw` names every table and
-  function with its schema as well, and cannot read the row's columns by name, which a trigger knows only as
-  the row before and after; read the row in C# instead.
-- **Several column rules on one column add up:** a change one of them allows is allowed, as the rules of a row
-  do. The columns the same rules hold share one trigger, so a statement that changes several of them asks the
-  rules once.
-- **The roles a caller's statement runs as are held:** the roles the column rules are for, the signed-in user's
-  and the anonymous caller's, every [token role](#token-roles) you map, and any other role a policy lets change
-  the table. A held role that none of the column's rules is for may not change the column, as a role that no
-  rule grants a command may not run it. The application's own work is not held: the
-  [scoped system role](#the-scoped-system-role) and the bookkeeping role pass, unless a column rule names the
-  role in `To`, and so do the tables' owner and a role that may bypass row level security, which no policy holds
-  either.
-- **A value object is every column it is stored in:** `Columns = [nameof(Project.Planned)]` holds both columns of
-  the planned range, and `"Planned.From"` the one. A property of a value object is named with a dot, which
-  `nameof` does not write. A collection of values stored in the row, such as a list of strings kept as an array,
-  is its one column.
-- **It is found the way a policy is:** the trigger carries a comment, and the drop at the start of every script,
-  and of every migration of a module with rules, takes it away with the policies. A rule taken out loses its
-  trigger with the next script, and a migration may drop or change a column a column rule holds, which the
-  trigger would otherwise stand in the way of.
-- **The refusal is the database's, and the caller is told `access.refused`:** `42501`,
-  `insufficient_privilege`, with a message that names the rule, the trigger's name as the constraint, and the
-  toolkit's hint, as every access guard the toolkit writes refuses. Through Entity Framework the save is refused as one
-  a policy refuses is: a `RefusalException` with the code `access.refused`, and a warning that names the
-  trigger. See [When the database refuses](#when-the-database-refuses).
 
 <details>
 <summary>Show the code: two column rules of a project, and the trigger one of them becomes</summary>
@@ -1479,6 +1437,48 @@ rules stops at the placeholder it does not know, and asks for the same version o
 everywhere, rather than write such a policy.
 
 </details>
+
+- **The row's own rules still decide first.** The trigger only fires for a row the policy for `UPDATE` lets the
+  caller change, and the policy still checks the new row after it. A column rule lets nobody change anything a
+  rule for the row does not let them change: it narrows that, for its columns.
+- **It is asked as a rule for `UPDATE` is,** of the row as it was and of the row as it is about to be, and both
+  have to say yes. A rule that reads nothing of the row but its key, as a set-shaped question about the row's id
+  does, answers the same of both while the key stays what it was, which every change Entity Framework makes
+  does, so it is asked once per changed row rather than twice.
+- **It is asked once per changed row, not once per statement.** A policy asks a set once per statement; a
+  trigger runs for each row whose held column changes, and asks the set again for each. Entity Framework's saves
+  change one row per statement, so for them a column rule costs the set asked once more. A statement that
+  changes a held column of many rows, an `ExecuteUpdate` or a Data API `PATCH` with a filter, asks the set once
+  for each of them.
+- **Its SQL runs in the trigger, with an empty search path.** Every name the toolkit writes carries its schema.
+  A function the rule calls with `Sql.Call` names its schema too, `"public.is_agent"`, or `"pg_catalog.lower"`
+  for one of Postgres's own, which [DDD00038](diagnostics.md#ddd00038) holds it to: in a policy Postgres finds a
+  name when the policy is made, in a trigger only as it runs. The SQL of a `Sql.Raw` names every table and
+  function with its schema as well, and cannot read the row's columns by name, which a trigger knows only as
+  the row before and after; read the row in C# instead.
+- **Several column rules on one column add up:** a change one of them allows is allowed, as the rules of a row
+  do. The columns the same rules hold share one trigger, so a statement that changes several of them asks the
+  rules once.
+- **The roles a caller's statement runs as are held:** the roles the column rules are for, the signed-in user's
+  and the anonymous caller's, every [token role](#token-roles) you map, and any other role a policy lets change
+  the table. A held role that none of the column's rules is for may not change the column, as a role that no
+  rule grants a command may not run it. The application's own work is not held: the
+  [scoped system role](#the-scoped-system-role) and the bookkeeping role pass, unless a column rule names the
+  role in `To`, and so do the tables' owner and a role that may bypass row level security, which no policy holds
+  either.
+- **A value object is every column it is stored in:** `Columns = [nameof(Project.Planned)]` holds both columns of
+  the planned range, and `"Planned.From"` the one. A property of a value object is named with a dot, which
+  `nameof` does not write. A collection of values stored in the row, such as a list of strings kept as an array,
+  is its one column.
+- **It is found the way a policy is:** the trigger carries a comment, and the drop at the start of every script,
+  and of every migration of a module with rules, takes it away with the policies. A rule taken out loses its
+  trigger with the next script, and a migration may drop or change a column a column rule holds, which the
+  trigger would otherwise stand in the way of.
+- **The refusal is the database's, and the caller is told `access.refused`:** `42501`,
+  `insufficient_privilege`, with a message that names the rule, the trigger's name as the constraint, and the
+  toolkit's hint, as every access guard the toolkit writes refuses. Through Entity Framework the save is refused as one
+  a policy refuses is: a `RefusalException` with the code `access.refused`, and a warning that names the
+  trigger. See [When the database refuses](#when-the-database-refuses).
 
 [DDD00038](diagnostics.md#ddd00038) reports a column rule for another operation than `Change`, which are about
 whole rows; a name in `Columns` that is no property of the aggregate or of a value object it holds, or is a
@@ -1661,15 +1661,6 @@ well: information where the caller's rights changed between the check and the sa
 asking the request's check again, and a warning where C# and the database disagree
 ([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)).
 
-```mermaid
-flowchart LR
-    Failed["A save fails"] --> Code{"What did<br/>Postgres say?"}
-    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the log line names it"]
-    Code -->|"42501 from<br/>ExecWithCheckOptions"| Policy["A policy: access.refused"]
-    Code -->|"23505 on an index<br/>with RefusesAs"| Index["The index's own refusal"]
-    Code -->|"anything else"| Other["The failure as it was: a 500"]
-```
-
 An update or a delete whose row a policy hides fails with no error at all: the statement finds no row, as when
 somebody else changed it first. That case is told apart by reading the row again, as
 [`AggregateVersionInterceptor`](entity-framework.md) does, and is answered with the same refusal.
@@ -1715,6 +1706,15 @@ somebody else changed it first. That case is told apart by reading the row again
   `RowAccessModel.Refusal(guard, message)` writes the statement. By hand it is one line. A trigger that should not
   be answered as a refusal leaves the hint out. `DatabaseRefusal.From(exception)` reads what refused for a
   translation of your own: `GuardRefused`, with the guard's name as `Constraint`.
+
+```mermaid
+flowchart LR
+    Failed["A save fails"] --> Code{"What did<br/>Postgres say?"}
+    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the log line names it"]
+    Code -->|"42501 from<br/>ExecWithCheckOptions"| Policy["A policy: access.refused"]
+    Code -->|"23505 on an index<br/>with RefusesAs"| Index["The index's own refusal"]
+    Code -->|"anything else"| Other["The failure as it was: a 500"]
+```
 
 <details>
 <summary>Show the code: a trigger of your own that refuses as the toolkit's access guards do</summary>
@@ -2110,16 +2110,6 @@ the access check of ChangeProjectOwner (MemberAccess<ProjectId>.On) let the call
 `... the guard projects_owner_stays on projects.Projects. C# and the guards disagree.` The table goes with it
 where the database named one or the save wrote one.
 
-```mermaid
-flowchart LR
-    Refused["the policies or a guard<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
-    Passed -- "no" --> Warning["warning:<br/>C# and the policies<br/>disagree"]
-    Passed -- "yes" --> Again{"asked again,<br/>now"}
-    Again -- "refuses" --> Information["information:<br/>the caller's rights<br/>changed meanwhile"]
-    Again -- "lets through" --> Warning
-    Again -- "fails" --> Warning
-```
-
 Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` puts every request it lets through in hand,
 with its check, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of
 your own written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
@@ -2138,6 +2128,16 @@ behavior, runs outside the handler's flow and finds no check to ask: the warning
 gives no answer the second time leaves the warning too, and the warning says why: its connection gone, say, or a
 `ConcurrencyConflictException` because what the request is about moved on from the version it named, which says
 nothing about the caller's rights.
+
+```mermaid
+flowchart TB
+    Refused["the policies or a guard<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
+    Passed -- "no" --> Warning["warning:<br/>C# and the policies<br/>disagree"]
+    Passed -- "yes" --> Again{"asked again,<br/>now"}
+    Again -- "refuses" --> Information["information:<br/>the caller's rights<br/>changed meanwhile"]
+    Again -- "lets through" --> Warning
+    Again -- "fails" --> Warning
+```
 
 <details>
 <summary>Show the code: the three lines, and a rename in the Tenancy sample that loses its key on the way</summary>

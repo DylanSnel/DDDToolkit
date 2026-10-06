@@ -100,13 +100,6 @@ saving. With a context pool the callback runs once and is handed the application
 handlers get the scope the context was rented in instead; see [Contexts from a pool](#contexts-from-a-pool).
 [The interceptors](#the-interceptors) lists the toolkit's own in the order they run.
 
-```mermaid
-flowchart LR
-    Call["UseNpgsql(...)<br/>.UseDDDToolkit(services)"] --> Own["the toolkit's<br/>own interceptors"]
-    Own -- "AddSupabaseRowLevelSecurity()<br/>brought it, at 100" --> Rls["row level security<br/>on a context on Postgres"]
-    Rls -- "AddTenancy()<br/>brought it, last" --> Tenancy["Tenancy's save check<br/>does what the model asks"]
-```
-
 Each registration announces its part with a position, and the one call puts every part after the toolkit's
 own interceptors, the lowest position first. That is the order the toolkit holds a context to. Tenancy's save
 check comes last, at the highest position there is, so it sees what the domain event handlers changed, only
@@ -122,6 +115,13 @@ rights in Tenancy's own context, and passes over a context that has neither. So 
 contexts it is for, and a module added later is wired by the same call. A model that cannot do without a part
 says so, and a context of it without the part is refused at its first save
 ([A part a model cannot do without](#a-part-a-model-cannot-do-without)).
+
+```mermaid
+flowchart TB
+    Call["UseNpgsql(...)<br/>.UseDDDToolkit(services)"] --> Own["the toolkit's<br/>own interceptors"]
+    Own -- "if registered,<br/>at 100" --> Rls["row level security<br/>on a context on Postgres"]
+    Rls -- "if registered,<br/>last" --> Tenancy["Tenancy's save check<br/>does what the model asks"]
+```
 
 <details>
 <summary>Show the code: three contexts in one host, one call each</summary>
@@ -908,10 +908,10 @@ sequenceDiagram
     Scope->>Pool: first asks for the context
     Pool-->>Scope: a context, bound to this scope
     Scope->>Context: SaveChanges
-    Context->>Handlers: domain events, with the scope's services
-    Handlers-->>Context: changes on the same context
+    Context->>Handlers: domain events, with<br/>the scope's services
+    Handlers-->>Context: changes on the<br/>same context
     Context-->>Scope: saved
-    Scope->>Pool: the scope ends: the context goes back, tracking nothing
+    Scope->>Pool: the scope ends: the context<br/>goes back, tracking nothing
     Note over Pool,Context: the next renter gets<br/>its own scope and its own caller
 ```
 

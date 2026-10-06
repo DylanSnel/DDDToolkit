@@ -19,7 +19,7 @@ the context.
 From a change to a model to a database that has it:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Add["dotnet ef migrations add, in the module"] --> Build["dotnet build, of the host"]
     Build --> Files["supabase/migrations, one .ddd.sql file per migration"]
     Files --> Commit["committed with the change"]
@@ -781,7 +781,7 @@ nothing else. That migration's one fact of its own is the role's name. The roles
 the deployment's, and the host checks at start-up that the role may become every caller:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Build["dotnet build, with SupabaseLoginRole beside SupabaseRowAccessRoles"] --> File["{version}_login_role.sample_api.ddd.sql, after the access files"]
     File --> Push["supabase db push"]
     Push --> Login["alter role with login, once per project, never in a file"]

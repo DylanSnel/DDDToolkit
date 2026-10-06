@@ -727,12 +727,35 @@ public sealed class Reminders(BillingSubscriptions.Dunning dunning)
 ```
 
 ```mermaid
-flowchart LR
+flowchart TB
     Package["Acme.Subscriptions<br/>SubscriptionUseCases,<br/>generic"]
     Domain["Shop.Billing.Domain<br/>your classes"] --> Class(["BillingSubscriptions,<br/>generated there"])
     Class -- "derives from,<br/>closed over them" --> Package
     Application["Shop.Billing.Application<br/>its API project, the host"] -- "BillingSubscriptions.Dunning" --> Class
 ```
+
+<details>
+<summary>Show the code: what the generator writes</summary>
+
+```csharp title="BillingSubscriptions.TemplateFacade.g.cs"
+/// <summary>
+/// SubscriptionUseCases, closed over the classes of the module Billing: ShopSubscription, SubscriptionId,
+/// ShopInvoice, InvoiceId, ShopInvoiceLine and InvoiceLineId.
+/// Every type nested in it is named through this class, and is the package's own: the type its registration added.
+/// The class is only that name. Nothing makes one, and nothing derives from it.
+/// </summary>
+public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<
+    global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId,
+    global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId,
+    global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>
+{
+    private BillingSubscriptions()
+    {
+    }
+}
+```
+
+</details>
 
 - **A name, and no second type.** C# finds a type nested in a class through every class derived from it, so
   `BillingSubscriptions.Dunning` is the package's own `Dunning`, closed over the application's classes: what the
@@ -763,29 +786,6 @@ flowchart LR
   constructor without parameters a derived class can call, and every type parameter marked `[TemplateType]`,
   since the application's class leaves none open. One that is not is passed over without a word, so prove it in
   the package's own tests, with a project that names the class.
-
-<details>
-<summary>Show the code: what the generator writes</summary>
-
-```csharp title="BillingSubscriptions.TemplateFacade.g.cs"
-/// <summary>
-/// SubscriptionUseCases, closed over the classes of the module Billing: ShopSubscription, SubscriptionId,
-/// ShopInvoice, InvoiceId, ShopInvoiceLine and InvoiceLineId.
-/// Every type nested in it is named through this class, and is the package's own: the type its registration added.
-/// The class is only that name. Nothing makes one, and nothing derives from it.
-/// </summary>
-public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<
-    global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId,
-    global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId,
-    global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>
-{
-    private BillingSubscriptions()
-    {
-    }
-}
-```
-
-</details>
 
 [Tenancy](tenancy.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and the
 sample names them `TenantsTenancy.SeatCommands`. [Membership](membership.md)'s are small classes generic over

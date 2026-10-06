@@ -309,19 +309,6 @@ The check runs before the handler, and the handler loads, changes and saves afte
 requests go on: somebody renames the document, takes a role from the caller, revokes what reached it from
 above. What holds a change through that, on the default path, is what is already there, each doing one thing:
 
-```mermaid
-flowchart LR
-    Check["the request's check<br/>who: the key held"] -- "met" --> Load["the load by id<br/>ExpectVersion"]
-    Load -- "not the version<br/>the caller named" --> Lost["409<br/>a lost race"]
-    Load -- "not seen any more" --> NotFound["404"]
-    Load --> Change["the aggregate<br/>keeps its rules"]
-    Change --> Save["the save compares<br/>the version loaded"]
-    Save -- "changed since<br/>the load" --> Lost
-    Save --> Database["the database<br/>checks the write"]
-    Database -- "no key left<br/>that writes it" --> Refused["403<br/>access.refused"]
-    Database --> Saved["saved"]
-```
-
 1. **The request's requirement**, `MemberAccess.On(key, document, ExpectedVersion)`, before the handler: who
    may, and, where the caller named the version it read, that the document is still at it.
 2. **The load by id.** The handler loads the document its request names, which is the one that was checked,
@@ -339,6 +326,19 @@ flowchart LR
 So permission is about who, and the version is about what the caller read. How the caller holds the key, and
 until when, a rule of yours [asks the questions for](#who-may-give-a-role-is-yours-to-decide), in one
 statement.
+
+```mermaid
+flowchart TB
+    Check["the request's check<br/>who: the key held"] -- "met" --> Load["the load by id<br/>ExpectVersion"]
+    Load -- "not the version<br/>the caller named" --> Lost["409<br/>a lost race"]
+    Load -- "not seen any more" --> NotFound["404"]
+    Load --> Change["the aggregate<br/>keeps its rules"]
+    Change --> Save["the save compares<br/>the version loaded"]
+    Save -- "changed since<br/>the load" --> Lost
+    Save --> Database["the database<br/>checks the write"]
+    Database -- "no key left<br/>that writes it" --> Refused["403<br/>access.refused"]
+    Database --> Saved["saved"]
+```
 
 <details>
 <summary>Show the code: the handler, and a store that loads with the version</summary>
@@ -1153,7 +1153,7 @@ services.AddCourseMemberAccess<ICampusRequest>();
 ```
 
 ```mermaid
-flowchart LR
+flowchart TB
     Rules["MembershipRules<br/>members, above,<br/>where the roles come from"] --> Questions["IMemberQuestions<br/>one statement"]
     Questions -- "who is the caller,<br/>where is the key held" --> Written["GeneratedCourseMembershipWithTenancy<br/>written into your project"]
     Written -- "the seat of the caller,<br/>the units where it holds the key" --> Tenancy["Tenancy<br/>its questions and answers"]
@@ -1321,6 +1321,12 @@ to what the access check of its request read of that resource: the version it re
 | any other resource, as the application's own work that trusted code began (`Callers.Begin(Caller.System)`, or a scope the rules name) | saved: system work needs no check. A resource the request's check did read stays held to its version, whoever saves it |
 | a new resource | saved: there was nothing to check |
 
+The handler is handed nothing and passes nothing on. What ties the save to the check is the **request in
+hand** ([`RequestInHand`](access-requirements.md#the-request-in-hand)): `AccessChecks.RequireAsync` puts the
+request in hand for the flow of work that asked, the method that runs the handler next, from the moment the
+checks let it through; `MemberAccessCheck` keeps what it read with it, in `Checked<MemberHold<DocumentId>>`;
+and at the save the hold finds it there, for each resource the save changes.
+
 ```mermaid
 sequenceDiagram
     participant Behavior as the access behavior
@@ -1334,12 +1340,6 @@ sequenceDiagram
     Save->>Save: each resource changed:<br/>the hold in hand?
     Save-->>Handler: saved, 409 or refused
 ```
-
-The handler is handed nothing and passes nothing on. What ties the save to the check is the **request in
-hand** ([`RequestInHand`](access-requirements.md#the-request-in-hand)): `AccessChecks.RequireAsync` puts the
-request in hand for the flow of work that asked, the method that runs the handler next, from the moment the
-checks let it through; `MemberAccessCheck` keeps what it read with it, in `Checked<MemberHold<DocumentId>>`;
-and at the save the hold finds it there, for each resource the save changes.
 
 <details>
 <summary>Show the code: what the save asks</summary>

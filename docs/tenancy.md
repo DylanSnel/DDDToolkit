@@ -74,17 +74,6 @@ host adds them with one generated call ([A module states its keys once](#a-modul
 `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
 one.
 
-```mermaid
-flowchart TD
-    Declares{"does a pack<br/>administer?"}
-    Declares -- no --> Taken{"one with the<br/>default's key<br/>or name?"}
-    Declares -- yes --> PerShape{"one seeded<br/>per shape?"}
-    Taken -- no --> Default(["Tenancy's own<br/>is added"])
-    Taken -- yes --> Refused["refused, with<br/>the fix"]
-    PerShape -- no --> Refused
-    PerShape -- yes --> Yours(["yours are<br/>used"])
-```
-
 Declare your own once the role should have another name or list its keys, and then declare one for every
 shape. The default is added only when you declare none, so a catalogue with an administrators' pack for a
 flat tenant and none for a hierarchical one is refused, with a problem that says so. While the default is
@@ -98,6 +87,17 @@ languages it ships, and your `IRolePackTexts` is asked first, by the key `admini
 ([Roles in the tenant's language](#roles-in-the-tenants-language)). On Postgres the access file is written
 from the same catalogue, so `pack_keys('administrator')` answers every live key, and the start-up check that
 compares the database's functions with the catalogue the application runs with passes.
+
+```mermaid
+flowchart TD
+    Declares{"does a pack<br/>administer?"}
+    Declares -- no --> Taken{"one with the<br/>default's key<br/>or name?"}
+    Declares -- yes --> PerShape{"one seeded<br/>per shape?"}
+    Taken -- no --> Default(["Tenancy's own<br/>is added"])
+    Taken -- yes --> Refused["refused, with<br/>the fix"]
+    PerShape -- no --> Refused
+    PerShape -- yes --> Yours(["yours are<br/>used"])
+```
 
 <details>
 <summary>Show the code: an application without a catalogue, and one with keys of its own and no packs</summary>
@@ -314,7 +314,7 @@ without any. Both compose the modules, so both see every module's assembly, and 
 comes with the package, reads the keys there.
 
 ```mermaid
-flowchart LR
+flowchart TB
     Ordering["Ordering.Application<br/>OrderingKeys.Permissions<br/>[TenancyPermissions]"]
     Billing["Billing.Application<br/>BillingKeys.Permissions<br/>[TenancyPermissions]"]
     Generator{{"Tenancy's generator,<br/>in each project that<br/>declares no module"}}
@@ -328,6 +328,44 @@ flowchart LR
     Generator --> Host --> Running --> Check
     Generator --> Export --> Written --> Check
 ```
+
+<details>
+<summary>Show the code: a module's keys, the host's one call, the export, and what the generator writes</summary>
+
+```csharp
+// Ordering.Application: the keys, stated once
+public static class OrderingKeys
+{
+    [TenancyPermissions]
+    public static IReadOnlyList<Permission> Permissions { get; } =
+    [
+        new("orders.view", "Ordering", "See the orders"),
+        new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
+    ];
+}
+
+// The host's Program.cs: the host references every module, and the class is in the namespace of its assembly
+using Shop.Host;
+
+builder.Services.AddTenancyPermissionsOfModules();
+
+// The project that runs the export, or one the host shares with it
+public sealed class ShopTenancyRowAccess()
+    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
+
+// What the generator writes into each of those projects, in the namespace of its assembly
+internal static class TenancyPermissionsOfModules
+{
+    public static IReadOnlyList<Permission> All { get; } = Join(
+        global::Shop.Billing.BillingKeys.Permissions,
+        global::Shop.Ordering.OrderingKeys.Permissions);
+
+    public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
+        => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
+}
+```
+
+</details>
 
 A module states its keys on the static list where it declares them, and marks that list with
 `[TenancyPermissions]`. That is the only place: its registration adds nothing, and no other project lists them.
@@ -374,44 +412,6 @@ of its own, as in the sample, it references the modules the host does, and the s
 stays the guard: it compares the functions the export wrote with the catalogue the host runs with, and refuses
 a host whose policies were written from another catalogue ([Setting it up](#setting-it-up)).
 
-<details>
-<summary>Show the code: a module's keys, the host's one call, the export, and what the generator writes</summary>
-
-```csharp
-// Ordering.Application: the keys, stated once
-public static class OrderingKeys
-{
-    [TenancyPermissions]
-    public static IReadOnlyList<Permission> Permissions { get; } =
-    [
-        new("orders.view", "Ordering", "See the orders"),
-        new("orders.refund", "Ordering", "Refund an order", ManagesAccess: true),
-    ];
-}
-
-// The host's Program.cs: the host references every module, and the class is in the namespace of its assembly
-using Shop.Host;
-
-builder.Services.AddTenancyPermissionsOfModules();
-
-// The project that runs the export, or one the host shares with it
-public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
-
-// What the generator writes into each of those projects, in the namespace of its assembly
-internal static class TenancyPermissionsOfModules
-{
-    public static IReadOnlyList<Permission> All { get; } = Join(
-        global::Shop.Billing.BillingKeys.Permissions,
-        global::Shop.Ordering.OrderingKeys.Permissions);
-
-    public static IServiceCollection AddTenancyPermissionsOfModules(this IServiceCollection services)
-        => TenancyServiceCollectionExtensions.AddTenancyPermissions(services, All);
-}
-```
-
-</details>
-
 ### Calling a use case
 
 Tenancy's use cases, and the records they take and answer, are nested in one generic class,
@@ -431,6 +431,27 @@ flowchart LR
     Name --> Api["API project<br/>TenantsTenancy.SeatOverview,<br/>in GraphQL types too"]
     Name --> Host["host and tests<br/>TenantsTenancy.TenantCommands"]
 ```
+
+<details>
+<summary>Show the code: what the generator writes into the project that declares the classes</summary>
+
+```csharp title="TenantsTenancy.TemplateFacade.g.cs, shortened"
+/// <summary>
+/// TenancyUseCases, closed over the classes of the module Tenants: ShopTenant, TenantId, ShopOrganization,
+/// ShopUnit, OrganizationUnitId, ShopSeat, SeatId, ShopRole and RoleId.
+/// </summary>
+public abstract class TenantsTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
+    global::Shop.Tenants.ShopTenant, global::Shop.Tenants.Contracts.TenantId, global::Shop.Tenants.ShopOrganization,
+    global::Shop.Tenants.ShopUnit, global::Shop.Tenants.Contracts.OrganizationUnitId, global::Shop.Tenants.ShopSeat,
+    global::Shop.Tenants.Contracts.SeatId, global::Shop.Tenants.ShopRole, global::Shop.Tenants.Contracts.RoleId>
+{
+    private TenantsTenancy()
+    {
+    }
+}
+```
+
+</details>
 
 `TenantsTenancy.TenantCommands`, `TenantsTenancy.OrganizationCommands`, `TenantsTenancy.SeatCommands`,
 `TenantsTenancy.RoleCommands` and `TenantsTenancy.TenancyDirectory` are services, registered by `AddTenancy`
@@ -498,27 +519,6 @@ shows. The invitation use cases take your invitation class and its id as well:
   module of one project with GraphQL types over Tenancy's records keeps one alias of exactly that name there,
   `global using TenantsTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, which every
   generator of the project reads. The generator stands back for it, and nothing else changes.
-
-<details>
-<summary>Show the code: what the generator writes into the project that declares the classes</summary>
-
-```csharp title="TenantsTenancy.TemplateFacade.g.cs, shortened"
-/// <summary>
-/// TenancyUseCases, closed over the classes of the module Tenants: ShopTenant, TenantId, ShopOrganization,
-/// ShopUnit, OrganizationUnitId, ShopSeat, SeatId, ShopRole and RoleId.
-/// </summary>
-public abstract class TenantsTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    global::Shop.Tenants.ShopTenant, global::Shop.Tenants.Contracts.TenantId, global::Shop.Tenants.ShopOrganization,
-    global::Shop.Tenants.ShopUnit, global::Shop.Tenants.Contracts.OrganizationUnitId, global::Shop.Tenants.ShopSeat,
-    global::Shop.Tenants.Contracts.SeatId, global::Shop.Tenants.ShopRole, global::Shop.Tenants.Contracts.RoleId>
-{
-    private TenantsTenancy()
-    {
-    }
-}
-```
-
-</details>
 
 The rest of this page writes `TenantsTenancy.`, the sample's name as well: its module is called Tenants too.
 
@@ -606,7 +606,7 @@ an enum say, shown and stored like any field of its own. It sets the field in th
 that makes the unit:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Ask["AddUnitAsync<br/>(parent, name,<br/>configure)"] --> Key{"tenancy.units.manage<br/>at the parent?"}
     Key -- no --> Refused(["refused,<br/>nothing saved"])
     Key -- yes --> Tree{"the tree<br/>takes it?"}
@@ -615,18 +615,6 @@ flowchart LR
     Configure -- throws --> Nothing(["not added,<br/>nothing saved"])
     Configure --> Save(["added, one save:<br/>the unit, your fields"])
 ```
-
-The use case checks the caller, and the organization checks the tree and makes the unit through your own
-class. It hands the unit to `configure` before it takes the unit in, so your field is written in the same save
-as the unit and a rule of your class judges it there. A callback that throws leaves the organization as it was:
-the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
-through `ConfigureRoot` when the tenant is provisioned.
-
-To show the kind, ask the directory with a view. `ListUnitsAsync` and `UnitsByIdAsync` take a function of the
-directory's `UnitSummary`, what Tenancy keeps of a unit, and of your own unit, which the directory read anyway,
-so you answer the two side by side with no read more. The sample does all of it: a `UnitKind` enum on its unit,
-set by its command and by its seeding, and a `UnitListing` its queries answer, the summary with the kind beside
-it.
 
 <details>
 <summary>Show the code: a unit's kind as the application's own enum</summary>
@@ -667,6 +655,18 @@ The sample stores the kind by its key in lower case instead, with a converter of
 because its rows from before the enum hold the keys of the catalogue the package once asked for.
 
 </details>
+
+The use case checks the caller, and the organization checks the tree and makes the unit through your own
+class. It hands the unit to `configure` before it takes the unit in, so your field is written in the same save
+as the unit and a rule of your class judges it there. A callback that throws leaves the organization as it was:
+the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
+through `ConfigureRoot` when the tenant is provisioned.
+
+To show the kind, ask the directory with a view. `ListUnitsAsync` and `UnitsByIdAsync` take a function of the
+directory's `UnitSummary`, what Tenancy keeps of a unit, and of your own unit, which the directory read anyway,
+so you answer the two side by side with no read more. The sample does all of it: a `UnitKind` enum on its unit,
+set by its command and by its seeding, and a `UnitListing` its queries answer, the summary with the kind beside
+it.
 
 ## Who may do what
 
@@ -867,15 +867,6 @@ What is held on one thing a module keeps at a unit is that module's own case, wi
 [check of its own](access-requirements.md#what-answers-it) written over the questions above;
 [Membership](membership.md) ships such cases for a resource with members.
 
-```mermaid
-flowchart LR
-    Request["MakeGrant"] --> Door["its requirement:<br/>tenancy.grants.manage at the unit"]
-    Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
-    Door -- "held" --> UseCase["the use case: the key again,<br/>and what only it can read"]
-    UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
-    UseCase -- "saves, as the seat" --> Policies[("Tenancy's policies,<br/>on Postgres")]
-```
-
 **A request handed to a use case of the package says what that use case asks first.** No requirement leaves
 a request to the package. A command that gives a role declares `TenancyAccess.AtUnit(TenancyKeys.GrantsManage,
 Unit)`, one that makes a role `TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)`, and a query the
@@ -888,6 +879,15 @@ whether the tenant keeps an administrator. Those rules are the package's, and no
 the use case would refuse first is refused at the door already, with the same code and the same key. Under it
 all, on Postgres, [the second lock](#on-postgres-the-second-lock) holds every row the use case saves to the
 seat it runs as.
+
+```mermaid
+flowchart TB
+    Request["MakeGrant"] --> Door["its requirement:<br/>tenancy.grants.manage at the unit"]
+    Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
+    Door -- "held" --> UseCase["the use case: the key again,<br/>and what only it can read"]
+    UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
+    UseCase -- "saves, as the seat" --> Policies[("Tenancy's policies,<br/>on Postgres")]
+```
 
 <details>
 <summary>Show the code: a command handed to the package's use case</summary>
@@ -918,20 +918,6 @@ A tenant is provisioned by system work outside any tenant, and nobody holds a se
 who may send the request that provisions one is one decision, and what the work runs with is another: the
 handler begins the system work itself, in trusted code, whichever requirement its request declares.
 
-```mermaid
-sequenceDiagram
-    participant Person as Signed-in person
-    participant Door as Requirement
-    participant Handler as RegisterOrganization's handler
-    participant Tenancy as ProvisionAsync
-    Person->>Door: RegisterOrganization
-    Door->>Handler: SignedIn(): let through
-    Handler->>Handler: the token's user is the administrator
-    Handler->>Handler: begins system work
-    Handler->>Tenancy: provision the tenant
-    Tenancy-->>Handler: the new tenant
-```
-
 The request's requirement says who gets as far as the handler. Every handler below begins
 `TenancyWork.BeginSystem` and provisions as that, whoever sent the request, and the caller gets nothing more by
 it: what the system work does is the handler's to say, and the database's policies hold it to the tenant it
@@ -947,6 +933,20 @@ first administrator:
 An operator's screen is none of these. An operator is a signed-in user, whom `RequiresSystemWork()` refuses
 like any other, and what an operator asks for is carried out by system work that names the operator,
 `TenancyWork.BeginOperator(identity)` ([Operators](#operators)).
+
+```mermaid
+sequenceDiagram
+    participant Person as Signed-in person
+    participant Door as Requirement
+    participant Handler as RegisterOrganization's handler
+    participant Tenancy as ProvisionAsync
+    Person->>Door: RegisterOrganization
+    Door->>Handler: SignedIn(): let through
+    Handler->>Handler: the token's user is the administrator
+    Handler->>Handler: begins system work
+    Handler->>Tenancy: provision the tenant
+    Tenancy-->>Handler: the new tenant
+```
 
 <details>
 <summary>Show the code: a registration that provisions a tenant</summary>
@@ -1108,9 +1108,9 @@ sequenceDiagram
     participant Tenancy as Tenancy's API
 
     Page->>Projects: GET /projects
-    Projects-->>Page: projects, with unitId, seatId and roleId
+    Projects-->>Page: projects, with unitId,<br/>seatId and roleId
     Page->>Names: these ids
-    Names->>Tenancy: POST /tenancy/directory/seats and units<br/>only the ids not known yet
+    Names->>Tenancy: POST /tenancy/directory/<br/>seats and units, only<br/>the ids not known yet
     Tenancy-->>Names: display names and paths
     Names->>Projects: GET /project-roles<br/>the crew roles' names
     Projects-->>Names: role names
@@ -1639,14 +1639,6 @@ every context it wires, after the toolkit's own interceptors and last of all the
 domain event handlers changed, only aggregates that passed their invariants, and every row another part added to
 the save; added before, it would check rows that are still to change.
 
-```mermaid
-flowchart LR
-    Add["AddTenancy()<br/>brings the save check"] --> Call["UseDDDToolkit(services)<br/>on every context"]
-    Call --> Own["Tenancy's own context<br/>checks its rows, writes<br/>the closure and the rights"]
-    Call --> Module["a module's context<br/>with ScopeToTenant<br/>checks its rows"]
-    Call --> Other["a context that keeps<br/>nothing to a tenant<br/>saves as it would"]
-```
-
 The check goes on every context alike because what decides its work is the model, and the options are built before
 the model is. So it asks the model at every save, once per model: in Tenancy's own context it checks the rows and
 writes the closure and the rights the save changes, in a module's context it checks the rows `ScopeToTenant` keeps
@@ -1663,6 +1655,14 @@ interceptors is refused too. `AddTenancy` registers it as the [start-up check](s
 `tenancy.contexts-wired`, over every context the host registers, with `tenancy.catalogue-builds` and
 `tenancy.unknown-stored-keys`; a host runs them with `services.RunStartupChecks()`. It holds a context configured
 with `UseDDDToolkitCore` to the same: such a context takes the save check with `UseTenancy`, after it.
+
+```mermaid
+flowchart LR
+    Add["AddTenancy()<br/>brings the save check"] --> Call["UseDDDToolkit(services)<br/>on every context"]
+    Call --> Own["Tenancy's own context<br/>checks its rows, writes<br/>the closure and the rights"]
+    Call --> Module["a module's context<br/>with ScopeToTenant<br/>checks its rows"]
+    Call --> Other["a context that keeps<br/>nothing to a tenant<br/>saves as it would"]
+```
 
 <details>
 <summary>Show the code: a module's context, and one that takes the parts one by one</summary>
@@ -1824,7 +1824,7 @@ tenants. An operator is not an administrator of every tenant. It **holds no seat
   request that asked, taken from the token or from a record that request wrote, never from what a caller sends.
 
 ```mermaid
-flowchart LR
+flowchart TB
     Person["A member of staff,<br/>signed in with an operator's token role"]
     Directory["TenantDirectory<br/>every tenant, a page at a time"]
     Request["What they ask for,<br/>recorded by your own module"]
@@ -2160,27 +2160,21 @@ module registered, and the one that decides the case answers. Here leo closes Pi
 
 ```mermaid
 sequenceDiagram
-    participant Route
-    participant ISender
-    participant RequestTracing as RequestTracingBehavior
-    participant Behavior as ProjectsAccessBehavior
-    participant Check as MemberAccessCheck
-    participant Questions as IMemberQuestions
-    participant Handler as CloseProjectHandler
-    participant IProjectStore
+    participant Route as Route, ISender,<br/>tracing
+    participant Behavior as ProjectsAccess<br/>Behavior
+    participant Check as MemberAccess<br/>Check
+    participant Handler as CloseProject<br/>Handler
+    participant Store as IProjectStore
 
-    Route->>ISender: Send(CloseProject)
-    ISender->>RequestTracing: the request's pipeline
-    RequestTracing->>Behavior: inside one activity
-    Behavior->>Check: the check that decides<br/>a key on a project
-    Check->>Questions: projects.close on Pier 7?<br/>one statement, on a context of its own
-    Questions-->>Check: held through the crew,<br/>read at version 7
+    Route->>Behavior: Send(CloseProject),<br/>in one activity
+    Behavior->>Check: a key on a project
+    Check->>Check: IMemberQuestions:<br/>projects.close<br/>on Pier 7? held<br/>through the crew,<br/>at version 7
     Check-->>Behavior: met
     Behavior->>Handler: checked
-    Handler->>IProjectStore: LoadAsync(Pier 7, If-Match)
-    IProjectStore-->>Handler: the project, tracked
+    Handler->>Store: LoadAsync(Pier 7,<br/>If-Match)
+    Store-->>Handler: the project, tracked
     Handler->>Handler: project.Close()
-    Handler->>IProjectStore: SaveAsync()
+    Handler->>Store: SaveAsync()
     Handler-->>Route: done
     Route-->>Route: 204
 ```
@@ -2903,18 +2897,18 @@ sequenceDiagram
     participant API as The API
     participant Auth as Supabase Auth
     actor Person
-    participant Page as The UI's accept page
+    participant Page as The UI's<br/>accept page
 
-    Inviter->>API: POST /tenancy/invitations
-    API->>Auth: make the account and mail it,<br/>send the person on to the page with the token
-    API-->>Inviter: the id, the token (once), the end
-    Auth-->>Person: a mail with Auth's link
+    Inviter->>API: POST /tenancy/<br/>invitations
+    API->>Auth: make the account<br/>and mail it, send<br/>the person on to the<br/>page with the token
+    API-->>Inviter: the id, the token<br/>(once), the end
+    Auth-->>Person: a mail with<br/>Auth's link
     Person->>Auth: follows the link
-    Auth-->>Person: on to the page, with the token<br/>and the sign-in after the hash
-    Person->>Page: the browser opens the page
-    Page->>Auth: GET user, whose sign-in this is
-    Page->>Auth: PUT user, the password the person chose
-    Page->>API: POST /invitations/accept, the token, as that person
+    Auth-->>Person: on to the page,<br/>with the token and the<br/>sign-in after the hash
+    Person->>Page: the browser<br/>opens the page
+    Page->>Auth: GET user, whose<br/>sign-in this is
+    Page->>Auth: PUT user, the password<br/>the person chose
+    Page->>API: POST /invitations/accept,<br/>the token, as that person
     API-->>Page: the seat
 ```
 
@@ -3171,12 +3165,12 @@ sequenceDiagram
     participant Projects as projects
     participant Tenants as tenants
 
-    Client->>Gateway: projects { nodes { name unit { path } owner { displayName } } }
-    Gateway->>Projects: projects { nodes { name unit { id } owner { id } } }
-    Note over Projects: the seat gate, then Send(VisibleProjects):<br/>its access check, and the page in one statement
-    Projects-->>Gateway: names, and the ids of units and seats
-    Gateway->>Tenants: organizationUnit(id) and seat(id), for every id at once
-    Note over Tenants: the seat gate, then one loader per kind:<br/>Send(OrganizationUnitsById), Send(SeatsById)
+    Client->>Gateway: projects { nodes { name<br/>unit { path }<br/>owner { displayName } } }
+    Gateway->>Projects: projects { nodes { name<br/>unit { id } owner { id } } }
+    Note over Projects: the seat gate, then<br/>Send(VisibleProjects):<br/>its access check, and<br/>the page in one statement
+    Projects-->>Gateway: names, and the ids<br/>of units and seats
+    Gateway->>Tenants: organizationUnit(id)<br/>and seat(id), for<br/>every id at once
+    Note over Tenants: the seat gate, then<br/>one loader per kind:<br/>Send(OrganizationUnitsById),<br/>Send(SeatsById)
     Tenants-->>Gateway: paths and display names
     Gateway-->>Client: one answer
 ```
@@ -3464,24 +3458,20 @@ rhea grants leo a role that manages access with keys she does not hold:
 
 ```mermaid
 sequenceDiagram
-    participant Browser
     participant UI
     box API
-        participant Bearer as Supabase bearer
-        participant Selection as Tenant selection
+        participant Bearer as Supabase bearer,<br/>tenant selection
         participant Requirement
         participant UseCase as Use case
     end
 
-    Browser->>UI: rhea clicks Grant
-    UI->>Bearer: POST grants<br/>token, Tenant: harbor
-    Bearer->>Selection: the token's sub
-    Selection->>Selection: her seat in harbor
-    Selection->>Requirement: runs as that seat
+    UI->>Bearer: rhea's Grant: POST grants,<br/>token, Tenant: harbor
+    Bearer->>Bearer: the token's sub,<br/>her seat in harbor
+    Bearer->>Requirement: runs as that seat
     Requirement->>UseCase: tenancy.grants.manage<br/>at the unit: held
-    UseCase->>UseCase: the role manages access,<br/>with keys she lacks there
-    UseCase-->>UI: refused, 403 problem+json<br/>tenancy.grant-exceeds-own
-    UI-->>Browser: status, code,<br/>the missing keys
+    UseCase->>UseCase: the role manages<br/>access, with keys<br/>she lacks there
+    UseCase-->>UI: refused, 403 problem+json,<br/>tenancy.grant-exceeds-own
+    UI->>UI: shows the status, the code,<br/>the missing keys
 ```
 
 <details>
@@ -3902,14 +3892,14 @@ sequenceDiagram
     participant Host as The host
     participant Tenancy as TenantSelection
     participant Postgres
-    Client->>Host: a request, with a token and the Tenant header
-    Host->>Host: validates the token, the caller is its user
-    Host->>Tenancy: which seat has this user in the tenant the header names?
-    Tenancy->>Postgres: the seat directory, as the user, in no tenant yet
-    Postgres-->>Tenancy: the user's own seats, found by the token's identity
-    Tenancy-->>Host: the seat, when it and the tenant are both active, or nobody
-    Host->>Postgres: a query, with the role, the claims and tenancy.caller_tenant set on its connection
-    Postgres->>Postgres: a policy asks caller_tenant(), caller_seat() finds the seat of the token's identity in that tenant
+    Client->>Host: a request, with a token<br/>and the Tenant header
+    Host->>Host: validates the token,<br/>the caller is its user
+    Host->>Tenancy: which seat has this user<br/>in the tenant the header names?
+    Tenancy->>Postgres: the seat directory, as the<br/>user, in no tenant yet
+    Postgres-->>Tenancy: the user's own seats, found<br/>by the token's identity
+    Tenancy-->>Host: the seat, when it and the<br/>tenant are both active, or nobody
+    Host->>Postgres: a query, with the role, the claims<br/>and tenancy.caller_tenant<br/>set on its connection
+    Postgres->>Postgres: a policy asks caller_tenant(),<br/>caller_seat() finds the seat<br/>of the token's identity<br/>in that tenant
     Postgres-->>Host: the rows that seat may see
 ```
 

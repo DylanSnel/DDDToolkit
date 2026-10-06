@@ -101,16 +101,6 @@ unit)` is closed over your unit id without your writing it. And `AllowAnonymous(
 
 Three things stand between a caller and a row, and each asks what it alone can answer.
 
-```mermaid
-flowchart LR
-    Caller["a caller"] --> Door["the request's<br/>requirement"]
-    Door -- "not met" --> Refused["refused,<br/>with a code"]
-    Door -- "met" --> Handler["the handler, and the<br/>use case it calls"]
-    Handler -- "a rule only it can read" --> Refused
-    Handler -- "as the caller, or as<br/>system work it begins" --> Database[("row level<br/>security")]
-    Database -- "a row the policies refuse" --> Refused
-```
-
 - **The request's requirement** says who may send the request, and the module's checks hold the caller to it
   before the handler runs. It is one line on the request, where a review reads it.
 - **The handler**, and the use case of a package it hands the request to, asks what only it can read: who
@@ -129,6 +119,16 @@ finds what system work cannot tell it, such as who becomes the first administrat
 for `SignedIn()`, an account the handler makes for the address on the form for `AllowAnonymous()`, and the
 request itself for a job. The caller gets nothing more by it, since the handler alone says what that system
 work does. [Provisioning a tenant](tenancy.md#who-may-ask-and-what-the-work-runs-as) shows it with Tenancy.
+
+```mermaid
+flowchart TB
+    Caller["a caller"] --> Door["the request's<br/>requirement"]
+    Door -- "not met" --> Refused["refused,<br/>with a code"]
+    Door -- "met" --> Handler["the handler, and the<br/>use case it calls"]
+    Handler -- "a rule only it can read" --> Refused
+    Handler -- "as the caller, or as<br/>system work it begins" --> Database[("row level<br/>security")]
+    Database -- "a row the policies refuse" --> Refused
+```
 
 <details>
 <summary>Show the code: a form anyone may send, whose handler begins system work</summary>
@@ -451,13 +451,6 @@ only close it. So the toolkit watches the two ways round the behavior it can see
 host when it starts, in a host that calls `RunStartupChecks()`, and a handler called in code is reported when the
 code builds.
 
-```mermaid
-flowchart LR
-    Sent["sent<br/>sender.Send(request)"] --> Behavior["the access behavior<br/>asks the checks"] --> Handler["the handler"]
-    Direct["called directly<br/>handler.Handle(request)"] -- "DDD00061, a warning<br/>when it builds" --> Handler
-    Missing["handler registered,<br/>behavior not"] -- "access.behaviors-registered,<br/>in RunStartupChecks()" --> Stopped["the host stops"]
-```
-
 - **The behavior is not in the pipeline.** A module registers its checks and not the behavior that asks them, a
   host forgets a module's registration altogether, or a host that lists its behaviors for Mediator's generator
   leaves one out. The registration of the checks brings the [start-up check](startup-checks.md)
@@ -485,6 +478,13 @@ flowchart LR
   itself, `AccessChecks<IBillingRequest>.RequireAsync`, [as above](#asking-the-checks-without-mediator): neither
   the build nor the start can see such a way. That includes a dispatcher that calls `Handle` on a handler of a
   type parameter with no constraint to a marked interface: the build cannot tell which requests pass through it.
+
+```mermaid
+flowchart TB
+    Sent["sent<br/>sender.Send(request)"] --> Behavior["the access behavior<br/>asks the checks"] --> Handler["the handler"]
+    Direct["called directly<br/>handler.Handle(request)"] -- "DDD00061, a warning<br/>when it builds" --> Handler
+    Missing["handler registered,<br/>behavior not"] -- "access.behaviors-registered,<br/>in RunStartupChecks()" --> Stopped["the host stops"]
+```
 
 <details>
 <summary>Show the code: what the start-up check says, and a call the build reports</summary>

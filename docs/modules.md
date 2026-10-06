@@ -351,6 +351,11 @@ the attribute. A project added to the folder is the module's from its first buil
 [Tenancy sample](../Examples/README.md#the-tenancy-sample) declares its three modules this way, each named after
 its folder: [`Examples/Tenancy/Modules/Directory.Build.props`](../Examples/Tenancy/Modules/Directory.Build.props).
 
+The build takes two steps, because a source generator never sees what another generator writes. First the
+build writes the two properties into a file of the project, as assembly metadata, and every generator reads
+the module from there. Then the toolkit's generator writes `[assembly: Module("Ordering")]` from them, for what
+reads the compiled assembly: the analyzer, the runtime and every project that references it.
+
 ```mermaid
 flowchart LR
     Props["Directory.Build.props<br/>DDD_Module, DDD_DeclareModule"] --> Build["the build<br/>writes them into obj/"]
@@ -359,11 +364,6 @@ flowchart LR
     Module --> Dll["Ordering.Domain.dll"]
     Dll --> Readers["the analyzer, the runtime,<br/>every project that references it"]
 ```
-
-The build takes two steps, because a source generator never sees what another generator writes. First the
-build writes the two properties into a file of the project, as assembly metadata, and every generator reads
-the module from there. Then the toolkit's generator writes `[assembly: Module("Ordering")]` from them, for what
-reads the compiled assembly: the analyzer, the runtime and every project that references it.
 
 <details>
 <summary>Show the code: a folder that names its modules, and what the build and the generator write</summary>
@@ -684,19 +684,6 @@ gets it as a dependency of `DDDToolkit`, and one that gets it through a project 
 nothing to add to a project file. The build step that `DDD_DeclareModule` switches on arrives beside it, as a
 targets file in the same package.
 
-```mermaid
-flowchart LR
-    Host["a project referencing the module"] --> Module["the module's project"]
-    Module --> Core["DDDToolkit"]
-    Core --> Analyzers
-    Contracts["its contracts project"] --> Abstractions["DDDToolkit.Abstractions"]
-    Contracts --> Analyzers
-    subgraph Analyzers ["DDDToolkit.Analyzers"]
-        direction TB
-        Generators["the generators"] ~~~ Props["props: declares DDD_Module"] ~~~ Targets["targets: DDD_DeclareModule"]
-    end
-```
-
 So there are two supported ways to reference the toolkit, and a module with a
 [contracts project](module-contracts.md#a-project-of-its-own) uses both:
 
@@ -709,6 +696,19 @@ The second row is for a project that should carry no runtime. A record struct id
 and an integration event compile against the attributes alone. Entities, aggregate roots, value objects
 and domain events derive from base types in `DDDToolkit`, so the project that declares those references
 `DDDToolkit`.
+
+```mermaid
+flowchart LR
+    Host["a project referencing the module"] --> Module["the module's project"]
+    Module --> Core["DDDToolkit"]
+    Core --> Analyzers
+    Contracts["its contracts project"] --> Abstractions["DDDToolkit.Abstractions"]
+    Contracts --> Analyzers
+    subgraph Analyzers ["DDDToolkit.Analyzers"]
+        direction TB
+        Generators["the generators"] ~~~ Props["props: declares DDD_Module"] ~~~ Targets["targets: DDD_DeclareModule"]
+    end
+```
 
 <details>
 <summary>Show the code: a contracts project without the runtime</summary>

@@ -1128,7 +1128,7 @@ in one method, and every schema that calls that method gets all of it.
 `[GraphQLSchema]`, on a class of fields in the API project, says which schema the class belongs to:
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph api ["The module's API project"]
         Own["SeatsQueries<br/>[Query] overviewOfMine"]
         Type["SeatType<br/>[ObjectType]"]
@@ -1144,44 +1144,6 @@ flowchart LR
     User --> UserEndpoint["/graphql"]
     AdminSchema --> AdminEndpoint["/admin/graphql"]
 ```
-
-Both schemas are made of the same two calls, as every schema is. HotChocolate's `AddTenantsTypes()` registers what
-its generator found, in both. The toolkit's `AddTenantsGraphQlRuntimeBindings()` binds the module's ids as scalars,
-in both, and registers the classes marked for the schema whose name the builder has: for `"admin"` the fields of
-`SeatsAdminQueries`, for `"user"` nothing more. So `seatGrants` is a field of the admin schema, and a document that
-asks `/graphql` for it is refused when it is validated, before anything runs. Marking a class asks nothing of the
-host: there is no other method to call, and none to forget.
-
-- **A class without the attribute is in every schema**, as it always was. The types, and the fields every caller is
-  offered, need no mark; only what one schema has and the others have not is marked. A project that marks nothing
-  gets exactly the bindings it had.
-- **A marked class says what its methods are**: `[GraphQLSchema("admin", OperationType.Query)]`, and each public
-  static method is a field of that schema's `Query`, as a `[Query]` method is; `OperationType.Mutation` and
-  `OperationType.Subscription` make the others. HotChocolate binds such a method the way it binds a `[Query]` method its
-  generator found, so `[Service]` parameters, a data loader, a `CancellationToken` and the attributes it reads off a
-  method, `[Lookup]` and `[Cost]` among them, work as there. A method marked `[GraphQLIgnore]` or `[DataLoader]` is no
-  field, and neither is the stream a subscription names with `[Subscribe(With = ...)]`. A class of two schemas
-  carries the attribute twice.
-- **It carries nothing HotChocolate's generator registers**: no `[Query]` on its methods, no `[QueryType]` or
-  `[ExtendObjectType]` on the class. Any of those would put it into every schema after all, and
-  [DDD00062](diagnostics.md#ddd00062) refuses it. It refuses as well what would lose a field without a word: an
-  instance method, a class with no field, and two methods that would be one field, such as two overloads.
-- **A schema's name is one the classes and the host agree on**, as a Fusion source schema's is. Put it in a constant
-  both can read. HotChocolate's default schema, `AddGraphQLServer()`, is called `_Default`. To give one schema
-  something the other must not have, name both, and mark the classes of each.
-- **What is marked are root fields**, of `Query`, `Mutation` or `Subscription`. A field of one schema on a type
-  every schema shows, such as a seat's grants on `Seat`, is registered by hand in the schema that has it, as the
-  shop sample adds `product` to `OrderLine` for its gateway's schema alone
-  ([One schema over a modular monolith](#one-schema-over-a-modular-monolith), `AddOrderingProductStub`), or is
-  answered by a root field of its own, as `seatGrants(seatId:)` is.
-- **A type goes where a field takes it.** A record that only a marked field answers, with no type class of its own,
-  is in the schemas where such a field is, and nowhere else: HotChocolate infers it from the field. A type class,
-  `[ObjectType<T>]`, is HotChocolate's generator's to register, in every schema; a record only one schema shows needs
-  none, or is shown by every schema without a field that answers it.
-- **The schema decides who is offered a field, not who may use it.** A field sends its request, and the request's
-  access check refuses whoever does not hold what it requires, at either endpoint. An endpoint may ask more of its
-  callers, `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`: that keeps the administration's schema,
-  its introspection included, from callers who have no business with it.
 
 <details>
 <summary>Show the code: a class of the admin schema, and a host with two schemas</summary>
@@ -1230,6 +1192,44 @@ public static IRequestExecutorBuilder AddTenantsGraphQlRuntimeBindings(this IReq
 ```
 
 </details>
+
+Both schemas are made of the same two calls, as every schema is. HotChocolate's `AddTenantsTypes()` registers what
+its generator found, in both. The toolkit's `AddTenantsGraphQlRuntimeBindings()` binds the module's ids as scalars,
+in both, and registers the classes marked for the schema whose name the builder has: for `"admin"` the fields of
+`SeatsAdminQueries`, for `"user"` nothing more. So `seatGrants` is a field of the admin schema, and a document that
+asks `/graphql` for it is refused when it is validated, before anything runs. Marking a class asks nothing of the
+host: there is no other method to call, and none to forget.
+
+- **A class without the attribute is in every schema**, as it always was. The types, and the fields every caller is
+  offered, need no mark; only what one schema has and the others have not is marked. A project that marks nothing
+  gets exactly the bindings it had.
+- **A marked class says what its methods are**: `[GraphQLSchema("admin", OperationType.Query)]`, and each public
+  static method is a field of that schema's `Query`, as a `[Query]` method is; `OperationType.Mutation` and
+  `OperationType.Subscription` make the others. HotChocolate binds such a method the way it binds a `[Query]` method its
+  generator found, so `[Service]` parameters, a data loader, a `CancellationToken` and the attributes it reads off a
+  method, `[Lookup]` and `[Cost]` among them, work as there. A method marked `[GraphQLIgnore]` or `[DataLoader]` is no
+  field, and neither is the stream a subscription names with `[Subscribe(With = ...)]`. A class of two schemas
+  carries the attribute twice.
+- **It carries nothing HotChocolate's generator registers**: no `[Query]` on its methods, no `[QueryType]` or
+  `[ExtendObjectType]` on the class. Any of those would put it into every schema after all, and
+  [DDD00062](diagnostics.md#ddd00062) refuses it. It refuses as well what would lose a field without a word: an
+  instance method, a class with no field, and two methods that would be one field, such as two overloads.
+- **A schema's name is one the classes and the host agree on**, as a Fusion source schema's is. Put it in a constant
+  both can read. HotChocolate's default schema, `AddGraphQLServer()`, is called `_Default`. To give one schema
+  something the other must not have, name both, and mark the classes of each.
+- **What is marked are root fields**, of `Query`, `Mutation` or `Subscription`. A field of one schema on a type
+  every schema shows, such as a seat's grants on `Seat`, is registered by hand in the schema that has it, as the
+  shop sample adds `product` to `OrderLine` for its gateway's schema alone
+  ([One schema over a modular monolith](#one-schema-over-a-modular-monolith), `AddOrderingProductStub`), or is
+  answered by a root field of its own, as `seatGrants(seatId:)` is.
+- **A type goes where a field takes it.** A record that only a marked field answers, with no type class of its own,
+  is in the schemas where such a field is, and nowhere else: HotChocolate infers it from the field. A type class,
+  `[ObjectType<T>]`, is HotChocolate's generator's to register, in every schema; a record only one schema shows needs
+  none, or is shown by every schema without a field that answers it.
+- **The schema decides who is offered a field, not who may use it.** A field sends its request, and the request's
+  access check refuses whoever does not hold what it requires, at either endpoint. An endpoint may ask more of its
+  callers, `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`: that keeps the administration's schema,
+  its introspection included, from callers who have no business with it.
 
 The [Tenancy sample](tenancy.md#graphql-in-the-sample) serves its administration schema this way, beside the gateway
 of the next section: [A schema served apart](#a-schema-served-apart).

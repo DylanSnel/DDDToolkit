@@ -27,6 +27,31 @@ flowchart LR
     Database --> Started["the hosted services start, and the server binds its port"]
 ```
 
+<details>
+<summary>Show the code: registrations that bring a check of each stage, and the one call</summary>
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+//   Services:   entity-framework.toolkit-wired
+
+builder.Services.AddSupabaseRowLevelSecurity();
+//   Services:   postgres.row-level-security-wired
+//   Login:      postgres.login-role-may-switch-to-callers
+//   Database:   postgres.login-role-owns-nothing, postgres.definer-owners-bypass
+
+// in a module: its context, and its migrations
+services.AddDbContext<OrderingContext>((serviceProvider, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(serviceProvider));
+services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
+//   Migrations: supabase.migrations-applied
+
+builder.Services.RunStartupChecks();
+//   every check above, stage by stage, before the server binds its port
+```
+
+</details>
+
 Every check runs in a stage, `StartupCheckStage`, and every check of one stage runs before any of the next. The
 stages are the order in which one failure hides another, so a host is told the cause rather than one of its
 effects:
