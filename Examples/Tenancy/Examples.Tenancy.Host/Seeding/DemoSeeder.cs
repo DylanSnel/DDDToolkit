@@ -90,10 +90,10 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per pack of its shape,
-    /// and its administrator's seat, placed at the root and granted the administrators' role of that shape there.
-    /// The root's kind is the application's own field, so the package hands the root to a callback that sets it, in
-    /// the save that provisions. <see langword="false"/> when its slug is taken.
+    /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per pack seeded for its
+    /// shape, and its administrator's seat, placed at the root and granted there the role of the administrators'
+    /// pack among them. The root's kind is the application's own field, so the package hands the root to a callback
+    /// that sets it, in the save that provisions. <see langword="false"/> when its slug is taken.
     /// </summary>
     private async Task<bool> ProvisionAsync(DemoTenant tenant, CancellationToken cancellationToken)
     {

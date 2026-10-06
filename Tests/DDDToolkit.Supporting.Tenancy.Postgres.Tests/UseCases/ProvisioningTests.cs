@@ -42,8 +42,8 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
     {
         Packs =
         [
-            .. HostCatalogue.Application.Packs.Select(pack => pack.Administers ? pack with { Shape = TenantShape.Flat } : pack),
-            new RolePack(TreeAdministrators, "Tree administrator", "Runs access across the tree", Listed, Shape: TenantShape.Hierarchical, Administers: true, Order: 15),
+            .. HostCatalogue.Application.Packs.Select(pack => pack.Administers ? pack with { SeededFor = TenantShape.Flat } : pack),
+            new RolePack(TreeAdministrators, "Tree administrator", "Runs access across the tree", Listed, SeededFor: TenantShape.Hierarchical, Administers: true, Order: 15),
         ],
     };
 

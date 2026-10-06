@@ -20,7 +20,7 @@ public static class TenancyPacks
 
     /// <summary>
     /// The administrators' pack <see cref="TenancyCatalogue.Build(ApplicationCatalogue, IEnumerable{Permission})"/>
-    /// adds when the application declares none: named "Administrator", for every shape, seeded on provision and
+    /// adds when the application declares none: named "Administrator", seeded for every shape on provision and
     /// listed first. It lists no keys, so the role made from it holds every live key of the catalogue as built, as
     /// an administrators' pack of the application's own that lists none does. A key a module declares later is
     /// the pack's too: a tenant provisioned after that gets it with the role, and a role made from the pack before

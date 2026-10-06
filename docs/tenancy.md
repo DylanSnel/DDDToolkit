@@ -39,7 +39,7 @@ The page goes in the order you need it:
 | **Organization** | The tree of **OrganizationUnits** | One root, no cycles, a depth of at most 32. A unit is archived, never deleted. |
 | **Seat** | A person in a tenant: their **Placements** in units, and the **RoleGrants** at each | One placement per unit and one primary. Only active roles are granted. The person a seat belongs to never changes. |
 | **Role** | A name and the **Permission** keys it grants | Only keys from the catalogue, with the keys they imply expanded. |
-| **Catalogue** | The permission keys and the **RolePacks** | One administrators' pack per shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
+| **Catalogue** | The permission keys and the **RolePacks** | One administrators' pack seeded for each shape, Tenancy's own when you declare none. A key is retired, never deleted. Keys that manage access are marked, Tenancy's own among them. |
 
 Tenant, Organization, Seat and Role are aggregates, and they refer to each other by id. The catalogue is
 data, not a class you declare: Tenancy's keys, the keys your modules contribute, and what your application
@@ -77,13 +77,19 @@ host adds them with one generated call ([A module states its keys once](#a-modul
 `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
 one.
 
-Declare your own once the role should have another name or list its keys, and then declare one for every
-shape. The default is added only when you declare none, so a catalogue with an administrators' pack for a
-flat tenant and none for a hierarchical one is refused, with a problem that says so. While the default is
-added, a pack of yours may not have its key, or one of its names ignoring case, Administrator or the Dutch
-Beheerder, since a tenant's roles have names of their own; the problem names the pack, and says to rename it
-or to declare it with `Administers: true`, which makes it the administrators' pack. `HasDefaultAdministrators`
-on the built catalogue says which of the two it has.
+A pack says which tenants are given a copy with `SeededFor`. Left out, every tenant is; set to a shape, only a
+tenant of that shape, provisioned so or changed to it later. It is about which tenants get the role, not about
+the role: a role has no shape, and the tenant's copy is its own. Declare your own administrators' pack once the
+role should have another name or list its keys, and then declare one for every shape: a single one with no
+`SeededFor`, or one seeded for each shape. The default is added only when you declare none, so a catalogue with
+an administrators' pack seeded for a flat tenant and none for a hierarchical one is refused, with a problem that
+names the `SeededFor` to write. One declared with `SeedOnProvision: false` is seeded into no tenant and counts
+for no shape; the problem names it, and says to leave that off. Two seeded for one shape are refused too, and
+the problem says to keep one: seed the other for another shape, or declare it without `Administers`. While the
+default is added, a pack of yours may not have its key, or one of its
+names ignoring case, Administrator or the Dutch Beheerder, since a tenant's roles have names of their own; the
+problem names the pack, and says to rename it or to declare it with `Administers: true`, which makes it the
+administrators' pack. `HasDefaultAdministrators` on the built catalogue says which of the two it has.
 
 A tenant provisioned in Dutch gets the default role as Beheerder: the package names its own pack in the two
 languages it ships, and your `IRolePackTexts` is asked first, by the key `administrator`
@@ -95,7 +101,7 @@ compares the database's functions with the catalogue the application runs with p
 flowchart TD
     Declares{"does a pack<br/>administer?"}
     Declares -- no --> Taken{"one with the<br/>default's key<br/>or name?"}
-    Declares -- yes --> PerShape{"one seeded<br/>per shape?"}
+    Declares -- yes --> PerShape{"one seeded<br/>for each shape?"}
     Taken -- no --> Default(["Tenancy's own<br/>is added"])
     Taken -- yes --> Refused["refused, with<br/>the fix"]
     PerShape -- no --> Refused
@@ -103,7 +109,7 @@ flowchart TD
 ```
 
 <details>
-<summary>Show the code: an application without a catalogue, and one with keys of its own and no packs</summary>
+<summary>Show the code: an application without a catalogue, one with keys of its own and no packs, and one with an administrators' pack for each shape</summary>
 
 ```csharp
 // No catalogue: the keys are Tenancy's and the modules', and every tenant starts with the default
@@ -115,15 +121,25 @@ public static ApplicationCatalogue Application { get; } = new(Permissions: ShopK
 
 // A provisioned tenant names the role by the pack's key
 var administrators = provisioned.RolesByPack[TenancyPacks.DefaultAdministratorsKey];
+
+// Administrators of your own, one seeded for each shape of tenant, and a pack that every tenant gets
+public static ApplicationCatalogue Application { get; } = new(
+    Packs:
+    [
+        new("owner", "Owner", "Runs the shop", [], SeededFor: TenantShape.Flat, Administers: true),
+        new("head-office", "Head office", "Runs every branch", [], SeededFor: TenantShape.Hierarchical, Administers: true),
+        new("viewer", "Viewer", "Looks at the orders", [ShopKeys.OrdersView]),   // no SeededFor: every tenant
+    ],
+    Permissions: ShopKeys.All);
 ```
 
 </details>
 
 Switching an application that runs already from a pack of its own to the default changes no tenant it has.
 Each keeps the role its old pack gave it, with that role's keys, and the seats that hold it keep it. Nothing
-copies the default into those tenants until a change of shape, which copies every pack of the new shape the
-tenant has no copy of, the default among them. A tenant that still has a role named like the default, as an
-old pack called Administrator gave it, refuses that copy with `tenancy.role-name-taken`, and the change of
+copies the default into those tenants until a change of shape, which copies every pack seeded for the new shape
+that the tenant has no copy of, the default among them. A tenant that still has a role named like the default,
+as an old pack called Administrator gave it, refuses that copy with `tenancy.role-name-taken`, and the change of
 shape with it. Rename that role in those tenants first, or keep declaring your own pack.
 
 An administrators' pack that lists no keys holds every key of the catalogue, the modules' included. One that
@@ -626,7 +642,7 @@ brings its own keys, and every module states its keys next to the code that asks
 
 | Part | What it decides | Without it |
 |---|---|---|
-| `Packs` | The roles a new tenant starts with, and what its first administrator holds | Every tenant starts with Tenancy's administrators' role alone ([The administrators' pack](#the-administrators-pack)) |
+| `Packs` | The roles a new tenant starts with, which shape of tenant gets each (`SeededFor`), and what its first administrator holds | Every tenant starts with Tenancy's administrators' role alone ([The administrators' pack](#the-administrators-pack)) |
 | `Permissions` | Keys that belong to no module | Only Tenancy's keys and the modules' contributions |
 | `AccessManagingKeys` | A key a module declares that should manage access in your application | A key manages access only where it is declared so ([Which keys manage access](#who-may-give-a-role)) |
 
@@ -1935,8 +1951,10 @@ Without a language, without registered texts, or where `For` answers `null`, a r
 texts. The texts are chosen once. Afterwards the role is the tenant's own, renamed like any role, and a
 tenant that changes its language later keeps its roles' names. A role that [follows its pack](#packs-after-provisioning)
 follows it in its keys alone: its name and description stay the tenant's. A translated name is checked like any role's
-name: blank or too long is `tenancy.name-invalid`, and two packs of one shape under one name, ignoring case,
-are `tenancy.role-name-taken`, so give every pack a name of its own in every language.
+name: blank or too long is `tenancy.name-invalid`, and a name another role of the tenant has, ignoring case,
+is `tenancy.role-name-taken`. A tenant holds a copy of every pack seeded for its shape, and a flat tenant that
+turns hierarchical is given the packs seeded for a hierarchical one next to them, so give every pack a name of
+its own in every language.
 
 The [default administrators' pack](#the-administrators-pack), which Tenancy adds when you declare no
 administrators' pack, is the package's own, so the package has texts for it: Administrator in English and
@@ -2801,19 +2819,21 @@ A seat reaches a project in two ways, and Projects asks both inside one query:
   Tenancy's own keys, which manage the organization, are the organization's: a crew role that holds them gives
   nothing with them.
 
-The application's catalogue has seven packs, and each tenant's roles start as copies of the packs of its shape:
+The application's catalogue has seven packs, and each tenant's roles start as copies of the packs seeded for
+its shape:
 
-| Pack | Keys | Manages access | Usually granted |
-|---|---|---|---|
-| Tenant admin | every key: the administrators' pack of a flat tenant, which lists none | yes | at the root of a flat tenant, to its first administrator |
-| Access admin | Tenancy's six keys, `projects.owner.change`, `projects.crew.manage`, `projects.view`: the administrators' pack of a hierarchical tenant, which lists its keys | yes | at the root of a hierarchical tenant, to its first administrator |
-| Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage` | yes | at a unit; hierarchical tenants only |
-| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record` | yes | at a unit, to lead every crew there |
-| Surveyor | `projects.view`, `inspections.record` | no | at a unit, to record on every project there |
-| Observer | `projects.view` | no | at a unit |
-| People office | `tenancy.grants.manage` | yes | at a unit, to someone who gives people their roles |
+| Pack | Keys | Manages access | Seeded for | Usually granted |
+|---|---|---|---|---|
+| Tenant admin | every key: the administrators' pack of a flat tenant, which lists none | yes | flat | at the root of a flat tenant, to its first administrator |
+| Access admin | Tenancy's six keys, `projects.owner.change`, `projects.crew.manage`, `projects.view`: the administrators' pack of a hierarchical tenant, which lists its keys | yes | hierarchical | at the root of a hierarchical tenant, to its first administrator |
+| Area manager | `projects.view`, `projects.open`, `projects.edit`, `projects.close`, `projects.crew.manage`, `projects.owner.change`, `inspections.record`, `tenancy.units.manage`, `tenancy.seats.manage`, `tenancy.grants.manage` | yes | hierarchical | at a unit |
+| Crew lead | `projects.view`, `projects.edit`, `projects.close`, `projects.crew.manage`, `inspections.record` | yes | every shape | at a unit, to lead every crew there |
+| Surveyor | `projects.view`, `inspections.record` | no | every shape | at a unit, to record on every project there |
+| Observer | `projects.view` | no | every shape | at a unit |
+| People office | `tenancy.grants.manage` | yes | every shape | at a unit, to someone who gives people their roles |
 
-Each shape of tenant has an administrators' pack of its own. A flat tenant has one unit and a handful of
+Each shape of tenant has an administrators' pack of its own, seeded for it with `SeededFor`, and a flat tenant
+that turns hierarchical is given Access admin and Area manager then. A flat tenant has one unit and a handful of
 people, so its administrator does everything: Tenant admin lists no keys and holds them all. A hierarchical
 tenant keeps running access apart from doing the work. Access admin lists its keys, so whoever holds it gives
 every role, names owners, manages every crew and sees every project, and renames, closes and records on none
@@ -4994,7 +5014,7 @@ choices.
   asked of the directory, by id.
 - It does not publish integration events or create tables. Those are your module's.
 - It never links a seat to a person by their e-mail address. A seat is linked to a verified identity.
-- It does not copy a pack you add later into the tenants that exist already: a tenant gets the packs of its shape when
-  it is provisioned, and those of a new shape when it changes shape. The [sync](#packs-after-provisioning) brings
+- It does not copy a pack you add later into the tenants that exist already: a tenant gets the packs seeded for its
+  shape when it is provisioned, and those seeded for a new shape when it changes shape. The [sync](#packs-after-provisioning) brings
   the roles a tenant has up to their packs, and makes none. Nor does it send a message about what the sync
   changed: it raises the event, and the access history keeps it.

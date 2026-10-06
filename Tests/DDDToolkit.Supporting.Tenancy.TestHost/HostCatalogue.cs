@@ -44,7 +44,7 @@ public static class HostCatalogue
             new(AdministratorPack, "Administrator", "Runs the tenant", [], Administers: true, Order: 10),
             new(SupervisorPack, "Supervisor", "Runs a part of the organization",
                 [WidgetChange, WidgetCreate, TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, TenancyKeys.GrantsManage],
-                Shape: TenantShape.Hierarchical, Order: 20),
+                SeededFor: TenantShape.Hierarchical, Order: 20),
             new(OperatorPack, "Operator", "Works with widgets", [WidgetChange, WidgetCreate], Order: 30),
             new(WatcherPack, "Watcher", "Looks at widgets", [WidgetRead], Order: 40),
         ],

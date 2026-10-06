@@ -349,8 +349,8 @@ public class TenantCommandsTests
             {
                 Packs =
                 [
-                    .. HostCatalogue.Application.Packs.Select(pack => pack.Administers ? pack with { Shape = TenantShape.Flat } : pack),
-                    new RolePack("tree-admin", "Tree administrator", "Runs access across the tree", listed, Shape: TenantShape.Hierarchical, Administers: true, Order: 15),
+                    .. HostCatalogue.Application.Packs.Select(pack => pack.Administers ? pack with { SeededFor = TenantShape.Flat } : pack),
+                    new RolePack("tree-admin", "Tree administrator", "Runs access across the tree", listed, SeededFor: TenantShape.Hierarchical, Administers: true, Order: 15),
                 ],
             },
             []);
@@ -361,7 +361,7 @@ public class TenantCommandsTests
 
         await harness.Run(administrator, h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));
 
-        // The tenant gets the role of the administrators' pack of its new shape, with the keys that pack lists.
+        // The tenant gets the role of the administrators' pack seeded for its new shape, with the keys that pack lists.
         var roles = harness.Store.RolesOf(provisioned.Tenant);
         var treeAdministrators = roles.Should().ContainSingle(role => role.FromPack == "tree-admin").Which;
         treeAdministrators.Keys.Should().Equal(listed).And.Equal(catalogue.AdministratorPackFor(TenantShape.Hierarchical).Keys);

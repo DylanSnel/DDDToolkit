@@ -199,7 +199,7 @@ public sealed class AccessAdminScenarios(SampleHosts sample) : IClassFixture<Sam
             .Should().BeEquivalentTo(catalogue.LiveKeys);
         catalogue.Packs.Single(pack => pack.Key == SampleCatalogue.TenantAdmin).Keys.Should().BeEquivalentTo(catalogue.LiveKeys);
 
-        // Each shape has its administrators' pack, and a tenant's roles hold the one of its shape.
+        // Each shape has an administrators' pack seeded for it, and a tenant's roles hold the one seeded for its shape.
         var roles = await tove.GetFromJsonAsync<JsonElement>("/tenancy/roles", Cancellation);
         roles.EnumerateArray().Select(role => role.Text("fromPack")).Should().Contain(SampleCatalogue.TenantAdmin).And.NotContain(SampleCatalogue.AccessAdmin);
         using var harbors = await sample.ClientAsync("ada", Harbor.Slug);

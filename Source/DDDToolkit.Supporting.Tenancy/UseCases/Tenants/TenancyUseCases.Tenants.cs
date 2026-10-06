@@ -35,10 +35,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Provisions a tenant, in one save: the tenant, its organization with the root, a role copied from
-        /// every pack of its shape, and a first seat for <see cref="TenantToProvision.AdminIdentity"/>, placed
-        /// at the root and granted the administrators' role there with no end. That role holds what the
-        /// administrators' pack of the shape holds, which is every live key unless the pack lists its own. The
-        /// tenant is active when the save is done.
+        /// every pack seeded for its shape, and a first seat for <see cref="TenantToProvision.AdminIdentity"/>,
+        /// placed at the root and granted the administrators' role there with no end. That role holds what the
+        /// administrators' pack seeded for the shape holds, which is every live key unless the pack lists its own.
+        /// The tenant is active when the save is done.
         /// <para>
         /// The roles are named as the catalogue names its packs, or, with a
         /// <see cref="TenantToProvision.Language"/> and an <see cref="IRolePackTexts"/> registered, in that
@@ -158,11 +158,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// Changes a flat tenant into a hierarchical one, and gives it a copy of every pack of the new shape it
-        /// has no copy of yet. No grant changes: who held what at the root still does. Where the two shapes have
-        /// administrators' packs of their own, the tenant gets the role of the new shape's pack with the keys that
-        /// pack holds, and nobody is given it: the administrators keep the role they have, and give the new one
-        /// as they see fit.
+        /// Changes a flat tenant into a hierarchical one, and gives it a copy of every pack seeded for the new shape
+        /// it has no copy of yet. No grant changes: who held what at the root still does. Where the two shapes have
+        /// administrators' packs of their own, the tenant gets the role of the pack seeded for the new shape with
+        /// the keys that pack holds, and nobody is given it: the administrators keep the role they have, and give
+        /// the new one as they see fit.
         /// </summary>
         /// <param name="to">The new shape.</param>
         /// <param name="roleIds">The ids of the new roles, by pack key, for imports and seeding; the rest get new ids.</param>

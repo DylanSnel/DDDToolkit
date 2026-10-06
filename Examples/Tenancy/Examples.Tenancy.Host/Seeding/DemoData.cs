@@ -12,8 +12,8 @@ namespace Examples.Tenancy.Host.Seeding;
 /// in <see cref="DemoPeople"/>), and its last three the tenant (1 harbor, 2 meadow) and the number. A seat's
 /// number is its person's, so <c>c0000000-…-000000000207</c> is Tove's seat in meadow. A role's number is its
 /// pack's in both tenants: 1 Tenant admin, 2 Area manager, 3 Crew lead, 4 Surveyor, 5 Observer, 6 People office,
-/// 7 Access admin. A tenant has the roles of its shape, so harbor has no role 1, and meadow no role 2 or 7 until
-/// it turns hierarchical and is given an area manager's and an access admin's. A project role's number is the
+/// 7 Access admin. A tenant has the roles of the packs seeded for its shape, so harbor has no role 1, and meadow
+/// no role 2 or 7 until it turns hierarchical and is given an area manager's and an access admin's. A project role's number is the
 /// number of the pack of the same name: 3 Crew lead, 4 Surveyor, 5 Observer, the starter roles every tenant has.
 /// </remarks>
 public static class DemoData

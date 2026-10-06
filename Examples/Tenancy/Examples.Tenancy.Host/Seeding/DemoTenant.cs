@@ -8,8 +8,8 @@ namespace Examples.Tenancy.Host.Seeding;
 /// <param name="Name">The tenant's name, which is also its root's.</param>
 /// <param name="Shape">Flat or hierarchical.</param>
 /// <param name="Root">The root unit's id.</param>
-/// <param name="Administrator">The first administrator's seat, which provisioning places at the root and grants the administrators' role of the tenant's shape.</param>
-/// <param name="Roles">The ids of the roles of the organization copied from the packs of the tenant's shape, by pack key.</param>
+/// <param name="Administrator">The first administrator's seat, which provisioning places at the root and grants the role of the administrators' pack seeded for the tenant's shape.</param>
+/// <param name="Roles">The ids of the roles of the organization copied from the packs seeded for the tenant's shape, by pack key.</param>
 /// <param name="ProjectRoles">The ids of the project roles made from the starter roles when the tenant is set up, by the starter role's key.</param>
 /// <param name="Units">The units below the root, parents before children.</param>
 /// <param name="Seats">Every other seat, each with its primary placement.</param>
@@ -35,7 +35,7 @@ public sealed record DemoTenant(
     public const UnitKind RootKind = UnitKind.Company;
 
     /// <summary>
-    /// The key of the administrators' pack of this tenant's shape: the pack whose role provisioning grants the
+    /// The key of the administrators' pack seeded for this tenant's shape: the pack whose role provisioning grants the
     /// first administrator. A flat tenant's holds every key; a hierarchical tenant's runs access.
     /// </summary>
     public string AdministratorsPack => Shape == TenantShape.Flat ? SampleCatalogue.TenantAdmin : SampleCatalogue.AccessAdmin;

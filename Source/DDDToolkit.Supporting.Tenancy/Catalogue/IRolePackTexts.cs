@@ -46,7 +46,9 @@ public interface IRolePackTexts
     /// <para>
     /// What comes back is checked like any role's name and description: a name that is blank or too long is
     /// refused with <c>tenancy.name-invalid</c>, and one another role of the tenant has already, ignoring case,
-    /// with <c>tenancy.role-name-taken</c>, so two packs of one shape need names of their own in every language.
+    /// with <c>tenancy.role-name-taken</c>. A tenant holds a copy of every pack seeded for its shape, and a flat
+    /// tenant that turns hierarchical is given the packs seeded for a hierarchical one next to them, so every pack
+    /// needs a name of its own in every language.
     /// </para>
     /// </summary>
     /// <param name="pack">The pack a role is being made from, as the catalogue built it.</param>

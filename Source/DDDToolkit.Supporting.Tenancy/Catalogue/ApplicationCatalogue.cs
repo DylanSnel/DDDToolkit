@@ -21,8 +21,8 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// <param name="Packs">
 /// The role packs. Either none of them is an administrators' pack, and the catalogue adds
 /// <see cref="TenancyPacks.DefaultAdministrators"/>, which holds every live key in a tenant of every shape; or
-/// there is one administrators' pack for each shape of tenant. Left out or empty: every tenant starts with the
-/// default administrators' role alone.
+/// there is one administrators' pack seeded for each shape of tenant (<see cref="RolePack.SeededFor"/>). Left out
+/// or empty: every tenant starts with the default administrators' role alone.
 /// </param>
 /// <param name="Permissions">
 /// The keys the application owns itself, besides Tenancy's and the modules' contributions. A module's keys are

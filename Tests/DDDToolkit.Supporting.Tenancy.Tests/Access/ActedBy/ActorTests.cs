@@ -352,7 +352,7 @@ public class ActorTests
         followed.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
         bySystem.AddRange(followed);
 
-        // ... made a tree by its administrator, with the roles of the new shape, ...
+        // ... made a tree by its administrator, with the roles of the packs seeded for the new shape, ...
         await harness.Run(HostCaller.InSeat(quay.Tenant, quay.AdminSeat), use => use.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));
 
         var byQuin = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();

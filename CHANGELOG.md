@@ -2253,6 +2253,18 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     accepting an invitation `tenancy.identity-required`. And in a host that requires explicit callers, a
     request that requires system work and runs as nobody fails with `NoCallerException`.
 
+- **For the 3.2.0 previews: `RolePack.Shape` is `RolePack.SeededFor`.** The name read as if a role had a shape,
+  and a role has none: the property says which tenants are given a copy of the pack, one provisioned with that
+  shape or changed to it, and `null` still means every shape. Nothing else changes. A catalogue writes
+  `new RolePack(..., SeededFor: TenantShape.Hierarchical)` where it wrote `Shape:`, and
+  `pack with { SeededFor = ... }` where it wrote `Shape =`. The problem `TenancyCatalogue.Build` reports for a shape
+  without exactly one administrators' pack names what to write: the `SeededFor` of the pack the shape lacks, or
+  the pack that would be it but is declared with `SeedOnProvision: false`, and for more than one, keeping one of
+  them by seeding the others for another shape or declaring them without `Administers`. The Tenancy sample's
+  catalogue query follows it: `PackOverview.SeededFor`, answered as `seededFor` over REST and as
+  `RolePack.seededFor` in GraphQL, where both answered `shape`. See
+  [The administrators' pack](docs/tenancy.md#the-administrators-pack).
+
 - **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
   others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
   and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up

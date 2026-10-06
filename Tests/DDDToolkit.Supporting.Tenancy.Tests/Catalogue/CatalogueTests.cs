@@ -123,18 +123,37 @@ public class CatalogueTests
     [Fact]
     public void Each_shape_has_exactly_one_administrators_pack()
     {
-        Problems(Application(packs: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat }]))
-            .Should().ContainSingle().Which.Should().StartWith("A flat tenant needs exactly one administrators' pack").And.Contain("host-admin, flat-admin");
+        // The cure keeps one for the shape, however many there are and whichever shapes they are seeded for.
+        static string MoreThanOne(string shape, string packs)
+            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has " + packs + ". Keep one of them for it: seed the "
+               + "others for another shape with SeededFor, or declare them without Administers.";
 
-        Problems(Application(packs: [Administrators with { SeedOnProvision = false }]))
-            .Should().HaveCount(2, "an administrators' pack that is not seeded gives a new tenant no administrator, and the default is not added in its place")
-            .And.OnlyContain(problem => problem.Contains("is added only when the application declares no administrators' pack at all"));
+        Problems(Application(packs: [Administrators, Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
+            .Should().ContainSingle().Which.Should().Be(MoreThanOne("flat", "2: host-admin, flat-admin"));
+
+        // Two seeded for the same shape already.
+        Problems(Application(packs:
+            [
+                Administrators with { Key = "owner", Name = "Owner", SeededFor = TenantShape.Flat },
+                Administrators with { Key = "manager", Name = "Manager", SeededFor = TenantShape.Flat },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
+            ]))
+            .Should().ContainSingle().Which.Should().Be(MoreThanOne("flat", "2: owner, manager"));
+
+        // Three for two shapes: no SeededFor gives each shape one of them, so one goes without Administers.
+        Problems(Application(packs:
+            [
+                Administrators,
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
+            ]))
+            .Should().Equal(MoreThanOne("flat", "2: host-admin, flat-admin"), MoreThanOne("hierarchical", "2: host-admin, tree-admin"));
 
         var perShape = TenancyCatalogue.Build(Application(packs:
         [
             // Named apart: a flat tenant that turns hierarchical is given the other pack's role next to its own.
-            Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat },
-            Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical },
+            Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
+            Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
         ]), []);
         perShape.AdministratorPackFor(TenantShape.Flat).Key.Should().Be("flat-admin");
         perShape.AdministratorPackFor(TenantShape.Hierarchical).Key.Should().Be("tree-admin");
@@ -151,7 +170,7 @@ public class CatalogueTests
         administrators.Key.Should().Be("administrator");
         administrators.Name.Should().Be("Administrator");
         administrators.Description.Should().NotBeNullOrWhiteSpace("the screens that assign roles show it");
-        administrators.Should().Match<RolePack>(pack => pack.Administers && pack.SeedOnProvision && pack.Shape == null);
+        administrators.Should().Match<RolePack>(pack => pack.Administers && pack.SeedOnProvision && pack.SeededFor == null);
         administrators.Keys.Should().Equal(catalogue.LiveKeys, "it lists nothing, and so holds every live key, Tenancy's and the application's");
         catalogue.HasDefaultAdministrators.Should().BeTrue();
 
@@ -179,7 +198,7 @@ public class CatalogueTests
     public void The_default_administrators_pack_comes_first_next_to_the_packs_the_application_declares()
     {
         var watcher = new RolePack("watcher", "Watcher", "Looks", [HostCatalogue.WidgetChange], Order: 10);
-        var supervisor = new RolePack("supervisor", "Supervisor", "Runs a part", [TenancyKeys.UnitsManage], Shape: TenantShape.Hierarchical, Order: 20);
+        var supervisor = new RolePack("supervisor", "Supervisor", "Runs a part", [TenancyKeys.UnitsManage], SeededFor: TenantShape.Hierarchical, Order: 20);
 
         var catalogue = TenancyCatalogue.Build(Application(packs: [watcher, supervisor]), []);
 
@@ -206,21 +225,48 @@ public class CatalogueTests
     }
 
     [Fact]
-    public void Administrators_packs_declared_for_some_shapes_and_not_others_are_refused()
+    public void Administrators_packs_seeded_for_some_shapes_and_not_others_are_refused()
     {
-        Problems(Application(packs: [Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat }]))
-            .Should().ContainSingle().Which.Should().Be(
-                "A hierarchical tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
-                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.");
+        // The problem names the property to write, with the shape the catalogue lacks a pack for.
+        static string NoneFor(string shape, string property)
+            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has none. The default one, 'administrator', is added only "
+               + "when the application declares no administrators' pack at all: declare one with SeededFor: " + property + " as well, or declare none.";
+
+        Problems(Application(packs: [Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat }]))
+            .Should().ContainSingle().Which.Should().Be(NoneFor("hierarchical", "TenantShape.Hierarchical"));
 
         // A pack that administers counts as declared even when something else about it is refused.
         Problems(Application(packs: [Administrators with { Key = " " }]))
-            .Should().BeEquivalentTo(
-                "A pack has no key.",
-                "A flat tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
-                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.",
-                "A hierarchical tenant needs exactly one administrators' pack that is seeded, and has none. The default one, 'administrator', is added only "
-                + "when the application declares no administrators' pack at all: declare a seeded one for this shape as well, or declare none.");
+            .Should().BeEquivalentTo("A pack has no key.", NoneFor("flat", "TenantShape.Flat"), NoneFor("hierarchical", "TenantShape.Hierarchical"));
+    }
+
+    [Fact]
+    public void An_administrators_pack_seeded_for_a_shape_but_not_on_provision_is_named_as_the_one_it_lacks()
+    {
+        // Not seeded, it gives a new tenant no administrator, and the default is not added in its place. Its
+        // SeededFor is right already, so the problem names SeedOnProvision, not another pack to declare.
+        static string Unseeded(string shape, string packs, bool several)
+            => "A " + shape + " tenant needs exactly one administrators' pack seeded for it, and has none: " + packs
+               + (several ? " would be, but are" : " would be, but is") + " declared with SeedOnProvision: false, and the default one, 'administrator', "
+               + (several ? "is not added in their place. Leave SeedOnProvision: false off one of them." : "is not added in its place. Leave SeedOnProvision: false off it.");
+
+        Problems(Application(packs: [Administrators with { SeedOnProvision = false }]))
+            .Should().Equal(Unseeded("flat", "'host-admin'", several: false), Unseeded("hierarchical", "'host-admin'", several: false));
+
+        Problems(Application(packs:
+            [
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, SeedOnProvision = false },
+            ]))
+            .Should().ContainSingle().Which.Should().Be(Unseeded("hierarchical", "'tree-admin'", several: false));
+
+        // Two that a hierarchical tenant would get: seeding either is enough for it.
+        Problems(Application(packs:
+            [
+                Administrators with { SeedOnProvision = false },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, SeedOnProvision = false },
+            ]))
+            .Should().Equal(Unseeded("flat", "'host-admin'", several: false), Unseeded("hierarchical", "'host-admin', 'tree-admin'", several: true));
     }
 
     [Fact]
@@ -349,8 +395,8 @@ public class CatalogueTests
         // administrators hold the units key like any other of Tenancy's.
         Problems(Application(packs:
             [
-                Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat, Keys = [.. TenancysOwn.Where(key => key != TenancyKeys.UnitsManage)] },
-                Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical },
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat, Keys = [.. TenancysOwn.Where(key => key != TenancyKeys.UnitsManage)] },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical },
             ]))
             .Should().ContainSingle().Which.Should().Be(LeftOut("flat-admin", TenancyKeys.UnitsManage, "is one of Tenancy's own"));
     }
@@ -406,8 +452,8 @@ public class CatalogueTests
         var application = Application(
             packs:
             [
-                Administrators with { Key = "flat-admin", Name = "Flat administrator", Shape = TenantShape.Flat },
-                Administrators with { Key = "tree-admin", Name = "Tree administrator", Shape = TenantShape.Hierarchical, Keys = [.. TenancysOwn, "widget.assign"] },
+                Administrators with { Key = "flat-admin", Name = "Flat administrator", SeededFor = TenantShape.Flat },
+                Administrators with { Key = "tree-admin", Name = "Tree administrator", SeededFor = TenantShape.Hierarchical, Keys = [.. TenancysOwn, "widget.assign"] },
             ],
             permissions:
             [
@@ -497,7 +543,7 @@ public class CatalogueTests
                     Packs:
                     [
                         new RolePack("watcher", "Watcher", "Looks", ["widget.fly"]),
-                        new RolePack("flat-admin", "Flat administrator", "Runs a flat tenant", [], Shape: TenantShape.Flat, Administers: true),
+                        new RolePack("flat-admin", "Flat administrator", "Runs a flat tenant", [], SeededFor: TenantShape.Flat, Administers: true),
                     ],
                     Permissions: [new Permission("tenancy.extra", "Tenancy", "Taken")]),
                 [new Permission("Bad Key", "Gadgets", "Bad")]))

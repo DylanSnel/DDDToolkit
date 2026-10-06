@@ -340,7 +340,7 @@ type RolePack {
   keys: [String!]!
   name: String!
   description: String!
-  shape: TenantShape
+  seededFor: TenantShape
   administers: Boolean!
 }
 

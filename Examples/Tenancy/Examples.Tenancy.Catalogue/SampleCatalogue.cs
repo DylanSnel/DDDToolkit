@@ -21,15 +21,15 @@ namespace Examples.Tenancy.Catalogue;
 /// that is added changes nothing here. The packs only name them. The catalogue is built and checked once, when the
 /// host starts, and a catalogue that does not hold together stops the start.
 /// <para>
-/// There are two administrators' packs, one for each shape of tenant, and a tenant's first seat is granted the
-/// one of its shape. A flat tenant has one unit and usually a handful of people, so its administrator does
-/// everything: <see cref="TenantAdmin"/> lists no keys, and once built holds every live key of the catalogue, the
-/// modules' included. A hierarchical tenant separates running access from doing the work: <see cref="AccessAdmin"/>
-/// lists its keys, Tenancy's own and the ones that manage access, so its holder gives every role, names owners,
-/// manages crews and sees every project, and renames, closes and records on none. The catalogue refuses a
-/// listing administrators' pack that leaves out a key that manages access, so marking another key stops the
-/// host at start-up until this pack lists it. Either way nobody but system work is needed to appoint, say, an
-/// area manager.
+/// There are two administrators' packs, each seeded for one shape of tenant (<see cref="RolePack.SeededFor"/>),
+/// and a tenant's first seat is granted the one seeded for its shape. A flat tenant has one unit and usually a
+/// handful of people, so its administrator does everything: <see cref="TenantAdmin"/> lists no keys, and once
+/// built holds every live key of the catalogue, the modules' included. A hierarchical tenant separates running
+/// access from doing the work: <see cref="AccessAdmin"/> lists its keys, Tenancy's own and the ones that manage
+/// access, so its holder gives every role, names owners, manages crews and sees every project, and renames,
+/// closes and records on none. The catalogue refuses a listing administrators' pack that leaves out a key that
+/// manages access, so marking another key stops the host at start-up until this pack lists it. Either way nobody
+/// but system work is needed to appoint, say, an area manager.
 /// </para>
 /// <para>
 /// There are two kinds of role, each kept where it belongs. A role of the organization is Tenancy's, copied from a
@@ -44,8 +44,8 @@ namespace Examples.Tenancy.Catalogue;
 /// An area manager is appointed at an area of the organization. A crew lead, a surveyor and an observer are
 /// usually project roles, given on a crew, and are packs of the organization as well, for a tenant that grants
 /// one at a unit: a surveyor at a site records on every project there. The area manager's and the access admin's
-/// packs are only for a hierarchical tenant: a flat one has nothing but its root to manage, and gets them when it
-/// changes shape.
+/// packs are seeded for a hierarchical tenant only: a flat one has nothing but its root to manage, and gets them
+/// when it changes shape. The other packs name no shape, so every tenant gets them.
 /// </para>
 /// <para>
 /// Tenant admin, Access admin, Area manager, Crew lead and People office manage access. Two of Projects' keys are marked as
@@ -121,7 +121,7 @@ public static class SampleCatalogue
     public static ApplicationCatalogue Application { get; } = new(
         Packs:
         [
-            new(TenantAdmin, "Tenant admin", "Runs the tenant", [], Shape: TenantShape.Flat, Administers: true, Order: 10),
+            new(TenantAdmin, "Tenant admin", "Runs the tenant", [], SeededFor: TenantShape.Flat, Administers: true, Order: 10),
             new(
                 AccessAdmin,
                 "Access admin",
@@ -130,7 +130,7 @@ public static class SampleCatalogue
                     .. TenancyKeys.Permissions.Select(permission => permission.Key),
                     ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew, ProjectKeys.View,
                 ],
-                Shape: TenantShape.Hierarchical,
+                SeededFor: TenantShape.Hierarchical,
                 Administers: true,
                 Order: 10),
             new(
@@ -142,7 +142,7 @@ public static class SampleCatalogue
                     InspectionKeys.Record,
                     TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, TenancyKeys.GrantsManage,
                 ],
-                Shape: TenantShape.Hierarchical,
+                SeededFor: TenantShape.Hierarchical,
                 Order: 20),
             new(
                 CrewLead,

@@ -83,6 +83,12 @@ public sealed partial class ShopSeat
            .UseDDDToolkit(serviceProvider));
    ```
 
+   A pack of the catalogue is `new RolePack(key, name, description, keys)`. `SeededFor: TenantShape.Hierarchical`
+   gives a copy only to a tenant of that shape, provisioned so or changed to it; left out, every tenant gets one.
+   It filters seeding and is no property of the role: a role has no shape. Declare no administrators' pack and
+   every tenant gets Tenancy's own; declare one (`Administers: true`) and declare one for every shape, a single
+   one without `SeededFor` or one seeded for each shape.
+
 4. Name the use cases through `{Module}Tenancy`, and write no alias. They are nested in one generic class,
    `TenancyUseCases<...>`, and the toolkit's generator closes it over your classes in the project that declares
    them, as a class named after its module: the module Tenants, declared by its folder (`DDD_Module` in

@@ -44,14 +44,17 @@ public sealed record PermissionOverview(
 /// <param name="Keys">The keys a role copied from it holds.</param>
 /// <param name="Name">What a role copied from it is called.</param>
 /// <param name="Description">What the role is for.</param>
-/// <param name="Shape">The shape of tenant it is for, or <see langword="null"/> for every shape.</param>
+/// <param name="SeededFor">
+/// The one shape of tenant that is given a copy, or <see langword="null"/> for every shape. It says which tenants
+/// get a role made from it, not a shape of the role.
+/// </param>
 /// <param name="Administers">Whether it is the administrators' pack.</param>
 public sealed record PackOverview(
     string Key,
     IReadOnlyList<string> Keys,
     string Name,
     string Description,
-    TenantShape? Shape,
+    TenantShape? SeededFor,
     bool Administers);
 
 /// <summary>
@@ -71,5 +74,5 @@ public sealed class CatalogueContentsHandler(TenancyCatalogue catalogue) : IQuer
                 permission.Implies ?? [],
                 permission.Retired,
                 permission.ManagesAccess))],
-            [.. catalogue.Packs.Select(pack => new PackOverview(pack.Key, pack.Keys, pack.Name, pack.Description, pack.Shape, pack.Administers))]));
+            [.. catalogue.Packs.Select(pack => new PackOverview(pack.Key, pack.Keys, pack.Name, pack.Description, pack.SeededFor, pack.Administers))]));
 }

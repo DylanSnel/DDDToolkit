@@ -191,9 +191,12 @@ public sealed partial class TenancyCatalogue
             : expanded;
     }
 
-    /// <summary>The packs a newly provisioned tenant of <paramref name="shape"/> gets a copy of, in their order.</summary>
+    /// <summary>
+    /// The packs a newly provisioned tenant of <paramref name="shape"/> gets a copy of, in their order: those seeded
+    /// on provision whose <see cref="RolePack.SeededFor"/> is that shape or every shape.
+    /// </summary>
     public IEnumerable<RolePack> PacksFor(TenantShape shape)
-        => Packs.Where(pack => pack.SeedOnProvision && (pack.Shape is null || pack.Shape == shape)).OrderBy(pack => pack.Order);
+        => Packs.Where(pack => IsSeededFor(pack, shape)).OrderBy(pack => pack.Order);
 
     /// <summary>
     /// The pack the first administrator of a tenant of <paramref name="shape"/> is granted: the application's, or
@@ -219,6 +222,14 @@ public sealed partial class TenancyCatalogue
                 nameof(key));
         }
     }
+
+    /// <summary>
+    /// Whether a tenant of <paramref name="shape"/> is given a copy of <paramref name="pack"/>: the pack is seeded on
+    /// provision, and seeded for that shape or for every shape. What provisioning and a change of shape copy, and
+    /// what the check of the administrators' packs counts, so the two never disagree.
+    /// </summary>
+    private static bool IsSeededFor(RolePack pack, TenantShape shape)
+        => pack.SeedOnProvision && (pack.SeededFor is null || pack.SeededFor == shape);
 
     // ---------------------------------------------------------------- the checks Build makes
 
@@ -401,9 +412,9 @@ public sealed partial class TenancyCatalogue
     /// Pack keys are unique, not blank and at most <see cref="RolePack.MaxKeyLength"/> long; the names and descriptions of the roles made from them follow a
     /// role's rules, and the names are unique ignoring case, as a tenant's role names are; every key a pack
     /// lists is known and not retired; an administrators' pack that lists keys leaves out none an administrator
-    /// needs (<see cref="CheckAdministratorsKeys"/>); and each shape has exactly one administrators' pack that is
-    /// seeded. Returns the packs as built: their keys expanded, and for an administrators' pack that lists none,
-    /// every live key.
+    /// needs (<see cref="CheckAdministratorsKeys"/>); and each shape has exactly one administrators' pack seeded for
+    /// it (<see cref="CheckAdministratorsSeededFor"/>). Returns the packs as built: their keys expanded, and for an
+    /// administrators' pack that lists none, every live key.
     /// <para>
     /// An application that declares no administrators' pack at all gets <see cref="TenancyPacks.DefaultAdministrators"/>,
     /// which gives every shape its one (<see cref="AddDefaultAdministrators"/>). One that declares an
@@ -496,22 +507,52 @@ public sealed partial class TenancyCatalogue
 
         foreach (var shape in Enum.GetValues<TenantShape>())
         {
-            var administrators = result
-                .Where(pack => pack.Administers && pack.SeedOnProvision && (pack.Shape is null || pack.Shape == shape))
-                .Select(pack => pack.Key)
-                .ToArray();
-
-            if (administrators.Length != 1)
-            {
-                problems.Add("A " + shape.ToString().ToLowerInvariant() + " tenant needs exactly one administrators' pack that is seeded, and has "
-                             + (administrators.Length == 0
-                                 ? "none. The default one, '" + TenancyPacks.DefaultAdministratorsKey + "', is added only when the application declares "
-                                   + "no administrators' pack at all: declare a seeded one for this shape as well, or declare none."
-                                 : administrators.Length + ": " + string.Join(", ", administrators) + "."));
-            }
+            CheckAdministratorsSeededFor(shape, result, problems);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// A tenant of <paramref name="shape"/> has exactly one administrators' pack seeded for it, the one its first
+    /// administrator is granted. The problem names the property to write, so the cure reads as the code that
+    /// makes it. With none, that is the <see cref="RolePack.SeedOnProvision"/> of a pack that would be seeded for
+    /// the shape but is declared unseeded, or else the <see cref="RolePack.SeededFor"/> of the pack the shape
+    /// lacks. With more than one, it is keeping one of them, by seeding the others for another shape or declaring
+    /// them without <see cref="RolePack.Administers"/>; the second is the cure when there are more administrators'
+    /// packs than shapes.
+    /// </summary>
+    private static void CheckAdministratorsSeededFor(TenantShape shape, List<RolePack> packs, List<string> problems)
+    {
+        var administrators = packs.Where(pack => pack.Administers && IsSeededFor(pack, shape)).Select(pack => pack.Key).ToArray();
+        if (administrators.Length == 1)
+        {
+            return;
+        }
+
+        var problem = "A " + shape.ToString().ToLowerInvariant() + " tenant needs exactly one administrators' pack seeded for it, and has ";
+        if (administrators.Length > 1)
+        {
+            problems.Add(problem + administrators.Length + ": " + string.Join(", ", administrators) + ". Keep one of them for it: seed the "
+                         + "others for another shape with SeededFor, or declare them without Administers.");
+            return;
+        }
+
+        // An administrators' pack for this shape, or for every shape, that is declared unseeded is the one that is
+        // missing: declaring another as well would leave it in the catalogue, an administrators' pack no tenant gets.
+        var unseeded = packs
+            .Where(pack => pack.Administers && !pack.SeedOnProvision && (pack.SeededFor is null || pack.SeededFor == shape))
+            .Select(pack => "'" + pack.Key + "'")
+            .ToArray();
+        problems.Add(unseeded.Length switch
+        {
+            0 => problem + "none. The default one, '" + TenancyPacks.DefaultAdministratorsKey + "', is added only when the application declares "
+                 + "no administrators' pack at all: declare one with SeededFor: TenantShape." + shape + " as well, or declare none.",
+            1 => problem + "none: " + unseeded[0] + " would be, but is declared with SeedOnProvision: false, and the default one, '"
+                 + TenancyPacks.DefaultAdministratorsKey + "', is not added in its place. Leave SeedOnProvision: false off it.",
+            _ => problem + "none: " + string.Join(", ", unseeded) + " would be, but are declared with SeedOnProvision: false, and the default "
+                 + "one, '" + TenancyPacks.DefaultAdministratorsKey + "', is not added in their place. Leave SeedOnProvision: false off one of them.",
+        });
     }
 
     /// <summary>

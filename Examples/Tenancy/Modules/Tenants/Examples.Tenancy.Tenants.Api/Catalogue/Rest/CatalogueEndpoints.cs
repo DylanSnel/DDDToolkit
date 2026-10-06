@@ -45,7 +45,7 @@ internal static class CatalogueEndpoints
             pack.Name,
             pack.Description,
             pack.Keys,
-            pack.Shape,
+            pack.SeededFor,
             pack.Administers,
         }),
     };

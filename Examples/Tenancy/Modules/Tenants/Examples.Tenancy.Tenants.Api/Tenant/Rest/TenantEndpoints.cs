@@ -24,7 +24,7 @@ internal static class TenantEndpoints
     {
         ArgumentNullException.ThrowIfNull(group);
 
-        // Flat to hierarchical, never back. The tenant gains the roles of the packs for the new shape it lacks.
+        // Flat to hierarchical, never back. The tenant gains the roles of the packs seeded for the new shape it lacks.
         group.MapPost("/tenancy/shape", async (NewShape body, ISender sender, CancellationToken cancellationToken) =>
         {
             await sender.Send(new ChangeTenantShape(body.Shape), cancellationToken);

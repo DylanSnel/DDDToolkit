@@ -582,7 +582,7 @@ type RolePack {
   key: String!
   keys: [String!]!
   name: String!
-  shape: TenantShape
+  seededFor: TenantShape
 }
 
 type RoleRevokePayload {

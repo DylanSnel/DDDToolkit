@@ -60,7 +60,7 @@ public static class New
 
 /// <summary>
 /// A hierarchical tenant, "Harbor Works", as provisioning leaves it: active, its organization with North,
-/// North Coast below it and South, a role copied from every pack of its shape, and a first administrator
+/// North Coast below it and South, a role copied from every pack seeded for its shape, and a first administrator
 /// placed at the root with the administrators' role, open-ended. Every event is drained, so a test sees only
 /// what it does itself.
 /// </summary>

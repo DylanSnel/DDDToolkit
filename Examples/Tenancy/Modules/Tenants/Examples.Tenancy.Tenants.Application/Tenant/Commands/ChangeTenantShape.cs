@@ -5,7 +5,7 @@ namespace Examples.Tenancy.Tenants.Application.Tenant.Commands;
 
 /// <summary>
 /// Changes the shape of the caller's tenant: flat to hierarchical, never back. The tenant gains a role for
-/// every pack of the new shape it has no copy of yet.
+/// every pack seeded for the new shape that it has no copy of yet.
 /// </summary>
 /// <remarks>
 /// It requires <c>tenancy.settings.manage</c> for the whole tenant, which the package's use case asks for again.
