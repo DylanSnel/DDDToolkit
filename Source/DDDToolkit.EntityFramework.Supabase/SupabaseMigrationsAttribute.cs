@@ -37,7 +37,7 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// project than its context, one that says where the migrations are, say. The factory has to be a public,
 /// non-abstract class with a public parameterless constructor that implements
 /// <c>IDesignTimeDbContextFactory&lt;TContext&gt;</c>, and calls <c>UseDDDToolkitDesignTime()</c> where the host wires
-/// the context with <c>UseDDDToolkit</c>, which DDD00071 reports a factory without. A marked factory wins over the
+/// the context with <c>UseDDDToolkit</c>, which DDD00074 reports a factory without. A marked factory wins over the
 /// factory of its context, marked too or not.
 /// </para>
 /// <para>

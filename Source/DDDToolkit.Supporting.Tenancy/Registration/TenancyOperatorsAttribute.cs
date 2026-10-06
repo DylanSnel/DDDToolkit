@@ -23,7 +23,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <para>
 /// The member is a static property or field of a collection of <see cref="string"/>, readable from the project that
 /// runs the export: in a library it is public, in public types, which that library's own build checks (DDD00070).
-/// One member is marked in all the projects it references: the export reports two, and one of another type (DDD00072).
+/// One member is marked in all the projects it references: the export reports two, and one of another type (DDD00071).
 /// </para>
 /// </summary>
 [ApplicationMark]

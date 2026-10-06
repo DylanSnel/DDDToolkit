@@ -20,7 +20,7 @@ namespace DDDToolkit.Analyzers.Analyzers;
 /// <para>
 /// Silent in an application: the program that runs the export, or the host, reads its own marks, and nothing
 /// references it for them. Whether the member is static, has a getter and is of the type the package takes, the
-/// export says where it runs (DDD00072), since it sees such a member.
+/// export says where it runs (DDD00071), since it sees such a member.
 /// </para>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

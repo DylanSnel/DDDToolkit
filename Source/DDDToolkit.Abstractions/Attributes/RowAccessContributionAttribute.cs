@@ -21,7 +21,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <c>new X()</c>. SQL that depends on what only the application knows, its catalogue or a resource's rules, takes
 /// it in the constructor, whose every parameter says with <see cref="FromApplicationAttribute"/> which member the
 /// application marks for it; a generic class is closed with the type argument of the attribute that marks it, once
-/// for each member so marked. The build reports what it cannot find (DDD00054) and what it cannot use (DDD00072).
+/// for each member so marked. The build reports what it cannot find (DDD00054) and what it cannot use (DDD00071).
 /// </para>
 /// <para>
 /// A package is an assembly that declares no module. In an assembly that declares one, with <c>DDD_Module</c> or

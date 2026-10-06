@@ -34,7 +34,7 @@ the login role; it takes the parts it does want with their own `Use...` calls af
 migration history in its default schema (`HasDefaultSchema`), so never write `MigrationsHistoryTable` for that;
 a design-time factory, which has no services, writes
 `new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`
-so `dotnet ef` and the Supabase export record migrations where the host reads them (DDD00071 reports a factory
+so `dotnet ef` and the Supabase export record migrations where the host reads them (DDD00074 reports a factory
 without it). For a context whose migrations Supabase applies, write no factory: put `[SupabaseMigrations]` on the
 context, and the build writes `OrderingContextDesignTimeFactory` beside it, which `dotnet ef` and the export use;
 the host registers every marked context for the start-up check with one `services.AddSupabaseMigrations()`, which

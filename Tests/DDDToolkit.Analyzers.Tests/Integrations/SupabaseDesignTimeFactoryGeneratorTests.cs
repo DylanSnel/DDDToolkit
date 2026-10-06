@@ -79,7 +79,7 @@ public sealed class SupabaseDesignTimeFactoryGeneratorTests
     }
 
     [Fact]
-    public void The_written_factory_is_not_held_to_DDD00071_and_would_pass_it()
+    public void The_written_factory_is_not_held_to_DDD00074_and_would_pass_it()
     {
         // The factory calls UseDDDToolkitDesignTime(), so the analyzer that holds a factory written by hand to it has
         // nothing to say; and it reads no generated code besides, so it never sees this one.
@@ -88,7 +88,7 @@ public sealed class SupabaseDesignTimeFactoryGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldCompile();
-        result.AnalyzerDiagnostics.Should().NotContain(diagnostic => diagnostic.Id == "DDD00071");
+        result.AnalyzerDiagnostics.Should().NotContain(diagnostic => diagnostic.Id == "DDD00074");
 
         // A factory written by hand without the call, beside an unmarked context, is still reported: the analyzer
         // stays what it was.
@@ -108,14 +108,14 @@ public sealed class SupabaseDesignTimeFactoryGeneratorTests
             .WithAnalyzers(GeneratorTestHost.EntityFrameworkAnalyzers())
             .Run(GeneratorTestHost.SupabaseGenerators());
 
-        byHand.AnalyzerDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00071");
+        byHand.AnalyzerDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00074");
     }
 
     [Fact]
     public void Without_the_toolkits_Entity_Framework_the_factory_leaves_the_history_where_Entity_Framework_keeps_it()
     {
         // A project that does not reference DDDToolkit.EntityFramework has a context the toolkit does not wire, as
-        // DDD00071 reads it: its history is where Entity Framework keeps it, in the host and in the factory alike.
+        // DDD00074 reads it: its history is where Entity Framework keeps it, in the host and in the factory alike.
         var result = GeneratorTestHost.Create(OrderingContext).WithAssemblyName("Shop.Ordering").WithSupabase().WithNpgsql()
             .Run(GeneratorTestHost.SupabaseGenerators());
 

@@ -1501,8 +1501,8 @@ generator writes into a file of its own, `DDDToolkit.RowAccessContributionsOfPac
 the application marks, unless the project leaves it out with `[assembly: LeaveOutRowAccessContribution]`; then
 the ones the project lists with `[assembly: UseRowAccessContribution(typeof(X))]`, each as `new X()`. A
 package's contribution whose data the application does not mark is [DDD00054](diagnostics.md#ddd00054), one
-whose marks cannot be used [DDD00072](diagnostics.md#ddd00072), one the project lists again
-[DDD00073](diagnostics.md#ddd00073), and a line that leaves nothing out [DDD00074](diagnostics.md#ddd00074).
+whose marks cannot be used [DDD00071](diagnostics.md#ddd00071), one the project lists again
+[DDD00072](diagnostics.md#ddd00072), and a line that leaves nothing out [DDD00073](diagnostics.md#ddd00073).
 An assembly that declares a module offers its contribution rather than writing it, and one the project does
 not list is [DDD00069](diagnostics.md#ddd00069).
 
@@ -1529,6 +1529,6 @@ that said more, a history table of its own or options for Npgsql, stays, unmarke
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
 - [Diagnostics](diagnostics.md#ddd00031) for the build error about a context or factory the build cannot make, and
   [DDD00054](diagnostics.md#ddd00054), [DDD00070](diagnostics.md#ddd00070),
-  [DDD00072](diagnostics.md#ddd00072), [DDD00073](diagnostics.md#ddd00073) and
-  [DDD00074](diagnostics.md#ddd00074) for a package's row access contribution, and
+  [DDD00071](diagnostics.md#ddd00071), [DDD00072](diagnostics.md#ddd00072) and
+  [DDD00073](diagnostics.md#ddd00073) for a package's row access contribution, and
   [DDD00069](diagnostics.md#ddd00069) for a module's.

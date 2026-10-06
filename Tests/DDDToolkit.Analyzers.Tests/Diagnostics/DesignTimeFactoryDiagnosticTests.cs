@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 namespace DDDToolkit.Analyzers.Tests.Diagnostics;
 
 /// <summary>
-/// DDD00071: a design-time factory whose context does not keep its migration history where the running application
+/// DDD00074: a design-time factory whose context does not keep its migration history where the running application
 /// does. <c>UseDDDToolkit</c> keeps it in the context's default schema; <c>dotnet ef</c> and the Supabase export make
 /// the context through the factory, which says the same with <c>UseDDDToolkitDesignTime()</c>. A factory that says
 /// nothing records the migrations where the application does not look, so the build says it at
@@ -80,14 +80,14 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldHaveExactlyDiagnostics("DDD00071");
-        var reported = result.ShouldHaveDiagnostic("DDD00071", at: "CreateDbContext");
+        result.ShouldHaveExactlyDiagnostics("DDD00074");
+        var reported = result.ShouldHaveDiagnostic("DDD00074", at: "CreateDbContext");
         reported.Severity.Should().Be(DiagnosticSeverity.Warning);
         reported.GetMessage().Should()
             .StartWith("'OrderingContextFactory' makes its 'OrderingContext' without UseDDDToolkitDesignTime()")
             .And.Contain("record the migrations in the provider's default schema, while a host that wires the context with UseDDDToolkit reads them in the context's own")
             .And.EndWith("Add .UseDDDToolkitDesignTime() to its options, after the provider.");
-        reported.Descriptor.HelpLinkUri.Should().EndWith("diagnostics#ddd00071");
+        reported.Descriptor.HelpLinkUri.Should().EndWith("diagnostics#ddd00074");
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00071");
+        result.ShouldNotHaveDiagnostic("DDD00074");
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00071");
+        result.ShouldNotHaveDiagnostic("DDD00074");
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00071");
+        result.ShouldNotHaveDiagnostic("DDD00074");
     }
 
     [Fact]
@@ -184,7 +184,7 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldHaveExactlyDiagnostics("DDD00071");
+        result.ShouldHaveExactlyDiagnostics("DDD00074");
     }
 
     [Fact]
@@ -206,8 +206,8 @@ public class DesignTimeFactoryDiagnosticTests
             """);
 
         result.ShouldCompile();
-        result.ShouldHaveExactlyDiagnostics("DDD00071");
-        result.ShouldHaveDiagnostic("DDD00071", at: "CreateDbContext").GetMessage().Should().StartWith("'OrderingContextFactory'");
+        result.ShouldHaveExactlyDiagnostics("DDD00074");
+        result.ShouldHaveDiagnostic("DDD00074", at: "CreateDbContext").GetMessage().Should().StartWith("'OrderingContextFactory'");
     }
 
     [Fact]
@@ -226,6 +226,6 @@ public class DesignTimeFactoryDiagnosticTests
             toolkit: false);
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00071");
+        result.ShouldNotHaveDiagnostic("DDD00074");
     }
 }

@@ -664,7 +664,7 @@ dotnet ef database update
 The one line to write is in the context's design-time factory, the one `dotnet ef` makes the context with: it
 calls `UseDDDToolkitDesignTime()` after its provider, so `dotnet ef` records the migrations in the history the
 running application reads. The build reports a factory without it
-([DDD00071](diagnostics.md#ddd00071)); [The migration history](#the-migration-history) says why. A context whose
+([DDD00074](diagnostics.md#ddd00074)); [The migration history](#the-migration-history) says why. A context whose
 migrations Supabase applies needs no factory written by hand at all: [The design-time factory](#the-design-time-factory)
 below.
 
@@ -716,7 +716,7 @@ the migration history and nothing else. Without it the factory's context keeps E
 `dotnet ef database update`, a migrations script, a migration bundle and the exported files record every
 migration in a table the running application does not read: its `Migrate()` then tries to apply the first
 migration again and fails on a table that is there. So the build reports a factory, in a project that references
-`DDDToolkit.EntityFramework`, that leaves the call out ([DDD00071](diagnostics.md#ddd00071)), and a code fix adds
+`DDDToolkit.EntityFramework`, that leaves the call out ([DDD00074](diagnostics.md#ddd00074)), and a code fix adds
 it. On Supabase the [start-up check](supabase.md#checking-at-start-up) also says so when it finds the migrations
 missing for that reason.
 
@@ -810,7 +810,7 @@ say, keeps that one. A factory of the context's project's own wins over the buil
 one where the context needs more at design time than Npgsql and the toolkit's call, provider options such as
 `MapEnum` or a history table of its own, since the build's has neither. The export and the start-up check make the
 context as `dotnet ef` does with the host as its startup project, so a factory of the host's own for a module's
-context is the one they use there too. DDD00071 holds a factory written by hand to `UseDDDToolkitDesignTime()`; the
+context is the one they use there too. DDD00074 holds a factory written by hand to `UseDDDToolkitDesignTime()`; the
 one the build writes calls it wherever the project references `DDDToolkit.EntityFramework`.
 
 <details>

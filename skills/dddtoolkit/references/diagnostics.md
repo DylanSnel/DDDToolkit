@@ -396,7 +396,7 @@ references it, but its class takes something the application marks nothing for, 
 migrations. Mark the static property or field the message names with the attribute it names, where the value is
 declared: the resource's rules `[MembershipRules<TMember>]` for Membership on Postgres, one per member class. Do
 not write a class that derives from the package's, and do not list anything with `UseRowAccessContribution`
-(that is DDD00073). If the application must not have the package's SQL, add
+(that is DDD00072). If the application must not have the package's SQL, add
 `[assembly: LeaveOutRowAccessContribution(typeof(X))]` to the project that runs the export instead of `<NoWarn>`.
 
 ## DDD00055
@@ -592,19 +592,6 @@ host runs with.
 
 ## DDD00071
 
-Warning, at `CreateDbContext` of an `IDesignTimeDbContextFactory<TContext>` in a project that references
-`DDDToolkit.EntityFramework`, whose class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
-`UseDDDToolkitCore` and `MigrationsHistoryTable`. `UseDDDToolkit` keeps the migration history in the context's
-default schema; without the call `dotnet ef` and the Supabase export record it in `public` or `dbo`, where the
-application never reads it. Add `.UseDDDToolkitDesignTime()` after the provider:
-`new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`; the
-code fix does exactly that. Where a helper of another class makes the options, add the call after the helper. Only
-for a context the host does not wire with the toolkit, name the history in both the factory's and the host's
-options instead, `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Never answer it by writing
-`MigrationsHistoryTable(..., schema)` in the factory alone.
-
-## DDD00072
-
 Error, in the project that turns the Supabase export on, at the marked member where it is in that project. A
 package's row access contribution cannot be made from what the application marks. Two members marked with an
 attribute the package takes once (two `[TenancyCatalogue]`, or two `[MembershipRules<T>]` for one member class):
@@ -616,7 +603,7 @@ seen here at all; that project reports it, DDD00070.) A message
 that ends "That is the package's to fix" is about the package's own class; report it, or leave the package out
 with `[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
 
-## DDD00073
+## DDD00072
 
 Error, on an `[assembly: UseRowAccessContribution(typeof(X))]` line, or about a class another project declares
 with `[assembly: RowAccessContribution]`. `X` is a package's contribution, a class derived from it, or its closing
@@ -627,7 +614,7 @@ and mark what the class handed over instead: `[TenancyCatalogue]` on the applica
 when the application writes the package's SQL with its own class on purpose, keep the line and add
 `[assembly: LeaveOutRowAccessContribution(typeof(PackageContribution))]`.
 
-## DDD00074
+## DDD00073
 
 Warning, at an `[assembly: LeaveOutRowAccessContribution(...)]` line in the project that turns the Supabase export
 on. The line leaves nothing out. Its `Context` is no class derived from `DbContext` (or an open generic one): name
@@ -635,6 +622,20 @@ the context whose access file the package's SQL is kept out of. Its type is no c
 declares, or a closing the application marks nothing for: take the line out. Its type is a module's own
 contribution: take that module's `[assembly: UseRowAccessContribution]` line out instead, which is the only thing
 that writes it.
+
+## DDD00074
+
+Warning, at `CreateDbContext` of an `IDesignTimeDbContextFactory<TContext>` in a project that references
+`DDDToolkit.EntityFramework`, whose class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
+`UseDDDToolkitCore` and `MigrationsHistoryTable`. `UseDDDToolkit` keeps the migration history in the context's
+default schema; without the call `dotnet ef` and the Supabase export record it in `public` or `dbo`, where the
+application never reads it. Add `.UseDDDToolkitDesignTime()` after the provider:
+`new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`; the
+code fix does exactly that. Where a helper of another class makes the options, add the call after the helper. Only
+for a context the host does not wire with the toolkit, name the history in both the factory's and the host's
+options instead, `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Never answer it by writing
+`MigrationsHistoryTable(..., schema)` in the factory alone. A context marked `[SupabaseMigrations]` needs no factory
+written by hand: the build writes one beside it that makes the call, so delete a hand-written one that adds nothing.
 
 ## Not a diagnostic: the owned type must carry the key part
 

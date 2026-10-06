@@ -11,7 +11,7 @@ namespace DDDToolkit.EntityFramework.Analyzers;
 
 /// <summary>
 /// Reports a design-time factory whose context does not keep its migration history where the running application
-/// does: DDD00071, at <c>CreateDbContext</c> of an <c>IDesignTimeDbContextFactory&lt;TContext&gt;</c> whose class calls
+/// does: DDD00074, at <c>CreateDbContext</c> of an <c>IDesignTimeDbContextFactory&lt;TContext&gt;</c> whose class calls
 /// none of <c>UseDDDToolkitDesignTime</c>, <c>UseDDDToolkit</c>, <c>UseDDDToolkitCore</c> and
 /// <c>MigrationsHistoryTable</c>.
 /// <para>

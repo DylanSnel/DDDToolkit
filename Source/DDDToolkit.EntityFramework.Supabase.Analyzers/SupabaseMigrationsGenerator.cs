@@ -52,8 +52,8 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// project lists with <c>[assembly: UseRowAccessContribution(typeof(X))]</c>, as <c>new X()</c>. An assembly that
 /// declares a module and <c>[assembly: RowAccessContribution]</c> offers its own SQL rather than writing it: one the
 /// project does not list is DDD00069. A package's contribution that misses what it cannot do without is DDD00054,
-/// one whose marks cannot be used DDD00072, one the project lists again, itself or a class derived from it,
-/// DDD00073, and a line that leaves nothing out DDD00074.
+/// one whose marks cannot be used DDD00071, one the project lists again, itself or a class derived from it,
+/// DDD00072, and a line that leaves nothing out DDD00073.
 /// </para>
 /// <para>
 /// A marked context or factory whose assembly and whose context's assembly both declare no <c>[assembly: Module]</c>

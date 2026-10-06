@@ -22,7 +22,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// A generic contribution is left out with its open type, every closing of it, or with one closing,
 /// <c>typeof(MembershipRowAccessContribution&lt;DocumentShare&gt;)</c>, that one alone. A line that leaves nothing
 /// out, because no referenced package declares what it names, nothing the application marks makes that closing,
-/// or its <see cref="Context"/> is no class derived from <c>DbContext</c>, is a warning (DDD00074), and nothing is
+/// or its <see cref="Context"/> is no class derived from <c>DbContext</c>, is a warning (DDD00073), and nothing is
 /// left out for it.
 /// </para>
 /// </summary>

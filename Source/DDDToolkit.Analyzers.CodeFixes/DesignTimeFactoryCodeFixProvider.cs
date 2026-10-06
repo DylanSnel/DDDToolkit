@@ -14,7 +14,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 namespace DDDToolkit.Analyzers.CodeFixes;
 
 /// <summary>
-/// Fixes DDD00071: a design-time factory whose context does not keep its migration history where the application
+/// Fixes DDD00074: a design-time factory whose context does not keep its migration history where the application
 /// does. The fix adds <c>UseDDDToolkitDesignTime()</c> to the options the factory hands its context, in front of the
 /// <c>Options</c> it reads from them, and the <c>using</c> it needs:
 /// <code>
@@ -32,7 +32,7 @@ namespace DDDToolkit.Analyzers.CodeFixes;
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(DesignTimeFactoryCodeFixProvider))]
 public sealed class DesignTimeFactoryCodeFixProvider : CodeFixProvider
 {
-    private const string FactoryWithoutTheToolkit = "DDD00071";
+    private const string FactoryWithoutTheToolkit = "DDD00074";
 
     private const string OptionsBuilder = "Microsoft.EntityFrameworkCore.DbContextOptionsBuilder";
 

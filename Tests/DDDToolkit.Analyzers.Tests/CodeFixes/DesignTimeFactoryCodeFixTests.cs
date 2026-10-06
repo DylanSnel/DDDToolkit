@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace DDDToolkit.Analyzers.Tests.CodeFixes;
 
 /// <summary>
-/// The code fix for DDD00071: a design-time factory whose context does not keep its migration history where the
+/// The code fix for DDD00074: a design-time factory whose context does not keep its migration history where the
 /// application does gets <c>UseDDDToolkitDesignTime()</c> in front of the <c>Options</c> it reads from its builder, and
 /// the <c>using</c> the call needs. Every test applies the fix through a workspace the way an IDE does and runs the
 /// analyzer again over the result: a fix is only right when the warning is gone and the code still compiles.
@@ -126,7 +126,7 @@ public class DesignTimeFactoryCodeFixTests
         var fixedText = (await solution.GetDocument(document.Id)!.GetTextAsync()).ToString().Replace("\r\n", "\n");
 
         var rerun = Host(fixedText, globalUsing).RunCore();
-        rerun.ShouldNotHaveDiagnostic("DDD00071");
+        rerun.ShouldNotHaveDiagnostic("DDD00074");
         rerun.ShouldCompile();
 
         return fixedText;
@@ -155,7 +155,7 @@ public class DesignTimeFactoryCodeFixTests
 
     private const string Usings = "global using DDDToolkit.EntityFramework;";
 
-    /// <summary>Runs the analyzer and opens the source as a workspace document, with DDD00071 anchored in that document.</summary>
+    /// <summary>Runs the analyzer and opens the source as a workspace document, with DDD00074 anchored in that document.</summary>
     private static async Task<(Document Document, ImmutableArray<Diagnostic> Diagnostics)> Open(string code, bool globalUsing)
     {
         var text = (DesignTimeFactoryDiagnosticTests.Ordering + code).Replace("\r\n", "\n");
@@ -182,13 +182,13 @@ public class DesignTimeFactoryCodeFixTests
         var tree = (await document.GetSyntaxTreeAsync())!;
 
         var diagnostics = outcome.AnalyzerDiagnostics
-            .Where(diagnostic => diagnostic.Id == "DDD00071")
+            .Where(diagnostic => diagnostic.Id == "DDD00074")
             .Where(diagnostic => diagnostic.Location.SourceTree?.FilePath == "Source.cs")
             .OrderBy(diagnostic => diagnostic.Location.SourceSpan.Start)
             .Select(diagnostic => Diagnostic.Create(diagnostic.Descriptor, Location.Create(tree, diagnostic.Location.SourceSpan), diagnostic.Properties))
             .ToImmutableArray();
 
-        diagnostics.Should().NotBeEmpty("the source should report DDD00071");
+        diagnostics.Should().NotBeEmpty("the source should report DDD00074");
         return (document, diagnostics);
     }
 }

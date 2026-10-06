@@ -41,7 +41,7 @@ namespace DDDToolkit.EntityFramework.Supabase.Analyzers;
 /// Where no factory can be written and the project has none of its own, the context is made by nothing and its
 /// migrations would not be exported: DDD00031, at the context, with the reason. A context the toolkit does not wire,
 /// in a project that does not reference DDDToolkit.EntityFramework, gets the factory without
-/// <c>UseDDDToolkitDesignTime()</c>, and keeps its history where Entity Framework keeps it, as DDD00071 lets a factory
+/// <c>UseDDDToolkitDesignTime()</c>, and keeps its history where Entity Framework keeps it, as DDD00074 lets a factory
 /// written by hand do there.
 /// </para>
 /// </summary>

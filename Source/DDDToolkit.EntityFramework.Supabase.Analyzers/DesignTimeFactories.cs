@@ -154,7 +154,7 @@ internal static class DesignTimeFactories
     /// <summary>
     /// Whether the factory the build writes calls <c>UseDDDToolkitDesignTime()</c>: where the project references
     /// DDDToolkit.EntityFramework at a version that has it, which is where a host wires the context with
-    /// <c>UseDDDToolkit</c> and DDD00071 holds a factory written by hand to the same call. Elsewhere the toolkit does not
+    /// <c>UseDDDToolkit</c> and DDD00074 holds a factory written by hand to the same call. Elsewhere the toolkit does not
     /// wire the context, and the history stays where Entity Framework keeps it, in the factory as in the host.
     /// </summary>
     public static bool CallsTheToolkit(Compilation compilation)

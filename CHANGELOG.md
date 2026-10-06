@@ -387,13 +387,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`. It
   adds no interceptor, and nothing options already have. See
   [The migration history](docs/entity-framework.md#the-migration-history).
-- **DDD00071, a warning, reports a design-time factory that leaves the call out**, at its `CreateDbContext`, in a
+- **DDD00074, a warning, reports a design-time factory that leaves the call out**, at its `CreateDbContext`, in a
   project that references `DDDToolkit.EntityFramework`: one whose class calls none of `UseDDDToolkitDesignTime`,
   `UseDDDToolkit`, `UseDDDToolkitCore` and `MigrationsHistoryTable`. Such a factory's `dotnet ef database update`,
   scripts, bundles and exported files record the migrations in the provider's default schema, where the running
   application does not look, and on a host that applies its own migrations nothing else would say so before the
   first migration failed on a table that is there. A code fix adds `.UseDDDToolkitDesignTime()` in front of the
-  options' `.Options`. See [DDD00071](docs/diagnostics.md#ddd00071).
+  options' `.Options`. See [DDD00074](docs/diagnostics.md#ddd00074).
 - **`UseDDDToolkitCore`: the toolkit's own interceptors, and nothing a package brings**, which is what
   `UseDDDToolkit` added up to 3.1. It is for a context that should do without a part the host registered, one on
   Postgres that runs as the role the application logged in as while the others run as their caller, say, and
@@ -696,9 +696,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[assembly: UseRowAccessContribution(typeof(X))]` in that project; an assembly that declares a module offers
   its contribution with `[assembly: RowAccessContribution]` rather than writing it, so a module's SQL is written
   only where it is listed, and DDD00069, a warning, reports one the project does not list. DDD00054, a warning,
-  reports a package's contribution whose data the application does not mark, DDD00072 a marked member it cannot
-  use or two marked where it takes one, DDD00073 a package's contribution the project lists again, or a class
-  derived from it, and DDD00074, a warning, a line to leave out that names no contribution a package writes or a
+  reports a package's contribution whose data the application does not mark, DDD00071 a marked member it cannot
+  use or two marked where it takes one, DDD00072 a package's contribution the project lists again, or a class
+  derived from it, and DDD00073, a warning, a line to leave out that names no contribution a package writes or a
   `Context` that is no context. A package puts `[ApplicationMark]` on each of its marks, as Tenancy's and
   Membership's have it, and a library that marks a member it does not make public, which the exporting project
   would not see, is DDD00070 where the member is declared.
@@ -811,7 +811,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   context as `dotnet ef` does with the host as its startup project: with a factory of the host's own for the
   context where it has one, and with the one beside the context otherwise. The factory calls
   `UseDDDToolkitDesignTime()` where the project references `DDDToolkit.EntityFramework`, and leaves the history where
-  Entity Framework keeps it in a project that does not, as DDD00071 does. A factory of the project's own for the
+  Entity Framework keeps it in a project that does not, as DDD00074 does. A factory of the project's own for the
   context wins, whatever else it makes: the build writes none and says nothing; for an export or a check in another
   project it is public, with a public parameterless constructor. Write one for a context that needs more at design
   time than Npgsql and the toolkit, `MapEnum` or a history table of its own; the start-up check's advice for a
@@ -2437,7 +2437,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     written from `new ApplicationCatalogue()`, as a host that leaves `TenancyOptions.Catalogue` unset runs with.
   - `public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules)`
     and its line: mark the rules `[MembershipRules<DocumentShare>]`, once for each kind of resource.
-  - A class and a line that are still there are DDD00073, an error, since the SQL would be written twice. A
+  - A class and a line that are still there are DDD00072, an error, since the SQL would be written twice. A
     module that offers a contribution of its own with `[assembly: RowAccessContribution]` still offers it: its
     assembly declares a module, so its SQL is the application's and is written where the project that runs the
     export lists it, as before, and DDD00069 (where DDD00054 was) reports one that project does not list.

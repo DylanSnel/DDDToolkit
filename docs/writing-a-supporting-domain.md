@@ -340,7 +340,7 @@ public static class ShopPlans
 
 The class the package declares is public and not abstract, implements `IRowAccessContribution`, and has one
 public constructor whose every parameter says where it comes from, or none that takes anything: a class the
-build cannot make is [DDD00072](diagnostics.md#ddd00072) in every application that references the package,
+build cannot make is [DDD00071](diagnostics.md#ddd00071) in every application that references the package,
 naming the package. Put the marker attributes where the application declares the values, the package's domain
 project rather than its Postgres one, so the project that declares them needs no reference to Postgres; the
 build searches the exporting project and every project it references that references the attribute's assembly,

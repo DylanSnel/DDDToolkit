@@ -11,7 +11,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// packages it references write by themselves (<see cref="RowAccessContributionAttribute"/>). A module that offers
 /// its own with that attribute is written only where it is listed here, and the build warns until it is
 /// (DDD00069). A package's contribution, a class derived from it or its closing over a type of the application's
-/// is not listed again: the package writes it already, and listed it would be written twice (DDD00073). To write a
+/// is not listed again: the package writes it already, and listed it would be written twice (DDD00072). To write a
 /// package's SQL with a class of your own, leave the package's out with
 /// <see cref="LeaveOutRowAccessContributionAttribute"/> and list yours.
 /// </para>

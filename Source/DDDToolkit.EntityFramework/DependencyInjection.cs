@@ -272,7 +272,7 @@ public static class DependencyInjection
     /// Without it the factory's context keeps the history in the provider's default schema, <c>public</c> on Postgres,
     /// while the running one, wired with <see cref="UseDDDToolkit"/>, keeps it in the model's: <c>dotnet ef database
     /// update</c> and the exported files would record every migration where the application does not look, which the
-    /// build reports as DDD00071 at the factory's <c>CreateDbContext</c>. A host's
+    /// build reports as DDD00074 at the factory's <c>CreateDbContext</c>. A host's
     /// options may call it too, and it adds nothing they already have, so options shared by the host and the factory
     /// are written once. It adds no interceptor: a design-time context saves nothing.
     /// </para>
