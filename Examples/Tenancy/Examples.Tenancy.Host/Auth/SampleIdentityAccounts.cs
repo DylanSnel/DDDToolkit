@@ -46,8 +46,10 @@ public static class SampleIdentityAccounts
 
         if (configuration[DemoAuthUsers.SecretKeySetting] is { Length: > 0 } secretKey)
         {
-            // The key stays with the admin client: it is in no log and no exception.
-            services.AddSupabaseAuthAdmin(SampleAuthentication.AuthUrlOf(configuration), secretKey);
+            // The project as the bearer is given it, read from the same settings, so the admin client reaches
+            // Auth where the bearer fetches its keys. The key stays with the admin client: it is in no log and
+            // no exception.
+            services.AddSupabaseAuthAdmin(SampleAuthentication.ProjectOf(configuration), secretKey);
         }
         else if (DevLoginGuard.Check(configuration, environment))
         {

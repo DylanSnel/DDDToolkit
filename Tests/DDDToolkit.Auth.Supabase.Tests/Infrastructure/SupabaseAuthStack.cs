@@ -313,11 +313,17 @@ public sealed class SupabaseAuthServer
     /// <summary>What it mailed.</summary>
     public MailCatcher Mail { get; }
 
+    /// <summary>
+    /// The project as a host beside this server describes it: the URL its tokens name, and this server as where
+    /// its Auth answers, since no gateway serves it under that URL.
+    /// </summary>
+    public SupabaseAuthOptions Project => new() { ProjectUrl = SupabaseAuthStack.ProjectUrl, AuthUrl = Url.ToString() };
+
     /// <summary>An admin client for this server, the caller's to dispose. The service role's token stands in for a project's secret key.</summary>
-    public SupabaseAuthAdmin Admin() => new(Url.ToString(), _serviceRoleKey);
+    public SupabaseAuthAdmin Admin() => new(Project, _serviceRoleKey);
 
     /// <summary>An admin client that sends through <paramref name="handler"/>, for a test that has something happen between two of its calls.</summary>
-    public SupabaseAuthAdmin Admin(HttpMessageHandler handler) => new(Url.ToString(), _serviceRoleKey, handler);
+    public SupabaseAuthAdmin Admin(HttpMessageHandler handler) => new(Project, _serviceRoleKey, handler);
 
     /// <summary>The identity port over <paramref name="admin"/>, which is all application code sees.</summary>
     public static IIdentityAccounts Accounts(SupabaseAuthAdmin admin) => new SupabaseIdentityAccounts(admin);

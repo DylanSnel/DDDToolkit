@@ -110,8 +110,9 @@ public static class SupabaseAuthentication
     /// <param name="authenticationScheme">The scheme's name.</param>
     /// <param name="supabase">
     /// The project: its URL, its JWT secret where tokens are signed with it, where its Auth answers when
-    /// that is elsewhere, and whether that may be in plain http on a network of the host's own. Read now; a
-    /// later change to it changes nothing.
+    /// that is elsewhere, and whether that may be in plain http on a network of the host's own. The admin
+    /// client, <c>services.AddSupabaseAuthAdmin(supabase, secretKey)</c>, takes the same object, so a host
+    /// describes its project once. Read now; a later change to it changes nothing.
     /// </param>
     /// <param name="configure">Anything else about the scheme.</param>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> or <paramref name="supabase"/> is null.</exception>

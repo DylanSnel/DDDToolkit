@@ -469,12 +469,11 @@ builder.Services.AddAuthentication().AddSupabaseJwtBearer(new SupabaseAuthOption
 {
     ProjectUrl = builder.Configuration["Supabase:Url"]!,       // the issuer is {ProjectUrl}/auth/v1
     JwtSecret = builder.Configuration["Supabase:JwtSecret"],   // unset: published keys only
-    AuthUrl = builder.Configuration["Supabase:AuthUrl"],       // unset: Auth answers at {ProjectUrl}/auth/v1
 });
 ```
 
-`AddSupabaseJwtBearer(url, jwt => jwt.UseSupabaseJwtSecret(secret))` is the same without an Auth URL, and
-`AddSupabaseAuth(url, options => ...)` takes the same settings for a function or a worker.
+`AddSupabaseJwtBearer(url, jwt => jwt.UseSupabaseJwtSecret(secret))` is the same, and
+`AddSupabaseAuth(...)` takes the same settings for a function or a worker.
 
 </details>
 
@@ -499,18 +498,71 @@ handing its secret to another service.
   a stream of requests to Auth. A key Auth stopped publishing is refused from the next fetch on.
 - **Nothing is fetched for a token signed with the secret.** A host with no Auth server in reach takes
   those all the same.
-- **`AuthUrl` is for an Auth server that answers elsewhere than `{ProjectUrl}/auth/v1`**: one with no
-  gateway in front of it, or one reached inside a network under another name than its tokens carry. The
-  keys are fetched there, and the issuer a token has to name stays the project's.
 - **The keys are fetched over https.** Whoever answers for the keys decides who is signed in, so they do
   not travel unencrypted without anybody having said so. Plain http is taken for an Auth server on the same
   machine, `localhost` or a loopback address, which is what a local stack is. Any other address in plain
   http is refused when the host starts; for an Auth server on a private network of your own, set
-  `AllowPlainHttp = true` on the `SupabaseAuthOptions`. It is the rule the
-  [admin client](#users-before-their-first-sign-in) has for the secret key.
+  `AllowPlainHttp = true` on the `SupabaseAuthOptions`, as [Where Auth answers](#where-auth-answers) shows.
 - **No token waits on Auth without end.** A request for the keys ends with the timeout of the client that
   fetches them, the scheme's `BackchannelTimeout` in ASP.NET Core, and a token that waits behind another
   token's fetch stops waiting after as long. Either is refused.
+
+### Where Auth answers
+
+Every Supabase registration takes the project by the URL its tokens name, and reaches Auth where a project's
+gateway serves it, at `{ProjectUrl}/auth/v1`: the bearer and `AddSupabaseAuth` fetch the published keys there,
+and the [admin client](#users-before-their-first-sign-in) sends its calls there. A host with more to say about
+the project than its URL says it once, in a `SupabaseAuthOptions`, and hands that one object to each of them.
+
+```mermaid
+flowchart LR
+    Options[One SupabaseAuthOptions] --> Bearer[AddSupabaseJwtBearer]
+    Options --> Validator[AddSupabaseAuth]
+    Options --> Admin[AddSupabaseAuthAdmin]
+    Bearer -->|published keys| Set{AuthUrl set?}
+    Validator -->|published keys| Set
+    Admin -->|admin calls| Set
+    Set -->|no| Gateway[("{ProjectUrl}/auth/v1, behind the project's gateway")]
+    Set -->|yes| Bare[("AuthUrl, as it is written")]
+```
+
+- **The project's URL is all a project needs**, hosted or the stack the Supabase CLI starts: its gateway
+  serves Auth under it. A URL that already ends in `/auth/v1` is taken as it is, by every registration alike.
+- **`AuthUrl` is for an Auth server that answers elsewhere**, and is taken as it is written, with nothing
+  added. For an Auth server with no gateway in front of it, that is the server's own root, such as
+  `http://auth:9999`. For a project's gateway reached inside a network under another name than its tokens
+  carry, as a stack in containers is, it is that name with its `/auth/v1`, such as `http://kong:8000/auth/v1`:
+  the gateway's address alone reaches no Auth. The keys are fetched there and the admin client calls there;
+  the issuer a token has to name stays `{ProjectUrl}/auth/v1`.
+- **`AllowPlainHttp` says that the network to Auth is your own.** Auth is reached over https, or in plain
+  http on the same machine. Any other address in plain http is refused when the host starts, because both
+  the keys a token is checked with and the secret key the admin client sends would travel unencrypted. One
+  setting covers both, since it is one address.
+- **Each registration reads the object when it is called.** A later change reaches none of them, so a host
+  fills it in from its configuration before it hands it on, and describes the project in one place.
+
+<details>
+<summary>Show the code: one description of the project, for every registration</summary>
+
+```csharp
+var supabase = new SupabaseAuthOptions
+{
+    ProjectUrl = builder.Configuration["Supabase:Url"]!,       // the issuer is {ProjectUrl}/auth/v1
+    JwtSecret = builder.Configuration["Supabase:JwtSecret"],   // unset: published keys only
+    AuthUrl = builder.Configuration["Supabase:AuthUrl"],       // unset: Auth answers at {ProjectUrl}/auth/v1
+};
+
+builder.Services.AddAuthentication().AddSupabaseJwtBearer(supabase);
+builder.Services.AddSupabaseAuthAdmin(supabase, builder.Configuration["Supabase:SecretKey"]!);
+```
+
+A function or a worker registers the validator with the same object, `AddSupabaseAuth(supabase)`. The admin
+client checks no token, so it passes the JWT secret by. `Examples/Tenancy` describes its project in one place,
+`SampleAuthentication.ProjectOf` in `Host/Auth/SampleAuthentication.cs`, which reads it from the configuration
+for every registration there, and its AppHost sets `Supabase:AuthUrl`, because it starts Auth with no gateway
+in front of it.
+
+</details>
 
 ### Through the transaction pooler
 
@@ -942,9 +994,14 @@ Auth that does those few things. It is for server code only: every call sends th
 
 ```csharp
 builder.Services.AddSupabaseAuthAdmin(
-    SupabaseTokens.IssuerOf("https://<ref>.supabase.co"),   // the Auth URL, https://<ref>.supabase.co/auth/v1
-    builder.Configuration["Supabase:SecretKey"]!);          // sb_secret_..., from the host's secret store
+    "https://<ref>.supabase.co",                       // the project's URL, as the bearer is given it
+    builder.Configuration["Supabase:SecretKey"]!);     // sb_secret_..., from the host's secret store
 ```
+
+It takes the project as the bearer does, and calls Auth where the bearer finds the project's keys,
+`https://<ref>.supabase.co/auth/v1`. A host whose Auth answers elsewhere hands it the `SupabaseAuthOptions`
+it hands the bearer, `AddSupabaseAuthAdmin(supabase, secretKey)`, as [Where Auth answers](#where-auth-answers)
+shows.
 
 | Call | What Auth does | The answer |
 |---|---|---|
@@ -966,11 +1023,12 @@ is retried, because an invitation sent twice is two mails; that is also why the 
 either. A refusal is a `SupabaseAuthAdminException` with the HTTP status and Auth's error code, such as
 `over_email_send_rate_limit`, and none of Auth's own text, which can quote the address. The address travels
 in the request's body and the key in its headers, never in the URL, which is what request logs and traces
-keep. The client follows no redirect, so the key goes to the Auth URL and nowhere else; a handler of your
-own that you pass, for a proxy say, is refused while it follows redirects (`AllowAutoRedirect = false`).
-The Auth URL is https. Plain http is taken for an Auth server on the same machine, `localhost` or a
+keep. The client follows no redirect, so the key goes to Auth's address and nowhere else; a handler of
+your own that you pass, for a proxy say, is refused while it follows redirects (`AllowAutoRedirect = false`).
+Auth's address is https. Plain http is taken for an Auth server on the same machine, `localhost` or a
 loopback address; for one on a private network of your own, where the key would otherwise travel
-unencrypted without anybody having said so, pass `allowPlainHttp: true`.
+unencrypted without anybody having said so, set `AllowPlainHttp` on the `SupabaseAuthOptions`, the setting
+the bearer fetches the keys by.
 
 > [!IMPORTANT]
 > `AlreadyRegistered` is for your server code, not for the person who asked for the invitation. Tell them

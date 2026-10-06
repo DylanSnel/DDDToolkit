@@ -1,3 +1,4 @@
+using DDDToolkit.Auth.Supabase;
 using DDDToolkit.Auth.Supabase.AspNetCore;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.EntityFramework.Supabase;
@@ -62,12 +63,10 @@ var database = supabase is not null ? ModuleDatabase.Supabase(supabase) : Module
 var signedIn = supabase is not null && builder.Configuration["Supabase:Url"] is { Length: > 0 };
 if (signedIn)
 {
-    builder.Services.AddAuthentication().AddSupabaseJwtBearer(builder.Configuration["Supabase:Url"]!, jwt =>
+    builder.Services.AddAuthentication().AddSupabaseJwtBearer(new SupabaseAuthOptions
     {
-        if (builder.Configuration["Supabase:JwtSecret"] is { Length: > 0 } secret)
-        {
-            jwt.UseSupabaseJwtSecret(secret);
-        }
+        ProjectUrl = builder.Configuration["Supabase:Url"]!,
+        JwtSecret = builder.Configuration["Supabase:JwtSecret"],   // unset: published keys only
     });
 
     // Every module's context is wired with UseDDDToolkit, which brings this to each context on Postgres: nothing

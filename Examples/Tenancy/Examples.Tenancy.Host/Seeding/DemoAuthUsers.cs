@@ -88,7 +88,7 @@ public sealed class DemoAuthUsers(SupabaseAuthAdmin auth, string password, ILogg
                 + string.Join("; ", problems) + ". Turn the setting off, or run it on a developer's machine with the three settings in user-secrets.");
         }
 
-        services.AddSupabaseAuthAdmin(SampleAuthentication.AuthUrlOf(configuration), secretKey!);
+        services.AddSupabaseAuthAdmin(SampleAuthentication.ProjectOf(configuration), secretKey!);
         services.AddHostedService(provider => new DemoAuthUsers(
             provider.GetRequiredService<SupabaseAuthAdmin>(),
             password!,

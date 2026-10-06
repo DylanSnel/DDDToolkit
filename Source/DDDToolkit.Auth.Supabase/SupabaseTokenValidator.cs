@@ -6,10 +6,23 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace DDDToolkit.Auth.Supabase;
 
-/// <summary>How to reach a project's Supabase Auth.</summary>
+/// <summary>
+/// How to reach a project's Supabase Auth: one description of the project that the bearer scheme
+/// (<c>AddSupabaseJwtBearer</c>), the token validator (<c>AddSupabaseAuth</c>) and the admin client
+/// (<c>AddSupabaseAuthAdmin</c>) all take, so a host with more to say than the project's URL says it once
+/// and hands the same object to each.
+/// </summary>
+/// <remarks>
+/// Each of them reads it when it is called, and a later change to it changes nothing. What one of them has
+/// no use for it passes by: the admin client checks no token, so it reads where Auth answers and not
+/// <see cref="JwtSecret"/>.
+/// </remarks>
 public sealed class SupabaseAuthOptions
 {
-    /// <summary>The project's URL, <c>https://&lt;ref&gt;.supabase.co</c>, or the local stack's, <c>http://127.0.0.1:54321</c>.</summary>
+    /// <summary>
+    /// The project's URL, <c>https://&lt;ref&gt;.supabase.co</c>, or the local stack's, <c>http://127.0.0.1:54321</c>.
+    /// Its tokens name <c>{ProjectUrl}/auth/v1</c> as their issuer, and that is where its gateway serves Auth.
+    /// </summary>
     public string ProjectUrl { get; set; } = "";
 
     /// <summary>
@@ -23,21 +36,29 @@ public sealed class SupabaseAuthOptions
 
     /// <summary>
     /// Where Supabase Auth answers, when that is not <c>{ProjectUrl}/auth/v1</c>: an Auth server with no
-    /// gateway in front of it, or one reached inside a network under another name than the one its tokens
-    /// carry. The keys Auth publishes are fetched from there. The issuer a token has to name stays the one of
-    /// <see cref="ProjectUrl"/>.
+    /// gateway in front of it, which answers at its own root, or a project's gateway reached inside a network
+    /// under another name than the one its tokens carry, which serves Auth under that name's <c>/auth/v1</c>,
+    /// such as <c>http://kong:8000/auth/v1</c>. It is taken as it is written, with nothing added, so a
+    /// gateway's address without its <c>/auth/v1</c> reaches no Auth. The keys Auth publishes are fetched from
+    /// there, and <see cref="SupabaseAuthAdmin"/> sends its calls there. The issuer a token has to name stays the one of
+    /// <see cref="ProjectUrl"/>. Leave it unset for a project, hosted or the stack the Supabase CLI starts:
+    /// its gateway serves Auth at <c>{ProjectUrl}/auth/v1</c>.
     /// </summary>
     public string? AuthUrl { get; set; }
 
     /// <summary>
-    /// Whether the keys Auth publishes are fetched over plain http from a server that is not on this machine:
-    /// for an Auth server on a private network of the host's own. Off: Auth is asked over https, or over
-    /// plain http on <c>localhost</c> or a loopback address, where nothing travels, and any other address in
-    /// plain http is refused when the host starts. A token signed with a published key is checked with
-    /// whatever key that address answers with, so over plain http whoever is in between could sign in as
-    /// anybody; turning this on says that the network in between is the host's own.
+    /// Whether Auth is reached over plain http on a server that is not on this machine: for an Auth server on
+    /// a private network of the host's own. Off: Auth is reached over https, or over plain http on
+    /// <c>localhost</c> or a loopback address, where nothing travels, and any other address in plain http is
+    /// refused when the host starts. Two things would travel unencrypted: the keys Auth publishes, which a
+    /// token signed with a published key is checked with, so whoever is in between could sign in as anybody;
+    /// and the secret key, which every call of <see cref="SupabaseAuthAdmin"/> sends. Turning this on says
+    /// that the network in between is the host's own.
     /// </summary>
     public bool AllowPlainHttp { get; set; }
+
+    /// <summary>A copy, for a registration that keeps what it was given: the host's later changes reach nothing.</summary>
+    internal SupabaseAuthOptions Copy() => (SupabaseAuthOptions)MemberwiseClone();
 }
 
 /// <summary>

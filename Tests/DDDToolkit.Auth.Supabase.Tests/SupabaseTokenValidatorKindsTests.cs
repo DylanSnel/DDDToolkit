@@ -107,4 +107,18 @@ public sealed class SupabaseTokenValidatorKindsTests
 
         SupabaseTokens.KeysAddressOf("http://auth.example.test:9999", allowPlainHttp: true).Should().Be("http://auth.example.test:9999/.well-known/jwks.json");
     }
+
+    [Fact]
+    public void The_validator_takes_the_project_as_the_bearer_and_the_admin_client_take_it()
+    {
+        var register = (SupabaseAuthOptions project) => () => new ServiceCollection().AddSupabaseAuth(project);
+
+        register(new SupabaseAuthOptions { ProjectUrl = AccessTokens.ProjectUrl, AuthUrl = "auth.example.test" })
+            .Should().Throw<ArgumentException>().WithParameterName("authUrl");
+        register(new SupabaseAuthOptions { ProjectUrl = AccessTokens.ProjectUrl, AuthUrl = "http://auth.example.test:9999" })
+            .Should().Throw<ArgumentException>().WithMessage("*unencrypted*AllowPlainHttp*");
+        register(new SupabaseAuthOptions { ProjectUrl = AccessTokens.ProjectUrl, AuthUrl = "http://auth.example.test:9999", AllowPlainHttp = true })
+            .Should().NotThrow();
+        register(null!).Should().Throw<ArgumentNullException>().WithParameterName("supabase");
+    }
 }

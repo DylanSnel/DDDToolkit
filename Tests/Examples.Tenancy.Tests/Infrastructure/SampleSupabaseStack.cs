@@ -530,8 +530,14 @@ public sealed record SupabaseDatabase(string Name, string AsMigrationRole)
 /// <param name="Mail">What it mailed.</param>
 public sealed record SupabaseAuthServer(Uri Url, string ServiceRoleKey, MailCatcher Mail)
 {
+    /// <summary>
+    /// The project as the sample's host is told it: the URL its tokens name, and this server as where its Auth
+    /// answers (<c>Supabase:AuthUrl</c>), since no gateway serves it under that URL.
+    /// </summary>
+    public SupabaseAuthOptions Project => new() { ProjectUrl = SampleSupabaseStack.ProjectUrl, AuthUrl = Url.ToString() };
+
     /// <summary>An admin client for this server, the caller's to dispose.</summary>
-    public SupabaseAuthAdmin Admin() => new(Url.ToString(), ServiceRoleKey);
+    public SupabaseAuthAdmin Admin() => new(Project, ServiceRoleKey);
 
     /// <summary>
     /// The person opens the link of <paramref name="mail"/>, which proves the address is theirs. Answers the

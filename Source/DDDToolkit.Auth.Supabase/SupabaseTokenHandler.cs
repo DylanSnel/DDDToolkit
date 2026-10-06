@@ -41,8 +41,8 @@ namespace DDDToolkit.Auth.Supabase;
 /// <b>Whoever answers for the keys decides who is signed in.</b> So they are fetched over https. Plain http
 /// is taken for an Auth server on this machine, <c>localhost</c> or a loopback address, where nothing
 /// travels; for one on a private network of the host's own the host says so, with <c>allowPlainHttp</c>, as
-/// it does for <see cref="SupabaseAuthAdmin"/>. Any other address in plain http is refused when the handler
-/// is made.
+/// <see cref="SupabaseAuthOptions.AllowPlainHttp"/> says it for the bearer and <see cref="SupabaseAuthAdmin"/>.
+/// Any other address in plain http is refused when the handler is made.
 /// </para>
 /// <para>
 /// <b>No token waits on Auth without end.</b> A request for the keys ends with the

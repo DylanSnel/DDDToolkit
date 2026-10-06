@@ -425,7 +425,7 @@ public sealed class SupabaseAuthAdminTests
 
             refused.Which.Status.Should().Be(200);
             refused.Which.AuthErrorCode.Should().BeNull();
-            refused.Which.Message.Should().Contain("Auth URL").And.NotContain("continue");
+            refused.Which.Message.Should().Contain("project URL").And.NotContain("continue");
         }
     }
 
@@ -439,19 +439,38 @@ public sealed class SupabaseAuthAdminTests
     }
 
     [Theory]
+    [InlineData("https://project.example.test", "https://project.example.test/auth/v1/invite")]
+    [InlineData("https://project.example.test/", "https://project.example.test/auth/v1/invite")]
+    [InlineData("  https://project.example.test  ", "https://project.example.test/auth/v1/invite")]
+    [InlineData("http://127.0.0.1:54321", "http://127.0.0.1:54321/auth/v1/invite")]
     [InlineData("https://project.example.test/auth/v1", "https://project.example.test/auth/v1/invite")]
-    [InlineData("https://project.example.test/auth/v1/", "https://project.example.test/auth/v1/invite")]
-    [InlineData("  https://project.example.test/auth/v1  ", "https://project.example.test/auth/v1/invite")]
-    [InlineData("http://localhost:9999", "http://localhost:9999/invite")]
-    [InlineData("http://127.0.0.1:54321/auth/v1", "http://127.0.0.1:54321/auth/v1/invite")]
-    [InlineData("http://[::1]:9999/", "http://[::1]:9999/invite")]
-    public async Task The_auth_url_is_a_projects_or_a_bare_servers_with_or_without_a_slash(string authUrl, string expected)
+    public async Task The_admin_client_calls_auth_under_the_project_url_where_the_bearer_finds_it(string projectUrl, string expected)
     {
         _auth.Answers(200, AuthAnswers.User(Ada, Address));
 
-        await _auth.Admin(authUrl).InviteByEmailAsync(Address, options: null, Cancellation);
+        await _auth.Admin(new SupabaseAuthOptions { ProjectUrl = projectUrl }).InviteByEmailAsync(Address, options: null, Cancellation);
 
-        _auth.Request.Uri.AbsoluteUri.Should().Be(expected);
+        _auth.Request.Uri.AbsoluteUri.Should().Be(expected)
+            .And.Be(SupabaseTokens.IssuerOf(projectUrl) + "/invite", "one project URL, read alike by the bearer, which finds the issuer and the keys there");
+    }
+
+    [Theory]
+    [InlineData("http://localhost:9999", "http://localhost:9999/invite")]
+    [InlineData("http://[::1]:9999/", "http://[::1]:9999/invite")]
+    [InlineData("https://auth.internal.example.test", "https://auth.internal.example.test/invite")]
+    [InlineData("https://project.example.test/auth/v1/", "https://project.example.test/auth/v1/invite")]
+    public async Task An_auth_server_without_the_projects_gateway_is_reached_where_auth_url_says(string authUrl, string expected)
+    {
+        _auth.Answers(200, AuthAnswers.User(Ada, Address));
+        _auth.Answers(200, AuthAnswers.User(Ada, Address));
+
+        // The setting the bearer fetches the published keys from; the project's URL stays what its tokens name.
+        await _auth.Admin(new SupabaseAuthOptions { ProjectUrl = "http://127.0.0.1:54321", AuthUrl = authUrl }).InviteByEmailAsync(Address, options: null, Cancellation);
+
+        // An Auth URL that is blank is no Auth URL: the project's own address, as the bearer reads it.
+        await _auth.Admin(new SupabaseAuthOptions { ProjectUrl = StubAuthServer.ProjectUrl, AuthUrl = "  " }).InviteByEmailAsync(Address, options: null, Cancellation);
+
+        _auth.Requests.Select(request => request.Uri.AbsoluteUri).Should().Equal(expected, StubAuthServer.Url + "/invite");
     }
 
     [Theory]
@@ -461,34 +480,41 @@ public sealed class SupabaseAuthAdminTests
     public async Task Plain_http_to_another_machine_is_refused_unless_the_host_says_the_network_is_its_own(string authUrl)
     {
         // Every call sends the secret key, as apikey and as the bearer token, before any answer could say no.
-        var making = () => new SupabaseAuthAdmin(authUrl, StubAuthServer.SecretKey, _auth);
+        var project = new SupabaseAuthOptions { ProjectUrl = StubAuthServer.ProjectUrl, AuthUrl = authUrl };
+        var making = () => new SupabaseAuthAdmin(project, StubAuthServer.SecretKey, _auth);
         making.Should().Throw<ArgumentException>().WithParameterName("authUrl")
-            .Which.Message.Should().Contain("unencrypted").And.Contain("allowPlainHttp").And.NotContain("9999", "the message does not repeat the URL");
+            .Which.Message.Should().Contain("unencrypted").And.Contain("AllowPlainHttp").And.NotContain("9999", "the message does not repeat the URL");
 
-        using var http = new HttpClient(_auth) { BaseAddress = new Uri(authUrl) };
-        var wrapping = () => new SupabaseAuthAdmin(http);
-        wrapping.Should().Throw<ArgumentException>().WithParameterName("http");
+        using var http = new HttpClient(_auth);
+        var wrapping = () => new SupabaseAuthAdmin(project, http);
+        wrapping.Should().Throw<ArgumentException>().WithParameterName("authUrl");
 
-        var registering = () => new ServiceCollection().AddSupabaseAuthAdmin(authUrl, StubAuthServer.SecretKey, _auth);
+        var registering = () => new ServiceCollection().AddSupabaseAuthAdmin(project, StubAuthServer.SecretKey, _auth);
         registering.Should().Throw<ArgumentException>("the host does not start").WithParameterName("authUrl");
+
+        // The project's own address in plain http is held to the same rule, and its URL alone cannot say otherwise.
+        var byItsUrl = () => new ServiceCollection().AddSupabaseAuthAdmin("http://project.example.test", StubAuthServer.SecretKey, _auth);
+        byItsUrl.Should().Throw<ArgumentException>().WithParameterName("projectUrl").WithMessage("*unencrypted*AllowPlainHttp*");
 
         _auth.Requests.Should().BeEmpty("nothing was sent");
 
-        // An Auth server with no gateway in front of it, on a network of the host's own: the host says so.
+        // An Auth server with no gateway in front of it, on a network of the host's own: the host says so, with the
+        // setting that lets the bearer fetch the published keys from there too.
+        project.AllowPlainHttp = true;
         _auth.Answers(200, AuthAnswers.User(Ada, Address));
         _auth.Answers(200, AuthAnswers.User(Ada, Address));
-        using (var admin = _auth.Admin(authUrl, allowPlainHttp: true))
+        using (var admin = _auth.Admin(project))
         {
             await admin.InviteByEmailAsync(Address, options: null, Cancellation);
         }
 
-        using (var admin = new SupabaseAuthAdmin(http, allowPlainHttp: true))
+        using (var admin = new SupabaseAuthAdmin(project, http))
         {
             await admin.FindUserAsync(Ada, Cancellation);
         }
 
         _auth.Requests.Should().HaveCount(2).And.OnlyContain(request => request.Uri.Scheme == Uri.UriSchemeHttp);
-        new ServiceCollection().AddSupabaseAuthAdmin(authUrl, StubAuthServer.SecretKey, _auth, allowPlainHttp: true).Should().HaveCount(2);
+        new ServiceCollection().AddSupabaseAuthAdmin(project, StubAuthServer.SecretKey, _auth).Should().HaveCount(2);
     }
 
     [Fact]
@@ -503,12 +529,12 @@ public sealed class SupabaseAuthAdminTests
 
         foreach (var handler in new HttpMessageHandler[] { plain, sockets, wrapped })
         {
-            var making = () => new SupabaseAuthAdmin(StubAuthServer.Url, StubAuthServer.SecretKey, handler);
+            var making = () => new SupabaseAuthAdmin(StubAuthServer.Project, StubAuthServer.SecretKey, handler);
             making.Should().Throw<ArgumentException>(handler.GetType().Name).WithParameterName("handler")
                 .Which.Message.Should().Contain("AllowAutoRedirect = false");
 
             var services = new ServiceCollection();
-            var registering = () => services.AddSupabaseAuthAdmin(StubAuthServer.Url, StubAuthServer.SecretKey, handler);
+            var registering = () => services.AddSupabaseAuthAdmin(StubAuthServer.ProjectUrl, StubAuthServer.SecretKey, handler);
             registering.Should().Throw<ArgumentException>("the host does not start").WithParameterName("handler");
             services.Should().BeEmpty();
         }
@@ -519,7 +545,7 @@ public sealed class SupabaseAuthAdminTests
         using var wrappedOff = new Passing(new HttpClientHandler { AllowAutoRedirect = false });
         foreach (var handler in new HttpMessageHandler[] { off, socketsOff, wrappedOff, _auth })
         {
-            using var admin = new SupabaseAuthAdmin(StubAuthServer.Url, StubAuthServer.SecretKey, handler);
+            using var admin = new SupabaseAuthAdmin(StubAuthServer.Project, StubAuthServer.SecretKey, handler);
         }
     }
 
@@ -529,28 +555,53 @@ public sealed class SupabaseAuthAdminTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("project.example.test/auth/v1")]
+    [InlineData("project.example.test")]
+    [InlineData("/rest/v1")]
+    [InlineData("ftp://project.example.test")]
+    [InlineData("https://project.example.test?apikey=x")]
+    [InlineData("https://project.example.test#top")]
+    public void A_project_url_that_is_not_one_is_refused(string projectUrl)
+    {
+        var making = () => new SupabaseAuthAdmin(new SupabaseAuthOptions { ProjectUrl = projectUrl }, StubAuthServer.SecretKey, _auth);
+        var registering = () => new ServiceCollection().AddSupabaseAuthAdmin(projectUrl, StubAuthServer.SecretKey, _auth);
+
+        making.Should().Throw<ArgumentException>().WithParameterName("projectUrl").WithMessage("*project URL*");
+        registering.Should().Throw<ArgumentException>().WithParameterName("projectUrl");
+    }
+
+    [Theory]
+    [InlineData("auth.example.test/")]
     [InlineData("/auth/v1")]
-    [InlineData("ftp://project.example.test/auth/v1")]
-    [InlineData("https://project.example.test/auth/v1?apikey=x")]
-    [InlineData("https://project.example.test/auth/v1#top")]
+    [InlineData("ftp://auth.example.test")]
+    [InlineData("https://auth.example.test?apikey=x")]
+    [InlineData("https://auth.example.test#top")]
     public void An_auth_url_that_is_not_one_is_refused(string authUrl)
     {
-        var making = () => new SupabaseAuthAdmin(authUrl, StubAuthServer.SecretKey, _auth);
+        var making = () => new SupabaseAuthAdmin(new SupabaseAuthOptions { ProjectUrl = StubAuthServer.ProjectUrl, AuthUrl = authUrl }, StubAuthServer.SecretKey, _auth);
 
-        making.Should().Throw<ArgumentException>().WithParameterName("authUrl");
+        making.Should().Throw<ArgumentException>().WithParameterName("authUrl").WithMessage("SupabaseAuthOptions.AuthUrl*");
+    }
+
+    [Fact]
+    public void Without_a_project_there_is_nothing_to_reach()
+    {
+        using var http = new HttpClient(_auth);
+
+        FluentActions.Invoking(() => new SupabaseAuthAdmin(null!, StubAuthServer.SecretKey, _auth)).Should().Throw<ArgumentNullException>().WithParameterName("supabase");
+        FluentActions.Invoking(() => new SupabaseAuthAdmin(null!, http)).Should().Throw<ArgumentNullException>().WithParameterName("supabase");
+        FluentActions.Invoking(() => new ServiceCollection().AddSupabaseAuthAdmin((SupabaseAuthOptions)null!, StubAuthServer.SecretKey)).Should().Throw<ArgumentNullException>().WithParameterName("supabase");
     }
 
     [Fact]
     public async Task A_client_the_host_configured_is_used_as_it_is()
     {
-        // The host's own client: its base address is the Auth URL and its headers carry the key.
-        using var http = new HttpClient(_auth) { BaseAddress = new Uri("http://localhost:9999") };
+        // The host's own client: its headers carry the key. Where it goes is the project's to say, as for every client.
+        using var http = new HttpClient(_auth);
         http.DefaultRequestHeaders.Add("apikey", "a-service-token");
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "a-service-token");
         _auth.Answers(200, AuthAnswers.User(Ada, Address));
 
-        using (var admin = new SupabaseAuthAdmin(http))
+        using (var admin = new SupabaseAuthAdmin(new SupabaseAuthOptions { ProjectUrl = "http://127.0.0.1:54321", AuthUrl = "http://localhost:9999" }, http))
         {
             await admin.FindUserAsync(Ada, Cancellation);
         }
@@ -561,17 +612,18 @@ public sealed class SupabaseAuthAdminTests
 
         // Disposing the admin client left the host's client alone.
         _auth.Answers(200, "{}");
-        (await http.GetAsync("ready", Cancellation)).IsSuccessStatusCode.Should().BeTrue();
+        (await http.GetAsync("http://localhost:9999/ready", Cancellation)).IsSuccessStatusCode.Should().BeTrue();
     }
 
     [Fact]
-    public void A_client_without_a_base_address_is_refused()
+    public void A_client_with_an_address_of_its_own_is_refused()
     {
-        using var http = new HttpClient(_auth);
+        // Its base address and the project would be two places that say where Auth is, and they could disagree.
+        using var http = new HttpClient(_auth) { BaseAddress = new Uri(StubAuthServer.Url) };
 
-        var making = () => new SupabaseAuthAdmin(http);
+        var making = () => new SupabaseAuthAdmin(StubAuthServer.Project, http);
 
-        making.Should().Throw<ArgumentException>().WithParameterName("http");
+        making.Should().Throw<ArgumentException>().WithParameterName("http").WithMessage("*BaseAddress*");
     }
 
     [Fact]

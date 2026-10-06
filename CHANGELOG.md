@@ -835,11 +835,15 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   retried and nothing is logged, and a refusal is a `SupabaseAuthAdminException` with the status and Auth's
   error code and none of Auth's text, so neither an address nor the secret key reaches a log; its
   `DuplicateKey` says the database refused a taken id, or an address that another call registered at the
-  same moment. No redirect
-  is followed, so the key goes to the Auth URL alone: a handler of the host's own that follows redirects is
-  refused, and so is an Auth URL in plain http to another machine unless the host passes `allowPlainHttp`,
-  for an Auth server on a private network of its own. `SupabaseIdentityAccounts` is the adapter of
-  `IIdentityAccounts` over it, and `services.AddSupabaseAuthAdmin(authUrl, secretKey)` registers both. Its
+  same moment. `SupabaseIdentityAccounts` is the adapter of `IIdentityAccounts` over it, and
+  `services.AddSupabaseAuthAdmin(projectUrl, secretKey)` registers both. It takes the project as the bearer
+  does, by the URL its tokens name, and calls Auth at `{projectUrl}/auth/v1`, where the bearer finds the
+  project's keys, so a host writes one form of the address for both. An Auth server reached without the
+  project's gateway is the one exception: the host hands the admin client the `SupabaseAuthOptions` it hands
+  the bearer, `AddSupabaseAuthAdmin(supabase, secretKey)`, whose `AuthUrl` says where Auth answers for both.
+  No redirect is followed, so the key goes to Auth's address alone: a handler of the host's own that follows
+  redirects is refused, and so is an address in plain http to another machine unless the host sets
+  `SupabaseAuthOptions.AllowPlainHttp`, for an Auth server on a private network of its own. Its
   invitation makes the user first and has Auth mail it after, because Auth's own invitation also mails a
   user who was there already, who in a project that lets anybody sign up can be a stranger's; a user whose
   mail could not be sent is taken away again, so the invitation can be repeated. See
@@ -848,8 +852,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `SupabaseTokenValidator`, for a host that checks tokens in a place of its own;
   `SupabaseAuthOptions.AuthUrl`, for an Auth server that answers elsewhere than `{ProjectUrl}/auth/v1`;
   `SupabaseAuthOptions.AllowPlainHttp`, for one that is reached in plain http on a private network of the
-  host's own; and `SupabaseTokens.KeysAddressOf(authUrl)`. `DDDToolkit.Auth.Supabase.AspNetCore`:
-  `AddSupabaseJwtBearer` takes a `SupabaseAuthOptions` as well as a project URL.
+  host's own; and `SupabaseTokens.KeysAddressOf(authUrl)`. Every Supabase registration takes the project's URL,
+  or one `SupabaseAuthOptions` that a host builds once and hands to each: `AddSupabaseJwtBearer` in
+  `DDDToolkit.Auth.Supabase.AspNetCore`, `AddSupabaseAuth` and `AddSupabaseAuthAdmin`. Each reads it when it
+  is called. See [Where Auth answers](docs/supabase.md#where-auth-answers).
 - `context.SupabaseCaller()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own caller, the
   user of its validated token or `Caller.Anonymous`, whatever caller is ambient, so a host can make it
   current at the start of every request.
@@ -2342,6 +2348,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   catalogue query follows it: `PackOverview.SeededFor`, answered as `seededFor` over REST and as
   `RolePack.seededFor` in GraphQL, where both answered `shape`. See
   [The administrators' pack](docs/tenancy.md#the-administrators-pack).
+- **For the 3.2.0 previews: `AddSupabaseAuthAdmin` takes the project's URL**, as `AddSupabaseJwtBearer` does,
+  and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` and `3.2.0-preview.2` took Auth's own address
+  there. A call that passes a project's `https://<ref>.supabase.co/auth/v1` works as before, because a URL that
+  already ends in `/auth/v1` is taken as it is. A call that passes a bare Auth server's address still compiles,
+  but its calls then go to `{address}/auth/v1/...`, where that server has nothing, and every one of them fails
+  with a `SupabaseAuthAdminException`, at the first invitation and not when the host starts. That address moves
+  to `SupabaseAuthOptions.AuthUrl`, registered with `AddSupabaseAuthAdmin(supabase, secretKey)`, the object the
+  bearer is given (see [Where Auth answers](docs/supabase.md#where-auth-answers)).
+  - `allowPlainHttp: true` is `SupabaseAuthOptions.AllowPlainHttp`, the one setting for the bearer's keys and
+    the admin client's secret key alike.
+  - `new SupabaseAuthAdmin(authUrl, secretKey, handler)` is `new SupabaseAuthAdmin(supabase, secretKey,
+    handler)`, with a `SupabaseAuthOptions` that names the project, and its `AuthUrl` for a bare Auth server.
+  - `new SupabaseAuthAdmin(http, allowPlainHttp)` is `new SupabaseAuthAdmin(supabase, http)`, over a client
+    without a `BaseAddress`: where the calls go is the options' to say, and a client that has one is refused.
+  - The Tenancy sample's `SampleAuthentication.AuthUrlOf(configuration)` is
+    `SampleAuthentication.ProjectOf(configuration)`, which reads `Supabase:Url`, `Supabase:JwtSecret` and
+    `Supabase:AuthUrl` into a `SupabaseAuthOptions` for the bearer and the admin client alike.
 
 - **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
   others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
@@ -2375,7 +2398,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `localhost` or a loopback address. A project URL or an Auth URL in plain http to another machine is
     refused when the host starts, where it used to be asked in the clear: whoever answers for the keys
     decides who is signed in. A host whose Auth server is on a private network of its own says so with
-    `SupabaseAuthOptions.AllowPlainHttp`, as it passes `allowPlainHttp` to the admin client.
+    `SupabaseAuthOptions.AllowPlainHttp`, the setting the admin client reads for its secret key as well.
   - `AddSupabaseJwtBearer` no longer sets `JwtBearerOptions.Authority`, and `UseSupabaseJwtSecret` no
     longer sets `ValidAlgorithms` or clears the authority: it adds the secret as the scheme's
     `IssuerSigningKey`. A host that sets an authority or a metadata address itself has the published keys

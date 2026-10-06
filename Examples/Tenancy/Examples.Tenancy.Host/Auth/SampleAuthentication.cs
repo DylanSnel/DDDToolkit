@@ -22,25 +22,34 @@ public static class SampleAuthentication
     /// Where Supabase Auth answers, when that is not <c>{Supabase:Url}/auth/v1</c>: an Auth server with no
     /// gateway in front of it, as the AppHost and the tests run one. It is where the host reaches Auth's admin
     /// API and the keys Auth publishes; the issuer its tokens are checked against stays the one of
-    /// <see cref="UrlSetting"/>.
+    /// <see cref="UrlSetting"/>. Left unset, as on a project or the stack the Supabase CLI starts, Auth is
+    /// reached where the project's gateway serves it.
     /// </summary>
     public const string AuthUrlSetting = "Supabase:AuthUrl";
 
-    /// <summary>Where Auth answers: <see cref="AuthUrlSetting"/>, or the project's own Auth address when it is not set.</summary>
+    /// <summary>
+    /// The Supabase project as the host's settings describe it: the one place that reads them, which every
+    /// registration that reaches its Auth is given, the bearer here and the admin client of
+    /// <see cref="SampleIdentityAccounts"/> and <see cref="Seeding.DemoAuthUsers"/>. Each call reads the
+    /// configuration again into a <see cref="SupabaseAuthOptions"/> of its own, so each registration reaches
+    /// Auth at the same address, and none of them works that address out itself.
+    /// </summary>
     /// <param name="configuration">The host's configuration.</param>
-    /// <exception cref="InvalidOperationException">Neither setting is there.</exception>
-    public static string AuthUrlOf(IConfiguration configuration)
+    /// <exception cref="InvalidOperationException"><see cref="UrlSetting"/> is not set.</exception>
+    public static SupabaseAuthOptions ProjectOf(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        if (configuration[AuthUrlSetting] is { Length: > 0 } auth)
+        return new SupabaseAuthOptions
         {
-            return auth;
-        }
-
-        return configuration[UrlSetting] is { Length: > 0 } project
-            ? SupabaseTokens.IssuerOf(project)
-            : throw new InvalidOperationException("Neither " + AuthUrlSetting + " nor " + UrlSetting + " is set, so there is no Auth server to reach.");
+            ProjectUrl = configuration[UrlSetting] is { Length: > 0 } url
+                ? url
+                : throw new InvalidOperationException(
+                    UrlSetting + " is not set. The API accepts the access tokens of one Supabase project, and needs its URL: "
+                    + "https://<ref>.supabase.co, or the local stack's http://127.0.0.1:54321, which appsettings.Development.json sets."),
+            JwtSecret = configuration[JwtSecretSetting] is { Length: > 0 } secret ? secret : null,
+            AuthUrl = configuration[AuthUrlSetting] is { Length: > 0 } auth ? auth : null,
+        };
     }
 
     /// <summary>
@@ -68,25 +77,14 @@ public static class SampleAuthentication
         ArgumentNullException.ThrowIfNull(environment);
 
         var devLogin = DevLoginGuard.Check(configuration, environment);
+        var project = ProjectOf(configuration);
 
-        var url = configuration[UrlSetting] is { Length: > 0 } configured
-            ? configured
-            : throw new InvalidOperationException(
-                UrlSetting + " is not set. The API accepts the access tokens of one Supabase project, and needs its URL: "
-                + "https://<ref>.supabase.co, or the local stack's http://127.0.0.1:54321, which appsettings.Development.json sets.");
-        var secret = configuration[JwtSecretSetting] is { Length: > 0 } configuredSecret ? configuredSecret : null;
-
-        services.AddAuthentication().AddSupabaseJwtBearer(new SupabaseAuthOptions
-        {
-            ProjectUrl = url,
-            JwtSecret = secret,
-            AuthUrl = configuration[AuthUrlSetting],
-        });
+        services.AddAuthentication().AddSupabaseJwtBearer(project);
 
         if (devLogin)
         {
             // The guard passed, so there is a secret, and the project is this machine's.
-            services.AddSingleton(provider => new LocalTokenIssuer(url, secret!, provider.GetService<TimeProvider>() ?? TimeProvider.System));
+            services.AddSingleton(provider => new LocalTokenIssuer(project.ProjectUrl, project.JwtSecret!, provider.GetService<TimeProvider>() ?? TimeProvider.System));
         }
 
         return services;

@@ -27,9 +27,9 @@ namespace DDDToolkit.Auth.Supabase;
 /// <b>Nothing is retried.</b> An invitation sent twice is two mails, and a failure the caller never saw
 /// cannot be reasoned about, so each call is one request, or for <see cref="InviteUserAsync"/> two that
 /// follow each other, and the caller decides what a failure means.
-/// For the same reason <see cref="DependencyInjection.AddSupabaseAuthAdmin"/> gives this a client of its
-/// own rather than one from <c>IHttpClientFactory</c>, where a host's defaults for every client, a retry
-/// handler among them, would apply.
+/// For the same reason <c>AddSupabaseAuthAdmin</c> (<see cref="DependencyInjection"/>) gives this a client
+/// of its own rather than one from <c>IHttpClientFactory</c>, where a host's defaults for every client, a
+/// retry handler among them, would apply.
 /// </para>
 /// <para>
 /// <b>Nothing is logged.</b> The address travels in the request's body and the key in its headers, never
@@ -39,53 +39,70 @@ namespace DDDToolkit.Auth.Supabase;
 /// names the server and nothing that was sent.
 /// </para>
 /// <para>
-/// <b>The key goes to the Auth URL and nowhere else.</b> The client this makes for itself follows no
+/// <b>Auth is reached where the project's tokens say it is.</b> The client is given the project as the bearer
+/// scheme is, by its URL, and calls <c>{ProjectUrl}/auth/v1</c>, where a project's gateway serves Auth. An
+/// Auth server reached without that gateway is named by <see cref="SupabaseAuthOptions.AuthUrl"/>, the same
+/// setting the bearer fetches the published keys from, so one <see cref="SupabaseAuthOptions"/> serves both.
+/// </para>
+/// <para>
+/// <b>The key goes to Auth's address and nowhere else.</b> The client this makes for itself follows no
 /// redirect: following one would send the key along to wherever it points. An answer that redirects is a
 /// refusal like any other. A handler the host passes is refused while it follows redirects. A client the
 /// host configured itself cannot be looked into from here, so there the host switches redirects off.
 /// </para>
 /// <para>
-/// <b>The key is not sent in the clear.</b> The Auth URL is https. Plain http is taken for an Auth server on
-/// this machine, <c>localhost</c> or a loopback address, where nothing travels; for one on a private
-/// network of the host's own the host says so, with <c>allowPlainHttp</c>.
+/// <b>The key is not sent in the clear.</b> Auth's address is https. Plain http is taken for an Auth server
+/// on this machine, <c>localhost</c> or a loopback address, where nothing travels; for one on a private
+/// network of the host's own the host says so, with <see cref="SupabaseAuthOptions.AllowPlainHttp"/>, the
+/// setting that lets the bearer fetch the published keys from there.
 /// </para>
 /// </remarks>
 public sealed class SupabaseAuthAdmin : IDisposable
 {
+    /// <summary>Where a project's gateway serves Auth, under the project's URL.</summary>
+    private const string GatewayPath = "/auth/v1";
+
     private readonly HttpClient _http;
     private readonly Uri _auth;
     private readonly bool _ownsClient;
 
     /// <summary>
-    /// An admin client over a client the host configured itself: its <see cref="HttpClient.BaseAddress"/>
-    /// is the Auth URL, and its default headers carry the secret key as <c>apikey</c> and as the bearer
-    /// token. The client stays the host's to dispose. Give it a handler that follows no redirect and
-    /// retries nothing, and keep it out of the host's defaults for every client, for the reasons this
-    /// class gives.
+    /// An admin client over a client the host configured itself, for the project <paramref name="supabase"/>
+    /// names: the client's default headers carry the secret key as <c>apikey</c> and as the bearer token, and
+    /// the calls go to Auth's address as <paramref name="supabase"/> gives it, as they do for a client made
+    /// here. The client stays the host's to dispose. Give it a handler that follows no redirect and retries
+    /// nothing, and keep it out of the host's defaults for every client, for the reasons this class gives.
     /// </summary>
-    /// <param name="http">The configured client.</param>
-    /// <param name="allowPlainHttp">
-    /// Whether a base address in plain http is taken for a server that is not on this machine: for an Auth
-    /// server on a private network of the host's own. Every call sends the secret key, unencrypted there.
+    /// <param name="supabase">
+    /// The project: its URL, where its Auth answers when that is not <c>{ProjectUrl}/auth/v1</c>, and whether
+    /// that may be in plain http on a network of the host's own. Read now.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="http"/> is null.</exception>
+    /// <param name="http">
+    /// The configured client, without a <see cref="HttpClient.BaseAddress"/>: where the calls go is
+    /// <paramref name="supabase"/>'s to say, so that the address is written down once.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="supabase"/> or <paramref name="http"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="http"/> has no base address, one that is not an http or https URL, or one in plain http
-    /// to another machine without <paramref name="allowPlainHttp"/>.
+    /// <paramref name="http"/> has a base address; or Auth's address is not an http or https URL, or is plain
+    /// http to another machine without <see cref="SupabaseAuthOptions.AllowPlainHttp"/>.
     /// </exception>
-    public SupabaseAuthAdmin(HttpClient http, bool allowPlainHttp = false)
+    public SupabaseAuthAdmin(SupabaseAuthOptions supabase, HttpClient http)
     {
-        ArgumentNullException.ThrowIfNull(http);
+        _auth = AuthAddressOf(supabase);
 
-        _auth = AuthAddressOf(http.BaseAddress?.OriginalString ?? "", nameof(http), allowPlainHttp);
-        _http = http;
+        ArgumentNullException.ThrowIfNull(http);
+        _http = http.BaseAddress is null
+            ? http
+            : throw new ArgumentException(
+                "The client has a BaseAddress, and where the admin client sends its calls is the SupabaseAuthOptions' to say: the project's URL, or AuthUrl for an Auth server without the project's gateway. " +
+                "Leave BaseAddress unset.",
+                nameof(http));
     }
 
-    /// <summary>An admin client for the Auth server at <paramref name="authUrl"/>, with a client of its own.</summary>
-    /// <param name="authUrl">
-    /// Where Auth answers: <c>https://&lt;ref&gt;.supabase.co/auth/v1</c> for a project, which is
-    /// <see cref="SupabaseTokens.IssuerOf"/> of its URL, or the address of an Auth server with no gateway in
-    /// front of it.
+    /// <summary>An admin client for the project <paramref name="supabase"/> names, with a client of its own.</summary>
+    /// <param name="supabase">
+    /// The project: its URL, where its Auth answers when that is not <c>{ProjectUrl}/auth/v1</c>, and whether
+    /// that may be in plain http on a network of the host's own. Read now; a later change to it changes nothing.
     /// </param>
     /// <param name="secretKey">
     /// The project's secret key (<c>sb_secret_...</c>, or the legacy <c>service_role</c> key); for a bare
@@ -98,20 +115,23 @@ public sealed class SupabaseAuthAdmin : IDisposable
     /// does is refused. Left out, the client pools connections itself, follows no redirect, keeps no cookies
     /// and looks the server's address up again every few minutes.
     /// </param>
-    /// <param name="allowPlainHttp">
-    /// Whether an <paramref name="authUrl"/> in plain http is taken for a server that is not on this machine:
-    /// for an Auth server on a private network of the host's own. Every call sends the secret key,
-    /// unencrypted there.
-    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="supabase"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="authUrl"/> is not an http or https URL, or is plain http to another machine without
-    /// <paramref name="allowPlainHttp"/>; <paramref name="secretKey"/> is empty, is a publishable key, or has
-    /// a character a header cannot carry; or <paramref name="handler"/> follows redirects. The message never
-    /// repeats the key.
+    /// The project URL, or <see cref="SupabaseAuthOptions.AuthUrl"/> when one is given, is not an http or
+    /// https URL, or Auth's address is plain http to another machine without
+    /// <see cref="SupabaseAuthOptions.AllowPlainHttp"/>; <paramref name="secretKey"/> is empty, is a
+    /// publishable key, or has a character a header cannot carry; or <paramref name="handler"/> follows
+    /// redirects. The message never repeats the key, nor the address.
     /// </exception>
-    public SupabaseAuthAdmin(string authUrl, string secretKey, HttpMessageHandler? handler = null, bool allowPlainHttp = false)
+    public SupabaseAuthAdmin(SupabaseAuthOptions supabase, string secretKey, HttpMessageHandler? handler = null)
+        : this(AuthAddressOf(supabase), secretKey, handler)
     {
-        _auth = AuthAddressOf(authUrl, nameof(authUrl), allowPlainHttp);
+    }
+
+    /// <summary>An admin client for Auth at <paramref name="auth"/>, an address <see cref="AuthAddressOf"/> gave.</summary>
+    internal SupabaseAuthAdmin(Uri auth, string secretKey, HttpMessageHandler? handler)
+    {
+        _auth = auth;
         var key = SecretKeyOf(secretKey, nameof(secretKey));
 
         _http = handler is null
@@ -130,7 +150,7 @@ public sealed class SupabaseAuthAdmin : IDisposable
     /// <param name="cancellationToken">Stops waiting for Auth.</param>
     /// <exception cref="SupabaseAuthAdminException">
     /// Auth refused, or answered "not found" without saying that it is the user it did not find: a wrong
-    /// Auth URL must not read as a user who is gone.
+    /// address for Auth must not read as a user who is gone.
     /// </exception>
     public async Task<SupabaseAuthUser?> FindUserAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -262,7 +282,7 @@ public sealed class SupabaseAuthAdmin : IDisposable
     /// </returns>
     /// <exception cref="SupabaseAuthAdminException">
     /// Auth refused, or answered "not found" without saying that it is the user it did not find: a wrong
-    /// Auth URL must not read as a user who is gone.
+    /// address for Auth must not read as a user who is gone.
     /// </exception>
     public async Task<bool> DeleteUserAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -406,7 +426,7 @@ public sealed class SupabaseAuthAdmin : IDisposable
     /// <summary>
     /// The handler of a client this makes for itself. It follows no redirect: the runtime drops the bearer
     /// token when it follows one and keeps every other header, so <c>apikey</c> would travel to wherever
-    /// the redirect points, and the secret key is for the Auth URL alone. It keeps no cookies, which the
+    /// the redirect points, and the secret key is for Auth's address alone. It keeps no cookies, which the
     /// admin API does not use, and it looks the server's address up again every few minutes, as a client
     /// that lives as long as the host has to.
     /// </summary>
@@ -440,36 +460,52 @@ public sealed class SupabaseAuthAdmin : IDisposable
     }
 
     /// <summary>
-    /// The Auth URL as the base every call is resolved against, ending in a slash so that a path such as
-    /// <c>/auth/v1</c> is kept rather than replaced. The message of a refusal does not repeat the value: a
-    /// URL pasted from a connection setting can have a password in it.
+    /// Where Auth answers for the project <paramref name="supabase"/> names, as the base every call is
+    /// resolved against: <see cref="SupabaseAuthOptions.AuthUrl"/> when one is given, and otherwise
+    /// <c>{ProjectUrl}/auth/v1</c>, the project's issuer as <see cref="SupabaseTokens.IssuerOf"/> makes it, so
+    /// that the bearer and this read one project URL alike. It ends in a slash, so that a path such as
+    /// <c>/auth/v1</c> is kept rather than replaced. The message of a refusal does not repeat the value: a URL
+    /// pasted from a connection setting can have a password in it.
     /// </summary>
-    internal static Uri AuthAddressOf(string authUrl, string parameter, bool allowPlainHttp = false)
+    internal static Uri AuthAddressOf(SupabaseAuthOptions supabase)
     {
-        if (string.IsNullOrWhiteSpace(authUrl)
-            || !Uri.TryCreate(authUrl.Trim(), UriKind.Absolute, out var uri)
+        ArgumentNullException.ThrowIfNull(supabase);
+
+        var bare = !string.IsNullOrWhiteSpace(supabase.AuthUrl);
+        var given = bare ? supabase.AuthUrl! : supabase.ProjectUrl;
+        var parameter = bare ? "authUrl" : "projectUrl";
+
+        if (string.IsNullOrWhiteSpace(given)
+            || !Uri.TryCreate(given.Trim(), UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
             || uri.Query.Length > 0
             || uri.Fragment.Length > 0
             || uri.UserInfo.Length > 0)
         {
             throw new ArgumentException(
-                "The Auth URL is not one: pass an absolute http or https URL without a query, such as https://<ref>.supabase.co/auth/v1 for a project, or the address of an Auth server of your own.",
+                bare
+                    ? "SupabaseAuthOptions.AuthUrl is not where an Auth server answers: pass an absolute http or https URL without a query, such as http://auth.internal:9999 for an Auth server without the project's gateway."
+                    : "The project URL is not one: pass an absolute http or https URL without a query, such as https://<ref>.supabase.co, or the local stack's http://127.0.0.1:54321.",
                 parameter);
         }
 
         // Every call carries the secret key. On this machine nothing travels; anywhere else plain http shows
         // it to whatever is in between, so the host has to say that the network in between is its own.
-        if (SupabaseTokens.IsPlainHttpToAnotherMachine(uri) && !allowPlainHttp)
+        if (SupabaseTokens.IsPlainHttpToAnotherMachine(uri) && !supabase.AllowPlainHttp)
         {
             throw new ArgumentException(
-                "The Auth URL is plain http to another machine, so every call would send the secret key unencrypted. Use https. " +
-                "For an Auth server on a private network of your own, pass allowPlainHttp: true.",
+                "Supabase Auth would be reached in plain http on another machine, so every call would send the secret key unencrypted. Use https. " +
+                "For an Auth server on a private network of your own, set SupabaseAuthOptions.AllowPlainHttp.",
                 parameter);
         }
 
-        var root = uri.GetLeftPart(UriPartial.Path);
-        return new Uri(root.EndsWith('/') ? root : root + "/");
+        var root = uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        if (!bare && !root.EndsWith(GatewayPath, StringComparison.OrdinalIgnoreCase))
+        {
+            root += GatewayPath;
+        }
+
+        return new Uri(root + "/");
     }
 
     /// <summary>The secret key as a header can carry it. No message here repeats any part of it.</summary>

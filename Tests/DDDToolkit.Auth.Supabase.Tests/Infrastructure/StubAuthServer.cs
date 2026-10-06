@@ -11,8 +11,11 @@ namespace DDDToolkit.Auth.Supabase.Tests.Infrastructure;
 /// </summary>
 internal sealed class StubAuthServer : HttpMessageHandler
 {
-    /// <summary>A project's Auth URL, in a domain nobody can register.</summary>
-    public const string Url = "https://project.example.test/auth/v1";
+    /// <summary>A project's URL, in a domain nobody can register: what a host registers the admin client with.</summary>
+    public const string ProjectUrl = "https://project.example.test";
+
+    /// <summary>Where that project's Auth answers, <c>{ProjectUrl}/auth/v1</c>: where the admin client's calls arrive.</summary>
+    public const string Url = ProjectUrl + "/auth/v1";
 
     /// <summary>Stands in for the project's secret key. Not shaped like a real one, so nothing mistakes it for a leak.</summary>
     public const string SecretKey = "the-secret-key-of-these-tests";
@@ -27,8 +30,11 @@ internal sealed class StubAuthServer : HttpMessageHandler
         ? Requests[0]
         : throw new InvalidOperationException($"Expected one request, but {Requests.Count} arrived.");
 
-    /// <summary>An admin client that talks to this instead of a project.</summary>
-    public SupabaseAuthAdmin Admin(string url = Url, bool allowPlainHttp = false) => new(url, SecretKey, this, allowPlainHttp);
+    /// <summary>The project as a host describes it to the admin client: by its URL alone.</summary>
+    public static SupabaseAuthOptions Project => new() { ProjectUrl = ProjectUrl };
+
+    /// <summary>An admin client that talks to this instead of the project <paramref name="project"/> names, <see cref="Project"/> when left out.</summary>
+    public SupabaseAuthAdmin Admin(SupabaseAuthOptions? project = null) => new(project ?? Project, SecretKey, this);
 
     /// <summary>Queues an answer with a status and a JSON body.</summary>
     public StubAuthServer Answers(int status, string json)

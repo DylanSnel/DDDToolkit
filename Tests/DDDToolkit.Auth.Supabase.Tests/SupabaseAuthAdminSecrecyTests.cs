@@ -157,7 +157,7 @@ public sealed class SupabaseAuthAdminSecrecyTests
     [InlineData("sb_publishable_kq7zzv")]
     public void A_key_that_cannot_be_the_secret_one_is_refused_without_repeating_it(string key)
     {
-        var making = () => new SupabaseAuthAdmin(StubAuthServer.Url, key, _auth);
+        var making = () => new SupabaseAuthAdmin(StubAuthServer.Project, key, _auth);
 
         var refused = making.Should().Throw<ArgumentException>().WithParameterName("secretKey");
         refused.Which.ToString().Should().NotContain("kq7zzv", "a key that was mistyped is still mostly the key");
@@ -168,7 +168,7 @@ public sealed class SupabaseAuthAdminSecrecyTests
     [InlineData("  ")]
     public void An_empty_key_is_refused(string key)
     {
-        var making = () => new SupabaseAuthAdmin(StubAuthServer.Url, key, _auth);
+        var making = () => new SupabaseAuthAdmin(StubAuthServer.Project, key, _auth);
 
         making.Should().Throw<ArgumentException>().WithParameterName("secretKey");
     }
@@ -177,7 +177,7 @@ public sealed class SupabaseAuthAdminSecrecyTests
     public async Task The_key_pasted_with_a_line_end_is_the_key_without_it()
     {
         _auth.Answers(200, "{}");
-        using var admin = new SupabaseAuthAdmin(StubAuthServer.Url, StubAuthServer.SecretKey + "\r\n", _auth);
+        using var admin = new SupabaseAuthAdmin(StubAuthServer.Project, StubAuthServer.SecretKey + "\r\n", _auth);
 
         await admin.DeleteUserAsync(Ada, Cancellation);
 
@@ -186,11 +186,15 @@ public sealed class SupabaseAuthAdminSecrecyTests
     }
 
     [Fact]
-    public void An_auth_url_with_a_password_in_it_is_refused_without_repeating_it()
+    public void An_address_with_a_password_in_it_is_refused_without_repeating_it()
     {
-        var making = () => new SupabaseAuthAdmin("https://postgres:the-database-password@project.example.test/auth/v1", StubAuthServer.SecretKey, _auth);
+        var byProject = () => new SupabaseAuthAdmin(
+            new SupabaseAuthOptions { ProjectUrl = "https://postgres:the-database-password@project.example.test" }, StubAuthServer.SecretKey, _auth);
+        var byAuthUrl = () => new SupabaseAuthAdmin(
+            new SupabaseAuthOptions { ProjectUrl = StubAuthServer.ProjectUrl, AuthUrl = "https://postgres:the-database-password@auth.example.test" }, StubAuthServer.SecretKey, _auth);
 
-        making.Should().Throw<ArgumentException>().Which.Message.Should().NotContain("the-database-password");
+        byProject.Should().Throw<ArgumentException>().WithParameterName("projectUrl").Which.Message.Should().NotContain("the-database-password");
+        byAuthUrl.Should().Throw<ArgumentException>().WithParameterName("authUrl").Which.Message.Should().NotContain("the-database-password");
     }
 
     /// <summary>

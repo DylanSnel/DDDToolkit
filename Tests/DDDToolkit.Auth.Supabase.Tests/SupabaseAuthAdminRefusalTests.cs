@@ -196,19 +196,21 @@ public sealed class SupabaseAuthAdminRefusalTests
     }
 
     [Fact]
-    public async Task A_project_url_without_the_auth_path_says_what_to_check()
+    public async Task An_address_that_is_not_auths_says_what_to_check()
     {
-        // The gateway of a project has no route for /invite: the Auth URL ends in /auth/v1.
+        // The project's URL given as the Auth URL: its gateway has no route for /invite, which Auth has under /auth/v1.
         _auth.Answers(404, """{"message":"no Route matched with those values"}""");
         _auth.Answers(404, AuthAnswers.Refusal(404, "user_not_found", "User not found"));
 
-        var wrongUrl = await _auth.Admin("https://project.example.test").Invoking(a => a.InviteByEmailAsync(Address, options: null, Cancellation))
+        var wrongUrl = await _auth.Admin(new SupabaseAuthOptions { ProjectUrl = StubAuthServer.ProjectUrl, AuthUrl = StubAuthServer.ProjectUrl })
+            .Invoking(a => a.InviteByEmailAsync(Address, options: null, Cancellation))
             .Should().ThrowAsync<SupabaseAuthAdminException>();
         var noSuchUser = await _auth.Admin().Invoking(a => a.UpdateUserAsync(Ada, new SupabaseUserChange(Password: "another-password-nobody-uses"), Cancellation))
             .Should().ThrowAsync<SupabaseAuthAdminException>();
 
-        wrongUrl.Which.Message.Should().Contain("/auth/v1", "a 404 that names nothing came from something that does not know the admin API");
-        noSuchUser.Which.Message.Should().NotContain("/auth/v1", "Auth said what it did not find, so the URL is right");
+        wrongUrl.Which.Message.Should().Contain("project URL").And.Contain("AuthUrl", "a 404 that names nothing came from something that does not know the admin API");
+        wrongUrl.Which.Message.Should().Contain("AuthUrl ends in /auth/v1", "a gateway reached under another name serves Auth there, and AuthUrl is taken as it is written");
+        noSuchUser.Which.Message.Should().NotContain("AuthUrl", "Auth said what it did not find, so the address is right");
     }
 
     [Theory]

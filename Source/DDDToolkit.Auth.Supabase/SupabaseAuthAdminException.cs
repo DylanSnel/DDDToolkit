@@ -69,7 +69,7 @@ public sealed class SupabaseAuthAdminException : Exception
 
     /// <summary>An answer with a success status that is not what the call answers with, such as a page from something in between.</summary>
     internal static SupabaseAuthAdminException Unreadable(int status, string operation)
-        => new(MessageOf(status, authErrorCode: null, operation, "The answer is not one Auth's admin API gives for this, so something else answered: check the Auth URL."), status, authErrorCode: null);
+        => new(MessageOf(status, authErrorCode: null, operation, "The answer is not one Auth's admin API gives for this, so something else answered: " + CheckTheAddress + "."), status, authErrorCode: null);
 
     /// <summary>Auth made the user, but under an id of its own.</summary>
     internal static SupabaseAuthAdminException AnotherId(int status, Guid made)
@@ -98,6 +98,9 @@ public sealed class SupabaseAuthAdminException : Exception
             200,
             authErrorCode: null);
 
+    /// <summary>What a host checks when something other than Auth answered: the address it said Auth is at.</summary>
+    private const string CheckTheAddress = "check the project URL this was registered with, and SupabaseAuthOptions.AuthUrl where one is set";
+
     private static string MessageOf(int status, string? authErrorCode, string? operation, string? detail)
     {
         var message = string.Create(
@@ -110,9 +113,13 @@ public sealed class SupabaseAuthAdminException : Exception
             (null, 401 or 403, _) => message + " It takes the project's secret key, or on a bare Auth server a token with the service role: check the key this was registered with.",
 
             // Auth says what it did not find. A 404 that says nothing came from something that has no such
-            // route, which is what a project's own URL answers when /auth/v1 was left off.
-            (null, 404, null) => message + " Nothing at that address knows the admin API: check the Auth URL, which for a project ends in /auth/v1.",
-            (null, >= 300 and <= 399, _) => message + " That is a redirect, and none is followed, so that the secret key goes to the Auth URL and nowhere else: check the Auth URL.",
+            // route: a URL that is not a project's, or an AuthUrl that is a project's URL, or a gateway's
+            // address without the /auth/v1 under which the gateway serves Auth. AuthUrl is taken as it is
+            // written, so the message says where each kind of Auth answers.
+            (null, 404, null) => message + " Nothing at that address knows the admin API: " + CheckTheAddress
+                + ". A project's own Auth needs no AuthUrl. A bare Auth server answers at its root; a project's gateway"
+                + " reached under another name than its tokens carry serves Auth under /auth/v1, so there AuthUrl ends in /auth/v1.",
+            (null, >= 300 and <= 399, _) => message + " That is a redirect, and none is followed, so that the secret key goes to Auth's address and nowhere else: " + CheckTheAddress + ".",
             _ => message,
         };
     }

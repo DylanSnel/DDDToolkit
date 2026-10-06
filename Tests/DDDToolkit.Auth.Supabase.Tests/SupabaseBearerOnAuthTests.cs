@@ -49,9 +49,9 @@ public sealed class SupabaseBearerOnAuthTests(SupabaseAuthStack stack)
         key.GetProperty("kty").GetString().Should().Be("EC");
         key.TryGetProperty("d", out _).Should().BeFalse("the private half stays with Auth");
 
-        // A host that knows the project by the URL its tokens name, and is told where Auth answers. It has no
-        // secret: the key Auth publishes is all it checks the token with.
-        var project = new SupabaseAuthOptions { ProjectUrl = SupabaseAuthStack.ProjectUrl, AuthUrl = auth.Url.ToString() };
+        // A host that knows the project by the URL its tokens name, and is told where Auth answers: the description
+        // the stack's admin client is made with. It has no secret: the key Auth publishes is all it checks the token with.
+        var project = auth.Project;
         await using var host = await BearerApplication.StartAsync(authentication => authentication.AddSupabaseJwtBearer(project), Cancellation);
 
         (await host.AskAsync(token!)).Should().BeEquivalentTo(new { Status = HttpStatusCode.OK, Body = $"{person.Id}|authenticated {person.Id}" });

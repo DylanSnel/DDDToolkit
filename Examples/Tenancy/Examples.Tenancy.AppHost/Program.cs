@@ -158,10 +158,12 @@ var migrate = builder.AddContainer("migrate", postgresImage, postgresTag)
     .WithEnvironment("TENANCY_API_PASSWORD", loginPassword)
     .WaitFor(auth);
 
-// The API logs in as tenancy_api and as nothing else: it never sees the owner's password. It is told where
-// Auth answers, which is where it fetches the key Auth publishes and reaches the admin API, with a token
-// that carries the service role: what a bare Auth server takes where a project has its secret key. With
-// it the API makes the demonstration people users there, and has Auth mail a person who is invited. The
+// The API logs in as tenancy_api and as nothing else: it never sees the owner's password. It keeps the project's
+// URL from its development settings, which its tokens name, and is told where Auth answers, since no gateway
+// serves Auth under that URL here: Supabase:AuthUrl, the one exception to reaching Auth at {Supabase:Url}/auth/v1.
+// That is where it fetches the key Auth publishes and reaches the admin API, with a token that carries the
+// service role: what a bare Auth server takes where a project has its secret key. With it the API makes the
+// demonstration people users there, and has Auth mail a person who is invited. The
 // mail's link leads on to the UI's page that accepts, which the API is told here. Auth sends a browser on
 // only to an address of its site, and tells the two apart by host name: the page is on the UI's endpoint,
 // which is on localhost, as the site above is.
