@@ -11,7 +11,11 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- The application's module, Filing, which also names the generated AddFilingConverters method. -->
+    <!--
+      The application's one module, Filing: the build declares it from this property, which also names the
+      generated AddFilingConverters method. The package declares no module of its own: once an application
+      references it, it is part of whichever module declares the member classes.
+    -->
     <DDD_Module>Filing</DDD_Module>
   </PropertyGroup>
 
