@@ -306,6 +306,10 @@ public class TenancyPermissionsGeneratorTests
     [InlineData("file static class Keys { [TenancyPermissions] public static IReadOnlyList<Permission> Permissions { get; } = []; }", "is declared in the file-local type 'Keys', which no other file can name")]
     public void A_modules_list_no_other_project_can_read_is_reported_where_it_is_declared(string declaration, string because)
     {
+        Assert.SkipUnless(
+            GeneratorTestHost.ParsesExtensionBlocks || !declaration.Contains("extension(", StringComparison.Ordinal),
+            "An extension block is C# 14, which the oldest Roslyn the generators support does not parse.");
+
         var source =
             $$"""
               using System.Collections.Generic;
@@ -388,7 +392,7 @@ public class TenancyPermissionsGeneratorTests
     {
         // The module as its own build left it: without Tenancy's generator, which would have stopped it, so the host
         // meets the lists a module gets wrong. One is no static member, one is internal, one is read only through a
-        // type parameter, one is in an extension block, and one is right.
+        // type parameter, one is in an extension block (where the Roslyn the tests run on parses C# 14), and one is right.
         const string Careless =
             """
             using System.Collections.Generic;
@@ -417,6 +421,16 @@ public class TenancyPermissionsGeneratorTests
                 static virtual IReadOnlyList<Permission> Permissions => [new("orders.bend", "Ordering", "Bend an order")];
             }
 
+            public static class OrderingKeys
+            {
+                [TenancyPermissions]
+                public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
+            }
+            """;
+
+        const string Extended =
+            """
+
             public static class ExtendedKeys
             {
                 extension(string)
@@ -425,16 +439,11 @@ public class TenancyPermissionsGeneratorTests
                     public static IReadOnlyList<Permission> Permissions => [new("orders.extend", "Ordering", "Extend an order")];
                 }
             }
-
-            public static class OrderingKeys
-            {
-                [TenancyPermissions]
-                public static IReadOnlyList<Permission> Permissions { get; } = [new("orders.view", "Ordering", "See the orders")];
-            }
             """;
 
+        var module = GeneratorTestHost.ParsesExtensionBlocks ? Careless + Extended : Careless;
         var result = Run(GeneratorTestHost.Create(Host, "Startup.cs").WithAssemblyName("Shop.Host").WithTenancy().WithDependencyInjection()
-            .WithReferencedProject("Shop.Ordering", project => project.WithSource(Careless, "Ordering.cs")));
+            .WithReferencedProject("Shop.Ordering", project => project.WithSource(module, "Ordering.cs")));
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty("what is wrong with the module's lists is the module's to hear, where they are declared");

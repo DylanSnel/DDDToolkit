@@ -469,6 +469,12 @@ public sealed class GeneratorTestHost
     /// <summary>The project file a project of this name is built from, where a diagnostic about its module points when no line of its source declares one.</summary>
     public string ProjectFile => "src/" + _assemblyName + "/" + _assemblyName + ".csproj";
 
+    /// <summary>
+    /// Whether the Roslyn the tests run on parses C# 14's extension blocks. The floor build runs the tests on the
+    /// oldest Roslyn the generators support, which does not, so a test of how a generator treats one asks this first.
+    /// </summary>
+    public static bool ParsesExtensionBlocks { get; } = Enum.IsDefined(typeof(LanguageVersion), 1400);
+
     public CSharpParseOptions CreateParseOptions()
         => new CSharpParseOptions(LanguageVersion.Latest).WithPreprocessorSymbols(PreprocessorSymbols);
 
