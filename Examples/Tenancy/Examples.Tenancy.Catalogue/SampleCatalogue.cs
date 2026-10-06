@@ -63,6 +63,18 @@ namespace Examples.Tenancy.Catalogue;
 /// alone (<see cref="ProjectCatalogue.CrewGives"/>), and whoever manages the crew gives any project role, the crew
 /// lead's included, as the owner rule allows.
 /// </para>
+/// <para>
+/// That a role which manages access is given only by someone who holds its keys is containment, which a catalogue
+/// keeps unless the application turns <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/> off. The sample
+/// leaves it on, and so writes nothing for it: who may give which role is no rule of its own product. Its database,
+/// which only its handlers reach, holds the rule again as a second lock behind every query of the sample's: it
+/// refuses a seat a role that manages access at a unit where the seat lacks that role's keys, any such role to
+/// itself, such an invitation, and stopping a seat whose such grants it could not take away; how long a grant runs,
+/// a change of such a key in a role, and moves stay with the use cases. An application that lets somebody
+/// earn a role that manages access, by passing a course say, keeps it on as well: its own handler checks the
+/// course, and gives the role as Tenancy's system work in the tenant, which containment does not hold, for the
+/// calling seat and with the role the course names, never one the request does.
+/// </para>
 /// </remarks>
 public static class SampleCatalogue
 {

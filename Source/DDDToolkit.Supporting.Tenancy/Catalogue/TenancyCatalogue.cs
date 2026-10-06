@@ -18,7 +18,8 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// </para>
 /// <para>
 /// Some keys manage access: they give power over other people's access, and a role holding one is given and
-/// taken away only by a seat that holds it there. Tenancy's own keys do, all but
+/// taken away only by a seat that holds it there, while the catalogue keeps them contained
+/// (<see cref="ContainAccessManagingKeys"/>). Tenancy's own keys do, all but
 /// <see cref="TenancyKeys.HistoryView"/>, which only reads; the application marks others
 /// where they are declared (<see cref="Permission.ManagesAccess"/>) or in
 /// <see cref="ApplicationCatalogue.AccessManagingKeys"/>. A key that is not live manages nothing.
@@ -34,13 +35,15 @@ public sealed partial class TenancyCatalogue
         IReadOnlyList<string> liveKeys,
         IReadOnlyList<string> accessManagingKeys,
         IReadOnlyList<RolePack> packs,
-        bool hasDefaultAdministrators)
+        bool hasDefaultAdministrators,
+        bool containAccessManagingKeys)
     {
         Permissions = permissions;
         LiveKeys = liveKeys;
         AccessManagingKeys = accessManagingKeys;
         Packs = packs;
         HasDefaultAdministrators = hasDefaultAdministrators;
+        ContainAccessManagingKeys = containAccessManagingKeys;
 
         _byKey = permissions.ToDictionary(permission => permission.Key, StringComparer.Ordinal);
         _accessManaging = accessManagingKeys.ToHashSet(StringComparer.Ordinal);
@@ -77,6 +80,15 @@ public sealed partial class TenancyCatalogue
     /// package's, named in the languages the package ships; otherwise every pack is the application's.
     /// </summary>
     public bool HasDefaultAdministrators { get; }
+
+    /// <summary>
+    /// Whether a seat hands on the keys of <see cref="AccessManagingKeys"/> only where it holds them itself, as
+    /// the application says in <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>: on unless it turns it
+    /// off. The use cases ask it before every rule of containment, and the export writes it into the database's
+    /// access files with the rest of the catalogue. It changes which keys are marked in nothing:
+    /// <see cref="AccessManagingKeys"/> and <see cref="ManagesAccess"/> answer the same either way.
+    /// </summary>
+    public bool ContainAccessManagingKeys { get; }
 
     /// <summary>
     /// Builds the catalogue of an application that adds nothing to it, from the modules' contributions alone, as
@@ -142,7 +154,7 @@ public sealed partial class TenancyCatalogue
             .ThenBy(permission => permission.Key, StringComparer.Ordinal)
             .ToArray();
 
-        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators);
+        return new TenancyCatalogue(permissions, live, managing, [.. packs], !declaresAdministrators, application.ContainAccessManagingKeys);
     }
 
     /// <summary>Whether the catalogue declares <paramref name="key"/>, retired or not.</summary>
@@ -160,7 +172,8 @@ public sealed partial class TenancyCatalogue
     /// <summary>
     /// The keys of a role that manage access, each once, in ordinal order: none for an archived role, which
     /// grants nothing, and none that are not live. A role manages access when this is not empty, and is then
-    /// given and taken away only by a seat that holds these keys there.
+    /// given and taken away only by a seat that holds these keys there, while <see cref="ContainAccessManagingKeys"/>
+    /// is on.
     /// </summary>
     /// <param name="role">What is known about the role.</param>
     public IReadOnlyList<string> AccessManagingKeysOf(RoleFacts role)

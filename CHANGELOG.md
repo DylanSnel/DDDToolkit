@@ -1280,6 +1280,31 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   update, as before, and Postgres refuses them before the trigger is asked. The next build writes the access file
   that changes the trigger. See
   [What the database guards on a seat](docs/tenancy.md#what-the-database-guards-on-a-seat).
+- **Tenancy: containment is a setting, on unless you turn it off.** That a seat hands on a key that manages access
+  only where it holds it itself is a rule of the access model, not one that keeps the data sound, so the
+  application decides it: `ApplicationCatalogue.ContainAccessManagingKeys`, `true` by default, which
+  `TenancyCatalogue.ContainAccessManagingKeys` carries. On, nothing changes: a role that manages access is given
+  and taken away only by a seat that holds its keys that do, there and for long enough, and never to itself; only
+  an administrator changes such a key in a role or archives a role that holds one; stopping or restarting a seat
+  that holds one, and moving a unit, follow the same rule. Off, a role or key that manages access goes as one
+  that manages none: a grants manager gives every role there, to anyone placed there for as long as it says and
+  to itself for no longer than it holds `tenancy.grants.manage` there, so whoever holds a key that manages access
+  administers what it reaches. Either way roles that manage no access go as before, a move gives the mover
+  nothing, a tenant keeps its last administrator, a seat keeps its identity and tenant, which keys are marked
+  stays as marked, and system work in a tenant is never held to it: a handler that checked something of the
+  application's own, a quiz passed say, gives the role inside `TenancyWork.BeginSystemIn` with containment on,
+  for the calling seat and with a role the application chose, never one the request named. On Postgres the
+  database holds a seat to the part a statement shows (which roles that manage access it gives, changes and takes
+  away where, never to itself, such invitations, and stopping a seat that holds one); how long, role key changes
+  and moves stay with the use cases, as before. The export writes the setting into the access files: on
+  Postgres the policies on the grants and the invitations, and the trigger on a seat's status, ask the new
+  function `key_is_contained(key)`, which answers the keys that manage access while it is on and none once it is
+  off, where they asked `manages_access`. `EnsurePoliciesAreInPlaceAsync`, the start-up check
+  `tenancy.policies-in-place`, compares that function with the catalogue the host runs with, and refuses a
+  database written with containment the other way round, saying which way each one is and what the difference
+  would let through or refuse. The next build writes the access file with the function; an application that
+  leaves the setting alone applies it and changes nothing else. The sample keeps it on, writes nothing for it,
+  and pins it with its marks in a test. See [Containment, on or off](docs/tenancy.md#containment-on-or-off).
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes

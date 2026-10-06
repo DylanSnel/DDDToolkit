@@ -50,6 +50,9 @@ internal static partial class RoleType
     [Authorize(RoleListing.KeysKey)]
     public static IReadOnlyList<string>? GetKeys([Parent] RoleListing listed) => listed.Keys;
 
-    /// <summary>Whether it is given only by a seat that holds its keys that manage access.</summary>
+    /// <summary>
+    /// Whether one of its keys manages access, and so, while containment is on, it is given only by a seat that
+    /// holds those keys.
+    /// </summary>
     public static bool GetManagesAccess([Parent] RoleListing listed) => listed.ManagesAccess;
 }

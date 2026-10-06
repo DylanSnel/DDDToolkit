@@ -20,6 +20,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// an administrator is decided before the role changes, so a refused command leaves nothing for a later save
     /// to write.
     /// </para>
+    /// <para>
+    /// That exception is containment, and goes when the application turns containment off
+    /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>): then the role key for the whole tenant is all
+    /// any change of a role takes. The administrator a tenant keeps stays either way.
+    /// </para>
     /// </summary>
     /// <param name="store">Where roles are loaded and saved.</param>
     /// <param name="catalogue">The keys a role may hold.</param>
@@ -81,7 +86,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// Sets the keys a role grants, for every seat that holds it. A seat that adds or takes out a key that
+        /// Sets the keys a role grants, for every seat that holds it. While containment is on
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), a seat that adds or takes out a key that
         /// manages access must be an administrator: hold <see cref="TenancyKeys.AdministratorKey"/> at the root
         /// with no end.
         /// </summary>
@@ -89,7 +95,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.RolesManage"/> for the whole tenant,
         /// <c>tenancy.role-not-found</c>, <c>tenancy.role-archived</c>, <c>tenancy.unknown-permission</c>,
         /// <c>tenancy.grant-exceeds-own</c> when a seat that is not an administrator adds or takes out a key that
-        /// manages access, naming <see cref="TenancyKeys.AdministratorKey"/>, and <c>tenancy.last-admin</c> when
+        /// manages access while containment is on, naming <see cref="TenancyKeys.AdministratorKey"/>, and
+        /// <c>tenancy.last-admin</c> when
         /// the last administrators' role would lose the administrator key.
         /// </exception>
         public async Task SetKeysAsync(TRoleId role, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
@@ -117,14 +124,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         }
 
         /// <summary>
-        /// Archives a role: it stays where it was granted, and grants nothing from now on. A seat that archives a
-        /// role that manages access must be an administrator: hold <see cref="TenancyKeys.AdministratorKey"/> at
-        /// the root with no end.
+        /// Archives a role: it stays where it was granted, and grants nothing from now on. While containment is on
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), a seat that archives a role that manages
+        /// access must be an administrator: hold <see cref="TenancyKeys.AdministratorKey"/> at the root with no end.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.RolesManage"/> for the whole tenant,
         /// <c>tenancy.role-not-found</c>, <c>tenancy.role-archived</c>, <c>tenancy.grant-exceeds-own</c> when a
-        /// seat that is not an administrator archives a role that manages access, naming
+        /// seat that is not an administrator archives a role that manages access while containment is on, naming
         /// <see cref="TenancyKeys.AdministratorKey"/>, and <c>tenancy.last-admin</c>.
         /// </exception>
         public async Task ArchiveAsync(TRoleId role, CancellationToken cancellationToken)

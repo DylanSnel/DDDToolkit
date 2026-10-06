@@ -84,6 +84,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "identity_tenants true search_path=\"\" true true false",
             "invitation_of_digest true search_path=\"\" false true false",
             "invitation_terms_are_fixed false search_path=\"\" false false false",
+            "key_is_contained false search_path=\"\" true true false",
             "key_is_live false search_path=\"\" false false false",
             "manages_access false search_path=\"\" true true false",
             "pack_keys false search_path=\"\" true true false",
@@ -161,6 +162,32 @@ public sealed class ContributionTests(TenancyPostgres postgres)
         (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('widget.create')", Cancellation)).Should().BeTrue();
         (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('widget.read')", Cancellation)).Should().BeFalse();
         (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.roles.manage')", Cancellation)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_function_that_says_which_keys_are_contained_follows_the_catalogues_setting()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
+
+        // On by default: the keys that manage access, and those alone.
+        await using (var owner = await OwnerAsync(database))
+        {
+            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.history.view')", Cancellation)).Should().BeFalse();
+            (await owner.ScalarAsync<bool>("SELECT tenancy.key_is_contained('widget.create')", Cancellation)).Should().BeFalse();
+        }
+
+        // Turned off, the next export writes the function again to answer no key, and the marks stay as they were.
+        var off = TenancyCatalogue.Build(HostCatalogue.Application with { ContainAccessManagingKeys = false }, []);
+        foreach (var script in TenancyPostgres.AccessScripts(off))
+        {
+            await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
+        }
+
+        await using var after = await OwnerAsync(database);
+        (await after.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.grants.manage')", Cancellation)).Should().BeFalse();
+        (await after.ScalarAsync<bool>("SELECT tenancy.key_is_contained('tenancy.roles.manage')", Cancellation)).Should().BeFalse();
+        (await after.ScalarAsync<bool>("SELECT tenancy.manages_access('tenancy.grants.manage')", Cancellation)).Should().BeTrue();
     }
 
     [Fact]

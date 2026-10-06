@@ -23,8 +23,9 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// <param name="ManagesAccess">
 /// Whether holding the key gives power over other people's access. A role holding such a key is given and
 /// taken away only by a seat that holds the key there itself, for at least as long, and never by a seat to
-/// itself. Any other role is given by whoever holds <see cref="TenancyKeys.GrantsManage"/> where the seat is
-/// placed.
+/// itself, as long as the application keeps such keys contained, which it does unless it turns
+/// <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/> off. Any other role is given by whoever holds
+/// <see cref="TenancyKeys.GrantsManage"/> where the seat is placed.
 /// <para>
 /// Mark a key when it should be given only by someone who holds it: power over roles, placements or the
 /// tree, or a decision the organization keeps for itself, such as naming a project's owner. A key whose power

@@ -22,7 +22,10 @@ namespace Examples.Tenancy.Tenants.Application.Roles;
 /// The permission keys it brings, or <see langword="null"/> for a caller who does not hold <see cref="KeysKey"/>:
 /// not an empty list, which would say the role brings none.
 /// </param>
-/// <param name="ManagesAccess">Whether it is given only by a seat that holds its keys that manage access.</param>
+/// <param name="ManagesAccess">
+/// Whether one of its keys manages access, and so, while containment is on, as it is in the sample, it is given only
+/// by a seat that holds those keys.
+/// </param>
 public sealed record RoleListing(
     RoleId Id,
     string Name,

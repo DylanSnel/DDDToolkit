@@ -52,6 +52,10 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
         // And the administrators' pack that lists its keys holds every one of them, or the host would not start.
         host.Services.GetRequiredService<TenancyCatalogue>().Packs.Single(pack => pack.Key == SampleCatalogue.AccessAdmin).Keys
             .Should().Contain(host.Services.GetRequiredService<TenancyCatalogue>().AccessManagingKeys);
+
+        // Those keys stay contained: the sample leaves the setting at its default, and its refusals that name the keys
+        // a seat lacks, or its own seat, rest on it. Turning it off is a decision of the same kind as a mark.
+        host.Services.GetRequiredService<TenancyCatalogue>().ContainAccessManagingKeys.Should().BeTrue();
     }
 
     [Fact]

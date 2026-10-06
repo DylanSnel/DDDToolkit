@@ -1,5 +1,6 @@
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
+using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -363,6 +364,40 @@ public sealed class StartUpCheckTests(TenancyPostgres postgres)
         {
             await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
                 .Should().ThrowAsync<InvalidOperationException>().WithMessage("*key_is_live in the database was written from another catalogue*the live keys are*widget.read*");
+        }
+    }
+
+    [Fact]
+    public async Task The_policies_check_refuses_a_database_written_with_containment_the_other_way_round_from_the_application()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation);
+        var off = HostCatalogue.Application with { ContainAccessManagingKeys = false };
+
+        // Written with containment on, the default, for an application that turned it off: the database would refuse
+        // what the use cases allow.
+        await using (var services = new TenancyServices(database, catalogue: off))
+        {
+            await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
+                .Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys on, and the application runs with it off*tenancy.key_is_contained*would refuse what the use cases allow*Export the access files*");
+        }
+
+        // Written again with it off: the application that turned it off starts, and one that runs with it on is refused.
+        foreach (var script in TenancyPostgres.AccessScripts(TenancyCatalogue.Build(off, [])))
+        {
+            await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
+        }
+
+        await using (var services = new TenancyServices(database, catalogue: off))
+        {
+            await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation);
+        }
+
+        await using (var services = new TenancyServices(database))
+        {
+            await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(services.Provider, Cancellation))
+                .Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys off, and the application runs with it on*would let a seat give, take away or stop*Export the access files*");
         }
     }
 

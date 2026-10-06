@@ -39,6 +39,19 @@ public class CatalogueTests
     }
 
     [Fact]
+    public void Keys_that_manage_access_stay_contained_unless_the_application_turns_it_off()
+    {
+        TenancyCatalogue.Build([]).ContainAccessManagingKeys.Should().BeTrue("an application without a catalogue of its own gets the default");
+        TenancyCatalogue.Build(Application(), []).ContainAccessManagingKeys.Should().BeTrue();
+
+        var off = TenancyCatalogue.Build(Application() with { ContainAccessManagingKeys = false, AccessManagingKeys = [HostCatalogue.WidgetCreate] }, []);
+
+        off.ContainAccessManagingKeys.Should().BeFalse();
+        off.AccessManagingKeys.Should().Contain([TenancyKeys.GrantsManage, HostCatalogue.WidgetCreate], "turning containment off marks no key differently");
+        off.ManagesAccess(HostCatalogue.WidgetCreate).Should().BeTrue();
+    }
+
+    [Fact]
     public void An_application_key_under_tenancy_is_refused()
     {
         Problems(Application(permissions: [new Permission("tenancy.extras.manage", "Extras", "Extra things")]))

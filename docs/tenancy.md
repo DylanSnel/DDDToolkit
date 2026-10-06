@@ -640,7 +640,8 @@ explains how the calls without your classes come about.
 ### What the catalogue is for
 
 Tenancy asks the application only what it needs to decide something, and its catalogue is what it decides
-access with: which keys exist, which of them manage access, and which roles a new tenant starts with. Tenancy
+access with: which keys exist, which of them manage access and whether those stay contained, and which roles a
+new tenant starts with. Tenancy
 brings its own keys, and every module states its keys next to the code that asks for them, once
 ([A module states its keys once](#a-module-states-its-keys-once)). What is left for your
 `ApplicationCatalogue` is what neither can say:
@@ -650,6 +651,7 @@ brings its own keys, and every module states its keys next to the code that asks
 | `Packs` | The roles a new tenant starts with, which shape of tenant gets each (`SeededFor`), and what its first administrator holds | Every tenant starts with Tenancy's administrators' role alone ([The administrators' pack](#the-administrators-pack)) |
 | `Permissions` | Keys that belong to no module | Only Tenancy's keys and the modules' contributions |
 | `AccessManagingKeys` | A key a module declares that should manage access in your application | A key manages access only where it is declared so ([Which keys manage access](#who-may-give-a-role)) |
+| `ContainAccessManagingKeys` | Whether a seat hands on a key that manages access only where it holds it itself | On: containment holds ([Containment, on or off](#containment-on-or-off)) |
 
 Every part is optional, and so is the catalogue: leave `options.Catalogue` unset and Tenancy builds it from
 `new ApplicationCatalogue()`, its own keys and the modules'. The export on Postgres, which builds the
@@ -1814,6 +1816,11 @@ contained:
 - Nobody gives themselves one, whatever they hold: `tenancy.self-appointment`, decided before any of the
   role's keys is counted.
 
+This is containment, and everything this section says about roles and keys that manage access is part of it. It
+is on unless you turn it off, which [Containment, on or off](#containment-on-or-off) weighs: then a role that
+manages access goes as one that manages none, down the flowchart's branch for those below, and what this
+section says of those holds for every role.
+
 ```mermaid
 flowchart TD
     Give(["a seat gives a role<br/>at a unit"]) --> Held{"tenancy.grants.manage<br/>held there?"}
@@ -1994,6 +2001,131 @@ What that means for a tenant:
   mover could not give or take away at the unit. A seat that manages a region for a week neither keeps its
   units for good by moving them under a region it manages for good, nor moves a unit away from, or under,
   someone who holds a role that manages access there for good.
+
+## Containment, on or off
+
+Containment is the rule of [the section above](#who-may-give-a-role) for keys that manage access: a seat hands
+one on only where it holds it itself. Tenancy keeps it unless you turn it off. Who may give your users what is
+a choice about your product, and this rule is part of the access model rather than something that keeps your
+data sound, so it is a setting of your catalogue: `ContainAccessManagingKeys`, on by default.
+
+**What it does.** Ben holds `tenancy.grants.manage` at Pier 7, a unit of Harbor Works, for good, through a role
+that holds that key alone. He gives anyone placed at Pier 7 a role that manages no access, a surveyor's say,
+himself included. He gives nobody a role that holds a key that manages access he does not hold there: not an area
+manager's, which holds `tenancy.units.manage` and `tenancy.seats.manage`, and not the administrators', which holds
+`tenancy.roles.manage`. And he gives himself no role that manages access at all. So Ben cannot give himself
+`tenancy.roles.manage` at the root, or anywhere: what he hands on is the grants key, and no more. The same rule
+holds for every other way a key that manages access changes hands:
+
+- taking a role away, and withdrawing a placement that has one;
+- suspending, deactivating or reactivating a seat that holds one;
+- putting such a key into a role, taking one out of it, or archiving a role that holds one, which only an
+  administrator does;
+- moving a unit, which gives or takes away such a key from nobody where the mover does not hold it.
+
+**What turning it off means.** A role or a key that manages access then goes as one that manages none, and the
+rules above are asked of a seat no more. Ben gives himself the administrators' role at Pier 7, and from then on
+manages everything at and below it: its units, its seats, its grants and every key of every module. A seat with
+the grants key at the root gives itself the administrators' role there, and a seat that manages roles for the
+whole tenant puts every key into every role, its own included. Anyone who holds a key that manages access can
+hand out every key, so in practice is an administrator of everything that key reaches. Turn it off when that is
+what you want, or when your own handlers decide who may give what, by rules of your product.
+
+**What it does not touch.** Turning it off changes nothing else:
+
+- Roles that manage no access go as they always do, with `tenancy.grants.manage` at the unit, and every role now
+  goes that way. So a seat still gives itself a role, any role now, for no longer than it holds
+  `tenancy.grants.manage` there: had Ben the grants key for a week, he would give himself the administrators'
+  role for that week, and not for good. And a move still gives the mover nothing.
+- Each command still asks its key where it acts. Ben gives no role outside Pier 7 and the units below it, since
+  he holds the grants key there alone; that he gives none at the root is this, and not containment.
+- A tenant keeps an administrator: the last one is never taken away, in C# or in the database.
+- A seat keeps its identity and its tenant, whoever asks ([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
+- Which keys manage access stays as you marked them: `AccessManagingKeys` and `ManagesAccess` answer the same.
+
+**The one question that decides it.** Can your database be reached without your handlers, for instance through
+Supabase's Data API? Then leave it on. Your handlers are the only place a product rule of your own can say who
+may give what, and a client that talks to the database directly goes past them. With containment on, the
+database still refuses that client a role that manages access at a unit where it lacks that role's keys, any
+such role to itself, such an invitation, and stopping a seat whose such grants it could not take away; how long
+a grant runs, a change of such a key in a role, and moves are asked by the use cases alone
+([What stays in C#](#what-stays-in-c)). With it off, a grants manager there hands out every role.
+
+```mermaid
+flowchart LR
+    Seat(["a seat hands on<br/>a key that<br/>manages access"]) --> Setting{"Contain<br/>AccessManagingKeys"}
+    Setting -- "on, the default" --> Holds{"holds it there,<br/>for as long,<br/>not to itself?"}
+    Holds -- no --> Refused["tenancy.grant-exceeds-own<br/>tenancy.self-appointment"]
+    Holds -- yes --> Given(["given"])
+    Setting -- off --> Ordinary["as a key that<br/>manages no access"]
+    Ordinary --> Given
+    Work(["system work in the tenant,<br/>a quiz handler say"]) --> Given
+```
+
+Containment is about a seat handing keys on, never about your application. System work in a tenant holds every
+key there and is not held to it, on or off. So an application that lets a manager earn a role that manages
+access, by passing a quiz say, keeps containment on: its own handler checks the quiz, which Tenancy knows nothing
+of, and then gives the role inside `TenancyWork.BeginSystemIn`, for the seat that passed. The grant records no
+seat as its giver, and its event records the system, acting for that seat.
+
+System work gives whatever it is told, so what it is told comes from your application, never from the request.
+The handler below takes the tenant and the seat from the caller, refusing anything that is not a seat, and the
+role and the unit from the quiz's own record: the request names the quiz and carries the answers, nothing more.
+A handler that took a role or a seat from its request would give whoever passed the quiz whatever they named,
+the administrators' role at the root included.
+
+The setting is one line of your part of the catalogue, and leaving the line out keeps it on. The export writes it
+into the access files with the rest of the catalogue: on Postgres the policies on the grants and the
+invitations, and the trigger on a seat's status, ask `key_is_contained(key)`, which answers the keys that manage
+access while containment is on and none once it is off. The start-up check `tenancy.policies-in-place` compares
+that function with the catalogue the host runs with, and refuses a database written with containment the other
+way round, saying which way each one is. So after changing the setting, export the access files and apply them
+before the host starts. Grants made while it was off stay when you turn it back on: containment is asked when a
+role is given or taken away, and nothing checks the grants that exist.
+
+<details>
+<summary>Show the code: turning containment off, and a quiz handler that keeps it on</summary>
+
+```csharp
+// Your part of the catalogue, with containment off. Leave the last line out to keep it on.
+public static ApplicationCatalogue Application { get; } = new(
+    Packs: [/* ... */],
+    AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew],
+    ContainAccessManagingKeys: false);
+```
+
+```csharp
+// Your own handler, with containment on. The request names the quiz and carries the answers. Who passed is the
+// caller, and what passing gives is the quiz's: system work gives whatever it is told, so a client chooses neither.
+public sealed class QuizDesk(
+    TenantsTenancy.SeatCommands seats,
+    ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
+    IQuizzes quizzes)
+{
+    public async Task PassAsync(QuizId quizId, QuizAnswers answers, CancellationToken cancellationToken)
+    {
+        var caller = tenancy.RequireTenant();
+        if (caller.BySystem || caller.Seat is not { } seat)
+        {
+            throw QuizRefusals.Of(QuizRefusals.SeatsOnly);
+        }
+
+        var quiz = await quizzes.FindAsync(quizId, cancellationToken) ?? throw QuizRefusals.Of(QuizRefusals.NotFound);
+        if (!quiz.Passes(answers))
+        {
+            throw QuizRefusals.Of(QuizRefusals.NotPassed);
+        }
+
+        // The role and the unit are the quiz's own, which an administrator set when making it.
+        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(caller.Tenant, seat))
+        {
+            await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);
+        }
+    }
+}
+```
+
+</details>
 
 ## Invitations
 
@@ -4312,6 +4444,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
 | A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its keys that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-key`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
 | A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
+| Containment is a setting of the catalogue, on unless the application turns it off, and the sample keeps it on: the database and the use cases follow the same setting, and system work gives what a handler of the application's own decided | **Code:** [`ApplicationCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/ApplicationCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Nothing in the demonstration turns it off; every refusal of `tenancy.grant-exceeds-own` and `tenancy.self-appointment` there is containment<br/>**Test:** `ContainmentTests`, in Tenancy's tests and on Postgres, `StartUpCheckTests`, `ApplicationRuleScenarios` |
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the catalogue `[TenancyCatalogue]`, `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
 | A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
@@ -4509,9 +4642,10 @@ public static class ShopCatalogue
   their functions, to the scoped system role and to nobody else
   ([below](#the-scoped-system-role-grants-and-reads-across-tenants)). The last,
   that row level security is on for Tenancy's tables, that the units' table has
-  [the unique index on a tenant's root](#the-index-on-a-tenants-root), that `manages_access`, `pack_keys`
-  and `key_is_live`
-  in the database were written from the catalogue the host runs with, and that the database keeps the
+  [the unique index on a tenant's root](#the-index-on-a-tenants-root), that `manages_access`,
+  `key_is_contained`, `pack_keys` and `key_is_live`
+  in the database were written from the catalogue the host runs with, with [containment](#containment-on-or-off)
+  the same way round, and that the database keeps the
   rights as the store expects: the trigger that writes them is on the grants, the seats and the roles, the
   functions the store asks, the ones [modules read through](#modules-read-through-functions) and the ones
   that [take the tenant](#where-the-connection-names-no-tenant) are there
@@ -4797,7 +4931,7 @@ $function$;
 
 The contribution writes the questions as functions, with your table names and the column types of your ids.
 They are `LANGUAGE sql`, run with an empty `search_path`, and may be run by signed-in users and by the scoped
-system role, never by `anon`. All but `system_tenant`, `manages_access` and `pack_keys` run as their owner, so
+system role, never by `anon`. All but `system_tenant`, `manages_access`, `key_is_contained` and `pack_keys` run as their owner, so
 they read Tenancy's tables whatever the caller's policies allow. "Live" is a grant or right whose period holds
 now, by the database's `now()`. A grant's start is stamped by the application's clock, so keep the two clocks
 in step, as servers that synchronize theirs are: while the database's runs behind, a grant made a moment ago is
@@ -4817,6 +4951,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 | `identity_tenants()` | every tenant where the caller's identity has a seat, whatever its status | the seat directory |
 | `unit_parent(unit)` | the parent a unit of the seat's tenant has, as it was before the statement that asks | |
 | `manages_access(key)` | whether your catalogue marks the key as managing access | `TenancyCatalogue.ManagesAccess` |
+| `key_is_contained(key)` | whether a seat hands the key on only where it holds it: a key that manages access while [containment](#containment-on-or-off) is on, and no key once it is off | `TenancyCatalogue.ContainAccessManagingKeys` |
 | `pack_keys(pack)` | the keys a role made from that pack of your catalogue holds, implied ones included; null for a pack it does not have | `TenancyCatalogue.Packs` |
 
 Your modules' rules ask them through `TenancyRowAccess`, in `DDDToolkit.Supporting.Tenancy`, so a module
@@ -4978,7 +5113,10 @@ the checks its policy makes of a new one, or hand a seat to another account.
 manage access and the ones you mark. A grant of a role that holds a key that manages access is given, changed and taken away
 only by a seat that holds each such key at the grant's unit, and never given by a seat to itself, however
 much it holds. The same goes for withdrawing a placement: the database would take its grants with it, so a
-placement goes only once its grants are gone. Every change of a role, of its keys and archiving it included,
+placement goes only once its grants are gone. That is [containment](#containment-on-or-off), and the policies
+ask it of `key_is_contained(key)`, which the export writes from your catalogue's setting: the keys that manage
+access while it is on, none once you turn it off, and then a grant of any role takes the grants key at its unit
+alone, as one of a role that manages no access does. Every change of a role, of its keys and archiving it included,
 takes `tenancy.roles.manage` for the whole tenant. A settings manager adds a role only as a copy of a pack,
 as the use case that changes a tenant's shape does: it names the pack, holds exactly the keys `pack_keys` says, and
 remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with. A role
@@ -5061,9 +5199,9 @@ commit what the transaction wrote, the last four as the row changes:
   away. The rights follow the status: a seat made active again gets every grant back, and one suspended or
   deactivated loses them. So the calling seat holds `tenancy.seats.manage` for the whole tenant, as the use
   cases ask, and holds, at the unit of each grant of the seat that has not ended, every key that manages
-  access of that grant's role. Its own grants that apply now are its own hold, so a seat that manages seats
-  suspends itself. System work and the tables' owner are no seat and are not held to it; the policies, and
-  the administrator a tenant keeps, hold those;
+  access of that grant's role, while containment is on (`key_is_contained`). Its own grants that apply now are
+  its own hold, so a seat that manages seats suspends itself. System work and the tables' owner are no seat and
+  are not held to it; the policies, and the administrator a tenant keeps, hold those;
 - what a role's pack gave it, which the [sync of the packs](#packs-after-provisioning) compares the pack with, is
   changed by no seat: a role manager who wrote it could have the next sync add to the role what the pack never gave
   it. It is written as a role is made from its pack, and as Tenancy's own system work makes the role follow it.
@@ -5260,11 +5398,17 @@ does not repeat it:
   `tenancy.roles.manage` at the root however long it runs;
 - how long the caller holds each key that manages access against the end of each grant of a seat it
   suspends, deactivates or reactivates, where the trigger asks only that it holds the key now;
-- what a move may give or take away, the mover's own keys and anyone's keys that manage access, and the old
-  parent's key;
+- what a move may give or take away, the mover's own keys and anyone's keys that manage access;
+- the key at the old parent of a unit that moves, where the policy asks the units key at the unit itself;
 - every change of state a policy cannot tell from another change of the row, such as archiving a unit;
 - the keys a seat needs to take away its own grants and placements, and which packs a tenant's shape
   asks for.
+
+Some of the first four are containment, and go when you turn it [off](#containment-on-or-off): how long a grant
+of a role that manages access may run, the administrator who changes such a key in a role, the hold against
+each grant of a seat whose status changes, and the keys that manage access a move gives or takes away, from
+anyone. A seat's grant to itself against its own `tenancy.grants.manage`, every key a move would give the mover,
+and the key at the old parent stay, on or off.
 
 The columns you add to Tenancy's classes are neither: Tenancy checks nothing about them, in C# or in SQL. Your
 own command's rule holds them in C#, and a column rule of yours in the database, where without one they are as

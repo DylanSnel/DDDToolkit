@@ -144,14 +144,15 @@ public sealed class TenancyPostgres : IAsyncLifetime
 
     /// <summary>
     /// Writes the access files of <paramref name="database"/> again with every policy forced on the tables' owner,
-    /// from <paramref name="rules"/> or the widgets' own, and hands the tables, the functions and the schemas to
+    /// from <paramref name="rules"/> or the widgets' own and Tenancy's contribution built from
+    /// <paramref name="catalogue"/> or the TestHost's own, and hands the tables, the functions and the schemas to
     /// <see cref="MigrationRole"/>, which may bypass the policies, as the role that runs an application's migrations
     /// does: under forced policies the functions that run as their owner see nothing otherwise. The application keeps
     /// logging in as the role that owned them, which now owns nothing and becomes its callers' roles.
     /// </summary>
-    public static async Task ForceAsync(TestDatabase database, CancellationToken cancellationToken, IReadOnlyList<RowAccessRule>? rules = null)
+    public static async Task ForceAsync(TestDatabase database, CancellationToken cancellationToken, IReadOnlyList<RowAccessRule>? rules = null, TenancyCatalogue? catalogue = null)
     {
-        foreach (var script in AccessScripts(rules: rules, names: database.Names, export: written => new RowAccessExport { Roles = written.Roles, Contributions = written.Contributions, ForceRowLevelSecurity = true }))
+        foreach (var script in AccessScripts(catalogue, rules, names: database.Names, export: written => new RowAccessExport { Roles = written.Roles, Contributions = written.Contributions, ForceRowLevelSecurity = true }))
         {
             await ExecuteAsync(database.ConnectionString, script, cancellationToken);
         }

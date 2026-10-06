@@ -450,8 +450,10 @@ public static class TenancyPostgresChecks
     /// the database what they take from it: every one of Tenancy's tables has row level security on, and so has
     /// its access history where the context maps one; the units' table has the unique index that keeps a tenant's
     /// organization to a single root; the functions
-    /// written from the catalogue, which say which keys manage access, which keys a copy of each pack holds and
-    /// which keys are live, answer as the catalogue the application runs with does; the store leaves the rights to
+    /// written from the catalogue, which say which keys manage access, which of them a seat hands on only where it
+    /// holds them, which keys a copy of each pack holds and which keys are live, answer as the catalogue the
+    /// application runs with does, so a database written with containment on for an application that turned it off,
+    /// or the other way round, is refused and said to be so; the store leaves the rights to
     /// the database (<see cref="TenancyStoreOptions.DatabaseKeepsRights"/>), and the trigger that writes them is
     /// on the grants, the seats and the roles; the functions the store asks about other seats' rights, the ones
     /// system work reads across tenants through and the ones that take the tenant as an argument are there,
@@ -615,6 +617,12 @@ public static class TenancyPostgresChecks
             (string Name, string Body, string Says)[] fromTheCatalogue =
             [
                 (TenancySql.ManagesAccess, TenancySql.ManagesAccessBody(catalogue), "the keys that manage access are " + string.Join(", ", catalogue.AccessManagingKeys)),
+                (
+                    TenancySql.KeyIsContained,
+                    TenancySql.KeyIsContainedBody(catalogue),
+                    catalogue.ContainAccessManagingKeys
+                        ? "the keys a seat hands on only where it holds them are those that manage access, " + string.Join(", ", catalogue.AccessManagingKeys)
+                        : "no key is handed on only where a seat holds it, since ApplicationCatalogue.ContainAccessManagingKeys is off"),
                 (TenancySql.PackKeys, TenancySql.PackKeysBody(catalogue), "the packs are " + string.Join(", ", catalogue.Packs.Select(pack => pack.Key)) + ", with the keys the catalogue gives them"),
                 (TenancySql.KeyIsLive, TenancySql.KeyIsLiveBody(catalogue), "the live keys are " + string.Join(", ", catalogue.LiveKeys)),
             ];
@@ -630,6 +638,13 @@ public static class TenancyPostgresChecks
                     """,
                     [tenancy.Schema, name],
                     cancellationToken).ConfigureAwait(false);
+
+                // Written with containment the other way round: said as such, which a mark left out is not.
+                if (name == TenancySql.KeyIsContained && written.Count == 1
+                    && written[0].Trim() == TenancySql.KeyIsContainedBody(catalogue, !catalogue.ContainAccessManagingKeys))
+                {
+                    throw ContainmentDisagrees(tenancy.Schema, catalogue.ContainAccessManagingKeys);
+                }
 
                 if (written.Count != 1 || written[0].Trim() != body)
                 {
@@ -832,6 +847,22 @@ public static class TenancyPostgresChecks
 
         return [.. operators.Select(tokenRole => options.TokenRoles[tokenRole]).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
     }
+
+    /// <summary>
+    /// What the start-up check says when the database's access files were written with containment the other way
+    /// round from the catalogue the application runs with (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>):
+    /// which way each one is, what the difference lets through or refuses, and how to put it right.
+    /// </summary>
+    /// <param name="schema">Tenancy's schema, where <c>key_is_contained</c> is.</param>
+    /// <param name="applicationContains">Whether the application runs with containment on.</param>
+    private static InvalidOperationException ContainmentDisagrees(string schema, bool applicationContains)
+        => new(
+            "The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys " + (applicationContains ? "off" : "on") +
+            ", and the application runs with it " + (applicationContains ? "on" : "off") + ", as the function " + schema + "." + TenancySql.KeyIsContained + " says. " +
+            (applicationContains
+                ? "The database would let a seat give, take away or stop, by a query of its own, the roles that manage access it does not hold, which the use cases refuse. "
+                : "The database would refuse what the use cases allow: a seat that manages grants giving a role that manages access it does not hold, or giving one to itself, and a seat that manages seats stopping one that holds such a role. ") +
+            "Export the access files with the catalogue the application runs with, and apply them.");
 
     /// <summary>
     /// The schemas of <paramref name="tables"/>, in their order: tables are looked up by name in the catalog,

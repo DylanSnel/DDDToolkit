@@ -14,6 +14,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// whether the tenant keeps an administrator. One per command call: it fixes the caller and "now" when the
     /// command starts.
     /// <para>
+    /// The rules in the middle hold a seat to containment while the catalogue keeps the keys that manage access
+    /// contained (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>). Once the application turns that off,
+    /// they ask of a role or a key that manages access what they ask of one that manages none
+    /// (<see cref="ContainedKeysOf"/> and <see cref="IsContained"/>). The key a command asks where it acts, a
+    /// seat's grant to itself against its own <see cref="TenancyKeys.GrantsManage"/>, what a move gives the mover,
+    /// and the administrator a tenant keeps, are asked either way.
+    /// </para>
+    /// <para>
     /// Asking who is calling reads nothing, so a command that takes the access revision can take it before any
     /// other read; the questions are only made, over the store's reads, when a key is first asked about.
     /// </para>
@@ -44,6 +52,27 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>Whether this is system work in a tenant, which holds every key there.</summary>
         public bool BySystem => Caller.Kind == TenancyCallerKind.SystemInTenant;
+
+        /// <summary>
+        /// Whether the caller is held to containment: it is a seat, and the catalogue keeps the keys that manage
+        /// access contained (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>). System work in a tenant
+        /// holds every key there and never is, whatever the catalogue says.
+        /// </summary>
+        private bool HeldToContainment => Caller.Kind == TenancyCallerKind.Seat && _catalogue.ContainAccessManagingKeys;
+
+        /// <summary>
+        /// The keys of <paramref name="role"/> that a seat hands on only where it holds them: its keys that manage
+        /// access while the catalogue keeps them contained, and none once the application turns that off, when
+        /// the role is given and taken away as one that manages no access.
+        /// </summary>
+        private IReadOnlyList<string> ContainedKeysOf(TRole role)
+            => _catalogue.ContainAccessManagingKeys ? _catalogue.AccessManagingKeysOf(role.Facts) : [];
+
+        /// <summary>
+        /// Whether a seat hands <paramref name="key"/> on only where it holds it: a key that manages access while
+        /// the catalogue keeps such keys contained, and no key once the application turns that off.
+        /// </summary>
+        private bool IsContained(string key) => _catalogue.ContainAccessManagingKeys && _catalogue.ManagesAccess(key);
 
         /// <summary>
         /// Who the command's changes are recorded as, on every event it raises: the caller's own actor, a seat as
@@ -158,7 +187,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// there. A role that manages access goes only from a seat that holds each of its keys that do at that
         /// unit, for at least as long as the grant runs, and never to the seat itself, whatever it holds.
         /// Otherwise a seat holding a key for a week could hand it out for good, and outlast its own grant through
-        /// another seat. System work in a tenant is not held to this.
+        /// another seat. System work in a tenant is not held to this. With containment off every role goes as one
+        /// that manages no access: to anyone placed there for as long as the seat says, and to the seat itself for
+        /// no longer than it holds <see cref="TenancyKeys.GrantsManage"/> there.
         /// </summary>
         /// <param name="to">
         /// The seat the role goes to, or <see langword="null"/> for a seat still to be made, which cannot be the
@@ -169,8 +200,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="until">When the grant would end, or <see langword="null"/> for no end.</param>
         /// <param name="cancellationToken">Cancels the query.</param>
         /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.self-appointment</c> for a role that manages access given to the caller itself;
-        /// <c>tenancy.grant-exceeds-own</c>, naming the keys the seat lacks there, or lacks for long enough.
+        /// <c>tenancy.self-appointment</c> for a role that manages access given to the caller itself, while
+        /// containment is on; <c>tenancy.grant-exceeds-own</c>, naming the keys the seat lacks there, or lacks for
+        /// long enough.
         /// </exception>
         public async Task RequireGrantableAsync(TSeatId? to, TUnitId unit, TRole role, DateTimeOffset? until, CancellationToken cancellationToken)
         {
@@ -179,7 +211,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return;
             }
 
-            var managing = _catalogue.AccessManagingKeysOf(role.Facts);
+            var managing = ContainedKeysOf(role);
             var self = to is { } target && target.Equals(Caller.Seat!.Value);
             if (managing.Count > 0 && self)
             {
@@ -201,7 +233,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// keys. For one that manages access the seat holds each of its keys that do at that unit, until at least
         /// the end of that grant, or for good for a grant with no end: taking a role away is as contained as
         /// giving it. A seat's own grant that applies now is its own hold, so a seat takes its current roles away;
-        /// one that has ended, or is still to start, holds nothing. System work in a tenant is not held to this.
+        /// one that has ended, or is still to start, holds nothing. System work in a tenant is not held to this, and
+        /// with containment off no seat is either.
         /// </summary>
         /// <param name="grants">The roles, as they are now, each with the end of its grant there.</param>
         /// <param name="unit">Where.</param>
@@ -211,7 +244,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </exception>
         public async Task RequireRevocableAsync(IReadOnlyList<(TRole Role, DateTimeOffset? Until)> grants, TUnitId unit, CancellationToken cancellationToken)
         {
-            if (Caller.Kind != TenancyCallerKind.Seat)
+            if (!HeldToContainment)
             {
                 return;
             }
@@ -240,7 +273,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// (<see cref="RequireRevocableAsync"/>): at its own unit, until at least its own end. A grant that has
         /// ended gives nothing either way, and is not counted. A seat's own grant that applies now is its own
         /// hold, so a seat may suspend or deactivate itself; it never reactivates itself, because a
-        /// suspended seat acts as nobody. System work in a tenant is not held to this.
+        /// suspended seat acts as nobody. System work in a tenant is not held to this, and with containment off no
+        /// seat is either: the seats key for the whole tenant, which the use case asks, is all it takes.
         /// </summary>
         /// <param name="seat">The seat whose status would change, as it is now.</param>
         /// <param name="cancellationToken">Cancels the queries.</param>
@@ -250,7 +284,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </exception>
         public async Task RequireStatusChangeableAsync(TSeat seat, CancellationToken cancellationToken)
         {
-            if (Caller.Kind != TenancyCallerKind.Seat)
+            if (!HeldToContainment)
             {
                 return;
             }
@@ -281,7 +315,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// holds the role, seats that gave it to themselves included, or by taking one out or archiving the role,
         /// which takes it from every holder at once. So a seat holding the key for a week neither gives lasting
         /// power over access that way, nor takes away what it could not revoke grant by grant. System work in a
-        /// tenant is not held to this.
+        /// tenant is not held to this, and with containment off no seat is either: the roles key for the whole
+        /// tenant, which every change of a role asks, is all it takes.
         /// </summary>
         /// <param name="tenant">The tenant.</param>
         /// <param name="role">The role that would change, for the refusal.</param>
@@ -289,7 +324,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.grant-exceeds-own</c>, naming <see cref="TenancyKeys.AdministratorKey"/>.</exception>
         public async Task RequireAdministratorAsync(TTenantId tenant, TRoleId role, CancellationToken cancellationToken)
         {
-            if (Caller.Kind != TenancyCallerKind.Seat)
+            if (!HeldToContainment)
             {
                 return;
             }
@@ -314,7 +349,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// for everyone but the mover, as a role holding only them is given freely. Otherwise a seat that manages
         /// units in two parts of the tree could move a unit where it, or someone else, holds more, or holds the
         /// same for longer, and so give what nobody could have given, or take what nobody could have taken away.
-        /// System work in a tenant is not held to this.
+        /// System work in a tenant is not held to this. With containment off every key follows a move as one that
+        /// manages no access does, freely for everyone but the mover: the move still gives the mover nothing.
         /// <para>
         /// An administrator whose role holds every live key passes both parts wherever a unit goes. One whose pack
         /// lists its keys holds every key that manages access at the root, and so passes the second part; the
@@ -349,7 +385,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             {
                 var gives = row.Parent.Equals(newParent) && !aboveParent.Contains(row.UnitId);
                 var takes = row.Parent.Equals(parent) && !aboveNewParent.Contains(row.UnitId);
-                var counts = _catalogue.ManagesAccess(row.Key)
+                var counts = IsContained(row.Key)
                     ? gives || takes
                     : gives && row.OfCaller && _catalogue.IsLive(row.Key);
                 if (counts)

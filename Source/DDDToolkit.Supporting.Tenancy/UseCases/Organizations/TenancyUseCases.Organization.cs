@@ -84,13 +84,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// A move changes which grants reach the unit, so a seat moves it only as far as it could give and take
         /// away what that changes: the move gives the seat itself no key it does not hold at the unit already,
         /// and none for longer than it holds it there; and it gives or takes away no key that manages access,
-        /// from anyone, that the seat does not hold at the unit for at least as long as that grant runs.
+        /// from anyone, that the seat does not hold at the unit for at least as long as that grant runs. The second
+        /// part is containment, which goes when the application turns it off
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>): then a key that manages access follows a
+        /// move as any other does, and the move still gives the seat itself nothing.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.unit-not-found</c>, <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.UnitsManage"/>
         /// at the current parent and at the new one, what the organization refuses, and
-        /// <c>tenancy.grant-exceeds-own</c> naming the keys the move would give or take away that the calling seat
-        /// lacks at the unit, or lacks for long enough.
+        /// <c>tenancy.grant-exceeds-own</c> naming the keys the move would give the calling seat, or, while
+        /// containment is on, give or take away from anyone, that it lacks at the unit, or lacks for long enough.
         /// </exception>
         public async Task MoveUnitAsync(TUnitId unit, TUnitId newParent, CancellationToken cancellationToken)
         {

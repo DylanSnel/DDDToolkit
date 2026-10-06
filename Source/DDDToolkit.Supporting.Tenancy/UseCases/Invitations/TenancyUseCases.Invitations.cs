@@ -18,8 +18,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// what those take: <see cref="TenancyKeys.SeatsManage"/> for the whole tenant, as adding a seat does, and
     /// <see cref="TenancyKeys.GrantsManage"/> at the unit, with the rule for giving a role there. A role that
     /// manages no access is offered freely, and may outlast the issuer's own grants. A role that manages access is
-    /// offered only by a seat that holds each of its keys that do at the unit, until at least the end of the grant.
-    /// Nobody invites themself into one: an identity that has a seat in the tenant cannot accept.
+    /// offered only by a seat that holds each of its keys that do at the unit, until at least the end of the grant,
+    /// unless the application turns containment off (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>),
+    /// and then as freely as any other. Nobody invites themself into one: an identity that has a seat in the tenant
+    /// cannot accept.
     /// </para>
     /// <para>
     /// An invitation never gives more than its issuer could give at the moment it is used. Accepting asks the
@@ -79,7 +81,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant or
         /// <see cref="TenancyKeys.GrantsManage"/> at the unit, <c>tenancy.invitation-lifetime</c>,
         /// <c>tenancy.tenant-inactive</c>, <c>tenancy.role-not-found</c>, <c>tenancy.grant-exceeds-own</c> for a
-        /// role that manages access the caller could not give there for that long, <c>tenancy.unit-not-found</c>,
+        /// role that manages access the caller could not give there for that long, while containment is on
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), <c>tenancy.unit-not-found</c>,
         /// <c>tenancy.unit-not-active</c>, <c>tenancy.role-not-active</c>, <c>tenancy.address-invalid</c>,
         /// <c>tenancy.invitation-grant-ends-first</c>.
         /// </exception>

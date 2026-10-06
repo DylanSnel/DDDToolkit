@@ -61,6 +61,8 @@ internal static class TenancySql
 
     internal const string ManagesAccess = "manages_access";
 
+    internal const string KeyIsContained = "key_is_contained";
+
     internal const string PackKeys = "pack_keys";
 
     internal const string UnitParent = "unit_parent";
@@ -155,7 +157,7 @@ internal static class TenancySql
     internal const string SeatIdentityRefusal = "A seat keeps the id, the identity and the tenant it was made with: only Tenancy's system work in its tenant changes them.";
 
     /// <summary>What the trigger on a seat's status tells a statement it refuses.</summary>
-    internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.";
+    internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and, while keys that manage access are contained, holds at each of its grants those the grant gives.";
 
     /// <summary>The caller's verified identity, as the script fills it in: <c>(SELECT auth.uid())</c> on Supabase.</summary>
     private const string Uid = "{caller:uid}";
@@ -487,6 +489,19 @@ internal static class TenancySql
             "key text",
             "boolean",
             ManagesAccessBody(catalogue),
+            SecurityDefiner: false,
+            GrantTo: callers,
+            Volatility: "IMMUTABLE");
+
+        // Which keys a seat hands on only where it holds them, from the same catalogue: those that manage access while
+        // the application keeps them contained, and none once it turns that off. The policies on the grants and the
+        // invitations, and the trigger on a seat's status, ask this and not manages_access, so the export writes the
+        // setting into the database with this one function, and the start-up check compares it as it compares the marks.
+        yield return new ContributedFunction(
+            KeyIsContained,
+            "key text",
+            "boolean",
+            KeyIsContainedBody(catalogue),
             SecurityDefiner: false,
             GrantTo: callers,
             Volatility: "IMMUTABLE");
@@ -988,6 +1003,20 @@ internal static class TenancySql
         => "SELECT $1 IN (" + string.Join(", ", catalogue.AccessManagingKeys.Select(RowAccessModel.Literal)) + ")";
 
     /// <summary>
+    /// The body of <c>key_is_contained(key)</c>: whether a seat hands the key on only where it holds it. While
+    /// <paramref name="catalogue"/> keeps the keys that manage access contained
+    /// (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>), the same as <see cref="ManagesAccessBody"/>; once the
+    /// application turns that off, no key. A start-up check compares it with the function the database has, and
+    /// tells the two settings apart by it.
+    /// </summary>
+    internal static string KeyIsContainedBody(TenancyCatalogue catalogue)
+        => KeyIsContainedBody(catalogue, catalogue.ContainAccessManagingKeys);
+
+    /// <summary>The body of <c>key_is_contained(key)</c> from <paramref name="catalogue"/>'s marks, with containment on or off.</summary>
+    internal static string KeyIsContainedBody(TenancyCatalogue catalogue, bool contained)
+        => contained ? ManagesAccessBody(catalogue) : "SELECT false";
+
+    /// <summary>
     /// The body of <c>pack_keys(pack)</c>: the keys, implied ones included, a role made from the pack of that key
     /// holds, as <paramref name="catalogue"/> expands them; null for a pack it does not have. A start-up check
     /// compares it with the function the database has.
@@ -1046,17 +1075,20 @@ internal static class TenancySql
         };
 
     /// <summary>
-    /// A row of <paramref name="table"/>'s role, active, joined to each of its keys that manage access, as
-    /// <c>managed.k</c>: for a grant or a right, the keys whose holders alone give or take it away.
+    /// A row of <paramref name="table"/>'s role, active, joined to each of its keys that are contained, as
+    /// <c>managed.k</c>: for a grant or a right, the keys whose holders alone give or take it away. Those are the
+    /// keys that manage access while the catalogue keeps them contained, and none once the application turns that
+    /// off (<c>key_is_contained</c>), when no row is found.
     /// </summary>
     private static string Managed(IEntityType roles, IEntityType table)
         => $"SELECT 1 FROM {Q(roles)} r CROSS JOIN LATERAL {KeysOf(roles, "r", "managed")} "
            + $"WHERE r.{C(roles, "Id")} = {TenancyTables.Own(table, "RoleId")} AND r.{C(roles, "Status")} = {TenancyTables.Stored(roles, "Status", RoleStatus.Active)} "
-           + $"AND {Fn(ManagesAccess)}(managed.k)";
+           + $"AND {Fn(KeyIsContained)}(managed.k)";
 
     /// <summary>
-    /// The calling seat holds, at the unit of <paramref name="table"/>'s row, each key that manages access of the
-    /// row's role: true for a role that manages none, an archived one included.
+    /// The calling seat holds, at the unit of <paramref name="table"/>'s row, each contained key of the row's role,
+    /// each key that manages access while containment is on: true for a role that manages none, an archived one
+    /// included, and for every role once containment is off.
     /// </summary>
     private static string Contained(IEntityType roles, IEntityType table)
         => $"NOT EXISTS ({Managed(roles, table)} AND NOT ({TenancyTables.Own(table, "UnitId")} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}(managed.k)))))";
@@ -1214,8 +1246,9 @@ internal static class TenancySql
 
         // A grant has no tenant of its own: its seat's. Giving and taking away a role that manages access is
         // contained: the caller holds each of its keys that manage access at the grant's unit, and never gives
-        // one to itself. A role that manages no access goes by the grants key alone. A grant keeps its seat, unit,
-        // role and giver (a trigger), so a change never makes another grant of it.
+        // one to itself. A role that manages no access goes by the grants key alone, and so does every role once
+        // the application turns containment off, which key_is_contained says. A grant keeps its seat, unit, role
+        // and giver (a trigger), so a change never makes another grant of it.
         var grantTenant = $"EXISTS (SELECT 1 FROM {Q(seats)} s WHERE s.{C(seats, "Id")} = {TenancyTables.Own(grants, "SeatId")} AND {T("s." + C(seats, "TenantId"))})";
         var grantUnit = U(GrantsKey, C(grants, "UnitId"));
         var activeRole = $"EXISTS (SELECT 1 FROM {Q(roles)} r WHERE r.{C(roles, "Id")} = {TenancyTables.Own(grants, "RoleId")} AND {T("r." + C(roles, "TenantId"))} AND r.{C(roles, "Status")} = {TenancyTables.Stored(roles, "Status", RoleStatus.Active)})";
@@ -1277,7 +1310,7 @@ internal static class TenancySql
     /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the use
     /// case lists it. It is added by a seat that could add the seat and make the grant itself: one that manages
     /// seats for the whole tenant and grants at the unit, and for a role that manages access holds each of its keys
-    /// that do there, as the policy on the grants asks; open, as its own, and never as system work's, which the
+    /// that do there while containment is on, as the policy on the grants asks; open, as its own, and never as system work's, which the
     /// acceptance would trust. It is changed by a seat that manages seats at its unit, while it is open and to
     /// nothing but cancelled: accepting is the application's own work. What it offers is fixed for every role, by
     /// a trigger.
@@ -2150,7 +2183,9 @@ internal static class TenancySql
     /// seat is held here to what giving and taking away those grants one by one is held to: the calling seat holds
     /// <see cref="TenancyKeys.SeatsManage"/> for the whole tenant, as the use cases ask, and for every grant of
     /// the seat that has not ended, of an active role, each key of that role that manages access at the grant's
-    /// unit. Its own grants that apply now are its own hold, so a seat that manages seats suspends itself.
+    /// unit. Its own grants that apply now are its own hold, so a seat that manages seats suspends itself. The
+    /// second part is containment, which asks <c>key_is_contained</c>: once the application turns containment off,
+    /// the seats key for the whole tenant is all a seat needs.
     /// <para>
     /// Only a seat is held to it. System work, which the policies keep to Tenancy's own scope, and the tables'
     /// owner are no seat: the function that finds the calling seat answers them nothing. How long the caller
@@ -2172,15 +2207,15 @@ internal static class TenancySql
         var function = $"{schema}.{SeatStatusIsManaged}";
         var status = C(seats, "Status");
 
-        // A grant of the seat that has not ended, of an active role, with a key that manages access the calling
-        // seat does not hold at the grant's unit.
+        // A grant of the seat that has not ended, of an active role, with a contained key, one that manages access
+        // while containment is on, that the calling seat does not hold at the grant's unit.
         var beyond =
             $"SELECT 1 FROM {Q(grants)} g\n" +
             $"                   JOIN {Q(roles)} r ON r.{C(roles, "Id")} = g.{C(grants, "RoleId")} AND r.{C(roles, "Status")} = {TenancyTables.Stored(roles, "Status", RoleStatus.Active)}\n" +
             $"                   CROSS JOIN LATERAL {KeysOf(roles, "r", "managed")}\n" +
             $"                   WHERE g.{C(grants, "SeatId")} = NEW.{C(seats, "Id")}\n" +
             $"                     AND (g.{C(grants, "EndsAt")} IS NULL OR g.{C(grants, "EndsAt")} > pg_catalog.now())\n" +
-            $"                     AND {Fn(ManagesAccess)}(managed.k)\n" +
+            $"                     AND {Fn(KeyIsContained)}(managed.k)\n" +
             $"                     AND NOT (g.{C(grants, "UnitId")} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}(managed.k))))";
 
         yield return

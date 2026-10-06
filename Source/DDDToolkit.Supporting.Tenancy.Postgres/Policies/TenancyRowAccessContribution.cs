@@ -23,10 +23,11 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// public static IReadOnlyList&lt;string&gt; OperatorTokenRoles { get; } = ["operator"];
 /// </code>
 /// The catalogue is the one the application runs with, the application's part and every module's keys: its
-/// marks decide which roles manage access, and so which grants the policies contain, and its packs which roles a
-/// settings manager may add. When either changes, a key added to a pack or to the administrators' pack included,
-/// the next export writes the access file again. The export makes the class before the application starts, so it
-/// builds the catalogue as the host's registration does, without the application's services: from the member marked
+/// marks decide which roles manage access, its <see cref="ApplicationCatalogue.ContainAccessManagingKeys"/> whether
+/// the policies contain the grants of those roles, and its packs which roles a settings manager may add. When any of
+/// them changes, a key added to a pack or to the administrators' pack included, the next export writes the access
+/// file again. The export makes the class before the application starts, so it builds the catalogue as the host's
+/// registration does, without the application's services: from the member marked
 /// <see cref="TenancyCatalogueAttribute"/>, or <c>new ApplicationCatalogue()</c> where none is, and the lists every
 /// module the exporting project references marks with <see cref="TenancyPermissionsAttribute"/>
 /// (<see cref="TenancyRowAccessContribution(IEnumerable{IEnumerable{Permission}}, ApplicationCatalogue?, IReadOnlyCollection{string}?)"/>).
@@ -38,7 +39,8 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// For the context that maps Tenancy's tables, in its default schema: the functions <c>caller_seat</c>,
 /// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold</c>, <c>readable_units</c>,
 /// <c>roles_with_key</c>, <c>holds_key</c>, <c>holds_tenant_wide</c>, <c>identity_tenants</c>, <c>unit_parent</c>,
-/// <c>manages_access</c> and <c>pack_keys</c>, executable by signed-in users and by system work in a tenant; the
+/// <c>manages_access</c>, <c>key_is_contained</c> and <c>pack_keys</c>, executable by signed-in users and by system
+/// work in a tenant; the
 /// policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator
 /// in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed
 /// what a seat, a placement and a grant are about.
@@ -175,8 +177,8 @@ public class TenancyRowAccessContribution : IRowAccessContribution
 
     /// <summary>A contribution for an application whose catalogue is <paramref name="catalogue"/>, as a script written by hand makes it.</summary>
     /// <param name="catalogue">
-    /// The catalogue the application runs with, built as its registration builds it: which keys are live, and
-    /// which of them manage access.
+    /// The catalogue the application runs with, built as its registration builds it: which keys are live, which
+    /// of them manage access, and whether those stay contained.
     /// </param>
     /// <param name="operatorTokenRoles">
     /// The token roles of the application's operators, as <c>TenancyOptions.OperatorTokenRoles</c> lists them:

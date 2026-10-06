@@ -17,7 +17,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// away, only while holding there each of its keys that manage access, for at least as long as the grant
     /// runs, and never gives it to itself. Withdrawing a placement takes its grants away, by the same rule, and
     /// so does suspending or deactivating a seat, while reactivating one gives its grants back by that rule too.
-    /// System work in a tenant is not held to any of that. Nothing leaves a tenant that has an administrator
+    /// System work in a tenant is not held to any of that. When the application turns containment off
+    /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), a role that manages access goes as one
+    /// that manages none: a grants manager gives every role, to another seat for as long as it says and to itself
+    /// for no longer than it holds <see cref="TenancyKeys.GrantsManage"/> there, and the key a command asks where
+    /// it acts is all a seat's status takes. Nothing leaves a tenant that has an administrator
     /// without one, whoever asks, and that is decided before the seat changes, so a refused command leaves
     /// nothing for a later save to write. A seat of another tenant is not found.
     /// </para>
@@ -101,9 +105,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Withdraws a seat from a unit, revoking every role it holds there. When it holds any, the caller needs
-        /// <see cref="TenancyKeys.GrantsManage"/> there too, and for each of those roles that manages access, its
-        /// keys that do, held there until at least that grant's end: taking a placement away takes its grants
-        /// away. A role that manages no access needs none of its keys.
+        /// <see cref="TenancyKeys.GrantsManage"/> there too, and, while containment is on
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), for each of those roles that manages
+        /// access, its keys that do, held there until at least that grant's end: taking a placement away takes its
+        /// grants away. A role that manages no access needs none of its keys.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c>, <c>tenancy.seat-not-found</c>, <c>tenancy.placement-not-found</c>,
@@ -161,9 +166,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// Grants a seat a role at an active unit where it is placed, from now until <paramref name="until"/>.
         /// With <see cref="TenancyKeys.GrantsManage"/> at the unit, a seat gives another seat any role that
         /// manages no access, for any period, and itself one for no longer than it holds
-        /// <see cref="TenancyKeys.GrantsManage"/> there. A role that manages access it gives only while it holds
-        /// there each of the role's keys that manage access, for at least as long as the grant lasts, and never
-        /// to itself: a seat whose own grant ends next week does not give such a role for good.
+        /// <see cref="TenancyKeys.GrantsManage"/> there. While containment is on
+        /// (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), a role that manages access it gives only
+        /// while it holds there each of the role's keys that manage access, for at least as long as the grant
+        /// lasts, and never to itself: a seat whose own grant ends next week does not give such a role for good.
+        /// Off, such a role goes as any other.
         /// </summary>
         /// <param name="seat">The seat.</param>
         /// <param name="unit">The unit of one of its placements.</param>
@@ -178,7 +185,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.start-system-only</c>, <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.GrantsManage"/>
         /// at the unit, <c>tenancy.role-not-found</c>, <c>tenancy.self-appointment</c> for a role that manages
-        /// access given to the caller itself, <c>tenancy.grant-exceeds-own</c>, <c>tenancy.seat-not-found</c>,
+        /// access given to the caller itself while containment is on, <c>tenancy.grant-exceeds-own</c>,
+        /// <c>tenancy.seat-not-found</c>,
         /// <c>tenancy.unit-not-found</c>, <c>tenancy.unit-not-active</c> for an archived unit,
         /// <c>tenancy.invalid-period</c>, and what the seat refuses.
         /// </exception>
@@ -213,10 +221,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Revokes a role a seat holds at a unit. With <see cref="TenancyKeys.GrantsManage"/> at the unit, a seat
-        /// takes away any role that manages no access, an archived role included, which manages nothing. A role
-        /// that manages access it takes away only while it holds there each of the role's keys that manage access,
-        /// until at least the grant's end, or for good for a grant with none. A seat's own grant that applies now
-        /// is its own hold, so a seat may take away its current roles.
+        /// takes away any role that manages no access, an archived role included, which manages nothing. While
+        /// containment is on (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), a role that manages
+        /// access it takes away only while it holds there each of the role's keys that manage access, until at
+        /// least the grant's end, or for good for a grant with none; off, such a role goes as any other. A seat's
+        /// own grant that applies now is its own hold, so a seat may take away its current roles.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.GrantsManage"/> at the unit,
@@ -246,9 +255,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// Suspends a seat: its grants give it nothing until it is reactivated. Suspending takes away every grant
-        /// that has not ended, so each of a role that manages access needs its keys that do, held by the caller
-        /// at that grant's unit until at least its end, as taking the role away would. A seat may suspend itself:
-        /// its own grants that apply now are its own hold.
+        /// that has not ended, so, while containment is on (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>),
+        /// each of a role that manages access needs its keys that do, held by the caller at that grant's unit until
+        /// at least its end, as taking the role away would. A seat may suspend itself: its own grants that apply
+        /// now are its own hold.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant,
@@ -259,9 +269,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             => ChangeStatusAsync(seat, (changed, by) => changed.Suspend(by), endsAdministration: true, cancellationToken);
 
         /// <summary>
-        /// Makes a suspended seat active again. Reactivating gives back every grant that has not ended, so each of
-        /// a role that manages access needs its keys that do, held by the caller at that grant's unit until at
-        /// least its end, as giving the role would.
+        /// Makes a suspended seat active again. Reactivating gives back every grant that has not ended, so, while
+        /// containment is on (<see cref="ApplicationCatalogue.ContainAccessManagingKeys"/>), each of a role that
+        /// manages access needs its keys that do, held by the caller at that grant's unit until at least its end,
+        /// as giving the role would.
         /// </summary>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant,
