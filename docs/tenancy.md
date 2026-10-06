@@ -3515,15 +3515,20 @@ sequenceDiagram
 <summary>Show the code: the host's part, and a field that only sends</summary>
 
 ```csharp
-// Host/Program.cs: every module registers its schema and gets the host's conventions; the gateway composes.
+// Host/Program.cs: every module registers its schemas and gets the host's conventions; two gateways compose.
 // AddSampleStorage says where the modules' tables live: Postgres, at ConnectionStrings:Supabase.
 var host = builder.AddSampleStorage().WithGraphQL(graphql => graphql.AddSampleGraphQLConventions());
 // Each module's entry is given that host: the three Add{Module}Module(host) calls, shown under "Try it".
-builder.Services.AddInMemoryFusionGateway();
+builder.Services.AddInMemoryFusionGateway(SampleGateways.User,
+    [TenantsModule.SourceSchema, ProjectsModule.SourceSchema, InspectionsModule.SourceSchema],
+    options => options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds());
+builder.Services.AddInMemoryFusionGateway(SampleGateways.Administration,
+    [TenantsModule.AdministrationSchema, ProjectsModule.SourceSchema, InspectionsModule.SourceSchema],
+    options => options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds());
 
-// After authentication and tenant selection: a token in front of the gateway, then the gateway.
-app.UseWhen(context => context.Request.Path.StartsWithSegments("/graphql"), branch => branch.UseSignedInOnly());
-app.MapInMemoryFusionGateway();
+// After authentication and tenant selection: each gateway is an endpoint, and requires what the routes do.
+app.MapInMemoryFusionGateway("/graphql", SampleGateways.User).RequireAuthorization();
+app.MapInMemoryFusionGateway("/admin/graphql", SampleGateways.Administration).RequireAuthorization(SamplePolicies.SeatRequired);
 ```
 
 ```csharp
@@ -3665,9 +3670,9 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   and answer the new `version`; a stale one is a `ConcurrencyConflictError`.
 - **A project is a node.** Its `id` is a node id, not the bare id the routes take, in every schema that names
   a project. Seats, units and roles keep plain `UUID` ids.
-- **A token, then a seat.** `/graphql` is a branch of the pipeline, not an endpoint, so
-  `RequireAuthorization()` cannot be put on it: `UseSignedInOnly` challenges a request without a token in
-  front of the gateway. The seat is checked in front of every root field of every module's schema by
+- **A token, then a seat.** `/graphql` is the user's gateway, an endpoint, and requires a token as the routes do,
+  `RequireAuthorization()`: a request without one is challenged before the gateway reads it. The seat is checked
+  in front of every root field of every module's schema by
   `SeatGate`, which asks what the routes' policy asks (`SeatRequirement.RefusalFor`) and throws the refusal,
   so a client gets `tenancy.tenant-required` or `tenancy.not-seated` with its code. Two fields need no seat,
   as their routes need none: `seatsOfMine` and `invitationAccept`. The operators' four ask for an operator
@@ -3701,38 +3706,44 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   for a batch of its parents, says that it weighs one (`[Cost(1)]`), where HotChocolate would weigh it ten for
   every row. A page of projects with their crews, what the caller may do and their inspections, at the
   largest size, is then within the limits: `GraphQLProjectScenarios` asks for one.
-- **The gateway bounds a request as a whole.** That estimate is made in each module's schema, for each
+- **A gateway bounds a request as a whole.** That estimate is made in each module's schema, for each
   operation the gateway sends it, and the gateway asks a field another module adds once for every row. A
   request that is wide, the list of projects many times over under names of its own and in each row the list
   of its inspections many times over, passes every estimate and still asks for a great many rows. So the host
-  bounds the request where it is seen whole (`AddSampleRequestBounds` in `Host/GraphQL/SampleGraphQL.cs`):
-  at most 200 fields in a document, and ten levels deep, where the deepest a screen asks is seven. Such a
-  request is refused before a module is asked. A statement that runs for a signed-in user is
+  bounds the request where it is seen whole, at each of its two gateways (`AddSampleRequestBounds` in
+  `Host/GraphQL/SampleGraphQL.cs`): at most 200 fields in a document, and ten levels of data deep, where the deepest
+  a screen asks is seven. Such a request is refused before a module is asked. Introspection is left to
+  HotChocolate's own bound on it, so the query GraphQL Codegen sends, seven `ofType` deep, is answered to a tool
+  that may read the schema. A statement that runs for a signed-in user is
   stopped after ten seconds as well, `StatementTimeouts[CallerKind.User]` in `Host/Storage/SampleStorage.cs`;
   the application's own work keeps the login role's timeout.
 - The sample has no subscriptions. A WebSocket carries no header per message, so a host that adds them reads
   the tenant from the connection's first message and resolves it once, as tenant selection does per request.
-- **The tenant's administration has a schema of its own, at `/admin/graphql`.** It is Tenancy's schema, everything
-  of Tenancy a seat is offered at `/graphql`, and another person's roles besides: `seatGrants(seatId:)`, the query
+- **The tenant's administration has a gateway of its own, at `/admin/graphql`.** It offers everything a seat is
+  offered at `/graphql`, and another person's roles besides: `seatGrants(seatId:)`, the query
   `GET /tenancy/seats/{seatId}/grants` sends, which requires `tenancy.seats.manage` for the whole tenant. The class
   of that field, `SeatsAdminQueries`, is marked
   [`[GraphQLSchema("admin", OperationType.Query)]`](graphql.md#a-field-for-one-schema-only), so the module's
   generated bindings, `AddTenantsGraphQlRuntimeBindings()`, register it in the schema of that name and in no other;
-  a seat reads its own roles at `/graphql`, in `overviewOfMine`. The lookups the gateway alone asks,
-  `DirectoryQueries`, are marked for the source schema the same way, so the administration's schema has none of
-  them. The module registers both schemas from the same calls (`TenantsGraphQL.AddTenantsGraphQL`), and the host
-  leaves the administration's out of what the gateway composes (`ServedApart`,
-  [A schema served apart](graphql.md#a-schema-served-apart)), bounds its requests as the gateway bounds those to
-  `/graphql`, and maps it at an endpoint that requires a seat, as the routes do. Maud, an access admin, reads
-  Rhea's roles there; Leo, who holds no key, is refused with `tenancy.not-permitted`; a seat of another tenant has
-  no roles there; and `/graphql` refuses the field to everybody when it reads the document. The schema decides who
-  is offered a field, the request who may read what it answers. The operators' fields are offered at both
-  endpoints, as everything of Tenancy is; since `/admin/graphql` admits seats only, there they always answer
-  `tenancy.operators-only`.
+  a seat reads its own roles at `/graphql`, in `overviewOfMine`. The module registers its two source schemas from the
+  same calls (`TenantsGraphQL.AddTenantsGraphQL`), and the lookups the gateways resolve references through,
+  `DirectoryQueries`, are marked for both. The host composes each in a gateway of its own with Projects and
+  Inspections ([Several gateways](graphql.md#several-gateways), `SampleGateways`), bounds both alike, and maps the
+  administration's at an endpoint that requires a seat, as the routes inside a tenant do. Maud, an access admin,
+  reads Rhea's roles there; Leo, who holds no key, is refused with `tenancy.not-permitted`; a seat of another tenant
+  has no roles there; and `/graphql` refuses the field to everybody when it reads the document. The schema decides
+  who is offered a field, the request who may read what it answers. The operators' fields are offered at both
+  endpoints, as everything of the three modules is; since `/admin/graphql` admits seats only, there they always
+  answer `tenancy.operators-only`.
+- **A tool reads the schemas with a key.** GraphQL Codegen and the Relay compiler have no token. In Development,
+  where the sample runs on a developer's machine, they read either gateway's schema without one; elsewhere with the
+  key the host reads at `GraphQL:SchemaKey`, from the environment variable `GraphQL__SchemaKey` or its secret store,
+  which the tool sends in `X-GraphQL-Schema-Key` from the same secret. The key reads the schema and nothing else ([Reading the schema from a tool](graphql.md#reading-the-schema-from-a-tool));
+  `GraphQLSchemaKeyTests` runs the host in Production and downloads both schemas with it.
 
-The schemas are committed: `schema.graphql` next to the host's `Program.cs` is what a client is offered, each
-module's `GraphQL/schema.graphql` is its own, with the keys and lookups the gateway composes by, and
-`Tenants.Api/GraphQL/admin.graphql` is the administration's.
+The schemas are committed: `schema.graphql` next to the host's `Program.cs` is what a client of `/graphql` is offered
+and `admin.graphql` beside it what `/admin/graphql` offers, each module's `GraphQL/schema.graphql` is its own, with
+the keys and lookups the gateways compose by, and `Tenants.Api/GraphQL/admin.graphql` is Tenancy's administration's.
 `GraphQLSchemaTests` compares them, and writes them anew when run with `TENANCY_WRITE_SCHEMA=1`: a test that
 wrote its file fails and says so, and passes when it is run again without the variable.
 
@@ -4046,7 +4057,8 @@ tables say where, group by group. Where one of the three is not there, the row s
 | A type is declared over the application's own record, and what takes a read of its own is a resolver behind a data loader that HotChocolate's generator writes | **Code:** [`ProjectType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/ProjectType.cs), [`OverviewDataLoaders.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/OverviewDataLoaders.cs), [`AccessHistoryEntryType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/History/GraphQL/AccessHistoryEntryType.cs)<br/>**Try it:** "A project with names", in the `.http` file: the crews of the answer are one read<br/>**Test:** `GraphQLDeclarationTests`, `GraphQLProjectScenarios` |
 | A field can ask for a permission key, beside the access check of every request and never in its place. The rule itself is held where the data is read, so a route answers what the field answers; the field declares it | **Code:** [`CrewOverviews.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/CrewOverviews.cs), [`RoleListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Roles/RoleListing.cs), [`CrewMemberType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewMemberType.cs), [`CrewFieldKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Crew/GraphQL/CrewFieldKeys.cs), [`KeyAuthorizationHandler.cs`](../Source/DDDToolkit.HotChocolate/Authorization/KeyAuthorizationHandler.cs)<br/>**Try it:** In the `.http` file: juno's `GET /projects/{id}/crew` and vic's query answer every member with `roles` null, and leo's `{ roles { name keys } }` every role with `keys` null. Pier 7's page as juno says who manages the crew reads the roles<br/>**Test:** `CrewRoleScenarios`, `RoleKeysScenarios`, `GraphQLProjectScenarios`, `KeyAuthorizationTests` |
 | Across modules a relation is the gateway's: a reference by key, and a module adding fields to a type another owns. A batch of projects, as a rule a page, costs the other module one question and one statement | **Code:** [`ProjectType.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Recording/GraphQL/ProjectType.cs), [`RecordingDataLoaders.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Recording/GraphQL/RecordingDataLoaders.cs), [`IProjectGate.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/Gate/IProjectGate.cs)<br/>**Try it:** juno's projects with their inspections, in the `.http` file<br/>**Test:** `InspectionsOfProjectsScenarios`, `InspectionsSchemaTests` |
-| The tenant's administration has a schema of its own at `/admin/graphql`, with another person's roles, which `/graphql` offers nobody. Its class of fields is marked for that schema, the gateway leaves it out, and the request still says who may read it | **Code:** [`SeatsAdminQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs), [`TenantsGraphQL.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/GraphQL/TenantsGraphQL.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`admin.graphql`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/GraphQL/admin.graphql)<br/>**Try it:** maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `AdministrationSchemaScenarios`, `GraphQLSchemaTests`, `OneSchemaPerClassTests` |
+| The tenant's administration has a gateway of its own at `/admin/graphql`: everything `/graphql` offers, and another person's roles, which `/graphql` offers nobody. The class of that field is marked for Tenancy's administration schema, each gateway lists the schemas it composes, and the request still says who may read it | **Code:** [`SeatsAdminQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs), [`TenantsGraphQL.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/GraphQL/TenantsGraphQL.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`admin.graphql`](../Examples/Tenancy/Examples.Tenancy.Host/admin.graphql)<br/>**Try it:** maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `AdministrationSchemaScenarios`, `GraphQLSchemaTests`, `OneSchemaPerClassTests` |
+| A gateway is an endpoint and requires what the routes require; a tool reads a schema with the key at `GraphQL:SchemaKey`, and in Development without one | **Code:** [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs)<br/>**Try it:** "The schema, as a tool reads it", in the `.http` file<br/>**Test:** `GraphQLSchemaKeyTests`, `GraphQLSeatGateScenarios`, `SchemaKeyTests` |
 | A project is a node, a mutation answers what it changed with typed errors in its payload, and the seat is checked in front of every field | **Code:** [`SampleGraphQL.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGraphQL.cs), [`SeatGate.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/SeatGate.cs)<br/>**Try it:** The rename with `expectedVersion`, vic's refused rename and rhea's query in meadow, in the `.http` file<br/>**Test:** `GraphQLMutationScenarios`, `GraphQLSeatGateScenarios` |
 | A field of the application's own staff asks for an operator where every other asks for a seat, and is in the `Operators` feature of the module that owns what it reads | **Code:** [`SeatGate.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/SeatGate.cs), [`OperatorsQueries.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Operators/GraphQL/OperatorsQueries.cs), [`TenantProjectType.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Operators/GraphQL/TenantProjectType.cs)<br/>**Try it:** orla's four requests at the end of the GraphQL part of the `.http` file<br/>**Test:** `GraphQLSeatGateScenarios`, `OperatorFieldScenarios`, `TenantProjectsFieldScenarios`, `TenantProjectInspectionsFieldScenarios` |
 | A page is within what a request may cost: HotChocolate's own page sizes, said on the field, and a weight of one on a field behind a data loader. The gateway bounds the request as a whole, its depth and its number of fields, and in the database a user's statement has a timeout | **Code:** [`OverviewPagedQueries.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/Overview/GraphQL/OverviewPagedQueries.cs), [`InspectionsConnection.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Api/Recording/GraphQL/InspectionsConnection.cs), [`SampleGraphQL.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGraphQL.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs)<br/>**Try it:** A page of projects with `crew`, `can` and `inspections`; and the request that goes round three times, in the `.http` file, which is refused<br/>**Test:** `GraphQLProjectScenarios`, `GraphQLDeclarationTests`, `SampleOnPostgresTests` |

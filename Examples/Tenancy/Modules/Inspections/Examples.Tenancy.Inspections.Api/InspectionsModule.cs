@@ -32,6 +32,9 @@ namespace Examples.Tenancy.Inspections.Api;
 /// </remarks>
 public static class InspectionsModule
 {
+    /// <summary>The name of Inspections' GraphQL source schema, which the host's gateways list among those they compose.</summary>
+    public static string SourceSchema => InspectionsGraphQL.SourceSchemaName;
+
     /// <summary>
     /// Registers Inspections: how it is stored and its use cases. Its key is not registered here: the host adds it
     /// with every module's, from the list the module marks with <c>[TenancyPermissions]</c>. The host says where

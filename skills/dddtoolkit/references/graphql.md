@@ -85,10 +85,11 @@ app.MapGraphQL("/admin/graphql", "admin").RequireAuthorization("Administrators")
 - Only root fields can be marked. A field of one schema on a shared type is registered by hand in that schema.
 - A record only an administration field answers needs no `[ObjectType<T>]` class: a type class is in every schema.
 - The schema decides who is offered a field; the request's access check still decides who may read it.
-- With `DDDToolkit.HotChocolate.Fusion.InMemory`, keep the administration's schema out of the gateway:
-  `AddInMemoryFusionGateway(options => options.ServedApart.Add(Administration))`, with one constant for the name (a
-  name no schema has fails the start), map it with `MapGraphQL`, and bound its requests there: the gateway's
-  `ConfigureGateway` does not reach it.
+- With `DDDToolkit.HotChocolate.Fusion.InMemory`, make both schemas source schemas (`AddSourceSchemaDefaults()`) and
+  give each surface a gateway that lists its schemas: `AddInMemoryFusionGateway("user", ["tenants", "projects"])`,
+  `AddInMemoryFusionGateway("admin", ["admin", "projects"])`. The attribute says which schema a class belongs to; a
+  gateway which schemas form one endpoint. Mark a class of lookups for every schema a gateway composes with the
+  modules that reference it.
 
 ## Types, loaders and paging
 
@@ -135,7 +136,9 @@ public static async Task<IReadOnlyDictionary<ProjectId, ProjectCrew>> GetCrewByP
 ## One schema over several modules
 
 Each module serves a source schema from its API project, and the host composes them in the process:
-`AddInMemoryFusionGateway()` and `MapInMemoryFusionGateway()`.
+`AddInMemoryFusionGateway()` and `MapInMemoryFusionGateway()` for one gateway of every schema, or a named gateway per
+endpoint with the schemas it composes, `AddInMemoryFusionGateway("user", [...])` and
+`MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization()`.
 
 - **The host gives every source schema the same conventions**, in one method: `AddDDDToolkitTypes()`,
   the errors, the mutation conventions, the enum spelling, `AddDDDToolkitEntityNullability()` and
@@ -154,7 +157,14 @@ Each module serves a source schema from its API project, and the host composes t
 - **Scopes**: a scope per resolver for queries, the request's for mutations
   (`DefaultQueryDependencyInjectionScope`, `DefaultMutationDependencyInjectionScope`). Fields run side by
   side, so a read takes a context of its own from a pool.
-- **Middleware goes before the gateway.** The gateway is a branch of the pipeline, not an endpoint:
-  `RequireAuthorization()` cannot be put on it. Authentication, the caller (`Callers.Begin`) and request
-  localization come first, and a check for a token is middleware on the path.
+- **A gateway is an endpoint.** Require a token or a policy on it as on a route, `RequireAuthorization(...)`;
+  authentication, the caller (`Callers.Begin`) and request localization are middleware, which runs before it.
+- **Tools read the schema with a key.** GraphQL Codegen and the Relay compiler send `X-GraphQL-Schema-Key` with the
+  key the host reads at `GraphQL:SchemaKey` (never code, 32 characters at least): a deployed host from
+  `GraphQL__SchemaKey` or its secret store, the tool from the same secret in its own environment. In Development they
+  need none. The key reads the schema and nothing else; elsewhere nobody reads the schema without it. A gateway's
+  `SchemaReaders` (`DevelopmentOrKey`, `KeyOnly`, `Everyone`, `Nobody`) change who reads it, introspection and the
+  file alike; `DisableIntrospection` does not.
+- **Register an `IAuthorizationMiddlewareResultHandler` of the host's before `AddInMemoryFusionGateway`**, which wraps
+  it so the key passes the endpoint's authorization; after it, mapping a gateway by name fails.
 - Commit each schema as `schema.graphql` and compare it in a test, so a change of the API is seen.

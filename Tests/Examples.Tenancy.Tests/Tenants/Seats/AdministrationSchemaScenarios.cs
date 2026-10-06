@@ -8,10 +8,10 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Examples.Tenancy.Tests.Tenants.Seats;
 
 /// <summary>
-/// The tenant's administration schema at <c>/admin/graphql</c>: what a seat is offered at <c>/graphql</c> of
-/// Tenancy, and another person's roles besides, which <c>/graphql</c> does not offer anybody. Which schema offers
-/// the field decides nothing about who may read it: that is the request's, <c>tenancy.seats.manage</c> for the whole
-/// tenant, as on its route.
+/// The tenant's administration at <c>/admin/graphql</c>, a gateway of its own: what a seat is offered at
+/// <c>/graphql</c>, and another person's roles besides, which <c>/graphql</c> does not offer anybody. Which schema
+/// offers the field decides nothing about who may read it: that is the request's, <c>tenancy.seats.manage</c> for the
+/// whole tenant, as on its route.
 /// </summary>
 /// <remarks>
 /// The class's hosts run on Supabase's own Postgres image, with the exported policies and privileges under the
@@ -139,7 +139,8 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     [Fact]
     public async Task At_graphql_the_field_is_offered_to_nobody_and_a_seat_reads_its_own_roles_there()
     {
-        // Not to Maud either: the gateway does not have the field, so the document is refused before anything runs.
+        // Not to Maud either: the user's gateway does not compose the field, so the document is refused before
+        // anything runs.
         using var maud = await sample.ClientAsync("maud", Harbor.Slug);
         var refused = await maud.GraphQLAsync(Grants, new { seat = Rhea });
 
@@ -156,9 +157,9 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
     }
 
     [Fact]
-    public async Task The_administrations_endpoint_bounds_a_request_as_the_gateway_bounds_one_at_graphql()
+    public async Task The_administrations_gateway_bounds_a_request_as_the_users_gateway_does()
     {
-        // The gateway's bounds are the gateway's: the schema served apart has the same, from the host.
+        // Each gateway has options of its own, and the host gives both the same bounds.
         using var maud = await sample.ClientAsync("maud", Harbor.Slug);
 
         static string Seats(int times) => "{ " + string.Join(" ", Enumerable.Range(1, times).Select(n => $"s{n}: seats {{ id }}")) + " }";
@@ -168,16 +169,31 @@ public sealed class AdministrationSchemaScenarios(SampleHosts sample) : IClassFi
         wide.TryGetProperty("data", out _).Should().BeFalse("a document of too many fields is not run: {0}", wide.GetRawText());
         wide.GetProperty("errors").EnumerateArray().Should().NotBeEmpty();
 
-        // Eleven levels deep, one more than a request may go.
-        var deep = await maud.GraphQLAsync(
-            SampleGraphQLCalls.Administration,
-            "{ __schema { types { fields { type { ofType { ofType { ofType { ofType { ofType { ofType { name } } } } } } } } } } }",
-            variables: null);
+        // A project of an inspection of a project, round three times: twelve levels, more than a request may go.
+        static string Round(int times)
+            => "{ projects(first: 1) { nodes { " + string.Concat(Enumerable.Repeat("inspections(first: 1) { nodes { project { ", times)) + "number" + new string('}', (times * 3) + 2).Replace("}", " }", StringComparison.Ordinal) + " }";
+
+        var deep = await maud.GraphQLAsync(SampleGraphQLCalls.Administration, Round(3), variables: null);
         deep.TryGetProperty("data", out _).Should().BeFalse("a document that goes too deep is not run: {0}", deep.GetRawText());
         deep.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.GetProperty("message").GetString().Should().Contain("depth");
 
-        // Within both, the same request is answered.
+        // Within both, the same requests are answered: the administration's gateway composes Projects and
+        // Inspections as the user's does.
         (await maud.AdministrationDataAsync(Seats(50))).EnumerateObject().Should().HaveCount(50);
+        (await maud.AdministrationDataAsync(Round(2))).GetProperty("projects").GetProperty("nodes").ValueKind.Should().Be(JsonValueKind.Array);
+    }
+
+    [Fact]
+    public async Task The_administrations_gateway_answers_a_tools_introspection_whatever_its_depth()
+    {
+        // The depth is a bound on data. What GraphQL Codegen asks nests ofType seven times, and is answered: the host
+        // runs in Development here, where a tool reads the schema without a key.
+        using var maud = await sample.ClientAsync("maud", Harbor.Slug);
+
+        var schema = await maud.AdministrationDataAsync(
+            "{ __schema { types { fields { type { ofType { ofType { ofType { ofType { ofType { ofType { ofType { name } } } } } } } } } } } }");
+
+        schema.GetProperty("__schema").GetProperty("types").GetArrayLength().Should().BeGreaterThan(10);
     }
 
     [Fact]

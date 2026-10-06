@@ -11,15 +11,14 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Examples.Tenancy.Tenants.Api.GraphQL;
 
 /// <summary>
-/// Tenancy's two GraphQL schemas. Its source schema, which a gateway in the host composes with the other modules'
-/// into the one schema every seat is offered; and the schema of the tenant's administration, which the host serves
-/// on its own, beside the gateway.
+/// Tenancy's two GraphQL source schemas: the one every seat is offered, which the host's user gateway composes with
+/// the other modules' at <c>/graphql</c>; and the tenant's administration's, which its administration gateway
+/// composes with the same modules at <c>/admin/graphql</c>.
 /// </summary>
 /// <remarks>
-/// Tenancy owns what a seat, a unit and a role are called. The other modules name them by id alone, and the
-/// gateway fetches the rest here, through the three lookups of the <c>Directory</c> feature. Each feature's
-/// queries, mutations and types are in its own <c>GraphQL</c> folder, beside its routes; this class only puts
-/// them together.
+/// Tenancy owns what a seat, a unit and a role are called. The other modules name them by id alone, and a gateway
+/// fetches the rest here, through the three lookups of the <c>Directory</c> feature. Each feature's queries,
+/// mutations and types are in its own <c>GraphQL</c> folder, beside its routes; this class only puts them together.
 /// <para>
 /// A type of the schema is declared over the record the application layer answers, in a type class beside the
 /// fields that answer it, so no record is copied for the schema's sake. HotChocolate's generator registers the
@@ -31,19 +30,20 @@ namespace Examples.Tenancy.Tenants.Api.GraphQL;
 /// The two schemas are made of the same calls, and differ by name only. A class of fields marked
 /// <c>[GraphQLSchema(name, ...)]</c> is registered by the toolkit's generated bindings,
 /// <c>AddTenantsGraphQlRuntimeBindings()</c>, for the schema of that name and for no other: <c>SeatsAdminQueries</c>
-/// for the administration's, and the gateway's lookups, <c>DirectoryQueries</c>, for the source schema. Every other
-/// class is in both. So the administration's schema has all of Tenancy a seat is offered at the gateway, and
-/// another person's roles besides.
+/// for the administration's alone, and the gateways' lookups, <c>DirectoryQueries</c>, for both, since each gateway
+/// resolves the other modules' references through them. Every other class is in both. So the administration's
+/// schema has all of Tenancy a seat is offered, and another person's roles besides. Which schemas form an endpoint
+/// is the host's to say, with a gateway per endpoint; the module only names its schemas.
 /// </para>
 /// </remarks>
 internal static class TenantsGraphQL
 {
-    /// <summary>The name the source schema is registered under, and the gateway knows it by.</summary>
+    /// <summary>The name the schema every seat is offered is registered under, and the host's user gateway lists it by.</summary>
     public const string SourceSchemaName = "tenants";
 
     /// <summary>
-    /// The name the administration's schema is registered under, and its classes are marked with: the host serves
-    /// it on its own, and keeps it out of what the gateway composes.
+    /// The name the administration's schema is registered under, and its classes are marked with: the host's
+    /// administration gateway lists it where the user gateway lists <see cref="SourceSchemaName"/>.
     /// </summary>
     public const string AdministrationSchemaName = "admin";
 
@@ -65,16 +65,13 @@ internal static class TenantsGraphQL
         // Who answers the key a field of a role asks for. The host's conventions add the handler that asks.
         services.AddScoped<IFieldKeys<RoleListing>, RoleFieldKeys>();
 
-        // A schema a gateway composes: its lookups are how the gateway finds an entity by its key.
+        // Two schemas a gateway composes: their lookups are how a gateway finds an entity by its key.
         var schema = Tenancy(services.AddGraphQLServer(SourceSchemaName).AddSourceSchemaDefaults());
-
-        // The administration's: no gateway composes it, so it is a plain schema.
-        var administration = Tenancy(services.AddGraphQLServer(AdministrationSchemaName));
+        var administration = Tenancy(services.AddGraphQLServer(AdministrationSchemaName).AddSourceSchemaDefaults());
 
         // What the host gives every schema of a module: typed errors, one spelling for enum values, a scope per
         // field, the check that the caller has a seat, nullable fields for a type with a key, and a field's
-        // permission key asked of the class above. The host knows each schema by its name, and decides by it what
-        // only one of them gets: the bounds of a request, for the one it serves without the gateway.
+        // permission key asked of the class above.
         conventions(schema);
         conventions(administration);
         return schema;

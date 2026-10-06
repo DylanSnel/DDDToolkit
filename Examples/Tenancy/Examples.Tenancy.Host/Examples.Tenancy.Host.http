@@ -828,7 +828,7 @@ Authorization: Bearer {{ada.response.body.access_token}}
 ### module serves a schema of its own and names another module's entity by its id; the gateway asks the owner
 ### for the rest. A token is needed as on every route, and a seat in the tenant the Tenant header names for
 ### every field but seatsOfMine and invitationAccept, which need none, and the operators' four, which need an
-### operator.
+### operator. The tenant's administration has a gateway of its own, at /admin/graphql, further down.
 ###
 ### A project with names. Projects answers the project and the ids of its unit, its owner and its crew;
 ### Tenancy answers what those are called, in the same answer. A project's id is a node id here, not the bare
@@ -1033,10 +1033,10 @@ Content-Type: application/json
   "variables": { "tenant": "{{harbor}}" }
 }
 
-### The tenant's administration has a schema of its own, at /admin/graphql: all of Tenancy that /graphql
-### offers, and another person's roles besides. Vic's, as maud reads them: Observer at North Inland, for four
-### weeks that ended yesterday, so appliesNow is false. Nothing above changes his roles in the organization. The
-### same field sent to /graphql is refused when the document is read, for maud as for everybody.
+### The tenant's administration has a gateway of its own, at /admin/graphql: everything /graphql offers, and
+### another person's roles besides. Vic's, as maud reads them: Observer at North Inland, for four weeks that ended
+### yesterday, so appliesNow is false. Nothing above changes his roles in the organization. The same field sent to
+### /graphql is refused when the document is read, for maud as for everybody.
 POST {{api}}/admin/graphql
 Authorization: Bearer {{maud.response.body.access_token}}
 Tenant: harbor
@@ -1059,6 +1059,14 @@ Content-Type: application/json
   "query": "query($seat: UUID!) { seatGrants(seatId: $seat) { unitPath role } }",
   "variables": { "seat": "{{vicsSeat}}" }
 }
+
+### The schema, as a tool reads it: GraphQL Codegen, or the file the Relay compiler is pointed at. No token. Here,
+### in Development, no key either; where the host runs for real it takes the key kept at GraphQL:SchemaKey, sent as
+### X-GraphQL-Schema-Key: <the key>, and without it this is a 401. The key reads the schema and nothing else.
+GET {{api}}/graphql/schema.graphql
+
+### The administration's schema, the same way.
+GET {{api}}/admin/graphql?sdl
 
 ### ------------------------------------------------------------------------------------------------
 ### Every call that deliberately breaks a rule, and one read that is allowed beside the same read refused, with

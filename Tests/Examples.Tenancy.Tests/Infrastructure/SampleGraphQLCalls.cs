@@ -13,7 +13,7 @@ public static class SampleGraphQLCalls
     /// <summary>The selection that reads any of a mutation's typed errors: its type, its code and what kind of refusal it is.</summary>
     public const string Errors = "errors { __typename ... on CodedError { code message } ... on RefusalError { kind } }";
 
-    /// <summary>Where the tenant's administration schema is served, on its own and not through the gateway.</summary>
+    /// <summary>Where the tenant's administration is served: its own gateway, beside the user's at <c>/graphql</c>.</summary>
     public const string Administration = "/admin/graphql";
 
     /// <summary>Posts a document and returns the whole answer, <c>data</c> and <c>errors</c> alike.</summary>

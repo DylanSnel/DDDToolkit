@@ -8,8 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Examples.Tenancy.Tests.GraphQL;
 
 /// <summary>
-/// The GraphQL schemas of the sample's host, held to committed files: the schema a client is offered, which the
-/// gateway composes, and each module's source schema with the directives the gateway composes by.
+/// The GraphQL schemas of the sample's host, held to committed files: the schema each gateway offers its clients,
+/// the user's at <c>/graphql</c> and the administration's at <c>/admin/graphql</c>, and each module's source schema
+/// with the directives the gateways compose by.
 /// </summary>
 /// <remarks>
 /// A change to what clients see, or to a key or a lookup, shows in a review as a change to a file. Run the tests
@@ -22,13 +23,16 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
     /// <summary>The environment variable that makes the snapshot tests write the files instead of comparing with them.</summary>
     private const string WriteSchema = "TENANCY_WRITE_SCHEMA";
 
-    /// <summary>The types more than one module declares, each with the module that owns it.</summary>
-    private static readonly IReadOnlyDictionary<string, string> Owners = new Dictionary<string, string>(StringComparer.Ordinal)
+    /// <summary>
+    /// The types more than one module declares, each with the schemas of the module that owns it: Tenancy's two,
+    /// since either is the Tenancy of one gateway, or Projects' one.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string[]> Owners = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
-        ["Seat"] = "tenants",
-        ["OrganizationUnit"] = "tenants",
-        ["Role"] = "tenants",
-        ["Project"] = "projects",
+        ["Seat"] = ["tenants", "admin"],
+        ["OrganizationUnit"] = ["tenants", "admin"],
+        ["Role"] = ["tenants", "admin"],
+        ["Project"] = ["projects"],
     };
 
     /// <summary>
@@ -42,14 +46,25 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
-    public static TheoryData<string> SourceSchemas => new("inspections", "projects", "tenants");
+    public static TheoryData<string> SourceSchemas => new("admin", "inspections", "projects", "tenants");
 
-    [Fact]
-    public async Task The_gateway_schema_is_the_committed_snapshot()
+    /// <summary>Each gateway, with the file its schema is held to: next to the host's <c>Program.cs</c>.</summary>
+    public static TheoryData<string, string> Gateways => new()
     {
-        var printed = await sample.Services.GetRequiredService<InMemoryFusionSchemas>().PrintGatewayAsync(Cancellation);
+        { SampleGateways.User, "schema.graphql" },
+        { SampleGateways.Administration, "admin.graphql" },
+    };
 
-        Compare(printed, Path.Combine(Path.GetDirectoryName(SampleLayout.HostProjectFile())!, "schema.graphql"));
+    [Theory]
+    [MemberData(nameof(Gateways))]
+    public async Task Each_gateways_schema_is_its_committed_snapshot(string gateway, string file)
+    {
+        var schemas = sample.Services.GetRequiredService<InMemoryFusionSchemas>();
+        schemas.GatewayNames.Should().BeEquivalentTo(Gateways.Select(row => row.Data.Item1), "the host serves these gateways, and no other");
+
+        var printed = await schemas.PrintGatewayAsync(gateway, Cancellation);
+
+        Compare(printed, Path.Combine(Path.GetDirectoryName(SampleLayout.HostProjectFile())!, file));
 
         // The lookups that are there for the gateway alone are no fields of what a client is offered.
         printed.Should().Contain("project(id: ID!): Project").And.NotContain("organizationUnit(id:").And.NotContain("@internal");
@@ -61,41 +76,40 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
     {
         var schemas = sample.Services.GetRequiredService<InMemoryFusionSchemas>();
 
-        schemas.SourceSchemaNames.Should().Equal(SourceSchemas.Select(row => row.Data), "every module registers a source schema, and no schema is registered that is not listed here");
+        schemas.SourceSchemaNames.Should().Equal(SourceSchemas.Select(row => row.Data), "every schema a module registers is composed by a gateway, and no schema is registered that is not listed here");
         Compare(await schemas.PrintSourceAsync(name, Cancellation), SnapshotOf(name));
     }
 
     [Fact]
-    public async Task The_administration_schema_is_the_committed_snapshot()
+    public async Task Each_gateway_composes_Projects_and_Inspections_and_a_Tenancy_of_its_own()
     {
-        var printed = (await sample.Services.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema.ToString();
+        var schemas = sample.Services.GetRequiredService<InMemoryFusionSchemas>();
 
-        Compare(printed, Path.Combine(SampleLayout.DirectoryOf(SampleLayout.Project("Tenants", Layer.Api)), "GraphQL", "admin.graphql"));
+        schemas.SourceSchemaNamesOf(SampleGateways.User).Should().Equal(InspectionsModule.SourceSchema, ProjectsModule.SourceSchema, TenantsModule.SourceSchema);
+        schemas.SourceSchemaNamesOf(SampleGateways.Administration).Should().Equal(TenantsModule.AdministrationSchema, InspectionsModule.SourceSchema, ProjectsModule.SourceSchema);
     }
 
     [Fact]
-    public async Task The_administration_schema_offers_what_the_gateway_offers_of_Tenancy_and_another_persons_roles_besides()
+    public async Task The_administrations_gateway_offers_what_the_users_offers_and_another_persons_roles_besides()
     {
-        var executors = sample.Services.GetRequiredService<IRequestExecutorProvider>();
-        var administration = (await executors.GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema;
-        var tenancy = (await executors.GetExecutorAsync("tenants", Cancellation)).Schema;
         var schemas = sample.Services.GetRequiredService<InMemoryFusionSchemas>();
-        var gateway = Utf8GraphQLParser.Parse(await schemas.PrintGatewayAsync(Cancellation));
+        var user = Utf8GraphQLParser.Parse(await schemas.PrintGatewayAsync(SampleGateways.User, Cancellation));
+        var administration = Utf8GraphQLParser.Parse(await schemas.PrintGatewayAsync(SampleGateways.Administration, Cancellation));
 
-        // What a seat is offered of Tenancy at /graphql: its source schema's fields that the gateway has. Not the
-        // lookups, which are the gateway's alone, and whose class is marked for the source schema.
-        var offered = FieldsOf(tenancy.QueryType).Intersect(FieldsOf(gateway, "Query")).ToList();
-        FieldsOf(tenancy.QueryType).Except(offered).Should().BeEquivalentTo(["seat", "organizationUnit", "role"], "the lookups are all the gateway keeps to itself");
+        // Everything a seat is offered at /graphql, and another person's roles besides: the one class marked for it.
+        FieldsOf(administration, "Query").Should().BeEquivalentTo([.. FieldsOf(user, "Query"), "seatGrants"], "the administration reads another person's roles, and that is all it adds");
+        FieldsOf(administration, "Mutation").Should().BeEquivalentTo(FieldsOf(user, "Mutation"), "the administration changes nothing a seat could not ask to change at /graphql");
+        administration.ToString().Should().Contain("seatGrants(seatId: UUID!): [SeatGrant!]!");
 
-        // The administration has all of that, and another person's roles besides: the one class marked for it.
-        FieldsOf(administration.QueryType).Should().BeEquivalentTo([.. offered, "seatGrants"], "the administration reads another person's roles, and that is all it adds");
-        FieldsOf(administration.MutationType!).Should().BeEquivalentTo(FieldsOf(tenancy.MutationType!), "the administration changes nothing a seat could not ask to change at /graphql");
-        FieldsOf(tenancy.MutationType!).Should().BeSubsetOf(FieldsOf(gateway, "Mutation"));
-        administration.ToString().Should().Contain("seatGrants(seatId: UUID!): [SeatGrant!]!").And.NotContain("@lookup").And.NotContain("@internal");
+        // And what a client of the user's gateway is offered has nothing of it: not the field, and not the type it answers.
+        user.ToString().Should().NotContain("seatGrants").And.NotContain("SeatGrant");
 
-        // And what a client of the gateway is offered has nothing of it: not the field, and not the type it answers.
-        gateway.ToString().Should().NotContain("seatGrants").And.NotContain("SeatGrant");
-        schemas.SourceSchemaNames.Should().NotContain(TenantsModule.AdministrationSchema, "the gateway leaves the administration's schema out");
+        // The two of Tenancy differ by that class alone, the lookups both gateways resolve references through included.
+        var executors = sample.Services.GetRequiredService<IRequestExecutorProvider>();
+        var tenancy = (await executors.GetExecutorAsync(TenantsModule.SourceSchema, Cancellation)).Schema;
+        var tenancyOfTheAdministration = (await executors.GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema;
+        FieldsOf(tenancyOfTheAdministration.QueryType).Should().BeEquivalentTo([.. FieldsOf(tenancy.QueryType), "seatGrants"]);
+        FieldsOf(tenancy.QueryType).Should().Contain(["seat", "organizationUnit", "role"], "the lookups are the gateways' own, in both of Tenancy's schemas");
     }
 
     private static IReadOnlyList<string> FieldsOf(IObjectTypeDefinition type)
@@ -114,7 +128,7 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
         {
             var schema = (await executors.GetExecutorAsync(name, Cancellation)).Schema;
 
-            foreach (var (type, owner) in Owners)
+            foreach (var (type, owners) in Owners)
             {
                 if (!schema.Types.TryGetType<IObjectTypeDefinition>(type, out var declared))
                 {
@@ -122,7 +136,7 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
                 }
 
                 var fields = declared.Fields.Where(field => !field.IsIntrospectionField).ToList();
-                if (name == owner)
+                if (owners.Contains(name))
                 {
                     // A reference whose owner answers nothing is its key with the owner's fields null. A field the
                     // owner declared as never null would turn that into an error, so it declares none but the key.
@@ -142,15 +156,27 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
                     fields.Where(field => added.Contains(field.Name) && field.Type.IsNonNullType()).Select(field => field.Name)
                         .Should().BeEmpty("what {0} adds to {1} is nothing for an entity out of reach, not an error", name, type);
 
-                    var owned = (await executors.GetExecutorAsync(owner, Cancellation)).Schema.Types.GetType<IObjectTypeDefinition>(type);
-                    owned.Fields.Select(field => field.Name).Intersect(added).Should().BeEmpty("a field has one module that answers it");
+                    foreach (var owner in owners)
+                    {
+                        var owned = (await executors.GetExecutorAsync(owner, Cancellation)).Schema.Types.GetType<IObjectTypeDefinition>(type);
+                        owned.Fields.Select(field => field.Name).Intersect(added).Should().BeEmpty("a field has one module that answers it");
+                    }
                 }
             }
         }
     }
 
+    /// <summary>
+    /// Where a source schema is held: <c>GraphQL/schema.graphql</c> of the module's API project, and Tenancy's
+    /// administration's beside it, as <c>GraphQL/admin.graphql</c>.
+    /// </summary>
     private static string SnapshotOf(string sourceSchema)
     {
+        if (sourceSchema == TenantsModule.AdministrationSchema)
+        {
+            return Path.Combine(SampleLayout.DirectoryOf(SampleLayout.Project("Tenants", Layer.Api)), "GraphQL", "admin.graphql");
+        }
+
         var module = SampleLayout.Modules.Single(listed => string.Equals(listed, sourceSchema, StringComparison.OrdinalIgnoreCase));
         return Path.Combine(SampleLayout.DirectoryOf(SampleLayout.Project(module, Layer.Api)), "GraphQL", "schema.graphql");
     }

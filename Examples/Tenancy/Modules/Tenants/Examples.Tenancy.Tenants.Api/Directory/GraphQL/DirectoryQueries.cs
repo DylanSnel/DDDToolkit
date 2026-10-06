@@ -18,13 +18,15 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 /// so the seats of one batch, as a rule all a page of projects names, are asked in one question, and each
 /// answers nothing for an id of another tenant or of nothing at all, which a client cannot tell apart.
 /// <para>
-/// So they are fields of the source schema the gateway composes, and of no other: the class is marked for that
-/// schema, and its methods carry no <c>[Query]</c>, which would make them fields of the administration's schema
-/// too, where a client would be offered them. HotChocolate reads <c>[Lookup]</c>, <c>[Internal]</c> and
-/// <c>[Cost]</c> off a method of a marked class as it does off a <c>[Query]</c> method.
+/// So they are fields of the two source schemas, since a gateway composes each with the modules that name a seat, a
+/// unit or a role: the class is marked for both, as a class of two schemas is. Marked, and no <c>[Query]</c> class:
+/// a schema this project were added to that no gateway composes would offer them to its clients as public fields.
+/// HotChocolate reads <c>[Lookup]</c>, <c>[Internal]</c> and <c>[Cost]</c> off a method of a marked class as it does
+/// off a <c>[Query]</c> method.
 /// </para>
 /// </remarks>
 [GraphQLSchema(TenantsGraphQL.SourceSchemaName, OperationType.Query)]
+[GraphQLSchema(TenantsGraphQL.AdministrationSchemaName, OperationType.Query)]
 internal static class DirectoryQueries
 {
     /// <summary>

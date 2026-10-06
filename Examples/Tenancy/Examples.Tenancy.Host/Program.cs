@@ -26,22 +26,18 @@ builder.AddServiceDefaults();
 // as a role that owns nothing and every command runs as its caller under the exported policies. Without that
 // setting the host stops here, and says how to get one: the AppHost, or the Supabase CLI's stack.
 //
-// The host serves GraphQL next to the routes: every module registers a source schema of its own, and gets from
-// the host what all of them share, the typed errors, the spelling of enum values and the check that the caller
-// has a seat. Tenancy registers its administration's schema as well, which the host serves on its own, below:
-// the gateway bounds a request to /graphql, and that schema is bounded the same way here.
-var host = builder.AddSampleStorage().WithGraphQL(graphql =>
-{
-    graphql.AddSampleGraphQLConventions();
-    if (graphql.Name == TenantsModule.AdministrationSchema)
-    {
-        graphql.AddSampleRequestBounds();
-    }
-});
+// The host serves GraphQL next to the routes: every module registers a source schema of its own, Tenancy its
+// administration's as well, and each gets from the host what all of them share, the typed errors, the spelling of
+// enum values and the check that the caller has a seat.
+var host = builder.AddSampleStorage().WithGraphQL(graphql => graphql.AddSampleGraphQLConventions());
 
 // Who is calling: Supabase access tokens, and in Development the dev login that issues them for the
 // demonstration people. Registered before the modules, so the request's caller is the one Tenancy reads.
 builder.Services.AddSampleAuthentication(builder.Configuration, builder.Environment);
+
+// The seat policy brings the host's answer to a refusal, which says why with a code. It is registered before the
+// GraphQL gateways below, which wrap it: a tool's schema request with the key passes their authorization that way,
+// and every other refusal is still answered by it. Registered after them, it would fail the mapping.
 builder.Services.AddSampleSeatPolicy();
 builder.Services.AddSampleOperatorPolicy();
 
@@ -101,18 +97,21 @@ builder.Services.AddInspectionsModule(host);
 // project, so the new module's keys reach the export once that project references the module as well.
 builder.Services.AddTenancyPermissionsOfModules();
 
-// One GraphQL schema over the modules: the gateway composes the source schemas the modules registered, in this
-// process, and calls them in memory. A module names another's entity by its id, and the gateway asks the owner
-// for the rest. Source schemas that do not compose fail the start, with the composer's reason. The gateway bounds
-// a request as a whole, its depth and its number of fields: what a request may cost is estimated per module and
-// per operation the gateway sends, which a request that asks one list many times over stays under. Tenancy's
-// administration schema is left out: it is served on its own, below, and composed its fields would be offered at
-// /graphql too.
-builder.Services.AddInMemoryFusionGateway(options =>
-{
-    options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds();
-    options.ServedApart.Add(TenantsModule.AdministrationSchema);
-});
+// Two GraphQL schemas over the modules, one per endpoint, each a gateway that composes the source schemas listed
+// for it, in this process, and calls them in memory: the user's, with Tenancy's schema for a seat, and the
+// administration's, with Tenancy's administration schema in its place, which has another person's roles besides. A
+// module names another's entity by its id, and the gateway asks the owner for the rest. Source schemas that do not
+// compose fail the start, with the composer's reason. Each gateway bounds a request as a whole, its depth and its
+// number of fields: what a request may cost is estimated per module and per operation the gateway sends, which a
+// request that asks one list many times over stays under.
+builder.Services.AddInMemoryFusionGateway(
+    SampleGateways.User,
+    [TenantsModule.SourceSchema, ProjectsModule.SourceSchema, InspectionsModule.SourceSchema],
+    options => options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds());
+builder.Services.AddInMemoryFusionGateway(
+    SampleGateways.Administration,
+    [TenantsModule.AdministrationSchema, ProjectsModule.SourceSchema, InspectionsModule.SourceSchema],
+    options => options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds());
 
 // Every refusal, broken rule and lost race as problem+json with a code.
 builder.Services.AddProblemDetails();
@@ -195,17 +194,19 @@ operators.MapTenantsOperations();
 operators.MapProjectsOperations();
 operators.MapInspectionsOperations();
 
-// GraphQL at /graphql, for the same callers: a token, checked here because the gateway is a branch of the pipeline
-// and not an endpoint that could require it, and a seat, which each module's schema checks in front of its fields.
-// Both come after tenant selection, so the caller it resolved is the one a resolver runs as.
-app.UseWhen(context => context.Request.Path.StartsWithSegments("/graphql"), branch => branch.UseSignedInOnly());
-app.MapInMemoryFusionGateway();
-
-// The tenant's administration at /admin/graphql: all of Tenancy a seat is offered at /graphql, and another
-// person's roles besides. A plain schema at an endpoint, not a branch, so it requires a seat as the routes do.
-// That decides who is offered the fields; who may read what one answers is its request's to say, as everywhere
-// else.
-app.MapGraphQL("/admin/graphql", TenantsModule.AdministrationSchema).RequireAuthorization(SamplePolicies.SeatRequired);
+// GraphQL at /graphql, for the same callers as the routes: a token, which the endpoint requires as a route does,
+// and a seat, which each module's schema checks in front of its fields, since seatsOfMine and invitationAccept need
+// none. The tenant's administration at /admin/graphql: everything a seat is offered at /graphql, and another person's
+// roles besides, for a seat in the tenant the request names, as the routes inside a tenant require. That decides who
+// is offered the fields; who may read what one answers is its request's to say, as everywhere else. Both run after
+// tenant selection, so the caller it resolved is the one a resolver runs as.
+//
+// A tool that reads a schema, GraphQL Codegen or the Relay compiler, has no token. In Development, where the host runs
+// on a developer's machine, it reads the schema without one; elsewhere with the key the host reads at
+// GraphQL:SchemaKey, from the environment variable GraphQL__SchemaKey or its secret store, which the tool sends in
+// X-GraphQL-Schema-Key. The key reads the schema and nothing else.
+app.MapInMemoryFusionGateway(SampleGateways.UserPath, SampleGateways.User).RequireAuthorization();
+app.MapInMemoryFusionGateway(SampleGateways.AdministrationPath, SampleGateways.Administration).RequireAuthorization(SamplePolicies.SeatRequired);
 
 app.MapDefaultEndpoints();
 

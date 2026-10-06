@@ -18,9 +18,9 @@ namespace Examples.Tenancy.Tests.GraphQL;
 
 /// <summary>
 /// Who may ask the GraphQL schema: a signed-in caller, with a seat in the tenant the request names. The token is
-/// checked in front of the gateway, and the seat in front of every root field of every module's schema but the
-/// caller's own seats and accepting an invitation, with the refusals the routes answer. A field of the
-/// application's own staff asks for an operator instead.
+/// required by the gateway's endpoint, as by a route, and the seat in front of every root field of every module's
+/// schema but the caller's own seats and accepting an invitation, with the refusals the routes answer. A field of
+/// the application's own staff asks for an operator instead.
 /// </summary>
 [Trait("Category", "Samples")]
 [Trait("Sample", "Tenancy.Supabase")]
@@ -46,16 +46,19 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     private static DemoTenant Harbor => DemoData.Harbor;
 
     [Fact]
-    public async Task Graphql_without_a_token_is_401()
+    public async Task Graphql_without_a_token_is_401_and_in_Development_the_schema_is_a_tools_to_read()
     {
         // No token is not "no seat": the caller is challenged, as on every route, before the gateway reads anything.
         using var anonymous = (await sample.SharedAsync()).Client(token: null, tenant: Harbor.Slug);
 
         using var asked = await anonymous.PostAsJsonAsync("/graphql", new { query = Projects }, Cancellation);
-        using var schema = await anonymous.GetAsync("/graphql?sdl", Cancellation);
-
         asked.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        schema.StatusCode.Should().Be(HttpStatusCode.Unauthorized, "the schema is not handed out either");
+
+        // The host runs in Development here: a developer's GraphQL Codegen reads the schema without a token or a key,
+        // and reads nothing else. Outside Development it takes the key (GraphQLSchemaKeyTests).
+        using var schema = await anonymous.GetAsync("/graphql?sdl", Cancellation);
+        schema.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await schema.Content.ReadAsStringAsync(Cancellation)).Should().Contain("projects(");
     }
 
     [Fact]
@@ -115,9 +118,9 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
     /// <summary>
     /// The scenario above tries a few fields. This one tries them all, from the schemas themselves: every field of
     /// the query type and of the mutation type of every schema the host registers, the modules' source schemas with
-    /// the lookups only the gateway asks, and the administration's it serves apart, each asked of its own schema by
-    /// a caller without a seat. A field added tomorrow is tried the day it is added, at either endpoint, and one the
-    /// gate does not stand in front of answers something else than the gate's refusal.
+    /// the lookups only the gateways ask, Tenancy's administration's among them, each asked of its own schema by a
+    /// caller without a seat. A field added tomorrow is tried the day it is added, whichever gateway composes it,
+    /// and one the gate does not stand in front of answers something else than the gate's refusal.
     /// </summary>
     [Fact]
     public async Task Every_root_field_of_every_module_is_behind_the_gate_but_the_ones_the_host_names()
@@ -136,9 +139,9 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         var operators = new List<string>();
         var seated = new List<string>();
 
-        // Every schema, not only those the gateway composes: the administration's is served on its own.
+        // Every schema the host registers is one a gateway composes: none is served on its own, past the gateways.
         var schemas = executors.SchemaNames;
-        schemas.Should().BeEquivalentTo([.. host.Services.GetRequiredService<InMemoryFusionSchemas>().SourceSchemaNames, TenantsModule.AdministrationSchema]);
+        schemas.Should().BeEquivalentTo(host.Services.GetRequiredService<InMemoryFusionSchemas>().SourceSchemaNames);
 
         foreach (var schema in schemas)
         {

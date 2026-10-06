@@ -884,9 +884,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   is in `GreenDonut.Data.EntityFramework`, which the project that holds the context references. See
   [Paging by an id](docs/graphql.md#paging-by-an-id).
 - **The schemas of a modular monolith, printed for tests.** `InMemoryFusionSchemas`, a singleton
-  `AddInMemoryFusionGateway()` registers: `PrintGatewayAsync()` is the composed schema as the endpoint
-  serves it, `PrintSourceAsync(name)` one module's source schema with the directives the gateway composes
-  by, and `SourceSchemaNames` the modules' names, so a test compares each with a committed file. See
+  `AddInMemoryFusionGateway` registers: `PrintGatewayAsync(name)` is a gateway's composed schema as its endpoint
+  serves it (`PrintGatewayAsync()` the one gateway's), `PrintSourceAsync(name)` one module's source schema with the
+  directives the gateways compose by, `GatewayNames` the gateways, `SourceSchemaNames` every schema some gateway
+  composes and `SourceSchemaNamesOf(gateway)` one gateway's, so a test compares each with a committed file. See
   [Your schemas in a test](docs/graphql.md#your-schemas-in-a-test).
 - **A field for one schema only.** `[GraphQLSchema("admin", OperationType.Query)]`, new in
   `DDDToolkit.HotChocolate.Attributes`, says that a class of fields belongs to the schema of that name and to no
@@ -903,13 +904,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and what would lose a field without a word: an instance method, a class with no field, two methods that are one
   field, and an overload that takes a type another generator writes. See
   [A field for one schema only](docs/graphql.md#a-field-for-one-schema-only).
-- **A schema served apart from the in-memory gateway.** `InMemoryFusionGatewayOptions.ServedApart` names the
-  schemas of the application the gateway leaves out of its composition, and `InMemoryFusionSchemas.SourceSchemaNames`
-  leaves them out with it: such a schema is served on its own, `MapGraphQL("/admin/graphql", "admin")`, where it
-  can require authorization as an endpoint. Empty by default, so the gateway still composes every schema. A name
-  no schema is registered under fails `MapInMemoryFusionGateway()` with the names there are, rather than leave the
-  schema it was meant for in the composition, and so does leaving every schema out. See
-  [A schema served apart](docs/graphql.md#a-schema-served-apart).
+- **Several in-memory gateways in one application.** `AddInMemoryFusionGateway("user", ["tenants", "projects"])`
+  registers a gateway by name that composes the source schemas listed for it and no other, each with options of its
+  own, and `MapInMemoryFusionGateway("/graphql", "user")` serves it as an endpoint, answering the endpoint's builder,
+  so `RequireAuthorization(...)` and a group's requirements apply as on a route. A schema may be in several gateways:
+  `[GraphQLSchema]` says which schema a class belongs to, a gateway which schemas form one endpoint. A listed name no
+  schema is registered under fails the mapping with the names there are; a second gateway of one name fails its
+  registration; a gateway registered and not mapped fails the start, and so does one whose schemas do not compose,
+  naming it. `InMemoryFusionGateway.DefaultName` is the name of the one gateway of every schema
+  `AddInMemoryFusionGateway()` registers. See [Several gateways](docs/graphql.md#several-gateways).
+- **A schema key, for the tools that read a gateway's schema.** GraphQL Codegen and the Relay compiler read a schema
+  without a user. A request that carries the key the host reads at `GraphQL:SchemaKey` (never code: the environment
+  variable `GraphQL__SchemaKey` or the host's secret store, and the same secret in the tool's environment) in
+  `X-GraphQL-Schema-Key` reads a gateway's schema, by introspection or as the file at `?sdl` and `/schema.graphql`
+  (behind a group's prefix in a group), past the endpoint's authorization, and reads nothing else: an ordinary
+  operation still needs what the endpoint requires, and a document that could be read two ways, or that is no text,
+  is decided by the endpoint. In Development a schema request needs no key. Elsewhere one without it is refused, a
+  signed-in user's too: the file with 403, every `GET` that asks for it whatever operation it carries besides, and
+  introspection with an error that names the header. `InMemoryFusionGatewayOptions.SchemaReaders` says otherwise per
+  gateway: `DevelopmentOrKey` by default, `KeyOnly`, `Everyone` or `Nobody`, for the authorization, introspection
+  and the file alike; `DisableIntrospection` in `ConfigureGateway` does not overrule it. The key is compared in
+  constant time, has at least 32 characters or the mapping fails, and is never logged; a wrong one is logged as a
+  warning without either key. It passes authorization through the application's
+  `IAuthorizationMiddlewareResultHandler`, which `AddInMemoryFusionGateway` wraps for as long as the host's own lives,
+  so a handler registered before it, a scoped one too, still answers every other refusal; one registered after it
+  fails the mapping of a gateway by name and says so. A plain schema mapped with `MapGraphQL` does not take the key.
+  See [Reading the schema from a tool](docs/graphql.md#reading-the-schema-from-a-tool).
 
 #### Tenancy
 
@@ -1775,7 +1795,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     not the caller's to see, is its id with nothing else, and no error.
   - A mutation answers what it changed, read after the save, with typed errors in its payload. A project's
     mutations take `expectedVersion` and answer the new `version`.
-  - A request to `/graphql` needs a token (`UseSignedInOnly`, in front of the gateway) and a seat in the
+  - A request to `/graphql` needs a token (`RequireAuthorization()` on the gateway's endpoint) and a seat in the
     tenant it names (`SeatGate`, which answers the refusals of the routes' policy), except for the fields
     `SeatGate` is told need no seat, `seatsOfMine` and `invitationAccept`, and the fields that ask for an
     operator instead, which answer anybody else `tenancy.operators-only`.
@@ -2048,19 +2068,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   name, sets no `DDD_Module` any more, and the Tenancy sample's shared projects set neither `DDD_Module` nor
   `[assembly: Module]`. `DDDToolkit.ExampleApi` is module Api, the benchmarks module Benchmarks, and the docs
   site's sample module Shop, so the homepage shows its generated `Module.g.cs` as well.
-- **The Tenancy sample serves the tenant's administration a schema of its own.** `/admin/graphql` offers all of
-  Tenancy that `/graphql` offers, and `seatGrants(seatId:)` besides: the roles another seat holds, where and for
-  when, which `SeatGrants` answers for `tenancy.seats.manage` held for the whole tenant, and
-  `GET /tenancy/seats/{seatId}/grants` answers over REST. Its class, `SeatsAdminQueries`, is marked
-  `[GraphQLSchema("admin", OperationType.Query)]`, and the gateway's lookups, `DirectoryQueries`, are marked for the
-  source schema, so the administration's schema has none of them. The Tenants module registers both schemas from the
-  same calls in `TenantsGraphQL.AddTenantsGraphQL`; the host leaves the administration's out of the gateway with
-  `ServedApart`, bounds its requests as the gateway bounds those to `/graphql` (`AddSampleRequestBounds` for a
-  schema), and maps it at an endpoint that requires a seat. The committed `Tenants.Api/GraphQL/admin.graphql` is the
-  schema, `GraphQLSchemaTests` holds it to what the gateway offers of Tenancy plus `seatGrants`,
-  `GraphQLSeatGateScenarios` asks every root field of it without a seat, and `AdministrationSchemaScenarios` shows
-  maud reading another person's roles there, leo refused, a seat of another tenant having none, the read refusing
-  leo past the mediator too, and `/graphql` refusing the field to everybody.
+- **The Tenancy sample serves the tenant's administration a gateway of its own.** `/admin/graphql` offers everything
+  `/graphql` offers, and `seatGrants(seatId:)` besides: the roles another seat holds, where and for when, which
+  `SeatGrants` answers for `tenancy.seats.manage` held for the whole tenant, and `GET /tenancy/seats/{seatId}/grants`
+  answers over REST. Its class, `SeatsAdminQueries`, is marked `[GraphQLSchema("admin", OperationType.Query)]`, and the
+  gateways' lookups, `DirectoryQueries`, are marked for both of Tenancy's schemas. The Tenants module registers both
+  as source schemas from the same calls in `TenantsGraphQL.AddTenantsGraphQL`, and names them, as Projects and
+  Inspections name theirs (`TenantsModule.SourceSchema`, `TenantsModule.AdministrationSchema`,
+  `ProjectsModule.SourceSchema`, `InspectionsModule.SourceSchema`). The host composes two gateways
+  (`SampleGateways`): the user's of Tenancy's schema for a seat, Projects and Inspections at `/graphql`, which
+  requires a token, and the administration's of Tenancy's administration schema and the same two at
+  `/admin/graphql`, which requires a seat; both bounded alike by `AddSampleRequestBounds`, whose depth now leaves
+  introspection to HotChocolate's own bound, so GraphQL Codegen's query is answered. `UseSignedInOnly` is gone: the
+  gateways are endpoints. A tool reads either schema without a token, in Development with nothing and elsewhere
+  with the key at `GraphQL:SchemaKey`. The committed `Host/schema.graphql` and `Host/admin.graphql` are the two
+  gateways' schemas and `Tenants.Api/GraphQL/admin.graphql` the administration's source schema;
+  `GraphQLSchemaTests` holds the administration's gateway to the user's plus `seatGrants`,
+  `GraphQLSchemaKeyTests` runs the host in Production and downloads both schemas with the key and is refused
+  without it, `GraphQLSeatGateScenarios` asks every root field of every schema without a seat, and
+  `AdministrationSchemaScenarios` shows maud reading another person's roles there, leo refused, a seat of another
+  tenant having none, the read refusing leo past the mediator too, and `/graphql` refusing the field to everybody.
 - **The Tenancy sample writes no alias of Tenancy's use cases.** The Tenants module's application, infrastructure
   and API projects, the host and the sample's tests named `SampleTenancy`, an alias over nine types each of them
   declared again, and the application project `SampleInvitations` besides. They name `TenantsTenancy`, the class
@@ -2437,6 +2464,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   that there was no schema: HotChocolate's in-memory connector composes in its constructor and tells only
   who is listening at that moment. The package now listens before the composer starts, stops waiting when
   the composer refuses, and lists every error it found, where the composer's own exception names the first.
+- **`DDDToolkit.HotChocolate.Fusion.InMemory`: the gateway is an endpoint, and its schema is a tool's to read.**
+  Up to 3.1 `MapInMemoryFusionGateway()` added a branch of the pipeline, which nothing could require authorization
+  of, served the schema file to whoever reached it, and allowed introspection nowhere, Development included, since
+  the gateway's own container knew no environment. Now it maps an endpoint at `{path}/{**slug}`, so it runs after
+  every middleware of the pipeline, wherever it is mapped; introspection follows the application's environment by
+  default, as HotChocolate's own schemas do; and outside Development the schema, file and introspection alike, takes
+  the schema key, from a signed-in user as well. `AddInMemoryFusionGateway()` and `MapInMemoryFusionGateway(path)`
+  keep their signatures, and name the one gateway of every schema `InMemoryFusionGateway.DefaultName`; calling
+  `AddInMemoryFusionGateway()` twice fails, where it registered two gateways that fought over one container. The
+  endpoint `MapInMemoryFusionGateway(path)` maps requires nothing, so a host's own `IAuthorizationMiddlewareResultHandler`
+  may still be registered before or after `AddInMemoryFusionGateway()`.
+  - **Breaking, for a tool that downloads the schema outside Development.** `/graphql?sdl` without the key is a 403
+    there; give the tool the key ([Reading the schema from a tool](docs/graphql.md#reading-the-schema-from-a-tool)).
+  - **Breaking, for middleware mapped after the gateway.** Middleware added after `MapInMemoryFusionGateway()` ran
+    only for requests the branch did not take; as with any endpoint it now runs before the gateway too.
 - **`DDDToolkit.HotChocolate`: the error types describe themselves in the schema.** `CodedError`, the four
   error types, `ValueFailure`, `RuleViolation`, `FailureArgument` and `RefusalKind`, with every field and value,
   carry a description written for the client that reads the schema, where they had none, so a schema snapshot

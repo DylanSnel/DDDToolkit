@@ -120,7 +120,15 @@ public sealed class SchemaPrintingTests
     [Fact]
     public async Task The_printed_gateway_schema_is_what_the_endpoint_serves()
     {
-        await using var shop = await GatewayHost.StartAsync(builder => builder.AddShop());
+        // In Development, where the schema file is served without a key.
+        await using var shop = await GatewayHost.StartAsync(
+            Environments.Development,
+            builder =>
+            {
+                builder.AddShop();
+                builder.Services.AddInMemoryFusionGateway();
+            },
+            app => app.MapInMemoryFusionGateway());
 
         var printed = await shop.Schemas.PrintGatewayAsync(Cancellation);
         var served = await shop.Http.GetStringAsync("/graphql?sdl", Cancellation);

@@ -1232,8 +1232,10 @@ host: there is no other method to call, and none to forget.
   callers, `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`: that keeps the administration's schema,
   its introspection included, from callers who have no business with it.
 
-The [Tenancy sample](tenancy.md#graphql-in-the-sample) serves its administration schema this way, beside the gateway
-of the next section: [A schema served apart](#a-schema-served-apart).
+With [one schema over a modular monolith](#one-schema-over-a-modular-monolith), the two are gateways: the attribute
+says which schema a class belongs to, and a gateway which schemas form one endpoint. The
+[Tenancy sample](tenancy.md#graphql-in-the-sample) serves its administration that way:
+[Several gateways](#several-gateways).
 
 ## One schema over a modular monolith
 
@@ -1363,6 +1365,12 @@ A module's GraphQL is then the same code in the monolith and as a service behind
 the modules still know nothing of each other's classes: they agree on a type's name and its key.
 `Examples/ModularMonolith.*` register every module this way; see the examples' README.
 
+That is the application's one gateway, of every schema it registers. An application that serves more than one
+surface, a user's and an administration's, names a gateway per surface and lists the schemas of each:
+[Several gateways](#several-gateways). Every gateway is an endpoint, so what the host requires of its callers it
+puts on it as on a route, and a tool such as GraphQL Codegen reads its schema with a key of the application's:
+[Reading the schema from a tool](#reading-the-schema-from-a-tool).
+
 Three things it takes care of, all found the hard way and shown in
 `Tests/Spikes/DDDToolkit.Spikes.FusionInProcess`:
 
@@ -1403,7 +1411,8 @@ because it is less than an HTTP request and more than nothing:
 - **What is ambient stays ambient.** The call is awaited in the request's own flow, so what the host's
   middleware made ambient before the gateway is there in a resolver, in a lookup the gateway calls in
   another module, and in a data loader: the caller `Callers.Begin` made current, and the culture request
-  localization set. That is why such middleware goes before `MapInMemoryFusionGateway()`.
+  localization set. Such middleware is in the pipeline, which runs before every endpoint, the gateway's among
+  them.
 - **The fields of a query run side by side.** With a scope per resolver each field gets its own scoped
   services, and so its own `DbContext`:
 
@@ -1421,26 +1430,20 @@ because it is less than an HTTP request and more than nothing:
 - **Lookups for one answer arrive together.** When an answer names twenty products, the module that owns
   their stock gets one call, and a data loader behind its lookup gets the twenty keys together, as a rule in
   one batch.
-- **A check in front of the gateway is middleware.** `MapInMemoryFusionGateway()` adds a branch of the
-  pipeline, not an endpoint, so there is nothing to put `RequireAuthorization()` on. A host that wants a token
-  for `/graphql` puts middleware on that path, before the gateway, and after whatever makes the caller current:
+- **A gateway is an endpoint**, so it requires of its callers what a route would, the same way:
 
   ```csharp
   app.UseAuthentication();
-  app.UseWhen(
-      context => context.Request.Path.StartsWithSegments("/graphql"),
-      branch => branch.Use(async (context, next) =>
-      {
-          if (context.User.Identity?.IsAuthenticated != true)
-          {
-              await context.ChallengeAsync();   // 401, as on a route that requires authorization
-              return;
-          }
-
-          await next(context);
-      }));
-  app.MapInMemoryFusionGateway();
+  app.UseAuthorization();
+  app.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();   // a token, or 401
   ```
+
+  Mapping a gateway by name answers the endpoint's builder. The one gateway of every schema,
+  `AddInMemoryFusionGateway()` without a name, is mapped by name as well when it requires something:
+  `MapInMemoryFusionGateway("/graphql", InMemoryFusionGateway.DefaultName).RequireAuthorization()`. A group's
+  requirements and prefix reach a gateway mapped in it as they reach its routes: in `MapGroup("/api")` it answers at
+  `/api/graphql`, its schema file at `/api/graphql/schema.graphql`. A tool that only reads the schema has no
+  token, and reads it with a key instead: [Reading the schema from a tool](#reading-the-schema-from-a-tool).
 
 - **A source schema that never finishes building holds the start.** `CompositionTimeout` bounds the gateway's
   own wait for the composed schema. HotChocolate builds every source schema when the application starts, in
@@ -1605,8 +1608,8 @@ order of their classes' names, then as they are written.
 
 ### Your schemas in a test
 
-What a client is offered, and what the gateway composes by, should not change by accident.
-`InMemoryFusionSchemas`, a singleton `AddInMemoryFusionGateway()` registers, prints both, for a test that
+What a client is offered, and what the gateways compose by, should not change by accident.
+`InMemoryFusionSchemas`, a singleton `AddInMemoryFusionGateway` registers, prints both, for a test that
 compares each with a committed file:
 
 ```csharp
@@ -1616,53 +1619,207 @@ public async Task The_schemas_are_the_committed_ones()
     await using var app = new WebApplicationFactory<Program>();
     var schemas = app.Services.GetRequiredService<InMemoryFusionSchemas>();
 
-    (await schemas.PrintGatewayAsync()).Should().Be(await File.ReadAllTextAsync("schema.graphql"));
-
-    foreach (var name in schemas.SourceSchemaNames)     // "catalog", "inventory", in ordinal order
+    foreach (var gateway in schemas.GatewayNames)       // "admin", "user", in ordinal order
     {
-        (await schemas.PrintSourceAsync(name)).Should().Be(await File.ReadAllTextAsync($"{name}.graphql"));
+        (await schemas.PrintGatewayAsync(gateway)).Should().Be(await File.ReadAllTextAsync($"{gateway}.graphql"));
+    }
+
+    foreach (var name in schemas.SourceSchemaNames)     // every schema a gateway composes, once
+    {
+        (await schemas.PrintSourceAsync(name)).Should().Be(await File.ReadAllTextAsync($"{name}.source.graphql"));
     }
 }
 ```
 
-`PrintGatewayAsync()` is the composed schema as the endpoint serves it for `/graphql?sdl`: one `Product`,
-and no trace of how it is put together. `PrintSourceAsync(name)` is one module's schema with the
-directives the gateway composes by (`@key`, `@lookup`, `@internal`, `@shareable`), which is where a
-changed key or a type that stopped being shared shows. Source schemas print as soon as the application is
-built; the gateway's needs `MapInMemoryFusionGateway()` to have been called, and source schemas that
-compose, and says which of the two is missing otherwise.
+`PrintGatewayAsync(name)` is a gateway's composed schema as its endpoint serves it for `?sdl`: one `Product`,
+and no trace of how it is put together; an application with one gateway prints it with `PrintGatewayAsync()`.
+`PrintSourceAsync(name)` is one module's schema with the directives the gateways compose by (`@key`, `@lookup`,
+`@internal`, `@shareable`), which is where a changed key or a type that stopped being shared shows.
+`SourceSchemaNamesOf(gateway)` says which schemas one gateway composes. Source schemas print as soon as the
+application is built; a gateway's needs it to be mapped, and source schemas that compose, and says which of the two
+is missing otherwise.
 
-### A schema served apart
+### Several gateways
 
-The gateway composes every schema the application registers. A schema of
-[fields for one schema only](#a-field-for-one-schema-only), an administration's at `/admin/graphql`, would then be
-composed into `/graphql` as well, and its fields offered to every client of the gateway. Name it among the schemas
-the gateway leaves out, and serve it on its own:
+An application that serves more than one surface, the one every user is offered and an administration's, names a
+gateway per surface and lists the source schemas each composes. A schema may be in more than one gateway:
 
-```csharp
-const string Administration = "admin";   // one name, for the schema, the classes, the gateway and the endpoint
-
-builder.Services.AddGraphQLServer(Administration)
-    .AddDDDToolkitTypes().AddTenantsGraphQlRuntimeBindings().AddTenantsTypes()
-    .AddMaxExecutionDepthRule(10)                                      // the gateway's bounds do not reach it
-    .ModifyParserOptions(parser => parser.MaxAllowedFields = 200);
-builder.Services.AddInMemoryFusionGateway(options => options.ServedApart.Add(Administration));
-
-app.MapInMemoryFusionGateway();                                               // /graphql: every other schema, composed
-app.MapGraphQL("/admin/graphql", Administration).RequireAuthorization(...);   // the administration's, on its own
+```mermaid
+flowchart LR
+    Tenants["tenants"] --> User["gateway user"]
+    Admin["admin<br/>tenants and seatGrants"] --> Office["gateway admin"]
+    Projects["projects"] --> User
+    Projects --> Office
+    Inspections["inspections"] --> User
+    Inspections --> Office
+    User --> UserEndpoint["/graphql<br/>a token"]
+    Office --> AdminEndpoint["/admin/graphql<br/>a seat"]
 ```
 
-A name in `ServedApart` that no schema is registered under fails `MapInMemoryFusionGateway()`, and the message lists
-the names there are. Left out of nothing, the schema it was meant for would be composed after all; `"Admin"` beside
-`AddGraphQLServer("admin")` is such a name, since names are compared as they are written.
+[`[GraphQLSchema]`](#a-field-for-one-schema-only) says which schema a class of fields belongs to; a gateway says
+which schemas form one endpoint. In the Tenancy sample, Tenancy registers its schema twice from the same calls, the
+second time under `"admin"` and so with the classes marked for it, and the administration's gateway composes that
+one, in the place of the user's Tenancy, with the same modules the user's gateway composes. Its clients get
+everything a user gets, and another person's roles besides, in one schema; the user's gateway has nothing of it.
 
-A schema served apart is a plain HotChocolate schema at an endpoint of its own: it is not a source schema, so it is
-not among `InMemoryFusionSchemas.SourceSchemaNames`, it calls no `AddSourceSchemaDefaults()`, and it is no branch of
-the pipeline, so `RequireAuthorization()` works on it where it cannot on the gateway. The gateway's own options,
-`ConfigureGateway` with the bounds it puts on a request among them, do not reach it either: it sees the whole of its
-requests itself, so it bounds them itself, as above. It answers from its own module only: a type another module
-owns is not fetched for it, as the gateway fetches it. One gateway per application is still what the package
-composes; a second composed schema, of several modules, is not something it offers.
+- **Each gateway composes the schemas listed for it, and no other**, on its own: the user's never sees the
+  administration's types, and a document that names one of its fields is refused when it is read, before anything
+  runs. A name listed that no schema is registered under fails the mapping, with the names there are; `"Admin"`
+  beside `AddGraphQLServer("admin")` is such a name, since names are compared as they are written.
+- **Every schema a gateway lists is a source schema**: `AddSourceSchemaDefaults()`, an administration's too. A
+  lookup the gateway resolves another module's references through is in each of a module's source schemas that a
+  gateway composes with those modules, so a class of lookups marked for one schema is marked for both.
+- **Each gateway has options of its own.** The bounds of a request, in `ConfigureGateway`, are given to each, and
+  each says who reads its schema, `SchemaReaders` ([Reading the schema from a tool](#reading-the-schema-from-a-tool)).
+- **The application starts when every gateway has a composed schema.** One whose schemas do not compose fails the
+  start with the composer's reason, and names the gateway; one that is registered and not mapped fails it too.
+- **A name is the gateway's own.** Registering a second gateway under a name fails at once, and mapping a name no
+  gateway has fails with the names there are. A gateway mapped at two paths is one gateway.
+- **The one gateway of every schema stays.** `AddInMemoryFusionGateway()`, with no name and no list, composes every
+  schema the application registers; it is `InMemoryFusionGateway.DefaultName` among the gateways. Beside named
+  ones it would compose theirs too, so an application with several names them all.
+
+<details>
+<summary>Show the code: a module with two schemas, and a host with two gateways</summary>
+
+```csharp title="Tenants.Api/GraphQL/TenantsGraphQL.cs"
+// Two source schemas of the same calls. [GraphQLSchema("admin", ...)] puts SeatsAdminQueries into the second only;
+// the lookups are marked for both.
+var schema = Tenancy(services.AddGraphQLServer("tenants").AddSourceSchemaDefaults());
+var administration = Tenancy(services.AddGraphQLServer("admin").AddSourceSchemaDefaults());
+```
+
+```csharp title="Program.cs"
+builder.Services.AddInMemoryFusionGateway("user", ["tenants", "projects", "inspections"],
+    options => options.ConfigureGateway = gateway => gateway.AddMaxExecutionDepthRule(10, skipIntrospectionFields: true));
+builder.Services.AddInMemoryFusionGateway("admin", ["admin", "projects", "inspections"],
+    options => options.ConfigureGateway = gateway => gateway.AddMaxExecutionDepthRule(10, skipIntrospectionFields: true));
+
+app.MapInMemoryFusionGateway("/graphql", "user").RequireAuthorization();
+app.MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization("seat-required");
+```
+
+*[`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleGateways.cs`](../Examples/Tenancy/Examples.Tenancy.Host/GraphQL/SampleGateways.cs)*
+
+</details>
+
+A schema that is not a source schema stays HotChocolate's to serve, `MapGraphQL("/admin/graphql", "admin")`, with
+nothing of the other modules in it: a type another module owns is not fetched for it, and the schema key below does
+not reach it.
+
+### Reading the schema from a tool
+
+GraphQL Codegen, the Relay compiler's schema download and a build step that writes `schema.graphql` read a schema
+without a user: an introspection query, or the schema file at `{path}?sdl` and `{path}/schema.graphql` (behind a
+group's prefix, for a gateway mapped in a group). A gateway that requires a token would refuse them, so a tool sends
+the application's schema key instead, in the `X-GraphQL-Schema-Key` header:
+
+```mermaid
+sequenceDiagram
+    participant Tool as Codegen
+    participant Auth as Authorization
+    participant Gateway as The gateway
+    Tool->>Auth: __schema, with the key
+    Note over Auth: no token: refused,<br/>then: only the schema?<br/>the key? let through
+    Auth->>Gateway: the request
+    Note over Gateway: introspection<br/>allowed for it
+    Gateway-->>Tool: the schema
+```
+
+The endpoint's authorization refuses the tool, as it refuses any request without a token. Before that refusal is
+answered, the gateway looks at the request: if it reads the schema and nothing else, and carries the key, it goes on
+to the gateway, which allows introspection for that one request. Anything else is answered as the endpoint answers
+it. In Development the key is not needed: a developer's codegen reads the schema of the application on their machine
+as it is. That is the default, and a gateway's `SchemaReaders` say otherwise where the host wants otherwise (below).
+
+| The request, by default | In Development | Elsewhere, with the key | Elsewhere, without it |
+| --- | --- | --- | --- |
+| reads the schema, without a token | answered | answered | refused: 401 where the endpoint requires a token |
+| reads the schema, with a token | answered | answered | the file 403, introspection an error that names the header |
+| asks for anything else | as the endpoint requires | as the endpoint requires: the key opens nothing else | as the endpoint requires |
+
+- **Only the schema.** A request reads the schema when it is the schema file, or when every operation of its
+  document asks `__schema`, `__type` or `__typename` at its root, fragments included. One that could be read two
+  ways is not: a JSON property twice, a persisted operation, a batch, a field aliased `__schema`, a query string on
+  a post, a socket, a body that is no text. Those are the endpoint's to decide.
+- **Elsewhere nobody reads the schema without the key**, a signed-in user neither: the schema of an application in
+  production is its tools' to read. The gateway refuses introspection to whoever does not read the schema, and the
+  schema file too, which HotChocolate hands to whoever reaches it: every `GET` that asks for the file, whatever
+  operation it carries besides, since whether HotChocolate runs that operation first depends on server options a
+  host may change (`EnableGetRequests`, `EnforceGetRequestsPreflightHeader`).
+- **The host says who reads a gateway's schema**, with `SchemaReaders` in the gateway's options:
+  `DevelopmentOrKey`, the default; `KeyOnly`, the key in Development as well, for a host that runs in Development
+  where others than its developers reach it; `Everyone`, for a public API whose schema is no secret, past the
+  endpoint's authorization too; or `Nobody`, key or not, where the schema is read from the committed file. One
+  setting decides the authorization, introspection and the file alike, so a schema is never readable one way and
+  refused the other: `DisableIntrospection` in `ConfigureGateway` does not overrule it.
+- **The key is configuration, never code**: `GraphQL:SchemaKey`. A host on a developer's machine runs in Development
+  and needs none. A deployed host reads it from its own configuration, the environment variable `GraphQL__SchemaKey`
+  or its secret store, and the tool reads the same secret from its own environment, a CI secret or an untracked
+  `.env` file: one secret, given to both. It has at least 32 characters, or the mapping fails: a key that can be
+  guessed opens the schema to whoever guesses it. Without one, nothing reads the schema outside Development by
+  default.
+- **It is compared in constant time and never logged.** A wrong key is logged as a warning, with the path it was sent
+  to and nothing of either key, and the request is answered as one without a key.
+- **It passes the endpoint's authorization** through the application's `IAuthorizationMiddlewareResultHandler`, which
+  `AddInMemoryFusionGateway` wraps for as long as the host's own lives, a scoped one per request, so a handler the
+  host registered first, one that answers a refusal its own way, still answers every other refusal. One registered
+  after `AddInMemoryFusionGateway` would replace it; mapping a gateway by name then fails and says to register it
+  first. `MapInMemoryFusionGateway()` without a name maps an endpoint that requires nothing, which no refusal reaches,
+  so the order is no matter there.
+- **Gateways only.** A plain schema the host maps with `MapGraphQL` does not take the key: HotChocolate lets one
+  interceptor per schema allow introspection for a request, and a plain schema's is the host's, while a gateway's
+  container is the package's own. An administration schema that should take it is served through a gateway, as
+  above.
+
+<details>
+<summary>Show the code: the key, GraphQL Codegen, the Relay compiler and a public schema</summary>
+
+```bash
+# Once: the key, kept as one secret, GRAPHQL_SCHEMA_KEY in the build server's secrets and the host's store.
+openssl rand -base64 32
+```
+
+```yaml title=".github/workflows/schema.yml"
+# The one secret, given to the host as configuration and to the tool as its environment.
+env:
+  GraphQL__SchemaKey: ${{ secrets.GRAPHQL_SCHEMA_KEY }}   # the host, when CI runs one outside Development
+  GRAPHQL_SCHEMA_KEY: ${{ secrets.GRAPHQL_SCHEMA_KEY }}   # GraphQL Codegen and curl below
+```
+
+```ts title="codegen.ts"
+import type { CodegenConfig } from '@graphql-codegen/cli';
+
+const config: CodegenConfig = {
+  schema: [
+    {
+      'https://api.example.com/graphql': {
+        headers: { 'X-GraphQL-Schema-Key': process.env.GRAPHQL_SCHEMA_KEY ?? '' },
+      },
+    },
+  ],
+  documents: ['src/**/*.graphql'],
+  generates: { 'src/gql/': { preset: 'client' } },
+};
+
+export default config;
+```
+
+```bash
+# The Relay compiler reads a file: download it, then point relay.config.json's "schema" at it.
+curl -H "X-GraphQL-Schema-Key: $GRAPHQL_SCHEMA_KEY" https://api.example.com/graphql/schema.graphql -o schema.graphql
+```
+
+```csharp title="Program.cs"
+// A public API: every request reads the schema, wherever the application runs.
+builder.Services.AddInMemoryFusionGateway("public", ["catalog"], options => options.SchemaReaders = SchemaReaders.Everyone);
+```
+
+</details>
+
+The [Tenancy sample](tenancy.md#graphql-in-the-sample) maps both of its gateways with `RequireAuthorization`;
+`GraphQLSchemaKeyTests` runs its host in Production and downloads each gateway's schema with the key, the way a build
+server would, and is refused without it.
 
 ## Value objects in a Fusion source schema
 

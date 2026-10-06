@@ -9,8 +9,9 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 
 /// <summary>
 /// What the tenant's administration asks about seats: another person's roles. Only the administration's schema has
-/// it, which the host serves at <c>/admin/graphql</c>; the schema every seat is offered at <c>/graphql</c> has not.
-/// A seat reads its own roles there, in <c>overviewOfMine</c>.
+/// it, which the host's administration gateway composes at <c>/admin/graphql</c>; the schema every seat is offered,
+/// which its user gateway composes at <c>/graphql</c>, has not. A seat reads its own roles there, in
+/// <c>overviewOfMine</c>.
 /// </summary>
 /// <remarks>
 /// Marked for that one schema, the class carries nothing else that says what it is: its methods have no

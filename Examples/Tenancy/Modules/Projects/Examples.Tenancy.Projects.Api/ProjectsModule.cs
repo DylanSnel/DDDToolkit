@@ -43,6 +43,9 @@ namespace Examples.Tenancy.Projects.Api;
 /// </remarks>
 public static class ProjectsModule
 {
+    /// <summary>The name of Projects' GraphQL source schema, which the host's gateways list among those they compose.</summary>
+    public static string SourceSchema => ProjectsGraphQL.SourceSchemaName;
+
     /// <summary>
     /// Registers Projects: how it is stored, the projects' rules, the checks its commands and queries pass, and the
     /// gate other modules ask. Its keys are not registered here: the host adds them with every module's, from the

@@ -76,11 +76,13 @@ global using Examples.Tenancy.Inspections.Infrastructure.Persistence;
 // What the modules share and none owns.
 global using Examples.Tenancy.Shared.Domain.ValueObjects;
 
-// The host: its access plumbing, its request pipeline, its dev login and the demonstration's fixed data.
+// The host: its access plumbing, its request pipeline, its dev login, its GraphQL gateways and the demonstration's
+// fixed data.
 global using Examples.Tenancy.Host;
 global using Examples.Tenancy.Host.Access;
 global using Examples.Tenancy.Host.Auth;
 global using Examples.Tenancy.Host.DevLogin;
+global using Examples.Tenancy.Host.GraphQL;
 global using Examples.Tenancy.Host.Requests;
 global using Examples.Tenancy.Host.Seeding;
 global using Examples.Tenancy.Host.Storage;

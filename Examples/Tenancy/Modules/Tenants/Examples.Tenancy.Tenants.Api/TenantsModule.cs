@@ -50,10 +50,14 @@ namespace Examples.Tenancy.Tenants.Api;
 public static class TenantsModule
 {
     /// <summary>
-    /// The name of the tenant's administration schema: all of Tenancy a seat is offered at the gateway, and another
-    /// person's roles besides. The host serves it on its own, with
-    /// <c>MapGraphQL("/admin/graphql", AdministrationSchema)</c>, and keeps it out of what the gateway composes, or a
-    /// client of the gateway would be offered its fields too.
+    /// The name of Tenancy's source schema every seat is offered, which the host's user gateway composes.
+    /// </summary>
+    public static string SourceSchema => TenantsGraphQL.SourceSchemaName;
+
+    /// <summary>
+    /// The name of the tenant's administration schema: all of Tenancy a seat is offered, and another person's roles
+    /// besides. The host's administration gateway composes it in the place of <see cref="SourceSchema"/>; a gateway
+    /// that composed it would offer its fields to every client of that gateway's endpoint.
     /// </summary>
     public static string AdministrationSchema => TenantsGraphQL.AdministrationSchemaName;
 
@@ -69,9 +73,10 @@ public static class TenantsModule
     {
         services.AddTenantsInfrastructure(host, catalogue).AddTenantsApplication();
 
-        // The module's GraphQL schemas, when the host serves GraphQL: its source schema, and the administration's,
-        // which the host serves on its own (AdministrationSchema). No context is registered with them: a field only
-        // sends, and every query that reads takes a context of its own from the pool.
+        // The module's GraphQL schemas, when the host serves GraphQL: the one every seat is offered (SourceSchema),
+        // and the administration's (AdministrationSchema), each a source schema the host's gateways compose. No
+        // context is registered with them: a field only sends, and every query that reads takes a context of its
+        // own from the pool.
         services.AddTenantsGraphQL(host);
         return services;
     }

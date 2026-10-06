@@ -81,10 +81,18 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     /// Changes to its services, made after the host's own registrations and before the hosted services are taken
     /// out: what it sees is everything the host registers.
     /// </param>
-    public static SampleFactory WithoutDatabase(Action<IServiceCollection>? services = null)
+    /// <param name="environment">
+    /// The environment it runs in; Development when left out. Outside Development the host's settings files hold
+    /// next to nothing, so what it cannot start without comes in <paramref name="settings"/>.
+    /// </param>
+    /// <param name="settings">Settings over its own, besides the connection string and the seeding, which are these.</param>
+    public static SampleFactory WithoutDatabase(
+        Action<IServiceCollection>? services = null,
+        string? environment = null,
+        IReadOnlyDictionary<string, string>? settings = null)
         => new(
-            Environments.Development,
-            new Dictionary<string, string>
+            environment ?? Environments.Development,
+            new Dictionary<string, string>(settings ?? new Dictionary<string, string>())
             {
                 ["ConnectionStrings:" + SampleStorage.ConnectionString] = NobodyAnswers,
                 [DemoSeeder.Setting] = "false",

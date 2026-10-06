@@ -32,17 +32,67 @@ internal sealed class GatewayHost : IAsyncDisposable
     /// <summary>The application's schemas, printed.</summary>
     public InMemoryFusionSchemas Schemas => _app.Services.GetRequiredService<InMemoryFusionSchemas>();
 
-    /// <summary>Builds and starts an application.</summary>
+    /// <summary>Builds and starts an application with the one gateway, of every schema, at <c>/graphql</c>.</summary>
     /// <param name="modules">Registers each module's source schema, and whatever the modules need.</param>
     /// <param name="pipeline">Middleware that runs before the gateway, as a host's own would.</param>
     /// <param name="configure">Options for the gateway.</param>
-    public static async Task<GatewayHost> StartAsync(
+    public static Task<GatewayHost> StartAsync(
         Action<WebApplicationBuilder> modules,
         Action<WebApplication>? pipeline = null,
         Action<InMemoryFusionGatewayOptions>? configure = null)
-    {
-        var app = Build(modules, pipeline, configure);
+        => StartAsync(Build(modules, pipeline, configure));
 
+    /// <summary>
+    /// Builds and starts an application in <paramref name="environment"/>, whose gateways and endpoints the test
+    /// registers and maps itself.
+    /// </summary>
+    /// <param name="environment">The environment it runs in: what a schema request needs depends on it.</param>
+    /// <param name="services">Registers the source schemas, the gateways and whatever else the application has.</param>
+    /// <param name="endpoints">Its pipeline and its endpoints, the gateways' among them.</param>
+    public static Task<GatewayHost> StartAsync(string environment, Action<WebApplicationBuilder> services, Action<WebApplication> endpoints)
+        => StartAsync(Build(environment, services, endpoints));
+
+    /// <summary>Builds an application and maps the one gateway, without starting it.</summary>
+    public static WebApplication Build(
+        Action<WebApplicationBuilder> modules,
+        Action<WebApplication>? pipeline = null,
+        Action<InMemoryFusionGatewayOptions>? configure = null)
+        => Build(
+            Environments.Production,
+            builder =>
+            {
+                modules(builder);
+                builder.Services.AddInMemoryFusionGateway(configure);
+            },
+            app =>
+            {
+                pipeline?.Invoke(app);
+                app.MapInMemoryFusionGateway();
+            });
+
+    /// <summary>Builds an application in <paramref name="environment"/> as the test describes it, without starting it.</summary>
+    public static WebApplication Build(string environment, Action<WebApplicationBuilder> services, Action<WebApplication> endpoints)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environment });
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Logging.ClearProviders();
+
+        // What a host under development runs with: a scoped service resolved from the root fails loudly.
+        builder.Host.UseDefaultServiceProvider(options =>
+        {
+            options.ValidateScopes = true;
+            options.ValidateOnBuild = true;
+        });
+
+        services(builder);
+
+        var app = builder.Build();
+        endpoints(app);
+        return app;
+    }
+
+    private static async Task<GatewayHost> StartAsync(WebApplication app)
+    {
         try
         {
             await app.StartAsync(Cancellation);
@@ -57,46 +107,33 @@ internal sealed class GatewayHost : IAsyncDisposable
         return new GatewayHost(app, new HttpClient { BaseAddress = new Uri(address) });
     }
 
-    /// <summary>Builds an application and maps the gateway, without starting it.</summary>
-    public static WebApplication Build(
-        Action<WebApplicationBuilder> modules,
-        Action<WebApplication>? pipeline = null,
-        Action<InMemoryFusionGatewayOptions>? configure = null)
-    {
-        var builder = WebApplication.CreateBuilder();
-        builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Logging.ClearProviders();
-
-        // What a host under development runs with: a scoped service resolved from the root fails loudly.
-        builder.Host.UseDefaultServiceProvider(options =>
-        {
-            options.ValidateScopes = true;
-            options.ValidateOnBuild = true;
-        });
-
-        modules(builder);
-        builder.Services.AddInMemoryFusionGateway(configure);
-
-        var app = builder.Build();
-        pipeline?.Invoke(app);
-        app.MapInMemoryFusionGateway();
-        return app;
-    }
-
     /// <summary>Posts a GraphQL request and returns the whole response body, errors and all.</summary>
     public async Task<JsonElement> PostAsync(string query, object? variables = null, Action<HttpRequestMessage>? request = null)
-    {
-        using var message = new HttpRequestMessage(HttpMethod.Post, "/graphql") { Content = JsonContent.Create(new { query, variables }) };
-        request?.Invoke(message);
+        => await PostAsync("/graphql", query, variables, request);
 
-        using var response = await Http.SendAsync(message, Cancellation);
+    /// <summary>Posts a GraphQL request to the gateway at <paramref name="path"/> and returns the whole response body.</summary>
+    public async Task<JsonElement> PostAsync(string path, string query, object? variables = null, Action<HttpRequestMessage>? request = null)
+    {
+        using var response = await SendAsync(path, query, variables, request);
         return await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+    }
+
+    /// <summary>Posts a GraphQL request to the gateway at <paramref name="path"/> and returns the response, for its status.</summary>
+    public async Task<HttpResponseMessage> SendAsync(string path, string query, object? variables = null, Action<HttpRequestMessage>? request = null)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(new { query, variables }) };
+        request?.Invoke(message);
+        return await Http.SendAsync(message, Cancellation);
     }
 
     /// <summary>Posts a GraphQL request and returns its <c>data</c>, failing the test when the response carries errors.</summary>
     public async Task<JsonElement> DataAsync(string query, object? variables = null, Action<HttpRequestMessage>? request = null)
+        => await DataAsync("/graphql", query, variables, request);
+
+    /// <summary>Posts a GraphQL request to the gateway at <paramref name="path"/> and returns its <c>data</c>, failing the test on errors.</summary>
+    public async Task<JsonElement> DataAsync(string path, string query, object? variables = null, Action<HttpRequestMessage>? request = null)
     {
-        var body = await PostAsync(query, variables, request);
+        var body = await PostAsync(path, query, variables, request);
         body.TryGetProperty("errors", out _).Should().BeFalse("the gateway answered {0}", body.ToString());
         return body.GetProperty("data");
     }

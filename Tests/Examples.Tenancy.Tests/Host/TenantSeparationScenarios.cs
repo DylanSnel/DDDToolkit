@@ -99,12 +99,14 @@ public sealed class TenantSeparationScenarios(SampleHosts sample) : IClassFixtur
         // The theory above proves something for the routes it is given. So the list it is given is held to what
         // the host maps: every route the modules map into the groups that require a caller, and nothing that is
         // gone. A route added to a module fails here until it is listed, and is then asked without a token too.
-        // The administration's GraphQL endpoint is no route, and is asked without a token by AdministrationSchemaScenarios.
+        // The two GraphQL gateways are endpoints of their own, not REST routes, and are asked without a token by
+        // GraphQLSeatGateScenarios and AdministrationSchemaScenarios.
         var host = await sample.SharedAsync();
         var mapped = host.Services.GetRequiredService<EndpointDataSource>().Endpoints
             .OfType<RouteEndpoint>()
             .Where(endpoint => endpoint.Metadata.GetMetadata<IAuthorizeData>() is not null && endpoint.Metadata.GetMetadata<IAllowAnonymous>() is null)
-            .Where(endpoint => endpoint.RoutePattern.RawText?.StartsWith(SampleGraphQLCalls.Administration, StringComparison.Ordinal) != true)
+            .Where(endpoint => !new[] { SampleGateways.UserPath, SampleGateways.AdministrationPath }
+                .Any(gateway => endpoint.RoutePattern.RawText?.StartsWith(gateway + "/", StringComparison.Ordinal) == true))
             .SelectMany(endpoint => endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Select(method => $"{method} {endpoint.RoutePattern.RawText}"))
             .ToList();
 
