@@ -42,21 +42,59 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
         return found.Select(seat => seat.ToSeatOfCaller()).ToList();
     }
 
-    /// <summary>The identity's seats with their tenants, in the tenant with <paramref name="slug"/> when there is one; past the tenant filter and no other.</summary>
-    private IQueryable<FoundSeat> SeatsWithIdentity(Guid identity, TenantSlug? slug)
+    /// <inheritdoc />
+    /// <remarks>
+    /// One statement, as the lookup without a view, with the seats read whole beside their tenants, and tracked by
+    /// nobody: nothing a view does to a seat is saved. The identity is still the one thing looked for past the tenant
+    /// filter; the application's own filters apply.
+    /// </remarks>
+    public async Task<IReadOnlyList<TView>> AllOfAsync<TAsked, TView>(
+        Guid identity,
+        Func<SeatOfCaller<TTenantId, TSeatId>, TAsked, TView> view,
+        CancellationToken cancellationToken)
+        where TAsked : class
     {
-        var tenants = context.Set<TTenant>().IgnoreQueryFilters([TenancyQueryFilter.Name]);
-        if (slug is not null)
+        ArgumentNullException.ThrowIfNull(view);
+        if (!typeof(TAsked).IsAssignableFrom(typeof(TSeat)))
         {
-            tenants = tenants.Where(tenant => tenant.Slug == slug);
+            throw new InvalidOperationException(
+                $"Tenancy's seats are {typeof(TSeat).FullName}, which is no {typeof(TAsked).FullName}: "
+                + "a view of the seats takes the seat class Tenancy was added with, or a class it derives from.");
         }
 
-        return from seat in context.Set<TSeat>().IgnoreQueryFilters([TenancyQueryFilter.Name])
-               where seat.Identity == identity
-               join tenant in tenants on seat.TenantId equals tenant.Id
-               join organization in context.Set<TOrganization>().IgnoreQueryFilters([TenancyQueryFilter.Name]) on seat.TenantId equals organization.Id
-               select new FoundSeat(tenant.Id, tenant.Slug, organization.Name, tenant.Status, seat.Id, seat.DisplayName, seat.Status);
+        var found = await (from seat in SeatsOf(identity)
+                           join tenant in Tenants(slug: null) on seat.TenantId equals tenant.Id
+                           join organization in Organizations() on seat.TenantId equals organization.Id
+                           select new { Seat = seat, Found = new FoundSeat(tenant.Id, tenant.Slug, organization.Name, tenant.Status, seat.Id, seat.Status) })
+            .AsNoTracking()
+            .AsSingleQuery()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return [.. found.Select(row => view(row.Found.ToSeatOfCaller(), (TAsked)(object)row.Seat))];
     }
+
+    /// <summary>The identity's seats with their tenants, in the tenant with <paramref name="slug"/> when there is one; past the tenant filter and no other.</summary>
+    private IQueryable<FoundSeat> SeatsWithIdentity(Guid identity, TenantSlug? slug)
+        => from seat in SeatsOf(identity)
+           join tenant in Tenants(slug) on seat.TenantId equals tenant.Id
+           join organization in Organizations() on seat.TenantId equals organization.Id
+           select new FoundSeat(tenant.Id, tenant.Slug, organization.Name, tenant.Status, seat.Id, seat.Status);
+
+    /// <summary>The identity's seats in every tenant: past the tenant filter, and no other.</summary>
+    private IQueryable<TSeat> SeatsOf(Guid identity)
+        => context.Set<TSeat>().IgnoreQueryFilters([TenancyQueryFilter.Name]).Where(seat => seat.Identity == identity);
+
+    /// <summary>Every tenant, or the one with <paramref name="slug"/> when there is one: past the tenant filter, and no other.</summary>
+    private IQueryable<TTenant> Tenants(TenantSlug? slug)
+    {
+        var tenants = context.Set<TTenant>().IgnoreQueryFilters([TenancyQueryFilter.Name]);
+        return slug is null ? tenants : tenants.Where(tenant => tenant.Slug == slug);
+    }
+
+    /// <summary>Every organization, for the tenant's name: past the tenant filter, and no other.</summary>
+    private IQueryable<TOrganization> Organizations()
+        => context.Set<TOrganization>().IgnoreQueryFilters([TenancyQueryFilter.Name]);
 
     /// <summary>What the query reads, before the slug becomes the string the directory answers with.</summary>
     private sealed record FoundSeat(
@@ -65,10 +103,9 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
         string OrganizationName,
         TenantStatus TenantStatus,
         TSeatId Seat,
-        string DisplayName,
         SeatStatus SeatStatus)
     {
         public SeatOfCaller<TTenantId, TSeatId> ToSeatOfCaller()
-            => new(Tenant, Slug.Value, OrganizationName, TenantStatus, Seat, DisplayName, SeatStatus);
+            => new(Tenant, Slug.Value, OrganizationName, TenantStatus, Seat, SeatStatus);
     }
 }

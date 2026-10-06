@@ -94,7 +94,7 @@ public partial class RefusalTableTests
 
         var organization = New.Organization();
         var refusal = Refused.With(TenancyRefusals.NameInvalid, () => organization.RenameUnit<SeatId>(organization.Root.Id, " "));
-        var tooLong = Refused.With(TenancyRefusals.NameInvalid, () => New.Seat().Rename(new string('n', 201)));
+        var tooLong = Refused.With(TenancyRefusals.NameInvalid, () => organization.RenameUnit<SeatId>(organization.Root.Id, new string('n', 201)));
         var previous = CultureInfo.CurrentUICulture;
         try
         {
@@ -214,12 +214,11 @@ public partial class RefusalTableTests
             }
         }
 
-        // Each code through a use case, as a caller meets it. A name is refused under one code for six inputs.
+        // Each code through a use case, as a caller meets it. A name is refused under one code for five inputs.
         var thrown = new List<(string Code, string Field, IReadOnlyDictionary<string, object?> Arguments)>
         {
             (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Tenants.RenameOrganizationAsync(" ", default))),
             (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Organization.RenameUnitAsync(harness.Harbor.North, " ", default))),
-            (TenancyRefusals.NameInvalid, "displayName", await Refusing(TenancyRefusals.NameInvalid, h => h.Seats.RenameAsync(ada, " ", default))),
             (TenancyRefusals.NameInvalid, "name", await Refusing(TenancyRefusals.NameInvalid, h => h.Roles.CreateAsync(" ", "Files widgets", [], default))),
             (TenancyRefusals.NameInvalid, "description", await Refusing(TenancyRefusals.NameInvalid, h => h.Roles.CreateAsync("Clerk", tooLong, [], default))),
             (TenancyRefusals.NameInvalid, "reason", await Refusing(TenancyRefusals.NameInvalid, h => h.Seats.GrantAsync(ada, root, watcher, until: null, tooLong, default))),
@@ -227,19 +226,18 @@ public partial class RefusalTableTests
             (TenancyRefusals.InvalidPeriod, "until", await Refusing(TenancyRefusals.InvalidPeriod, h => h.Seats.GrantAsync(ada, root, watcher, until: h.Clock.Now, reason: null, default))),
             (TenancyRefusals.ReasonRequired, "reason", await Refusing(TenancyRefusals.ReasonRequired, h => h.Tenants.CloseAsync(" ", default))),
             (TenancyRefusals.UnknownPermission, "keys", await Refusing(TenancyRefusals.UnknownPermission, h => h.Roles.CreateAsync("Clerk", "Files widgets", ["widget.polish"], default))),
-            (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddSeatAsync(Guid.Empty, "Bert", default))),
+            (TenancyRefusals.IdentityRequired, "identity", await Refusing(TenancyRefusals.IdentityRequired, h => h.Seats.AddSeatAsync(Guid.Empty, default))),
             (TenancyRefusals.TooManyIds, "ids", await Refusing(TenancyRefusals.TooManyIds, h => h.Directory.SeatsByIdAsync(tooMany, default))),
             (TenancyRefusals.PageSizeInvalid, "size", await RefusingAnOperator(TenancyRefusals.PageSizeInvalid, h => h.TenantDirectory.ListAsync(after: null, size: 0, default))),
             (TenancyRefusals.CursorInvalid, "after", await RefusingAnOperator(TenancyRefusals.CursorInvalid, h => h.TenantDirectory.ListAsync(after: "not a marker", size: 50, default))),
-            (TenancyRefusals.AddressInvalid, "address", await Refusing(TenancyRefusals.AddressInvalid, h => h.Invitations.IssueAsync("nobody", root, watcher, null, null, null, default))),
-            (TenancyRefusals.InvitationLifetime, "lifetime", await Refusing(TenancyRefusals.InvitationLifetime, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, null, null, TimeSpan.FromMinutes(1), default))),
-            (TenancyRefusals.InvitationGrantEndsFirst, "grantUntil", await Refusing(TenancyRefusals.InvitationGrantEndsFirst, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, h.Clock.Now.AddDays(1), null, null, default))),
-            (TenancyRefusals.NameInvalid, "displayName", await Refusing(TenancyRefusals.NameInvalid, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, null, tooLong, null, default))),
+            (TenancyRefusals.AddressInvalid, "address", await Refusing(TenancyRefusals.AddressInvalid, h => h.Invitations.IssueAsync("nobody", root, watcher, null, null, default))),
+            (TenancyRefusals.InvitationLifetime, "lifetime", await Refusing(TenancyRefusals.InvitationLifetime, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, null, TimeSpan.FromMinutes(1), default))),
+            (TenancyRefusals.InvitationGrantEndsFirst, "grantUntil", await Refusing(TenancyRefusals.InvitationGrantEndsFirst, h => h.Invitations.IssueAsync("wren@example.test", root, watcher, h.Clock.Now.AddDays(1), null, default))),
         };
 
         // A slug is a value object, so a wrong one is a validation failure with the same code, and it names its input too.
         var slug = (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid(), "Bert"), default)))
+                new HostTenancy.TenantToProvision("-wharf", "Wharf", TenantShape.Flat, "Wharf", Guid.NewGuid()), default)))
             .Should().ThrowAsync<InvalidValueObjectException>()).Which.Errors.Should().ContainSingle().Which;
         slug.Code.Should().Be(TenancyRefusals.InvalidSlug);
         thrown.Add((TenancyRefusals.InvalidSlug, "slug", slug.Arguments));
@@ -264,13 +262,13 @@ public partial class RefusalTableTests
 
         thrown.Where(refused => refused.Code == TenancyRefusals.NameInvalid).Select(refused => refused.Arguments["What"]).Distinct()
             .Should().BeEquivalentTo(
-                ["tenant-name", "unit-name", "display-name", "role-name", "role-description", "reason"],
+                ["tenant-name", "unit-name", "role-name", "role-description", "reason"],
                 "every name the code refuses has been seen with its field");
 
         // The rule under a refusal reports the same arguments, so one translation and one form serve both.
-        var seat = New.Seat();
-        Break(seat, nameof(HostSeat.DisplayName), string.Empty);
-        seat.GetInvariantViolations().Should().ContainSingle().Which.Arguments[RefusalException.FieldArgument].Should().Be("displayName");
+        var nameless = New.Role(harness.Catalogue, "Clerk", HostCatalogue.WidgetRead);
+        Break(nameless, nameof(HostRole.Name), string.Empty);
+        nameless.GetInvariantViolations().Should().ContainSingle().Which.Arguments[RefusalException.FieldArgument].Should().Be("name");
 
         foreach (var code in AboutNoOneInput)
         {

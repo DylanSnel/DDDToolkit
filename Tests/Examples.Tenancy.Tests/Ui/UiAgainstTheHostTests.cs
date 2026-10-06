@@ -206,7 +206,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         var (tove, tovesSession) = await SignInAsync(host, "tove");
         tovesSession.SelectTenant(meadow.Slug);
 
-        var invited = await tove.InvitePersonAsync(DemoPeople.Juno.Email, meadow.Root.Value.ToString(), meadow.Roles[SampleCatalogue.Surveyor].Value.ToString(), until: null, "Juno", Cancellation);
+        var invited = await tove.InvitePersonAsync(DemoPeople.Juno.Email, meadow.Root.Value.ToString(), meadow.Roles[SampleCatalogue.Surveyor].Value.ToString(), until: null, Cancellation);
 
         // The page that invited holds the token, once. What any page shows of the answer, and what the session
         // keeps as its last answer, has it blanked.
@@ -218,22 +218,25 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
         invited.Value.ToString().Should().NotContain(token);
 
         var listed = (await tove.OpenInvitationsAsync(Cancellation)).Value!.Should().ContainSingle().Subject;
-        listed.Should().Match<InvitationInfo>(invitation => invitation.Id == invited.Value.InvitationId && invitation.Address == DemoPeople.Juno.Email && invitation.DisplayName == "Juno"
+        listed.Should().Match<InvitationInfo>(invitation => invitation.Id == invited.Value.InvitationId && invitation.Address == DemoPeople.Juno.Email
             && invitation.UnitId == meadow.Root.Value && invitation.RoleEndsAt == null && invitation.IssuedBy == meadow.Administrator.Id.Value);
 
-        // Juno accepts with the token, naming no tenant, and the session then works where her new seat is.
+        // Juno accepts with the token and the name she is shown by in meadow, naming no tenant, and the session then
+        // works where her new seat is.
         var (juno, junoSession) = await SignInAsync(host, "juno");
-        var accepted = await juno.AcceptInvitationAsync(token, displayName: null, Cancellation);
+        var accepted = await juno.AcceptInvitationAsync(token, displayName: "Juno", Cancellation);
         accepted.Tenant.Should().BeNull("accepting names no tenant");
         accepted.RawBody.Should().NotContain(token);
         var seats = (await juno.SeatsOfMineAsync(Cancellation)).Value!;
         var hers = seats.Single(mine => mine.Seat.Id == accepted.Value!.SeatId);
         junoSession.SeatAdded(hers.Tenant.Slug);
         (junoSession.Tenant, junoSession.SeatsAdded).Should().Be((meadow.Slug, 1));
-        (await juno.WhoAmIAsync(Cancellation)).Value!.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.Role.Should().Be("Surveyor");
+        var overview = (await juno.WhoAmIAsync(Cancellation)).Value!;
+        overview.Seat.DisplayName.Should().Be("Juno");
+        overview.Placements.Should().ContainSingle().Which.Grants.Should().ContainSingle().Which.Role.Should().Be("Surveyor");
 
         // A second one is revoked from the list, and the refusal of a token nobody was given reads as a problem.
-        var second = await tove.InvitePersonAsync("wren@example.test", meadow.Root.Value.ToString(), meadow.Roles[SampleCatalogue.Observer].Value.ToString(), until: null, displayName: null, Cancellation);
+        var second = await tove.InvitePersonAsync("wren@example.test", meadow.Root.Value.ToString(), meadow.Roles[SampleCatalogue.Observer].Value.ToString(), until: null, Cancellation);
         (await tove.CancelInvitationAsync(second.Value!.InvitationId, Cancellation)).Succeeded.Should().BeTrue();
         (await tove.OpenInvitationsAsync(Cancellation)).Value!.Should().BeEmpty();
         (await juno.AcceptInvitationAsync("not-a-token", displayName: null, Cancellation)).Problem!.Code.Should().Be(TenancyRefusals.InvitationNotFound);
@@ -273,7 +276,6 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             Harbor.UnitNamed("North Coast").Value.ToString(),
             Harbor.Roles[SampleCatalogue.Observer].Value.ToString(),
             until: null,
-            displayName: null,
             Cancellation);
 
         // The refusal's text names the key she holds and not where it was needed; its arguments name no unit,

@@ -117,7 +117,7 @@ public class TenancyWorkTests
         {
             harness.Store.BeginUnitOfWork();
             provisioned = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -139,7 +139,7 @@ public class TenancyWorkTests
         {
             harness.Store.BeginUnitOfWork();
             harbor = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Flat, "Harbor Works", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -155,8 +155,7 @@ public class TenancyWorkTests
         await BySystemIn(harness, tenant, h => h.Organization.RenameUnitAsync(coast, "North Coast", default));
         await BySystemIn(harness, tenant, h => h.Organization.MoveUnitAsync(coast, south, default));
 
-        var grace = await BySystemIn(harness, tenant, h => h.Seats.AddSeatAsync(Guid.NewGuid(), "Grace", default));
-        await BySystemIn(harness, tenant, h => h.Seats.RenameAsync(grace, "Grace Hopper", default));
+        var grace = await BySystemIn(harness, tenant, h => h.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: seat => seat.Rename("Grace")));
         await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, north, primary: true, default));
         await BySystemIn(harness, tenant, h => h.Seats.PlaceAsync(grace, south, primary: false, default));
         await BySystemIn(harness, tenant, h => h.Seats.MakePrimaryAsync(grace, south, default));

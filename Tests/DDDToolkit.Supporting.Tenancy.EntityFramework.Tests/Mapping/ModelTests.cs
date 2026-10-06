@@ -73,7 +73,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
         Filtered(path, "TenantId");
 
         var seat = Table<HostSeat>(model, "Seats", key: ["Id"], indexes: ["Identity,TenantId unique", "TenantId"]);
-        Column(seat, "DisplayName").GetMaxLength().Should().Be(200);
+        Column(seat, "DisplayName").GetMaxLength().Should().BeNull("a seat has no name of the package's: the application's own field is mapped as it maps it");
         Named(Column(seat, "Status"));
         Column(seat, "Version").IsConcurrencyToken.Should().BeTrue();
         Filtered(seat, "TenantId");
@@ -128,7 +128,7 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
 
         var invitation = Table<HostInvitation>(model, "Invitations", key: ["Id"], indexes: ["TenantId,State,ExpiresAt"]);
         Column(invitation, "Address").GetMaxLength().Should().Be(254);
-        Column(invitation, "DisplayName").GetMaxLength().Should().Be(200);
+        invitation.FindProperty("DisplayName").Should().BeNull("an invitation suggests no name: a seat has none in Tenancy");
         Named(Column(invitation, "State"));
         Utc(Column(invitation, "IssuedAt"), nullable: false);
         Utc(Column(invitation, "ExpiresAt"), nullable: false);

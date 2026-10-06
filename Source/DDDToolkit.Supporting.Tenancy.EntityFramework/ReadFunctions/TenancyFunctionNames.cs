@@ -57,7 +57,7 @@ public static class TenancyFunctionNames
 
     /// <summary>
     /// The seats, as rows of <see cref="Access.SeatRow{TTenantId, TSeatId}"/>: <c>"Id"</c>, <c>"TenantId"</c>
-    /// and <c>"Status"</c>; never the identity or the display name.
+    /// and <c>"Status"</c>; never the identity, nor a field the application adds to its seat class.
     /// </summary>
     public const string TenantSeats = "tenant_seats";
 

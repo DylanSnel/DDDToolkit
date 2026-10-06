@@ -818,7 +818,7 @@ internal static class TenancySql
                 Answered.AsStored(placements, "TenantId"),
             ]);
 
-        // Not the display name, and never the identity.
+        // Never the identity, nor a field the application adds to its seat class.
         yield return (
             TenancyFunctionNames.TenantSeats,
             seats,

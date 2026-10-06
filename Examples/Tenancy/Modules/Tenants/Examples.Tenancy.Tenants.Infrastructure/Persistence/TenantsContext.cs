@@ -19,8 +19,9 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// classes and ids: the ids the contracts project declares, and the classes the domain project declares, or has
 /// Tenancy's switch write where they add nothing, as it does the organization and the role. The fields and rules
 /// the classes add (<see cref="OrganizationUnit.Kind"/>, <see cref="OrganizationUnit.CostCentre"/>,
-/// <see cref="Seat.JobTitle"/>) are mapped by the toolkit's conventions like any aggregate's, the kind by its key
-/// (<see cref="UnitKindKeyConverter"/>). The save check, and the writer of what a save changes of the access
+/// <see cref="Seat.DisplayName"/>, <see cref="Seat.JobTitle"/>) are mapped by the toolkit's conventions like any
+/// aggregate's, the kind by its key (<see cref="UnitKindKeyConverter"/>) and a seat's name to the length its rule
+/// allows. The save check, and the writer of what a save changes of the access
 /// questions' tables, arrive with the options instead: <c>AddTenancy</c> brings them, and <c>UseDDDToolkit</c>, in
 /// the options the module passes to <see cref="PostgresPools.AddContext{TContext}"/>, puts them on.
 /// <para>
@@ -73,6 +74,10 @@ public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : D
         // filled in. Given the provider, it also makes a tenant's root and a seat's primary placement unique in the
         // database.
         modelBuilder.AddTenancy(database: Database);
+
+        // The name a seat is shown by is this application's field, not Tenancy's: its column is as long as its rule
+        // allows, as the column was when the package kept a name, so the rows from then read unchanged.
+        modelBuilder.Entity<Seat>().Property(seat => seat.DisplayName).HasMaxLength(Seat.MaxDisplayNameLength);
 
         // The invitations, which the application chose to have: the class and its id are named, and the generated
         // call fills in the other ids. A token is never stored; its digest is, in a table of its own that reading

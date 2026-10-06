@@ -1,6 +1,7 @@
 using Examples.Tenancy.Tenants.Application.Directory.Queries;
 using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
+using Examples.Tenancy.Tenants.Application.Seats;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
@@ -16,7 +17,7 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 internal static class DirectoryAnswers
 {
     /// <summary>The seat as the directory answers it now.</summary>
-    public static async Task<TenantsTenancy.SeatSummary?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
+    public static async Task<SeatListing?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
         => (await sender.Send(new SeatsById([id]), cancellationToken)).FirstOrDefault();
 
     /// <summary>The unit as the directory answers it now, with its kind.</summary>

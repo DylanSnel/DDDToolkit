@@ -216,7 +216,7 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         using var nowhere = await host.ClientAsync("rhea", tenant: null);
         var before = sent.Names.Count;
         var accepted = (await nowhere.GraphQLDataAsync(
-            $$"""mutation($token: String!) { invitationAccept(input: { token: $token }) { seatId {{SampleGraphQLCalls.Errors}} } }""",
+            $$"""mutation($token: String!) { invitationAccept(input: { token: $token, displayName: "Rhea" }) { seatId {{SampleGraphQLCalls.Errors}} } }""",
             new { token = "not-a-token" })).GetProperty("invitationAccept");
         accepted.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.GetProperty("code").GetString().Should().Be(TenancyRefusals.InvitationNotFound);
         (await nowhere.GraphQLAsync("{ openInvitations { id } }")).SingleError().Code().Should().Be(TenancyRefusals.TenantRequired);

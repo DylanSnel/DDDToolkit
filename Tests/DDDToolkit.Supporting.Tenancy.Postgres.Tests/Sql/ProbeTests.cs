@@ -78,7 +78,7 @@ public sealed class ProbeTests(TenancyPostgres postgres)
         // A grant that runs from two days ago to two days ahead, and one that ended yesterday, by the database's clock.
         var (from, until) = (now.AddDays(-2), now.AddDays(2));
         await using var services = new TenancyServices(database, rowLevelSecurity: false, databaseKeepsRights: false);
-        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddSeatAsync(TenancySeed.Oli.Identity, "Oli", Cancellation, TenancySeed.Oli.Seat));
+        await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().AddSeatAsync(TenancySeed.Oli.Identity, Cancellation, TenancySeed.Oli.Seat, configure: seat => seat.Rename("Oli")));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().PlaceAsync(TenancySeed.Oli.Seat, TenancySeed.HarborRoot, primary: true, Cancellation));
         await services.BySystemIn(TenancySeed.Harbor, scoped => scoped.Seats().GrantAsync(
             TenancySeed.Oli.Seat, TenancySeed.HarborRoot, TenancySeed.HarborRoles.Watcher, until, reason: null, Cancellation, from));
@@ -443,11 +443,11 @@ public sealed class ProbeTests(TenancyPostgres postgres)
                     TenantShape.Hierarchical,
                     "Harbor",
                     TenancySeed.Ada.Identity,
-                    TenancySeed.Ada.Name,
                     TenantId: TenancySeed.Harbor,
                     RootId: TenancySeed.HarborRoot,
                     AdminSeatId: TenancySeed.Ada.Seat,
-                    RoleIds: TenancySeed.HarborRoles.ByPack),
+                    RoleIds: TenancySeed.HarborRoles.ByPack,
+                    ConfigureFirstSeat: seat => seat.Rename(TenancySeed.Ada.Name)),
                 Cancellation));
         }
     }

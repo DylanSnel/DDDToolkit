@@ -12,7 +12,7 @@ public class TenantCommandsTests
     private static readonly Guid Ada = Guid.NewGuid();
 
     private static HostTenancy.TenantToProvision Harbor(TenantShape shape = TenantShape.Hierarchical, string slug = "harbor")
-        => new(slug, "Harbor Works", shape, "Harbor Works", Ada, "Ada");
+        => new(slug, "Harbor Works", shape, "Harbor Works", Ada);
 
     private static async Task<HostTenancy.ProvisionedTenant> Provision(Harness harness, HostTenancy.TenantToProvision command)
         => await harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(command, default));

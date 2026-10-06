@@ -22,7 +22,7 @@ public class KeySetQuestionTests
 
     private HostSeat SeatAt(OrganizationUnitId unit, string pack, DateTimeOffset? until = null)
     {
-        var seat = _harbor.NewSeat("Bert");
+        var seat = _harbor.NewSeat();
         var role = _harbor.RolesByPack[pack];
         seat.Place(unit, primary: true, Now, placedBy: null);
         seat.Grant(unit, role.Id, role.Facts, GrantPeriod.Between(Now, until), null, null);

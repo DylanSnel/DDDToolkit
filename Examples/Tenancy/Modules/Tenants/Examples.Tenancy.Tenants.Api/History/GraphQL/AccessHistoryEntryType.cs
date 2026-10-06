@@ -1,5 +1,6 @@
 using Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 using Examples.Tenancy.Tenants.Application.History;
+using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate;
 using HotChocolate.CostAnalysis.Types;
 using HotChocolate.Types;
@@ -30,6 +31,6 @@ internal static partial class AccessHistoryEntryType
 
     /// <summary>The seat that made the change, or the seat a token stands for; nothing when no seat did.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<TenantsTenancy.SeatSummary?> GetBySeatAsync([Parent] AccessHistoryEntry row, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
+    public static async Task<SeatListing?> GetBySeatAsync([Parent] AccessHistoryEntry row, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
         => row.BySeat is { } seat ? await seats.LoadAsync(seat, cancellationToken) : null;
 }

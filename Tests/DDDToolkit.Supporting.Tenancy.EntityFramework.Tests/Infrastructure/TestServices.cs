@@ -127,7 +127,7 @@ public sealed class TestServices : IDisposable
 
     /// <summary>
     /// Provisions a tenant through the use cases, as system work outside any tenant: a tenant, its organization
-    /// with the root, a role per pack and a first administrator.
+    /// with the root, a role per pack and a first administrator, whom the host names in its callback.
     /// </summary>
     public async Task<HostTenancy.ProvisionedTenant> ProvisionAsync(
         string slug,
@@ -139,7 +139,13 @@ public sealed class TestServices : IDisposable
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             return await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
-                new HostTenancy.TenantToProvision(slug, Capitalized(slug) + " Works", shape, Capitalized(slug), administrator ?? Guid.NewGuid(), administratorName),
+                new HostTenancy.TenantToProvision(
+                    slug,
+                    Capitalized(slug) + " Works",
+                    shape,
+                    Capitalized(slug),
+                    administrator ?? Guid.NewGuid(),
+                    ConfigureFirstSeat: seat => seat.Rename(administratorName)),
                 CancellationToken.None);
         }
     }
@@ -148,9 +154,9 @@ public sealed class TestServices : IDisposable
     public Task<OrganizationUnitId> AddUnitAsync(TenantId tenant, OrganizationUnitId parent, string name, Action<HostUnit>? configure = null)
         => BySystemIn(tenant, services => services.Organization().AddUnitAsync(parent, name, CancellationToken.None, configure: configure));
 
-    /// <summary>Adds a seat, as system work in the tenant.</summary>
+    /// <summary>Adds a seat, as system work in the tenant, with the name the host shows it by set in the use case's callback.</summary>
     public Task<SeatId> AddSeatAsync(TenantId tenant, Guid identity, string displayName)
-        => BySystemIn(tenant, services => services.Seats().AddSeatAsync(identity, displayName, CancellationToken.None));
+        => BySystemIn(tenant, services => services.Seats().AddSeatAsync(identity, CancellationToken.None, configure: seat => seat.Rename(displayName)));
 
     /// <summary>
     /// A new seat, added, placed at <paramref name="unit"/> as its primary placement and granted there the role
@@ -212,7 +218,7 @@ public sealed class TestServices : IDisposable
         using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
         using (TenancyCallers.BeginNone())
         {
-            return await scope.ServiceProvider.Invitations().AcceptAsync(token, displayName, verifiedAddress, CancellationToken.None);
+            return await scope.ServiceProvider.Invitations().AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));
         }
     }
 

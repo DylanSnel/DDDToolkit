@@ -19,9 +19,9 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
 {
     private static readonly Guid Odette = Guid.NewGuid();
 
-    /// <summary>The four events that only say something is called something else: stored, and no part of the history.</summary>
+    /// <summary>The three events that only say something is called something else: stored, and no part of the history.</summary>
     private static readonly string[] Renames =
-        ["tenancy.organization-renamed", "tenancy.organization-unit-renamed", "tenancy.seat-renamed", "tenancy.role-renamed"];
+        ["tenancy.organization-renamed", "tenancy.organization-unit-renamed", "tenancy.role-renamed"];
 
     private TestServices _services = null!;
 
@@ -84,7 +84,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
         Task AsAda(Func<IServiceProvider, Task> act) => _services.BySeat(harbor.Tenant, ada, act);
 
-        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), "Ben", Cancellation));
+        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Ben")));
         await AsAda(services => services.Seats().PlaceAsync(ben, harbor.RootUnit, primary: true, Cancellation));
 
         // One change, looked at closely: the grant, its outbox row and its row in the history are written by one transaction.
@@ -97,7 +97,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         writes.Should().Contain(command => command.Text.Contains("\"EventLog\""));
         writes.Select(command => command.Transaction).Distinct().Should().ContainSingle("the grant and its row in the history are one save").Which.Should().NotBeNull();
 
-        // Every other command a seat gives, the four that only rename something among them.
+        // Every other command a seat gives, the three that only rename something among them.
         await AsAda(services => services.Tenants().RenameOrganizationAsync("Harbor Yards", Cancellation));
         var east = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "East", Cancellation));
         var pier = await _services.BySeat(harbor.Tenant, ada, services => services.Organization().AddUnitAsync(harbor.RootUnit, "Pier", Cancellation));
@@ -111,7 +111,6 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         await AsAda(services => services.Roles().SetKeysAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await AsAda(services => services.Roles().ArchiveAsync(polisher, Cancellation));
 
-        await AsAda(services => services.Seats().RenameAsync(ben, "Benedict", Cancellation));
         await AsAda(services => services.Seats().PlaceAsync(ben, east, primary: false, Cancellation));
         await AsAda(services => services.Seats().MakePrimaryAsync(ben, east, Cancellation));
         await AsAda(services => services.Seats().RevokeAsync(ben, harbor.RootUnit, watcher, Cancellation));
@@ -136,7 +135,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
 
         // The script raised every event Tenancy has. The history has each one that changes access, under the id of its
         // outbox row, and none of the renames.
-        sent.Select(message => message.EventName).Distinct().Should().HaveCount(25);
+        sent.Select(message => message.EventName).Distinct().Should().HaveCount(24);
         sent.Select(message => message.EventName).Should().Contain(Renames);
         kept.Select(row => row.Id).Should().BeEquivalentTo(sent.Where(message => !Renames.Contains(message.EventName)).Select(message => message.Id));
         kept.Select(row => row.EventName).Distinct().Should().HaveCount(21).And.NotContain(Renames);
@@ -201,7 +200,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         var lamplighter = await _services.BySeat(harbor.Tenant, ada, services =>
             services.Roles().CreateAsync("Lamplighter", "Tends the lamps", [HostCatalogue.WidgetRead], Cancellation));
         await _services.BySeat(harbor.Tenant, ada, services => services.Roles().SetKeysAsync(lamplighter, [HostCatalogue.WidgetCreate], Cancellation));
-        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), "Benedict Quill", Cancellation));
+        var ben = await _services.BySeat(harbor.Tenant, ada, services => services.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Benedict Quill")));
         await _services.BySeat(harbor.Tenant, ada, services => services.Seats().PlaceAsync(ben, wharf, primary: true, Cancellation));
         await _services.BySeat(harbor.Tenant, ada, services => services.Seats().GrantAsync(ben, wharf, lamplighter, until: null, reason: "covering for Grace", Cancellation));
 
@@ -248,7 +247,7 @@ public abstract class AccessHistoryTests(TestDatabases databases) : IAsyncLifeti
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))
         {
             quay = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid(), "Quin"),
+                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
                 Cancellation);
         }
 

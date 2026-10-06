@@ -41,7 +41,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
             _services.Hook.BeforeSave(scope.ServiceProvider.Tenancy(), () => _services.ProvisionAsync("orchard"));
 
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.SlugTaken, () => scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), "Dan"),
+                new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid()),
                 Cancellation));
             Same(refusal, TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", "orchard")));
             refusal.InnerException.Should().BeOfType<DbUpdateException>("the refusal keeps the failure it stands for, so a log of it names the index");
@@ -56,7 +56,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
             _services.Hook.BeforeSave(services.Tenancy(), () => _services.AddSeatAsync(harbor.Tenant, bert, "Bert"));
 
             Same(
-                await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddSeatAsync(bert, "Bert again", Cancellation)),
+                await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddSeatAsync(bert, Cancellation)),
                 TenancyRefusals.Of(TenancyRefusals.IdentityHasSeat));
         });
 

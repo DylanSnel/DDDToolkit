@@ -191,7 +191,7 @@ public class TemplateDefaultsTests
             {
                 public static Seat Make()
                 {
-                    var seat = TenancyInstances.NewSeat<Seat, SeatId, TenantId, OrganizationUnitId, RoleId>(SeatId.CreateSequential(), TenantId.CreateSequential(), System.Guid.NewGuid(), "Ada");
+                    var seat = TenancyInstances.NewSeat<Seat, SeatId, TenantId, OrganizationUnitId, RoleId>(SeatId.CreateSequential(), TenantId.CreateSequential(), System.Guid.NewGuid());
                     seat.ChangeJobTitle("Surveyor");
                     return seat;
                 }
@@ -211,7 +211,6 @@ public class TemplateDefaultsTests
         var assembly = result.Emit();
         var seat = assembly.CallStatic("DDDToolkit.Sample.Seats.FirstSeat", "Make")!;
         assembly.Property(seat, "JobTitle").Should().Be("Surveyor");
-        assembly.Property(seat, "DisplayName").Should().Be("Ada");
     }
 
     [Fact]

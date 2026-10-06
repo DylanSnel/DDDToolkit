@@ -229,4 +229,18 @@ public static class ScopedServices
 
     public static ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> Answers(this IServiceProvider services)
         => services.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>();
+
+    /// <summary>
+    /// The host's own use case that renames a seat by the name the host keeps on it: Tenancy has none. It loads the
+    /// seat through the package's store, as the caller, and saves the host's field in the store's unit of work, so
+    /// the database's policies decide whether the caller may change the row.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The caller may not read the seat.</exception>
+    public static async Task RenameSeatAsync(this IServiceProvider services, SeatId seat, string name, CancellationToken cancellationToken)
+    {
+        var store = services.GetRequiredService<HostTenancy.IStore>();
+        var renamed = await store.FindSeatAsync(seat, cancellationToken) ?? throw new InvalidOperationException("No seat " + seat + " is the caller's to read.");
+        renamed.Rename(name);
+        await store.SaveAsync(cancellationToken);
+    }
 }

@@ -68,7 +68,7 @@ public class ProjectionTests
     public void Rights_are_one_row_per_unit_role_and_key_with_the_grant_period()
     {
         var harbor = new HarborBuilder().Build();
-        var seat = harbor.NewSeat("Bert");
+        var seat = harbor.NewSeat();
         var operatorRole = harbor.RolesByPack[HostCatalogue.OperatorPack];
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
         var ends = Now.AddDays(30);
@@ -109,7 +109,7 @@ public class ProjectionTests
     public void An_archived_role_conveys_nothing()
     {
         var harbor = new HarborBuilder().Build();
-        var seat = harbor.NewSeat("Bert");
+        var seat = harbor.NewSeat();
         var watcher = harbor.RolesByPack[HostCatalogue.WatcherPack];
         seat.Place(harbor.North, primary: true, Now, placedBy: null);
         seat.Grant(harbor.North, watcher.Id, watcher.Facts, GrantPeriod.Open(Now), null, null);

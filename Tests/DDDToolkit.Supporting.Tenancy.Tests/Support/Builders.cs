@@ -45,10 +45,10 @@ public static class New
         => TenancyInstances.NewOrganization<HostOrganization, TenantId, HostUnit, OrganizationUnitId, SeatId>(
             new TenantId(tenant), name, OrganizationUnitId.CreateSequential(), name);
 
-    /// <summary>An active seat, placed nowhere yet.</summary>
-    public static HostSeat Seat(long tenant = 1, string displayName = "Ada", Guid? identity = null)
+    /// <summary>An active seat, placed nowhere yet. It has no name: a seat has none in Tenancy.</summary>
+    public static HostSeat Seat(long tenant = 1, Guid? identity = null)
         => TenancyInstances.NewSeat<HostSeat, SeatId, TenantId, OrganizationUnitId, RoleId>(
-            SeatId.CreateSequential(), new TenantId(tenant), identity ?? Guid.NewGuid(), displayName);
+            SeatId.CreateSequential(), new TenantId(tenant), identity ?? Guid.NewGuid());
 
     /// <summary>An active role made by hand.</summary>
     public static HostRole Role(TenancyCatalogue catalogue, string name, params string[] keys)
@@ -111,7 +111,8 @@ public sealed class HarborBuilder
                 RoleId.CreateSequential(), tenant.Id, new RoleDraft(pack.Name, pack.Description, pack.Keys, pack.Key), catalogue));
 
         var administratorRole = roles[catalogue.AdministratorPackFor(tenant.Shape).Key];
-        var administrator = New.Seat(tenant.Id.Value, "Ada");
+        var administrator = New.Seat(tenant.Id.Value);
+        administrator.Rename("Ada");
         administrator.Place(root, primary: true, _now, placedBy: null);
         administrator.Grant(root, administratorRole.Id, administratorRole.Facts, GrantPeriod.Open(_now), grantedBy: null, "set up with the tenant");
         tenant.Activate<SeatId>();
@@ -141,7 +142,7 @@ public sealed record Harbor(
     public RoleFacts? FactsOf(RoleId role) => RolesByPack.Values.FirstOrDefault(candidate => candidate.Id == role)?.Facts;
 
     /// <summary>Another active seat of the tenant, placed nowhere yet.</summary>
-    public HostSeat NewSeat(string displayName) => New.Seat(Tenant.Id.Value, displayName);
+    public HostSeat NewSeat() => New.Seat(Tenant.Id.Value);
 
     /// <summary>Every aggregate, to seed a store with.</summary>
     public object[] Aggregates => [Tenant, Organization, Administrator, .. RolesByPack.Values];

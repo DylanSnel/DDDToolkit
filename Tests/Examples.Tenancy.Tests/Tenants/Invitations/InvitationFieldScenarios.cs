@@ -22,19 +22,19 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
 {
     private const string Invite =
         $$"""
-        mutation($address: String!, $unit: UUID!, $role: UUID!, $until: DateTime, $name: String) {
-          personInvite(input: { address: $address, unitId: $unit, roleId: $role, until: $until, displayName: $name }) {
+        mutation($address: String!, $unit: UUID!, $role: UUID!, $until: DateTime) {
+          personInvite(input: { address: $address, unitId: $unit, roleId: $role, until: $until }) {
             issuedInvitation { id token expiresAt } {{SampleGraphQLCalls.Errors}}
           }
         }
         """;
 
-    private const string Accept = $$"""mutation($token: String!) { invitationAccept(input: { token: $token }) { seatId {{SampleGraphQLCalls.Errors}} } }""";
+    private const string Accept = $$"""mutation($token: String!, $name: String!) { invitationAccept(input: { token: $token, displayName: $name }) { seatId {{SampleGraphQLCalls.Errors}} } }""";
 
     private const string Cancel = $$"""mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitationId {{SampleGraphQLCalls.Errors}} } }""";
 
     private const string Open =
-        "{ openInvitations { id address displayName until issuedAt expiresAt unit { id name } role { id name } issuedBy { id displayName } } }";
+        "{ openInvitations { id address until issuedAt expiresAt unit { id name } role { id name } issuedBy { id displayName } } }";
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -53,7 +53,7 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         var until = DateTimeOffset.UtcNow.AddDays(90);
 
         // Inviting answers the id, when the invitation ends and its token: the one answer with the token in it.
-        var invited = (await tove.GraphQLDataAsync(Invite, new { address = DemoPeople.Juno.Email, unit = Meadow.Root.Value, role = surveyor, until, name = "Juno" }))
+        var invited = (await tove.GraphQLDataAsync(Invite, new { address = DemoPeople.Juno.Email, unit = Meadow.Root.Value, role = surveyor, until }))
             .GetProperty("personInvite");
         invited.GetProperty("errors").ValueKind.Should().Be(JsonValueKind.Null);
         var issued = invited.GetProperty("issuedInvitation");
@@ -68,7 +68,6 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         var byRoute = (await tove.GetFromJsonAsync<JsonElement>("/tenancy/invitations", Cancellation)).EnumerateArray().Should().ContainSingle().Subject;
         listed.GetProperty("id").GetGuid().Should().Be(issued.GetProperty("id").GetGuid()).And.Be(byRoute.GetProperty("id").GetGuid());
         listed.Text("address").Should().Be(DemoPeople.Juno.Email).And.Be(byRoute.Text("address"));
-        listed.Text("displayName").Should().Be("Juno");
         listed.GetProperty("until").GetDateTimeOffset().Should().Be(byRoute.GetProperty("until").GetDateTimeOffset());
         listed.GetProperty("expiresAt").GetDateTimeOffset().Should().Be(byRoute.GetProperty("expiresAt").GetDateTimeOffset());
         listed.GetProperty("unit").GetProperty("id").GetGuid().Should().Be(Meadow.Root.Value);
@@ -79,27 +78,31 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         listed.GetProperty("issuedBy").Text("displayName").Should().Be(DemoPeople.Tove.Name);
         open.GetRawText().Should().NotContain(token, "a token is shown once, to whoever invited");
 
-        // She accepts, signed in and naming no tenant: the token says which. The answer is her new seat's id, and
-        // her own seats, the other field that needs no tenant, list it in meadow.
-        var accepted = (await juno.GraphQLDataAsync(Accept, new { token })).GetProperty("invitationAccept");
+        // She accepts, signed in and naming no tenant: the token says which. With a blank name the seat's own rule
+        // refuses in the payload, and the invitation stays open. With the name she is shown by there the answer is her
+        // new seat's id, and her own seats, the other field that needs no tenant, list it in meadow by that name.
+        var nameless = (await juno.GraphQLDataAsync(Accept, new { token, name = " " })).GetProperty("invitationAccept");
+        nameless.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.Text("code").Should().Be(Seat.DisplayNameIsValid.ViolationCode);
+        var accepted = (await juno.GraphQLDataAsync(Accept, new { token, name = "Juno" })).GetProperty("invitationAccept");
         accepted.GetProperty("errors").ValueKind.Should().Be(JsonValueKind.Null);
         var seat = accepted.GetProperty("seatId").GetGuid();
 
         var mine = (await juno.GraphQLDataAsync("{ seatsOfMine { tenant { slug } seat { id displayName } } }")).GetProperty("seatsOfMine");
         var inMeadow = mine.EnumerateArray().Single(of => of.GetProperty("tenant").Text("slug") == Meadow.Slug).GetProperty("seat");
         inMeadow.GetProperty("id").GetGuid().Should().Be(seat);
-        inMeadow.Text("displayName").Should().Be("Juno");
+        inMeadow.Text("displayName").Should().Be("Juno", "the picker shows the seat by the name its tenant keeps for her");
 
         // The seat came with its placement and its role: she is a surveyor at meadow's root, as after the route.
         var me = await junoInMeadow.GetFromJsonAsync<JsonElement>("/me", Cancellation);
         me.GetProperty("seat").GetProperty("id").GetGuid().Should().Be(seat);
+        me.GetProperty("seat").Text("displayName").Should().Be("Juno", "the name she gave, kept on the module's own seat");
         me.GetProperty("placements").EnumerateArray().Should().ContainSingle()
             .Which.GetProperty("grants").EnumerateArray().Should().ContainSingle().Which.GetProperty("roleId").GetGuid().Should().Be(surveyor);
 
         // The invitation is no longer open, and to anyone else its token was used: a refusal in the payload.
         (await tove.GraphQLDataAsync(Open)).GetProperty("openInvitations").EnumerateArray().Should().BeEmpty();
         using var leo = await host.ClientAsync("leo", tenant: null);
-        var taken = (await leo.GraphQLDataAsync(Accept, new { token })).GetProperty("invitationAccept");
+        var taken = (await leo.GraphQLDataAsync(Accept, new { token, name = "Leo" })).GetProperty("invitationAccept");
         taken.GetProperty("seatId").ValueKind.Should().Be(JsonValueKind.Null);
         Refusal(taken).Should().Be((TenancyRefusals.InvitationUsed, "conflict"));
     }
@@ -126,7 +129,7 @@ public sealed class InvitationFieldScenarios(SampleHosts sample) : IClassFixture
         cancelled.GetProperty("invitationId").GetGuid().Should().Be(id);
 
         (await tove.GraphQLDataAsync(Open)).GetProperty("openInvitations").EnumerateArray().Should().BeEmpty();
-        Refusal((await leo.GraphQLDataAsync(Accept, new { token })).GetProperty("invitationAccept")).Should().Be((TenancyRefusals.InvitationCancelled, "conflict"));
+        Refusal((await leo.GraphQLDataAsync(Accept, new { token, name = "Leo" })).GetProperty("invitationAccept")).Should().Be((TenancyRefusals.InvitationCancelled, "conflict"));
         (await leo.GraphQLDataAsync("{ seatsOfMine { seat { id } } }")).GetProperty("seatsOfMine").EnumerateArray().Should().ContainSingle("he got no seat in meadow");
     }
 

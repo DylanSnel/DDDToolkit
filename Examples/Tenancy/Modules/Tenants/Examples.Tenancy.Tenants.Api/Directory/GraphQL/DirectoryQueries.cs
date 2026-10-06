@@ -2,6 +2,7 @@ using DDDToolkit.HotChocolate.Attributes;
 using Examples.Tenancy.Tenants.Api.GraphQL;
 using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
+using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate.CostAnalysis.Types;
 using HotChocolate.Language;
 using HotChocolate.Types.Composite;
@@ -41,7 +42,7 @@ internal static class DirectoryQueries
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
-    public static async Task<TenantsTenancy.SeatSummary?> GetSeatAsync(SeatId id, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
+    public static async Task<SeatListing?> GetSeatAsync(SeatId id, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
         => await seats.LoadAsync(id, cancellationToken);
 
     /// <summary>A unit by its id, or nothing.</summary>

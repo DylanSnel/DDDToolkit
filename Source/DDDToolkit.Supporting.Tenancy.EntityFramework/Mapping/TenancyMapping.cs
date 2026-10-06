@@ -18,8 +18,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// keyless row in a consumer's.
 /// <para>
 /// A row has fewer columns than its table: it carries what an access rule reads, and no text that is shown to
-/// people. So a seat's display name, a unit's name and a role's name are mapped with the tables alone,
-/// and the shared settings name only what both have.
+/// people. So a unit's name and a role's name are mapped with the tables alone, and the shared settings name only
+/// what both have. A seat has no name of Tenancy's at all: one the application keeps is a field of its seat class,
+/// which its own context maps as it maps any field it adds.
 /// </para>
 /// <list type="bullet">
 /// <item>Every enum is stored as its name, at most <see cref="EnumLength"/> characters.</item>
@@ -161,7 +162,6 @@ internal static class TenancyMapping
         seat.Property(row => row.Id).ValueGeneratedNever();
         seat.HasIndex(row => row.TenantId);
         Refuses(seat.HasIndex(row => new { row.Identity, row.TenantId }).IsUnique(), TenancyRefusals.IdentityHasSeat);
-        seat.Property(row => row.DisplayName).HasMaxLength(SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>.MaxDisplayNameLength);
         SeatColumns<TSeatId, TTenantId>(name => seat.Property(name));
 
         seat.OwnsMany(row => row.Placements, placement =>
@@ -306,7 +306,6 @@ internal static class TenancyMapping
         invitation.Property(row => row.Id).ValueGeneratedNever();
         invitation.HasIndex(row => new { row.TenantId, row.State, row.ExpiresAt });
         invitation.Property(row => row.Address).HasMaxLength(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>.MaxAddressLength);
-        invitation.Property(row => row.DisplayName).HasMaxLength(InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>.MaxDisplayNameLength);
         AsName(invitation.Property(row => row.State));
 
         invitation.Property(row => row.UnitId).IsFixedAfterInsert();
@@ -402,8 +401,8 @@ internal static class TenancyMapping
     }
 
     /// <summary>
-    /// The seats, read as rows, without the identity and the display name: from a view over the seats' table, or
-    /// from Tenancy's function.
+    /// The seats, read as rows, without the identity or a field the application adds: from a view over the seats'
+    /// table, or from Tenancy's function.
     /// </summary>
     internal static void SeatRows<TTenantId, TSeatId>(EntityTypeBuilder<SeatRow<TTenantId, TSeatId>> seat, TenancyTableNames tables, ReadModel read)
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -486,7 +485,10 @@ internal static class TenancyMapping
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
         => AsName(column(nameof(OrganizationUnitRow<TTenantId, TUnitId>.Status)));
 
-    /// <summary>The columns a seat and its row share: the status. The display name is the table's alone.</summary>
+    /// <summary>
+    /// The columns a seat and its row share: the status. What the application adds to its seat class is the table's
+    /// alone.
+    /// </summary>
     private static void SeatColumns<TSeatId, TTenantId>(Func<string, PropertyBuilder> column)
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>

@@ -127,7 +127,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var administrators = roles[catalogue.AdministratorPackFor(command.Shape).Key];
             var seatId = command.AdminSeatId ?? TSeatId.Create();
-            var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(seatId, tenantId, command.AdminIdentity, command.AdminDisplayName, by);
+            var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(seatId, tenantId, command.AdminIdentity, by);
             seat.Place(rootId, primary: true, now, placedBy: null, by);
             seat.Grant(rootId, administrators.Id, administrators.Facts, GrantPeriod.Open(now), grantedBy: null, ProvisionedReason, by);
 

@@ -511,12 +511,14 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 await using var scope = sample.Services.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 
-                // The seats: one statement, with the ids in it, however many are asked about.
+                // The seats: one statement, with the ids in it, however many are asked about. It reads the module's
+                // own seats, whose class keeps the name: the name comes with them, with no statement more.
                 SeatId[] seats = [.. Harbor.Seats.Select(seat => seat.Id), Harbor.Administrator.Id, .. Enumerable.Range(0, padding).Select(_ => SeatId.CreateSequential())];
                 counter.WatchThisFlow();
-                (await sender.Send(new SeatsById(seats), Cancellation)).Should().HaveCount(Harbor.Seats.Count + 1);
+                (await sender.Send(new SeatsById(seats), Cancellation)).Should().HaveCount(Harbor.Seats.Count + 1)
+                    .And.OnlyContain(seat => seat.DisplayName.Length > 0, "every seat of the demonstration tenant is seeded with its name");
                 counter.Commands.Should().ContainSingle("{0} seats asked about", seats.Length)
-                    .Which.Should().Contain($"{AnyTableOfTenancy}Seats\"").And.NotContain("\"Identity\"", "the names are read from the seats' own table, and the identity is not selected");
+                    .Which.Should().Contain($"{AnyTableOfTenancy}Seats\"").And.Contain("\"DisplayName\"", "the name is read from the seats' own table");
 
                 // The roles: two statements, the tenant's roles, from which the ones asked for are picked, and
                 // whether the caller holds the key a role's keys are answered to.

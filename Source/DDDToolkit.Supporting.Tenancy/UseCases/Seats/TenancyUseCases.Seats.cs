@@ -21,6 +21,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// without one, whoever asks, and that is decided before the seat changes, so a refused command leaves
     /// nothing for a later save to write. A seat of another tenant is not found.
     /// </para>
+    /// <para>
+    /// Nothing here names a seat: a seat has no name in Tenancy. What the application keeps on its seat class, a
+    /// name it is shown by among it, it sets in the callback of <see cref="AddSeatAsync"/>, and changes with a use
+    /// case of its own, under a rule of its own.
+    /// </para>
     /// </summary>
     /// <param name="store">Where seats and roles are loaded and saved.</param>
     /// <param name="catalogue">The keys asked for, and which keys are live.</param>
@@ -32,18 +37,23 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     {
         /// <summary>Adds a seat for a verified identity, placed nowhere yet.</summary>
         /// <param name="identity">The person's verified identity, the subject of their token.</param>
-        /// <param name="displayName">The name the seat is shown by.</param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <param name="id">
         /// Its id, for imports and seeding; a new one otherwise. An id that is already a seat's is a mistake in
         /// the import, which the save reports.
         /// </param>
+        /// <param name="configure">
+        /// Sets the fields the application added to its seat class, such as the name it is shown by, on the new
+        /// seat once the caller is checked and before the seat is handed to the store, so they are saved in the
+        /// same transaction and the class's own rules judge them there. When it throws, the seat is not added:
+        /// nothing is saved, by this call or by a later save in the same scope.
+        /// </param>
         /// <returns>The new seat's id.</returns>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant,
-        /// <c>tenancy.identity-has-seat</c>, <c>tenancy.identity-required</c>, <c>tenancy.name-invalid</c>.
+        /// <c>tenancy.identity-has-seat</c>, <c>tenancy.identity-required</c>.
         /// </exception>
-        public async Task<TSeatId> AddSeatAsync(Guid identity, string displayName, CancellationToken cancellationToken, TSeatId? id = null)
+        public async Task<TSeatId> AddSeatAsync(Guid identity, CancellationToken cancellationToken, TSeatId? id = null, Action<TSeat>? configure = null)
         {
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
@@ -55,30 +65,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
-                id ?? TSeatId.Create(), tenantId, identity, displayName, gate.By);
+                id ?? TSeatId.Create(), tenantId, identity, gate.By);
+
+            // The application's own fields, before the store has the seat: a callback that throws leaves nothing
+            // for this save or a later one to write, and what it sets is written with the seat.
+            configure?.Invoke(seat);
             store.Add(seat);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
             return seat.Id;
-        }
-
-        /// <summary>Changes the name a seat is shown by. A seat renames itself; another seat needs the key.</summary>
-        /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.not-permitted</c> without <see cref="TenancyKeys.SeatsManage"/> for the whole tenant,
-        /// unless it is the caller's own seat; <c>tenancy.seat-not-found</c>, <c>tenancy.name-invalid</c>.
-        /// </exception>
-        public async Task RenameAsync(TSeatId seat, string displayName, CancellationToken cancellationToken)
-        {
-            var gate = new Gate(store, catalogue, clock);
-            gate.RequireTenant();
-            var own = gate.Caller.Kind == TenancyCallerKind.Seat && gate.Caller.Seat is { } caller && caller.Equals(seat);
-            if (!own)
-            {
-                await gate.RequireTenantWideAsync(TenancyKeys.SeatsManage, cancellationToken).ConfigureAwait(false);
-            }
-
-            var renamed = await gate.LoadSeatAsync(seat, cancellationToken).ConfigureAwait(false);
-            renamed.Rename(displayName, gate.By);
-            await store.SaveAsync(cancellationToken).ConfigureAwait(false);
         }
 
         /// <summary>Places a seat in an active unit.</summary>

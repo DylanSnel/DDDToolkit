@@ -27,12 +27,11 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             var directory = scoped.Directory();
 
             recorder.Clear();
-            (await directory.SeatsByIdAsync([Sue.Seat, Ada.Seat, Seth.Seat], Cancellation)).Should().Equal(
-                new HostTenancy.SeatSummary(Ada.Seat, "Ada", SeatStatus.Active),
-                new HostTenancy.SeatSummary(Seth.Seat, "Seth", SeatStatus.Active),
-                new HostTenancy.SeatSummary(Sue.Seat, "Sue", SeatStatus.Suspended));
+            (await directory.SeatsByIdAsync([Sue.Seat, Ada.Seat, Seth.Seat], Named, Cancellation)).Should().BeEquivalentTo(
+                [(Ada.Seat, "Ada", SeatStatus.Active), (Seth.Seat, "Seth", SeatStatus.Active), (Sue.Seat, "Sue", SeatStatus.Suspended)],
+                "the host's own name, from the seats the directory read");
             var seats = recorder.Sent.Should().ContainSingle("the seats asked for are one statement").Which.Text;
-            seats.Should().Contain(names.Of("Seats")).And.NotContain(TenancyFunctionNames.TenantSeats, "a name is read from the seats' own table, which the policies let a seat of the tenant read");
+            seats.Should().Contain(names.Of("Seats")).And.NotContain(TenancyFunctionNames.TenantSeats, "the host's seats are read from the seats' own table, which the policies let a seat of the tenant read");
 
             recorder.Clear();
             (await directory.RolesByIdAsync([HarborRoles.Watcher, GrantsDesk], Cancellation)).Select(role => (role.Id, role.Name, role.ManagesAccess)).Should().Equal(
@@ -49,7 +48,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             recorder.Sent.Should().HaveCount(2, "the organization with its units, and the closure that orders a path");
 
             (await directory.ListUnitsAsync(Cancellation)).Select(unit => unit.Path).Should().Equal(["Harbor / North / North Pier"], "the list is still the units he is placed under");
-            (await directory.ListSeatsAsync(Cancellation)).Select(seat => seat.DisplayName).Should().Equal("Ada", "Eve", "Hiro", "Oli", "Seth", "Sue");
+            (await directory.ListSeatsAsync(Named, Cancellation)).Select(seat => seat.Name).Should().BeEquivalentTo(["Ada", "Eve", "Hiro", "Oli", "Seth", "Sue"]);
             (await directory.ListRolesAsync(Cancellation)).Select(role => role.Name).Should().Equal("Administrator", "Grants desk", "Operator", "Supervisor", "Watcher");
         });
     }
@@ -79,18 +78,21 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         await services.BySeat(Oli.Identity, Orchard, OliInOrchard, async scoped =>
         {
             var directory = scoped.Directory();
-            (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Oli.Seat, Ada.Seat], Cancellation)).Select(seat => (seat.Id, seat.DisplayName))
-                .Should().Equal((Odette.Seat, "Odette"), (OliInOrchard, "Oli"));
+            (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Oli.Seat, Ada.Seat], Named, Cancellation)).Select(seat => (seat.Id, seat.Name))
+                .Should().BeEquivalentTo([(Odette.Seat, "Odette"), (OliInOrchard, "Oli")]);
             (await directory.UnitsByIdAsync([OrchardRoot, HarborRoot], Cancellation)).Select(unit => unit.Path).Should().Equal("Orchard");
         });
 
         // System work in a tenant reads that tenant's names, and no other's.
         await services.BySystemIn(Harbor, async scoped =>
         {
-            (await scoped.Directory().SeatsByIdAsync([Ada.Seat, Odette.Seat, OliInOrchard], Cancellation)).Select(seat => seat.DisplayName).Should().Equal("Ada");
+            (await scoped.Directory().SeatsByIdAsync([Ada.Seat, Odette.Seat, OliInOrchard], Named, Cancellation)).Select(seat => seat.Name).Should().Equal("Ada");
             (await scoped.Directory().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation)).Select(unit => unit.Path).Should().Equal("Harbor / North / North Pier");
         });
     }
+
+    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
+    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
 }
 
 /// <summary>The directory's names by id, under the names Entity Framework gives the tables and columns.</summary>

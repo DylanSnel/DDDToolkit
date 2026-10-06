@@ -24,7 +24,11 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// </para>
 /// </remarks>
 /// <param name="Token">The token, as inviting answered it.</param>
-/// <param name="DisplayName">The name the seat is shown by, or <see langword="null"/> for the name the invitation suggests.</param>
+/// <param name="DisplayName">
+/// The name the person is shown by in the invitation's tenant: this application's field on its seat, which its rule
+/// requires (<c>tenants.seat.display-name</c>). Tenancy keeps none, and the invitation suggests none. Sent again for
+/// an invitation the person accepted before, it changes nothing: the answer is the seat that acceptance made.
+/// </param>
 public sealed record AcceptInvitation(string Token, string? DisplayName) : ICommand<SeatId>, ITenantsRequest
 {
     /// <inheritdoc />
@@ -34,7 +38,10 @@ public sealed record AcceptInvitation(string Token, string? DisplayName) : IComm
     public override string ToString() => nameof(AcceptInvitation);
 }
 
-/// <summary>Handles <see cref="AcceptInvitation"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
+/// <summary>
+/// Handles <see cref="AcceptInvitation"/> with the Tenancy package's use case, which checks the caller, decides and
+/// saves; the seat it makes is named in the use case's callback, by this application's own rule.
+/// </summary>
 /// <param name="invitations">The package's use cases for invitations.</param>
 /// <param name="callers">Who is calling, as the host verified it: where the caller's address is read.</param>
 public sealed class AcceptInvitationHandler(TenantsTenancy.InvitationCommands<Invitation, InvitationId> invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, SeatId>
@@ -43,7 +50,10 @@ public sealed class AcceptInvitationHandler(TenantsTenancy.InvitationCommands<In
     private const string AddressClaim = "email";
 
     /// <inheritdoc />
-    /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
+    /// <exception cref="Exceptions.RefusalException">
+    /// What the package's use case refuses, with its code, and <c>tenants.seat.display-name</c> without a name for the
+    /// seat, which leaves the invitation open.
+    /// </exception>
     /// <exception cref="Exceptions.ConcurrencyConflictException">Another change of access in the tenant, another acceptance included, was saved first.</exception>
     public async ValueTask<SeatId> Handle(AcceptInvitation command, CancellationToken cancellationToken)
     {
@@ -51,6 +61,9 @@ public sealed class AcceptInvitationHandler(TenantsTenancy.InvitationCommands<In
         // invitation's, and an empty one matches none: the package then refuses as it does another address.
         var address = callers.Current.Claim(AddressClaim) ?? string.Empty;
 
-        return (await invitations.AcceptAsync(command.Token, command.DisplayName, address, cancellationToken)).Seat;
+        // The name is this application's field: set on the new seat once the package found the invitation good, and
+        // before anything is saved, so a name the seat refuses leaves the invitation open for another try.
+        var accepted = await invitations.AcceptAsync(command.Token, address, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
+        return accepted.Seat;
     }
 }

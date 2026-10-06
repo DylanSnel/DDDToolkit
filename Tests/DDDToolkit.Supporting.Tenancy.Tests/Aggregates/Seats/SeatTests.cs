@@ -29,14 +29,9 @@ public class SeatTests
     public void A_new_seat_is_active_and_keeps_its_identity()
     {
         var identity = Guid.NewGuid();
-        var seat = New.Seat(displayName: "Ada", identity: identity);
-        seat.DrainEvents();
+        var seat = New.Seat(identity: identity);
 
-        seat.AsScenario().When(candidate => candidate.Rename("Ada Lovelace"))
-            .RaisedExactly<SeatRenamed<TenantId, SeatId>>();
-
-        seat.DisplayName.Should().Be("Ada Lovelace");
-        seat.Identity.Should().Be(identity, "renaming changes the name, never who the seat belongs to");
+        seat.Identity.Should().Be(identity);
         seat.Status.Should().Be(SeatStatus.Active);
         typeof(SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>).GetProperty(nameof(seat.Identity))!.SetMethod!.IsPrivate
             .Should().BeTrue("nothing outside the seat can set the identity, and nothing inside it does after creation");
@@ -44,10 +39,24 @@ public class SeatTests
     }
 
     [Fact]
+    public void A_seat_has_no_name_of_the_packages_and_the_host_names_it_as_it_likes()
+    {
+        typeof(SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>).GetProperties().Select(property => property.Name)
+            .Should().NotContain(name => name.Contains("Name"), "what a seat is shown by is the application's, and no rule of Tenancy reads it");
+        typeof(SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>).GetMethods().Select(method => method.Name)
+            .Should().NotContain(name => name.Contains("Rename"), "renaming is the application's own use case, with its own rule");
+
+        // The host's name is a field of its own, which no rule of the package judges: blank is the host's to allow.
+        var seat = New.Seat();
+        seat.Rename(" ");
+        seat.GetInvariantViolations().Should().BeEmpty();
+        seat.PendingEvents().RaisedExactly<SeatAdded<TenantId, SeatId>>();
+    }
+
+    [Fact]
     public void An_empty_identity_is_refused()
     {
         Refused.With(TenancyRefusals.IdentityRequired, () => New.Seat(identity: Guid.Empty));
-        Refused.With(TenancyRefusals.NameInvalid, () => New.Seat(displayName: " ")).Arguments["What"].Should().Be("display-name");
     }
 
     [Fact]

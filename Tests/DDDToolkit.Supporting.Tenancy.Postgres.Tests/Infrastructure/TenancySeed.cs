@@ -107,7 +107,7 @@ public static class TenancySeed
 
         await services.BySystemIn(Orchard, async scoped =>
         {
-            await scoped.Seats().AddSeatAsync(Oli.Identity, Oli.Name, cancellationToken, OliInOrchard);
+            await scoped.Seats().AddSeatAsync(Oli.Identity, cancellationToken, OliInOrchard, seat => seat.Rename(Oli.Name));
         });
         await services.BySystemIn(Orchard, scoped => scoped.Seats().PlaceAsync(OliInOrchard, OrchardRoot, primary: true, cancellationToken));
         await services.BySystemIn(Orchard, scoped => scoped.Seats().GrantAsync(OliInOrchard, OrchardRoot, OrchardRoles.Watcher, until: null, reason: null, cancellationToken));
@@ -181,11 +181,11 @@ public static class TenancySeed
                     TenantShape.Hierarchical,
                     char.ToUpperInvariant(slug[0]) + slug[1..],
                     administrator.Identity,
-                    administrator.Name,
                     TenantId: tenant,
                     RootId: root,
                     AdminSeatId: administrator.Seat,
-                    RoleIds: roles.ByPack),
+                    RoleIds: roles.ByPack,
+                    ConfigureFirstSeat: seat => seat.Rename(administrator.Name)),
                 cancellationToken));
         }
     }
@@ -198,7 +198,7 @@ public static class TenancySeed
         IReadOnlyList<(OrganizationUnitId Unit, RoleId Role, DateTimeOffset? From, DateTimeOffset? Until)> grants,
         CancellationToken cancellationToken)
     {
-        await services.BySystemIn(tenant, scoped => scoped.Seats().AddSeatAsync(person.Identity, person.Name, cancellationToken, person.Seat));
+        await services.BySystemIn(tenant, scoped => scoped.Seats().AddSeatAsync(person.Identity, cancellationToken, person.Seat, seat => seat.Rename(person.Name)));
         await services.BySystemIn(tenant, scoped => scoped.Seats().PlaceAsync(person.Seat, primary, primary: true, cancellationToken));
         foreach (var (unit, role, from, until) in grants)
         {

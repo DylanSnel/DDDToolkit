@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <see cref="TenantSelectionOptions.SeatedTokenRoles"/>: <c>authenticated</c> unless the application lists
 /// others. A user with another token role is nobody in every tenant, and is told what a person without a seat
 /// is told, so the answer says nothing about the seats their identity has. The list of a person's own seats,
-/// <see cref="SeatsOfAsync"/>, follows the same rule.
+/// <see cref="SeatsOfAsync(Caller, CancellationToken)"/>, follows the same rule, with a view of the seats or without.
 /// </para>
 /// </summary>
 /// <param name="seats">Finds the caller's seats.</param>
@@ -96,11 +96,45 @@ public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId
     {
         ArgumentNullException.ThrowIfNull(caller);
 
-        if (caller.Kind != CallerKind.User || caller.UserId is not { } identity || !_options.Seats(caller.Role))
-        {
-            return [];
-        }
-
-        return await seats.AllOfAsync(identity, cancellationToken).ConfigureAwait(false);
+        return ListedIdentity(caller) is { } identity
+            ? await seats.AllOfAsync(identity, cancellationToken).ConfigureAwait(false)
+            : [];
     }
+
+    /// <summary>
+    /// Every seat <paramref name="caller"/> has, as <see cref="SeatsOfAsync(Caller, CancellationToken)"/> answers them
+    /// and by the same rule, each answered as <paramref name="view"/> makes it of what the directory found and the
+    /// application's own seat: a tenant picker shows a seat by the name the application keeps on its seat class, say,
+    /// as every other answer about the seat does, from the seats the lookup reads anyway. For a caller that is answered
+    /// none, nothing is looked up and the view is never asked.
+    /// </summary>
+    /// <typeparam name="TSeat">The application's seat class, or a class it derives from.</typeparam>
+    /// <typeparam name="TView">What the application answers of a seat.</typeparam>
+    /// <param name="caller">Who is calling, as the toolkit says.</param>
+    /// <param name="view">
+    /// Makes the answer of one seat, once for each, as <see cref="ISeatDirectory{TTenantId, TSeatId}.AllOfAsync{TSeat, TView}"/>
+    /// hands it: read the fields the application keeps on the seat, and change nothing.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <exception cref="InvalidOperationException"><typeparamref name="TSeat"/> is no class the storage's seats are.</exception>
+    public async Task<IReadOnlyList<TView>> SeatsOfAsync<TSeat, TView>(
+        Caller caller,
+        Func<SeatOfCaller<TTenantId, TSeatId>, TSeat, TView> view,
+        CancellationToken cancellationToken)
+        where TSeat : class
+    {
+        ArgumentNullException.ThrowIfNull(caller);
+        ArgumentNullException.ThrowIfNull(view);
+
+        return ListedIdentity(caller) is { } identity
+            ? await seats.AllOfAsync(identity, view, cancellationToken).ConfigureAwait(false)
+            : [];
+    }
+
+    /// <summary>
+    /// The identity whose seats a picker lists for <paramref name="caller"/>: a signed-in user's whose token role holds
+    /// seats, and nobody else's.
+    /// </summary>
+    private Guid? ListedIdentity(Caller caller)
+        => caller.Kind == CallerKind.User && caller.UserId is { } identity && _options.Seats(caller.Role) ? identity : null;
 }

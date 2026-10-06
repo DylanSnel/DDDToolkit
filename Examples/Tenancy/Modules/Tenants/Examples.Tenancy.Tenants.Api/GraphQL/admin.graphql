@@ -77,6 +77,7 @@ type Mutation {
   roleCreate(input: RoleCreateInput!): RoleCreatePayload! @cost(weight: "10")
   roleKeysSet(input: RoleKeysSetInput!): RoleKeysSetPayload! @cost(weight: "10")
   roleArchive(input: RoleArchiveInput!): RoleArchivePayload! @cost(weight: "10")
+  seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
   seatReactivate(input: SeatReactivateInput!): SeatReactivatePayload!
     @cost(weight: "10")
@@ -182,7 +183,6 @@ type Invitation {
   until: DateTime
   id: UUID!
   address: String!
-  displayName: String
   issuedAt: DateTime!
   expiresAt: DateTime!
 }
@@ -408,6 +408,11 @@ type SeatReactivatePayload {
   errors: [SeatReactivateError!]
 }
 
+type SeatRenamePayload {
+  seat: Seat
+  errors: [SeatRenameError!]
+}
+
 type SeatSuspendPayload {
   seat: Seat
   errors: [SeatSuspendError!]
@@ -573,6 +578,12 @@ union SeatReactivateError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
+union SeatRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
 union SeatSuspendError =
   | RefusalError
   | InvalidValuesError
@@ -587,7 +598,7 @@ union TenantShapeChangeError =
 
 input InvitationAcceptInput {
   token: String!
-  displayName: String
+  displayName: String!
 }
 
 input InvitationCancelInput {
@@ -614,7 +625,6 @@ input PersonInviteInput {
   unitId: UUID!
   roleId: UUID!
   until: DateTime
-  displayName: String
 }
 
 input PlacementWithdrawInput {
@@ -663,6 +673,11 @@ input SeatPlaceInput {
 
 input SeatReactivateInput {
   seatId: UUID!
+}
+
+input SeatRenameInput {
+  seatId: UUID!
+  displayName: String!
 }
 
 input SeatSuspendInput {

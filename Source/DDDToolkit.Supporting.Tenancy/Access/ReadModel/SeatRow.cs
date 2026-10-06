@@ -2,7 +2,10 @@ using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
-/// <summary>A tenant's seat, as a row to read: whether it counts, never its identity or the name it is shown by.</summary>
+/// <summary>
+/// A tenant's seat, as a row to read: whether it counts, never its identity, nor a field the application added to its
+/// seat class, such as the name it shows the seat by.
+/// </summary>
 public sealed class SeatRow<TTenantId, TSeatId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>

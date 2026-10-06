@@ -1,6 +1,7 @@
 using Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
+using Examples.Tenancy.Tenants.Application.Seats;
 using HotChocolate;
 using HotChocolate.CostAnalysis.Types;
 using HotChocolate.Types;
@@ -51,7 +52,7 @@ internal static partial class InvitationType
 
     /// <summary>The seat that issued it, or nothing when no seat did.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<TenantsTenancy.SeatSummary?> GetIssuedByAsync(
+    public static async Task<SeatListing?> GetIssuedByAsync(
         [Parent] TenantsTenancy.OpenInvitation<InvitationId> invitation,
         ISeatByIdDataLoader seats,
         CancellationToken cancellationToken)

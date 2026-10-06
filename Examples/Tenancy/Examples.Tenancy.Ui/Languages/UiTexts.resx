@@ -777,9 +777,6 @@
   <data name="invitations.invite.address" xml:space="preserve">
     <value>E-mail address</value>
   </data>
-  <data name="invitations.invite.name" xml:space="preserve">
-    <value>Name for the seat; left empty, the person gives one when accepting</value>
-  </data>
   <data name="invitations.invite" xml:space="preserve">
     <value>Invite</value>
   </data>
@@ -802,7 +799,7 @@
     <value>The invitation's token</value>
   </data>
   <data name="accept.name" xml:space="preserve">
-    <value>Name for the seat: needed when the invitation suggests none</value>
+    <value>Name for the seat, as the others in the tenant see it</value>
   </data>
   <data name="accept.send" xml:space="preserve">
     <value>Accept</value>

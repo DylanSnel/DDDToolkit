@@ -52,6 +52,7 @@ public static class SeatedRoutes
         Send("POST /tenancy/seats/{seatId}/suspend", HttpMethod.Post, $"/tenancy/seats/{Leo.Value}/suspend"),
         Send("POST /tenancy/seats/{seatId}/reactivate", HttpMethod.Post, $"/tenancy/seats/{Leo.Value}/reactivate"),
         Send("POST /tenancy/seats/{seatId}/deactivate", HttpMethod.Post, $"/tenancy/seats/{Leo.Value}/deactivate"),
+        Send("PUT /tenancy/seats/{seatId}/name", HttpMethod.Put, $"/tenancy/seats/{Leo.Value}/name", new { displayName = "Leo" }),
         Get("GET /tenancy/roles", "/tenancy/roles"),
         Send("POST /tenancy/roles", HttpMethod.Post, "/tenancy/roles", new { name = "Site keeper", description = "Keeps a site", keys = new[] { "tenancy.units.manage" } }),
         Send("PUT /tenancy/roles/{id}/keys", HttpMethod.Put, $"/tenancy/roles/{AccessAdmin.Value}/keys", new { keys = new[] { "tenancy.units.manage" } }),

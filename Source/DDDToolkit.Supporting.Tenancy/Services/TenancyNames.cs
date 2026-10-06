@@ -11,8 +11,8 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// A refusal says which name it is about with a stable token in its <c>What</c> argument, never with a word,
 /// so its message reads the same in every language. Next to it, the <c>Field</c> argument names the input the
 /// text belongs under, in the word the use cases call it by: <c>name</c> for the name of a tenant, a unit or a
-/// role, since each is the one name its command takes, and <c>displayName</c>, <c>description</c> or
-/// <c>reason</c> for the others.
+/// role, since each is the one name its command takes, and <c>description</c> or <c>reason</c> for the others.
+/// A seat has no name here: what it is shown by is the application's, with the application's own rule.
 /// </para>
 /// </summary>
 internal static class TenancyNames
@@ -37,9 +37,6 @@ internal static class TenancyNames
 
     /// <summary>The token for a unit's name.</summary>
     public const string UnitNameToken = "unit-name";
-
-    /// <summary>The token for a seat's display name.</summary>
-    public const string DisplayNameToken = "display-name";
 
     /// <summary>The token for a role's name.</summary>
     public const string RoleNameToken = "role-name";
@@ -93,7 +90,6 @@ internal static class TenancyNames
     private static string FieldOf(string what)
         => what switch
         {
-            DisplayNameToken => "displayName",
             RoleDescriptionToken => "description",
             ReasonToken => "reason",
             _ => "name",

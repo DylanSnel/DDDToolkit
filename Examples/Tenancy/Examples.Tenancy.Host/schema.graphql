@@ -112,6 +112,7 @@ type Mutation {
   seatPlace(input: SeatPlaceInput!): SeatPlacePayload! @cost(weight: "10")
   seatReactivate(input: SeatReactivateInput!): SeatReactivatePayload!
     @cost(weight: "10")
+  seatRename(input: SeatRenameInput!): SeatRenamePayload! @cost(weight: "10")
   seatSuspend(input: SeatSuspendInput!): SeatSuspendPayload! @cost(weight: "10")
   tenantShapeChange(input: TenantShapeChangeInput!): TenantShapeChangePayload!
     @cost(weight: "10")
@@ -288,7 +289,6 @@ type InvalidValuesError implements CodedError {
 
 type Invitation {
   address: String!
-  displayName: String
   expiresAt: DateTime!
   id: UUID!
   issuedAt: DateTime!
@@ -638,6 +638,11 @@ type SeatReactivatePayload {
   seat: Seat
 }
 
+type SeatRenamePayload {
+  errors: [SeatRenameError!]
+  seat: Seat
+}
+
 type SeatSuspendPayload {
   errors: [SeatSuspendError!]
   seat: Seat
@@ -905,6 +910,12 @@ union SeatReactivateError =
   | BrokenRulesError
   | ConcurrencyConflictError
 
+union SeatRenameError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
 union SeatSuspendError =
   | RefusalError
   | InvalidValuesError
@@ -958,7 +969,7 @@ input InspectionRecordInput {
 }
 
 input InvitationAcceptInput {
-  displayName: String
+  displayName: String!
   token: String!
 }
 
@@ -983,7 +994,6 @@ input OrganizationUnitMoveInput {
 
 input PersonInviteInput {
   address: String!
-  displayName: String
   roleId: UUID!
   unitId: UUID!
   until: DateTime
@@ -1097,6 +1107,11 @@ input SeatPlaceInput {
 }
 
 input SeatReactivateInput {
+  seatId: UUID!
+}
+
+input SeatRenameInput {
+  displayName: String!
   seatId: UUID!
 }
 

@@ -140,11 +140,48 @@ public abstract class TenantFilterTests(TestDatabases databases) : IAsyncLifetim
 
         var found = await directory.FindAsync(person, "orchard", TestContext.Current.CancellationToken);
         found.Should().Be(new SeatOfCaller<TenantId, SeatId>(
-            orchard.Tenant, "orchard", "Orchard Works", TenantStatus.Active, inOrchard, "Ada at the orchard", SeatStatus.Active));
+            orchard.Tenant, "orchard", "Orchard Works", TenantStatus.Active, inOrchard, SeatStatus.Active));
 
         (await directory.FindAsync(person, "quarry", TestContext.Current.CancellationToken)).Should().BeNull("there is no such tenant");
         (await directory.FindAsync(Guid.NewGuid(), "harbor", TestContext.Current.CancellationToken)).Should().BeNull("a tenant is not found for someone without a seat in it");
         (await directory.AllOfAsync(Guid.NewGuid(), TestContext.Current.CancellationToken)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task The_seat_directory_hands_a_view_the_hosts_own_seats_of_the_identity_in_one_statement_and_tracks_none()
+    {
+        var person = Guid.NewGuid();
+        var harbor = await _services.ProvisionAsync("harbor", administrator: person);
+        var orchard = await _services.ProvisionAsync("orchard");
+        var inOrchard = await _services.AddSeatAsync(orchard.Tenant, person, "Ada at the orchard");
+        await _services.AddSeatAsync(orchard.Tenant, Guid.NewGuid(), "Grace");
+
+        await using var scope = _services.Scope();
+        var directory = scope.ServiceProvider.GetRequiredService<ISeatDirectory<TenantId, SeatId>>();
+
+        // The name each tenant keeps for the person, a field of the host's own seat class, beside what the picker shows
+        // of the tenant: the seats and their tenants are one statement.
+        _services.Commands.Reset();
+        var mine = await directory.AllOfAsync<HostSeat, (string Slug, SeatId Seat, string? Name, Guid Identity)>(
+            person,
+            (found, own) =>
+            {
+                var named = (found.Slug, found.Seat, own.DisplayName, own.Identity);
+                own.Rename("changed by a view");
+                return named;
+            },
+            TestContext.Current.CancellationToken);
+
+        mine.Should().BeEquivalentTo([("harbor", harbor.AdminSeat, "Ada", person), ("orchard", inOrchard, "Ada at the orchard", person)]);
+        _services.Commands.Count.Should().Be(1, "the seats are read with the tenants they are found in");
+        scope.ServiceProvider.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("nothing a view does to a seat is saved");
+
+        // A class the seats derive from is a seat as well; a class they are not is refused before anything is read.
+        (await directory.AllOfAsync<SeatAggregate<SeatId, TenantId, OrganizationUnitId, RoleId>, SeatId>(person, (_, own) => own.Id, TestContext.Current.CancellationToken))
+            .Should().BeEquivalentTo([harbor.AdminSeat, inOrchard]);
+        await FluentActions.Awaiting(() => directory.AllOfAsync<HostTenant, string>(person, (found, _) => found.Slug, TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*HostSeat*HostTenant*");
+        (await directory.AllOfAsync<HostSeat, SeatId>(Guid.NewGuid(), (_, own) => own.Id, TestContext.Current.CancellationToken)).Should().BeEmpty();
     }
 
     /// <summary>Counts every set of both contexts that is kept to a tenant, by type.</summary>

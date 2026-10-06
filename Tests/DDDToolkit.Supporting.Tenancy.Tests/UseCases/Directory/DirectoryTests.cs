@@ -22,7 +22,8 @@ public class DirectoryTests
         var me = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
 
         me.Tenant.Should().Be(new HostTenancy.TenantSummary(harness.Tenant, "harbor", "Harbor Works", TenantShape.Hierarchical, TenantStatus.Active));
-        me.Seat.Should().Be(new HostTenancy.SeatSummary(bert, "Bert", SeatStatus.Active));
+        me.Seat.Should().Be(new HostTenancy.SeatSummary(bert, SeatStatus.Active), "Tenancy keeps no name of a seat");
+        (await harness.As(bert, h => h.Directory.WhoAmIAsync(Named, default))).Seat.Should().Be((bert, "Bert", SeatStatus.Active), "the host's own name, through a view of its own seat");
 
         me.Placements.Select(placement => (placement.Unit.Path, placement.IsPrimary)).Should().Equal(
             ("Harbor Works / North", true), ("Harbor Works / South", false));
@@ -87,8 +88,8 @@ public class DirectoryTests
         var mine = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
         mine.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast");
 
-        var seats = await harness.As(bert, h => h.Directory.ListSeatsAsync(default));
-        seats.Select(seat => seat.DisplayName).Should().Equal("Ada", "Bert");
+        var seats = await harness.As(bert, h => h.Directory.ListSeatsAsync(Named, default));
+        seats.Select(seat => seat.Name).Should().BeEquivalentTo(["Ada", "Bert"]);
 
         await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default));
         var roles = await harness.As(bert, h => h.Directory.ListRolesAsync(default));
@@ -140,17 +141,48 @@ public class DirectoryTests
         var cy = await harness.SeatAt("Cy", harness.Harbor.South);
         await harness.BySystemWork(h => h.Seats.SuspendAsync(cy, default));
 
-        // Bert holds no key at all: whoever works in a tenant reads its names.
-        var named = await harness.As(bert, h => h.Directory.SeatsByIdAsync([cy, harness.Administrator, orchard.Administrator.Id, SeatId.CreateSequential(), cy], default));
+        // Bert holds no key at all: whoever works in a tenant reads its seats. The name is the host's own field,
+        // answered by its view from the seats the directory read anyway.
+        var named = await harness.As(bert, h => h.Directory.SeatsByIdAsync([cy, harness.Administrator, orchard.Administrator.Id, SeatId.CreateSequential(), cy], Named, default));
 
-        named.Should().Equal(
-            new HostTenancy.SeatSummary(harness.Administrator, "Ada", SeatStatus.Active),
-            new HostTenancy.SeatSummary(cy, "Cy", SeatStatus.Suspended));
+        named.Should().BeEquivalentTo([(harness.Administrator, "Ada", SeatStatus.Active), (cy, "Cy", SeatStatus.Suspended)]);
         harness.Store.Calls.Should().Equal(["ListSeatsAsync"], "one read, of the seats themselves; the rows the access questions read have no name");
 
         (await harness.As(bert, h => h.Directory.SeatsByIdAsync([orchard.Administrator.Id, SeatId.CreateSequential()], default)))
             .Should().BeEmpty("a seat of another tenant and no seat at all are left out alike, without a word");
     }
+
+    [Fact]
+    public async Task Seats_come_in_the_order_of_their_ids_with_the_package_summary_beside_the_hosts_own_seat()
+    {
+        var harness = Harness.OfHarbor();
+        var seats = new List<SeatId> { harness.Administrator };
+        foreach (var name in new[] { "Zed", "Bert", "Mo" })
+        {
+            seats.Add(await harness.SeatAt(name, harness.Harbor.North));
+        }
+
+        var summaries = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(default));
+        var viewed = new List<(HostTenancy.SeatSummary Summary, HostSeat Own)>();
+        var listed = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(
+            (summary, own) =>
+            {
+                viewed.Add((summary, own));
+                own.Rename("changed by a view");
+                return summary.Id;
+            },
+            default));
+
+        var byId = seats.Order().ToArray();
+        summaries.Select(seat => seat.Id).Should().Equal(byId, "a seat has nothing of Tenancy's a person would order it by, so the order is the ids'");
+        listed.Should().Equal(byId, "the view is asked once for each seat, in the same order");
+        viewed.Should().OnlyContain(pair => pair.Summary.Id == pair.Own.Id && pair.Summary.Status == pair.Own.Status);
+        viewed.Select(pair => pair.Own.Identity).Should().OnlyHaveUniqueItems().And.NotContain(Guid.Empty, "the host's own seat comes whole, its identity included");
+        seats.Select(seat => harness.Store.Seat(seat).DisplayName).Should().Equal(["Ada", "Zed", "Bert", "Mo"], "what a view does to a seat it was handed is never saved");
+    }
+
+    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
+    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
 
     [Fact]
     public async Task Units_by_id_come_with_their_path_whichever_the_caller_is_placed_under()
@@ -280,7 +312,7 @@ public class DirectoryTests
         // As many as a question takes, and the same id again and again: it is the different ids that count.
         (await harness.As(harness.Administrator, h => h.Directory.SeatsByIdAsync([.. seats[..most]], default))).Should().BeEmpty();
         (await harness.As(harness.Administrator, h => h.Directory.SeatsByIdAsync([.. seats[..(most - 1)], harness.Administrator, harness.Administrator], default)))
-            .Select(seat => seat.DisplayName).Should().Equal("Ada");
+            .Select(seat => seat.Id).Should().Equal(harness.Administrator);
 
         // The limit is told to a caller that may ask, and to no other.
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated, () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), h => h.Directory.SeatsByIdAsync(seats, default)));
@@ -293,7 +325,7 @@ public class DirectoryTests
         var orchard = harness.Seed(2, "orchard");
 
         (await harness.BySystemWork(h => h.Directory.SeatsByIdAsync([harness.Administrator, orchard.Administrator.Id], default)))
-            .Select(seat => seat.DisplayName).Should().Equal("Ada");
+            .Select(seat => seat.Id).Should().Equal(harness.Administrator);
         (await harness.BySystemWork(h => h.Directory.RolesByIdAsync([harness.Harbor.AdministratorRole.Id, orchard.AdministratorRole.Id], default)))
             .Select(role => role.Name).Should().Equal("Administrator");
         (await harness.BySystemWork(h => h.Directory.UnitsByIdAsync([harness.Harbor.NorthCoast, orchard.NorthCoast], default)))
@@ -310,18 +342,20 @@ public class DirectoryTests
     {
         var harness = Harness.OfHarbor();
         var identity = Guid.NewGuid();
-        var bert = await harness.BySystemWork(h => h.Seats.AddSeatAsync(identity, "Bert", default));
+        var bert = await harness.BySystemWork(h => h.Seats.AddSeatAsync(identity, default, configure: seat => seat.Rename("Bert")));
         var ada = harness.Store.Seat(harness.Administrator).Identity;
 
         var named = await harness.As(harness.Administrator, h => h.Directory.SeatsByIdAsync([bert, harness.Administrator], default));
         var listed = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(default));
+        var shown = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync((seat, own) => new { seat.Id, own.DisplayName }, default));
 
-        named.Select(seat => seat.DisplayName).Should().Equal("Ada", "Bert");
-        foreach (var answer in new[] { JsonSerializer.Serialize(named), JsonSerializer.Serialize(listed) })
+        named.Select(seat => seat.Id).Should().BeEquivalentTo([bert, harness.Administrator]);
+        foreach (var answer in new[] { JsonSerializer.Serialize(named), JsonSerializer.Serialize(listed), JsonSerializer.Serialize(shown) })
         {
-            answer.Should().Contain("Bert").And.NotContain(identity.ToString()).And.NotContain(ada.ToString());
+            answer.Should().NotContain(identity.ToString()).And.NotContain(ada.ToString());
         }
 
-        typeof(HostTenancy.SeatSummary).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(["Id", "DisplayName", "Status"]);
+        JsonSerializer.Serialize(shown).Should().Contain("Bert", "a view answers what the host chose, and the host chose the name");
+        typeof(HostTenancy.SeatSummary).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(["Id", "Status"]);
     }
 }

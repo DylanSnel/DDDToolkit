@@ -98,7 +98,7 @@ public sealed class SaveFailureTests
     }
 
     private static HostTenancy.TenantToProvision Harbor(string slug = "harbor")
-        => new(slug, "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada");
+        => new(slug, "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid());
 
     /// <summary>Knows nothing, and keeps what it was offered.</summary>
     private sealed class Recording : ITenancySaveFailures

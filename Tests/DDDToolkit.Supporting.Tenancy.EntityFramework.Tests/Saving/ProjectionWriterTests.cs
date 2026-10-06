@@ -110,7 +110,13 @@ public abstract class ProjectionWriterTests(TestDatabases databases) : IAsyncLif
             var role = await context.Set<HostRole>().SingleAsync(row => row.Id == harbor.RolesByPack[HostCatalogue.OperatorPack], TestContext.Current.CancellationToken);
             seat.Grant(north, role.Id, role.Facts, GrantPeriod.Open(_clock.Now), grantedBy: null, reason: null);
 
-            await _services.BySystemIn(harbor.Tenant, other => other.Seats().RenameAsync(grace, "Grace Hopper", TestContext.Current.CancellationToken));
+            await _services.BySystemIn(harbor.Tenant, async other =>
+            {
+                // The host's own use case, renaming the seat by the name it keeps: a save of the seat like any other.
+                var renamed = await other.Tenancy().Set<HostSeat>().SingleAsync(row => row.Id == grace, TestContext.Current.CancellationToken);
+                renamed.Rename("Grace Hopper");
+                await other.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken);
+            });
 
             await FluentActions.Awaiting(() => context.SaveChangesAsync(TestContext.Current.CancellationToken)).Should().ThrowAsync<ConcurrencyConflictException>();
         });

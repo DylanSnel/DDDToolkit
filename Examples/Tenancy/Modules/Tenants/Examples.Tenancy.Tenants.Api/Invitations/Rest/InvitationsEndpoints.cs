@@ -40,7 +40,7 @@ internal static class InvitationsEndpoints
         // It says nothing of whether the address had an account.
         group.MapPost("/tenancy/invitations", async (PersonToInvite body, ISender sender, HttpContext http, CancellationToken cancellationToken) =>
         {
-            var issued = await sender.Send(new InvitePerson(body.Address, body.UnitId, body.RoleId, body.EndsAt, body.DisplayName), cancellationToken);
+            var issued = await sender.Send(new InvitePerson(body.Address, body.UnitId, body.RoleId, body.EndsAt), cancellationToken);
             http.Response.Headers.CacheControl = "no-store";
             return Results.Ok(new { invitationId = issued.Id, token = issued.Token, expiresAt = issued.ExpiresAt });
         });
@@ -77,7 +77,6 @@ internal static class InvitationsEndpoints
     {
         invitation.Id,
         invitation.Address,
-        invitation.DisplayName,
         invitation.UnitId,
         invitation.RoleId,
         until = invitation.GrantUntil,
@@ -95,10 +94,12 @@ internal static class InvitationsEndpoints
         [property: JsonRequired] string Address,
         [property: JsonRequired] OrganizationUnitId UnitId,
         [property: JsonRequired] RoleId RoleId,
-        [property: JsonPropertyName("until")] DateTimeOffset? EndsAt,
-        string? DisplayName);
+        [property: JsonPropertyName("until")] DateTimeOffset? EndsAt);
 
-    /// <summary>The invitation to accept, by its token, and the name the new seat is shown by when the invitation suggests none.</summary>
+    /// <summary>
+    /// The invitation to accept, by its token, and the name the new seat is shown by in the invitation's tenant: this
+    /// application's field, which its rule requires.
+    /// </summary>
     public sealed record InvitationToAccept([property: JsonRequired] string Token, string? DisplayName)
     {
         /// <summary>Says nothing of the token: a record prints its members, and a token must not end up in a log.</summary>

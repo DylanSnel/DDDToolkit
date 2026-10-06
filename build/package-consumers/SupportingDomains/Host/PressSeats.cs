@@ -1,4 +1,5 @@
 using Acme.Press.Tenants;
+using DDDToolkit.Supporting.Tenancy;
 
 namespace Acme.Press.Host;
 
@@ -8,12 +9,16 @@ namespace Acme.Press.Host;
 /// above it writes the nine types. The host sees it through the infrastructure project. This does not compile when
 /// that generator did not arrive in the domain project.
 /// </summary>
-public static class PressNames
+public static class PressSeats
 {
-    /// <summary>What the seats with these ids are called, in the tenant the caller works in.</summary>
+    /// <summary>
+    /// Whether the seats with these ids count, in the tenant the caller works in. A seat has no name in Tenancy, and
+    /// the house keeps none on its own seat class, so the view it hands the directory reads the house's seat for its
+    /// status alone.
+    /// </summary>
     /// <param name="directory">Tenancy's directory, which <c>AddTenancy</c> registered.</param>
     /// <param name="seats">The seats.</param>
     /// <param name="cancellationToken">Stops the read.</param>
-    public static async Task<IReadOnlyList<string>> OfAsync(PressTenancy.TenancyDirectory directory, IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
-        => [.. (await directory.SeatsByIdAsync(seats, cancellationToken)).Select(seat => seat.DisplayName)];
+    public static async Task<IReadOnlyList<(SeatId Id, SeatStatus Status)>> OfAsync(PressTenancy.TenancyDirectory directory, IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
+        => await directory.SeatsByIdAsync(seats, static (seat, own) => (seat.Id, own.Status), cancellationToken);
 }

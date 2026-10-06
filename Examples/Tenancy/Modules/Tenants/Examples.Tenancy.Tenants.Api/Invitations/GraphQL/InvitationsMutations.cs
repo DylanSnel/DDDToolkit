@@ -27,10 +27,9 @@ internal static class InvitationsMutations
         OrganizationUnitId unitId,
         RoleId roleId,
         DateTimeOffset? until,
-        string? displayName,
         [Service] ISender sender,
         CancellationToken cancellationToken)
-        => await sender.Send(new InvitePerson(address, unitId, roleId, until, displayName), cancellationToken);
+        => await sender.Send(new InvitePerson(address, unitId, roleId, until), cancellationToken);
 
     /// <summary>
     /// Cancels an open invitation: its token no longer works. The answer is the id that was asked, since a
@@ -47,11 +46,12 @@ internal static class InvitationsMutations
     /// <summary>
     /// Accepts the invitation a token is for, as the signed-in person who sends it. Like <c>seatsOfMine</c> it
     /// needs no seat and no <c>Tenant</c> header: whoever accepts has no seat there yet, and the token says which
-    /// tenant. The answer is the id of the seat they now have, as the route's is; <c>seatsOfMine</c> then lists
-    /// it with its tenant.
+    /// tenant. <paramref name="displayName"/> is the name they are shown by there: this application's field on its
+    /// seat, which its rule requires. The answer is the id of the seat they now have, as the route's is;
+    /// <c>seatsOfMine</c> then lists it with its tenant.
     /// </summary>
     [Mutation]
     [UseMutationConvention(PayloadFieldName = "seatId")]
-    public static async Task<SeatId> InvitationAcceptAsync(string token, string? displayName, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<SeatId> InvitationAcceptAsync(string token, string displayName, [Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new AcceptInvitation(token, displayName), cancellationToken);
 }

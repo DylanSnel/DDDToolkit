@@ -257,7 +257,7 @@ public class ActorTests
     [Fact]
     public void Every_tenancy_event_type_carries_who_made_the_change()
     {
-        EventTypes.Should().HaveCount(29, "an event that is added is registered with the outbox and, when it changes access, kept in the history");
+        EventTypes.Should().HaveCount(28, "an event that is added is registered with the outbox and, when it changes access, kept in the history");
 
         foreach (var type in EventTypes)
         {
@@ -299,8 +299,7 @@ public class ActorTests
         await harness.As(ada, use => use.Roles.SetKeysAsync(polisher, [HostCatalogue.WidgetCreate], Cancellation));
         await harness.As(ada, use => use.Roles.ArchiveAsync(polisher, Cancellation));
 
-        var ben = await harness.As(ada, use => use.Seats.AddSeatAsync(Guid.NewGuid(), "Ben", Cancellation));
-        await harness.As(ada, use => use.Seats.RenameAsync(ben, "Benedict", Cancellation));
+        var ben = await harness.As(ada, use => use.Seats.AddSeatAsync(Guid.NewGuid(), Cancellation, configure: added => added.Rename("Ben")));
         await harness.As(ada, use => use.Seats.PlaceAsync(ben, harbor.North, primary: true, Cancellation));
         await harness.As(ada, use => use.Seats.PlaceAsync(ben, harbor.South, primary: false, Cancellation));
         await harness.As(ada, use => use.Seats.MakePrimaryAsync(ben, harbor.South, Cancellation));
@@ -312,9 +311,9 @@ public class ActorTests
         await harness.As(ada, use => use.Seats.ReactivateAsync(ben, Cancellation));
         await harness.As(ada, use => use.Seats.DeactivateAsync(ben, Cancellation));
 
-        var withdrawn = await harness.As(ada, use => use.Invitations.IssueAsync("lark@example.test", harbor.North, watcher, null, "Lark", null, Cancellation));
+        var withdrawn = await harness.As(ada, use => use.Invitations.IssueAsync("lark@example.test", harbor.North, watcher, null, null, Cancellation));
         await harness.As(ada, use => use.Invitations.CancelAsync(withdrawn.Id, Cancellation));
-        var invited = await harness.As(ada, use => use.Invitations.IssueAsync("wren@example.test", harbor.North, watcher, null, "Wren", null, Cancellation));
+        var invited = await harness.As(ada, use => use.Invitations.IssueAsync("wren@example.test", harbor.North, watcher, null, null, Cancellation));
 
         var bySeat = harness.Store.SavedEvents.ToList();
         bySeat.Should().HaveCountGreaterThan(20).And.OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSeat(ada));
@@ -332,7 +331,7 @@ public class ActorTests
         {
             harness.Store.BeginUnitOfWork();
             quay = await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid(), "Quin"),
+                new HostTenancy.TenantToProvision("quay", "Quay Works", TenantShape.Flat, "Quay", Guid.NewGuid()),
                 Cancellation);
         }
 
@@ -449,7 +448,7 @@ public class ActorTests
         {
             harness.Store.BeginUnitOfWork();
             await harness.Tenants.ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid()),
                 Cancellation);
         }
 
@@ -502,7 +501,7 @@ public class ActorTests
     public async Task Provisioning_for_an_operator_is_recorded_as_that_operator()
     {
         var harness = new Harness(New.Catalogue());
-        var command = new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada");
+        var command = new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid());
 
         HostTenancy.ProvisionedTenant provisioned;
         using (TenancyWork.BeginOperator<TenantId, SeatId>(Odette))

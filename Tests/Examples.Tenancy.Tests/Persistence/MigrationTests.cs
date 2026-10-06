@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -211,7 +212,7 @@ public sealed partial class MigrationTests
     {
         var expected = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved", "20261005214244_UnitKindAsEnum", "20261006072714_KeysFromPack"],
+            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved", "20261005214244_UnitKindAsEnum", "20261006072714_KeysFromPack", "20261006134711_InvitationsSuggestNoName"],
             ["Projects"] = ["20261001215453_Initial", "20261003012507_ProjectRoles"],
             ["Inspections"] = ["20261001215456_Initial"],
         };
@@ -274,6 +275,21 @@ public sealed partial class MigrationTests
         Enum.GetValues<UnitKind>().Select(value => converter.ConvertFromProvider(converter.ConvertToProvider(value)))
             .Should().Equal(Enum.GetValues<UnitKind>().Cast<object>(), "every kind reads back as itself");
         FluentActions.Invoking(() => converter.ConvertFromProvider("galaxy")).Should().Throw<ArgumentException>("a key the enum has no member for is a row to correct");
+    }
+
+    [Fact]
+    public void A_seats_name_is_the_applications_own_column_and_an_invitation_suggests_none()
+    {
+        using var context = DesignTimeContexts["Tenants"]();
+        var name = context.Model.FindEntityType(typeof(Seat))!.FindProperty(nameof(Seat.DisplayName))!;
+        var change = context.GetService<IMigrator>().GenerateScript(fromMigration: "20261006072714_KeysFromPack", toMigration: "20261006134711_InvitationsSuggestNoName");
+
+        // Tenancy keeps no name, and the seat class keeps one, mapped to the column the package's was: the migration
+        // leaves the seats' rows as they are, and drops only the name an invitation suggested, which no class keeps.
+        change.Should().Contain("DROP COLUMN \"DisplayName\"").And.Contain("\"Invitations\"").And.NotContain("\"Seats\"");
+        name.GetMaxLength().Should().Be(Seat.MaxDisplayNameLength);
+        name.IsNullable.Should().BeFalse("the seat class's rule asks every seat for a name");
+        context.Model.FindEntityType(typeof(Invitation))!.FindProperty("DisplayName").Should().BeNull();
     }
 
     [Fact]

@@ -69,10 +69,10 @@ public static class TenancyAttribution
     /// changes one, and the privileges an export writes leave them out of <c>UPDATE</c>.
     /// </para>
     /// <para>
-    /// They are ids, never a name: what a seat is called is the directory's to answer, by id. They are shadow
-    /// properties, so the entity's class does not change; read one with <c>EF.Property&lt;SeatId?&gt;(row,
-    /// TenancyAttribution.ChangedBySeat)</c>. Adding them to a table that exists is a migration of your own, as any
-    /// change to the model is.
+    /// They are ids, never a name: what a seat is shown by is the application's, which the directory answers by id.
+    /// They are shadow properties, so the entity's class does not change; read one with
+    /// <c>EF.Property&lt;SeatId?&gt;(row, TenancyAttribution.ChangedBySeat)</c>. Adding them to a table that exists
+    /// is a migration of your own, as any change to the model is.
     /// </para>
     /// <para>
     /// On Postgres, <c>DDDToolkit.Supporting.Tenancy.Postgres</c> writes a trigger on the table that holds a

@@ -104,7 +104,7 @@ public sealed class TenancySettingTests(TenancyPostgres postgres) : IDisposable
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("lagoon", "Lagoon Works", TenantShape.Flat, "Lagoon", identity, "Dan", TenantId: lagoon),
+                new HostTenancy.TenantToProvision("lagoon", "Lagoon Works", TenantShape.Flat, "Lagoon", identity, TenantId: lagoon),
                 TestContext.Current.CancellationToken));
         }
 

@@ -36,10 +36,9 @@ public class InvitationTests
         string pack = HostCatalogue.WatcherPack,
         DateTimeOffset? grantUntil = null,
         TimeSpan? lifetime = null,
-        string address = Address,
-        string? displayName = "Wren")
+        string address = Address)
         => harness.As(issuer ?? harness.Administrator, use => use.Invitations.IssueAsync(
-            address, unit ?? harness.Harbor.North, harness.RoleFromPack(pack), grantUntil, displayName, lifetime, Cancellation));
+            address, unit ?? harness.Harbor.North, harness.RoleFromPack(pack), grantUntil, lifetime, Cancellation));
 
     /// <summary>
     /// A seat that manages seats and grants for the whole tenant and nothing else: it may invite, and holds none of
@@ -74,7 +73,6 @@ public class InvitationTests
         invitation.UnitId.Should().Be(harness.Harbor.North);
         invitation.RoleId.Should().Be(harness.RoleFromPack(HostCatalogue.WatcherPack));
         invitation.GrantUntil.Should().Be(Now.AddDays(90));
-        invitation.DisplayName.Should().Be("Wren");
         invitation.IssuedAt.Should().Be(Now);
         invitation.ExpiresAt.Should().Be(issued.ExpiresAt);
         invitation.IssuedBy.Should().Be(harness.Administrator);
@@ -156,18 +154,18 @@ public class InvitationTests
         var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
 
         Task<HostTenancy.IssuedInvitation<InvitationId>> Offering(OrganizationUnitId unit, RoleId role)
-            => harness.As(harness.Administrator, use => use.Invitations.IssueAsync(Address, unit, role, null, null, null, Cancellation));
+            => harness.As(harness.Administrator, use => use.Invitations.IssueAsync(Address, unit, role, null, null, Cancellation));
 
         await Refused.WithCodeAsync(TenancyRefusals.RoleNotFound, () => Offering(harness.Harbor.North, other.AdministratorRole.Id), "a role of another tenant is not found");
         await Refused.WithCodeAsync(TenancyRefusals.RoleNotActive, () => Offering(harness.Harbor.North, retired));
         (await Refused.WithCodeAsync(TenancyRefusals.UnitNotActive, () => Offering(harness.Harbor.NorthCoast, watcher))).Arguments["Unit"].Should().Be(harness.Harbor.NorthCoast);
         await Refused.WithCodeAsync(TenancyRefusals.UnitNotFound,
-            () => harness.BySystemWork(use => use.Invitations.IssueAsync(Address, OrganizationUnitId.CreateSequential(), watcher, null, null, null, Cancellation)));
+            () => harness.BySystemWork(use => use.Invitations.IssueAsync(Address, OrganizationUnitId.CreateSequential(), watcher, null, null, Cancellation)));
 
         // System work in a tenant that is not in use offers nothing either.
         await harness.BySystemWork(use => use.Tenants.SuspendAsync("unpaid", Cancellation));
         await Refused.WithCodeAsync(TenancyRefusals.TenantInactive,
-            () => harness.BySystemWork(use => use.Invitations.IssueAsync(Address, harness.Harbor.North, watcher, null, null, null, Cancellation)));
+            () => harness.BySystemWork(use => use.Invitations.IssueAsync(Address, harness.Harbor.North, watcher, null, null, Cancellation)));
 
         harness.Store.InvitationsOf(harness.Tenant).Should().BeEmpty();
     }
@@ -226,13 +224,11 @@ public class InvitationTests
     {
         var harness = Harness.OfHarbor();
 
-        var issued = await Issue(harness, address: "  Wren.Marsh@Example.Test ", displayName: "  ");
+        var issued = await Issue(harness, address: "  Wren.Marsh@Example.Test ");
         await Refused.WithCodeAsync(TenancyRefusals.AddressInvalid, () => Issue(harness, address: new string('w', 243) + "@example.test"));
-        await Refused.WithCodeAsync(TenancyRefusals.NameInvalid, () => Issue(harness, displayName: new string('n', 201)));
 
         var invitation = harness.Store.Invitation(issued.Id);
         invitation.Address.Should().Be("Wren.Marsh@Example.Test");
-        invitation.DisplayName.Should().BeNull("a blank name suggests nothing");
         invitation.IsFor("wren.marsh@example.test").Should().BeTrue();
         invitation.IsFor(" WREN.MARSH@EXAMPLE.TEST ").Should().BeTrue();
         invitation.IsFor("wren@example.test").Should().BeFalse();
@@ -280,7 +276,6 @@ public class InvitationTests
         invitation.AcceptedAs.Should().Be(accepted.Seat);
         invitation.AcceptedAt.Should().Be(Now.AddHours(3));
         invitation.Address.Should().BeNull("an invitation that is over forgets who it was sent to");
-        invitation.DisplayName.Should().BeNull();
 
         // The work is the application's, in that tenant, for the seat that issued the invitation.
         var raised = harness.Store.SavedEvents.Skip(events).ToList();
@@ -315,18 +310,77 @@ public class InvitationTests
     }
 
     [Fact]
-    public async Task The_seat_takes_the_name_the_invitation_suggests_unless_the_person_gives_one()
+    public async Task The_host_names_the_seat_in_the_callback_once_it_is_placed_and_holds_the_role()
     {
         var harness = Harness.OfHarbor();
-        var suggested = await Issue(harness);
-        var unnamed = await Issue(harness, displayName: null, address: "finch@example.test");
+        var issued = await Issue(harness);
+        var seen = new List<string>();
 
-        var wren = await harness.Accept(Wren, suggested.Token, displayName: " ");
-        var refusal = await Refused.WithCodeAsync(TenancyRefusals.NameInvalid, () => harness.Accept(Guid.NewGuid(), unnamed.Token, displayName: null));
+        HostTenancy.AcceptedInvitation accepted;
+        using (Callers.Begin(Caller.User(Wren)))
+        {
+            harness.Store.BeginUnitOfWork();
+            accepted = await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation, configure: seat =>
+            {
+                seen.Add(seat.Placements.Single().UnitId + " with " + seat.Placements.Single().Grants.Count + " grant, the invitation "
+                         + harness.Store.Invitation(issued.Id).State);
+                seat.Rename("Wren Marsh");
+            });
+        }
 
-        harness.Store.Seat(wren.Seat).DisplayName.Should().Be("Wren");
-        refusal.Arguments[RefusalException.FieldArgument].Should().Be("displayName");
-        harness.Store.Invitation(unnamed.Id).State.Should().Be(InvitationState.Open, "a refused acceptance leaves the invitation as it was");
+        seen.Should().Equal([harness.Harbor.North + " with 1 grant, the invitation Open"], "the callback runs once, before the invitation is accepted");
+        harness.Store.Seat(accepted.Seat).DisplayName.Should().Be("Wren Marsh", "the host's own field is saved with the seat, in the one save");
+        harness.Store.Invitation(issued.Id).State.Should().Be(InvitationState.Accepted);
+    }
+
+    [Fact]
+    public async Task An_event_the_hosts_seat_raises_in_the_callback_goes_out_with_the_acceptance()
+    {
+        var harness = Harness.OfHarbor();
+        var issued = await Issue(harness);
+        var saves = harness.Store.SaveCount;
+        var events = harness.Store.SavedEvents.Count;
+
+        var accepted = await AcceptWith(harness, issued.Token, seat => seat.Welcome());
+
+        harness.Store.SaveCount.Should().Be(saves + 1, "the host's event leaves with the one save of the acceptance");
+        var saved = harness.Store.SavedEvents.Skip(events).ToList();
+        saved.OfType<HostSeatWelcomed>().Should().ContainSingle().Which.SeatId.Should().Be(accepted.Seat);
+        saved.FindIndex(raised => raised is HostSeatWelcomed).Should().BeGreaterThan(
+            saved.FindIndex(raised => raised is SeatAdded<TenantId, SeatId>), "the seat was added, placed and granted before the callback ran");
+    }
+
+    [Fact]
+    public async Task A_callback_that_throws_accepts_nothing_and_the_invitation_stays_open()
+    {
+        var harness = Harness.OfHarbor();
+        var issued = await Issue(harness);
+        var saves = harness.Store.SaveCount;
+
+        // The host's own rule about its own field, checked where the field is set, and a callback that fails.
+        (await FluentActions.Awaiting(() => AcceptWith(harness, issued.Token, _ =>
+                throw new RefusalException("host.seat.name-required", RefusalKind.Invalid, "A seat is shown by a name.")))
+            .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be("host.seat.name-required");
+        await FluentActions.Awaiting(() => AcceptWith(harness, issued.Token, _ => throw new InvalidOperationException("no such person")))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such person");
+
+        harness.Store.SaveCount.Should().Be(saves, "neither acceptance saved anything");
+        harness.Store.SeatsIn(harness.Tenant).Should().NotContain(seat => seat.Identity == Wren);
+        harness.Store.Invitation(issued.Id).State.Should().Be(InvitationState.Open, "a refused acceptance leaves the invitation as it was");
+
+        // So the same person accepts it once the callback holds.
+        var accepted = await harness.Accept(Wren, issued.Token, displayName: "Wren");
+        harness.Store.Seat(accepted.Seat).DisplayName.Should().Be("Wren");
+    }
+
+    /// <summary>Accepts as Wren, with <paramref name="configure"/> as the host's callback, in a new unit of work.</summary>
+    private static async Task<HostTenancy.AcceptedInvitation> AcceptWith(Harness harness, string token, Action<HostSeat> configure)
+    {
+        using (Callers.Begin(Caller.User(Wren)))
+        {
+            harness.Store.BeginUnitOfWork();
+            return await harness.Invitations.AcceptAsync(token, verifiedAddress: null, Cancellation, configure: configure);
+        }
     }
 
     [Fact]
@@ -356,7 +410,7 @@ public class InvitationTests
                 harness.Store.BeginUnitOfWork();
                 var refusal = await Refused.WithCodeAsync(
                     TenancyRefusals.IdentityRequired,
-                    () => harness.Invitations.AcceptAsync(issued.Token, "Wren", verifiedAddress: null, Cancellation),
+                    () => harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation),
                     other?.ToString() ?? "with nobody calling");
                 refusal.Arguments[RefusalException.FieldArgument].Should().Be("identity");
             }
@@ -370,7 +424,7 @@ public class InvitationTests
         using (Callers.Begin(Caller.User(Wren, claim: path => path == "is_anonymous" ? "false" : null)))
         {
             harness.Store.BeginUnitOfWork();
-            (await harness.Invitations.AcceptAsync(issued.Token, "Wren", verifiedAddress: null, Cancellation)).Tenant.Should().Be(harness.Tenant);
+            (await harness.Invitations.AcceptAsync(issued.Token, verifiedAddress: null, Cancellation)).Tenant.Should().Be(harness.Tenant);
         }
     }
 
@@ -433,7 +487,7 @@ public class InvitationTests
 
         again.Should().Be(first, "a request that is sent again is answered what the first was");
         harness.Store.SaveCount.Should().Be(saves, "nothing was saved the second time");
-        harness.Store.Seat(first.Seat).DisplayName.Should().Be("Wren");
+        harness.Store.Seat(first.Seat).DisplayName.Should().Be("Wren", "the callback is not run for an invitation accepted before");
         harness.Store.SeatsIn(harness.Tenant).Should().HaveCount(2);
 
         // Long after it would have run out, the person who accepted still gets their answer.
@@ -542,7 +596,7 @@ public class InvitationTests
         var supervisors = harness.RoleFromPack(HostCatalogue.SupervisorPack);
         var events = harness.Store.SavedEvents.Count;
 
-        var issued = await harness.BySystemWork(use => use.Invitations.IssueAsync(Address, harness.Harbor.South, supervisors, null, "Wren", null, Cancellation));
+        var issued = await harness.BySystemWork(use => use.Invitations.IssueAsync(Address, harness.Harbor.South, supervisors, null, null, Cancellation));
         var accepted = await harness.Accept(Wren, issued.Token);
 
         var invitation = harness.Store.Invitation(issued.Id);
@@ -559,7 +613,7 @@ public class InvitationTests
         using (TenancyWork.BeginSystemIn(harness.Tenant, (SeatId?)watcher))
         {
             harness.Store.BeginUnitOfWork();
-            forBert = await harness.Invitations.IssueAsync("lark@example.test", harness.Harbor.South, supervisors, null, "Lark", null, Cancellation);
+            forBert = await harness.Invitations.IssueAsync("lark@example.test", harness.Harbor.South, supervisors, null, null, Cancellation);
         }
 
         var lark = await harness.Accept(Guid.NewGuid(), forBert.Token);
@@ -601,7 +655,7 @@ public class InvitationTests
         using (Callers.Begin(Caller.User(Wren)))
         {
             harness.Store.BeginUnitOfWork();
-            await Refused.WithCodeAsync(TenancyRefusals.InvitationUnbacked, () => harness.Invitations.AcceptAsync(issued.Token, "Wren", null, Cancellation));
+            await Refused.WithCodeAsync(TenancyRefusals.InvitationUnbacked, () => harness.Invitations.AcceptAsync(issued.Token, null, Cancellation));
             using (TenancyWork.BeginSystemIn<TenantId, SeatId>(harness.Tenant))
             {
                 await harness.Organization.RenameUnitAsync(harness.Harbor.South, "Southern Region", Cancellation);
@@ -639,7 +693,7 @@ public class InvitationTests
         forTheWatcher.Should().BeEmpty("a seat that manages no seats is shown no invitation, and is not refused");
         forSystemWork.Should().BeEquivalentTo(forAda);
         forAda[1].Should().Be(new HostTenancy.OpenInvitation<InvitationId>(
-            coast.Id, "coast@example.test", harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.WatcherPack), Now.AddDays(40), "Wren", Now, Now.AddDays(2), harness.Administrator, false));
+            coast.Id, "coast@example.test", harness.Harbor.NorthCoast, harness.RoleFromPack(HostCatalogue.WatcherPack), Now.AddDays(40), Now, Now.AddDays(2), harness.Administrator, false));
 
         // Another tenant's are not among them, whoever asks there.
         var quarry = harness.Seed(2, "quarry");
@@ -673,7 +727,6 @@ public class InvitationTests
         cancelled.State.Should().Be(InvitationState.Cancelled);
         cancelled.ClosedAt.Should().Be(Now.AddHours(2));
         cancelled.Address.Should().BeNull();
-        cancelled.DisplayName.Should().BeNull();
         var raised = harness.Store.SavedEvents.Skip(events).Should().ContainSingle()
             .Which.Should().BeOfType<InvitationCancelled<TenantId, InvitationId, SeatId>>().Which;
         raised.TenantId.Should().Be(harness.Tenant);
@@ -749,7 +802,7 @@ public class InvitationTests
         HostInvitation Make(string address = Address, DateTimeOffset? grantUntil = null, DateTimeOffset? expiresAt = null)
             => TenancyInstances.NewInvitation<HostInvitation, InvitationId, TenantId, OrganizationUnitId, RoleId, SeatId>(
                 InvitationId.CreateSequential(), new TenantId(1), address, OrganizationUnitId.CreateSequential(), RoleId.CreateSequential(),
-                grantUntil, displayName: null, issuedAt: Now, expiresAt ?? Now.AddDays(7));
+                grantUntil, issuedAt: Now, expiresAt ?? Now.AddDays(7));
 
         var invitation = Make();
 
@@ -780,7 +833,7 @@ public class InvitationTests
 
         // Made by hand with lifetimes out of order, a use case still says what is wrong.
         (await FluentActions.Awaiting(() => harness.As(harness.Administrator, _ => broken.IssueAsync(
-                Address, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.WatcherPack), null, null, null, Cancellation)))
+                Address, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.WatcherPack), null, null, Cancellation)))
             .Should().ThrowAsync<InvalidOperationException>()).WithMessage("*lifetimes are out of order*");
 
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();

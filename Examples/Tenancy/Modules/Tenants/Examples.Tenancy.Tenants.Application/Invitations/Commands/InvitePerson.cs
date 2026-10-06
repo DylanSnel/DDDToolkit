@@ -23,8 +23,7 @@ namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
 /// <param name="Unit">The unit the seat is placed in.</param>
 /// <param name="Role">The role the seat holds there, which must be active.</param>
 /// <param name="Until">When that role ends, later than the invitation itself, or <see langword="null"/> for no end.</param>
-/// <param name="DisplayName">A name suggested for the seat, or <see langword="null"/>.</param>
-public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until, string? DisplayName)
+public sealed record InvitePerson(string Address, OrganizationUnitId Unit, RoleId Role, DateTimeOffset? Until)
     : ICommand<TenantsTenancy.IssuedInvitation<InvitationId>>, ITenantsRequest
 {
     /// <inheritdoc />
@@ -90,7 +89,7 @@ public sealed class InvitePersonHandler(
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>
     public async ValueTask<TenantsTenancy.IssuedInvitation<InvitationId>> Handle(InvitePerson command, CancellationToken cancellationToken)
     {
-        var issued = await invitations.IssueAsync(command.Address, command.Unit, command.Role, command.Until, command.DisplayName, lifetime: null, cancellationToken);
+        var issued = await invitations.IssueAsync(command.Address, command.Unit, command.Role, command.Until, lifetime: null, cancellationToken);
 
         if (accounts is not null)
         {

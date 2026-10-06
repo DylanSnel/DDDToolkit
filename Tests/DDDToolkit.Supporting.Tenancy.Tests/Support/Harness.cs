@@ -121,24 +121,26 @@ public sealed class Harness
 
     /// <summary>
     /// Accepts an invitation as a person signed in with <paramref name="identity"/>, who names no tenant and has no
-    /// Tenancy caller: the toolkit's caller is all there is, as in a request, in a new unit of work.
+    /// Tenancy caller: the toolkit's caller is all there is, as in a request, in a new unit of work. The new seat is
+    /// given <paramref name="displayName"/> in the use case's callback, as the host application names its seats.
     /// </summary>
     public async Task<HostTenancy.AcceptedInvitation> Accept(Guid identity, string token, string? displayName = "Wren", string? verifiedAddress = null)
     {
         using (DDDToolkit.Access.Callers.Begin(DDDToolkit.Abstractions.Access.Caller.User(identity)))
         {
             Store.BeginUnitOfWork();
-            return await Invitations.AcceptAsync(token, displayName, verifiedAddress, CancellationToken.None);
+            return await Invitations.AcceptAsync(token, verifiedAddress, CancellationToken.None, configure: seat => seat.Rename(displayName));
         }
     }
 
     /// <summary>
-    /// A new seat of Harbor, added, placed at <paramref name="unit"/> as its primary placement and granted
-    /// there the role of each pack, by system work, one command at a time.
+    /// A new seat of Harbor, added with <paramref name="displayName"/>, the host's own field, placed at
+    /// <paramref name="unit"/> as its primary placement and granted there the role of each pack, by system work, one
+    /// command at a time.
     /// </summary>
     public async Task<SeatId> SeatAt(string displayName, OrganizationUnitId unit, params string[] packs)
     {
-        var seat = await BySystemWork(harness => harness.Seats.AddSeatAsync(Guid.NewGuid(), displayName, default));
+        var seat = await BySystemWork(harness => harness.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: added => added.Rename(displayName)));
         await BySystemWork(harness => harness.Seats.PlaceAsync(seat, unit, primary: true, default));
         foreach (var pack in packs)
         {

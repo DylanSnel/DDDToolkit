@@ -20,7 +20,11 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// people who manage seats recognize it by. It never finds a person. What accepts an invitation is its token and
 /// a verified identity; an application that knows the verified address of that identity may pass it along, and
 /// an invitation sent elsewhere is then refused. The address is forgotten once the invitation is accepted or
-/// cancelled, and so is the name suggested for the seat.
+/// cancelled.
+/// </para>
+/// <para>
+/// It suggests no name for the seat: a seat has none in Tenancy. What the seat is shown by is the application's,
+/// set in the callback of the use case that accepts.
 /// </para>
 /// <para>
 /// The token is not here, and neither is its digest: the store keeps the digest apart from the invitation, so
@@ -47,9 +51,6 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     /// <summary>The longest address an invitation may be for: the longest an e-mail address may be.</summary>
     public const int MaxAddressLength = 254;
 
-    /// <summary>The longest name an invitation may suggest for the seat, which is the longest a seat may have.</summary>
-    public const int MaxDisplayNameLength = 200;
-
     /// <summary>The tenant the invitation is into.</summary>
     public TTenantId TenantId { get; private set; }
 
@@ -67,12 +68,6 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
 
     /// <summary>When the grant ends, or <see langword="null"/> for no end. Later than <see cref="ExpiresAt"/>.</summary>
     public DateTimeOffset? GrantUntil { get; private set; }
-
-    /// <summary>
-    /// A name suggested for the seat, which whoever accepts may replace, or <see langword="null"/>. Forgotten
-    /// with the address.
-    /// </summary>
-    public string? DisplayName { get; private set; }
 
     /// <summary>Whether it is open, accepted or cancelled.</summary>
     public InvitationState State { get; private set; }
@@ -126,8 +121,8 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     /// <see cref="TenancyInstances"/>, right after the instance is made.
     /// </summary>
     /// <exception cref="RefusalException">
-    /// <c>tenancy.address-invalid</c>, <c>tenancy.name-invalid</c> for a suggested name that is too long,
-    /// <c>tenancy.invitation-grant-ends-first</c> for a grant that would end before the invitation does.
+    /// <c>tenancy.address-invalid</c>, <c>tenancy.invitation-grant-ends-first</c> for a grant that would end before
+    /// the invitation does.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="expiresAt"/> is not after <paramref name="issuedAt"/>.</exception>
     internal void InitializeNew(
@@ -137,7 +132,6 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
         TUnitId unitId,
         TRoleId roleId,
         DateTimeOffset? grantUntil,
-        string? displayName,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
         TSeatId? issuedBy,
@@ -150,7 +144,6 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
         }
 
         var sentTo = ValidAddress(address) ?? throw TenancyRefusals.Of(TenancyRefusals.AddressInvalid, ("Max", MaxAddressLength));
-        var suggested = TenancyNames.Optional(displayName, TenancyNames.DisplayNameToken, MaxDisplayNameLength);
         if (grantUntil is { } until && until <= expiresAt)
         {
             throw TenancyRefusals.Of(TenancyRefusals.InvitationGrantEndsFirst);
@@ -162,7 +155,6 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
         UnitId = unitId;
         RoleId = roleId;
         GrantUntil = grantUntil;
-        DisplayName = suggested.Length == 0 ? null : suggested;
         State = InvitationState.Open;
         IssuedAt = issuedAt;
         ExpiresAt = expiresAt;
@@ -174,7 +166,7 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
 
     /// <summary>
     /// Cancels an open invitation, one whose time ran out included: it can no longer be accepted, and forgets
-    /// the address it was for and the name it suggested.
+    /// the address it was for.
     /// </summary>
     /// <param name="at">When.</param>
     /// <param name="by">Who makes the change, for the event; <see langword="null"/> when nobody is named.</param>
@@ -190,9 +182,8 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     }
 
     /// <summary>
-    /// Marks the invitation as accepted by the seat it made, and forgets the address it was for and the name it
-    /// suggested. Whether it may be accepted, by whom, and making the seat are the use case's: this is its last
-    /// step, in the same save.
+    /// Marks the invitation as accepted by the seat it made, and forgets the address it was for. Whether it may be
+    /// accepted, by whom, and making the seat are the use case's: this is its last step, in the same save.
     /// </summary>
     /// <param name="seat">The seat the acceptance made.</param>
     /// <param name="at">When.</param>
@@ -210,11 +201,7 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     }
 
     /// <summary>An invitation that is over keeps what it offered and who took it, and nothing about the person it was sent to.</summary>
-    private void ForgetWhoItWasFor()
-    {
-        Address = null;
-        DisplayName = null;
-    }
+    private void ForgetWhoItWasFor() => Address = null;
 
     private void RequireOpen(string action)
     {

@@ -60,7 +60,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", Guid.NewGuid(), "Dan", TenantId: Estuary),
+                new HostTenancy.TenantToProvision("estuary", "Estuary Works", TenantShape.Hierarchical, "Estuary", Guid.NewGuid(), TenantId: Estuary),
                 Cancellation));
         }
 
@@ -94,7 +94,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), "Dan", TenantId: Estuary),
+                    new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid(), TenantId: Estuary),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -139,7 +139,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         // It is an administrator all the same, under the policies as in the use cases: it gives a role that manages
         // access, whose keys that do it holds, and a role to work with widgets, none of whose keys it holds.
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Fay", Cancellation));
+        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         foreach (var pack in new[] { HostCatalogue.SupervisorPack, HostCatalogue.OperatorPack })
         {
@@ -213,7 +213,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
 
         var desk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Fay", Cancellation));
+        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, desk, until: null, reason: null, Cancellation));
@@ -241,7 +241,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         provisioned.RolesByPack.Keys.Should().NotContain(TreeAdministrators, "that pack is for a hierarchical tenant");
         var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, "Fay", Cancellation));
+        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, settingsDesk, until: null, reason: null, Cancellation));
@@ -297,7 +297,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         {
             provisioned = await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision(
-                    "estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan, "Dan",
+                    "estuary", "Estuary Works", TenantShape.Flat, "Estuary", dan,
                     TenantId: Estuary,
                     Language: dutch,
                     ConfigureTenant: tenant => tenant.MarkAsDemo(),
@@ -320,7 +320,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         // pack's keys. The name is the tenant's, so the copy goes in under the pack's Dutch name.
         var settingsDesk = await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Roles().CreateAsync("Settings desk", "Keeps the settings", [TenancyKeys.SettingsManage], Cancellation));
-        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, "Fay", Cancellation));
+        var fay = await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().AddSeatAsync(fayIdentity, Cancellation, configure: seat => seat.Rename("Fay")));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat, scoped => scoped.Seats().PlaceAsync(fay, provisioned.RootUnit, primary: true, Cancellation));
         await services.BySeat(dan, Estuary, provisioned.AdminSeat,
             scoped => scoped.Seats().GrantAsync(fay, provisioned.RootUnit, settingsDesk, until: null, reason: null, Cancellation));
@@ -392,7 +392,7 @@ public abstract class ProvisioningTests(TenancyPostgres postgres, TenancyNaming 
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             return await services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("estuary", "Estuary Works", shape, "Estuary", administrator, "Dan", TenantId: Estuary),
+                new HostTenancy.TenantToProvision("estuary", "Estuary Works", shape, "Estuary", administrator, TenantId: Estuary),
                 Cancellation));
         }
     }

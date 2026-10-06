@@ -225,14 +225,17 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(tenants);
     }
 
-    public Task<IReadOnlyList<HostTenancy.SeatSummary>> ListSeatsAsync(TenantId tenant, IReadOnlyCollection<SeatId>? only, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<HostSeat>> ListSeatsAsync(TenantId tenant, IReadOnlyCollection<SeatId>? only, CancellationToken cancellationToken)
     {
         Record(nameof(ListSeatsAsync));
-        IReadOnlyList<HostTenancy.SeatSummary> seats =
+
+        // Copies the unit of work does not track, as a database's read for a view is: what a view does to one is
+        // never saved.
+        IReadOnlyList<HostSeat> seats =
         [
             .. _seats.Values
                 .Where(seat => Visible(seat.TenantId) && seat.TenantId == tenant && (only is null || only.Contains(seat.Id)))
-                .Select(seat => new HostTenancy.SeatSummary(seat.Id, seat.DisplayName, seat.Status)),
+                .Select(Copies.Of),
         ];
         return Task.FromResult(seats);
     }

@@ -1219,6 +1219,43 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     have the migration rewrite the keys to the members' names before the column changes
     (`UPDATE ... SET "Kind" = 'HeadOffice' WHERE "Kind" = 'head-office'`), as a role that row level security
     lets through: on Postgres the package's export forces it on the table, so its owner is held to it as well.
+- **Tenancy: a seat has no name, and the application shows it as it chooses.** No access rule read a seat's name:
+  Tenancy kept one for convenience, though it owns no users. So the package keeps none, and what a person is shown
+  by is the application's to decide, with a rule of its own: a name per tenant on its own seat class, the person's
+  own name from the identity provider, or a profile of its own, both found by the seat's `Identity`. A field of
+  the seat class is set in a callback of the use case that makes the seat: `TenantToProvision.ConfigureFirstSeat`
+  as before, and the new `configure` of `SeatCommands.AddSeatAsync` and of `InvitationCommands.AcceptAsync`. Each
+  runs once the caller and the invitation are checked and before the store has the seat, so the field is written
+  with the seat, the class's rules judge it there, an event the class raises leaves with the seat's own, and a
+  callback that throws saves nothing and leaves an invitation open. The directory's `ListSeatsAsync`,
+  `SeatsByIdAsync` and `WhoAmIAsync` take a view, `(SeatSummary, TSeat) => TView`, and so does the lookup of a
+  person's own seats for a tenant picker, `TenantSelection.SeatsOfAsync(caller, view)` over the new
+  `ISeatDirectory.AllOfAsync(identity, view)`, `(SeatOfCaller, TSeat) => TView`. Each view is handed the
+  application's own seat, read whole in one statement and tracked by nobody, so a screen shows what the
+  application chose with no read more, and nothing a view does to a seat is saved. The forms without a view answer
+  `SeatSummary`, now an id and a status, in the order of the ids (by the id's own comparison, so ids that are
+  numbers come as numbers do). Renaming is the application's own use case. See
+  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  - Drop the first administrator's name from `TenantToProvision` (the sixth argument, `AdminDisplayName`), the
+    name from `AddSeatAsync(identity, displayName, ...)`, `AcceptAsync(token, displayName, ...)` and
+    `TenancyInstances.NewSeat`, and the suggested name from `IssueAsync(..., displayName, ...)` and
+    `TenancyInstances.NewInvitation`. To keep a name, add it to your seat class and set it with
+    `ConfigureFirstSeat: seat => seat.Rename(...)` and `configure: seat => seat.Rename(...)`.
+  - `SeatAggregate.DisplayName`, `MaxDisplayNameLength`, `Rename` and its rule `DisplayNameIsValid`,
+    `SeatCommands.RenameAsync`, the event `SeatRenamed` (`tenancy.seat-renamed`), the invitation's
+    `DisplayName`, `MaxDisplayNameLength` and rule, `OpenInvitation.DisplayName`, `SeatSummary.DisplayName` and
+    `SeatOfCaller.DisplayName` are gone, and `tenancy.name-invalid` no longer refuses a seat's name (`What`
+    `display-name`, `Field` `displayName`). An event already stored keeps its payload; a `tenancy.seat-renamed`
+    the outbox has not delivered yet fails as a name it does not know, so let the outbox empty before upgrading.
+  - `WhoAmIAsync()` still answers `SeatOverview`, its seat by id and status; `WhoAmIAsync(view)` answers
+    `SeatOverview<TView>`. A storage of your own implements `IStore.ListSeatsAsync` as answering the seats
+    themselves, read only, and a seat directory of your own implements `ISeatDirectory.AllOfAsync(identity, view)`.
+  - `AddTenancy()` no longer maps the seats' `DisplayName` column, nor `AddTenancyInvitations()` the
+    invitations'. Add a migration. To keep the seats' names, add a field named `DisplayName` to your seat class
+    and map it as the package did, `HasMaxLength(200)`: the migration then leaves the seats' rows as they are, and
+    drops the invitations' column with the names they suggested. On Postgres, export the access files again: the
+    privileges on the invitations name one column less, and those on the seats one less too when you do not keep
+    the name.
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes
@@ -2221,6 +2258,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `invalid-request` where it was `tenancy.unknown-unit-kind`, and the catalogue's answer has no `unitKinds`.
   The migration `UnitKindAsEnum` makes the column the enum's, nullable, and leaves the stored keys as they are;
   its exported file follows.
+- **The Tenancy sample keeps a seat's name itself.** Its people sign in through Supabase Auth, and the same person
+  may be called differently in each tenant, so its `Seat` keeps a name per tenant, `DisplayName`, with a rule of its
+  own, `tenants.seat.display-name` (1 to 200 characters, in English and Dutch), which `Rename` asks before anything
+  changes. The demo seeder names each seat in the package's callbacks, and `POST /invitations/accept` and the
+  mutation `invitationAccept` take the name the person gives (`displayName: String!` in GraphQL, as in `seatRename`);
+  an invitation suggests none any more, so `POST /tenancy/invitations`, `personInvite` and the open invitations
+  have no `displayName`, nor the UI's invite form. Its queries answer a `SeatListing`, made by the views the
+  directory's seat questions and the tenant picker's lookup take (`SeatListing.Of`, `SeatOfMine.Of`), so
+  `GET /me`, `GET /me/seats`, `GET /tenancy/seats`, `/tenancy/directory/seats`, GraphQL's `Seat` and
+  `seatsOfMine` (in the administration schema too), the access history's `bySeat` and the UI carry `displayName`
+  as before, with no read more. Renaming is the module's own command, `RenameSeat`, at
+  `PUT /tenancy/seats/{seatId}/name` and as `seatRename`: a seat renames itself, another seat takes
+  `tenancy.seats.manage` for the whole tenant. The migration `InvitationsSuggestNoName` drops the invitations'
+  name and leaves the seats' column, now the seat class's own, as it was; its exported file and the access file
+  after it follow.
 - **The Tenancy sample states each module's keys once.** `ProjectCatalogue.Permissions` and
   `InspectionCatalogue.Permissions` are marked `[TenancyPermissions]`, and neither module's registration adds
   them any more. The host adds both with the generated `AddTenancyPermissionsOfModules()`, and the program

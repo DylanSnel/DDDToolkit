@@ -114,7 +114,8 @@ public sealed partial class ShopSeat
            {
                await tenants.ProvisionAsync(
                    new TenantsTenancy.TenantToProvision(
-                       "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity, "Ada"),
+                       "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity,
+                       ConfigureFirstSeat: seat => seat.Rename("Ada")),   // a seat's name is a field of yours
                    cancellationToken);
            }
        }
@@ -178,8 +179,16 @@ public sealed partial class ShopSeat
 - **Key sets draw a screen; a command asks again.** A list may carry what the caller can do with each row.
   The use case still checks when it runs.
 - **A module answers ids, never Tenancy's names.** The read model has ids, keys, periods and statuses, and
-  no name. What a seat, a unit or a role is called is asked of `TenancyDirectory` by id
-  (`SeatsByIdAsync`, `UnitsByIdAsync`, `RolesByIdAsync`) by whoever shows it.
+  no name. What a unit or a role is called is asked of `TenancyDirectory` by id (`UnitsByIdAsync`,
+  `RolesByIdAsync`) by whoever shows it.
+- **A seat has no name in Tenancy.** What a person is shown by is the application's: a field of its seat
+  class (set in `ConfigureFirstSeat`, `AddSeatAsync(..., configure:)` and `AcceptAsync(..., configure:)`,
+  renamed by a use case of its own), the identity provider's name, or a profile of its own by `Identity`. The
+  directory hands the application's seat to a view: `ListSeatsAsync(SeatListing.Of, ct)`,
+  `SeatsByIdAsync(ids, SeatListing.Of, ct)`, `WhoAmIAsync(SeatListing.Of, ct)`, with
+  `SeatListing.Of(TenantsTenancy.SeatSummary seat, Seat own)`; the tenant picker's lookup takes one as well,
+  `TenantSelection.SeatsOfAsync<Seat, TView>(caller, (SeatOfCaller found, Seat own) => ..., ct)`. Never add a name
+  back to Tenancy.
 - **Who may give a role.** `tenancy.grants.manage` at the unit gives any role that manages no access. A
   role that manages access is given only by a seat that holds each of its keys that do, there and for at
   least as long, and never to itself. A tenant always keeps an administrator. Mark your own keys that give

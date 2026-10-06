@@ -92,8 +92,9 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     /// <summary>
     /// Provisions <paramref name="tenant"/> with its fixed ids: the tenant, its root, a role per pack seeded for its
     /// shape, and its administrator's seat, placed at the root and granted there the role of the administrators'
-    /// pack among them. The root's kind is the application's own field, so the package hands the root to a callback
-    /// that sets it, in the save that provisions. <see langword="false"/> when its slug is taken.
+    /// pack among them. The root's kind and the administrator's name are the application's own fields, so the
+    /// package hands the root and the first seat to callbacks that set them, in the save that provisions.
+    /// <see langword="false"/> when its slug is taken.
     /// </summary>
     private async Task<bool> ProvisionAsync(DemoTenant tenant, CancellationToken cancellationToken)
     {
@@ -106,12 +107,12 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
                     tenant.Shape,
                     tenant.Name,
                     tenant.Administrator.Person.Id,
-                    tenant.Administrator.Person.Name,
                     TenantId: tenant.Id,
                     RootId: tenant.Root,
                     AdminSeatId: tenant.Administrator.Id,
                     RoleIds: tenant.Roles,
-                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
+                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind),
+                    ConfigureFirstSeat: administrator => administrator.Rename(tenant.Administrator.Person.Name)),
                 cancellationToken));
             return true;
         }
@@ -182,10 +183,11 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
                 => organization.AddUnitAsync(unit.Parent, unit.Name, cancellationToken, unit.Id, added => added.SetKind(unit.Kind)));
         }
 
+        // Each with the name the person is shown by in this tenant, the seat class's own field, set in the save that adds it.
         foreach (var seat in tenant.Seats)
         {
             await RunAsync<TenantsTenancy.SeatCommands>(seats
-                => seats.AddSeatAsync(seat.Person.Id, seat.Person.Name, cancellationToken, seat.Id));
+                => seats.AddSeatAsync(seat.Person.Id, cancellationToken, seat.Id, added => added.Rename(seat.Person.Name)));
         }
 
         foreach (var seat in tenant.Seats)

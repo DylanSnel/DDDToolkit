@@ -45,7 +45,7 @@ public sealed class ProvisioningTests : IDisposable
         using (ShopTenancy.BeginSystem())
         {
             provisioned = await scope.ServiceProvider.GetRequiredService<ShopTenancy.TenantCommands>().ProvisionAsync(
-                new ShopTenancy.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid(), "Ada"),
+                new ShopTenancy.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
@@ -64,7 +64,7 @@ public sealed class ProvisioningTests : IDisposable
 
         var seat = await context.Set<Seat>().SingleAsync(TestContext.Current.CancellationToken);
         seat.Id.Should().Be(provisioned.AdminSeat);
-        seat.DisplayName.Should().Be("Ada");
+        seat.Status.Should().Be(SeatStatus.Active, "a seat the switch wrote is the package's, with nothing of the application's added: no name either");
 
         (await context.Set<Role>().Select(static role => role.Id).ToListAsync(TestContext.Current.CancellationToken))
             .Should().BeEquivalentTo(provisioned.RolesByPack.Values);

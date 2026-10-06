@@ -32,7 +32,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             refusal = (await FluentActions.Awaiting(() => services.InScopeAsync(scoped => scoped.Tenants().ProvisionAsync(
-                    new HostTenancy.TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", Guid.NewGuid(), "Someone", TenantId: new TenantId(40)),
+                    new HostTenancy.TenantToProvision("harbor", "Second Harbor", TenantShape.Flat, "Second", Guid.NewGuid(), TenantId: new TenantId(40)),
                     Cancellation)))
                 .Should().ThrowAsync<RefusalException>()).Which;
         }
@@ -95,7 +95,7 @@ public abstract class TenancyFailureTests(TenancyPostgres postgres, TenancyNamin
         // policies let it read Tenancy's tables and write none of them. A new row is refused in so many words.
         var adding = await FluentActions.Awaiting(() => services.BySystemIn(
                 Harbor,
-                scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Zed", Cancellation),
+                scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Zed")),
                 scope: "widgets"))
             .Should().ThrowAsync<RefusalException>();
 

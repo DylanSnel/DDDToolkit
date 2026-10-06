@@ -255,7 +255,7 @@ public sealed class UseCaseTests : IDisposable
 
         await _services.BySeat(orchard.Tenant, orchard.AdminSeat, async services =>
         {
-            (await services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken)).Select(seat => seat.DisplayName).Should().Equal("Odette");
+            (await services.Directory().ListSeatsAsync(Named, TestContext.Current.CancellationToken)).Select(seat => seat.Name).Should().Equal("Odette");
             (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Select(unit => unit.Id).Should().Equal(orchard.RootUnit);
         });
 
@@ -277,14 +277,14 @@ public sealed class UseCaseTests : IDisposable
         var units = await AsGrace(services => services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken));
         units.Select(unit => (unit.Path, unit.Depth)).Should().Equal(("Harbor / North", 2), ("Harbor / North / Coast", 3));
 
-        var overview = await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
-        overview.Seat.DisplayName.Should().Be("Grace");
+        var overview = await AsGrace(services => services.Directory().WhoAmIAsync(Named, TestContext.Current.CancellationToken));
+        overview.Seat.Name.Should().Be("Grace", "the host's own name, from the seat the directory read anyway");
         overview.Placements.Should().ContainSingle().Which.Unit.Path.Should().Be("Harbor / North");
         overview.Keys.Single(reach => reach.Key == TenancyKeys.UnitsManage).Reaches.Select(unit => unit.Path)
             .Should().Equal("Harbor / North", "Harbor / North / Coast");
 
-        (await BySystem(services => services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken))).Select(seat => seat.DisplayName)
-            .Should().Equal("Ada", "Grace", "Lin");
+        (await BySystem(services => services.Directory().ListSeatsAsync(Named, TestContext.Current.CancellationToken))).Select(seat => seat.Name)
+            .Should().BeEquivalentTo(["Ada", "Grace", "Lin"]);
         (await BySystem(services => services.Directory().ListRolesAsync(TestContext.Current.CancellationToken))).Select(role => role.FromPack)
             .Should().BeEquivalentTo(_harbor.RolesByPack.Keys);
     }
@@ -302,10 +302,10 @@ public sealed class UseCaseTests : IDisposable
             var directory = services.Directory();
 
             _services.Commands.Reset();
-            (await directory.SeatsByIdAsync([_grace, _harbor.AdminSeat, orchard.AdminSeat], TestContext.Current.CancellationToken))
-                .Should().Equal(new HostTenancy.SeatSummary(_harbor.AdminSeat, "Ada", SeatStatus.Active), new HostTenancy.SeatSummary(_grace, "Grace", SeatStatus.Active));
+            (await directory.SeatsByIdAsync([_grace, _harbor.AdminSeat, orchard.AdminSeat], Named, TestContext.Current.CancellationToken))
+                .Should().BeEquivalentTo([(_harbor.AdminSeat, "Ada", SeatStatus.Active), (_grace, "Grace", SeatStatus.Active)]);
             _services.Commands.Count.Should().Be(1, "the seats are one statement");
-            _services.Commands.Commands.Single().Should().Contain(_services.Database.TenancyTable("Seats"), "a name is read from the seats' own table");
+            _services.Commands.Commands.Single().Should().Contain(_services.Database.TenancyTable("Seats"), "the host's name is read from the seats' own table");
 
             _services.Commands.Reset();
             (await directory.RolesByIdAsync([Operator, supervisor, orchard.AdministratorRole], TestContext.Current.CancellationToken))
@@ -410,7 +410,7 @@ public sealed class UseCaseTests : IDisposable
 
         var polder = await services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionAsync(
             new HostTenancy.TenantToProvision(
-                "polder", "Polder Werken", TenantShape.Flat, "Polder", Guid.NewGuid(), "Ada",
+                "polder", "Polder Werken", TenantShape.Flat, "Polder", Guid.NewGuid(),
                 Language: dutch,
                 ConfigureTenant: tenant => tenant.MarkAsDemo(),
                 ConfigureRoot: root => root.SetCostCentre("PO-001"),
@@ -437,7 +437,7 @@ public sealed class UseCaseTests : IDisposable
         // A callback that throws leaves no row behind, so the slug is free for the next attempt.
         await FluentActions.Awaiting(() => services.RunAsync(HostCaller.System, scoped => scoped.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision(
-                    "molen", "Molen Werken", TenantShape.Flat, "Molen", Guid.NewGuid(), "Bert",
+                    "molen", "Molen Werken", TenantShape.Flat, "Molen", Guid.NewGuid(),
                     ConfigureTenant: _ => throw new InvalidOperationException("no such plan")),
                 TestContext.Current.CancellationToken)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such plan");
@@ -484,4 +484,7 @@ public sealed class UseCaseTests : IDisposable
 
     private async Task<List<(OrganizationUnitId Unit, string Key)>> KeysAsync(SeatId seat)
         => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Key))];
+
+    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
+    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
 }

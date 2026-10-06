@@ -17,7 +17,7 @@ public class SeatCommandsTests
     {
         var harness = Harness.OfHarbor();
         var supervisor = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
-        var newcomer = await harness.BySystemWork(h => h.Seats.AddSeatAsync(Guid.NewGuid(), "Di", default));
+        var newcomer = await harness.BySystemWork(h => h.Seats.AddSeatAsync(Guid.NewGuid(), default));
 
         await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => harness.As(supervisor, h => h.Seats.PlaceAsync(newcomer, harness.Harbor.South, true, default)));
 
@@ -285,39 +285,71 @@ public class SeatCommandsTests
         var other = harness.Seed(2, "quarry");
         var identity = Guid.NewGuid();
 
-        await harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, "Bert", default));
-        await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, "Bert again", default)));
-        await Refused.WithCodeAsync(TenancyRefusals.IdentityRequired, () => harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(Guid.Empty, "Nobody", default)));
+        await harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, default));
+        await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, default)));
+        await Refused.WithCodeAsync(TenancyRefusals.IdentityRequired, () => harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(Guid.Empty, default)));
 
-        var elsewhere = await harness.Run(HostCaller.SystemIn(other.Tenant.Id), h => h.Seats.AddSeatAsync(identity, "Bert", default));
+        var elsewhere = await harness.Run(HostCaller.SystemIn(other.Tenant.Id), h => h.Seats.AddSeatAsync(identity, default));
 
         harness.Store.Seat(elsewhere).TenantId.Should().Be(other.Tenant.Id, "one seat per tenant, and a person may sit in several tenants");
         harness.Store.SeatsIn(harness.Tenant).Count(seat => seat.Identity == identity).Should().Be(1);
     }
 
     [Fact]
-    public async Task A_seat_renames_itself_without_seats_manage()
+    public async Task Adding_a_seat_sets_the_hosts_own_fields_in_its_callback_in_the_same_save()
     {
         var harness = Harness.OfHarbor();
-        var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
+        var saves = harness.Store.SaveCount;
+        var events = harness.Store.SavedEvents.Count;
 
-        await harness.As(watcher, h => h.Seats.RenameAsync(watcher, "Bert Brown", default));
+        var di = await harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: seat =>
+        {
+            seat.Rename("Di");
+            seat.ChangeJobTitle("Rigger");
+        }));
 
-        harness.Store.Seat(watcher).DisplayName.Should().Be("Bert Brown");
+        var saved = harness.Store.Seat(di);
+        saved.DisplayName.Should().Be("Di", "a seat has no name of Tenancy's: the host keeps one, and sets it here");
+        saved.JobTitle.Should().Be("Rigger");
+        harness.Store.SaveCount.Should().Be(saves + 1, "the host's fields go in the save that adds the seat");
+        harness.Store.SavedEvents.Skip(events).Should().ContainSingle().Which.Should().BeOfType<SeatAdded<TenantId, SeatId>>();
     }
 
     [Fact]
-    public async Task Renaming_another_seat_needs_seats_manage_tenant_wide()
+    public async Task An_event_the_hosts_seat_raises_in_the_callback_goes_out_with_the_seat_it_added()
+    {
+        var harness = Harness.OfHarbor();
+        var saves = harness.Store.SaveCount;
+        var events = harness.Store.SavedEvents.Count;
+
+        var di = await harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(Guid.NewGuid(), default, configure: seat => seat.Welcome()));
+
+        harness.Store.SaveCount.Should().Be(saves + 1, "the host's event leaves with the save that adds the seat, and in no save of its own");
+        harness.Store.SavedEvents.Skip(events).Should().SatisfyRespectively(
+            added => added.Should().BeOfType<SeatAdded<TenantId, SeatId>>(),
+            welcomed => welcomed.Should().BeOfType<HostSeatWelcomed>().Which.SeatId.Should().Be(di, "the seat was added before the callback ran"));
+    }
+
+    [Fact]
+    public async Task The_callback_runs_once_the_caller_is_checked_and_one_that_throws_adds_no_seat()
     {
         var harness = Harness.OfHarbor();
         var watcher = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
-        var supervisor = await harness.SeatAt("Cy", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var identity = Guid.NewGuid();
+        var called = 0;
 
-        await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => harness.As(watcher, h => h.Seats.RenameAsync(harness.Administrator, "Ada A.", default)));
-        await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => harness.As(supervisor, h => h.Seats.RenameAsync(watcher, "Bert B.", default)));
+        await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => harness.As(watcher, h => h.Seats.AddSeatAsync(identity, default, configure: _ => called++)));
+        called.Should().Be(0, "a caller that may not add the seat gets nothing of the host's run");
 
-        await harness.As(harness.Administrator, h => h.Seats.RenameAsync(watcher, "Bert B.", default));
-        harness.Store.Seat(watcher).DisplayName.Should().Be("Bert B.");
+        var saves = harness.Store.SaveCount;
+        await FluentActions.Awaiting(() => harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, default, configure: _ => throw new InvalidOperationException("no such person"))))
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such person");
+        harness.Store.SaveCount.Should().Be(saves);
+        harness.Store.SeatsIn(harness.Tenant).Should().NotContain(seat => seat.Identity == identity);
+
+        // So the identity has no seat yet, and is given one once the callback holds.
+        var added = await harness.As(harness.Administrator, h => h.Seats.AddSeatAsync(identity, default, configure: seat => seat.Rename("Di")));
+        harness.Store.Seat(added).DisplayName.Should().Be("Di");
     }
 
     [Fact]

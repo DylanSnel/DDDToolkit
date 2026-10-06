@@ -52,14 +52,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         Task<TSeat?> FindSeatAsync(TSeatId id, CancellationToken cancellationToken);
 
         /// <summary>
-        /// The tenant's seats as the directory shows them: id, name and status, never an identity. All of them, or
-        /// those among <paramref name="only"/>; an id that is no seat of the tenant is simply not among the answer.
-        /// Read from the seats themselves: the rows the access questions read (<see cref="Reads"/>) carry no name.
+        /// The tenant's seats, for the directory to answer: all of them, or those among <paramref name="only"/>; an id
+        /// that is no seat of the tenant is simply not among the answer. Read as the application's own seats, with
+        /// every field it added, since the directory hands them to the application's view; and read only, never for a
+        /// save: a change made to one is not written, by this unit of work or another. A storage that keeps grants to
+        /// the seats that may read them loads each seat's grants as <see cref="FindSeatAsync"/> does.
         /// </summary>
         /// <param name="tenant">The tenant, which is the current caller's.</param>
         /// <param name="only">The seats asked about, or <see langword="null"/> for every seat of the tenant.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
-        Task<IReadOnlyList<SeatSummary>> ListSeatsAsync(TTenantId tenant, IReadOnlyCollection<TSeatId>? only, CancellationToken cancellationToken);
+        Task<IReadOnlyList<TSeat>> ListSeatsAsync(TTenantId tenant, IReadOnlyCollection<TSeatId>? only, CancellationToken cancellationToken);
 
         /// <summary>Whether the identity already has a seat in the tenant.</summary>
         Task<bool> IdentityHasSeatAsync(TTenantId tenant, Guid identity, CancellationToken cancellationToken);

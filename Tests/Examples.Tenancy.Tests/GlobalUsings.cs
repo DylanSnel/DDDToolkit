@@ -23,6 +23,7 @@ global using Examples.Tenancy.Tenants.Application.Placements.Commands;
 global using Examples.Tenancy.Tenants.Application.Roles;
 global using Examples.Tenancy.Tenants.Application.Roles.Commands;
 global using Examples.Tenancy.Tenants.Application.Roles.Queries;
+global using Examples.Tenancy.Tenants.Application.Seats;
 global using Examples.Tenancy.Tenants.Application.Seats.Commands;
 global using Examples.Tenancy.Tenants.Application.Seats.Queries;
 global using Examples.Tenancy.Tenants.Application.Tenant.Commands;

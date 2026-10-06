@@ -27,7 +27,7 @@ public abstract class AccessHistoryPolicyTests(TenancyPostgres postgres, Tenancy
 
     /// <summary>A row somebody would add past the model: an event of <paramref name="tenant"/>, said to be the work of one actor.</summary>
     private static string Insert(TenantId tenant, string kind, string? actor)
-        => $"INSERT INTO ddd.\"EventLog\" ({Columns}) VALUES (gen_random_uuid(), 'tenancy.seat-renamed', 1, '{{}}', now(), now(), '{kind}', {(actor is null ? "NULL" : $"'{actor}'")}, {tenant.Value})";
+        => $"INSERT INTO ddd.\"EventLog\" ({Columns}) VALUES (gen_random_uuid(), 'tenancy.seat-suspended', 1, '{{}}', now(), now(), '{kind}', {(actor is null ? "NULL" : $"'{actor}'")}, {tenant.Value})";
 
     [Fact]
     public async Task A_seat_without_the_history_key_reads_no_history()

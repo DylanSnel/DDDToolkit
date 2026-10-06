@@ -205,7 +205,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         });
 
         // Ada, who administers Harbor, adds a seat, places it and gives it a role: three commands, three requests.
-        var seat = await As(Ada, scoped => scoped.Seats().AddSeatAsync(Pat, "Pat", Cancellation));
+        var seat = await As(Ada, scoped => scoped.Seats().AddSeatAsync(Pat, Cancellation, configure: seat => seat.Rename("Pat")));
         await As(Ada, async scoped =>
         {
             await scoped.Seats().PlaceAsync(seat, North, primary: true, Cancellation);
@@ -218,7 +218,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         });
 
         // Oli, on the context she gave back, manages no seats: the use case asks the database as him, and refuses.
-        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Uninvited", Cancellation)));
+        var refused = await RefusedAsync(TenancyRefusals.NotPermitted, () => As(Oli, scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Uninvited"))));
         refused.Arguments["Key"].Should().Be(Catalogue.TenancyKeys.SeatsManage);
 
         rented.Should().HaveCount(4);
@@ -308,18 +308,20 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
 
             var seat = await context.Set<HostSeat>().AsTracking().SingleAsync(candidate => candidate.Id == Oli.Seat, Cancellation);
             seat.Rename("Renamed and never saved");
+            seat.Suspend();
             context.ChangeTracker.Entries<HostSeat>().Should().ContainSingle();
             seat.DomainEvents.Should().NotBeEmpty("the change waits on the seat, with its event");
         });
 
-        // Odette, in Orchard, is handed that instance with nothing tracked on it, and her command saves her change alone.
+        // Odette, in Orchard, is handed that instance with nothing tracked on it, and her commands save her changes alone.
         await services.BySeat(Odette.Identity, Orchard, Odette.Seat, async scoped =>
         {
             var context = scoped.Tenancy();
             rented.Add(context);
             context.ChangeTracker.Entries().Should().BeEmpty("what the renter before tracked left with her");
 
-            await scoped.Seats().RenameAsync(OliInOrchard, "Oliver", Cancellation);
+            await scoped.RenameSeatAsync(OliInOrchard, "Oliver", Cancellation);
+            await scoped.Seats().SuspendAsync(OliInOrchard, Cancellation);
         });
 
         rented.Distinct().Should().ContainSingle("the second request was handed the context the first gave back");
@@ -327,9 +329,9 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
         (await owner.ListAsync<string>("SELECT \"DisplayName\" FROM tenancy.\"Seats\" WHERE \"Id\" = ANY ($1) ORDER BY 1", Cancellation, new[] { Oli.Seat.Value, OliInOrchard.Value }))
             .Should().Equal("Oli", "Oliver");
-        (await owner.ListAsync<string>("SELECT \"AggregateId\" FROM ddd.\"OutboxMessages\" WHERE \"EventName\" = $1", Cancellation, "tenancy.seat-renamed"))
-            .Should().ContainSingle("the event of the change that was never saved left with it")
-            .Which.Should().ContainEquivalentOf(OliInOrchard.Value.ToString());
+        (await owner.ListAsync<string>("SELECT \"AggregateId\" FROM ddd.\"OutboxMessages\" WHERE \"EventName\" = $1", Cancellation, "tenancy.seat-suspended"))
+            .Should().ContainSingle(id => id.Contains(OliInOrchard.Value.ToString(), StringComparison.OrdinalIgnoreCase), "Odette's change was saved with its event")
+            .And.NotContain(id => id.Contains(Oli.Seat.Value.ToString(), StringComparison.OrdinalIgnoreCase), "the event of the change that was never saved left with it");
     }
 
     [Fact]

@@ -53,7 +53,7 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
         // The answer carries the token, this once, and is kept by no cache.
         using var invited = await tove.PostAsJsonAsync(
             Invitations,
-            new { address = DemoPeople.Juno.Email, unitId = Meadow.Root.Value, roleId = surveyor, until, displayName = "Juno" },
+            new { address = DemoPeople.Juno.Email, unitId = Meadow.Root.Value, roleId = surveyor, until },
             Cancellation);
         invited.StatusCode.Should().Be(HttpStatusCode.OK);
         invited.Headers.CacheControl!.NoStore.Should().BeTrue();
@@ -68,8 +68,9 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
             await notYet.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotSeated);
         }
 
-        // She accepts, signed in and naming no tenant: the token says which. The answer is her new seat.
-        using var accepted = await juno.PostAsJsonAsync(Accept, new { token }, Cancellation);
+        // She accepts, signed in and naming no tenant: the token says which, and with the name she is shown by in
+        // meadow, the module's own field. The answer is her new seat.
+        using var accepted = await juno.PostAsJsonAsync(Accept, new { token, displayName = "Juno" }, Cancellation);
         accepted.StatusCode.Should().Be(HttpStatusCode.OK);
         var seat = (await accepted.Content.ReadFromJsonAsync<JsonElement>(Cancellation)).GetProperty("seatId").GetGuid();
 
@@ -188,13 +189,16 @@ public sealed class InvitationScenarios(SampleHosts sample) : IClassFixture<Samp
 
         (await leo.GetFromJsonAsync<JsonElement>("/me/seats", Cancellation)).EnumerateArray().Should().ContainSingle("he got no seat in meadow");
 
-        // The refusal used nothing up: the invitation is open still, and hers. It suggested no name for the seat,
-        // so she gives one, and is asked for it when she does not.
+        // The refusal used nothing up: the invitation is open still, and hers. An invitation suggests no name: she
+        // gives the one she is shown by, which the seat's own rule asks for, and is refused without one, which uses
+        // nothing up either.
         (await OpenAsync(tove)).Should().ContainSingle();
-        using (var nameless = await juno.PostAsJsonAsync(Accept, new { token }, Cancellation))
+        using (var nameless = await juno.PostAsJsonAsync(Accept, new { token, displayName = " " }, Cancellation))
         {
-            await nameless.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, TenancyRefusals.NameInvalid);
+            (await nameless.ShouldBeRefusedAsync(HttpStatusCode.BadRequest, Seat.DisplayNameIsValid.ViolationCode)).Argument("Field").Should().Be("displayName");
         }
+
+        (await OpenAsync(tove)).Should().ContainSingle();
 
         using var hers = await juno.PostAsJsonAsync(Accept, new { token, displayName = "Juno" }, Cancellation);
         hers.StatusCode.Should().Be(HttpStatusCode.OK);

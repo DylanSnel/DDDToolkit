@@ -69,7 +69,6 @@ public sealed class ReadFunctionModelTests
         // The tables keep their names, where the model has the tables: only the rows went without.
         if (mapping == "AddTenancy")
         {
-            context.Model.FindEntityType(typeof(HostSeat))!.FindProperty(nameof(HostSeat.DisplayName))!.GetMaxLength().Should().Be(HostSeat.MaxDisplayNameLength);
             context.Model.FindEntityType(typeof(HostRole))!.FindProperty(nameof(HostRole.Name))!.GetMaxLength().Should().Be(HostRole.MaxNameLength);
             context.Model.FindEntityType(typeof(HostUnit))!.FindProperty(nameof(HostUnit.Name))!.GetMaxLength().Should().Be(HostUnit.MaxNameLength);
         }

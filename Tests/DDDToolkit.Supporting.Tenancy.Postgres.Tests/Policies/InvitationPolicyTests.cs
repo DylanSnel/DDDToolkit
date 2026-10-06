@@ -33,7 +33,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
     /// <summary>Issues an invitation through the use case, as Ada, Harbor's administrator.</summary>
     private static Task<HostTenancy.IssuedInvitation<InvitationId>> IssueAsync(TenancyServices services, OrganizationUnitId unit, RoleId? role = null, string address = Address)
         => services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped =>
-            scoped.Invitations().IssueAsync(address, unit, role ?? HarborRoles.Watcher, grantUntil: null, "Wren", lifetime: null, Cancellation));
+            scoped.Invitations().IssueAsync(address, unit, role ?? HarborRoles.Watcher, grantUntil: null, lifetime: null, Cancellation));
 
     /// <summary>An invitation somebody would add past the use cases: a row of <paramref name="tenant"/>, said to be issued by one seat.</summary>
     private static string Insert(Guid id, long tenant, OrganizationUnitId unit, RoleId role, SeatId? by, bool asSystem = false, string state = "Open")
@@ -92,12 +92,12 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
             () => services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Invitations().CancelAsync(withdrawn.Id, Cancellation)));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Invitations().CancelAsync(withdrawn.Id, Cancellation));
         await RefusedWithAsync(TenancyRefusals.InvitationCancelled,
-            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(withdrawn.Token, "Wren", verifiedAddress: null, Cancellation)));
+            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(withdrawn.Token, verifiedAddress: null, Cancellation, configure: seat => seat.Rename("Wren"))));
 
         // Accepted by a person who has no seat and names no tenant, at the address it was sent to.
         await RefusedWithAsync(TenancyRefusals.AddressMismatch,
-            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, "Wren", verifiedAddress: "lark@example.test", Cancellation)));
-        var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, "Wren Marsh", verifiedAddress: "Wren@Example.Test", Cancellation));
+            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, verifiedAddress: "lark@example.test", Cancellation, configure: seat => seat.Rename("Wren"))));
+        var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, verifiedAddress: "Wren@Example.Test", Cancellation, configure: seat => seat.Rename("Wren Marsh")));
         accepted.Tenant.Should().Be(Harbor);
         accepted.Slug.Should().Be("harbor");
 
@@ -121,11 +121,11 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
         // The person is a seat like any other from here on, and the invitation is used.
         var wren = await services.BySeat(Wren, Harbor, accepted.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
         wren.Keys.Select(key => key.Key).Should().BeEquivalentTo([HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead]);
-        (await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, null, null, Cancellation))).Should().Be(accepted);
+        (await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, null, Cancellation))).Should().Be(accepted);
         await RefusedWithAsync(TenancyRefusals.InvitationUsed,
-            () => services.BySignedInUser(Guid.NewGuid(), scoped => scoped.Invitations().AcceptAsync(issued.Token, "Lark", null, Cancellation)));
+            () => services.BySignedInUser(Guid.NewGuid(), scoped => scoped.Invitations().AcceptAsync(issued.Token, null, Cancellation, configure: seat => seat.Rename("Lark"))));
         await RefusedWithAsync(TenancyRefusals.IdentityHasSeat,
-            () => services.BySignedInUser(Ada.Identity, async scoped => await scoped.Invitations().AcceptAsync((await IssueAsync(services, North)).Token, "Ada", null, Cancellation)));
+            () => services.BySignedInUser(Ada.Identity, async scoped => await scoped.Invitations().AcceptAsync((await IssueAsync(services, North)).Token, null, Cancellation, configure: seat => seat.Rename("Ada"))));
     }
 
     [Fact]
@@ -209,7 +209,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
         await using (var harbor = await AsCaller.SystemInAsync(database, Harbor, "widgets", Cancellation))
         {
             (await harbor.ListAsync<string>(Read, Cancellation)).Should().HaveCount(2, "system work reads its tenant, in any scope");
-            (await harbor.AttemptAsync("UPDATE tenancy.\"Invitations\" SET \"DisplayName\" = 'Nobody'", Cancellation)).Should().Be(0, "and writes Tenancy's tables in Tenancy's own scope alone");
+            (await harbor.AttemptAsync("UPDATE tenancy.\"Invitations\" SET \"Address\" = 'nobody@example.test'", Cancellation)).Should().Be(0, "and writes Tenancy's tables in Tenancy's own scope alone");
         }
 
         await using var orchard = await AsCaller.SystemInAsync(database, Orchard, TenancyWork.SystemScope, Cancellation);
@@ -274,7 +274,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
             await RefusedAsync(seth, $"UPDATE tenancy.\"Invitations\" SET \"AcceptedAs\" = '{Seth.Seat.Value}' WHERE \"Id\" = '{id}'");
             (await seth.AttemptAsync("DELETE FROM tenancy.\"Invitations\"", Cancellation)).Should().Be(0, "no seat removes an invitation");
 
-            (await seth.AttemptAsync($"UPDATE tenancy.\"Invitations\" SET \"State\" = 'Cancelled', \"ClosedAt\" = now(), \"Address\" = NULL, \"DisplayName\" = NULL WHERE \"Id\" = '{id}'", Cancellation))
+            (await seth.AttemptAsync($"UPDATE tenancy.\"Invitations\" SET \"State\" = 'Cancelled', \"ClosedAt\" = now(), \"Address\" = NULL WHERE \"Id\" = '{id}'", Cancellation))
                 .Should().Be(1, "whoever manages seats at its unit cancels it");
             (await seth.AttemptAsync($"UPDATE tenancy.\"Invitations\" SET \"ClosedAt\" = NULL WHERE \"Id\" = '{id}'", Cancellation)).Should().Be(0, "and once it is over, a seat changes nothing of it");
         }
@@ -293,7 +293,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
         await using var services = new TenancyServices(database);
         var open = await IssueAsync(services, NorthPier);
         var taken = await IssueAsync(services, North, address: "lark@example.test");
-        var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(taken.Token, "Wren", null, Cancellation));
+        var accepted = await services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(taken.Token, null, Cancellation, configure: seat => seat.Rename("Wren")));
 
         string[] changes =
         [
@@ -388,7 +388,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
 
         clock.Advance(TimeSpan.FromDays(7));
         await RefusedWithAsync(TenancyRefusals.InvitationLapsed,
-            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, "Wren", null, Cancellation)));
+            () => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(issued.Token, null, Cancellation, configure: seat => seat.Rename("Wren"))));
         (await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Invitations().ListOpenAsync(Cancellation))).Should().BeEmpty();
 
         await using var owner = await AsCaller.OwnerAsync(database, Cancellation);
@@ -409,9 +409,9 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
 
         Task<HostTenancy.IssuedInvitation<InvitationId>> ByEve(string address)
             => services.BySeat(Eve.Identity, Harbor, Eve.Seat, scoped =>
-                scoped.Invitations().IssueAsync(address, North, HarborRoles.Watcher, grantUntil: null, "Wren", lifetime: null, Cancellation));
+                scoped.Invitations().IssueAsync(address, North, HarborRoles.Watcher, grantUntil: null, lifetime: null, Cancellation));
         Task<HostTenancy.AcceptedInvitation> Accept(Guid identity, string token)
-            => services.BySignedInUser(identity, scoped => scoped.Invitations().AcceptAsync(token, "Wren", verifiedAddress: null, Cancellation));
+            => services.BySignedInUser(identity, scoped => scoped.Invitations().AcceptAsync(token, verifiedAddress: null, Cancellation, configure: seat => seat.Rename("Wren")));
 
         var first = await ByEve(Address);
         var second = await ByEve("lark@example.test");
@@ -471,7 +471,7 @@ public abstract class InvitationPolicyTests(TenancyPostgres postgres, TenancyNam
             .WithMessage("Tenancy's reads across tenants would not answer as they should: - invitation_of_digest is missing:*");
 
         // And an acceptance then fails, rather than find nothing in silence.
-        await FluentActions.Awaiting(() => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(BearerTokens.New().Token, "Wren", null, Cancellation)))
+        await FluentActions.Awaiting(() => services.BySignedInUser(Wren, scoped => scoped.Invitations().AcceptAsync(BearerTokens.New().Token, null, Cancellation, configure: seat => seat.Rename("Wren"))))
             .Should().ThrowAsync<PostgresException>();
     }
 

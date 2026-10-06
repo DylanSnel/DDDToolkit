@@ -10,7 +10,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// <param name="UnitId">The unit the seat would be placed in.</param>
     /// <param name="RoleId">The role the seat would hold there.</param>
     /// <param name="GrantUntil">When that grant would end, or <see langword="null"/> for no end.</param>
-    /// <param name="DisplayName">The name suggested for the seat, or <see langword="null"/>.</param>
     /// <param name="IssuedAt">When it was issued.</param>
     /// <param name="ExpiresAt">The first moment it can no longer be accepted.</param>
     /// <param name="IssuedBy">The seat that issued it, or that system work issued it for; <see langword="null"/> for none.</param>
@@ -21,7 +20,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         TUnitId UnitId,
         TRoleId RoleId,
         DateTimeOffset? GrantUntil,
-        string? DisplayName,
         DateTimeOffset IssuedAt,
         DateTimeOffset ExpiresAt,
         TSeatId? IssuedBy,

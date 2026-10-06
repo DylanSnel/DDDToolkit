@@ -16,6 +16,12 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// details adds them to its own class.
 /// </para>
 /// <para>
+/// Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's
+/// to say: a name per tenant on its own seat class, set in the callback of the use case that makes the seat; the
+/// person's own name, from the identity provider; or a profile of its own, found by <see cref="Identity"/>. The
+/// directory hands the application's own seat to a view of it, so a screen shows what the application chose.
+/// </para>
+/// <para>
 /// Placements and grants are the seat's own: it checks every change to them, and hands them out as
 /// read-only views. What a role grants is not the seat's to know; the use case reads the role and passes its
 /// <see cref="RoleFacts"/> in.
@@ -38,9 +44,6 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
-    /// <summary>The longest display name a seat may have.</summary>
-    public const int MaxDisplayNameLength = 200;
-
     /// <summary>The longest reason a grant may give.</summary>
     public const int MaxReasonLength = 500;
 
@@ -53,9 +56,6 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     /// <summary>The verified identity the seat belongs to: the subject of its token. Never changes.</summary>
     public Guid Identity { get; private set; }
 
-    /// <summary>The name the seat is shown by in its tenant.</summary>
-    public string DisplayName { get; private set; } = string.Empty;
-
     /// <summary>Whether the seat's grants count.</summary>
     public SeatStatus Status { get; private set; }
 
@@ -63,42 +63,23 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     public IReadOnlyList<Placement<TSeatId, TUnitId, TRoleId>> Placements => _placements.AsReadOnly();
 
     /// <summary>
-    /// What a constructor would do: gives a new instance its id, tenant, identity and display name, starts it
-    /// active, and raises <see cref="SeatAdded{TTenantId, TSeatId}"/>. Called once, by
-    /// <see cref="TenancyInstances"/>, right after the instance is made.
+    /// What a constructor would do: gives a new instance its id, tenant and identity, starts it active, and raises
+    /// <see cref="SeatAdded{TTenantId, TSeatId}"/>. Called once, by <see cref="TenancyInstances"/>, right after the
+    /// instance is made.
     /// </summary>
-    internal void InitializeNew(TSeatId id, TTenantId tenantId, Guid identity, string displayName, TenancyActor<TSeatId>? by)
+    internal void InitializeNew(TSeatId id, TTenantId tenantId, Guid identity, TenancyActor<TSeatId>? by)
     {
         if (identity == Guid.Empty)
         {
             throw TenancyRefusals.Of(TenancyRefusals.IdentityRequired);
         }
 
-        var name = TenancyNames.Required(displayName, TenancyNames.DisplayNameToken, MaxDisplayNameLength);
-
         Id = id;
         TenantId = tenantId;
         Identity = identity;
-        DisplayName = name;
         Status = SeatStatus.Active;
 
         RaiseDomainEvent(new SeatAdded<TTenantId, TSeatId>(tenantId, id, by));
-    }
-
-    /// <summary>Changes the name the seat is shown by. The same name again changes nothing and raises nothing.</summary>
-    /// <param name="displayName">The new name.</param>
-    /// <param name="by">Who makes the change, for the event; <see langword="null"/> when nobody is named.</param>
-    /// <exception cref="RefusalException"><c>tenancy.name-invalid</c>: blank or too long.</exception>
-    public void Rename(string displayName, TenancyActor<TSeatId>? by = null)
-    {
-        var name = TenancyNames.Required(displayName, TenancyNames.DisplayNameToken, MaxDisplayNameLength);
-        if (name == DisplayName)
-        {
-            return;
-        }
-
-        DisplayName = name;
-        RaiseDomainEvent(new SeatRenamed<TTenantId, TSeatId>(TenantId, Id, by));
     }
 
     /// <summary>Stops an active seat for now. Its placements and grants stay, and give it nothing while it is suspended.</summary>

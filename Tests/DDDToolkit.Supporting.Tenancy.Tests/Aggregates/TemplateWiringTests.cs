@@ -30,12 +30,12 @@ public class TemplateWiringTests
         var identity = Guid.NewGuid();
         var id = SeatId.CreateSequential();
 
-        var seat = TenancyInstances.NewSeat<HostSeat, SeatId, TenantId, OrganizationUnitId, RoleId>(id, new TenantId(7), identity, " Ada ");
+        var seat = TenancyInstances.NewSeat<HostSeat, SeatId, TenantId, OrganizationUnitId, RoleId>(id, new TenantId(7), identity);
 
         seat.Id.Should().Be(id);
         seat.TenantId.Should().Be(new TenantId(7));
         seat.Identity.Should().Be(identity);
-        seat.DisplayName.Should().Be("Ada", "names are trimmed");
+        seat.DisplayName.Should().BeNull("a field the host added starts at its default, until the host sets it");
         seat.Status.Should().Be(SeatStatus.Active);
         seat.PendingEvents().RaisedExactly<SeatAdded<TenantId, SeatId>>()
             .SingleEvent<SeatAdded<TenantId, SeatId>>().Should().Match<SeatAdded<TenantId, SeatId>>(added => added.TenantId == new TenantId(7) && added.SeatId == id);
@@ -63,13 +63,12 @@ public class TemplateWiringTests
     {
         var seat = New.Seat();
         seat.ChangeJobTitle(new string('x', HostSeat.MaxJobTitleLength + 1));
-        Break(seat, "DisplayName", string.Empty);
+        Break(seat, "Identity", Guid.Empty);
 
         var violations = seat.GetInvariantViolations();
 
-        violations.Select(violation => violation.Code).Should().Equal(TenancyRefusals.NameInvalid, "host.seat.job-title");
+        violations.Select(violation => violation.Code).Should().Equal(TenancyRefusals.IdentityRequired, "host.seat.job-title");
         violations.Should().OnlyContain(violation => violation.EntityType == typeof(HostSeat));
-        violations[0].Arguments["What"].Should().Be("display-name");
     }
 
     [Fact]

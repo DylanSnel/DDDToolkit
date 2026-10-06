@@ -292,7 +292,7 @@ public abstract class DatabaseKeepsRightsTests(TenancyPostgres postgres, Tenancy
         var before = await RightsAsync(database);
 
         // Commands that change no grant, no seat's status and no role's keys.
-        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Seats().RenameAsync(Hiro.Seat, "Hiro B.", Cancellation));
+        await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.RenameSeatAsync(Hiro.Seat, "Hiro B.", Cancellation));
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped => scoped.Roles().RenameAsync(HarborRoles.Operator, "Operators", "Work with widgets", Cancellation));
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Seats().PlaceAsync(Eve.Seat, North, primary: false, Cancellation));
         await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().RenameUnitAsync(North, "North Coast", Cancellation));

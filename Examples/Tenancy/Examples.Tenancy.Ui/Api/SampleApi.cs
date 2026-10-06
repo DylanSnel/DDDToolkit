@@ -227,13 +227,12 @@ public sealed class SampleApi(HttpClient http, UiSession session)
         string? unitId,
         string? roleId,
         DateTimeOffset? until,
-        string? displayName,
         CancellationToken cancellationToken = default)
     {
         var outcome = await ExchangeAsync<IssuedInvitationInfo>(
             HttpMethod.Post,
             "/tenancy/invitations",
-            new { address = Blank(address), unitId = Blank(unitId), roleId = Blank(roleId), until, displayName = Blank(displayName) },
+            new { address = Blank(address), unitId = Blank(unitId), roleId = Blank(roleId), until },
             CallAs.Session,
             TenantChoice.Session,
             record: false,
@@ -254,7 +253,8 @@ public sealed class SampleApi(HttpClient http, UiSession session)
 
     /// <summary>
     /// <c>POST /invitations/accept</c>: the signed-in person accepts the invitation a token is for. It names no
-    /// tenant: the token says which. The token travels in the body, and the answer carries none.
+    /// tenant: the token says which. The token travels in the body, and the answer carries none. The name is the one the
+    /// person is shown by in that tenant, which the seat's rule requires.
     /// </summary>
     public Task<ApiOutcome<AcceptedInvitationInfo>> AcceptInvitationAsync(string? token, string? displayName, CancellationToken cancellationToken = default)
         => SendAsync<AcceptedInvitationInfo>(

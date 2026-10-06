@@ -1,3 +1,5 @@
+using DDDToolkit.Exceptions;
+
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
@@ -12,7 +14,7 @@ public class ProvisioningHooksTests
         Action<HostSeat>? configureFirstSeat = null,
         Action<HostUnit>? configureRoot = null)
         => new(
-            "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(), "Ada",
+            "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", Guid.NewGuid(),
             ConfigureTenant: configureTenant,
             ConfigureRoot: configureRoot,
             ConfigureFirstSeat: configureFirstSeat);
@@ -51,13 +53,27 @@ public class ProvisioningHooksTests
 
         var provisioned = await Provision(harness, Harbor(
             tenant => seen.Add("tenant " + tenant.Slug.Value + " " + tenant.Status),
-            seat => seen.Add("seat " + seat.DisplayName + " with " + seat.Placements.Single().Grants.Count + " grant at its " + seat.Placements.Count + " placement"),
+            seat => seen.Add("seat of " + seat.TenantId + " with " + seat.Placements.Single().Grants.Count + " grant at its " + seat.Placements.Count + " placement"),
             root => seen.Add("root " + root.Name + (root.IsRoot ? " at the top" : " below another"))));
 
         seen.Should().Equal(
-            ["tenant harbor Provisioning", "root Harbor Works at the top", "seat Ada with 1 grant at its 1 placement"],
+            ["tenant harbor Provisioning", "root Harbor Works at the top", "seat of " + provisioned.Tenant + " with 1 grant at its 1 placement"],
             "the callbacks run in the order the instances are made, each once, and none sees a tenant in use yet");
         harness.Store.Tenant(provisioned.Tenant).Status.Should().Be(TenantStatus.Active);
+    }
+
+    [Fact]
+    public async Task The_first_administrator_is_named_by_the_host_in_its_hook_and_the_package_records_no_name()
+    {
+        var harness = new Harness(New.Catalogue());
+
+        var provisioned = await Provision(harness, Harbor(configureFirstSeat: seat => seat.Rename("Ada Harbor")));
+
+        harness.Store.Seat(provisioned.AdminSeat).DisplayName.Should().Be("Ada Harbor", "the name is the host's own field, saved with the seat");
+        harness.Store.SaveCount.Should().Be(1);
+        harness.Store.SavedEvents.Select(saved => saved.GetType().Name)
+            .Should().Contain(name => name.StartsWith("SeatAdded", StringComparison.Ordinal))
+            .And.NotContain(name => name.Contains("Renamed") && name.StartsWith("Seat", StringComparison.Ordinal), "a seat has no name of Tenancy's, so the package raises nothing about one");
     }
 
     [Fact]
@@ -65,13 +81,13 @@ public class ProvisioningHooksTests
     {
         var harness = new Harness(New.Catalogue());
 
-        var provisioned = await Provision(harness, Harbor(configureFirstSeat: seat => seat.Rename("Ada Harbor")));
+        var provisioned = await Provision(harness, Harbor(configureFirstSeat: seat => seat.Welcome()));
 
-        harness.Store.Seat(provisioned.AdminSeat).DisplayName.Should().Be("Ada Harbor");
-        var events = harness.Store.SavedEvents.Select(saved => saved.GetType().GetGenericTypeDefinition()).ToList();
-        events.Should().Contain(typeof(SeatRenamed<,>));
-        events.IndexOf(typeof(SeatRenamed<,>)).Should().BeGreaterThan(events.IndexOf(typeof(SeatAdded<,>)), "the seat was added before the callback changed it");
-        harness.Store.SaveCount.Should().Be(1);
+        harness.Store.SaveCount.Should().Be(1, "the host's event leaves with the provisioning's own save");
+        var events = harness.Store.SavedEvents.ToList();
+        events.OfType<HostSeatWelcomed>().Should().ContainSingle().Which.SeatId.Should().Be(provisioned.AdminSeat);
+        events.FindIndex(raised => raised is HostSeatWelcomed).Should().BeGreaterThan(
+            events.FindIndex(raised => raised is SeatAdded<TenantId, SeatId>), "the seat was added before the callback changed it");
     }
 
     [Fact]
@@ -100,7 +116,9 @@ public class ProvisioningHooksTests
         var harness = new Harness(New.Catalogue());
 
         // The application's own rule about its own field, checked where the field is set.
-        await Refused.WithCodeAsync(TenancyRefusals.NameInvalid, () => Provision(harness, Harbor(configureFirstSeat: seat => seat.Rename(" "))));
+        (await FluentActions.Awaiting(() => Provision(harness, Harbor(configureFirstSeat: _ =>
+                throw new RefusalException("host.seat.name-required", RefusalKind.Invalid, "A seat is shown by a name."))))
+            .Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be("host.seat.name-required");
 
         harness.Store.SaveCount.Should().Be(0);
     }

@@ -10,8 +10,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// <param name="Name">The tenant's name, which is its organization's.</param>
     /// <param name="Shape">Whether its organization is flat or a tree.</param>
     /// <param name="RootName">The root unit's name.</param>
-    /// <param name="AdminIdentity">The verified identity of the first administrator.</param>
-    /// <param name="AdminDisplayName">The name the first administrator's seat is shown by.</param>
+    /// <param name="AdminIdentity">
+    /// The verified identity of the first administrator. What their seat is shown by is the application's, set in
+    /// <paramref name="ConfigureFirstSeat"/> when its seat class keeps a name.
+    /// </param>
     /// <param name="TenantId">The tenant's id, for imports and seeding; a new one otherwise.</param>
     /// <param name="RootId">The root's id, for imports and seeding; a new one otherwise.</param>
     /// <param name="AdminSeatId">The first seat's id, for imports and seeding; a new one otherwise.</param>
@@ -35,7 +37,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// </param>
     /// <param name="ConfigureFirstSeat">
     /// The same for the first administrator's seat, which is placed at the root and holds the administrators'
-    /// role by then.
+    /// role by then: the name it is shown by, say, when the class keeps one.
     /// </param>
     public sealed record TenantToProvision(
         string Slug,
@@ -43,7 +45,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         TenantShape Shape,
         string RootName,
         Guid AdminIdentity,
-        string AdminDisplayName,
         TTenantId? TenantId = null,
         TUnitId? RootId = null,
         TSeatId? AdminSeatId = null,

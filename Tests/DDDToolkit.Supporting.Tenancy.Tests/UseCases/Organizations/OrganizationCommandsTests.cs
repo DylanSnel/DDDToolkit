@@ -127,7 +127,7 @@ public class OrganizationCommandsTests
     {
         var harness = new Harness(New.Catalogue());
         var provisioned = await harness.Run(HostCaller.System, h => h.Tenants.ProvisionAsync(
-            new HostTenancy.TenantToProvision("kiosk", "Kiosk", TenantShape.Flat, "Kiosk", Guid.NewGuid(), "Ada"), default));
+            new HostTenancy.TenantToProvision("kiosk", "Kiosk", TenantShape.Flat, "Kiosk", Guid.NewGuid()), default));
         var administrator = HostCaller.InSeat(provisioned.Tenant, provisioned.AdminSeat);
 
         await Refused.WithCodeAsync(TenancyRefusals.FlatTenant,

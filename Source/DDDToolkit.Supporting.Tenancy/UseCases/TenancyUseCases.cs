@@ -23,7 +23,7 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// </code>
 /// for <c>[assembly: Module("Shop")]</c>. A type nested in a class is found through every class derived from it, so
 /// every project that sees that one, the module's application and API projects and the host among them, takes a
-/// <c>ShopTenancy.SeatCommands</c> and answers a <c>ShopTenancy.SeatOverview</c>: the types nested here, closed over
+/// <c>ShopTenancy.SeatCommands</c> and answers a <c>ShopTenancy.UnitSummary</c>: the types nested here, closed over
 /// the module's classes, which the container registered and whose documentation shows. Each type parameter's
 /// <c>[TemplateType]</c> says which class fills it, as <c>AddTenancy</c>'s do, and the package's
 /// <c>[assembly: TemplateFacade]</c> asks for the class. That is why this class is abstract rather than static.

@@ -230,10 +230,10 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
                     Harbor.Shape,
                     Harbor.Name,
                     Harbor.Administrator.Person.Id,
-                    Harbor.Administrator.Person.Name,
                     TenantId: Harbor.Id,
                     AdminSeatId: Harbor.Administrator.Id,
-                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
+                    ConfigureRoot: root => root.SetKind(DemoTenant.RootKind),
+                    ConfigureFirstSeat: administrator => administrator.Rename(Harbor.Administrator.Person.Name)),
                 Cancellation);
         }
 
@@ -308,7 +308,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             new SetRoleKeys(role, []),
             new ArchiveTenantRole(role),
             new ChangeTenantShape(TenantShape.Hierarchical),
-            new InvitePerson("wren@example.test", unit, role, Until: null, DisplayName: null),
+            new InvitePerson("wren@example.test", unit, role, Until: null),
         ];
 
         using (AsSeatOf(DemoPeople.Juno))
@@ -1274,7 +1274,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     {
         var host = await sample.SharedAsync();
 
-        async Task<IReadOnlyList<SeatOfCaller<TenantId, SeatId>>> OwnSeatsAsync(string claims)
+        async Task<IReadOnlyList<SeatOfMine>> OwnSeatsAsync(string claims)
         {
             using (Callers.Begin(Callers.FromClaims(claims)))
             {

@@ -777,9 +777,6 @@
   <data name="invitations.invite.address" xml:space="preserve">
     <value>E-mailadres</value>
   </data>
-  <data name="invitations.invite.name" xml:space="preserve">
-    <value>Naam voor de plaats; leeg gelaten geeft de persoon er een bij het accepteren</value>
-  </data>
   <data name="invitations.invite" xml:space="preserve">
     <value>Uitnodigen</value>
   </data>
@@ -802,7 +799,7 @@
     <value>Het token van de uitnodiging</value>
   </data>
   <data name="accept.name" xml:space="preserve">
-    <value>Naam voor de plaats: nodig als de uitnodiging er geen voorstelt</value>
+    <value>Naam voor de plaats, zoals de anderen in de tenant die zien</value>
   </data>
   <data name="accept.send" xml:space="preserve">
     <value>Accepteren</value>

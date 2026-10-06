@@ -24,7 +24,7 @@ public class AccessQuestionTests
     /// <summary>A new seat of Harbor, placed at <paramref name="unit"/> and granted the role of <paramref name="pack"/> there, saved.</summary>
     private HostSeat SeatAt(OrganizationUnitId unit, string? pack, DateTimeOffset? from = null, DateTimeOffset? until = null)
     {
-        var seat = _harbor.NewSeat("Bert");
+        var seat = _harbor.NewSeat();
         seat.Place(unit, primary: true, Now, placedBy: null);
         if (pack is not null)
         {

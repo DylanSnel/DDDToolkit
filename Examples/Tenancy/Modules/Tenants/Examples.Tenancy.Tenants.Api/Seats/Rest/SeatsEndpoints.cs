@@ -1,8 +1,8 @@
 using Examples.Tenancy.Tenants.Api.Organization.Rest;
 using Examples.Tenancy.Tenants.Api.Roles.Rest;
+using Examples.Tenancy.Tenants.Application.Seats;
 using Examples.Tenancy.Tenants.Application.Seats.Commands;
 using Examples.Tenancy.Tenants.Application.Seats.Queries;
-using DDDToolkit.Supporting.Tenancy.Access;
 using Mediator;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -11,8 +11,9 @@ using Microsoft.AspNetCore.Routing;
 namespace Examples.Tenancy.Tenants.Api.Seats.Rest;
 
 /// <summary>
-/// Seats over HTTP: who am I and which seats are mine, the tenant's seats, and suspending, reactivating and
-/// deactivating one. Each route sends one command or query of the application project's <c>Seats</c> feature.
+/// Seats over HTTP: who am I and which seats are mine, the tenant's seats, renaming one, and suspending,
+/// reactivating and deactivating one. Each route sends one command or query of the application project's
+/// <c>Seats</c> feature.
 /// </summary>
 /// <remarks>
 /// Like every route of this project, these decide nothing and take only the sender;
@@ -36,9 +37,9 @@ internal static class SeatsEndpoints
     }
 
     /// <summary>
-    /// Maps <c>GET /me</c>, <c>GET /tenancy/seats</c>, <c>GET /tenancy/seats/{seatId}/grants</c>, and
-    /// <c>POST /tenancy/seats/{seatId}/suspend</c>, <c>/reactivate</c> and <c>/deactivate</c>, each for a seat in the
-    /// tenant the request selected.
+    /// Maps <c>GET /me</c>, <c>GET /tenancy/seats</c>, <c>GET /tenancy/seats/{seatId}/grants</c>,
+    /// <c>PUT /tenancy/seats/{seatId}/name</c>, and <c>POST /tenancy/seats/{seatId}/suspend</c>, <c>/reactivate</c>
+    /// and <c>/deactivate</c>, each for a seat in the tenant the request selected.
     /// </summary>
     public static IEndpointRouteBuilder MapSeatsEndpoints(this IEndpointRouteBuilder group)
     {
@@ -49,7 +50,8 @@ internal static class SeatsEndpoints
         group.MapGet("/me", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok(Describe(await sender.Send(new OverviewOfMine(), cancellationToken))));
 
-        // Every seat of the tenant, by name, for the pickers: id, name and status, never an identity.
+        // Every seat of the tenant, by name, for the pickers: id, the name this application keeps and status, never an
+        // identity.
         group.MapGet("/tenancy/seats", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new TenantSeats(), cancellationToken)).Select(Describe)));
 
@@ -65,6 +67,14 @@ internal static class SeatsEndpoints
                 grant.EndsAt,
                 grant.AppliesNow,
             })));
+
+        // The name a seat is shown by is this application's field, and renaming it this application's own command: a
+        // seat renames itself, another seat takes tenancy.seats.manage for the whole tenant.
+        group.MapPut("/tenancy/seats/{seatId}/name", async (SeatId seatId, NewName body, ISender sender, CancellationToken cancellationToken) =>
+        {
+            await sender.Send(new RenameSeat(seatId, body.DisplayName), cancellationToken);
+            return Results.NoContent();
+        });
 
         group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
         {
@@ -87,17 +97,21 @@ internal static class SeatsEndpoints
         return group;
     }
 
-    /// <summary>A seat as every answer of this project writes it: its id, its name and its status, never an identity.</summary>
-    internal static object Describe(TenantsTenancy.SeatSummary seat) => new { seat.Id, seat.DisplayName, seat.Status };
+    /// <summary>
+    /// A seat as every answer of this project writes it: its id, the name this application keeps on it and its status,
+    /// never an identity.
+    /// </summary>
+    internal static object Describe(SeatListing seat) => new { seat.Id, seat.DisplayName, seat.Status };
 
-    private static object Describe(SeatOfCaller<TenantId, SeatId> mine) => new
+    // One of the caller's own seats: its tenant, and the seat as every answer writes it, by the name that tenant keeps.
+    private static object Describe(SeatOfMine mine) => new
     {
-        tenant = new { id = mine.Tenant, slug = mine.Slug, name = mine.OrganizationName, status = mine.TenantStatus },
-        seat = new { id = mine.Seat, displayName = mine.DisplayName, status = mine.SeatStatus },
+        tenant = new { id = mine.Found.Tenant, slug = mine.Found.Slug, name = mine.Found.OrganizationName, status = mine.Found.TenantStatus },
+        seat = Describe(mine.Seat),
     };
 
     // A seat's own overview shows units and roles too, each as the feature that owns it writes it.
-    private static object Describe(TenantsTenancy.SeatOverview overview) => new
+    private static object Describe(TenantsTenancy.SeatOverview<SeatListing> overview) => new
     {
         tenant = new
         {
@@ -123,4 +137,7 @@ internal static class SeatsEndpoints
             reaches = reach.Reaches.Select(OrganizationEndpoints.Describe),
         }),
     };
+
+    /// <summary>The name a seat is shown by from now on, by the rule of the seat class: 1 to 200 characters.</summary>
+    public sealed record NewName(string? DisplayName);
 }

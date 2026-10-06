@@ -67,7 +67,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <param name="unit">The unit the seat is placed in, which must be active.</param>
         /// <param name="role">The role the seat is granted there, which must be active.</param>
         /// <param name="grantUntil">When the grant ends, later than the invitation itself, or <see langword="null"/> for no end.</param>
-        /// <param name="displayName">A name suggested for the seat, which whoever accepts may replace, or <see langword="null"/>.</param>
         /// <param name="lifetime">
         /// How long the invitation stays open, within <see cref="TenancyInvitationOptions{TInvitationId}.MinLifetime"/>
         /// and <see cref="TenancyInvitationOptions{TInvitationId}.MaxLifetime"/>, or <see langword="null"/> for
@@ -82,14 +81,13 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <c>tenancy.tenant-inactive</c>, <c>tenancy.role-not-found</c>, <c>tenancy.grant-exceeds-own</c> for a
         /// role that manages access the caller could not give there for that long, <c>tenancy.unit-not-found</c>,
         /// <c>tenancy.unit-not-active</c>, <c>tenancy.role-not-active</c>, <c>tenancy.address-invalid</c>,
-        /// <c>tenancy.name-invalid</c>, <c>tenancy.invitation-grant-ends-first</c>.
+        /// <c>tenancy.invitation-grant-ends-first</c>.
         /// </exception>
         public async Task<IssuedInvitation<TInvitationId>> IssueAsync(
             string address,
             TUnitId unit,
             TRoleId role,
             DateTimeOffset? grantUntil,
-            string? displayName,
             TimeSpan? lifetime,
             CancellationToken cancellationToken,
             TInvitationId? id = null)
@@ -132,7 +130,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 unit,
                 role,
                 grantUntil,
-                displayName,
                 issuedAt: gate.Now,
                 expiresAt: gate.Now + open,
                 issuedBy: gate.Caller.Seat,
@@ -172,7 +169,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                         invitation.UnitId,
                         invitation.RoleId,
                         invitation.GrantUntil,
-                        invitation.DisplayName,
                         invitation.IssuedAt,
                         invitation.ExpiresAt,
                         invitation.IssuedBy,
@@ -227,7 +223,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </para>
         /// </summary>
         /// <param name="token">The token, as <see cref="IssueAsync"/> returned it.</param>
-        /// <param name="displayName">The name the seat is shown by, or <see langword="null"/> for the name the invitation suggests.</param>
         /// <param name="verifiedAddress">
         /// The address the application knows the calling identity to have, verified by its identity provider, or
         /// <see langword="null"/> when the application does not hold an invitation to its address. Given, it only
@@ -235,6 +230,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// </param>
         /// <param name="cancellationToken">Cancels the work.</param>
         /// <param name="seat">The new seat's id, for imports and seeding; a new one otherwise.</param>
+        /// <param name="configure">
+        /// Sets the fields the application added to its seat class, such as the name it is shown by, on the new
+        /// seat once the invitation is found to hold, and the seat is placed and holds the role, and before the
+        /// invitation is marked as accepted and the seat is handed to the store: so they are saved in the same
+        /// transaction, and the class's own rules judge them there. When it throws, nothing is accepted: no seat is
+        /// saved, by this call or by a later save in the same scope, and the invitation stays open. It is not run
+        /// for an invitation the same identity accepted before, which answers the seat it made then.
+        /// </param>
         /// <returns>The tenant, the slug it is selected by, and the seat the caller now has in it.</returns>
         /// <exception cref="RefusalException">
         /// <c>tenancy.identity-required</c> for a caller that is no signed-in identity that may hold a seat;
@@ -243,15 +246,15 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// time ran out; <c>tenancy.address-mismatch</c>; <c>tenancy.tenant-inactive</c>;
         /// <c>tenancy.identity-has-seat</c>; <c>tenancy.unit-not-found</c> and <c>tenancy.unit-not-active</c>;
         /// <c>tenancy.role-not-found</c> and <c>tenancy.role-not-active</c>; <c>tenancy.invitation-unbacked</c> when
-        /// its issuer may no longer give what it offers; <c>tenancy.name-invalid</c> without a name for the seat.
+        /// its issuer may no longer give what it offers.
         /// </exception>
         /// <exception cref="ConcurrencyConflictException">Another change of access in the tenant, another acceptance included, was saved first.</exception>
         public async Task<AcceptedInvitation> AcceptAsync(
             string token,
-            string? displayName,
             string? verifiedAddress,
             CancellationToken cancellationToken,
-            TSeatId? seat = null)
+            TSeatId? seat = null,
+            Action<TSeat>? configure = null)
         {
             var identity = AcceptingIdentity(callers.Current);
 
@@ -265,7 +268,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             // From here on the work acts in the invitation's tenant and in no other, for the seat that issued it.
             using (TenancyWork.BeginSystemIn(found.Tenant, found.IssuedBy))
             {
-                return await AcceptInAsync(found.Invitation, identity, displayName, verifiedAddress, seat, cancellationToken).ConfigureAwait(false);
+                return await AcceptInAsync(found.Invitation, identity, verifiedAddress, seat, configure, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -273,9 +276,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         private async Task<AcceptedInvitation> AcceptInAsync(
             TInvitationId id,
             Guid identity,
-            string? displayName,
             string? verifiedAddress,
             TSeatId? seatId,
+            Action<TSeat>? configure,
             CancellationToken cancellationToken)
         {
             var gate = new Gate(store, catalogue, clock);
@@ -340,10 +343,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 seatId ?? TSeatId.Create(),
                 tenantId,
                 identity,
-                string.IsNullOrWhiteSpace(displayName) ? invitation.DisplayName ?? string.Empty : displayName,
                 gate.By);
             seat.Place(invitation.UnitId, primary: true, gate.Now, gate.ActorFor(seat.Id), gate.By);
             seat.Grant(invitation.UnitId, role.Id, role.Facts, GrantPeriod.Between(gate.Now, invitation.GrantUntil), gate.ActorFor(seat.Id), AcceptedReason, gate.By);
+
+            // The application's own fields, while the invitation is still open and before the store has the seat:
+            // a callback that throws leaves the invitation, which the store tracks, open, and no seat for a later
+            // save in the same scope to write.
+            configure?.Invoke(seat);
             invitation.Accept(seat.Id, gate.Now, gate.By);
 
             store.Add(seat);

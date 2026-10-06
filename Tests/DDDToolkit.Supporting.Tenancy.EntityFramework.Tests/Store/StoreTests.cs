@@ -45,13 +45,13 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         });
 
         await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
-            services.Seats().RenameAsync(orchard.AdminSeat, "Someone else", TestContext.Current.CancellationToken)));
+            services.Seats().SuspendAsync(orchard.AdminSeat, TestContext.Current.CancellationToken)));
         await Refused.WithCodeAsync(TenancyRefusals.RoleNotFound, () => _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
             services.Seats().GrantAsync(harbor.AdminSeat, harbor.RootUnit, orchard.AdministratorRole, until: null, reason: null, TestContext.Current.CancellationToken)));
     }
 
     [Fact]
-    public async Task The_store_lists_seats_by_name_all_or_by_id()
+    public async Task The_store_lists_the_hosts_own_seats_all_or_by_id_in_one_statement_and_tracks_none()
     {
         var identity = Guid.NewGuid();
         var harbor = await _services.ProvisionAsync("harbor", administrator: identity);
@@ -60,27 +60,28 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         var lin = await _services.AddSeatAsync(harbor.Tenant, Guid.NewGuid(), "Lin");
         await _services.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(lin, TestContext.Current.CancellationToken));
 
-        // Grace has no placement and no key: whoever works in a tenant reads its seats' names.
+        // Grace has no placement and no key: whoever works in a tenant reads its seats, for the directory's views.
         await _services.BySeat(harbor.Tenant, grace, async services =>
         {
             var store = services.GetRequiredService<HostTenancy.IStore>();
 
             _services.Commands.Reset();
             var all = await store.ListSeatsAsync(harbor.Tenant, only: null, TestContext.Current.CancellationToken);
-            all.Should().BeEquivalentTo(
+            all.Select(seat => (seat.Id, seat.DisplayName, seat.Status)).Should().BeEquivalentTo(
             [
-                new HostTenancy.SeatSummary(harbor.AdminSeat, "Ada", SeatStatus.Active),
-                new HostTenancy.SeatSummary(grace, "Grace", SeatStatus.Active),
-                new HostTenancy.SeatSummary(lin, "Lin", SeatStatus.Suspended),
-            ]);
-            _services.Commands.Count.Should().Be(1);
-            Selected(_services.Commands.Commands.Single()).Should().NotContain("Identity", "the identity never leaves the database");
+                (harbor.AdminSeat, "Ada", SeatStatus.Active),
+                (grace, "Grace", SeatStatus.Active),
+                (lin, "Lin", SeatStatus.Suspended),
+            ], "the host's own seats, with the name it keeps on them");
+            all.Single(seat => seat.Id == harbor.AdminSeat).Should().Match<HostSeat>(
+                seat => seat.Identity == identity && seat.Placements.Count == 1 && seat.Placements[0].Grants.Count == 1,
+                "a seat comes whole, its identity, placements and grants with it");
+            _services.Commands.Count.Should().Be(1, "the seats, their placements and their grants are one statement");
 
             _services.Commands.Reset();
             var some = await store.ListSeatsAsync(harbor.Tenant, [lin, orchard.AdminSeat, SeatId.CreateSequential(), harbor.AdminSeat], TestContext.Current.CancellationToken);
             some.Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Lin"], "a seat of another tenant and no seat at all are not found");
             _services.Commands.Count.Should().Be(1, "the ids travel with the one statement");
-            Selected(_services.Commands.Commands.Single()).Should().NotContain("Identity");
 
             (await store.ListSeatsAsync(harbor.Tenant, [], TestContext.Current.CancellationToken)).Should().BeEmpty();
 
@@ -88,12 +89,36 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             (await store.ListSeatsAsync(orchard.Tenant, only: null, TestContext.Current.CancellationToken)).Should().BeEmpty();
             (await store.ListSeatsAsync(orchard.Tenant, [orchard.AdminSeat], TestContext.Current.CancellationToken)).Should().BeEmpty();
 
-            // And nothing it read is tracked: the directory's reads leave the unit of work as it was.
+            // And nothing it read is tracked: a view that changes a seat it was handed changes nothing a save writes.
+            all[0].Rename("changed by a view");
             services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty();
+            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+        });
+    }
+
+    [Fact]
+    public async Task The_callers_own_seat_is_handed_to_a_view_untracked_as_the_lists_hand_theirs()
+    {
+        var harbor = await _services.ProvisionAsync("harbor");
+
+        await _services.BySeat(harbor.Tenant, harbor.AdminSeat, async services =>
+        {
+            var me = await services.Directory().WhoAmIAsync(
+                (summary, own) =>
+                {
+                    own.Rename("changed by a view");
+                    return (summary.Id, own.DisplayName);
+                },
+                TestContext.Current.CancellationToken);
+
+            me.Seat.Should().Be((harbor.AdminSeat, "changed by a view"));
+            services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("the caller's own seat is read as the lists read theirs, not loaded as a command loads one");
+            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing the view did");
         });
 
-        // What the statement selects, from its first word to the table it reads: the columns that leave the database.
-        static string Selected(string sql) => sql[..sql.IndexOf("FROM", StringComparison.Ordinal)];
+        var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
+            services.Directory().WhoAmIAsync((_, own) => own.DisplayName, TestContext.Current.CancellationToken));
+        again.Seat.Should().Be("Ada");
     }
 
     [Fact]
@@ -183,6 +208,22 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_event_the_hosts_seat_raises_in_a_callback_is_stored_with_the_seat_the_callback_made()
+    {
+        var harbor = await _services.ProvisionAsync("harbor");
+
+        var seat = await _services.BySystemIn(harbor.Tenant, services =>
+            services.Seats().AddSeatAsync(Guid.NewGuid(), TestContext.Current.CancellationToken, configure: added => added.Welcome()));
+
+        await using var scope = _services.Scope();
+        var welcomed = await scope.ServiceProvider.Tenancy().Set<OutboxMessage>().AsNoTracking()
+            .Where(message => message.EventName == "host.seat-welcomed")
+            .ToListAsync(TestContext.Current.CancellationToken);
+        welcomed.Should().ContainSingle("the application's own event is in the outbox, under the name it gives it")
+            .Which.Payload.Should().Contain(seat.Value.ToString());
+    }
+
+    [Fact]
     public async Task Tenancy_domain_events_are_kept_off_the_sinks()
     {
         // Nothing mapped: every event is stored, delivered to nothing, and done with.
@@ -234,7 +275,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         using (TenancyWork.BeginOperator<TenantId, SeatId>(operatorIdentity))
         {
             harbor = await scope.ServiceProvider.Tenants().ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 

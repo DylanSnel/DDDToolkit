@@ -9,7 +9,6 @@ namespace Examples.Tenancy.Ui.Api.Wire;
 public sealed record InvitationInfo(
     Guid Id,
     string Address,
-    string? DisplayName,
     Guid UnitId,
     Guid RoleId,
     [property: JsonPropertyName("until")] DateTimeOffset? RoleEndsAt,

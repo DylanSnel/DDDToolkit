@@ -74,7 +74,8 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
 
         Texts(typeof(HostFailures), CultureInfo.InvariantCulture).Keys
             .Should().BeEquivalentTo([.. RefusalProblems.Codes, DevLoginEndpoints.UnknownPerson], "HostFailures.resx holds exactly the host's own codes");
-        Texts(typeof(SeatFailures), CultureInfo.InvariantCulture).Keys.Should().Equal(Seat.JobTitleLength.ViolationCode);
+        Texts(typeof(SeatFailures), CultureInfo.InvariantCulture).Keys.Should().BeEquivalentTo([Seat.DisplayNameIsValid.ViolationCode, Seat.JobTitleLength.ViolationCode]);
+        Texts(typeof(SeatFailures), CultureInfo.InvariantCulture)[Seat.DisplayNameIsValid.ViolationCode].Should().Be(Seat.DisplayNameIsValid.Text, "the seat's rule and its refusal read as the resource file says");
         Texts(typeof(OrganizationFailures), CultureInfo.InvariantCulture).Keys.Should().Equal(OrganizationUnit.CostCentreFormat.ViolationCode);
         Texts(typeof(HistoryFailures), CultureInfo.InvariantCulture)
             .Should().Equal(new Dictionary<string, string>

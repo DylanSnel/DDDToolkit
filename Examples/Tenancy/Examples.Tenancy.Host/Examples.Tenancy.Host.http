@@ -605,7 +605,7 @@ Content-Type: application/json
 
 { "person": "tove" }
 
-### Both seats.
+### Both seats, each with the name its tenant keeps for her.
 GET {{api}}/me/seats
 Authorization: Bearer {{tove.response.body.access_token}}
 
@@ -665,7 +665,7 @@ Authorization: Bearer {{tove.response.body.access_token}}
 Tenant: meadow
 Content-Type: application/json
 
-{ "address": "juno@example.test", "unitId": "{{meadowRoot}}", "roleId": "{{meadowSurveyor}}", "displayName": "Juno" }
+{ "address": "juno@example.test", "unitId": "{{meadowRoot}}", "roleId": "{{meadowSurveyor}}" }
 
 ### The open invitations, for whoever manages seats at their unit: the address, and what each offers by id.
 ### Never a token.
@@ -681,19 +681,33 @@ Content-Type: application/json
 
 { "token": "{{invited.response.body.token}}" }
 
-### juno accepts: 200 with the id of her new seat. The seat, its placement and its role were made in one save,
-### and GET /me/seats lists it with its tenant from now on. Sent again by her it answers the same seat; by anyone
-### else, 409 tenancy.invitation-used.
+### juno accepts, with the name she is shown by in meadow: 200 with the id of her new seat. The seat, its
+### placement and its role were made in one save, and GET /me/seats lists it with its tenant from now on. The
+### name is the application's own field on its seat, which Tenancy keeps none of and the invitation suggests
+### none of; without one it is 400 tenants.seat.display-name, and the invitation stays open. Sent again by her it
+### answers the same seat; by anyone else, 409 tenancy.invitation-used.
+# @name junoAccepted
 POST {{api}}/invitations/accept
 Authorization: Bearer {{juno.response.body.access_token}}
 Content-Type: application/json
 
-{ "token": "{{invited.response.body.token}}" }
+{ "token": "{{invited.response.body.token}}", "displayName": "Juno" }
 
-### Who she is in meadow now: placed at its root, a surveyor.
+### Who she is in meadow now: Juno, placed at its root, a surveyor.
 GET {{api}}/me
 Authorization: Bearer {{juno.response.body.access_token}}
 Tenant: meadow
+
+### Renaming is the application's own command, under its own rule: a seat renames itself, here juno her seat in
+### meadow: 204. Another seat takes tenancy.seats.manage for the whole tenant, which tove holds there and juno, a
+### surveyor, does not: juno renaming tove's seat there is 403 tenancy.not-permitted. A name the seat refuses,
+### blank or over 200 characters, is 400 tenants.seat.display-name.
+PUT {{api}}/tenancy/seats/{{junoAccepted.response.body.seatId}}/name
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "displayName": "Juno Marsh" }
 
 ### A second invitation, for an address nobody has an account for yet, and tove thinks better of it. The host
 ### asked for an account at the address and kept its id with the invitation. Sent twice, the second answers
@@ -941,7 +955,7 @@ Tenant: meadow
 Content-Type: application/json
 
 {
-  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role, displayName: \"Leo\" }) { issuedInvitation { id token expiresAt } errors { __typename ... on CodedError { code message } } } }",
+  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { id token expiresAt } errors { __typename ... on CodedError { code message } } } }",
   "variables": { "unit": "{{meadowRoot}}", "role": "{{meadowSurveyor}}" }
 }
 
@@ -962,7 +976,7 @@ Authorization: Bearer {{leo.response.body.access_token}}
 Content-Type: application/json
 
 {
-  "query": "mutation($token: String!) { invitationAccept(input: { token: $token }) { seatId errors { __typename ... on CodedError { code message } } } }",
+  "query": "mutation($token: String!) { invitationAccept(input: { token: $token, displayName: \"Leo\" }) { seatId errors { __typename ... on CodedError { code message } } } }",
   "variables": { "token": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.token}}" }
 }
 

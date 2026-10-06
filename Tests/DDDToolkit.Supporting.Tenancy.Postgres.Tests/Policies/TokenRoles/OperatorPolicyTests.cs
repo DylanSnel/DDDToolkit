@@ -42,7 +42,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
 
         // An invitation, so its table and the table of its token's digest each hold a row.
         await services.BySeat(Ada.Identity, Harbor, Ada.Seat, scoped =>
-            scoped.Invitations().IssueAsync("wren@example.test", North, HarborRoles.Watcher, grantUntil: null, "Wren", lifetime: null, Cancellation));
+            scoped.Invitations().IssueAsync("wren@example.test", North, HarborRoles.Watcher, grantUntil: null, lifetime: null, Cancellation));
 
         // What there is to read: Tenancy's tables, the table of the application's entity on a tenant, and the history.
         const string Digests = "tenancy.\"InvitationDigests\"";
@@ -97,7 +97,7 @@ public sealed class OperatorPolicyTests(TenancyPostgres postgres)
             await RefusedAsync(
                 asOperator,
                 "INSERT INTO ddd.\"EventLog\" (\"Id\", \"EventName\", \"Version\", \"Payload\", \"OccurredAt\", \"RecordedAt\", \"ActedByKind\", \"ActedById\", \"TenantId\") " +
-                $"VALUES (gen_random_uuid(), 'tenancy.seat-renamed', 1, '{{}}', now(), now(), 'operator', '{Operator}', 1)");
+                $"VALUES (gen_random_uuid(), 'tenancy.seat-suspended', 1, '{{}}', now(), now(), 'operator', '{Operator}', 1)");
 
             await RefusedAsync(asOperator, "SELECT * FROM tenancy.invitation_of_digest('\\x00'::bytea)");
 

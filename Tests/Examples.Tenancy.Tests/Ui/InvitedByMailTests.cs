@@ -51,7 +51,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         var (tove, tovesSession, _) = Ui(sample, auth);
         var toves = (await new DevLoginClient(tove).SignInAsync("tove", Cancellation)).Value!;
         tovesSession.SignIn("tove", "Tove", toves.AccessToken, toves.Expires, Meadow.Slug);
-        var invited = await tove.InvitePersonAsync(address, Meadow.Root.Value.ToString(), Meadow.Roles[SampleCatalogue.Surveyor].Value.ToString(), until: null, "Wren", Cancellation);
+        var invited = await tove.InvitePersonAsync(address, Meadow.Root.Value.ToString(), Meadow.Roles[SampleCatalogue.Surveyor].Value.ToString(), until: null, Cancellation);
         var token = invited.Value!.Token;
 
         // Auth mails the address one link. It leads back to the page that accepts, with the token behind the '#'
@@ -83,8 +83,8 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         (await login.ChoosePasswordAsync(session.AccessToken, "abc", Cancellation)).Should().Be(UiTexts.Of("login.password.not-taken", "en"));
         (await login.ChoosePasswordAsync(session.AccessToken, password, Cancellation)).Should().BeNull();
 
-        // Then the invitation, with the token the link brought: a seat in meadow.
-        var accepted = await api.AcceptInvitationAsync(link.Token, displayName: null, Cancellation);
+        // Then the invitation, with the token the link brought and the name she is shown by there: a seat in meadow.
+        var accepted = await api.AcceptInvitationAsync(link.Token, displayName: "Wren", Cancellation);
         accepted.Succeeded.Should().BeTrue("the API answered {0}", accepted.RawBody);
         session.SignOut();
 
@@ -132,13 +132,13 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         tovesSession.SignIn("tove", "Tove", toves.AccessToken, toves.Expires, Meadow.Slug);
 
         // Tove invites the address. Auth makes the account and mails it; the mail is never opened.
-        var first = (await tove.InvitePersonAsync(address, root, surveyor, until: null, "Lark", Cancellation)).Value!;
+        var first = (await tove.InvitePersonAsync(address, root, surveyor, until: null, Cancellation)).Value!;
         var unanswered = (await auth.Mail.SentToAsync(address, atLeast: 1, Cancellation)).Should().ContainSingle().Subject;
         unanswered.Text.Should().Contain("%23" + first.Token);
 
         // She invites the address again. To her it is answered like the first time; Auth mailed the same account
         // again, and the new mail leads to the page with the token of the new invitation.
-        var again = await tove.InvitePersonAsync(address, root, surveyor, until: null, "Lark", Cancellation);
+        var again = await tove.InvitePersonAsync(address, root, surveyor, until: null, Cancellation);
         again.Succeeded.Should().BeTrue("the API answered {0}", again.RawBody);
         var second = again.Value!;
         second.Token.Should().NotBe(first.Token);
@@ -154,7 +154,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         arrived.User!.Email.Should().Be(address);
         session.SignIn(address, address, arrived.AccessToken, arrived.Expires, tenant: null);
 
-        var accepted = await api.AcceptInvitationAsync(link.Token, displayName: null, Cancellation);
+        var accepted = await api.AcceptInvitationAsync(link.Token, displayName: "Lark", Cancellation);
         accepted.Succeeded.Should().BeTrue("the API answered {0}", accepted.RawBody);
         (await api.SeatsOfMineAsync(CallAs.Person(address, arrived.AccessToken), Cancellation)).Value!
             .Should().ContainSingle().Which.Seat.Id.Should().Be(accepted.Value!.SeatId);
@@ -189,7 +189,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         tovesSession.SignIn("tove", "Tove", toves.AccessToken, toves.Expires, Meadow.Slug);
 
         // Invited, mailed, and the person follows the link: signed in, and no password chosen.
-        (await tove.InvitePersonAsync(address, root, surveyor, until: null, "Lark", Cancellation)).Succeeded.Should().BeTrue();
+        (await tove.InvitePersonAsync(address, root, surveyor, until: null, Cancellation)).Succeeded.Should().BeTrue();
         var mail = (await auth.Mail.SentToAsync(address, atLeast: 1, Cancellation)).Should().ContainSingle().Subject;
         var (api, session, login) = Ui(sample, auth);
         var arrived = (await login.SignInWithLinkAsync(AuthLink.Read(await auth.LandingOfAsync(mail, Cancellation)), Cancellation)).Answer!;
@@ -197,12 +197,12 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
 
         // Invited again: answered as before, and nobody is mailed. Auth mails before it answers, so a second
         // mail would be there by now.
-        var again = await tove.InvitePersonAsync(address, root, surveyor, until: null, "Lark", Cancellation);
+        var again = await tove.InvitePersonAsync(address, root, surveyor, until: null, Cancellation);
         again.Succeeded.Should().BeTrue("the API answered {0}", again.RawBody);
         (await auth.Mail.SentToAsync(address, atLeast: 1, Cancellation)).Should().ContainSingle("Auth invites no account whose address is proven");
 
         // The new token reaches the person from whoever invited, and the sign-in they still have accepts it.
-        var accepted = await api.AcceptInvitationAsync(again.Value!.Token, displayName: null, Cancellation);
+        var accepted = await api.AcceptInvitationAsync(again.Value!.Token, displayName: "Lark", Cancellation);
         accepted.Succeeded.Should().BeTrue("the API answered {0}", accepted.RawBody);
     }
 

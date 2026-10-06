@@ -60,7 +60,6 @@ else
             <div class="action">
                 <label class="form-label small">@T["invitations.invite.label"]</label>
                 <input class="form-control form-control-sm" type="email" placeholder="@T["invitations.invite.address"]" @bind="_address" />
-                <input class="form-control form-control-sm" placeholder="@T["invitations.invite.name"]" @bind="_name" />
                 <select class="form-select form-select-sm" @bind="_unit">
                     <option value="">@T["project.pick-unit"]</option>
                     @foreach (var unit in _units.Where(candidate => candidate.IsActive))
@@ -107,7 +106,6 @@ else
     private IReadOnlyList<RoleInfo> _roles = [];
     private DirectoryNames? _names;
     private string? _address;
-    private string? _name;
     private string? _unit;
     private string? _role;
     private DateOnly? _until;
@@ -142,7 +140,7 @@ else
     // with the token blanked.
     private async Task<ApiOutcome> InvitePersonAsync()
     {
-        var answer = await Api.InvitePersonAsync(_address, _unit, _role, UntilDay.Instant(_until), _name);
+        var answer = await Api.InvitePersonAsync(_address, _unit, _role, UntilDay.Instant(_until));
         _issued = answer.Value;
         return answer;
     }
@@ -153,7 +151,7 @@ else
         {
             // The list is read again with the new invitation in it, and the token stays for this one look.
             var issued = _issued;
-            (_address, _name, _until) = (null, null, null);
+            (_address, _until) = (null, null);
             await ReloadAsync();
             _issued = issued;
         }

@@ -28,8 +28,10 @@ public static class TenancyEventLogExtensions
     /// followed its pack once the application changed the pack, with the same.</item>
     /// </list>
     /// <para>
-    /// A rename changes nobody's access, so the four events that say a tenant's organization, a unit, a seat or a
-    /// role is called something else are left out. They are still stored in the outbox like the rest.
+    /// A rename changes nobody's access, so the three events that say a tenant's organization, a unit or a role is
+    /// called something else are left out. They are still stored in the outbox like the rest. A seat has no name in
+    /// Tenancy, so it is never renamed here; an application that renames its own seats keeps an event of its own for
+    /// it, with a <c>Keep</c> next to this call when it belongs in the history.
     /// </para>
     /// <para>
     /// Each row is the event as the outbox stores it, written by the save that raised it: the ids, the keys, the

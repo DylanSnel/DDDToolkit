@@ -92,5 +92,9 @@ public sealed class AmbientCallerRecorder
 
         public Task<IReadOnlyList<SeatOfCaller<TenantId, SeatId>>> AllOfAsync(Guid identity, CancellationToken cancellationToken)
             => inner.AllOfAsync(identity, cancellationToken);
+
+        public Task<IReadOnlyList<TView>> AllOfAsync<TSeat, TView>(Guid identity, Func<SeatOfCaller<TenantId, SeatId>, TSeat, TView> view, CancellationToken cancellationToken)
+            where TSeat : class
+            => inner.AllOfAsync(identity, view, cancellationToken);
     }
 }

@@ -31,14 +31,14 @@ public sealed class DirectoryLoaderTests(SampleHosts sample) : IClassFixture<Sam
         using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
-            var seats = (IDataLoader<SeatId, TenantsTenancy.SeatSummary>)scope.ServiceProvider.GetRequiredService(registered);
+            var seats = (IDataLoader<SeatId, SeatListing>)scope.ServiceProvider.GetRequiredService(registered);
             sent.Clear();
 
             var found = await seats.LoadAsync(ids, Cancellation);
 
             // Nothing was refused, the seats that are there were found, and an id of nothing is nothing.
             found.Should().HaveCount(ids.Length);
-            found.OfType<TenantsTenancy.SeatSummary>().Select(seat => seat.Id).Should().BeEquivalentTo(Harbor.Seats.Select(seat => seat.Id));
+            found.OfType<SeatListing>().Select(seat => seat.Id).Should().BeEquivalentTo(Harbor.Seats.Select(seat => seat.Id));
         }
 
         sent.Of<SeatsById>().Select(asked => asked.Ids.Count).Should().Equal([most, Harbor.Seats.Count], "one batch of the loader is as many questions as it takes");

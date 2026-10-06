@@ -52,10 +52,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SeatOfCaller<TenantId, SeatId>>> SeatsOfAsync(Caller caller, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TView>> SeatsOfAsync<TView>(Caller caller, Func<SeatOfCaller<TenantId, SeatId>, Seat, TView> view, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync(caller, cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync(caller, view, cancellationToken);
     }
 
     /// <inheritdoc />

@@ -36,7 +36,7 @@ public sealed class PooledContextTests
         });
 
         // A seat added, placed and given a role by Harbor's administrator, through the use cases.
-        var grace = await AsHarborsAdministrator(scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), "Grace", Cancellation));
+        var grace = await AsHarborsAdministrator(scoped => scoped.Seats().AddSeatAsync(Guid.NewGuid(), Cancellation, configure: seat => seat.Rename("Grace")));
         await AsHarborsAdministrator(async scoped =>
         {
             await scoped.Seats().PlaceAsync(grace, north, primary: true, Cancellation);

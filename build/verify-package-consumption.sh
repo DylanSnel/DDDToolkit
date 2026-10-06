@@ -520,7 +520,7 @@ expect_module SupportingDomains/Infrastructure Press
 expect_module SupportingDomains/Host ""
 
 # Tenancy's use cases closed over the classes, PressTenancy, are written by the toolkit's generator into the domain
-# project that declares the classes, and into no project above it: those see that one, and PressNames in the host
+# project that declares the classes, and into no project above it: those see that one, and PressSeats in the host
 # names the directory through it, so the host does not compile without it.
 press_tenancy() {
   find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'PressTenancy.TemplateFacade.g.cs'

@@ -7,10 +7,11 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 // them next to its own tables in one query. The aggregates stay the only way to change what they say.
 //
 // They carry what an access rule reads and nothing else: ids, keys, periods, statuses, a unit's parent, and a
-// role's pack and keys. They never carry a text that is shown to people: no seat's display name, no unit's name,
-// no role's name. A module that maps these rows can therefore not lean on Tenancy for what it shows;
-// names are the directory's to answer, by id (TenancyUseCases<...>.TenancyDirectory). A property added here is
-// a column every module's model maps and every read function answers, so a test pins the exact list.
+// role's pack and keys. They never carry a text that is shown to people: no unit's name, no role's name, and
+// nothing the application keeps on its seat class, such as the name it shows a seat by. A module that maps these
+// rows can therefore not lean on Tenancy for what it shows; names are the directory's to answer, by id
+// (TenancyUseCases<...>.TenancyDirectory), a seat's through a view of the application's own seat. A property added
+// here is a column every module's model maps and every read function answers, so a test pins the exact list.
 
 /// <summary>
 /// One key a seat holds at one unit through one role, for the period of the grant. Written by

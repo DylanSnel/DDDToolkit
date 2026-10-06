@@ -64,7 +64,6 @@ public static class TenancyOutboxExtensions
         Register<OrganizationUnitArchived<TTenantId, TUnitId, TSeatId>>(outbox);
 
         Register<SeatAdded<TTenantId, TSeatId>>(outbox);
-        Register<SeatRenamed<TTenantId, TSeatId>>(outbox);
         Register<SeatSuspended<TTenantId, TSeatId>>(outbox);
         Register<SeatReactivated<TTenantId, TSeatId>>(outbox);
         Register<SeatDeactivated<TTenantId, TSeatId>>(outbox);

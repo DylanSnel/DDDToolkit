@@ -218,9 +218,9 @@ public static class TenancyRefusals
 
     /// <summary>
     /// A name is blank, or a name or text is too long. Arguments: <c>What</c>, one of <c>tenant-name</c>,
-    /// <c>unit-name</c>, <c>display-name</c>, <c>role-name</c>, <c>role-description</c> and <c>reason</c>;
-    /// <c>Min</c> and <c>Max</c>, the lengths allowed; and <c>Field</c>, the input it is about: <c>name</c> for
-    /// the name of a tenant, a unit or a role, <c>displayName</c>, <c>description</c> or <c>reason</c>.
+    /// <c>unit-name</c>, <c>role-name</c>, <c>role-description</c> and <c>reason</c>; <c>Min</c> and <c>Max</c>,
+    /// the lengths allowed; and <c>Field</c>, the input it is about: <c>name</c> for the name of a tenant, a unit or
+    /// a role, <c>description</c> or <c>reason</c>. A seat has no name in Tenancy, so none is refused here.
     /// </summary>
     public const string NameInvalid = "tenancy.name-invalid";
 

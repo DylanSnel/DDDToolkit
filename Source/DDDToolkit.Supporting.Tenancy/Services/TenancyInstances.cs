@@ -20,7 +20,8 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <code>
 /// var seat = TenancyInstances.NewSeat&lt;ShopSeat, SeatId, TenantId, OrganizationUnitId, RoleId&gt;(
-///     SeatId.Create(), tenantId, identity, "Ada");
+///     SeatId.Create(), tenantId, identity);
+/// seat.Rename("Ada"); // the application's own field: a seat has no name in Tenancy
 /// </code>
 /// </summary>
 public static class TenancyInstances
@@ -81,11 +82,10 @@ public static class TenancyInstances
     /// <param name="id">Its id.</param>
     /// <param name="tenantId">The tenant it is in.</param>
     /// <param name="identity">The verified identity it belongs to: the subject of the person's token.</param>
-    /// <param name="displayName">The name it is shown by.</param>
     /// <param name="by">Who makes it, for its creation event; <see langword="null"/> when nobody is named.</param>
-    /// <exception cref="Exceptions.RefusalException"><c>tenancy.identity-required</c> or <c>tenancy.name-invalid</c>.</exception>
+    /// <exception cref="Exceptions.RefusalException"><c>tenancy.identity-required</c>.</exception>
     public static TSeat NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
-        TSeatId id, TTenantId tenantId, Guid identity, string displayName, TenancyActor<TSeatId>? by = null)
+        TSeatId id, TTenantId tenantId, Guid identity, TenancyActor<TSeatId>? by = null)
         where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
         where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -93,7 +93,7 @@ public static class TenancyInstances
         where TRoleId : struct, IEntityId, IEquatable<TRoleId>
     {
         var seat = HostInstances<TSeat>.New();
-        seat.InitializeNew(id, tenantId, identity, displayName, by);
+        seat.InitializeNew(id, tenantId, identity, by);
         return seat;
     }
 
@@ -142,14 +142,13 @@ public static class TenancyInstances
     /// <param name="unitId">The unit the seat is placed in.</param>
     /// <param name="roleId">The role the seat is granted there.</param>
     /// <param name="grantUntil">When that grant ends, later than <paramref name="expiresAt"/>, or <see langword="null"/> for no end.</param>
-    /// <param name="displayName">A name suggested for the seat, or <see langword="null"/>.</param>
     /// <param name="issuedAt">When it is issued.</param>
     /// <param name="expiresAt">The first moment it can no longer be accepted.</param>
     /// <param name="issuedBy">The seat that issues it, or the seat system work issues it for; <see langword="null"/> for none.</param>
     /// <param name="issuedAsSystem">Whether system work issues it, which is then not held to a seat's rights when it is accepted.</param>
     /// <param name="by">Who makes it, for its creation event; <see langword="null"/> when nobody is named.</param>
     /// <exception cref="Exceptions.RefusalException">
-    /// <c>tenancy.address-invalid</c>, <c>tenancy.name-invalid</c> or <c>tenancy.invitation-grant-ends-first</c>.
+    /// <c>tenancy.address-invalid</c> or <c>tenancy.invitation-grant-ends-first</c>.
     /// </exception>
     /// <exception cref="ArgumentException"><paramref name="expiresAt"/> is not after <paramref name="issuedAt"/>.</exception>
     public static TInvitation NewInvitation<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>(
@@ -159,7 +158,6 @@ public static class TenancyInstances
         TUnitId unitId,
         TRoleId roleId,
         DateTimeOffset? grantUntil,
-        string? displayName,
         DateTimeOffset issuedAt,
         DateTimeOffset expiresAt,
         TSeatId? issuedBy = null,
@@ -173,7 +171,7 @@ public static class TenancyInstances
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
     {
         var invitation = HostInstances<TInvitation>.New();
-        invitation.InitializeNew(id, tenantId, address, unitId, roleId, grantUntil, displayName, issuedAt, expiresAt, issuedBy, issuedAsSystem, by);
+        invitation.InitializeNew(id, tenantId, address, unitId, roleId, grantUntil, issuedAt, expiresAt, issuedBy, issuedAsSystem, by);
         return invitation;
     }
 }

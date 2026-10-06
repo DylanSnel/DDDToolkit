@@ -157,27 +157,24 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
 
     /// <inheritdoc />
     /// <remarks>
-    /// One statement over the seats' table, which is where a seat's name is. It selects the id, the name and the
-    /// status and nothing else, so the identity never leaves the database, and it names the tenant next to the
-    /// tenant filter: a person's seats in other tenants, which a database may let that person read, are not among
-    /// the answer.
+    /// One statement, over the seats with their placements and grants as <see cref="FindSeatAsync"/> reads them, and
+    /// not tracked: the seats are the application's own class, read for a view of them, and nothing a view does to
+    /// one is saved. It names the tenant next to the tenant filter: a person's seats in other tenants, which a
+    /// database may let that person read, are not among the answer.
     /// </remarks>
-    public async Task<IReadOnlyList<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.SeatSummary>> ListSeatsAsync(
+    public async Task<IReadOnlyList<TSeat>> ListSeatsAsync(
         TTenantId tenant,
         IReadOnlyCollection<TSeatId>? only,
         CancellationToken cancellationToken)
     {
-        var seats = context.Set<TSeat>().AsNoTracking().Where(seat => seat.TenantId.Equals(tenant));
+        var seats = context.Set<TSeat>().AsNoTracking().AsSingleQuery().Where(seat => seat.TenantId.Equals(tenant));
         if (only is not null)
         {
             var asked = only.ToArray();
             seats = seats.Where(seat => asked.Contains(seat.Id));
         }
 
-        return await seats
-            .Select(seat => new TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.SeatSummary(seat.Id, seat.DisplayName, seat.Status))
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        return await seats.ToListAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
