@@ -40,8 +40,8 @@ public static class ProjectsInfrastructure
 
         // The context, from a pool: the reads, which each take a context of their own, and the request's own
         // context both draw on it. The provider is the pools' to set, on the host's connections for requests or for
-        // the background. The factory is the one dotnet ef and the export build the context with: its migrations are
-        // what the host is checked against.
+        // the background. The migrations beside it are what the host checks the database against, with the check its
+        // AddSupabaseMigrations() registers for every context marked [SupabaseMigrations].
         //
         // One call wires it, each lock in its place: the toolkit's interceptors, then what the host's registrations
         // bring. Row level security, which the host registered, puts the caller's role and claims on every
@@ -53,7 +53,7 @@ public static class ProjectsInfrastructure
         // its caller named, and the save, the project's rules and the policies hold the write. A host that also
         // wants every save of a project tied to the version its request's check read adds .UseMemberHolds(application)
         // after UseDDDToolkit: the expert hold of the Membership package, which no handler writes a line for.
-        host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, (application, options) => options
+        host.RequirePostgres().AddContext<ProjectsContext>(services, (application, options) => options
             .UseDDDToolkit(application));
 
         // The application's two ports. What a command changes goes through the request's context, its unit of

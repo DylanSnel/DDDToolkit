@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Supabase;
 using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
 using Examples.Tenancy.Tenants.Infrastructure.Converters;
 using Examples.Hosting;
@@ -21,12 +22,24 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// <see cref="Seat.JobTitle"/>) are mapped by the toolkit's conventions like any aggregate's, the kind by its key
 /// (<see cref="UnitKindKeyConverter"/>). The save check, and the writer of what a save changes of the access
 /// questions' tables, arrive with the options instead: <c>AddTenancy</c> brings them, and <c>UseDDDToolkit</c>, in
-/// the options the module passes to <see cref="PostgresPools.AddContext{TContext,TFactory}"/>, puts them on.
+/// the options the module passes to <see cref="PostgresPools.AddContext{TContext}"/>, puts them on.
 /// <para>
 /// Invitations are the application's to have or not, so they are a call of their own,
 /// <c>AddTenancyInvitations</c>: two more tables, the invitations and, apart from them, the digests of their tokens.
 /// </para>
+/// <para>
+/// <c>[SupabaseMigrations]</c> makes the migrations beside it Supabase's: the program that exports writes each into
+/// <c>Examples/Tenancy/supabase/migrations</c>, and the host checks at start-up that the database has every one. The
+/// build writes the design-time factory <c>dotnet ef</c> and the export make the context with beside it,
+/// <c>TenantsContextDesignTimeFactory</c>: on Postgres, pointing nowhere, and with the migration history in the
+/// module's schema, where the host's <c>UseDDDToolkit</c> reads it. This project is its own startup project:
+/// <code>
+/// dotnet ef migrations add Name --project Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure --startup-project Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure --output-dir Persistence/Migrations --context TenantsContext
+/// dotnet build Examples/Tenancy/Examples.Tenancy.Exporter
+/// </code>
+/// </para>
 /// </remarks>
+[SupabaseMigrations]
 public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : DbContext(options)
 {
     /// <summary>The schema Tenancy's tables live in, with the module's migration history.</summary>

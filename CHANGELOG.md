@@ -802,6 +802,39 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Supabase and Auth
 
+- **`[SupabaseMigrations]` goes on the context, and the build writes its design-time factory.** The export always
+  builds a context on Npgsql, pointing nowhere, with `UseDDDToolkitDesignTime()`, so the factory every module wrote
+  by hand for `dotnet ef` and the export was the same eight lines. Marked, the context gets it from the package's
+  generator: `OrderingContextDesignTimeFactory`, an `IDesignTimeDbContextFactory<OrderingContext>` beside the context,
+  in its project, in a file of that name, public where the context is. `dotnet ef` finds it as it finds one written
+  by hand, in the startup project or else in the context's assembly, and the export and the start-up check make the
+  context as `dotnet ef` does with the host as its startup project: with a factory of the host's own for the
+  context where it has one, and with the one beside the context otherwise. The factory calls
+  `UseDDDToolkitDesignTime()` where the project references `DDDToolkit.EntityFramework`, and leaves the history where
+  Entity Framework keeps it in a project that does not, as DDD00071 does. A factory of the project's own for the
+  context wins, whatever else it makes: the build writes none and says nothing; for an export or a check in another
+  project it is public, with a public parameterless constructor. Write one for a context that needs more at design
+  time than Npgsql and the toolkit, `MapEnum` or a history table of its own; the start-up check's advice for a
+  history recorded elsewhere says so for a marked context. A context the build cannot write one for, abstract,
+  generic, without a constructor `new TContext(options)` reaches, with `required` members that constructor does not
+  set, or in a project without `Npgsql.EntityFrameworkCore.PostgreSQL`, and that has none of its own, is DDD00031 at
+  the context. The marker on a factory works as it did, for a factory in another project than its context, and a
+  marked factory wins over every other factory of its context. See
+  [Exporting as part of the build](docs/supabase.md#exporting-as-part-of-the-build) and
+  [The design-time factory](docs/entity-framework.md#the-design-time-factory).
+- **One `services.AddSupabaseMigrations()` registers every marked context for the start-up check.** The package's
+  generator writes it into every application that is not a test project, whether the export is on there or not,
+  with the list of every marked context, and every marked factory, the application references, each made by the
+  factory beside it: `SupabaseMigrationsOfModules`, internal, in the namespace named after the application's
+  assembly, with `All()` and the extension method, which calls `AddSupabaseMigrations(source)` for each; a top-level
+  `Program.cs` imports that namespace for the call. A module that is added is checked with no change in the host,
+  and no module registers its own. The list follows the references, not the registrations, so the check now names a
+  registered context the application's services do not resolve, in its own words and with the per-context call to
+  use instead, where it threw the container's error. A host with a parameterless `AddSupabaseMigrations()` of its own
+  keeps it: the build writes the list alone, and no ambiguous call. Both generated classes carry `[GeneratedCode]`,
+  so an architecture test tells them from the host's own code. `AddSupabaseMigrations<TContext, TFactory>()` and
+  `AddSupabaseMigrations(source)` stay, for a host that checks some contexts and not others. See
+  [Checking at start-up](docs/supabase.md#checking-at-start-up).
 - **Roles and caller functions for the Supabase export.** `SupabaseMigrationOptions.Roles` and
   `SupabaseMigrationOptions.CallerFunctions`, and in the build the project properties
   `SupabaseRowAccessRoles` (`user=…|anonymous=…|system-in=…`) and `SupabaseCallerFunctions`
@@ -1712,14 +1745,24 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The samples write no design-time factory for Supabase, and register its check once.** The Tenancy sample's
+  three contexts and the webshop's five are marked `[SupabaseMigrations]`, and their hand-written Postgres factories,
+  `TenantsContextFactory.cs`, `ProjectsContextFactory.cs`, `InspectionsContextFactory.cs` and the webshop's five
+  beside their contexts, are gone: the build writes `TenantsContextDesignTimeFactory` and the rest. The webshop's
+  SQL Server factories stay, the SQL Server migrations projects' own, which `dotnet ef` takes with that project as its
+  startup project. `PostgresPools.AddContext` and `ModuleDatabase.AddContext` lost their factory type argument and
+  register no migrations: the Tenancy host calls `AddSupabaseMigrations()` once, and the webshop's host does when it
+  runs on Supabase. `Examples.Hosting` no longer references the Supabase package. The exported files did not
+  change. `MigrationTests` holds that `dotnet ef`'s own design-time services make each module's context through the
+  build's factory, with the module or the host as the startup project, and the architecture tests tell the list the
+  generator writes into the host, the one thing there that names a module's context, from the host's own code, as
+  they tell the Mediator's.
 - **The samples name no migration history table.** The toolkit keeps every module's history in its schema, so
   `ModuleDatabase.UsePostgres`, which only named it, is gone, `ModuleDatabase.UseSqlServer` lost its schema
-  argument, `PostgresPools.AddContext` lost it as well, and each design-time factory, the Tenancy sample's three and
-  the webshop's ten, writes `UseDDDToolkitDesignTime()` after its provider. The Postgres factories are one
-  expression, as the docs write them:
-  `new(new DbContextOptionsBuilder<TenantsContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options)`.
-  The migrations, their snapshots and the exported files are unchanged: the history is the same table in the same
-  schema.
+  argument, `PostgresPools.AddContext` lost it as well, and each design-time factory written by hand, the webshop's
+  five for SQL Server, writes `UseDDDToolkitDesignTime()` after its provider; the Postgres ones are the build's now,
+  which call it too (see the entry above). The migrations, their snapshots and the exported files are unchanged:
+  the history is the same table in the same schema.
 - **The Tenancy sample syncs its role packs.** Its host calls `SyncRolePacks()` after `RunStartupChecks()`, so a
   key a module brings later reaches the flat tenants' Tenant admin and a key added to a pack reaches every role made
   from it, at the next start. A role that followed its pack is kept in the access history, which the tenant's
@@ -2451,6 +2494,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   drop or change a column a column rule holds. The next build of an application that exports its migrations
   writes a new access file for every module that has one; a migration exported before is compared without its
   drop, as it always was.
+- **DDD00031 covers a marked context as well as a marked factory**, and is titled "A [SupabaseMigrations] context
+  or factory must be one the build can make". Besides a factory the generated code cannot create, it reports, in
+  the context's project, a marked context the build cannot write a factory for and that has none of its own, and,
+  where the export runs, a marked context whose assembly, or the exporting application itself, holds more than one
+  factory for it, whose assembly holds none, or that the project cannot see. The export's warning for a project that references nothing to export now says "No context or
+  factory marked [SupabaseMigrations]".
 - **The Supabase export writes the privileges and forces the policies unless a project turns them off.**
   `SupabaseMigrationOptions.WriteGrants` and `SupabaseMigrationOptions.ForceRowLevelSecurity` are `true` by
   default, and the build reads an unset `SupabaseRowAccessGrants` as `Write` and an unset

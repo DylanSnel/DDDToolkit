@@ -18,7 +18,7 @@ public static class InventoryModule
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        host.Database.AddContext<InventoryContext, InventoryContextFactory>(services, InventoryContext.Schema);
+        host.Database.AddContext<InventoryContext>(services, InventoryContext.Schema);
 
         services.AddDDDToolkitEntityFramework(options => options
             .UseOutbox<InventoryContext>(outbox =>

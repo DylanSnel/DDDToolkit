@@ -466,7 +466,19 @@ expect_generators_wrote SupportingDomains/Domain \
 expect_generators_wrote SupportingDomains/Infrastructure \
   "DDDToolkit.Analyzers" \
   "DDDToolkit.EntityFramework.Analyzers" \
-  "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers"
+  "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers" \
+  "DDDToolkit.EntityFramework.Supabase.Analyzers"
+
+# The Supabase package's generator writes the design-time factory of each context marked [SupabaseMigrations]
+# beside it, in the infrastructure project, where dotnet ef looks for one; the project has none of its own.
+for factory in TenancyContextDesignTimeFactory PressContextDesignTimeFactory; do
+  if [ -z "$(find "$work/package-consumers/SupportingDomains/Infrastructure/obj" -path '*generated*' -name "Acme.Press.Persistence.$factory.g.cs" | head -n 1)" ]; then
+    echo "FAILED: SupportingDomains/Infrastructure: the Supabase generator wrote no $factory beside its marked context." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Infrastructure: a design-time factory beside each marked context"
 
 # The host is handed Membership's generators too, as a dependency of a dependency, and has nothing of
 # theirs to be written: the classes and the contexts are below it. A second member list or a second
@@ -543,11 +555,11 @@ done
 # ---------------------------------------------------------------------------------------------------
 # The Supabase export of the same application.
 #
-# The infrastructure project references the Supabase package, where its contexts and their marked factories
-# are, and the host turns the export on in its project file, as docs/supabase.md says. Both Postgres packages
-# declare themselves contributors, so the host writes their row access SQL without a line of its own, from what
-# the domain project marks, and the build above wrote the two contexts' access files. The package's
-# build step and generator reach both projects through buildTransitive, so both import them; through
+# The infrastructure project references the Supabase package, where its marked contexts and the factories the
+# build wrote beside them are, and the host turns the export on in its project file, as docs/supabase.md says.
+# Both Postgres packages declare themselves contributors, so the host writes their row access SQL without a line
+# of its own, from what the domain project marks, and the build above wrote the two contexts' access files. The
+# package's build step and generator reach both projects through buildTransitive, so both import them; through
 # project references only the host did, which is how a property that reached the others went unnoticed.
 #
 # A CI script may give the property on the command line instead, and a Directory.Build.props sets it for
@@ -558,8 +570,15 @@ done
 # DDD00054 about what only the host makes; an empty value turns the export off in the host as well.
 # ---------------------------------------------------------------------------------------------------
 
-supabase_generator="DDDToolkit.EntityFramework.Supabase.Analyzers"
 supabase_migrations="$work/package-consumers/SupportingDomains/supabase/migrations"
+
+# Whether the Supabase package's generator wrote the file named $2 in the project folder $1: its export hook,
+# DDDToolkit.SupabaseMigrationSources.g.cs, where the export runs, and SupabaseMigrationsOfModules.g.cs, the list
+# and AddSupabaseMigrations(), in every application. In the infrastructure project it writes the design-time
+# factories, which are no part of the export.
+supabase_wrote() {
+  [ -n "$(find "$work/package-consumers/$1/obj" -path '*generated*/DDDToolkit.EntityFramework.Supabase.Analyzers/*' -name "$2" | head -n 1)" ]
+}
 
 # What the export said, one line per file: "<status> <file>".
 export_lines() {
@@ -570,14 +589,15 @@ export_lines() {
 expect_exported_by_the_host_only() {
   local status="$1" project lines
 
-  if ! grep -qxF "$supabase_generator" <<< "$(generators_that_wrote SupportingDomains/Host)"; then
+  if ! supabase_wrote SupportingDomains/Host DDDToolkit.SupabaseMigrationSources.g.cs; then
     echo "FAILED: SupportingDomains/Host: the Supabase generator wrote no list of sources in the host that turned the export on." >&2
     exit 1
   fi
 
   for project in Domain Infrastructure; do
-    if grep -qxF "$supabase_generator" <<< "$(generators_that_wrote "SupportingDomains/$project")"; then
-      echo "FAILED: SupportingDomains/$project: the Supabase generator wrote its export hook into a project that is not the host." >&2
+    if supabase_wrote "SupportingDomains/$project" DDDToolkit.SupabaseMigrationSources.g.cs \
+      || supabase_wrote "SupportingDomains/$project" SupabaseMigrationsOfModules.g.cs; then
+      echo "FAILED: SupportingDomains/$project: the Supabase generator wrote its export hook or its registration into a project that is not the host." >&2
       exit 1
     fi
   done
@@ -724,11 +744,15 @@ for mode in Check Write ""; do
   if [ -n "$mode" ]; then
     # The files the first build wrote are what the model and the rules give, so Write writes none and Check finds them so.
     expect_exported_by_the_host_only Unchanged
-  elif [ -n "$(export_lines)" ] || grep -qxF "$supabase_generator" <<< "$(generators_that_wrote SupportingDomains/Host)"; then
+  elif [ -n "$(export_lines)" ] || supabase_wrote SupportingDomains/Host DDDToolkit.SupabaseMigrationSources.g.cs; then
     echo "FAILED: an empty SupabaseMigrationsExport for the whole build did not turn the export off in the host." >&2
     exit 1
+  elif ! supabase_wrote SupportingDomains/Host SupabaseMigrationsOfModules.g.cs; then
+    # PressStartup calls AddSupabaseMigrations(), so the build would have failed without it; said here all the same.
+    echo "FAILED: SupportingDomains/Host: without the export the Supabase generator wrote no AddSupabaseMigrations(), which every application gets." >&2
+    exit 1
   else
-    echo "    SupportingDomains/Host: no export"
+    echo "    SupportingDomains/Host: no export, and AddSupabaseMigrations() all the same"
   fi
 done
 

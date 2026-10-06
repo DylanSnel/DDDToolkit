@@ -31,14 +31,13 @@ flowchart TB
 <details>
 <summary>Show the code: the three places it is switched on</summary>
 
-The design-time factory of each module's context is marked:
+Each module's context is marked:
 
 ```csharp
 [SupabaseMigrations]
-public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
 {
-    public OrderingContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+    // ...
 }
 ```
 
@@ -51,13 +50,13 @@ The host's project file turns the export on, writing locally and only checking i
 </PropertyGroup>
 ```
 
-And the host refuses to start against a database that lacks a migration:
+And the host refuses to start against a database that lacks a migration, with one call for every marked context:
 
 ```csharp
-// in the module
-services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
-
 // in the host
+using Shop.Host; // the namespace named after the host's assembly, where the build writes AddSupabaseMigrations()
+
+builder.Services.AddSupabaseMigrations();
 builder.Services.RunStartupChecks();
 ```
 
@@ -66,23 +65,79 @@ builder.Services.RunStartupChecks();
 ## Exporting as part of the build
 
 The export needs a context on Npgsql, but it never connects, so a connection string that points nowhere
-is enough. That is exactly what the design-time factory `dotnet ef` already uses gives you. Mark it:
+is enough. `dotnet ef` needs the same: a design-time factory that makes the context without the host. You
+write neither. Mark the context `[SupabaseMigrations]`, and the package's generator writes the factory beside it,
+in the context's project, in a file named after it:
+
+```mermaid
+flowchart LR
+    Marked["[SupabaseMigrations]<br/>on the context"] --> Own{"a factory of the<br/>project's own?"}
+    Own -- "no" --> Written["the build writes<br/>OrderingContextDesignTimeFactory"]
+    Own -- "yes" --> Yours["the build writes none,<br/>and yours is used"]
+    Written --> Users["dotnet ef, the export<br/>and AddSupabaseMigrations()"]
+    Yours --> Users
+```
+
+The export is always Postgres, so the factory is always the same: Npgsql, pointing nowhere, and
+`UseDDDToolkitDesignTime()`, which is `DDDToolkit.EntityFramework`'s and keeps the migration history where a host
+that wires the context with `UseDDDToolkit` keeps it, in the context's default schema, so the files record each
+migration in the table the application reads (see
+[The migration history](entity-framework.md#the-migration-history)). In a project that does not reference
+`DDDToolkit.EntityFramework` the toolkit does not wire the context, and the factory leaves the history where Entity
+Framework keeps it.
+
+`dotnet ef` finds the factory where it finds one written by hand: it looks in the startup project first and then in
+the context's own assembly, which is where this one is. So `dotnet ef migrations add` works with the module as its own
+startup project or with the host as the startup project, and a startup project with a factory of its own, a project
+of SQL Server migrations say, keeps using that one. The migrations are found where Entity Framework looks when it is
+told nothing else, in the context's assembly.
+
+A factory of your own for the context, in its project, wins: the build writes none, says nothing, and uses yours.
+Make it public, with a public parameterless constructor, where the export or the check is in another project, as
+the host is: the list the build writes there creates it with `new()`, and the project that exports reports
+[DDD00031](diagnostics.md#ddd00031) for one it cannot. Write one for a context the build cannot make, one whose
+constructor needs more than its options, say, and for one that needs more at design time than Npgsql pointing
+nowhere and the toolkit's call: provider options such as `MapEnum` or `UseNodaTime`, or a history table of its own.
+The build reports DDD00031 at a marked context it cannot write a factory for, and that has none: one that is
+abstract or generic, has no constructor that takes its options alone or none that sets its `required` members, or
+is in a project that does not reference `Npgsql.EntityFrameworkCore.PostgreSQL`.
+
+A factory of the host's own for a module's context wins in the host. `dotnet ef` takes it first with the host as its
+startup project, so the export and the start-up check there make the context with it too; with the module as its
+startup project, `dotnet ef` takes the one beside the context. The marker may still go on a factory instead, as it
+did up to 3.1: for a context whose migrations are in a project of their own, whose factory says where they are. A
+marked factory wins over every other factory of its context.
+
+<details>
+<summary>Show the code: a marked context and the factory the build writes beside it</summary>
 
 ```csharp
 [SupabaseMigrations]
-public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
 {
-    public OrderingContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        => modelBuilder.HasDefaultSchema("ordering");
 }
 ```
 
-`UseDDDToolkitDesignTime()` is `DDDToolkit.EntityFramework`'s, for a context the host wires with `UseDDDToolkit`:
-it keeps the migration history where the host does, in the context's default schema, so the files record each
-migration in the table the application reads. See
-[The migration history](entity-framework.md#the-migration-history).
+```csharp title="OrderingContextDesignTimeFactory.g.cs, shortened"
+public sealed class OrderingContextDesignTimeFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+        => new OrderingContext(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+}
+```
 
-and turn the export on in the project that references every module: the host of a modular monolith,
+```bash
+dotnet ef migrations add AddOrders --project src/Ordering --startup-project src/Ordering
+dotnet ef migrations has-pending-model-changes --project src/Ordering --startup-project src/Host
+```
+
+Both say `Using DbContext factory 'OrderingContextDesignTimeFactory'.` with `--verbose`.
+
+</details>
+
+Then turn the export on in the project that references every module: the host of a modular monolith,
 the presentation layer of a service.
 
 ```xml
@@ -92,7 +147,7 @@ the presentation layer of a service.
 </PropertyGroup>
 ```
 
-That is all. Nothing in `Program.cs`, no command to remember, no list of modules to keep up to date.
+That is all for the export. Nothing in `Program.cs`, no command to remember, no list of modules to keep up to date.
 
 - **`Write`** writes a file for every migration that has none, after every build. Locally that means
   the files exist by the time you commit, and `supabase start` or `db reset` has them.
@@ -108,8 +163,8 @@ only exports, say, keep the property in the exporting project's file, or give it
 project alone: `dotnet build src/Exporter -p:SupabaseMigrationsExport=Check`.
 
 The list of modules you do not keep is kept by the compiler. In the project that turned the export on,
-the package's generator finds every marked factory in the assemblies it references and writes them down
-as ordinary code:
+the package's generator finds every marked context in the assemblies it references, each with the factory beside
+it, and writes them down as ordinary code:
 
 ```csharp title="DDDToolkit.SupabaseMigrationSources.g.cs"
 namespace DDDToolkit.EntityFramework.Supabase.Generated
@@ -119,7 +174,7 @@ namespace DDDToolkit.EntityFramework.Supabase.Generated
         public static IReadOnlyList<SupabaseMigrationSource> All()
             => new SupabaseMigrationSource[]
             {
-            SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>("Ordering"),
+            SupabaseMigrationSource.For<OrderingContext, OrderingContextDesignTimeFactory>("Ordering"),
             };
 
         [ModuleInitializer]
@@ -129,7 +184,7 @@ namespace DDDToolkit.EntityFramework.Supabase.Generated
 }
 ```
 
-Add a module with a marked factory and the next build exports its migrations too. `"Ordering"` is the
+Add a module with a marked context and the next build exports its migrations too. `"Ordering"` is the
 module name the files carry, the module the project declares: `<DDD_Module>Ordering</DDD_Module>` or
 `[assembly: Module("Ordering")]`.
 [How the build step works](#how-the-build-step-works) explains the module initializer.
@@ -209,17 +264,74 @@ If a database already has these migrations from `dotnet ef database update`, tel
 ## Checking at start-up
 
 On Supabase the migrations are the CLI's to apply, so the application must not call
-`Database.Migrate()`. It can still refuse to run against an older schema. Each module registers its
-source, which brings the [start-up check](startup-checks.md) `supabase.migrations-applied`, and the host runs it
-with its other checks, before the server binds its port:
+`Database.Migrate()`. It can still refuse to run against an older schema. The host registers every marked context
+with one call, which brings the [start-up check](startup-checks.md) `supabase.migrations-applied`, and runs it with
+its other checks, before the server binds its port:
+
+```mermaid
+flowchart LR
+    Contexts["the contexts marked<br/>[SupabaseMigrations]"] --> Generator["the package's generator,<br/>in the host's build"]
+    Generator --> Call["AddSupabaseMigrations()<br/>in the host"]
+    Call --> Check["supabase.migrations-applied,<br/>before the port is bound"]
+```
+
+`AddSupabaseMigrations()` takes no type arguments and names no module: the package's generator writes it into
+every application that is not a test project, with the list of every marked context the application references,
+each with the factory `dotnet ef` makes it with from the host, in the namespace named after the application's
+assembly. A top-level `Program.cs` is in no namespace, so it needs `using Shop.Host;` for the call; without it the
+compiler finds only the package's `AddSupabaseMigrations<TContext, TFactory>()` and asks for its type arguments. A
+module that is added is checked with no change in the host, and the host's own code still names no context. The
+export's property plays no part: a host whose files another program exports, as the Tenancy sample's does, gets the
+call all the same.
+
+The list follows the references, not the registrations: a marked context of any project the host references is in
+it, whether the host registers that context or not, and the check asks each one for its history. A host that
+shares a project with a marked context it does not use, a worker beside an API say, is stopped by the check with a
+message that names the context. Such a host registers the contexts it does use one by one, with the factory
+`dotnet ef` uses: `services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>()`. A host that
+wrote an `AddSupabaseMigrations()` of its own before the build wrote one keeps it: the build then writes the list,
+`SupabaseMigrationsOfModules.All()`, and leaves the call to the host's.
+
+<details>
+<summary>Show the code: the host's one call, and what the build wrote for it</summary>
 
 ```csharp
-// in the module
-services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
-
 // in the host
+using Shop.Host; // the namespace named after the host's assembly, where the build writes AddSupabaseMigrations()
+
+builder.Services.AddSupabaseMigrations();
 builder.Services.RunStartupChecks();
 ```
+
+```csharp title="SupabaseMigrationsOfModules.g.cs, shortened"
+namespace Shop.Host
+{
+    internal static class SupabaseMigrationsOfModules
+    {
+        public static IReadOnlyList<SupabaseMigrationSource> All()
+            => new SupabaseMigrationSource[]
+            {
+            SupabaseMigrationSource.For<OrderingContext, OrderingContextDesignTimeFactory>("Ordering"),
+            SupabaseMigrationSource.For<ShippingContext, ShippingContextDesignTimeFactory>("Shipping"),
+            };
+
+        public static IServiceCollection AddSupabaseMigrations(this IServiceCollection services)
+        {
+            foreach (var source in All())
+            {
+                DependencyInjection.AddSupabaseMigrations(services, source);
+            }
+
+            return services;
+        }
+    }
+}
+```
+
+A host that checks some contexts and not others registers each itself, with the factory the build wrote:
+`services.AddSupabaseMigrations<OrderingContext, OrderingContextDesignTimeFactory>()`.
+
+</details>
 
 It asks each context's own migration history and throws a `SupabaseMigrationsPendingException` that
 names every context with migrations missing, and each missing migration. Where the running context reads its
@@ -229,9 +341,11 @@ be applied, and recorded where the application does not look. It also says what 
 applied to a database already, the application names the table they record in, with the `MigrationsHistoryTable`
 the message spells out, since an applied file keeps the table it was exported with. Where none was applied
 anywhere yet, the factory gets the application's history instead, `UseDDDToolkitDesignTime()` where the application
-calls `UseDDDToolkit`, and the files are exported again and the local database reset. Registering the same context
+calls `UseDDDToolkit`, and the files are exported again and the local database reset. For a marked context, whose
+factory the build writes, that means a factory of your own beside it, which the build then uses in place of its own. Registering the same context
 twice registers it once, and the check once however many contexts there are; with no sources registered there is
-no check, which is what a module running on something other than Supabase wants.
+no check, which is what a host running on something other than Supabase wants: it does not call
+`AddSupabaseMigrations()`.
 
 A host that runs its checks by hand calls the method behind it once the host is built, as before:
 
@@ -284,6 +398,8 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 A context the host does not wire with `DDDToolkit.EntityFramework` names the table itself, in the host's options
 and the factory's alike:
 `UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema))`.
+The factory the build writes names no table, so such a context, marked, gets a factory of your own beside it that
+does.
 
 Each module's migrations only ever see its own history table, so neither can report the other's as
 pending. Supabase has one history, which interleaves the modules by timestamp. That is fine, because no
@@ -294,11 +410,10 @@ orphaned, and if two modules scaffold migrations in the same second, the second 
 Module schemas are not in the Data API's `schemas` list in `supabase/config.toml`, so the Data API does
 not serve them and nothing needs row level security.
 
-`Examples/ModularMonolith.Supabase` does all of this for five modules. Each module's factory is marked
-`[SupabaseMigrations]`, next to its context, and its migrations are in its
-`Infrastructure/Persistence/Migrations` folder. When the host runs on Supabase, the shared
-[`ModuleDatabase.AddContext`](../Examples/Shared/Examples.Hosting/ModuleDatabase.cs)
-registers the start-up check for each module. The host's project file turns the export on, `Write`
+`Examples/ModularMonolith.Supabase` does all of this for five modules. Each module's context is marked
+`[SupabaseMigrations]`, the build writes its design-time factory beside it, and its migrations are in its
+`Infrastructure/Persistence/Migrations` folder. When the host runs on Supabase, it registers the start-up check for
+every module with its one `AddSupabaseMigrations()`. The host's project file turns the export on, `Write`
 locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
 [its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
 
@@ -1341,7 +1456,7 @@ Everything the build does is also an API, for a test, a tool of your own or a co
 factory:
 
 ```csharp
-var ordering = SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>();
+var ordering = SupabaseMigrationSource.For<OrderingContext, OrderingContextDesignTimeFactory>();
 
 SupabaseMigrations.Export([ordering, shipping]);        // writes what is missing
 SupabaseMigrations.EnsureInSync([ordering, shipping]);  // throws unless everything is there
@@ -1362,10 +1477,12 @@ directory unless you pass one.
 ## How the build step works
 
 The build step runs your code at build time, so here is what it does. A source generator in the
-package looks, in the project that turned the export on, for every factory marked `[SupabaseMigrations]`
-in the assemblies it references, and writes the list as ordinary generic code,
-`SupabaseMigrationSource.For<OrderingContext, OrderingContextFactory>("Ordering")`, together with a
-module initializer, as shown under [Exporting as part of the build](#exporting-as-part-of-the-build).
+package looks, in the project that turned the export on, for every context marked `[SupabaseMigrations]`, and every
+factory marked so, in the assemblies it references, and writes the list as ordinary generic code,
+`SupabaseMigrationSource.For<OrderingContext, OrderingContextDesignTimeFactory>("Ordering")`, together with a
+module initializer, as shown under [Exporting as part of the build](#exporting-as-part-of-the-build). A marked
+context is made by the factory in its own assembly: the one the package's other generator wrote there, or one of
+the project's own, which then wins.
 After the build, a target in the package starts the application it just built with one environment
 variable set. The module initializer runs before `Main`, sees the variable, exports, and ends the
 process. None of the application's own start-up runs: no host builder, no configuration providers, no
@@ -1373,8 +1490,9 @@ Azure App Configuration, no hosted services. Without the variable, which is ever
 application starts, the initializer returns at once. Nothing is found or created by reflection; the
 factory is `new TFactory()`. It adds about a second to a build of that one project.
 
-A marked factory the generated code cannot create, because it is not public, has no public
-parameterless constructor or does not implement `IDesignTimeDbContextFactory<TContext>`, is reported as
+A marked context no factory makes, because the build could not write one and the project has none of its own,
+or has more than one, and a marked factory the generated code cannot create, because it is not public, has no
+public parameterless constructor or does not implement `IDesignTimeDbContextFactory<TContext>`, are reported as
 [DDD00031](diagnostics.md#ddd00031) instead of being skipped.
 
 The generated code also hands the export the row access contributions: first those of every referenced
@@ -1388,15 +1506,28 @@ whose marks cannot be used [DDD00072](diagnostics.md#ddd00072), one the project 
 An assembly that declares a module offers its contribution rather than writing it, and one the project does
 not list is [DDD00069](diagnostics.md#ddd00069).
 
-The package brings the generator and the build step to the host through the module that references it,
-so the host does not reference the package itself unless it uses the start-up check.
+The package brings the generators and the build step to the host through the module that references it,
+so the host does not reference the package itself: `AddSupabaseMigrations()` arrives the same way.
+
+### Coming from 3.1
+
+A design-time factory marked `[SupabaseMigrations]` keeps working as it did. To have the build write it, move the
+marker to the context and delete the factory, in the same change: with both in the project, the factory, which is
+the project's own, wins and the build writes none. The build's factory is named `OrderingContextDesignTimeFactory`,
+not `OrderingContextFactory`, which matters only where code names it, as
+`services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>()` does; replace those calls with the
+host's one `AddSupabaseMigrations()`, with `using Shop.Host;` in a top-level `Program.cs`. A host that wrote a
+parameterless `AddSupabaseMigrations()` of its own keeps it, and the build writes no second one beside it. The
+exported files do not change, as long as the factory you delete said
+what the build's says: Npgsql, and `UseDDDToolkitDesignTime()` where the host calls `UseDDDToolkit`. A factory
+that said more, a history table of its own or options for Npgsql, stays, unmarked or marked as you like.
 
 ## Where to look next
 
 - [Entity Framework](entity-framework.md#migrations) for migrations on any other database.
 - [Row level security](row-level-security.md) for callers, work outside a request, and rules written in C#.
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
-- [Diagnostics](diagnostics.md#ddd00031) for the build error about an unusable factory, and
+- [Diagnostics](diagnostics.md#ddd00031) for the build error about a context or factory the build cannot make, and
   [DDD00054](diagnostics.md#ddd00054), [DDD00070](diagnostics.md#ddd00070),
   [DDD00072](diagnostics.md#ddd00072), [DDD00073](diagnostics.md#ddd00073) and
   [DDD00074](diagnostics.md#ddd00074) for a package's row access contribution, and

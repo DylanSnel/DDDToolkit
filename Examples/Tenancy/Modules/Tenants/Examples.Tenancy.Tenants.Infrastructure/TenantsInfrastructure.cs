@@ -62,16 +62,16 @@ public static class TenantsInfrastructure
         // The context, from a pool: the reads, which each take a context of their own, and the request's own
         // context both draw on it. The options are built once per pool, with the application's services, and every
         // interceptor in them asks who is calling when it is used. The provider is the pools' to set: one data source
-        // for requests and one for the background, shared by every module. The factory is the one dotnet ef and the
-        // export build the context with: its migrations are what the host is checked against.
+        // for requests and one for the background, shared by every module. The migrations beside it are what the host
+        // checks the database against, with the check its AddSupabaseMigrations() registers for every marked context.
         //
         // One call wires it, each lock in its place: the toolkit's interceptors, then the caller's role and claims on
         // every connection, which the host's row level security brings, so the policies see who asks, then Tenancy's
         // save check, which AddTenancy below brings, and which so sees what the toolkit let through. Here, in
         // Tenancy's own context, it also writes the closure of every organization a save changes, which the access
         // questions read; in the other modules' contexts it keeps their rows to the caller's tenant. The same call
-        // keeps the module's migration history in its schema, where the factory's UseDDDToolkitDesignTime() keeps it.
-        host.RequirePostgres().AddContext<TenantsContext, TenantsContextFactory>(services, (application, options) => options
+        // keeps the module's migration history in its schema, where the design-time factory the build writes keeps it.
+        host.RequirePostgres().AddContext<TenantsContext>(services, (application, options) => options
             .UseDDDToolkit(application));
 
         // The tenant of Tenancy's caller on every connection, the rights left to the database, whose trigger

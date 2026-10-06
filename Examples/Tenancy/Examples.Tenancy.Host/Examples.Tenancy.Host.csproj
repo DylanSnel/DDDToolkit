@@ -62,10 +62,14 @@
   <!--
     Tenancy's generator, which a NuGet consumer gets with the Tenancy package and this repository wires by hand. The
     host declares no module and references every one, so the generator writes the modules' keys into it, with the
-    call that registers them: AddTenancyPermissionsOfModules, in Program.cs.
+    call that registers them: AddTenancyPermissionsOfModules, in Program.cs. The Supabase package's generator, the
+    same way: the host is an application, so it writes the list of every context marked [SupabaseMigrations] into it,
+    with the call that registers them for the start-up check, AddSupabaseMigrations. No export: this project sets
+    none of the export's properties and imports no build step, so nothing of the export is written here.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

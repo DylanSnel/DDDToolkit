@@ -9,8 +9,10 @@
     The Supabase package's build step and generator arrive the same way, through the infrastructure project, and
     this is where they work: the host turns the export on, as docs/supabase.md has it, and every build writes the
     access files of the two contexts into ../supabase/migrations, and the migration that makes the role the host
-    logs in as, which SupabaseLoginRole names. The script also gives the export's property for the whole build,
-    the way a CI script does, and holds that it then reaches this project and no other.
+    logs in as, which SupabaseLoginRole names. The generator also writes the call that registers both contexts for
+    the start-up check, AddSupabaseMigrations, which PressStartup makes, as it does in every application, the export
+    turned on or not. The script also gives the export's property for the whole build, the way a CI script does, and
+    holds that it then reaches this project and no other.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>

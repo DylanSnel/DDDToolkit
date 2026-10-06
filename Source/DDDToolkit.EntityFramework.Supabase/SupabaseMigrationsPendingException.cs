@@ -63,7 +63,8 @@ public sealed partial class SupabaseMigrationsPendingException : InvalidOperatio
               $"records each migration in {TableOf(recorded)}: the files record their migrations where the application does not look. " +
               $"Where those files were applied to a database already, keep the history where they record it, and name that table in the application's options: {Naming(recorded)}. " +
               "Where none of them was applied anywhere yet, give the factory the application's history instead, UseDDDToolkitDesignTime() of DDDToolkit.EntityFramework where the application calls UseDDDToolkit, " +
-              "or the application's own MigrationsHistoryTable(...); then delete the files, export them again and reset the local database, since a file keeps the table it was exported with.";
+              "or the application's own MigrationsHistoryTable(...), and for a context marked [SupabaseMigrations], whose factory the build writes, write a factory of your own beside it that does: the build then writes none and uses yours. " +
+              "Then delete the files, export them again and reset the local database, since a file keeps the table it was exported with.";
     }
 
     private static string Describe(IReadOnlyList<(string Context, IReadOnlyList<string> Migrations)> pending, IReadOnlyList<string> elsewhere)

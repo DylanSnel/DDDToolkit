@@ -255,12 +255,12 @@ internal static class DiagnosticDescriptors
 
     public static readonly DiagnosticDescriptor SupabaseMigrationsFactoryUnusable = Create(
         id: "DDD00031",
-        title: "A [SupabaseMigrations] factory must be one the build can create",
+        title: "A [SupabaseMigrations] context or factory must be one the build can make",
         messageFormat: "'{0}' is marked [SupabaseMigrations] but {1}, so its migrations are not exported",
         category: Supabase,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The build exports a marked factory's migrations by creating the factory from generated code in the project that turns the export on. That needs a public, non-abstract, non-generic class with a public parameterless constructor that implements IDesignTimeDbContextFactory<TContext>. A factory that is not one is left out, and that is an error rather than a warning: a module whose migrations silently never reached Supabase would be found by a failing deployment instead of by the build.");
+        description: "The build exports a marked context's migrations through the design-time factory beside it, and a marked factory's through that factory, which it creates from generated code in the project that turns the export on. For a marked context the build writes that factory itself, in the context's project, unless the project has one of its own: that needs a context that is neither abstract nor generic, with a constructor that takes its options alone, DbContextOptions<TContext>, and sets its required members, in a project that references Npgsql.EntityFrameworkCore.PostgreSQL. Where it cannot write one, write a factory of your own beside the context, which the build then uses. The factory, the build's or your own, is in the context's assembly, where dotnet ef looks for it, or in the exporting application itself, where dotnet ef looks first, and only one is in either: with more than one, mark the one the export makes the context with. A factory needs a public, non-abstract, non-generic class with a public parameterless constructor that implements IDesignTimeDbContextFactory<TContext>, and the project that exports has to see it and its context. A context or factory that is none of these is left out, and that is an error rather than a warning: a module whose migrations silently never reached Supabase would be found by a failing deployment instead of by the build.");
 
     public static readonly DiagnosticDescriptor NodeIdSerializerFromToolkitId = Create(
         id: "DDD00032",

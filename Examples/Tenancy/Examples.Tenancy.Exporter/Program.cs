@@ -13,7 +13,7 @@ using Examples.Tenancy.Projects.Infrastructure.Access;
 
 // There is nothing to run here. The project file turns the Supabase export on, and its build starts this program
 // with the export asked for: code the build generated into it runs before Main, writes or compares
-// Examples/Tenancy/supabase/migrations from every [SupabaseMigrations] factory this project references, and ends
+// Examples/Tenancy/supabase/migrations from every [SupabaseMigrations] context this project references, and ends
 // the process. Started any other way, it says so and stops.
 Console.WriteLine("This program only exports: build it, and the build writes Examples/Tenancy/supabase/migrations.");
 return 0;

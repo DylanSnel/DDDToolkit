@@ -2,6 +2,7 @@ using Acme.Press.Infrastructure.Converters;
 using Acme.Press.Manuscripts;
 using Acme.Press.Tenants;
 using DDDToolkit.EntityFramework.Conventions;
+using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Acme.Press.Persistence;
 
 /// <summary>The context Tenancy lives in, with its tables closed over the application's classes.</summary>
+/// <remarks>
+/// The marker is what the host's build looks for in the projects it references, for its Supabase export and its
+/// AddSupabaseMigrations(). With it, the Supabase package's generator writes the context's design-time factory beside
+/// it, on Postgres, for dotnet ef and the export; neither opens a connection.
+/// </remarks>
 /// <param name="options">The context's options.</param>
+[SupabaseMigrations]
 public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : DbContext(options)
 {
     /// <summary>The schema Tenancy's tables and functions are in.</summary>
@@ -37,6 +44,8 @@ public sealed class TenancyContext(DbContextOptions<TenancyContext> options) : D
 
 /// <summary>The manuscripts' context: a manuscript with its members, the roles of manuscripts, and Tenancy's read functions beside them.</summary>
 /// <param name="options">The context's options.</param>
+/// <remarks>Marked as Tenancy's context is, so the build writes its design-time factory too.</remarks>
+[SupabaseMigrations]
 public sealed class PressContext(DbContextOptions<PressContext> options) : DbContext(options)
 {
     /// <summary>The manuscripts.</summary>

@@ -36,7 +36,7 @@
 
   <ItemGroup>
     <!-- The module's migrations are Postgres migrations, exported for Supabase. See
-         Infrastructure/Persistence/Migrations and the design-time factory next to the context. -->
+         Infrastructure/Persistence/Migrations and the [SupabaseMigrations] marker on the context. -->
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
@@ -45,6 +45,8 @@
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- The Supabase package's: it writes the design-time factory of the context marked [SupabaseMigrations]. -->
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

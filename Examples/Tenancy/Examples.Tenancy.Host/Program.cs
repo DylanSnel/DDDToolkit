@@ -97,6 +97,13 @@ builder.Services.AddInspectionsModule(host);
 // project, so the new module's keys reach the export once that project references the module as well.
 builder.Services.AddTenancyPermissionsOfModules();
 
+// The check that the database has every migration of every module: the migrations are the Supabase CLI's to apply,
+// from the files the exporter writes, and the host applies none. Each module marks its context [SupabaseMigrations],
+// which is also what the exporter writes the files from; the Supabase package's generator finds every marked context
+// this host references and wrote this call into it, in the same namespace as the one above. A module that is added
+// is checked with no change here.
+builder.Services.AddSupabaseMigrations();
+
 // Two GraphQL schemas over the modules, one per endpoint, each a gateway that composes the source schemas listed
 // for it, in this process, and calls them in memory: the user's, with Tenancy's schema for a seat, and the
 // administration's, with Tenancy's administration schema in its place, which has another person's roles besides. A

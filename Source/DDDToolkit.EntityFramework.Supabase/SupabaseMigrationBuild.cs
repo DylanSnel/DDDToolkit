@@ -377,7 +377,7 @@ public static partial class SupabaseMigrationBuild
 
         if (sources.Count == 0)
         {
-            output.WriteLine("warning : No factory marked [SupabaseMigrations] is referenced by this project, so there is nothing to export.");
+            output.WriteLine("warning : No context or factory marked [SupabaseMigrations] is referenced by this project, so there is nothing to export.");
             return 0;
         }
 

@@ -5,6 +5,7 @@ using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.EntityFramework;
 using Examples.Webshop.Catalog.Api;
 using Examples.Webshop.Catalog;
+using Examples.Webshop.Host;
 using Examples.Hosting;
 using Examples.Webshop.Inventory.Api;
 using Examples.Webshop.Inventory;
@@ -22,7 +23,7 @@ using DDDToolkit.Startup;
 using Npgsql;
 
 // There is no export command here. The project file turns the Supabase export on, and the build writes
-// supabase/migrations from every [SupabaseMigrations] factory this host references; see the csproj.
+// supabase/migrations from every [SupabaseMigrations] context this host references; see the csproj.
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -101,15 +102,24 @@ builder.Services.AddInventoryModule(host);
 builder.Services.AddPaymentsModule(host);
 builder.Services.AddShippingModule(host);
 
+// On Supabase the migrations are the CLI's to apply, from supabase/migrations, and the host applies none: it checks
+// that the database has every one before it starts. One call for every module: each marks its context
+// [SupabaseMigrations], and the Supabase package's generator found every marked context this host references and
+// wrote the call into it, in the namespace named after the host's assembly. On SQLite each module creates its file
+// itself, and there is nothing to check.
+if (supabase is not null)
+{
+    builder.Services.AddSupabaseMigrations();
+}
+
 // One GraphQL schema over the five modules' source schemas, composed by Fusion in this process, at
 // /graphql next to the REST endpoints.
 builder.Services.AddInMemoryFusionGateway();
 
 // Before the server binds its port, every check the registrations above brought: every module's context is
-// wired through the toolkit, and on Supabase every module that registered its migrations has them all applied.
-// The migrations are Supabase's to apply, from supabase/migrations; the host applies none, and refuses to start
-// while one is missing. With row level security, the role the host logs in as may also become every caller. On
-// SQLite no module registers any migrations, and each creates its file itself, before the checks run.
+// wired through the toolkit, and on Supabase every module has all of its migrations applied: the host refuses to
+// start while one is missing. With row level security, the role the host logs in as may also become every caller.
+// On SQLite each module creates its file itself, before the checks run.
 builder.Services.RunStartupChecks();
 
 var app = builder.Build();

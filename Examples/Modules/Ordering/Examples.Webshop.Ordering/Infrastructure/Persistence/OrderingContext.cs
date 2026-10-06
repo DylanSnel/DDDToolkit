@@ -5,7 +5,6 @@ using DDDToolkit.EntityFramework.Outbox;
 using Examples.Webshop.Ordering.Converters;
 using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Examples.Webshop.Ordering.Infrastructure.Persistence;
 
@@ -19,7 +18,18 @@ namespace Examples.Webshop.Ordering.Infrastructure.Persistence;
 /// through the generated backing field, <c>Address</c> is stored inline because <c>[ValueObject]</c>
 /// generated <c>[ComplexType]</c>, <c>OrderId</c> and <c>OrderLineId</c> map through generated value
 /// converters, and <c>Order.Version</c> is a concurrency token.
+/// <para>
+/// <c>[SupabaseMigrations]</c> is what puts Ordering's migrations in <c>supabase/migrations</c>: the host turns the
+/// export on, and its build finds this context without anybody listing it. The same marker has the build write the
+/// design-time factory <c>dotnet ef migrations add</c> and the export make the context with,
+/// <c>OrderingContextDesignTimeFactory</c>, beside it: on Postgres, pointing nowhere, because neither of them opens a
+/// connection, and with the migration history in the module's schema, where the host's <c>UseDDDToolkit</c> keeps it.
+/// Without a factory the tools would build the host, which picks SQLite unless it is given a Supabase connection
+/// string. On SQL Server, <c>Examples.Webshop.Ordering.Migrations.SqlServer</c> is the startup project, and its own
+/// factory is the one <c>dotnet ef</c> takes.
+/// </para>
 /// </remarks>
+[SupabaseMigrations]
 public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
 {
     /// <summary>
@@ -75,25 +85,4 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
         // this call makes the contracts' one as well.
         configurationBuilder.AddOrderingConverters();
     }
-}
-
-/// <summary>
-/// How <c>dotnet ef migrations add</c> and the Supabase export build an <see cref="OrderingContext"/>:
-/// on Postgres, and pointing nowhere, because neither of them opens a connection. Without it the tools
-/// would build the host, and the host picks SQLite unless it is given a Supabase connection string.
-/// <para>
-/// <c>[SupabaseMigrations]</c> is what puts Ordering's migrations in <c>supabase/migrations</c>: the host
-/// turns the export on, and its build finds this factory without anybody listing it.
-/// </para>
-/// <para>
-/// <c>UseDDDToolkitDesignTime()</c> keeps the migration history in the module's schema, where the host's
-/// <c>UseDDDToolkit</c> keeps it, so what <c>dotnet ef</c> applies and the files the export writes are recorded where
-/// the host reads them.
-/// </para>
-/// </summary>
-[SupabaseMigrations]
-public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
-{
-    public OrderingContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

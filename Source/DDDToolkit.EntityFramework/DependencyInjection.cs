@@ -258,13 +258,16 @@ public static class DependencyInjection
     /// services; with this call the scripts they write record the migrations in the table the running application
     /// reads.
     /// <code>
-    /// [SupabaseMigrations]
     /// public sealed class OrderingContextFactory : IDesignTimeDbContextFactory&lt;OrderingContext&gt;
     /// {
     ///     public OrderingContext CreateDbContext(string[] args)
-    ///         => new(new DbContextOptionsBuilder&lt;OrderingContext&gt;().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+    ///         => new(new DbContextOptionsBuilder&lt;OrderingContext&gt;().UseSqlServer("Server=unused").UseDDDToolkitDesignTime().Options);
     /// }
     /// </code>
+    /// <para>
+    /// A context marked <c>[SupabaseMigrations]</c> needs no such factory written by hand: the Supabase package's
+    /// generator writes one beside it, on Npgsql and with this call.
+    /// </para>
     /// <para>
     /// Without it the factory's context keeps the history in the provider's default schema, <c>public</c> on Postgres,
     /// while the running one, wired with <see cref="UseDDDToolkit"/>, keeps it in the model's: <c>dotnet ef database

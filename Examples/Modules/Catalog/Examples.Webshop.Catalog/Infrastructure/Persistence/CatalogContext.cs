@@ -4,11 +4,15 @@ using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
 using Examples.Webshop.Catalog.Converters;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Examples.Webshop.Catalog.Infrastructure.Persistence;
 
 /// <summary>Catalog's own database: the products, and the outbox that tells everyone about them.</summary>
+/// <remarks>
+/// <c>[SupabaseMigrations]</c> puts its migrations in <c>supabase/migrations</c> and has the build write its design-time
+/// factory, <c>CatalogContextDesignTimeFactory</c>, as Ordering's context explains.
+/// </remarks>
+[SupabaseMigrations]
 public sealed class CatalogContext(DbContextOptions<CatalogContext> options) : DbContext(options)
 {
     /// <summary>The schema Catalog's tables and migration history live in.</summary>
@@ -37,16 +41,4 @@ public sealed class CatalogContext(DbContextOptions<CatalogContext> options) : D
         configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
         configurationBuilder.AddCatalogConverters();
     }
-}
-
-/// <summary>
-/// How <c>dotnet ef</c> and the Supabase export build a <see cref="CatalogContext"/>: on Postgres, with
-/// <c>UseDDDToolkitDesignTime()</c>, which keeps the migration history in the module's schema, where the host's
-/// <c>UseDDDToolkit</c> keeps it.
-/// </summary>
-[SupabaseMigrations]
-public sealed class CatalogContextFactory : IDesignTimeDbContextFactory<CatalogContext>
-{
-    public CatalogContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<CatalogContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

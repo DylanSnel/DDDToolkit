@@ -1,10 +1,8 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,7 +17,8 @@ namespace Examples.Hosting;
 /// <list type="bullet">
 /// <item><see cref="Sqlite"/>: a file per module, created from the model on start-up. No setup at all.</item>
 /// <item><see cref="Supabase"/>: Postgres, where Supabase applies the migrations from
-/// <c>supabase/migrations</c> and the application only checks that none is missing. Once the host registers
+/// <c>supabase/migrations</c> and the application only checks that none is missing, with the one call the host makes for
+/// every context marked <c>[SupabaseMigrations]</c>, <c>AddSupabaseMigrations()</c>. Once the host registers
 /// <c>services.AddSupabaseRowLevelSecurity()</c>, Supabase's policies apply to the modules' queries as well:
 /// <c>UseDDDToolkit</c> brings it to every module's context.</item>
 /// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
@@ -39,7 +38,7 @@ public abstract record ModuleDatabase
     /// <summary>A SQLite file per module in <paramref name="directory"/>, next to the binary when left out.</summary>
     public static ModuleDatabase Sqlite(string? directory = null) => new SqliteDatabase(directory ?? AppContext.BaseDirectory);
 
-    /// <summary>Postgres on Supabase: the migrations are Supabase's to apply, the application checks.</summary>
+    /// <summary>Postgres on Supabase: the migrations are Supabase's to apply, the host checks them with <c>AddSupabaseMigrations()</c>.</summary>
     public static ModuleDatabase Supabase(string connectionString) => new PostgresDatabase(connectionString, AppliesMigrations: false);
 
     /// <summary>Postgres, where the application applies the migrations itself on start-up.</summary>
@@ -101,14 +100,10 @@ public abstract record ModuleDatabase
 
     /// <summary>
     /// Registers <typeparamref name="TContext"/> on this database, and whatever has to happen before the
-    /// module's first query: creating the file, applying the migrations, or registering the check that
-    /// Supabase applied them.
+    /// module's first query: creating the file or applying the migrations. On Supabase nothing does: the migrations
+    /// are Supabase's to apply, and the host checks them for every module at once, with <c>AddSupabaseMigrations()</c>.
     /// </summary>
     /// <typeparam name="TContext">The module's context.</typeparam>
-    /// <typeparam name="TFactory">
-    /// The module's design-time factory. On Supabase it is the <c>[SupabaseMigrations]</c> one, whose
-    /// migrations the start-up check compares with the database.
-    /// </typeparam>
     /// <param name="services">The host's services.</param>
     /// <param name="schema">
     /// The module's schema, which names its SQLite file. On the other databases the model says it, and the migration
@@ -119,12 +114,11 @@ public abstract record ModuleDatabase
     /// interceptor it adds sees a save after the toolkit's interceptors, and the parts the host's registrations
     /// brought, have.
     /// </param>
-    public IServiceCollection AddContext<TContext, TFactory>(
+    public IServiceCollection AddContext<TContext>(
         IServiceCollection services,
         string schema,
         Action<IServiceProvider, DbContextOptionsBuilder>? configure = null)
         where TContext : DbContext
-        where TFactory : IDesignTimeDbContextFactory<TContext>, new()
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentException.ThrowIfNullOrWhiteSpace(schema);
@@ -148,8 +142,8 @@ public abstract record ModuleDatabase
             case SqliteDatabase:
                 services.AddHostedService<PrepareDatabase<TContext>>(provider => new(provider.GetRequiredService<IServiceScopeFactory>(), migrate: false));
                 break;
+            // Supabase: the CLI applies the migrations, and the host checks them all with AddSupabaseMigrations().
             case PostgresDatabase { AppliesMigrations: false }:
-                services.AddSupabaseMigrations<TContext, TFactory>();
                 break;
             // Postgres and SQL Server: the application applies the module's migrations.
             default:

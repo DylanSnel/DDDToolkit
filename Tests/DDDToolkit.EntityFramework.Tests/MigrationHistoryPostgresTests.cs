@@ -55,7 +55,8 @@ public sealed class MigrationHistoryPostgresTests(ExplicitCallersPostgres postgr
                 "Where those files were applied to a database already, keep the history where they record it, and name that table in the application's options: " +
                 "MigrationsHistoryTable(HistoryRepository.DefaultTableName).")
             .And.Contain("Where none of them was applied anywhere yet, give the factory the application's history instead, UseDDDToolkitDesignTime()")
-            .And.Contain("then delete the files, export them again and reset the local database");
+            .And.Contain("for a context marked [SupabaseMigrations], whose factory the build writes, write a factory of your own beside it that does: the build then writes none and uses yours.")
+            .And.Contain("Then delete the files, export them again and reset the local database");
 
         // The first advice is the one for this database, whose files are applied: the application names the table they
         // record in, and the check finds every migration.

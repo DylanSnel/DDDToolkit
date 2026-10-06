@@ -19,7 +19,7 @@ public static class CatalogModule
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        host.Database.AddContext<CatalogContext, CatalogContextFactory>(services, CatalogContext.Schema);
+        host.Database.AddContext<CatalogContext>(services, CatalogContext.Schema);
 
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<CatalogContext>(outbox =>
         {

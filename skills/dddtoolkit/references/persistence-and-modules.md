@@ -35,7 +35,13 @@ migration history in its default schema (`HasDefaultSchema`), so never write `Mi
 a design-time factory, which has no services, writes
 `new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`
 so `dotnet ef` and the Supabase export record migrations where the host reads them (DDD00071 reports a factory
-without it).
+without it). For a context whose migrations Supabase applies, write no factory: put `[SupabaseMigrations]` on the
+context, and the build writes `OrderingContextDesignTimeFactory` beside it, which `dotnet ef` and the export use;
+the host registers every marked context for the start-up check with one `services.AddSupabaseMigrations()`, which
+the build writes into it, in the namespace named after the host's assembly (`using Shop.Host;` in a top-level
+`Program.cs`). A factory of the context's project's own wins, public where another project exports; so does one of
+the host's own in the host, as `dotnet ef` with the host as its startup project takes it first. Write one for a
+context that needs more at design time than Npgsql and the toolkit (`MapEnum`, its own history table).
 
 ```csharp
 using DDDToolkit.EntityFramework.Conventions;

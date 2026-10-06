@@ -5,7 +5,6 @@ using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Shipping.Converters;
 using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Examples.Webshop.Shipping.Infrastructure.Persistence;
 
@@ -20,7 +19,12 @@ namespace Examples.Webshop.Shipping.Infrastructure.Persistence;
 /// Two calls register converters because two assemblies declare identifiers this context stores:
 /// <c>ShipmentId</c> here, and <c>OrderId</c> in Ordering's contracts.
 /// </para>
+/// <para>
+/// <c>[SupabaseMigrations]</c> puts its migrations in <c>supabase/migrations</c> and has the build write its design-time
+/// factory, <c>ShippingContextDesignTimeFactory</c>, as Ordering's context explains.
+/// </para>
 /// </remarks>
+[SupabaseMigrations]
 public sealed class ShippingContext(DbContextOptions<ShippingContext> options) : DbContext(options)
 {
     /// <summary>
@@ -46,16 +50,4 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
         configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddShippingConverters();
     }
-}
-
-/// <summary>
-/// How <c>dotnet ef migrations add</c> and the Supabase export build a <see cref="ShippingContext"/>:
-/// on Postgres, and pointing nowhere, because neither of them opens a connection. <c>UseDDDToolkitDesignTime()</c> keeps
-/// the migration history in the module's schema, where the host's <c>UseDDDToolkit</c> keeps it.
-/// </summary>
-[SupabaseMigrations]
-public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<ShippingContext>
-{
-    public ShippingContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<ShippingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

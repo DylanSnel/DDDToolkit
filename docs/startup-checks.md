@@ -39,11 +39,14 @@ builder.Services.AddSupabaseRowLevelSecurity();
 //   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-callers
 //   Database:   postgres.login-role-owns-nothing, postgres.definer-owners-bypass
 
-// in a module: its context, and its migrations
+// in a module: its context, marked [SupabaseMigrations]
 services.AddDbContext<OrderingContext>((serviceProvider, options) => options
     .UseNpgsql(connectionString)
     .UseDDDToolkit(serviceProvider));
-services.AddSupabaseMigrations<OrderingContext, OrderingContextFactory>();
+
+// in the host: every marked context, in the one call the build writes into it, in the namespace named after the
+// host's assembly (using Shop.Host; in a top-level Program.cs)
+builder.Services.AddSupabaseMigrations();
 //   Migrations: supabase.migrations-applied
 
 builder.Services.RunStartupChecks();
@@ -205,10 +208,13 @@ services.AddHostedService<PostgresStartupCheck>();
 After, the registrations it already makes bring the checks, and the host asks for them:
 
 ```csharp
+using Shop.Host; // the namespace named after the host's assembly, where the build writes AddSupabaseMigrations()
+
 builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyPostgres();
 builder.Services.AddMembershipPostgres();
-// the modules: contexts with AddSupabaseMigrations, Tenancy with AddTenancy, the membership
+// the modules: Tenancy with AddTenancy, the membership
+builder.Services.AddSupabaseMigrations();   // every context marked [SupabaseMigrations]
 
 builder.Services.RunStartupChecks();
 ```

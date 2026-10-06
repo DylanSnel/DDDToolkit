@@ -273,14 +273,25 @@ public sealed class LayerReferenceTests
     }
 
     [Fact]
-    public void The_host_names_nothing_of_an_infrastructure_project()
+    public void The_host_names_nothing_of_an_infrastructure_project_but_in_the_list_of_marked_contexts()
     {
-        // The compiler records a reference only for an assembly the code names something of, so the host's own
-        // references say what it names. Project references flow on, so the host could name a context: it does not.
-        var named = typeof(Program).Assembly.GetReferencedAssemblies().Select(name => name.Name!).ToList();
+        // The compiler records a reference only for an assembly the code names something of, so the host's references
+        // say what it names. Project references flow on, so the host could name a context: its own code does not. What
+        // does is the list the Supabase package's generator wrote into it for AddSupabaseMigrations(): every context
+        // marked [SupabaseMigrations] with the design-time factory beside it, which the start-up check makes. So the
+        // infrastructure projects the host names are the ones that hold a marked context, and only that list names
+        // anything of them.
+        var host = typeof(Program).Assembly;
+        var named = host.GetReferencedAssemblies().Select(name => name.Name!).ToList();
+        var uses = ScanOf(host).Uses.Where(use => IsOfAStorageProject(use.Type)).ToList();
 
         named.Should().Contain(Named(Layer.Api), "the host names each module's entry, or this proves nothing");
-        named.Where(SampleLayout.IsStorageProject).Should().BeEmpty("the host knows no module's storage: no context, no store, no registration but the entry's");
+        named.Where(SampleLayout.IsStorageProject).Should().BeEquivalentTo(Named(Layer.Infrastructure), "each module marks its context");
+        uses.Where(use => !IsWrittenBySupabase(use.By)).Select(use => use.ToString())
+            .Should().BeEmpty("the host knows no module's storage: no context, no store, no registration but the entry's");
+        uses.Select(use => use.Type).Distinct().Should().OnlyContain(
+            type => type.IsSubclassOf(typeof(Microsoft.EntityFrameworkCore.DbContext)) || type.Name == type.GetInterfaces().Single().GetGenericArguments()[0].Name + "DesignTimeFactory",
+            "the list names a marked context and the factory the build wrote beside it, and nothing else of a module's storage");
     }
 
     /// <summary>
@@ -296,7 +307,7 @@ public sealed class LayerReferenceTests
     [Fact]
     public void The_host_sends_and_takes_nothing_else_of_a_module()
     {
-        var uses = ScanOf(typeof(Program).Assembly).Uses.Where(use => !IsWrittenByTheMediator(use.By)).ToList();
+        var uses = ScanOf(typeof(Program).Assembly).Uses.Where(use => !IsWrittenByTheMediator(use.By) && !IsWrittenBySupabase(use.By)).ToList();
         var seeding = uses.Where(use => TypeScan.Outermost(use.By) == typeof(DemoSeeder)).ToList();
         var elsewhere = uses.Where(use => TypeScan.Outermost(use.By) != typeof(DemoSeeder)).ToList();
 
@@ -768,6 +779,13 @@ public sealed class LayerReferenceTests
     /// <summary>Whether the mediator's generator wrote <paramref name="type"/>, or the type it is nested in.</summary>
     private static bool IsWrittenByTheMediator(Type type)
         => TypeScan.Outermost(type).GetCustomAttribute<GeneratedCodeAttribute>()?.Tool == "Mediator.SourceGenerator";
+
+    /// <summary>
+    /// Whether the Supabase package's generator wrote <paramref name="type"/>, or the type it is nested in: in the host,
+    /// the list of the marked contexts and <c>AddSupabaseMigrations()</c>.
+    /// </summary>
+    private static bool IsWrittenBySupabase(Type type)
+        => TypeScan.Outermost(type).GetCustomAttribute<GeneratedCodeAttribute>()?.Tool == "DDDToolkit.EntityFramework.Supabase.Analyzers";
 
     /// <summary>
     /// How far up a layer is. A project may reach a project of its own module only further down. The API project

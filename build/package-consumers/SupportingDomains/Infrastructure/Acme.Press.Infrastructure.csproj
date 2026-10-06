@@ -9,13 +9,14 @@
     calls what each of them writes, so a package that is missing, or a generator that did not arrive, fails
     this build; the script reads which generators wrote a file.
 
-    The Supabase package is referenced here, where the contexts and their design-time factories are, as
-    docs/supabase.md says. Its export runs in the host, which gets the package's build step and generator through
-    this project. Both arrive here as well, and must do nothing here, however the export was turned on.
+    The Supabase package is referenced here, where the contexts are, marked [SupabaseMigrations], as docs/supabase.md
+    says. Its generator writes their design-time factories here, beside them; the script holds that it wrote them.
+    Its export runs in the host, which gets the package's build step and generator through this project. Both arrive
+    here as well, and must export nothing here, however the export was turned on.
   -->
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <!-- dotnet ef runs this project as its own startup project, through its design-time factories. -->
+    <!-- dotnet ef runs this project as its own startup project, through the design-time factories the build writes here. -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <!--
       DDD00054 says a package's row access SQL is not written for want of what the application marks, and only the

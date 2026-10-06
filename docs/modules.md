@@ -286,7 +286,7 @@ public static class OrderingModule
 // Ordering.Infrastructure: the context, the adapters of the ports, and what the generators wrote here
 public static IServiceCollection AddOrderingInfrastructure(this IServiceCollection services, ModuleHost host)
 {
-    host.Database.AddContext<OrderingContext, OrderingContextFactory>(services, OrderingContext.Schema);
+    host.Database.AddContext<OrderingContext>(services, OrderingContext.Schema);
     services.AddScoped<IOrderStore, EfOrderStore>();
     services.AddDDDToolkitEntityFramework(options => options.UseOutbox<OrderingContext>(outbox =>
     {
@@ -609,8 +609,9 @@ Projects/
     StoredProjects/               IProjectStore.cs, IProjectReads.cs, IProjectReading.cs: the ports several features share
   Examples.Tenancy.Projects.Infrastructure/
     GlobalUsings.cs, ProjectsInfrastructure.cs
-    Persistence/                  ProjectsContext.cs, EfProjectStore.cs, EfProjectReads.cs; Migrations/, and
-                                  ProjectsContextFactory.cs, which dotnet ef and the export build the context with
+    Persistence/                  ProjectsContext.cs, marked [SupabaseMigrations], beside which the build
+                                  writes the factory dotnet ef and the export build it with;
+                                  EfProjectStore.cs, EfProjectReads.cs; Migrations/
     Access/                       the row rules, a class per file, column rules among them;
                                   UnitChangesWithItsKeys.cs, a rule Postgres holds beyond the
                                   policies, as a trigger of the module's own

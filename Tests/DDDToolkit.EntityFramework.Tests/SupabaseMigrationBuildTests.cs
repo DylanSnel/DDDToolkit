@@ -78,12 +78,12 @@ public sealed class SupabaseMigrationBuildTests : IDisposable
     }
 
     [Fact]
-    public void A_project_that_references_no_marked_factory_is_warned_but_not_failed()
+    public void A_project_that_references_no_marked_context_or_factory_is_warned_but_not_failed()
     {
         var (exitCode, output) = Run("Write");
 
         exitCode.Should().Be(0);
-        output.Should().StartWith("warning : No factory marked [SupabaseMigrations]");
+        output.Should().StartWith("warning : No context or factory marked [SupabaseMigrations]");
     }
 
     [Theory]

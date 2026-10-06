@@ -287,7 +287,7 @@ public sealed class LoginRoleFileTests(SampleSupabaseStack stack)
             {
                 using var output = new StringWriter();
                 SupabaseMigrationBuild.Run(
-                    "Write", [SupabaseMigrationSource.For<InspectionsContext, InspectionsContextFactory>()], [], [], [], directory, start: null,
+                    "Write", [SupabaseMigrationSource.For<InspectionsContext, InspectionsContextDesignTimeFactory>()], [], [], [], directory, start: null,
                     mapped, callerFunctions: null, grants: null, force: null, loginRole: login, output)
                     .Should().Be(0, output.ToString());
             }

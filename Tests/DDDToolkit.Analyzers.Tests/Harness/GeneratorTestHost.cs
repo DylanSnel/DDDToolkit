@@ -25,6 +25,7 @@ using FvValueObjectGenerator = DDDToolkit.FluentValidation.Analyzers.ValueObject
 using HcSingleValueObjectConverterGenerator = DDDToolkit.HotChocolate.Analyzers.SingleValueObjectConverterGenerator;
 using MemberListGenerator = DDDToolkit.Supporting.Membership.Analyzers.MemberListGenerator;
 using MembershipWithTenancyGenerator = DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.MembershipWithTenancyGenerator;
+using SupabaseDesignTimeFactoryGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseDesignTimeFactoryGenerator;
 using SupabaseMigrationsGenerator = DDDToolkit.EntityFramework.Supabase.Analyzers.SupabaseMigrationsGenerator;
 using TenancyPermissionsGenerator = DDDToolkit.Supporting.Tenancy.Analyzers.TenancyPermissionsGenerator;
 
@@ -136,8 +137,8 @@ public sealed class GeneratorTestHost
     /// <summary>The generator in DDDToolkit.HotChocolate.Analyzers.</summary>
     public static IIncrementalGenerator[] HotChocolateGenerators() => [new HcSingleValueObjectConverterGenerator()];
 
-    /// <summary>The generator in DDDToolkit.EntityFramework.Supabase.Analyzers.</summary>
-    public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator()];
+    /// <summary>The generators in DDDToolkit.EntityFramework.Supabase.Analyzers: the list and the export, and the design-time factories.</summary>
+    public static IIncrementalGenerator[] SupabaseGenerators() => [new SupabaseMigrationsGenerator(), new SupabaseDesignTimeFactoryGenerator()];
 
     /// <summary>The generator in DDDToolkit.Supporting.Membership.Analyzers, which a project that declares a member class runs.</summary>
     public static IIncrementalGenerator[] MemberListGenerators() => [new MemberListGenerator()];
@@ -274,6 +275,16 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithSupabase()
     {
         _extraReferences.AddRange(ReferenceSets.Supabase);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds Npgsql's Entity Framework provider, which the design-time factory the build writes for a
+    /// <c>[SupabaseMigrations]</c> context builds the context on.
+    /// </summary>
+    public GeneratorTestHost WithNpgsql()
+    {
+        _extraReferences.AddRange(ReferenceSets.Npgsql);
         return this;
     }
 

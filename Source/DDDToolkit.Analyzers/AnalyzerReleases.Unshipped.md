@@ -29,7 +29,7 @@ DDD00027 | DDDToolkit.Invariants | Error | An invariant needs an accessible para
 DDD00028 | DDDToolkit.Entities | Error | A key part belongs on an entity or aggregate root
 DDD00029 | DDDToolkit.Entities | Warning | A key part should not have a public setter
 DDD00030 | DDDToolkit.Entities | Error | Declare all key parts of a type in one file
-DDD00031 | DDDToolkit.Supabase | Error | A [SupabaseMigrations] factory must be one the build can create
+DDD00031 | DDDToolkit.Supabase | Error | A [SupabaseMigrations] context or factory must be one the build can make
 DDD00032 | DDDToolkit.GraphQL | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer
 DDD00033 | DDDToolkit.IntegrationEvents | Warning | The generated integration event registration must be able to construct the class
 DDD00034 | DDDToolkit.Events | Warning | An event's class name and its Version disagree

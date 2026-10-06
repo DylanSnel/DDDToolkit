@@ -1,8 +1,6 @@
 using System.Data.Common;
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -17,7 +15,7 @@ namespace Examples.Hosting;
 /// the first module that registers a context on it makes it the container's, which closes it when the host stops.
 /// </summary>
 /// <remarks>
-/// A module registers its context on it with <see cref="AddContext{TContext, TFactory}"/>, which gives that
+/// A module registers its context on it with <see cref="AddContext{TContext}"/>, which gives that
 /// context a pool per data source and picks between them at each rental. No module makes a data source of its
 /// own, so the two maxima here are the whole of what the host holds.
 /// </remarks>
@@ -83,26 +81,22 @@ public sealed class PostgresPools : IAsyncDisposable
     /// size bounds how many idle contexts are kept, not how many connections are open: that is the data source's.
     /// </para>
     /// <para>
-    /// The migrations are applied by whoever owns the database, from the files the export writes, so the context
-    /// is also registered, with its design-time factory, for the check that none is missing
-    /// (<c>EnsureSupabaseMigrationsAppliedAsync</c>). That check asks the running context, whose migrations are
-    /// the ones the factory's context finds: both read the context's assembly.
+    /// The migrations are applied by whoever owns the database, from the files the export writes, and the host checks
+    /// that none is missing with the one call it makes for every context marked <c>[SupabaseMigrations]</c>,
+    /// <c>AddSupabaseMigrations()</c>, which the Supabase package writes into it. That check asks the running context,
+    /// whose migrations are the ones the design-time factory the build writes beside the context finds: both read the
+    /// context's assembly. Nothing here registers it, so a module says nothing of Supabase when it registers its context.
     /// </para>
     /// </remarks>
     /// <typeparam name="TContext">The module's context.</typeparam>
-    /// <typeparam name="TFactory">
-    /// The module's design-time factory, the <c>[SupabaseMigrations]</c> one beside its context: what
-    /// <c>dotnet ef</c> and the export build the context with.
-    /// </typeparam>
     /// <param name="services">The host's services.</param>
     /// <param name="wire">
     /// What the context is wired with after its provider: <c>UseDDDToolkit</c>, which brings what the host's
     /// registrations bring, row level security and Tenancy's save check among them, and whatever else the module's
     /// contexts need.
     /// </param>
-    public IServiceCollection AddContext<TContext, TFactory>(IServiceCollection services, Action<IServiceProvider, DbContextOptionsBuilder> wire)
+    public IServiceCollection AddContext<TContext>(IServiceCollection services, Action<IServiceProvider, DbContextOptionsBuilder> wire)
         where TContext : DbContext
-        where TFactory : IDesignTimeDbContextFactory<TContext>, new()
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(wire);
@@ -137,11 +131,7 @@ public sealed class PostgresPools : IAsyncDisposable
         services.AddSingleton(application => application.GetRequiredService<ContextsByPurpose<TContext>>().RequestOptions);
         services.AddSingleton<DbContextOptions>(application => application.GetRequiredService<DbContextOptions<TContext>>());
 
-        services.AddScopedFromPool<TContext>();
-
-        // The start-up check asks the running context which migrations it misses. The export never asks this
-        // registration: it builds its own context, through the same factory.
-        return services.AddSupabaseMigrations<TContext, TFactory>();
+        return services.AddScopedFromPool<TContext>();
     }
 
     /// <inheritdoc />

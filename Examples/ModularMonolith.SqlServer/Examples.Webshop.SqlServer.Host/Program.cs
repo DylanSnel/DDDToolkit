@@ -15,11 +15,11 @@ using DDDToolkit.HotChocolate.Subscriptions;
 using DDDToolkit.Mediator;
 
 // The same five modules as the Supabase host, the same endpoints and the same messages, on SQL Server.
-// Compare the two Program.cs files: the only line that differs in substance is the database.
+// Compare the two Program.cs files: what differs in substance is the database, and what follows from it.
 //
-// And one thing follows from it. On Supabase the migrations are Supabase's to apply and the application
-// only checks; here nobody else is going to apply them, so each module migrates its own schema on
-// start-up, before its outbox poller starts. Run it through the AppHost next door, which starts SQL
+// On Supabase the migrations are Supabase's to apply, and the application only checks them, with its one
+// AddSupabaseMigrations(); here nobody else is going to apply them, so each module migrates its own schema
+// on start-up, before its outbox poller starts. Run it through the AppHost next door, which starts SQL
 // Server in Docker and hands this host its connection string.
 
 var builder = WebApplication.CreateBuilder(args);

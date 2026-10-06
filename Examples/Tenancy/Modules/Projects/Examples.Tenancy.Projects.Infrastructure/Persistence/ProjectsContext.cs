@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Examples.Tenancy.Projects.Infrastructure.Converters;
@@ -36,7 +37,17 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// </list>
 /// Table names carry the module's name where Tenancy's could be meant: a crew member's table says whose it is
 /// without its schema.
+/// <para>
+/// <c>[SupabaseMigrations]</c> makes the migrations beside it Supabase's, and the build writes the design-time factory
+/// <c>dotnet ef</c> and the export make the context with, <c>ProjectsContextDesignTimeFactory</c>, as it does for the
+/// Tenants module's context. This project is its own startup project:
+/// <code>
+/// dotnet ef migrations add Name --project Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure --startup-project Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure --output-dir Persistence/Migrations --context ProjectsContext
+/// dotnet build Examples/Tenancy/Examples.Tenancy.Exporter
+/// </code>
+/// </para>
 /// </remarks>
+[SupabaseMigrations]
 public sealed class ProjectsContext(DbContextOptions<ProjectsContext> options) : DbContext(options)
 {
     /// <summary>The schema Projects' tables live in, with the module's migration history.</summary>

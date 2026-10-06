@@ -30,6 +30,8 @@
     -->
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Npgsql" />
+    <!-- What dotnet ef runs to find a context and its design-time factory, for the test that the build's factory is the one it takes. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" />
   </ItemGroup>
 
   <!--

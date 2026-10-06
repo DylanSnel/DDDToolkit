@@ -22,8 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!--
+      Not the Supabase package: a module registers its context here and says nothing of Supabase. The host checks the
+      migrations of every context marked [SupabaseMigrations] with the one AddSupabaseMigrations() written into it.
+    -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
-    <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
   </ItemGroup>
 
 </Project>

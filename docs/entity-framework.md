@@ -664,7 +664,9 @@ dotnet ef database update
 The one line to write is in the context's design-time factory, the one `dotnet ef` makes the context with: it
 calls `UseDDDToolkitDesignTime()` after its provider, so `dotnet ef` records the migrations in the history the
 running application reads. The build reports a factory without it
-([DDD00071](diagnostics.md#ddd00071)); [The migration history](#the-migration-history) says why.
+([DDD00071](diagnostics.md#ddd00071)); [The migration history](#the-migration-history) says why. A context whose
+migrations Supabase applies needs no factory written by hand at all: [The design-time factory](#the-design-time-factory)
+below.
 
 The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
 the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
@@ -741,7 +743,8 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
     }
 }
 
-// dotnet ef and the Supabase export make the context with this, without the application's services
+// dotnet ef makes the context with this, without the application's services; for a context marked
+// [SupabaseMigrations] the build writes the same factory itself (see The design-time factory, below)
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
@@ -765,7 +768,8 @@ things.
 Keep the table where it is by naming it, in the application's options and the design-time factory's alike. This
 is the way for a context whose migrations are exported to Supabase: every file exported so far records its
 migration in that table, and a factory that placed the history elsewhere would make the export report each of
-those files as changed.
+those files as changed. Such a context keeps a factory of its own, which names the table: the one the build writes
+for a `[SupabaseMigrations]` context names none.
 
 ```csharp
 options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName));
@@ -781,6 +785,55 @@ ALTER TABLE public."__EFMigrationsHistory" SET SCHEMA ordering;
 -- SQL Server
 ALTER SCHEMA ordering TRANSFER dbo.__EFMigrationsHistory;
 ```
+
+### The design-time factory
+
+`dotnet ef` makes a context without the application, through an `IDesignTimeDbContextFactory<TContext>`: it looks
+for one in the startup project first, and then in the context's own assembly.
+
+```mermaid
+flowchart LR
+    Ef["dotnet ef"] --> Startup{"a factory in the<br/>startup project?"}
+    Startup -- "yes" --> That["that one"]
+    Startup -- "no" --> Own{"one of yours beside<br/>the context?"}
+    Own -- "yes" --> Yours["yours"]
+    Own -- "no, and the context is<br/>[SupabaseMigrations]" --> Build["the one the build<br/>wrote beside it"]
+```
+
+For a context on any database, write one, with `UseDDDToolkitDesignTime()` after its provider, as above. For a
+context whose migrations Supabase applies, write none. The [Supabase export](supabase.md#exporting-as-part-of-the-build)
+always builds the context on Npgsql, pointing nowhere, so its factory is always the same, and the marker the export
+needs, `[SupabaseMigrations]` on the context, is all the build needs to write it: `OrderingContextDesignTimeFactory`,
+beside the context, in a file of that name. `dotnet ef` finds it as it finds one written by hand, with the module or
+the host as the startup project, and a startup project with a factory of its own, SQL Server migrations of their own
+say, keeps that one. A factory of the context's project's own wins over the build's: the build writes none. Write
+one where the context needs more at design time than Npgsql and the toolkit's call, provider options such as
+`MapEnum` or a history table of its own, since the build's has neither. The export and the start-up check make the
+context as `dotnet ef` does with the host as its startup project, so a factory of the host's own for a module's
+context is the one they use there too. DDD00071 holds a factory written by hand to `UseDDDToolkitDesignTime()`; the
+one the build writes calls it wherever the project references `DDDToolkit.EntityFramework`.
+
+<details>
+<summary>Show the code: a context marked for Supabase, and the factory the build writes beside it</summary>
+
+```csharp
+[SupabaseMigrations]
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+        => modelBuilder.HasDefaultSchema("ordering");
+}
+```
+
+```csharp title="OrderingContextDesignTimeFactory.g.cs, shortened"
+public sealed class OrderingContextDesignTimeFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+        => new OrderingContext(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+}
+```
+
+</details>
 
 ## What is generated and what is a convention
 

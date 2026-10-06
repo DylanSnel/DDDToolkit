@@ -51,6 +51,24 @@ public sealed class StartupCheckRegistrationTests : IDisposable
     }
 
     [Fact]
+    public async Task The_migrations_check_names_a_registered_context_the_application_does_not_register_before_it_connects()
+    {
+        // The generated AddSupabaseMigrations() lists every marked context of the projects a host references, which a
+        // host that shares a module's project without using its context does not register. The check says so in its
+        // own words, and how to register only what the host uses, rather than in the container's.
+        await using var host = new ServiceCollection()
+            .AddSupabaseMigrations(SupabaseMigrationSource.For(() => SupabaseShelfContext.Create()))
+            .BuildServiceProvider();
+
+        var check = () => host.EnsureSupabaseMigrationsAppliedAsync(Cancellation);
+
+        (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should()
+            .StartWith("The check that Supabase applied every migration asks each registered context for its history, and the application's services do not register '"
+                       + typeof(SupabaseShelfContext).FullName + "'.")
+            .And.Contain("with AddSupabaseMigrations<TContext, TFactory>() in place of AddSupabaseMigrations()");
+    }
+
+    [Fact]
     public void A_pgmq_sink_or_consumer_brings_its_check_on_by_default_as_it_was()
     {
         var services = new ServiceCollection();

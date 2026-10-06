@@ -22,7 +22,7 @@ public static class ShippingModule
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        host.Database.AddContext<ShippingContext, ShippingContextFactory>(services, ShippingContext.Schema);
+        host.Database.AddContext<ShippingContext>(services, ShippingContext.Schema);
 
         // The payload shapes Shipping reads, as the compiler found them on its handlers. The inbox needs
         // them to turn a delivered message into the record BookShipment asked for; an upcaster from an

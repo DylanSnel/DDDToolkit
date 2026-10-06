@@ -65,9 +65,9 @@ public sealed class StoredNameTests
         // the ones the design-time factories build, which connect to nothing.
         DbContext[] contexts =
         [
-            new TenantsContextFactory().CreateDbContext([]),
-            new ProjectsContextFactory().CreateDbContext([]),
-            new InspectionsContextFactory().CreateDbContext([]),
+            new TenantsContextDesignTimeFactory().CreateDbContext([]),
+            new ProjectsContextDesignTimeFactory().CreateDbContext([]),
+            new InspectionsContextDesignTimeFactory().CreateDbContext([]),
         ];
 
         foreach (var context in contexts)

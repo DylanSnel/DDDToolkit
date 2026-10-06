@@ -19,7 +19,7 @@ public static class PaymentsModule
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        host.Database.AddContext<PaymentsContext, PaymentsContextFactory>(services, PaymentsContext.Schema);
+        host.Database.AddContext<PaymentsContext>(services, PaymentsContext.Schema);
 
         // A singleton, because the fake remembers what it answered per idempotency key, as a real
         // provider does on its side.

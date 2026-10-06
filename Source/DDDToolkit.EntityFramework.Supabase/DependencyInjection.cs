@@ -8,15 +8,24 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.EntityFramework.Supabase;
 
 /// <summary>
-/// The application side: modules register the contexts Supabase migrates, and the host checks at start-up
-/// that Supabase has applied all of them.
+/// The application side: the host registers the contexts Supabase migrates, and checks at start-up that Supabase has
+/// applied all of them.
 /// <code>
-/// // in each module
-/// services.AddSupabaseMigrations&lt;OrderingContext, OrderingContextFactory&gt;();
+/// // in the host: every context marked [SupabaseMigrations] it references, in one call the build writes into it, in
+/// // the namespace named after the host's assembly, which a top-level Program.cs imports
+/// using Shop.Host;
 ///
-/// // in the host: the check runs with every other start-up check, before the server binds its port
+/// builder.Services.AddSupabaseMigrations();
+///
+/// // the check runs with every other start-up check, before the server binds its port
 /// builder.Services.RunStartupChecks();
 /// </code>
+/// <c>AddSupabaseMigrations()</c> is not declared here: the package's generator writes it into every application that
+/// is not a test project, with the list of the marked contexts the application references, each with its design-time
+/// factory. It calls <see cref="AddSupabaseMigrations(IServiceCollection, SupabaseMigrationSource)"/> for each, which a
+/// host that registers some contexts and not others calls itself, or <see cref="AddSupabaseMigrations{TContext, TFactory}"/>
+/// with the factory the build wrote beside the context:
+/// <c>services.AddSupabaseMigrations&lt;OrderingContext, OrderingContextDesignTimeFactory&gt;()</c>.
 /// A host that runs its checks by hand calls <see cref="EnsureSupabaseMigrationsAppliedAsync"/> after <c>Build()</c>
 /// instead, as before.
 /// And, for applications that want Supabase's row level security to apply to their own queries, the
@@ -92,6 +101,7 @@ public static partial class DependencyInjection
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">A registered context is not one <paramref name="services"/> resolve.</exception>
     /// <exception cref="SupabaseMigrationsPendingException">A registered context has migrations the database does not.</exception>
     public static async Task EnsureSupabaseMigrationsAppliedAsync(this IServiceProvider services, CancellationToken cancellationToken = default)
     {
@@ -101,10 +111,19 @@ public static partial class DependencyInjection
         using var system = Callers.Begin(Caller.System);
         var pending = new List<(string Context, IReadOnlyList<string> Migrations)>();
         var elsewhere = new List<string>();
+        var sources = services.GetSupabaseMigrationSources();
 
-        foreach (var source in services.GetSupabaseMigrationSources())
+        // A context the check cannot ask is a registration that does not match the container, which is said in the
+        // toolkit's words before any connection is opened, rather than in the container's.
+        var unregistered = sources.Where(source => source.Resolve(scope.ServiceProvider) is null).Select(static source => source.ContextType).ToList();
+        if (unregistered.Count > 0)
         {
-            var context = source.Resolve(scope.ServiceProvider);
+            throw new InvalidOperationException(Unregistered(unregistered));
+        }
+
+        foreach (var source in sources)
+        {
+            var context = source.Resolve(scope.ServiceProvider)!;
             var missing = (await context.Database.GetPendingMigrationsAsync(cancellationToken).ConfigureAwait(false)).ToList();
 
             if (missing.Count > 0)
@@ -121,5 +140,19 @@ public static partial class DependencyInjection
         {
             throw new SupabaseMigrationsPendingException(pending, elsewhere);
         }
+    }
+
+    /// <summary>
+    /// What the check says of contexts registered as Supabase's that the application's services cannot resolve: most
+    /// likely a context <c>AddSupabaseMigrations()</c> found in a project the host references and does not use, since
+    /// the generated list follows the references, not the registrations.
+    /// </summary>
+    private static string Unregistered(IReadOnlyList<Type> contexts)
+    {
+        var named = string.Join(", ", contexts.Select(static context => "'" + context.FullName + "'"));
+        return $"The check that Supabase applied every migration asks each registered context for its history, and the application's services do not register {named}. "
+               + "AddSupabaseMigrations() registers every context marked [SupabaseMigrations] in the projects the application references, whether the application uses it or not. "
+               + "Register the context where the application uses it, or register only the contexts it uses, one by one, with AddSupabaseMigrations<TContext, TFactory>() "
+               + "in place of AddSupabaseMigrations().";
     }
 }

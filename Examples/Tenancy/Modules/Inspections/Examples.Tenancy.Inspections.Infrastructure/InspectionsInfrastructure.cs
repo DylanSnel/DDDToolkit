@@ -36,15 +36,15 @@ public static class InspectionsInfrastructure
 
         // The context, from a pool: the reads, which each take a context of their own, and the request's own
         // context both draw on it. The provider is the pools' to set, on the host's connections for requests or for
-        // the background. The factory is the one dotnet ef and the export build the context with: its migrations are
-        // what the host is checked against.
+        // the background. The migrations beside it are what the host checks the database against, with the check its
+        // AddSupabaseMigrations() registers for every context marked [SupabaseMigrations].
         //
         // One call wires it, each lock in its place: the toolkit's interceptors, then what the host's registrations
         // bring. Row level security, which the host registered, puts the caller's role and claims on every
         // connection, so the exported policies see who asks. Tenancy's save check, which AddTenancy brought, comes
         // after the toolkit's interceptors, so it sees what they let through, and refuses an inspection of another
         // tenant before anything is written.
-        host.RequirePostgres().AddContext<InspectionsContext, InspectionsContextFactory>(services, (application, options) => options
+        host.RequirePostgres().AddContext<InspectionsContext>(services, (application, options) => options
             .UseDDDToolkit(application));
 
         // The application's two ports. What a command records goes through the request's context, its unit of

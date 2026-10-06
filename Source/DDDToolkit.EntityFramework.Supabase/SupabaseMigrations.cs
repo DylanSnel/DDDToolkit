@@ -21,7 +21,7 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// SupabaseMigrations.EnsureInSync(context, "supabase/migrations");
 /// </code>
 /// <para>
-/// Usually the build calls this for you: mark the design-time factory <see cref="SupabaseMigrationsAttribute"/>
+/// Usually the build calls this for you: mark the context <see cref="SupabaseMigrationsAttribute"/>
 /// and set <c>SupabaseMigrationsExport</c> in the project that references the modules. Call it yourself
 /// from a test or a tool of your own.
 /// </para>
@@ -329,8 +329,8 @@ public static partial class SupabaseMigrations
     /// [Fact]
     /// public void Supabase_has_every_migration()
     ///     => SupabaseMigrations.EnsureInSync([
-    ///         SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextFactory&gt;(),
-    ///         SupabaseMigrationSource.For&lt;ShippingContext, ShippingContextFactory&gt;()]);
+    ///         SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextDesignTimeFactory&gt;(),
+    ///         SupabaseMigrationSource.For&lt;ShippingContext, ShippingContextDesignTimeFactory&gt;()]);
     /// </code>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>

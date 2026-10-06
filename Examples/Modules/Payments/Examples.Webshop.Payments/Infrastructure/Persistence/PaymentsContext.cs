@@ -6,11 +6,15 @@ using DDDToolkit.EntityFramework.Supabase;
 using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Payments.Converters;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Examples.Webshop.Payments.Infrastructure.Persistence;
 
 /// <summary>Payments' own database: the payments, an outbox and an inbox.</summary>
+/// <remarks>
+/// <c>[SupabaseMigrations]</c> puts its migrations in <c>supabase/migrations</c> and has the build write its design-time
+/// factory, <c>PaymentsContextDesignTimeFactory</c>, as Ordering's context explains.
+/// </remarks>
+[SupabaseMigrations]
 public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) : DbContext(options)
 {
     public const string Schema = "payments";
@@ -38,11 +42,4 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
         configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddPaymentsConverters();
     }
-}
-
-[SupabaseMigrations]
-public sealed class PaymentsContextFactory : IDesignTimeDbContextFactory<PaymentsContext>
-{
-    public PaymentsContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<PaymentsContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

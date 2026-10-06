@@ -173,10 +173,15 @@ column order is undefined. Declare them all in one part of the class, in the ord
 
 ## DDD00031
 
-Error, in the project that turns the Supabase export on. A `[SupabaseMigrations]` factory the build
-cannot create. Make it a `public`, non-abstract, non-generic class with a public parameterless
-constructor implementing `IDesignTimeDbContextFactory<TContext>`, for a context the exporting project
-can see. The message names what is missing.
+Error. In the project of a context marked `[SupabaseMigrations]`: the build cannot write its design-time
+factory, because the context is abstract or generic, has no constructor that takes its options alone (or none that
+sets its `required` members), or its project does not reference `Npgsql.EntityFrameworkCore.PostgreSQL`; fix that,
+or write a factory of your own beside the context, which the build then uses. In the project that turns the
+Supabase export on: a marked context whose assembly has no factory or more than one, or for which that project
+declares more than one itself (mark the one the export uses), or that the project cannot see, or a factory, marked
+or a module's own, the build cannot create; make that a `public`, non-abstract, non-generic class with a
+public parameterless constructor implementing `IDesignTimeDbContextFactory<TContext>`, for a context the exporting
+project can see. The message names what is missing.
 
 ## DDD00032
 
@@ -396,7 +401,7 @@ not write a class that derives from the package's, and do not list anything with
 
 ## DDD00055
 
-Warning, in the project that turns the Supabase export on. A `[SupabaseMigrations]` factory whose
+Warning, in the project that turns the Supabase export on. A `[SupabaseMigrations]` context, or factory, whose
 assembly and whose context's assembly both declare no module, so its migration files are named after the
 context's class and the export would recognize none of them after a rename of the class. Set
 `<DDD_Module>Name</DDD_Module>` in the project that holds the context, or add `[assembly: Module("Name")]`; where

@@ -6,11 +6,15 @@ using DDDToolkit.EntityFramework.Supabase;
 using Examples.Webshop.Inventory.Converters;
 using Examples.Webshop.Ordering.Contracts.Converters;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
 
 namespace Examples.Webshop.Inventory.Infrastructure.Persistence;
 
 /// <summary>Inventory's own database: the stock, the reservations, an outbox and an inbox.</summary>
+/// <remarks>
+/// <c>[SupabaseMigrations]</c> puts its migrations in <c>supabase/migrations</c> and has the build write its design-time
+/// factory, <c>InventoryContextDesignTimeFactory</c>, as Ordering's context explains.
+/// </remarks>
+[SupabaseMigrations]
 public sealed class InventoryContext(DbContextOptions<InventoryContext> options) : DbContext(options)
 {
     public const string Schema = "inventory";
@@ -39,11 +43,4 @@ public sealed class InventoryContext(DbContextOptions<InventoryContext> options)
         configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddInventoryConverters();
     }
-}
-
-[SupabaseMigrations]
-public sealed class InventoryContextFactory : IDesignTimeDbContextFactory<InventoryContext>
-{
-    public InventoryContext CreateDbContext(string[] args)
-        => new(new DbContextOptionsBuilder<InventoryContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

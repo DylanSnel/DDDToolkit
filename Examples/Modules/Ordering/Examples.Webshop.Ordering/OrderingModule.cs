@@ -26,10 +26,10 @@ public static class OrderingModule
         ArgumentNullException.ThrowIfNull(host);
 
         // The context, and whatever has to happen before its first query: a SQLite file created from the
-        // model, migrations applied on start-up, or the check that Supabase applied them. The Supabase
-        // export does not need this line: the build finds OrderingContextFactory by its
-        // [SupabaseMigrations] marker.
-        host.Database.AddContext<OrderingContext, OrderingContextFactory>(services, OrderingContext.Schema);
+        // model, or migrations applied on start-up. On Supabase nothing has to: the export finds the context
+        // by its [SupabaseMigrations] marker, and the host checks the migrations of every marked context with
+        // one AddSupabaseMigrations().
+        host.Database.AddContext<OrderingContext>(services, OrderingContext.Schema);
 
         // Who is asking, for the customer an order is placed in the name of. A host that knows its callers,
         // the Supabase monolith with signed-in customers, registers its own before this; everywhere else

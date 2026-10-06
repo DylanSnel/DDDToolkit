@@ -192,6 +192,13 @@ public static class ReferenceSets
         FromType(typeof(global::DDDToolkit.EntityFramework.Postgres.RowAccessRule)),
     ];
 
+    /// <summary>Npgsql and its Entity Framework provider: <c>UseNpgsql</c>, which a design-time factory builds a context on.</summary>
+    public static ImmutableArray<PortableExecutableReference> Npgsql =>
+    [
+        FromType(typeof(Microsoft.EntityFrameworkCore.NpgsqlDbContextOptionsBuilderExtensions)),
+        FromType(typeof(global::Npgsql.NpgsqlConnection)),
+    ];
+
     /// <summary>
     /// Resolves the assembly declaring <paramref name="type"/>. Preferred over a file name whenever a type
     /// is reachable at compile time: the compiler checks it, and it is immune to the assembly being

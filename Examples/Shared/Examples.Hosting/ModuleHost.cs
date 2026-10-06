@@ -23,7 +23,7 @@ public sealed record ModuleHost(ModuleDatabase Database, Action<OutboxOptions> P
     /// <summary>
     /// The host's connections to Postgres, per purpose, for a host that runs on it as a role that owns nothing;
     /// <see langword="null"/> on every other database. A module that finds them registers its context on them
-    /// (<see cref="PostgresPools.AddContext{TContext, TFactory}"/>) and leaves <see cref="Database"/> alone.
+    /// (<see cref="PostgresPools.AddContext{TContext}"/>) and leaves <see cref="Database"/> alone.
     /// </summary>
     public PostgresPools? Postgres { get; init; }
 

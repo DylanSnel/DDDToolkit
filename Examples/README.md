@@ -76,7 +76,7 @@ Examples.Webshop.Ordering/
     ReadModels/
       CatalogPrices/         a copy of another module's data, and the inbound policies that keep it current
   Infrastructure/
-    Persistence/             the DbContext, the design-time factory, Migrations/
+    Persistence/             the DbContext, marked [SupabaseMigrations], Migrations/
   Api/                       the module's HTTP endpoints
     GraphQL/                 its GraphQL types, queries, mutations and lookups
   Module.cs                  [assembly: Module("Ordering")]
@@ -229,10 +229,11 @@ dotnet build Examples.Webshop.Host   # writes 2026…_AddGiftWrap.ordering.ddd.s
 supabase migration up                   # or: supabase db reset, to start over
 ```
 
-There is no export step to remember. Each module's design-time factory is marked `[SupabaseMigrations]`,
-and the host's project file sets `SupabaseMigrationsExport`: `Write` locally, so every build writes the
-files a new migration needs, and `Check` in CI, so a pull request that adds a migration without its file
-fails. The files are committed, because Supabase branching reads them from the repository. See
+There is no export step to remember. Each module's context is marked `[SupabaseMigrations]`, which also has
+the build write the design-time factory `dotnet ef` uses beside it, and the host's project file sets
+`SupabaseMigrationsExport`: `Write` locally, so every build writes the files a new migration needs, and
+`Check` in CI, so a pull request that adds a migration without its file fails. On Supabase the host checks
+every module's migrations with one `AddSupabaseMigrations()` in its `Program.cs`. The files are committed, because Supabase branching reads them from the repository. See
 [Entity Framework → Supabase](../docs/supabase.md) for what the build writes and how.
 
 #### Signed-in customers and row level security
@@ -306,12 +307,13 @@ dotnet run --project Examples/ModularMonolith.SqlServer/Examples.Webshop.SqlServ
 ```
 
 The same five modules, the same endpoints and the same `.http` walk-through (on port 5090 when the
-host runs outside Aspire), on SQL Server in Docker. Compare the two hosts' `Program.cs`: the one line
-that differs in substance is `ModuleDatabase.SqlServer(...)` for `ModuleDatabase.Supabase(...)`.
+host runs outside Aspire), on SQL Server in Docker. Compare the two hosts' `Program.cs`: what differs in
+substance is the database, `ModuleDatabase.SqlServer(...)` for `ModuleDatabase.Supabase(...)`, and the one call
+that follows from it on Supabase, `AddSupabaseMigrations()`.
 
-One thing follows from that line. On Supabase somebody else applies the migrations and the application
-only checks; on SQL Server nobody else will, so each module migrates its own schema on start-up, before
-its outbox poller starts. Each module's SQL Server migrations live in a project next to it,
+On Supabase somebody else applies the migrations and the application only checks them, with that one call; on
+SQL Server nobody else will, so each module migrates its own schema on start-up, before its outbox poller
+starts. Each module's SQL Server migrations live in a project next to it,
 `Examples.Webshop.{Module}.Migrations.SqlServer`, apart from its Postgres ones: Entity Framework keeps
 one model snapshot per context per assembly, and the two providers disagree on every column type. A host
 on SQL Server references the migrations of the modules it runs, and `ModuleDatabase.SqlServer` finds them
@@ -530,7 +532,7 @@ Paths are under `Modules/`.
 | Rules and invalid values as GraphQL errors with their codes | `AddDDDToolkitErrors()` in each module's `Add{Module}SourceSchema`, `Ordering/.../Api/GraphQL/OrderingOperations.cs` |
 | Live updates from the outbox | `OrderingSubscriptions`, `GraphQlSubscriptionSink` in each monolith's `Program.cs` |
 | A schema, a migration history, an outbox and an inbox per module in one database | each `Infrastructure/Persistence/*Context.cs` |
-| Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each factory, the host's `.csproj` |
+| Entity Framework migrations applied by Supabase | `supabase/migrations`, `[SupabaseMigrations]` on each context, the host's `.csproj`, `AddSupabaseMigrations()` in its `Program.cs` |
 | Modules talking through Supabase Queues | `OverSupabaseQueues` in `ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs`, `supabase/migrations/20260925090000_enable_queues.sql` |
 | The testing kit and `DomainEventClock` | `Tests/Examples.Webshop.Tests` |
 
@@ -580,7 +582,7 @@ Tenancy/
       Examples.Tenancy.Tenants.Contracts           the ids, and the operators' token role
       Examples.Tenancy.Tenants.Domain              the application's classes on the package, a folder per aggregate it adds to; Module.cs with Tenancy's switch, which writes the organization and the role; and TenantsTenancy, which the generator writes here and the use cases are named through
       Examples.Tenancy.Tenants.Application         a command or query per use case, in a folder per feature; the request interface its access behavior is generated from; the port ITenancyReads
-      Examples.Tenancy.Tenants.Infrastructure      the context, its migrations and the [SupabaseMigrations] factory the export builds it with, EfTenancyReads, AddTenantsInfrastructure
+      Examples.Tenancy.Tenants.Infrastructure      the context, marked [SupabaseMigrations], its migrations, EfTenancyReads, AddTenantsInfrastructure
       Examples.Tenancy.Tenants.Api                 the module's entry, TenantsModule, and per feature the routes (Rest) and the GraphQL fields and types (GraphQL)
     Projects/
       Examples.Tenancy.Projects.Contracts          ProjectId, the keys and IProjectGate: all Inspections may name
@@ -713,10 +715,11 @@ The host runs on Postgres, as Supabase runs it, at the connection string it is g
   that use their Postgres packages, made in `DDDToolkit.RowAccessContributionsOfPackages.g.cs` among the
   exporter's generated files from what the sample marks, and is named by the package's class and assembly,
   without a version.
-- **A module has one set of migrations**, beside its context in its infrastructure project, with the
-  `[SupabaseMigrations]` factory that `dotnet ef`, the export and the host's start-up check all build the
-  context with. After a change to a model, `dotnet ef migrations add` in that project and a build of the
-  exporter write the new file; the factory's summary has both commands.
+- **A module has one set of migrations**, beside its context in its infrastructure project. The context is marked
+  `[SupabaseMigrations]`, and the build writes the design-time factory beside it that `dotnet ef`, the export and the
+  host's start-up check all build the context with; the host checks every marked context with one
+  `AddSupabaseMigrations()`. After a change to a model, `dotnet ef migrations add` in that project and a build of the
+  exporter write the new file; the context's remarks have both commands.
 - **Connections are budgeted per purpose**: one data source for requests and one for background work, each
   with its own maximum (`Sample:Pools:Requests`, 16, and `Sample:Pools:Background`, 4).
 - **GraphQL answers as the routes do.** A field only sends, so what it reads goes through the same
@@ -925,7 +928,7 @@ over a stub).
 | A login role that owns nothing, forced policies, privileges from the policies | `Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, the two properties in `Examples.Tenancy.Exporter.csproj`, which leaves the privileges and the forced policies to the export's defaults, `Host/Storage/SampleStorage.cs`, `Host/Program.cs`, which runs the start-up checks the registrations bring; `SampleOnPostgresTests`, `LoginRoleFileTests`, `PostgresCompositionTests` |
 | The roles said once where they differ from the defaults, and the host held to the ones the database's access files were written for | `SupabaseRowAccessRoles` in `Examples.Tenancy.Exporter.csproj`, the token role in `Host/Storage/SampleStorage.cs`, the record at the end of every `*_access.*.ddd.sql`, `supabase.roles-match-access-files` among the checks `Host/Program.cs` runs; `PostgresCompositionTests`, `SampleOnPostgresTests` |
 | The export as a build step of a program of its own | `Tenancy/Examples.Tenancy.Exporter`, which references each module's infrastructure project and the catalogue; `PostgresCompositionTests` |
-| A module's migrations beside its context, and one factory that `dotnet ef`, the export and the host's start-up check build the context with | `...Tenants.Infrastructure/Persistence/Migrations/` and `TenantsContextFactory.cs`, marked `[SupabaseMigrations]`; the same in Projects and Inspections; `MigrationTests` |
+| A module's migrations beside its context, and one factory that `dotnet ef`, the export and the host's start-up check build the context with: the one the build writes beside the context marked `[SupabaseMigrations]` | `...Tenants.Infrastructure/Persistence/Migrations/` and `TenantsContext.cs`; the same in Projects and Inspections; `AddSupabaseMigrations()` in the host's `Program.cs`; `MigrationTests` |
 | A rule Postgres holds beyond a module's policies: a project's unit changes only with its keys, by a trigger of the module's own, and its owner and its crew's rows with theirs, by the Membership package's lock | `UnitChangesWithItsKeys` in `...Projects.Infrastructure/Access/`, listed by `Tenancy/Examples.Tenancy.Exporter/Program.cs`, and the lock the Membership package writes by itself from the rules `Catalogue/SampleCatalogue.cs` marks; `SampleOnPostgresTests` |
 | Column rules: a column whose command asks a stricter key than changing the row does, a project's name and planned days the key to edit it, its state the key to close it | `NameAndPlanChangeWithTheEditKey` and `StateChangesWithTheCloseKey` in `...Projects.Infrastructure/Access/`, written as triggers into the module's access files; `SampleOnPostgresTests` |
 | A trigger that refuses as the toolkit's access guards do, so a save it refuses is `access.refused`, a 403, and not a failure of the server | `Refusal` in `UnitChangesWithItsKeys`, which writes its refusal with `RowAccessModel.Refusal`, as the column rules and the Membership lock write theirs; `SampleOnPostgresTests` |

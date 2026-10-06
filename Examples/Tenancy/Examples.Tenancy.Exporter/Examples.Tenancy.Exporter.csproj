@@ -10,11 +10,11 @@
 
   <!--
     The program that writes Examples/Tenancy/supabase/migrations, and nothing else. It is not the host: the host
-    serves requests as a role that owns nothing, and has no reason to carry the design-time factories, the
-    exporting generator or a build step that writes files. So the export lives here, in a program without routes,
-    which references what it writes from: each module's infrastructure project, which holds its migrations, the
-    design-time factory they are found through and its row access rules, and the application's catalogue. Nothing
-    references this project.
+    serves requests as a role that owns nothing, and has no reason to carry a build step that writes files or the
+    export's settings. So the export lives here, in a program without routes, which references what it writes from:
+    each module's infrastructure project, which holds its migrations, its context marked [SupabaseMigrations] with
+    the design-time factory the build writes beside it, and its row access rules, and the application's catalogue.
+    Nothing references this project.
 
     Tenancy's and Membership's SQL is written because the modules that store them on Postgres reference their
     Postgres packages, and this project references those modules: each package declares itself a contributor, and
@@ -62,9 +62,10 @@
 
   <ItemGroup>
     <!--
-      Each module's infrastructure project: its migrations, with the [SupabaseMigrations] factory the export builds
-      its context with, and its row access rules, each of which becomes a policy, a function or a trigger. Tenants'
-      brings Tenancy on Postgres, and Projects' Membership on Postgres, whose SQL comes with them.
+      Each module's infrastructure project: its migrations, with the [SupabaseMigrations] context the export builds
+      through the design-time factory beside it, and its row access rules, each of which becomes a policy, a function
+      or a trigger. Tenants' brings Tenancy on Postgres, and Projects' Membership on Postgres, whose SQL comes with
+      them.
     -->
     <ProjectReference Include="..\Modules\Tenants\Examples.Tenancy.Tenants.Infrastructure\Examples.Tenancy.Tenants.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\Projects\Examples.Tenancy.Projects.Infrastructure\Examples.Tenancy.Projects.Infrastructure.csproj" />

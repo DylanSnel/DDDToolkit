@@ -4,18 +4,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- dotnet ef runs this project as its own startup project, through its design-time factory. -->
+    <!-- dotnet ef runs this project as its own startup project, through the design-time factory the build writes beside its context. -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
   <!--
-    Where Tenancy is stored, on Postgres: the context its tables live in, with its migrations and the design-time
-    factory dotnet ef and the Supabase export build it with, the adapter of the application project's port, the
-    start-up checks, and AddTenantsInfrastructure, which registers them. It declares none of the tenancy classes
-    and none of the ids, and gets modelBuilder.AddTenancy(), services.AddTenancy<TContext>() and the ids'
-    converters anyway, generated from what the domain and contracts projects declare, because it declares the same
-    module. Only the module's entry, in the API project, calls its registration; the host does not reference this
-    project.
+    Where Tenancy is stored, on Postgres: the context its tables live in, marked [SupabaseMigrations], with its
+    migrations (the build writes the design-time factory dotnet ef and the Supabase export make it with beside it),
+    the adapter of the application project's port, the start-up checks, and AddTenantsInfrastructure, which
+    registers them. It declares none of the tenancy classes and none of the ids, and gets modelBuilder.AddTenancy(),
+    services.AddTenancy<TContext>() and the ids' converters anyway, generated from what the domain and contracts
+    projects declare, because it declares the same module. Only the module's entry, in the API project, calls its
+    registration; the host does not reference this project.
   -->
 
   <ItemGroup>
@@ -38,7 +38,7 @@
     <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Infrastructure\Examples.Tenancy.Shared.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.EntityFramework\DDDToolkit.Supporting.Tenancy.EntityFramework.csproj" />
-    <!-- [SupabaseMigrations] on the design-time factory, which is how the project that exports finds it, and the check a host makes at start-up that every migration here was applied. -->
+    <!-- [SupabaseMigrations] on the context, which is how the project that exports and the host find it, and the check a host makes at start-up that every migration here was applied. -->
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
     <!-- The tenant on every connection, the rights left to the database, and the checks at start-up. -->
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy.Postgres\DDDToolkit.Supporting.Tenancy.Postgres.csproj" />
@@ -48,6 +48,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- The Supabase package's: it writes the design-time factory of the context marked [SupabaseMigrations]. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

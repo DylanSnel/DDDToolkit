@@ -18,20 +18,20 @@ namespace Examples.Tenancy.Tests.Persistence;
 /// </summary>
 public sealed partial class MigrationTests
 {
-    /// <summary>Each module's context, from its design-time factory.</summary>
+    /// <summary>Each module's context, from the design-time factory the build wrote beside it.</summary>
     private static readonly IReadOnlyDictionary<string, Func<DbContext>> DesignTimeContexts = new Dictionary<string, Func<DbContext>>(StringComparer.Ordinal)
     {
-        ["Tenants"] = () => new TenantsContextFactory().CreateDbContext([]),
-        ["Projects"] = () => new ProjectsContextFactory().CreateDbContext([]),
-        ["Inspections"] = () => new InspectionsContextFactory().CreateDbContext([]),
+        ["Tenants"] = () => new TenantsContextDesignTimeFactory().CreateDbContext([]),
+        ["Projects"] = () => new ProjectsContextDesignTimeFactory().CreateDbContext([]),
+        ["Inspections"] = () => new InspectionsContextDesignTimeFactory().CreateDbContext([]),
     };
 
-    /// <summary>Each module's design-time factory.</summary>
+    /// <summary>Each module's design-time factory: the one the build wrote beside its context, which is marked.</summary>
     private static readonly IReadOnlyDictionary<string, Type> DesignTimeFactories = new Dictionary<string, Type>(StringComparer.Ordinal)
     {
-        ["Tenants"] = typeof(TenantsContextFactory),
-        ["Projects"] = typeof(ProjectsContextFactory),
-        ["Inspections"] = typeof(InspectionsContextFactory),
+        ["Tenants"] = typeof(TenantsContextDesignTimeFactory),
+        ["Projects"] = typeof(ProjectsContextDesignTimeFactory),
+        ["Inspections"] = typeof(InspectionsContextDesignTimeFactory),
     };
 
     /// <summary>Tenancy's tables, as the package names them, its outbox, its access history and its invitations.</summary>
@@ -70,9 +70,10 @@ public sealed partial class MigrationTests
 
     /// <summary>
     /// A module has one set of migrations, and it is where its context is: in the infrastructure project, in the
-    /// folder <c>Persistence/Migrations</c>, found through the one design-time factory beside the context, which
-    /// the export finds by its marker. No project beside it holds a second set for another database, and nothing
-    /// tells Entity Framework to look in another assembly: the running host and <c>dotnet ef</c> read the same.
+    /// folder <c>Persistence/Migrations</c>, found through the one design-time factory beside the context, which the
+    /// build writes because the context is marked; the marker is also how the export and the host find it. No project
+    /// beside it holds a second set for another database, and nothing tells Entity Framework to look in another
+    /// assembly: the running host and <c>dotnet ef</c> read the same.
     /// </summary>
     [Theory]
     [MemberData(nameof(Modules))]
@@ -89,9 +90,66 @@ public sealed partial class MigrationTests
             .Should().OnlyContain(name => name == infrastructure.GetName().Name + ".Persistence.Migrations", "a migration's namespace is its folder");
 
         factory.Assembly.Should().BeSameAs(infrastructure);
-        factory.IsDefined(typeof(SupabaseMigrationsAttribute), inherit: false).Should().BeTrue("the marker is how the project that exports finds {0}'s factory", module);
+        context.GetType().IsDefined(typeof(SupabaseMigrationsAttribute), inherit: false).Should().BeTrue("the marker on the context is how the project that exports and the host find {0}'s", module);
+        factory.Name.Should().Be(context.GetType().Name + "DesignTimeFactory", "{0} writes no factory of its own: the one dotnet ef finds is the build's", module);
         TypeScan.TypesOf(infrastructure).Where(type => type.GetInterfaces().Any(implemented => implemented.IsGenericType && implemented.GetGenericTypeDefinition() == typeof(Microsoft.EntityFrameworkCore.Design.IDesignTimeDbContextFactory<>)))
             .Should().Equal([factory], "one factory for one database: {0} has no second set of migrations to build a context for", module);
+    }
+
+    /// <summary>
+    /// What <c>dotnet ef migrations add</c> does, by the code it runs for it: Entity Framework's design-time services
+    /// find the context and the factory for it, and make the context through that factory. With the infrastructure
+    /// project as its own startup project, as the context's remarks write the command, the factory is found in the
+    /// startup project; with another startup project, the host's say, in the context's own assembly. Either way it is
+    /// the one the build wrote, with nothing written by hand, and the context it makes keeps the migration history in
+    /// the module's schema.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Modules))]
+    public void Dotnet_ef_makes_every_modules_context_through_the_factory_the_build_wrote(string module)
+    {
+        var infrastructure = SampleLayout.InfrastructureOf(module).Assembly;
+
+        foreach (var startup in new[] { infrastructure, typeof(Program).Assembly })
+        {
+            var reported = new DesignTimeReport();
+#pragma warning disable EF1001 // The operations dotnet ef runs, which Entity Framework keeps for its own tools.
+            var operations = new Microsoft.EntityFrameworkCore.Design.Internal.DbContextOperations(
+                reported, infrastructure, startup, project: infrastructure.GetName().Name + ".csproj", projectDir: AppContext.BaseDirectory,
+                rootNamespace: infrastructure.GetName().Name, language: "C#", nullable: true, args: []);
+            using var context = operations.CreateContext(module + "Context");
+#pragma warning restore EF1001
+
+            context.GetType().Should().BeSameAs(DesignTimeFactories[module].GetInterfaces().Single().GetGenericArguments()[0]);
+            reported.Verbose.Should().Contain(
+                $"Using DbContext factory '{DesignTimeFactories[module].Name}'.",
+                "dotnet ef says which factory it makes {0}'s context with, with {1} as its startup project", module, startup.GetName().Name);
+            context.Database.ProviderName.Should().Be("Npgsql.EntityFrameworkCore.PostgreSQL");
+            context.GetService<IHistoryRepository>().GetInsertScript(new HistoryRow("20260101000000_Probe", "10.0.0"))
+                .Should().Contain($"INSERT INTO {context.Model.GetDefaultSchema()}.\"{HistoryRepository.DefaultTableName}\"", "the history is in {0}'s schema, where the host reads it", module);
+        }
+    }
+
+    /// <summary>What dotnet ef's design-time services report, its verbose lines kept: they name the factory a context is made with.</summary>
+#pragma warning disable EF1001
+    private sealed class DesignTimeReport : Microsoft.EntityFrameworkCore.Design.Internal.IOperationReporter
+#pragma warning restore EF1001
+    {
+        public List<string> Verbose { get; } = [];
+
+        public void WriteError(string message)
+        {
+        }
+
+        public void WriteWarning(string message)
+        {
+        }
+
+        public void WriteInformation(string message)
+        {
+        }
+
+        public void WriteVerbose(string message) => Verbose.Add(message);
     }
 
     /// <summary>

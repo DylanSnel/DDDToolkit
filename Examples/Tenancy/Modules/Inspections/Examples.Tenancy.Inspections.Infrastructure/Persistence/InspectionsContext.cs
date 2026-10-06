@@ -1,5 +1,6 @@
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
+using DDDToolkit.EntityFramework.Supabase;
 using Examples.Tenancy.Inspections.Infrastructure.Converters;
 using Examples.Hosting;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -19,7 +20,17 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Persistence;
 /// <item><b>Instants.</b> Every <see cref="DateTimeOffset"/> is stored as its UTC instant, whatever offset it
 /// was written with, so a project's inspections are ordered in SQL.</item>
 /// </list>
+/// <para>
+/// <c>[SupabaseMigrations]</c> makes the migrations beside it Supabase's, and the build writes the design-time factory
+/// <c>dotnet ef</c> and the export make the context with, <c>InspectionsContextDesignTimeFactory</c>, as it does for the
+/// Tenants module's context. This project is its own startup project:
+/// <code>
+/// dotnet ef migrations add Name --project Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure --startup-project Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure --output-dir Persistence/Migrations --context InspectionsContext
+/// dotnet build Examples/Tenancy/Examples.Tenancy.Exporter
+/// </code>
+/// </para>
 /// </remarks>
+[SupabaseMigrations]
 public sealed class InspectionsContext(DbContextOptions<InspectionsContext> options) : DbContext(options)
 {
     /// <summary>The schema Inspections' tables live in, with the module's migration history.</summary>

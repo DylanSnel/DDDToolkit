@@ -29,7 +29,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00028](#ddd00028) | Error | A key part belongs on an entity or aggregate root |
 | [DDD00029](#ddd00029) | Warning | A key part should not have a public setter |
 | [DDD00030](#ddd00030) | Error | Declare all key parts of a type in one file |
-| [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] factory must be one the build can create |
+| [DDD00031](#ddd00031) | Error | A [SupabaseMigrations] context or factory must be one the build can make |
 | [DDD00032](#ddd00032) | Warning | Do not ask HotChocolate's generator for a toolkit identifier's node id serializer |
 | [DDD00033](#ddd00033) | Warning | The generated integration event registration must be able to construct the class |
 | [DDD00034](#ddd00034) | Warning | An event's class name and its Version disagree |
@@ -1030,10 +1030,29 @@ generated for the type until the key parts are together.
 
 ## DDD00031
 
-**A [SupabaseMigrations] factory must be one the build can create.**
+**A [SupabaseMigrations] context or factory must be one the build can make.**
 
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
-host, about a factory in a module it references.
+Reported in the project of a context marked `[SupabaseMigrations]`, about a context the build cannot write a
+design-time factory for, and in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`),
+normally the host, about a context or a factory in a module it references.
+
+```csharp
+[SupabaseMigrations]
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options, string schema) : DbContext(options)  // DDD00031: no constructor that takes its options alone
+```
+
+For a marked context the build writes the factory beside it, `OrderingContextDesignTimeFactory`, which makes the
+context with `new OrderingContext(options)` on Npgsql. That needs a context that is neither abstract nor generic,
+with a constructor that takes its options alone, `DbContextOptions<OrderingContext>` or `DbContextOptions`, with
+nothing after them but optional parameters, and marked `[SetsRequiredMembers]` where the context has `required`
+members, in a project that references `Npgsql.EntityFrameworkCore.PostgreSQL`. Where it cannot write one, write a
+factory of your own beside the context: the build then writes none and uses yours, and says nothing. The project
+that exports also reports a marked context whose assembly has no factory for it, or more than one, or for which it
+declares more than one itself, where it cannot tell which the export makes it with: mark that one
+`[SupabaseMigrations]` instead. It reports a context it cannot see as well, and a factory of a module's own it cannot
+create: one that is not public, or has no public parameterless constructor.
+
+A factory may be marked instead of its context, as it was up to 3.1. It is reported in the project that exports:
 
 ```csharp
 [SupabaseMigrations]
@@ -1795,17 +1814,18 @@ mark none, is never reported.
 **A context's migration files are named after its module.**
 
 Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), normally the
-host, about a factory in a project it references:
+host, about a marked context, or a marked factory, in a project it references:
 
 ```csharp
-// no module in the factory's project, nor in the context's: no DDD_Module, no [assembly: Module]
+// no module in the context's project: no DDD_Module, no [assembly: Module]
 [SupabaseMigrations]
-public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>  // DDD00055
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)  // DDD00055
 ```
 
 The export names every file it writes after the module the context belongs to, as in
 `20260922120000_AddOrders.ordering.ddd.sql`, and finds a module's files again by that name. The module is
-the one the factory's assembly declares, or else the context's. With neither, the name comes from the
+the one the assembly of the factory the export makes the context with declares, or else the context's; for a
+marked context those are one assembly. With neither, the name comes from the
 context's class, less its `Context`, and the message says which name that is. It works until somebody
 renames the class: the export then looks for files under the new name and recognizes none of those it
 wrote. Every migration is reported as `VersionTaken`, because the file under the old name holds its
@@ -2521,6 +2541,10 @@ reported too, since the analyzer reads one class at a time: add the call after t
 options have already. A context the host does not wire with the toolkit, and whose history is where Entity
 Framework keeps it, names the table in the factory's options and the host's alike,
 `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`, or suppresses the warning.
+
+A context marked `[SupabaseMigrations]` needs no factory written by hand: the build writes one beside it that calls
+`UseDDDToolkitDesignTime()` wherever the project references `DDDToolkit.EntityFramework`, and the analyzer does not
+read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-build).
 
 ## DDD00072
 

@@ -151,7 +151,12 @@ public sealed partial class PostgresCompositionTests
         host.Descendants().Select(element => element.Name.LocalName)
             .Should().NotContain(name => name.StartsWith("Supabase", StringComparison.Ordinal), "the host sets none of the export's properties: the exporter does");
         host.Descendants("Import").Should().BeEmpty("the build step that exports is imported by the exporter alone");
-        ReferencesOf(SampleLayout.HostProjectFile()).Should().NotContain(reference => reference.Contains("Supabase.Analyzers", StringComparison.Ordinal));
+
+        // It has the Supabase package's generator, as a NuGet consumer's host has it through the modules: for the list of
+        // the marked contexts and AddSupabaseMigrations(), which every application gets. No export is written into it.
+        ReferencesOf(SampleLayout.HostProjectFile()).Should().Contain(reference => reference.Contains("Supabase.Analyzers", StringComparison.Ordinal));
+        typeof(Program).Assembly.GetType("DDDToolkit.EntityFramework.Supabase.Generated.SupabaseMigrationSources").Should().BeNull("the export's hook is written where the export is turned on");
+        typeof(Program).Assembly.GetType("Examples.Tenancy.Host.SupabaseMigrationsOfModules").Should().NotBeNull();
 
         // The exporter, on the other hand, exports, and only checks where the build is a continuous integration's.
         var exporter = XDocument.Load(ExporterFile);
@@ -226,23 +231,18 @@ public sealed partial class PostgresCompositionTests
     public void No_module_opens_connections_of_its_own()
     {
         // The host's two data sources bound what it holds on the database. A module that made a data source, or
-        // named a connection string, would hold connections nobody budgeted. The design-time factories connect to
-        // nothing: the one provider a module names is theirs, on an address that leads nowhere, as the docs write it.
+        // named a connection string, would hold connections nobody budgeted. No module names a provider at all: the
+        // design-time factories, the only code that does, are the build's, and connect to nothing.
         var modules = Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "Modules");
-        string[] forbidden = ["NpgsqlDataSource", "UseNpgsql(", "NpgsqlConnection", "GetConnectionString"];
-        const string Nowhere = "UseNpgsql(\"Host=unused\")";
+        string[] forbidden = ["NpgsqlDataSource", "UseNpgsql(", "NpgsqlConnection", "GetConnectionString", "IDesignTimeDbContextFactory"];
 
         var files = SampleLayout.SourceFilesIn(modules)
             .Where(file => !file.Contains("/Migrations/", StringComparison.Ordinal))
             .Select(file => (File: file, Text: File.ReadAllText(Path.Combine(modules, file))))
             .ToList();
-        var offending = files.Where(each => forbidden.Any(each.Text.Replace(Nowhere, string.Empty, StringComparison.Ordinal).Contains)).Select(each => each.File);
-        var nowhere = files.Where(each => each.Text.Contains(Nowhere, StringComparison.Ordinal)).Select(each => Path.GetFileName(each.File));
+        var offending = files.Where(each => forbidden.Any(each.Text.Contains)).Select(each => each.File);
 
-        offending.Should().BeEmpty("a module registers its context on the connections the host hands it");
-        nowhere.Should().BeEquivalentTo(
-            ["InspectionsContextFactory.cs", "ProjectsContextFactory.cs", "TenantsContextFactory.cs"],
-            "only a design-time factory names a provider, and it connects to nothing");
+        offending.Should().BeEmpty("a module registers its context on the connections the host hands it, and writes no design-time factory");
     }
 
     /// <summary>
