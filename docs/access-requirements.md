@@ -516,12 +516,27 @@ StreamPipelineBehaviors as well.
 ```
 
 ```csharp
-public sealed class InvoiceReminders(CloseInvoiceHandler handler, ISender sender)
+// With the Mediator library, a command of IBillingRequest, marked [AccessRequests] as above, and its handler
+public sealed record CloseOverdueInvoice(InvoiceId Invoice) : ICommand, IBillingRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => new BillingAccess.OnInvoice("billing.close", Invoice);
+}
+
+public sealed class CloseOverdueInvoiceHandler(IInvoiceStore store) : ICommandHandler<CloseOverdueInvoice>
+{
+    public async ValueTask<Unit> Handle(CloseOverdueInvoice command, CancellationToken cancellationToken)
+    {
+        await store.CloseAsync(command.Invoice, cancellationToken);
+        return Unit.Value;
+    }
+}
+
+public sealed class InvoiceReminders(CloseOverdueInvoiceHandler handler, ISender sender)
 {
     public async Task CloseOverdueAsync(InvoiceId invoice, CancellationToken cancellationToken)
     {
-        await handler.Handle(new CloseInvoice(invoice), cancellationToken);   // DDD00061: past the behavior
-        await sender.Send(new CloseInvoice(invoice), cancellationToken);      // through it, as the fix writes it
+        await handler.Handle(new CloseOverdueInvoice(invoice), cancellationToken);   // DDD00061: past the behavior
+        await sender.Send(new CloseOverdueInvoice(invoice), cancellationToken);      // through it, as the fix writes it
     }
 }
 ```

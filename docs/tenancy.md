@@ -950,13 +950,13 @@ like any other, and what an operator asks for is carried out by system work that
 <summary>Show the code: a registration that provisions a tenant</summary>
 
 ```csharp
-public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, IShopRequest
+public sealed record RegisterOrganization(string Slug, string Name, string AdministratorName) : ICommand<TenantId>, ITenantsRequest
 {
     // Who may send it: a signed-in person, who becomes the first administrator.
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
 }
 
-public sealed class RegisterOrganizationHandler(ShopTenancy.TenantCommands tenants, ICallerAccessor callers)
+public sealed class RegisterOrganizationHandler(TenantsTenancy.TenantCommands tenants, ICallerAccessor callers)
     : ICommandHandler<RegisterOrganization, TenantId>
 {
     public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
@@ -975,8 +975,8 @@ public sealed class RegisterOrganizationHandler(ShopTenancy.TenantCommands tenan
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             var made = await tenants.ProvisionAsync(
-                new ShopTenancy.TenantToProvision(
-                    command.Slug, command.Name, TenantShape.Flat, command.Name, "company", administrator, command.AdministratorName),
+                new TenantsTenancy.TenantToProvision(
+                    command.Slug, command.Name, TenantShape.Flat, command.Name, administrator, command.AdministratorName),
                 cancellationToken);
             return made.Tenant;
         }
@@ -998,8 +998,8 @@ if (made is not IdentityAccountOutcome.Created(var administrator))
 using (TenancyWork.BeginSystem<TenantId, SeatId>())
 {
     await tenants.ProvisionAsync(
-        new ShopTenancy.TenantToProvision(
-            command.Slug, command.Name, TenantShape.Flat, command.Name, "company", administrator, command.AdministratorName),
+        new TenantsTenancy.TenantToProvision(
+            command.Slug, command.Name, TenantShape.Flat, command.Name, administrator, command.AdministratorName),
         cancellationToken);
 }
 ```
