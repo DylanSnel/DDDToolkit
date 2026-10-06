@@ -235,7 +235,7 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void Two_members_marked_for_what_a_contribution_takes_once_are_DDD00066()
+    public void Two_members_marked_for_what_a_contribution_takes_once_are_DDD00072()
     {
         var result = Host(
                 ShopPlans + """
@@ -251,7 +251,7 @@ public sealed class PackageContributionsGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
         var reported = result.ReportedDiagnostics.Should().ContainSingle().Subject;
-        reported.Id.Should().Be("DDD00066");
+        reported.Id.Should().Be("DDD00072");
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
         reported.GetMessage().Should().Be(
             "The row access contribution 'Shop.Plans.PlanRowAccess' of 'Shop.Plans' cannot be made: 'Shop.Host.OtherPlans.All' and 'Shop.Host.ShopPlans.All' are marked [Plans], "
@@ -260,7 +260,7 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_member_marked_that_is_not_what_the_contribution_takes_is_DDD00066_where_it_is_declared()
+    public void A_member_marked_that_is_not_what_the_contribution_takes_is_DDD00072_where_it_is_declared()
     {
         var result = Host(
                 """
@@ -280,9 +280,9 @@ public sealed class PackageContributionsGeneratorTests
                 (PlansPackage, "Shop.Plans"))
             .Run(GeneratorTestHost.SupabaseGenerators());
 
-        result.ShouldHaveDiagnostic("DDD00066", at: "All").GetMessage().Should().EndWith(
+        result.ShouldHaveDiagnostic("DDD00072", at: "All").GetMessage().Should().EndWith(
             "'Shop.Host.ShopPlans.All', marked [Plans], is a 'string', and it takes an 'IReadOnlyList<string>' for 'plans'.");
-        result.ShouldHaveDiagnostic("DDD00066", at: "GraceDays").GetMessage().Should().EndWith(
+        result.ShouldHaveDiagnostic("DDD00072", at: "GraceDays").GetMessage().Should().EndWith(
             "'Shop.Host.ShopPlans.GraceDays', marked [Grace], is not static, and nothing makes an instance of its class to read it from.");
         result.ReportedDiagnostics.Should().NotContain(diagnostic => diagnostic.Id == "DDD00054", "a member the application marked is reported for what it is, and not as one it did not mark");
         result.ShouldNotContain("SupabaseMigrationSources", "PlanRowAccess");
@@ -357,7 +357,7 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_generic_contribution_nothing_closes_is_DDD00054_and_two_marks_of_one_closing_are_DDD00066()
+    public void A_generic_contribution_nothing_closes_is_DDD00054_and_two_marks_of_one_closing_are_DDD00072()
     {
         var none = Host("namespace Shop.Host; public static class Program { }", (LedgerPackage, "Shop.Ledgers")).Run(GeneratorTestHost.SupabaseGenerators());
 
@@ -379,14 +379,14 @@ public sealed class PackageContributionsGeneratorTests
                 (LedgerPackage, "Shop.Ledgers"))
             .Run(GeneratorTestHost.SupabaseGenerators());
 
-        twice.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00066").Which.GetMessage().Should().EndWith(
+        twice.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00072").Which.GetMessage().Should().EndWith(
             "'Shop.Host.MoreLedgers.Invoices' and 'Shop.Host.ShopLedgers.Invoices' are marked [LedgerRules<Invoice>], and it is made once for each, from one; mark one of them.");
         twice.ShouldContain("SupabaseMigrationSources", "LedgerRowAccessOfRefund", "the closing that is marked once is still made");
         twice.ShouldNotContain("SupabaseMigrationSources", "LedgerRowAccessOfInvoice");
     }
 
     [Fact]
-    public void Listing_a_packages_contribution_again_is_DDD00067_unless_the_package_is_left_out()
+    public void Listing_a_packages_contribution_again_is_DDD00073_unless_the_package_is_left_out()
     {
         const string listed = """
             [assembly: DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Host.ShopPlanRowAccess))]
@@ -406,7 +406,7 @@ public sealed class PackageContributionsGeneratorTests
 
         var twice = Host(listed, (PlansPackage, "Shop.Plans")).Run(GeneratorTestHost.SupabaseGenerators());
 
-        var reported = twice.ShouldHaveDiagnostic("DDD00067", at: "DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Host.ShopPlanRowAccess))");
+        var reported = twice.ShouldHaveDiagnostic("DDD00073", at: "DDDToolkit.Abstractions.Attributes.UseRowAccessContribution(typeof(Shop.Host.ShopPlanRowAccess))");
         reported.Severity.Should().Be(DiagnosticSeverity.Error);
         reported.GetMessage().Should().Be(
             "'Shop.Host.ShopPlanRowAccess', listed with [assembly: UseRowAccessContribution], derives from 'Shop.Plans.PlanRowAccess', which 'Shop.Plans' writes into this "
@@ -426,7 +426,7 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_class_another_project_declares_derived_from_a_packages_contribution_is_DDD00067()
+    public void A_class_another_project_declares_derived_from_a_packages_contribution_is_DDD00073()
     {
         // What an application that once handed the package its plans through a class of its own still declares.
         const string old = """
@@ -445,14 +445,14 @@ public sealed class PackageContributionsGeneratorTests
 
         var result = Host("namespace Shop.Host; public static class Program { }", (PlansPackage, "Shop.Plans"), (old, "Shop.Catalogue")).Run(GeneratorTestHost.SupabaseGenerators());
 
-        result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00067").Which.GetMessage().Should().StartWith(
+        result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00073").Which.GetMessage().Should().StartWith(
             "'Shop.Catalogue.ShopPlanRowAccess', which 'Shop.Catalogue' declares, derives from 'Shop.Plans.PlanRowAccess', which 'Shop.Plans' writes into this application's migrations already");
         result.ShouldContain("SupabaseMigrationSources", "new global::DDDToolkit.EntityFramework.Supabase.Generated.PlanRowAccess(),");
         result.ShouldNotContain("SupabaseMigrationSources", "ShopPlanRowAccess");
     }
 
     [Fact]
-    public void A_packages_class_the_build_cannot_make_is_DDD00066_naming_the_package()
+    public void A_packages_class_the_build_cannot_make_is_DDD00072_naming_the_package()
     {
         const string package = """
             using DDDToolkit.EntityFramework.Postgres;
@@ -579,7 +579,7 @@ public sealed class PackageContributionsGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
     [Fact]
-    public void A_tenancy_catalogue_marked_twice_is_DDD00066()
+    public void A_tenancy_catalogue_marked_twice_is_DDD00072()
     {
         var result = WithTenancyOnPostgres(CatalogueHost + """
 
@@ -600,14 +600,14 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_tenancy_catalogue_marked_that_is_built_already_is_DDD00066_where_it_is_declared()
+    public void A_tenancy_catalogue_marked_that_is_built_already_is_DDD00072_where_it_is_declared()
     {
         var result = WithTenancyOnPostgres(CatalogueHost.Replace(
             "public static ApplicationCatalogue Application { get; } = new();",
             "public static TenancyCatalogue Application { get; } = TenancyCatalogue.Build([]);",
             StringComparison.Ordinal));
 
-        result.ShouldHaveDiagnostic("DDD00066", at: "Application").GetMessage().Should().EndWith(
+        result.ShouldHaveDiagnostic("DDD00072", at: "Application").GetMessage().Should().EndWith(
             "'Shop.Host.ShopCatalogue.Application', marked [TenancyCatalogue], is a 'TenancyCatalogue', and it takes an 'ApplicationCatalogue' for 'application'.");
         result.ReportedDiagnostics.Should().ContainSingle("a catalogue marked is never passed over for the default");
         result.ShouldNotContain("SupabaseMigrationSources", "TenancyRowAccessContribution");
@@ -727,7 +727,7 @@ public sealed class PackageContributionsGeneratorTests
     // ------------------------------------------------------------------ what a line to leave out names
 
     [Fact]
-    public void A_context_to_leave_out_of_that_is_no_context_is_DDD00068_and_leaves_nothing_out()
+    public void A_context_to_leave_out_of_that_is_no_context_is_DDD00074_and_leaves_nothing_out()
     {
         const string contexts = """
 
@@ -745,10 +745,10 @@ public sealed class PackageContributionsGeneratorTests
         result.ShouldCompile();
         result.ReportedDiagnostics.Select(diagnostic => (diagnostic.Id, diagnostic.Severity, Message: diagnostic.GetMessage())).Should().BeEquivalentTo(
             [
-                ("DDD00068", DiagnosticSeverity.Warning,
+                ("DDD00074", DiagnosticSeverity.Warning,
                     "[assembly: LeaveOutRowAccessContribution(typeof(Shop.Plans.PlanRowAccess), Context = typeof(string))] leaves nothing out: 'string' is no context: Context "
                     + "names a class derived from DbContext, whose access file it is left out of"),
-                ("DDD00068", DiagnosticSeverity.Warning,
+                ("DDD00074", DiagnosticSeverity.Warning,
                     "[assembly: LeaveOutRowAccessContribution(typeof(Shop.Plans.PlanRowAccess), Context = typeof(Shop.Host.ArchiveContext<>))] leaves nothing out: "
                     + "'Shop.Host.ArchiveContext<>' is left open, and Context names one context, closed with the type arguments it is declared with"),
             ]);
@@ -759,7 +759,7 @@ public sealed class PackageContributionsGeneratorTests
     }
 
     [Fact]
-    public void A_line_that_names_nothing_a_package_writes_is_DDD00068()
+    public void A_line_that_names_nothing_a_package_writes_is_DDD00074()
     {
         var result = Host(
                 "[assembly: DDDToolkit.Abstractions.Attributes.LeaveOutRowAccessContribution(typeof(Shop.Ledgers.LedgerRowAccess<Shop.Host.Payout>))]\n"
@@ -772,7 +772,7 @@ public sealed class PackageContributionsGeneratorTests
             .Run(GeneratorTestHost.SupabaseGenerators());
 
         result.ShouldCompile();
-        result.ReportedDiagnostics.Should().OnlyContain(diagnostic => diagnostic.Id == "DDD00068");
+        result.ReportedDiagnostics.Should().OnlyContain(diagnostic => diagnostic.Id == "DDD00074");
         result.ReportedDiagnostics.Select(diagnostic => diagnostic.GetMessage()).Should().BeEquivalentTo(
             [
                 "[assembly: LeaveOutRowAccessContribution(typeof(Shop.Ledgers.LedgerRowAccess<Shop.Host.Payout>))] leaves nothing out: nothing the application marks makes "

@@ -4304,7 +4304,7 @@ public static class ShopCatalogue
   the projects the exporting project references. The build makes it in that project, in a class it writes into
   `DDDToolkit.RowAccessContributionsOfPackages.g.cs`, whose comment names what it was made from. Two members
   marked `[TenancyCatalogue]`, or one of another type, the catalogue built already say, stop the build
-  ([DDD00066](diagnostics.md#ddd00066)); one a library keeps internal is reported where it is declared,
+  ([DDD00072](diagnostics.md#ddd00072)); one a library keeps internal is reported where it is declared,
   [DDD00070](diagnostics.md#ddd00070), since the exporting project would not see it and would write the policies
   from the default catalogue. An application with [operators](#operators) marks their token roles
   `[TenancyOperators]` too. On a Postgres of your own, pass `new TenancyRowAccessContribution(catalogue)` to

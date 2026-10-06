@@ -1667,13 +1667,13 @@ flowchart LR
 ```
 
 A parameter is found in one of three ways. Exactly one member marked, the usual case: two are an error,
-[DDD00066](diagnostics.md#ddd00066), since the build will not guess which one your application runs with,
+[DDD00072](diagnostics.md#ddd00072), since the build will not guess which one your application runs with,
 and none is the parameter's default where it has one, or else a warning,
 [DDD00054](diagnostics.md#ddd00054), and the package's SQL is not written. Every member marked, for a
 parameter that says `Every = true`: an array of all of them, in the order of their names, none an empty one.
 And once for each member marked with a generic attribute, for a generic contribution: the build makes it once
 for every member so marked, closed over the type the mark is written with. A member of another type than the
-parameter takes, or one that is not static, is [DDD00066](diagnostics.md#ddd00066). Of a library, the
+parameter takes, or one that is not static, is [DDD00072](diagnostics.md#ddd00072). Of a library, the
 exporting project sees what is public and nothing else, so a member a library marks that is internal, or
 declared in an internal class, is not found at all, and the export would go on as if nothing were marked.
 That one is reported where it is declared instead, by the library's own build,
@@ -1749,12 +1749,12 @@ context's database is not the package's to write, say so in the project that run
 A generic contribution is left out with its open type, every closing of it, or with one closing. To write a
 package's SQL with a class of your own instead, leave the package's out and list yours with
 `[assembly: UseRowAccessContribution]`. Listing yours without leaving the package's out would write the SQL
-twice, which [DDD00067](diagnostics.md#ddd00067) stops at build time: that is what an application still
+twice, which [DDD00073](diagnostics.md#ddd00073) stops at build time: that is what an application still
 has that once handed a package its data through a class of its own. Take the line and the class out, and
 mark what the class handed over. What is left out is checked by nothing else: a package's start-up checks
 still expect its SQL wherever the application uses the package. A line that leaves nothing out, because it
 names no contribution a package writes or its `Context` is no class derived from `DbContext`, is a warning,
-[DDD00068](diagnostics.md#ddd00068), rather than a line that reads as if it did.
+[DDD00074](diagnostics.md#ddd00074), rather than a line that reads as if it did.
 
 A contribution may be asked about a context several times in one export, so it answers from the model
 and what it was made with, the same every time.

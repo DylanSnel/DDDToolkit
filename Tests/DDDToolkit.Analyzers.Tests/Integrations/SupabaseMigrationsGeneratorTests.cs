@@ -221,7 +221,7 @@ public sealed class SupabaseMigrationsGeneratorTests
     }
 
     [Fact]
-    public void A_modules_offer_derived_from_a_packages_contribution_is_DDD00067_and_not_DDD00069()
+    public void A_modules_offer_derived_from_a_packages_contribution_is_DDD00073_and_not_DDD00069()
     {
         // What a module that once handed a package its data through a class of its own still declares.
         const string package = """

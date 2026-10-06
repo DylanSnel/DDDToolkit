@@ -16,13 +16,13 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <para>
 /// Searched are the project that runs the export and every project it references that references the marker's
 /// assembly, the one that declares it excepted. A marked member is static, readable from that project, and of a type
-/// the parameter takes; one that is not is DDD00066. Of a library, that project sees what is public and nothing
+/// the parameter takes; one that is not is DDD00072. Of a library, that project sees what is public and nothing
 /// else, so a member a library marks that is not public is not found at all: put <see cref="ApplicationMarkAttribute"/>
 /// on the marker, and the library's own build reports it where it is declared (DDD00070). It is found in one of
 /// three ways:
 /// </para>
 /// <list type="bullet">
-/// <item><b>One.</b> Exactly one member is marked. Two are DDD00066, since the build cannot choose. None is the
+/// <item><b>One.</b> Exactly one member is marked. Two are DDD00072, since the build cannot choose. None is the
 /// parameter's default value where it has one, so a package gives what it can do without one, and otherwise
 /// DDD00054: the contribution is not written.</item>
 /// <item><b>Every</b> (<see cref="Every"/>). Every member so marked, in the order of their names, as an array of

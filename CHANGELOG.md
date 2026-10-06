@@ -681,9 +681,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[assembly: UseRowAccessContribution(typeof(X))]` in that project; an assembly that declares a module offers
   its contribution with `[assembly: RowAccessContribution]` rather than writing it, so a module's SQL is written
   only where it is listed, and DDD00069, a warning, reports one the project does not list. DDD00054, a warning,
-  reports a package's contribution whose data the application does not mark, DDD00066 a marked member it cannot
-  use or two marked where it takes one, DDD00067 a package's contribution the project lists again, or a class
-  derived from it, and DDD00068, a warning, a line to leave out that names no contribution a package writes or a
+  reports a package's contribution whose data the application does not mark, DDD00072 a marked member it cannot
+  use or two marked where it takes one, DDD00073 a package's contribution the project lists again, or a class
+  derived from it, and DDD00074, a warning, a line to leave out that names no contribution a package writes or a
   `Context` that is no context. A package puts `[ApplicationMark]` on each of its marks, as Tenancy's and
   Membership's have it, and a library that marks a member it does not make public, which the exporting project
   would not see, is DDD00070 where the member is declared.
@@ -2313,7 +2313,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     written from `new ApplicationCatalogue()`, as a host that leaves `TenancyOptions.Catalogue` unset runs with.
   - `public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules)`
     and its line: mark the rules `[MembershipRules<DocumentShare>]`, once for each kind of resource.
-  - A class and a line that are still there are DDD00067, an error, since the SQL would be written twice. A
+  - A class and a line that are still there are DDD00073, an error, since the SQL would be written twice. A
     module that offers a contribution of its own with `[assembly: RowAccessContribution]` still offers it: its
     assembly declares a module, so its SQL is the application's and is written where the project that runs the
     export lists it, as before, and DDD00069 (where DDD00054 was) reports one that project does not list.

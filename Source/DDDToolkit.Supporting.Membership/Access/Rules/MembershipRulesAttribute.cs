@@ -27,7 +27,7 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// The member is a static property or field of type <see cref="MembershipRules"/>, readable from the project that
 /// runs the export, which references the project that declares it: in a library it is public, in public types, which
 /// that library's own build checks (DDD00070). One member is marked for each member class:
-/// the export reports two, and one of another type (DDD00066); an application that references Membership on
+/// the export reports two, and one of another type (DDD00072); an application that references Membership on
 /// Postgres and marks none is told that nothing of it is written (DDD00054).
 /// </para>
 /// </summary>

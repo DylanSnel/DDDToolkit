@@ -67,8 +67,8 @@ DDD00065 | DDDToolkit.Entities | Info | The class a package's use cases are name
 DDD00066 | DDDToolkit.Entities | Error | A package's switch writes a class or an id where its name is free and its id is known
 DDD00067 | DDDToolkit.Entities | Error | A class whose package makes its new ids is declared over an id with a Create()
 DDD00068 | DDDToolkit.Modules | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute
-DDD00066 | DDDToolkit.Supabase | Error | What a package's row access contribution is made from is found once, and is what it takes
-DDD00067 | DDDToolkit.Supabase | Error | A row access contribution a package writes is not listed again
-DDD00068 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context
 DDD00069 | DDDToolkit.Supabase | Warning | A module's row access contribution is listed by the project that runs the export
 DDD00070 | DDDToolkit.Supabase | Error | A member a library marks for a package's row access contribution is public
+DDD00072 | DDDToolkit.Supabase | Error | What a package's row access contribution is made from is found once, and is what it takes
+DDD00073 | DDDToolkit.Supabase | Error | A row access contribution a package writes is not listed again
+DDD00074 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context

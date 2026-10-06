@@ -1134,8 +1134,8 @@ generator writes into a file of its own, `DDDToolkit.RowAccessContributionsOfPac
 the application marks, unless the project leaves it out with `[assembly: LeaveOutRowAccessContribution]`; then
 the ones the project lists with `[assembly: UseRowAccessContribution(typeof(X))]`, each as `new X()`. A
 package's contribution whose data the application does not mark is [DDD00054](diagnostics.md#ddd00054), one
-whose marks cannot be used [DDD00066](diagnostics.md#ddd00066), one the project lists again
-[DDD00067](diagnostics.md#ddd00067), and a line that leaves nothing out [DDD00068](diagnostics.md#ddd00068).
+whose marks cannot be used [DDD00072](diagnostics.md#ddd00072), one the project lists again
+[DDD00073](diagnostics.md#ddd00073), and a line that leaves nothing out [DDD00074](diagnostics.md#ddd00074).
 An assembly that declares a module offers its contribution rather than writing it, and one the project does
 not list is [DDD00069](diagnostics.md#ddd00069).
 
@@ -1148,7 +1148,7 @@ so the host does not reference the package itself unless it uses the start-up ch
 - [Row level security](row-level-security.md) for callers, work outside a request, and rules written in C#.
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
 - [Diagnostics](diagnostics.md#ddd00031) for the build error about an unusable factory, and
-  [DDD00054](diagnostics.md#ddd00054), [DDD00066](diagnostics.md#ddd00066),
-  [DDD00067](diagnostics.md#ddd00067), [DDD00068](diagnostics.md#ddd00068) and
+  [DDD00054](diagnostics.md#ddd00054), [DDD00072](diagnostics.md#ddd00072),
+  [DDD00073](diagnostics.md#ddd00073), [DDD00074](diagnostics.md#ddd00074) and
   [DDD00070](diagnostics.md#ddd00070) for a package's row access contribution, and
   [DDD00069](diagnostics.md#ddd00069) for a module's.

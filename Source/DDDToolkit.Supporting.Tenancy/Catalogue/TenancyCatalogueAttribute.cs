@@ -27,7 +27,7 @@ namespace DDDToolkit.Supporting.Tenancy.Catalogue;
 /// that runs the export, which references the project that declares it: in a library it is public, in public
 /// types, which that library's own build checks (DDD00070), since the exporting project does not see it otherwise.
 /// One member is marked in all of them: the export cannot choose between two, and reports them, as it does one of
-/// another type (DDD00066).
+/// another type (DDD00072).
 /// </para>
 /// </summary>
 [ApplicationMark]

@@ -67,11 +67,11 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
 | [DDD00067](#ddd00067) | Error | A class whose package makes its new ids is declared over an id with a Create() |
 | [DDD00068](#ddd00068) | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute |
-| [DDD00066](#ddd00066) | Error | What a package's row access contribution is made from is found once, and is what it takes |
-| [DDD00067](#ddd00067) | Error | A row access contribution a package writes is not listed again |
-| [DDD00068](#ddd00068) | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context |
 | [DDD00069](#ddd00069) | Warning | A module's row access contribution is listed by the project that runs the export |
 | [DDD00070](#ddd00070) | Error | A member a library marks for a package's row access contribution is public |
+| [DDD00072](#ddd00072) | Error | What a package's row access contribution is made from is found once, and is what it takes |
+| [DDD00073](#ddd00073) | Error | A row access contribution a package writes is not listed again |
+| [DDD00074](#ddd00074) | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -84,7 +84,7 @@ one whose `DDD_ModuleContracts` could not make it its module's contracts;
 failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
 the one key-part mistake that can only be caught when the Entity Framework model is built.
-[DDD00031](#ddd00031), [DDD00054](#ddd00054), [DDD00055](#ddd00055) and [DDD00066](#ddd00066) to [DDD00070](#ddd00070) are about the
+[DDD00031](#ddd00031), [DDD00054](#ddd00054), [DDD00055](#ddd00055) and [DDD00069](#ddd00069), [DDD00070](#ddd00070) and [DDD00072](#ddd00072) to [DDD00074](#ddd00074) are about the
 [Supabase export](supabase.md), where the failure worth catching is a module whose migrations, or the
 policies a package writes, never reach Supabase, are written from what the host does not run with, or are
 written twice, or whose files a rename writes a second time.
@@ -2429,105 +2429,6 @@ severity in an `.editorconfig` section for `*.cs` files does not reach it: set i
 `<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file with
 `is_global = true`.
 
-## DDD00066
-
-**What a package's row access contribution is made from is found once, and is what it takes.**
-
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a package it
-references that declares itself a contributor, and at the member you marked where that member is declared in
-the same project:
-
-```csharp
-public static class ShopCatalogue
-{
-    [TenancyCatalogue]
-    public static ApplicationCatalogue Application { get; } = new(...);
-
-    [TenancyCatalogue]
-    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, ...);   // DDD00066: it takes an 'ApplicationCatalogue'
-}
-```
-
-A package that declares itself a contributor writes its [row level security](row-level-security.md#policies-a-package-ships)
-into your migrations, made from the static properties and fields you mark with the attributes it names:
-`[TenancyCatalogue]` for Tenancy's catalogue, `[MembershipRules<TMember>]` for a resource's rules. The build
-reads them in the project that runs the export, so a marked member is:
-
-| What | Why |
-|---|---|
-| marked once in all the projects the export sees, or once per type for a generic mark | the build cannot tell which of two your application runs with, and writes neither rather than guess |
-| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds it, from your part and your modules' keys, as your registration does |
-| static, with a getter, in a type that is not generic | the code the build writes reads it as `Type.Member` |
-| readable from the exporting project | the code the build writes is in that project |
-
-A member another project declares that is not public, or is declared in an internal class, is not reported
-here: the exporting project does not see it at all, so for that project nothing is marked. The project that
-declares it reports it instead, [DDD00070](#ddd00070).
-
-Policies written from another catalogue or other rules than your host runs with would grant other access than
-your application does, so this is an error, and the contribution is not made until it is fixed. The same id
-reports a class the package declares in a way the build cannot make: one whose constructor takes something it
-does not say where to find with `[FromApplication]`, or a generic one nothing you mark closes. The message ends
-with "That is the package's to fix" then; tell the package's authors, or leave its contribution out with
-`[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
-
-## DDD00067
-
-**A row access contribution a package writes is not listed again.**
-
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), on the line that lists
-it:
-
-```csharp
-// The project that runs the export, as the toolkit once asked for
-[assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]   // DDD00067
-
-public sealed class ShopTenancyRowAccess()
-    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
-```
-
-A package that declares itself a contributor writes its row level security into your migrations because the
-project references it, from what you mark. Listing the package's contribution as well, a class derived from it,
-or its closing over a type the package closes it with already, would hand the export the same SQL twice: two
-functions of one name, or two contributions that keep one table to themselves, which the export refuses when it
-runs. Take the line out, and the class with it, and mark what the class handed over:
-
-```csharp
-public static class ShopCatalogue
-{
-    [TenancyCatalogue]
-    public static ApplicationCatalogue Application { get; } = new(...);
-}
-```
-
-To write a package's SQL with a class of your own on purpose, leave the package's out and keep listing yours:
-`[assembly: LeaveOutRowAccessContribution(typeof(TenancyRowAccessContribution))]`. A class another project
-declares as a contributor, derived from a package's, is the same SQL a second time, and is reported as well,
-naming the project that declares it.
-
-## DDD00068
-
-**What `[assembly: LeaveOutRowAccessContribution]` names is a contribution a package writes, and a context.**
-
-Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), at the line:
-
-```csharp
-[assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(string))]   // DDD00068: no context
-[assembly: LeaveOutRowAccessContribution(typeof(UnitChangesWithItsKeys))]                       // DDD00068: a module's own
-```
-
-The line keeps a package's SQL out of your migrations, or with `Context` out of one context's access file. It
-names the contribution as the package declares it, open where it is generic, or one closing of it you mark;
-and the context is a class derived from `DbContext`, closed where it is generic. A line that names anything
-else leaves nothing out, while it reads as if it did, so it is reported and nothing is left out for it:
-
-| The line names | What to do |
-|---|---|
-| a `Context` that is no class derived from `DbContext`, or a generic context left open | name the context whose access file it is kept out of |
-| a class no package this project references declares a contributor | name what the package declares, or take the line out |
-| a closing nothing you mark makes, `MembershipRowAccessContribution<Refund>` with no rules marked for `Refund` | take the line out: nothing of it is written |
-| a module's own contribution | take its `[assembly: UseRowAccessContribution]` line out instead: only that line writes it |
-
 ## DDD00069
 
 **A module's row access contribution is listed by the project that runs the export.**
@@ -2581,6 +2482,105 @@ project could not say why. Make the member public, in public types, with a publi
 An application, the program that runs the export or the host, may keep its own marks internal: nothing
 references it for them. A list of keys marked `[TenancyPermissions]` is held to the same by
 [DDD00063](#ddd00063).
+
+## DDD00072
+
+**What a package's row access contribution is made from is found once, and is what it takes.**
+
+Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), about a package it
+references that declares itself a contributor, and at the member you marked where that member is declared in
+the same project:
+
+```csharp
+public static class ShopCatalogue
+{
+    [TenancyCatalogue]
+    public static ApplicationCatalogue Application { get; } = new(...);
+
+    [TenancyCatalogue]
+    public static TenancyCatalogue Built { get; } = TenancyCatalogue.Build(Application, ...);   // DDD00072: it takes an 'ApplicationCatalogue'
+}
+```
+
+A package that declares itself a contributor writes its [row level security](row-level-security.md#policies-a-package-ships)
+into your migrations, made from the static properties and fields you mark with the attributes it names:
+`[TenancyCatalogue]` for Tenancy's catalogue, `[MembershipRules<TMember>]` for a resource's rules. The build
+reads them in the project that runs the export, so a marked member is:
+
+| What | Why |
+|---|---|
+| marked once in all the projects the export sees, or once per type for a generic mark | the build cannot tell which of two your application runs with, and writes neither rather than guess |
+| of a type the package takes: an `ApplicationCatalogue` for `[TenancyCatalogue]`, not the catalogue built from it | the package builds it, from your part and your modules' keys, as your registration does |
+| static, with a getter, in a type that is not generic | the code the build writes reads it as `Type.Member` |
+| readable from the exporting project | the code the build writes is in that project |
+
+A member another project declares that is not public, or is declared in an internal class, is not reported
+here: the exporting project does not see it at all, so for that project nothing is marked. The project that
+declares it reports it instead, [DDD00070](#ddd00070).
+
+Policies written from another catalogue or other rules than your host runs with would grant other access than
+your application does, so this is an error, and the contribution is not made until it is fixed. The same id
+reports a class the package declares in a way the build cannot make: one whose constructor takes something it
+does not say where to find with `[FromApplication]`, or a generic one nothing you mark closes. The message ends
+with "That is the package's to fix" then; tell the package's authors, or leave its contribution out with
+`[assembly: LeaveOutRowAccessContribution(typeof(X))]` and write those policies yourself.
+
+## DDD00073
+
+**A row access contribution a package writes is not listed again.**
+
+Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), on the line that lists
+it:
+
+```csharp
+// The project that runs the export, as the toolkit once asked for
+[assembly: UseRowAccessContribution(typeof(ShopTenancyRowAccess))]   // DDD00073
+
+public sealed class ShopTenancyRowAccess()
+    : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All));
+```
+
+A package that declares itself a contributor writes its row level security into your migrations because the
+project references it, from what you mark. Listing the package's contribution as well, a class derived from it,
+or its closing over a type the package closes it with already, would hand the export the same SQL twice: two
+functions of one name, or two contributions that keep one table to themselves, which the export refuses when it
+runs. Take the line out, and the class with it, and mark what the class handed over:
+
+```csharp
+public static class ShopCatalogue
+{
+    [TenancyCatalogue]
+    public static ApplicationCatalogue Application { get; } = new(...);
+}
+```
+
+To write a package's SQL with a class of your own on purpose, leave the package's out and keep listing yours:
+`[assembly: LeaveOutRowAccessContribution(typeof(TenancyRowAccessContribution))]`. A class another project
+declares as a contributor, derived from a package's, is the same SQL a second time, and is reported as well,
+naming the project that declares it.
+
+## DDD00074
+
+**What `[assembly: LeaveOutRowAccessContribution]` names is a contribution a package writes, and a context.**
+
+Reported in the project that turns the Supabase export on (`<SupabaseMigrationsExport>`), at the line:
+
+```csharp
+[assembly: LeaveOutRowAccessContribution(typeof(AuditRowAccess), Context = typeof(string))]   // DDD00074: no context
+[assembly: LeaveOutRowAccessContribution(typeof(UnitChangesWithItsKeys))]                       // DDD00074: a module's own
+```
+
+The line keeps a package's SQL out of your migrations, or with `Context` out of one context's access file. It
+names the contribution as the package declares it, open where it is generic, or one closing of it you mark;
+and the context is a class derived from `DbContext`, closed where it is generic. A line that names anything
+else leaves nothing out, while it reads as if it did, so it is reported and nothing is left out for it:
+
+| The line names | What to do |
+|---|---|
+| a `Context` that is no class derived from `DbContext`, or a generic context left open | name the context whose access file it is kept out of |
+| a class no package this project references declares a contributor | name what the package declares, or take the line out |
+| a closing nothing you mark makes, `MembershipRowAccessContribution<Refund>` with no rules marked for `Refund` | take the line out: nothing of it is written |
+| a module's own contribution | take its `[assembly: UseRowAccessContribution]` line out instead: only that line writes it |
 
 ## Building the model fails: the owned type must carry the key part
 

@@ -82,7 +82,7 @@ public sealed partial class SupabaseMigrationsGenerator
 
     /// <summary>
     /// The contributions this project hands the export, and what is wrong with them. A package's is made unless
-    /// the project leaves it out; one this project lists that a package writes already is reported (DDD00067) and
+    /// the project leaves it out; one this project lists that a package writes already is reported (DDD00073) and
     /// left out of the list. A module's is an offer: it is written where this project lists it, and one it does
     /// not list is reported (DDD00069).
     /// </summary>
@@ -263,7 +263,7 @@ public sealed partial class SupabaseMigrationsGenerator
             own.Distinct(StringComparer.Ordinal).OrderBy(static each => each, StringComparer.Ordinal).ToEquatableArray());
     }
 
-    /// <summary>DDD00067 for a contribution another assembly declares that derives from one a package writes.</summary>
+    /// <summary>DDD00073 for a contribution another assembly declares that derives from one a package writes.</summary>
     private static DiagnosticInfo WrittenAgainDeclared(INamedTypeSymbol type, IAssemblySymbol declarer, INamedTypeSymbol writer, IAssemblySymbol writerDeclarer)
         => DiagnosticInfo.Create(
             DiagnosticDescriptors.RowAccessContributionWrittenTwice,
@@ -301,7 +301,7 @@ public sealed partial class SupabaseMigrationsGenerator
     /// <summary>
     /// What this project leaves out with <c>[assembly: LeaveOutRowAccessContribution(typeof(X), Context = typeof(C))]</c>.
     /// A line whose context is no context, a type that does not derive from <c>DbContext</c> or a generic one left
-    /// open, leaves nothing out and is reported (DDD00068): the code written for it would test for what no context is,
+    /// open, leaves nothing out and is reported (DDD00074): the code written for it would test for what no context is,
     /// or would not compile.
     /// </summary>
     private static List<LeaveOut> LeftOut(Compilation compilation, List<DiagnosticInfo> diagnostics)

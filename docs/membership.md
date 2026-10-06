@@ -682,7 +682,7 @@ services.RunStartupChecks();
   `MembershipRules`, closed over the member class the mark names: two kinds of resource are two marks. The
   rules the registration is called with are a value the build cannot read, so the mark is what tells it which
   rules are the resource's. Two marks for one member class, or one on a member of another type, stop the build
-  ([DDD00066](diagnostics.md#ddd00066)); none at all is [DDD00054](diagnostics.md#ddd00054), and none of the
+  ([DDD00072](diagnostics.md#ddd00072)); none at all is [DDD00054](diagnostics.md#ddd00054), and none of the
   package's SQL is written. A mark a library keeps internal is one the exporting project does not see, so the
   library reports it where it is declared ([DDD00070](diagnostics.md#ddd00070)). The access file names
   `MembershipRowAccessContribution<DocumentShare>` and the package's assembly above what it writes, without a
