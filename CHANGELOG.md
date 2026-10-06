@@ -1951,6 +1951,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Fixed
 
+- **Membership no longer has Entity Framework warn of a limit without an order.** Finding the role made from a
+  starter role, as opening a resource with an owner does, read at most two rows in no order, which Entity
+  Framework logs as a warning the first time a process compiles the query: the Tenancy sample's seeding did,
+  whenever its host was the first to open a project. The rows are read in the order of their ids.
+
 - **The packages ship their XML documentation.** No package carried the XML documentation file beside its
   assembly in `lib/`, so Visual Studio and other editors showed none of the toolkit's `///` comments, however
   well the source is documented. Every package now does, and the consumption check fails a package that does

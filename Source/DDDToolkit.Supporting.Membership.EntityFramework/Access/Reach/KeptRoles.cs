@@ -48,9 +48,11 @@ internal sealed class KeptRoles<TRole, TRoleId> : KeptRoles<TRoleId>
     /// <inheritdoc />
     public override async Task<TRoleId?> MadeFromAsync(DbContext context, string starter, CancellationToken cancellationToken)
     {
-        // Two are enough to tell that there is more than one.
+        // Two are enough to tell that there is more than one. Which two does not matter, but a limit without an
+        // order is what Entity Framework warns about, once for each query it compiles, so they come in one.
         var made = await context.Set<TRole>()
             .Where(kept => kept.MadeFrom == starter && kept.Status == KeptRoleStatus.Active)
+            .OrderBy(kept => kept.Id)
             .Select(kept => kept.Id)
             .Take(2)
             .ToListAsync(cancellationToken)
