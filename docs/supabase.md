@@ -1148,7 +1148,7 @@ so the host does not reference the package itself unless it uses the start-up ch
 - [Row level security](row-level-security.md) for callers, work outside a request, and rules written in C#.
 - [Modules](modules.md) for `[assembly: Module("Ordering")]`, the name the files carry.
 - [Diagnostics](diagnostics.md#ddd00031) for the build error about an unusable factory, and
-  [DDD00054](diagnostics.md#ddd00054), [DDD00072](diagnostics.md#ddd00072),
-  [DDD00073](diagnostics.md#ddd00073), [DDD00074](diagnostics.md#ddd00074) and
-  [DDD00070](diagnostics.md#ddd00070) for a package's row access contribution, and
+  [DDD00054](diagnostics.md#ddd00054), [DDD00070](diagnostics.md#ddd00070),
+  [DDD00072](diagnostics.md#ddd00072), [DDD00073](diagnostics.md#ddd00073) and
+  [DDD00074](diagnostics.md#ddd00074) for a package's row access contribution, and
   [DDD00069](diagnostics.md#ddd00069) for a module's.
