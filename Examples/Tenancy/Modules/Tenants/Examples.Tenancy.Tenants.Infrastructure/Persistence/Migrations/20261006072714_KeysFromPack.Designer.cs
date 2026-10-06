@@ -21,6 +21,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("tenancy")
+                .HasAnnotation("DDDToolkit:RequiresContextPart:tenancy.save-check", "DDDToolkit.Supporting.Tenancy.EntityFramework.TenancySaveInterceptor\nservices.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework\noptions.UseTenancy(serviceProvider)")
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
