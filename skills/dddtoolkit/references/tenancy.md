@@ -161,6 +161,13 @@ public sealed partial class ShopSeat
   least as long, and never to itself. A tenant always keeps an administrator. Mark your own keys that give
   power over other people's access (`ManagesAccess: true`, or `AccessManagingKeys` in the catalogue), and
   pin the set with a test: a forgotten mark fails open.
+- **Packs after provisioning.** A tenant's roles start as copies of the catalogue's packs, and are the
+  tenant's own to rename and re-key. `builder.Services.SyncRolePacks()` in the host, beside
+  `RunStartupChecks()` and not a check, since it changes roles, makes every role made from a pack follow it
+  once the host has started, tenant by tenant as system work: what the pack gained is added, what it lost is
+  taken out, what the tenant changed itself stays, and each role that changes raises `RoleFollowedItsPack`,
+  which the access history keeps. It needs the roles' nullable `KeysFromPack` column: add a migration. A host
+  that syncs from a deployment step runs `IRolePackSync` instead; one tenant is `RoleCommands.FollowPacksAsync`.
 - **A refusal is a `RefusalException` with a code**: `tenancy.not-permitted`, `tenancy.not-seated`,
   `tenancy.grant-exceeds-own`, `tenancy.last-admin`. Branch on `Code`, never on the message. A refusal
   about one input names it in its `Field` argument.

@@ -363,6 +363,13 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
 - A module asks Tenancy inside its own query, `answers.Over(db).UnitsWhereIHold(key)` as a subquery, and
   answers ids. What a seat, a unit or a role is called is asked of Tenancy's directory, by id.
 - Whether a command may run is asked when it runs, by the use case. A key set only draws a screen.
+- A role a tenant got from a pack follows a pack you change later only where the host calls
+  `builder.Services.SyncRolePacks()`, beside `RunStartupChecks()` and not among the checks. Without it a key
+  added to a pack, or a module's new keys, reach the tenants provisioned afterwards alone.
+- A row rule asks a resource with members by its id, through a one-line contract in the module that owns the
+  id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,
+  asked as `ProjectsISee.Ids().Contains(row.ProjectId)`. No rule and no contract names the SQL function: the
+  Membership contribution says which of its functions answers.
 - In a module whose use cases are commands and queries, a route and a GraphQL resolver only send one.
   Neither decides who may do what, and neither takes a `DbContext`.
 - A GraphQL type is `[ObjectType<T>]` over the application's own record, a list is paged by HotChocolate's

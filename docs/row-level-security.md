@@ -1341,7 +1341,8 @@ A package that keeps a resource's access writes the functions that answer it, an
 [Membership package](membership.md#on-postgres-the-second-lock) writes, for each resource with members, the
 resources the caller sees and those it holds a key on, under names it takes from the resource's rules. A rule
 should not have to repeat those names, and a module that asks about another module's resource should not even
-know them. So it asks by the resource's id:
+know them. So it asks by the resource's id. An `[AccessFunctionContract]`, above, is for a function your module
+defines itself and names; this contract is for a set a package answers:
 
 ```mermaid
 flowchart LR
