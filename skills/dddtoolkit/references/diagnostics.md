@@ -457,6 +457,19 @@ decorator that hands its inner handler the message it was given, or for construc
 A generic dispatcher over an unconstrained message type parameter is not seen: send through `ISender` there. A call that is meant elsewhere gets `#pragma warning disable DDD00061` with
 the reason. Do not hide it by calling a method of the handler's own instead: the check is skipped all the same.
 
+## DDD00062
+
+Error. A class marked `[GraphQLSchema("admin", OperationType.Query)]` also carries something HotChocolate's own
+generator registers, which would put its fields into every schema: `[QueryType]`, `[MutationType]`,
+`[SubscriptionType]`, `[ExtendObjectType]`, `[ObjectType]`, a base class such as `ObjectTypeExtension`, or a static
+method marked `[Query]`, `[Mutation]` or `[Subscription]`. Remove what the message names; the attribute on the class
+says what its public static methods are. Also reported when the attribute names no schema (use the name the schema
+is registered under, `AddGraphQLServer("admin")`), for a generic class, a `file` class or one that is private or
+protected inside another (make it a non-generic internal class), for an instance method (make it static), for a class
+with no field, for two methods that are one field (two overloads, or `GetX` beside `GetXAsync`: rename one or give it
+a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
+writes, such as a data loader's interface (give the method a name of its own).
+
 ## DDD00063
 
 Error, on a property or field marked `[TenancyPermissions]` (`DDDToolkit.Supporting.Tenancy.Catalogue`) that the
@@ -483,19 +496,6 @@ to `<DDD_Module>`, best in the `Directory.Build.props` that sets the name for th
 `<DDD_DeclareModule>false</DDD_DeclareModule>`. Do not silence it with `NoWarn`: the missing registrations are real.
 An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 
-## DDD00062
-
-Error. A class marked `[GraphQLSchema("admin", OperationType.Query)]` also carries something HotChocolate's own
-generator registers, which would put its fields into every schema: `[QueryType]`, `[MutationType]`,
-`[SubscriptionType]`, `[ExtendObjectType]`, `[ObjectType]`, a base class such as `ObjectTypeExtension`, or a static
-method marked `[Query]`, `[Mutation]` or `[Subscription]`. Remove what the message names; the attribute on the class
-says what its public static methods are. Also reported when the attribute names no schema (use the name the schema
-is registered under, `AddGraphQLServer("admin")`), for a generic class, a `file` class or one that is private or
-protected inside another (make it a non-generic internal class), for an instance method (make it static), for a class
-with no field, for two methods that are one field (two overloads, or `GetX` beside `GetXAsync`: rename one or give it
-a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
-writes, such as a data loader's interface (give the method a name of its own).
-
 ## DDD00065
 
 Info, in the project that declares Tenancy's classes (or another package's that asks with
@@ -505,7 +505,7 @@ CS0246. Read the message for why. A template with no class: declare that class n
 (a module split over two projects hears this in the first and gets the class in the second; nothing to do).
 Several classes of one template: keep one. A class that does not meet a constraint: give it what the message
 names. A type of that name in a namespace of the project: rename it, or name the class otherwise with
-`[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` beside `[assembly: Module]`. Never
+`[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` in that project. Never
 answer it by writing the nine-type alias in the projects above.
 
 ## Not a diagnostic: the owned type must carry the key part
