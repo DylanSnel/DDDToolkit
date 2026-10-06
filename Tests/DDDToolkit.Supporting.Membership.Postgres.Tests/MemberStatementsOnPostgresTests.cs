@@ -58,11 +58,16 @@ public sealed class MemberStatementsOnPostgresTests(FilingPostgres postgres)
             var access = scope.ServiceProvider.GetRequiredService<IMemberQuestions<DocumentId>>();
             commands.Reset();
 
+            // Started together, the three may still run one after the other, each giving its context back to the
+            // pool before the next takes one, which may then be the same instance. Held until all three have sent
+            // their statement, each keeps the context it took while the others take theirs.
+            var together = commands.HoldUntilTogether(readings: 3);
             var asked = await Task.WhenAll(
                 access.HoldAsync(data.Minutes, DocumentKeys.Edit, Cancellation),
                 access.HoldAsync(data.Budget, DocumentKeys.Share, Cancellation),
                 access.HoldAsync(data.Outline, DocumentKeys.View, Cancellation));
 
+            together.Met.Should().BeTrue("the three readings ran at the same time, or what follows proves nothing");
             asked[0]!.Via.Should().Be(MemberVia.Members, "Ben contributes to the minutes");
             asked[1]!.Via.Should().Be(MemberVia.Members, "and owns the budget");
             asked[2].Should().BeNull("the outline is Cy's alone: the policies hide it from Ben, and so does the question");
