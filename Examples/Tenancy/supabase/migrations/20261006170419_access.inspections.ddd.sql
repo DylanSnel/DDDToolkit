@@ -218,7 +218,7 @@ CREATE POLICY "Seats see the inspections of projects they see (sele ~ e2b699c1" 
     USING ("ProjectId" = ANY (ARRAY(SELECT projects.project_ids_i_see())));
 COMMENT ON POLICY "Seats see the inspections of projects they see (sele ~ e2b699c1" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- System work in its tenant (select) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work in its tenant (select) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work in its tenant (select) for ddd_system_in" ON inspections."Inspections" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work in its tenant (select) for ddd_system_in" ON inspections."Inspections" IS 'DDDToolkit row access rule';
@@ -231,57 +231,57 @@ CREATE POLICY "Seats record where they may (insert) for authenticated" ON inspec
     WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Seats record where they may (insert) for authenticated" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- System work in its tenant (insert) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work in its tenant (insert) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work in its tenant (insert) for ddd_system_in" ON inspections."Inspections" FOR INSERT TO ddd_system_in
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work in its tenant (insert) for ddd_system_in" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- System work in its tenant (update) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work in its tenant (update) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work in its tenant (update) for ddd_system_in" ON inspections."Inspections" FOR UPDATE TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work in its tenant (update) for ddd_system_in" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- System work in its tenant (delete) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work in its tenant (delete) for ddd_system_in asks the policy 'System work in its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work in its tenant (delete) for ddd_system_in" ON inspections."Inspections" FOR DELETE TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work in its tenant (delete) for ddd_system_in" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON inspections."Inspections" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for authenticated is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for authenticated is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for authenticated" ON inspections."Inspections" AS RESTRICTIVE FOR ALL TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.caller_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for authenticated" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON inspections."Inspections" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON inspections."Inspections" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON inspections."Inspections" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON inspections."Inspections" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON inspections."Inspections" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON inspections."Inspections" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON inspections."Inspections" IS 'DDDToolkit row access rule';
@@ -338,7 +338,7 @@ BEGIN
 END
 $ddd$;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION "inspections".attribution_matches_caller() RETURNS trigger
     LANGUAGE plpgsql SET search_path = '' AS $body$
 DECLARE

@@ -212,7 +212,7 @@ BEGIN
 END
 $ddd$;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.caller_rights() RETURNS TABLE ("TenantId" uuid, "SeatId" uuid, "UnitId" uuid, "RoleId" uuid, "Key" text, "StartsAt" timestamp with time zone, "EndsAt" timestamp with time zone)
     LANGUAGE sql STABLE AS $function$
 SELECT t."TenantId", t."SeatId", t."UnitId", t."RoleId", t."Key"::pg_catalog.text, t."StartsAt", t."EndsAt"
@@ -221,7 +221,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.caller_rights() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.caller_rights() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.identity_tenants() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Identity" = (SELECT auth.uid())
@@ -229,7 +229,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.identity_tenants() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.identity_tenants() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.invitation_of_digest(digest bytea) RETURNS TABLE ("TenantId" uuid, "InvitationId" uuid, "IssuedBy" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT i."TenantId", i."Id", i."IssuedBy" FROM "tenancy"."InvitationDigests" d
@@ -239,7 +239,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.invitation_of_digest(digest bytea) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.invitation_of_digest(digest bytea) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.key_is_live(key text) RETURNS boolean
     LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
 SELECT $1 IN ('inspections.record', 'projects.close', 'projects.crew.manage', 'projects.edit', 'projects.open', 'projects.owner.change', 'projects.view', 'tenancy.grants.manage', 'tenancy.history.view', 'tenancy.roles.manage', 'tenancy.seats.manage', 'tenancy.settings.manage', 'tenancy.units.manage')
@@ -247,7 +247,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.key_is_live(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.key_is_live(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.manages_access(key text) RETURNS boolean
     LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
 SELECT $1 IN ('projects.crew.manage', 'projects.owner.change', 'tenancy.grants.manage', 'tenancy.roles.manage', 'tenancy.seats.manage', 'tenancy.settings.manage', 'tenancy.units.manage')
@@ -255,7 +255,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.manages_access(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.manages_access(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.pack_keys(pack text) RETURNS text[]
     LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
 SELECT CASE $1 WHEN 'access-admin' THEN ARRAY['projects.crew.manage', 'projects.owner.change', 'projects.view', 'tenancy.grants.manage', 'tenancy.history.view', 'tenancy.roles.manage', 'tenancy.seats.manage', 'tenancy.settings.manage', 'tenancy.units.manage']::pg_catalog.text[] WHEN 'area-manager' THEN ARRAY['inspections.record', 'projects.close', 'projects.crew.manage', 'projects.edit', 'projects.open', 'projects.owner.change', 'projects.view', 'tenancy.grants.manage', 'tenancy.seats.manage', 'tenancy.units.manage']::pg_catalog.text[] WHEN 'crew-lead' THEN ARRAY['inspections.record', 'projects.close', 'projects.crew.manage', 'projects.edit', 'projects.view']::pg_catalog.text[] WHEN 'observer' THEN ARRAY['projects.view']::pg_catalog.text[] WHEN 'people-office' THEN ARRAY['tenancy.grants.manage']::pg_catalog.text[] WHEN 'surveyor' THEN ARRAY['inspections.record', 'projects.view']::pg_catalog.text[] WHEN 'tenant-admin' THEN ARRAY['inspections.record', 'projects.close', 'projects.crew.manage', 'projects.edit', 'projects.open', 'projects.owner.change', 'projects.view', 'tenancy.grants.manage', 'tenancy.history.view', 'tenancy.roles.manage', 'tenancy.seats.manage', 'tenancy.settings.manage', 'tenancy.units.manage']::pg_catalog.text[] END
@@ -263,7 +263,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.pack_keys(pack text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.pack_keys(pack text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.role_keys_in_use() RETURNS SETOF text
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT held.k::pg_catalog.text FROM "tenancy"."Roles" r
@@ -273,7 +273,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.role_keys_in_use() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.role_keys_in_use() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.seat_in_tenant(tenant uuid) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
@@ -285,7 +285,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.seat_in_tenant(tenant uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.seat_in_tenant(tenant uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.holds_key_in_tenant(tenant uuid, key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
@@ -294,7 +294,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.holds_key_in_tenant(tenant uuid, key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.holds_key_in_tenant(tenant uuid, key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.roles_with_key_in_tenant(tenant uuid, key text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."Id" FROM "tenancy"."Roles" r
@@ -305,7 +305,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.roles_with_key_in_tenant(tenant uuid, key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.roles_with_key_in_tenant(tenant uuid, key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.seated_in_tenant(tenant uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT tenancy.seat_in_tenant($1) IS NOT NULL
@@ -313,7 +313,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.seated_in_tenant(tenant uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.seated_in_tenant(tenant uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.seats_of_identity(identity uuid) RETURNS TABLE ("TenantId" uuid, "SeatId" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."TenantId", s."Id" FROM "tenancy"."Seats" s
@@ -322,7 +322,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.seats_of_identity(identity uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.seats_of_identity(identity uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.system_tenant() RETURNS uuid
     LANGUAGE sql STABLE SET search_path = '' AS $function$
 SELECT nullif(pg_catalog.current_setting('tenancy.caller_tenant', true), '')::pg_catalog.uuid
@@ -330,7 +330,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.system_tenant() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.system_tenant() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.caller_seat() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."Id" FROM "tenancy"."Seats" s
@@ -342,7 +342,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.caller_seat() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.caller_seat() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.caller_tenant() RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT s."TenantId" FROM "tenancy"."Seats" s WHERE s."Id" = (SELECT tenancy.caller_seat())
@@ -350,7 +350,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.caller_tenant() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.caller_tenant() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.holds_key(key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
@@ -359,7 +359,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.holds_key(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.holds_key(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.holds_tenant_wide(key text) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT EXISTS (SELECT 1 FROM "tenancy"."SeatRights" r
@@ -370,7 +370,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.holds_tenant_wide(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.holds_tenant_wide(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.readable_units() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatPlacements" pl
@@ -380,7 +380,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.readable_units() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.readable_units() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.rewrite_tenant_rights() RETURNS integer
     LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = '' AS $function$
 WITH removed AS (
@@ -412,7 +412,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.rewrite_tenant_rights() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.rewrite_tenant_rights() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.roles_with_key(key text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."Id" FROM "tenancy"."Roles" r
@@ -422,7 +422,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.roles_with_key(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.roles_with_key(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_placements() RETURNS TABLE ("SeatId" uuid, "UnitId" uuid, "IsPrimary" boolean, "TenantId" uuid)
     LANGUAGE sql STABLE AS $function$
 SELECT t."SeatId", t."UnitId", t."IsPrimary", t."TenantId"
@@ -431,7 +431,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_placements() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_placements() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_roles() RETURNS TABLE ("Id" uuid, "TenantId" uuid, "FromPack" text, "Status" text, "Keys" text[])
     LANGUAGE sql STABLE AS $function$
 SELECT t."Id", t."TenantId", t."FromPack"::pg_catalog.text, CASE t."Status" WHEN 'Active' THEN 'Active' WHEN 'Archived' THEN 'Archived' END, t."Keys"
@@ -440,7 +440,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_roles() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_roles() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_seats() RETURNS TABLE ("Id" uuid, "TenantId" uuid, "Status" text)
     LANGUAGE sql STABLE AS $function$
 SELECT t."Id", t."TenantId", CASE t."Status" WHEN 'Active' THEN 'Active' WHEN 'Suspended' THEN 'Suspended' WHEN 'Deactivated' THEN 'Deactivated' END
@@ -449,7 +449,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_seats() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_seats() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_unit_paths() RETURNS TABLE ("TenantId" uuid, "AncestorId" uuid, "DescendantId" uuid, "Distance" integer)
     LANGUAGE sql STABLE AS $function$
 SELECT t."TenantId", t."AncestorId", t."DescendantId", t."Distance"
@@ -458,7 +458,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_unit_paths() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_unit_paths() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_units() RETURNS TABLE ("Id" uuid, "TenantId" uuid, "ParentId" uuid, "Status" text)
     LANGUAGE sql STABLE AS $function$
 SELECT t."Id", t."TenantId", t."ParentId", CASE t."Status" WHEN 'Active' THEN 'Active' WHEN 'Archived' THEN 'Archived' END
@@ -467,7 +467,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_units() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_units() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenants_to_sweep() RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT t."Id" FROM "tenancy"."Tenants" t
@@ -476,7 +476,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenants_to_sweep() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenants_to_sweep() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.unit_parent(unit uuid) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT u."ParentId" FROM "tenancy"."OrganizationUnits" u WHERE u."Id" = $1 AND u."TenantId" = (SELECT tenancy.caller_tenant())
@@ -484,7 +484,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.unit_parent(unit uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.unit_parent(unit uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.units_where_i_hold(key text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
@@ -495,7 +495,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.units_where_i_hold(key text) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.units_where_i_hold(key text) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) RETURNS TABLE ("UnitId" uuid, "Key" text, "EndsAt" timestamp with time zone, "Parent" uuid, "OfCaller" boolean)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."UnitId", r."Key"::pg_catalog.text, r."EndsAt", p."DescendantId",
@@ -511,7 +511,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.seats_holding_at(key text, unit uuid) RETURNS TABLE ("SeatId" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT r."SeatId" FROM "tenancy"."SeatRights" r
@@ -525,7 +525,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
@@ -538,7 +538,7 @@ $function$;
 COMMENT ON FUNCTION tenancy.tenant_administrators() IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.tenant_administrators() FROM PUBLIC;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.units_where_i_hold_in_tenant(tenant uuid, key text) RETURNS SETOF uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
 SELECT DISTINCT p."DescendantId" FROM "tenancy"."SeatRights" r
@@ -604,45 +604,45 @@ GRANT EXECUTE ON FUNCTION tenancy.units_where_i_hold_in_tenant(tenant uuid, key 
 ALTER TABLE tenancy."InvitationDigests" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."InvitationDigests" FORCE ROW LEVEL SECURITY;
 
--- Issuers keep their token's digest (insert) for authenticated asks the policy 'Issuers keep their token's digest' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Issuers keep their token's digest (insert) for authenticated asks the policy 'Issuers keep their token's digest' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Issuers keep their token's digest (insert) for authenticated" ON tenancy."InvitationDigests" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (EXISTS (SELECT 1 FROM "tenancy"."Invitations" i WHERE i."Id" = "tenancy"."InvitationDigests"."InvitationId" AND i."TenantId" = "tenancy"."InvitationDigests"."TenantId" AND ddd.written_in_this_transaction(i.xmin) AND i."IssuedBy" = (SELECT tenancy.caller_seat()) AND i."State" = 'Open')));
 COMMENT ON POLICY "Issuers keep their token's digest (insert) for authenticated" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Tenancy work keeps a token's digest (insert) for ddd_system_in asks the policy 'Tenancy work keeps a token's digest' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work keeps a token's digest (insert) for ddd_system_in asks the policy 'Tenancy work keeps a token's digest' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work keeps a token's digest (insert) for ddd_system_in" ON tenancy."InvitationDigests" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy') AND (EXISTS (SELECT 1 FROM "tenancy"."Invitations" i WHERE i."Id" = "tenancy"."InvitationDigests"."InvitationId" AND i."TenantId" = "tenancy"."InvitationDigests"."TenantId" AND ddd.written_in_this_transaction(i.xmin))));
 COMMENT ON POLICY "Tenancy work keeps a token's digest (insert) for ddd_system_in" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."InvitationDigests" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."InvitationDigests" IS 'DDDToolkit row access rule';
@@ -650,77 +650,77 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."Invitations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."Invitations" FORCE ROW LEVEL SECURITY;
 
--- Seat managers read invitations (select) for authenticated asks the policy 'Seat managers read invitations' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers read invitations (select) for authenticated asks the policy 'Seat managers read invitations' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers read invitations (select) for authenticated" ON tenancy."Invitations" FOR SELECT TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage')))));
 COMMENT ON POLICY "Seat managers read invitations (select) for authenticated" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Invitations" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Invitations" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Seat managers issue invitations (insert) for authenticated asks the policy 'Seat managers issue invitations' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers issue invitations (insert) for authenticated asks the policy 'Seat managers issue invitations' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers issue invitations (insert) for authenticated" ON tenancy."Invitations" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."Invitations"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT "IssuedAsSystem") AND ("IssuedBy" = (SELECT tenancy.caller_seat())) AND ("State" = 'Open') AND ("AcceptedAs" IS NULL AND "AcceptedAt" IS NULL));
 COMMENT ON POLICY "Seat managers issue invitations (insert) for authenticated" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Invitations" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Seat managers cancel invitations (update) for authenticated asks the policy 'Seat managers cancel invitations' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers cancel invitations (update) for authenticated asks the policy 'Seat managers cancel invitations' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers cancel invitations (update) for authenticated" ON tenancy."Invitations" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage')))) AND ("State" = 'Open'))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage')))) AND ("State" IN ('Open', 'Cancelled')) AND ("AcceptedAs" IS NULL AND "AcceptedAt" IS NULL));
 COMMENT ON POLICY "Seat managers cancel invitations (update) for authenticated" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Invitations" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Invitations" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Invitations" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Invitations" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Invitations" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Invitations" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Invitations" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Invitations" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
@@ -728,82 +728,82 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."OrganizationUnitPaths" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."OrganizationUnitPaths" FORCE ROW LEVEL SECURITY;
 
--- Members read the tree (select) for authenticated asks the policy 'Members read the tree' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Members read the tree (select) for authenticated asks the policy 'Members read the tree' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Members read the tree (select) for authenticated" ON tenancy."OrganizationUnitPaths" FOR SELECT TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()));
 COMMENT ON POLICY "Members read the tree (select) for authenticated" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."OrganizationUnitPaths" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."OrganizationUnitPaths" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Unit managers write the tree (insert) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit managers write the tree (insert) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit managers write the tree (insert) for authenticated" ON tenancy."OrganizationUnitPaths" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_key('tenancy.units.manage')));
 COMMENT ON POLICY "Unit managers write the tree (insert) for authenticated" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."OrganizationUnitPaths" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Unit managers write the tree (update) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit managers write the tree (update) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit managers write the tree (update) for authenticated" ON tenancy."OrganizationUnitPaths" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_key('tenancy.units.manage')))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_key('tenancy.units.manage')));
 COMMENT ON POLICY "Unit managers write the tree (update) for authenticated" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."OrganizationUnitPaths" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Unit managers write the tree (delete) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit managers write the tree (delete) for authenticated asks the policy 'Unit managers write the tree' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit managers write the tree (delete) for authenticated" ON tenancy."OrganizationUnitPaths" FOR DELETE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_key('tenancy.units.manage')));
 COMMENT ON POLICY "Unit managers write the tree (delete) for authenticated" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."OrganizationUnitPaths" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."OrganizationUnitPaths" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."OrganizationUnitPaths" IS 'DDDToolkit row access rule';
@@ -811,77 +811,77 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."OrganizationUnits" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."OrganizationUnits" FORCE ROW LEVEL SECURITY;
 
--- Members read the units (select) for authenticated asks the policy 'Members read the units' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Members read the units (select) for authenticated asks the policy 'Members read the units' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Members read the units (select) for authenticated" ON tenancy."OrganizationUnits" FOR SELECT TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()));
 COMMENT ON POLICY "Members read the units (select) for authenticated" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."OrganizationUnits" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."OrganizationUnits" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Unit managers add below their units (insert) for authenticated asks the policy 'Unit managers add below their units' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit managers add below their units (insert) for authenticated asks the policy 'Unit managers add below their units' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit managers add below their units (insert) for authenticated" ON tenancy."OrganizationUnits" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("ParentId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage')))));
 COMMENT ON POLICY "Unit managers add below their units (insert) for authenticated" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."OrganizationUnits" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Unit managers change their units (update) for authenticated asks the policy 'Unit managers change their units' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit managers change their units (update) for authenticated asks the policy 'Unit managers change their units' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit managers change their units (update) for authenticated" ON tenancy."OrganizationUnits" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) OR "ParentId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage')))))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (("ParentId" IS NOT NULL AND "ParentId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage')))) OR ("Id" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) AND "ParentId" IS NOT DISTINCT FROM (SELECT tenancy.unit_parent("Id")))));
 COMMENT ON POLICY "Unit managers change their units (update) for authenticated" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."OrganizationUnits" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."OrganizationUnits" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."OrganizationUnits" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."OrganizationUnits" IS 'DDDToolkit row access rule';
@@ -889,72 +889,72 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."Organizations" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."Organizations" FORCE ROW LEVEL SECURITY;
 
--- Seats read their organizations (select) for authenticated asks the policy 'Seats read their organizations' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats read their organizations (select) for authenticated asks the policy 'Seats read their organizations' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats read their organizations (select) for authenticated" ON tenancy."Organizations" FOR SELECT TO authenticated
     USING ("Id" = (SELECT tenancy.caller_tenant()) OR "Id" = ANY (ARRAY(SELECT tenancy.identity_tenants())));
 COMMENT ON POLICY "Seats read their organizations (select) for authenticated" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Organizations" FOR SELECT TO ddd_system_in
     USING ("Id" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Organizations" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Organizations" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Unit and settings managers change it (update) for authenticated asks the policy 'Unit and settings managers change it' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Unit and settings managers change it (update) for authenticated asks the policy 'Unit and settings managers change it' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Unit and settings managers change it (update) for authenticated" ON tenancy."Organizations" FOR UPDATE TO authenticated
     USING (("Id" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.settings.manage'))))
     WITH CHECK (("Id" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.settings.manage'))));
 COMMENT ON POLICY "Unit and settings managers change it (update) for authenticated" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Organizations" FOR UPDATE TO ddd_system_in
     USING (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Organizations" FOR DELETE TO ddd_system_in
     USING (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Organizations" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("Id" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("Id" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Organizations" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Organizations" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Organizations" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Organizations" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Organizations" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Organizations" IS 'DDDToolkit row access rule';
@@ -962,77 +962,77 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."Roles" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."Roles" FORCE ROW LEVEL SECURITY;
 
--- Members read roles (select) for authenticated asks the policy 'Members read roles' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Members read roles (select) for authenticated asks the policy 'Members read roles' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Members read roles (select) for authenticated" ON tenancy."Roles" FOR SELECT TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()));
 COMMENT ON POLICY "Members read roles (select) for authenticated" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Roles" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Roles" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Role and settings managers add roles (insert) for authenticated asks the policy 'Role and settings managers add roles' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Role and settings managers add roles (insert) for authenticated asks the policy 'Role and settings managers add roles' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Role and settings managers add roles (insert) for authenticated" ON tenancy."Roles" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (((SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')) AND ("tenancy"."Roles"."FromPack" IS NULL AND "tenancy"."Roles"."KeysFromPack" IS NULL)) OR (((SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.settings.manage'))) AND (tenancy.pack_keys("tenancy"."Roles"."FromPack") IS NOT NULL AND NOT EXISTS (SELECT held.k FROM pg_catalog.unnest("tenancy"."Roles"."Keys") AS held(k) EXCEPT SELECT pg_catalog.unnest(tenancy.pack_keys("tenancy"."Roles"."FromPack"))) AND NOT EXISTS (SELECT pg_catalog.unnest(tenancy.pack_keys("tenancy"."Roles"."FromPack")) EXCEPT SELECT held.k FROM pg_catalog.unnest("tenancy"."Roles"."Keys") AS held(k)) AND "tenancy"."Roles"."KeysFromPack" IS NOT NULL AND NOT EXISTS (SELECT held.k FROM pg_catalog.unnest("tenancy"."Roles"."KeysFromPack") AS held(k) EXCEPT SELECT pg_catalog.unnest(tenancy.pack_keys("tenancy"."Roles"."FromPack"))) AND NOT EXISTS (SELECT pg_catalog.unnest(tenancy.pack_keys("tenancy"."Roles"."FromPack")) EXCEPT SELECT held.k FROM pg_catalog.unnest("tenancy"."Roles"."KeysFromPack") AS held(k))))));
 COMMENT ON POLICY "Role and settings managers add roles (insert) for authenticated" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Roles" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Role managers change roles (update) for authenticated asks the policy 'Role managers change roles' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Role managers change roles (update) for authenticated asks the policy 'Role managers change roles' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Role managers change roles (update) for authenticated" ON tenancy."Roles" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')));
 COMMENT ON POLICY "Role managers change roles (update) for authenticated" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Roles" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Roles" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Roles" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Roles" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Roles" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Roles" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Roles" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Roles" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Roles" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Roles" IS 'DDDToolkit row access rule';
@@ -1040,82 +1040,82 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."SeatPlacements" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."SeatPlacements" FORCE ROW LEVEL SECURITY;
 
--- Members read placements (select) for authenticated asks the policy 'Members read placements' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Members read placements (select) for authenticated asks the policy 'Members read placements' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Members read placements (select) for authenticated" ON tenancy."SeatPlacements" FOR SELECT TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()));
 COMMENT ON POLICY "Members read placements (select) for authenticated" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatPlacements" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatPlacements" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Seat managers place at the unit (insert) for authenticated asks the policy 'Seat managers place at the unit' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers place at the unit (insert) for authenticated asks the policy 'Seat managers place at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers place at the unit (insert) for authenticated" ON tenancy."SeatPlacements" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatPlacements"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage')))));
 COMMENT ON POLICY "Seat managers place at the unit (insert) for authenticated" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."SeatPlacements" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Seat managers change placements (update) for authenticated asks the policy 'Seat managers change placements' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers change placements (update) for authenticated asks the policy 'Seat managers change placements' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers change placements (update) for authenticated" ON tenancy."SeatPlacements" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_key('tenancy.seats.manage')))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatPlacements"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND (SELECT tenancy.holds_key('tenancy.seats.manage')) AND (NOT "IsPrimary" OR "UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage')))));
 COMMENT ON POLICY "Seat managers change placements (update) for authenticated" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."SeatPlacements" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Seat managers withdraw at the unit (delete) for authenticated asks the policy 'Seat managers withdraw at the unit' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers withdraw at the unit (delete) for authenticated asks the policy 'Seat managers withdraw at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers withdraw at the unit (delete) for authenticated" ON tenancy."SeatPlacements" FOR DELETE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage'))) OR "tenancy"."SeatPlacements"."SeatId" = (SELECT tenancy.caller_seat())) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."SeatRoleGrants" g WHERE g."SeatId" = "tenancy"."SeatPlacements"."SeatId" AND g."UnitId" = "tenancy"."SeatPlacements"."UnitId")));
 COMMENT ON POLICY "Seat managers withdraw at the unit (delete) for authenticated" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."SeatPlacements" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatPlacements" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatPlacements" IS 'DDDToolkit row access rule';
@@ -1123,50 +1123,50 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."SeatRights" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."SeatRights" FORCE ROW LEVEL SECURITY;
 
--- A seat reads its own rights (select) for authenticated asks the policy 'A seat reads its own rights' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- A seat reads its own rights (select) for authenticated asks the policy 'A seat reads its own rights' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "A seat reads its own rights (select) for authenticated" ON tenancy."SeatRights" FOR SELECT TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("tenancy"."SeatRights"."SeatId" = (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "A seat reads its own rights (select) for authenticated" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatRights" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatRights" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatRights" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatRights" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatRights" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatRights" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatRights" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatRights" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatRights" IS 'DDDToolkit row access rule';
@@ -1174,82 +1174,82 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."SeatRoleGrants" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."SeatRoleGrants" FORCE ROW LEVEL SECURITY;
 
--- Seats and managers read grants (select) for authenticated asks the policy 'Seats and managers read grants' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats and managers read grants (select) for authenticated asks the policy 'Seats and managers read grants' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats and managers read grants (select) for authenticated" ON tenancy."SeatRoleGrants" FOR SELECT TO authenticated
     USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat()) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage'))) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage'))) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage'))));
 COMMENT ON POLICY "Seats and managers read grants (select) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatRoleGrants" FOR SELECT TO ddd_system_in
     USING (EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant())));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatRoleGrants" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Grants managers give at the unit (insert) for authenticated asks the policy 'Grants managers give at the unit' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Grants managers give at the unit (insert) for authenticated asks the policy 'Grants managers give at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers give at the unit (insert) for authenticated" ON tenancy."SeatRoleGrants" FOR INSERT TO authenticated
     WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND ("GrantedBy" = (SELECT tenancy.caller_seat())) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers give at the unit (insert) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."SeatRoleGrants" FOR INSERT TO ddd_system_in
     WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant()))) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Grants managers change at the unit (update) for authenticated asks the policy 'Grants managers change at the unit' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Grants managers change at the unit (update) for authenticated asks the policy 'Grants managers change at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers change at the unit (update) for authenticated" ON tenancy."SeatRoleGrants" FOR UPDATE TO authenticated
     USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))))
     WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers change at the unit (update) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."SeatRoleGrants" FOR UPDATE TO ddd_system_in
     USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant()))) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant()))) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Grants managers revoke at the unit (delete) for authenticated asks the policy 'Grants managers revoke at the unit' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Grants managers revoke at the unit (delete) for authenticated asks the policy 'Grants managers revoke at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers revoke at the unit (delete) for authenticated" ON tenancy."SeatRoleGrants" FOR DELETE TO authenticated
     USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ((("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k))))))) OR "tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers revoke at the unit (delete) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."SeatRoleGrants" FOR DELETE TO ddd_system_in
     USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant()))) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING (EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant())))
     WITH CHECK (EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.system_tenant())));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatRoleGrants" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
@@ -1257,77 +1257,77 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."Seats" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."Seats" FORCE ROW LEVEL SECURITY;
 
--- Members and the person read seats (select) for authenticated asks the policy 'Members and the person read seats' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Members and the person read seats (select) for authenticated asks the policy 'Members and the person read seats' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Members and the person read seats (select) for authenticated" ON tenancy."Seats" FOR SELECT TO authenticated
     USING ("TenantId" = (SELECT tenancy.caller_tenant()) OR "Identity" = (SELECT auth.uid()));
 COMMENT ON POLICY "Members and the person read seats (select) for authenticated" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Seats" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Seats" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Seat managers add seats (insert) for authenticated asks the policy 'Seat managers add seats' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seat managers add seats (insert) for authenticated asks the policy 'Seat managers add seats' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers add seats (insert) for authenticated" ON tenancy."Seats" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')));
 COMMENT ON POLICY "Seat managers add seats (insert) for authenticated" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Seats" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Managers and the seat change it (update) for authenticated asks the policy 'Managers and the seat change it' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Managers and the seat change it (update) for authenticated asks the policy 'Managers and the seat change it' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Managers and the seat change it (update) for authenticated" ON tenancy."Seats" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.grants.manage')) OR "Id" = (SELECT tenancy.caller_seat())))
     WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.grants.manage')) OR "Id" = (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Managers and the seat change it (update) for authenticated" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Seats" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Seats" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Seats" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Seats" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Seats" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Seats" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Seats" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Seats" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Seats" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Seats" IS 'DDDToolkit row access rule';
@@ -1335,72 +1335,72 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."TenancyAccessRevisions" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."TenancyAccessRevisions" FORCE ROW LEVEL SECURITY;
 
--- Seats of the tenant read the revision (select) for a ~ b6768216 asks the policy 'Seats of the tenant read the revision' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats of the tenant read the revision (select) for a ~ b6768216 asks the policy 'Seats of the tenant read the revision' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats of the tenant read the revision (select) for a ~ b6768216" ON tenancy."TenancyAccessRevisions" FOR SELECT TO authenticated
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ("TenantId" = ANY (ARRAY(SELECT tenancy.identity_tenants()))));
 COMMENT ON POLICY "Seats of the tenant read the revision (select) for a ~ b6768216" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."TenancyAccessRevisions" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."TenancyAccessRevisions" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."TenancyAccessRevisions" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Seats of the tenant take the revision (update) for a ~ e1817f6e asks the policy 'Seats of the tenant take the revision' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats of the tenant take the revision (update) for a ~ e1817f6e asks the policy 'Seats of the tenant take the revision' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats of the tenant take the revision (update) for a ~ e1817f6e" ON tenancy."TenancyAccessRevisions" FOR UPDATE TO authenticated
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ("TenantId" = ANY (ARRAY(SELECT tenancy.identity_tenants()))))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ("TenantId" = ANY (ARRAY(SELECT tenancy.identity_tenants()))));
 COMMENT ON POLICY "Seats of the tenant take the revision (update) for a ~ e1817f6e" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."TenancyAccessRevisions" FOR UPDATE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."TenancyAccessRevisions" FOR DELETE TO ddd_system_in
     USING (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."TenancyAccessRevisions" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."TenancyAccessRevisions" IS 'DDDToolkit row access rule';
@@ -1408,60 +1408,60 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."TenancyEventLog" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."TenancyEventLog" FORCE ROW LEVEL SECURITY;
 
--- History readers read their tenant (select) for authenticated asks the policy 'History readers read their tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- History readers read their tenant (select) for authenticated asks the policy 'History readers read their tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "History readers read their tenant (select) for authenticated" ON tenancy."TenancyEventLog" FOR SELECT TO authenticated
     USING (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.history.view')));
 COMMENT ON POLICY "History readers read their tenant (select) for authenticated" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."TenancyEventLog" FOR SELECT TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."TenancyEventLog" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Seats record what they do (insert) for authenticated asks the policy 'Seats record what they do' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats record what they do (insert) for authenticated asks the policy 'Seats record what they do' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats record what they do (insert) for authenticated" ON tenancy."TenancyEventLog" FOR INSERT TO authenticated
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ("ActedByKind" = 'seat') AND (CASE WHEN "tenancy"."TenancyEventLog"."ActedById" = (SELECT tenancy.caller_seat())::pg_catalog.text THEN true ELSE EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Identity" = (SELECT auth.uid()) AND s."TenantId" = "tenancy"."TenancyEventLog"."TenantId" AND s."Id"::pg_catalog.text = "tenancy"."TenancyEventLog"."ActedById" AND ddd.written_in_this_transaction(s.xmin)) END));
 COMMENT ON POLICY "Seats record what they do (insert) for authenticated" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Tenancy work records its tenant (insert) for ddd_system_in asks the policy 'Tenancy work records its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work records its tenant (insert) for ddd_system_in asks the policy 'Tenancy work records its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work records its tenant (insert) for ddd_system_in" ON tenancy."TenancyEventLog" FOR INSERT TO ddd_system_in
     WITH CHECK (("TenantId" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy') AND ("ActedByKind" IN ('system', 'operator', 'token')));
 COMMENT ON POLICY "Tenancy work records its tenant (insert) for ddd_system_in" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("TenantId" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("TenantId" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."TenancyEventLog" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."TenancyEventLog" IS 'DDDToolkit row access rule';
@@ -1469,72 +1469,72 @@ COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy
 ALTER TABLE tenancy."Tenants" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenancy."Tenants" FORCE ROW LEVEL SECURITY;
 
--- Seats read their tenants (select) for authenticated asks the policy 'Seats read their tenants' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Seats read their tenants (select) for authenticated asks the policy 'Seats read their tenants' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seats read their tenants (select) for authenticated" ON tenancy."Tenants" FOR SELECT TO authenticated
     USING ("Id" = (SELECT tenancy.caller_tenant()) OR "Id" = ANY (ARRAY(SELECT tenancy.identity_tenants())));
 COMMENT ON POLICY "Seats read their tenants (select) for authenticated" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Tenants" FOR SELECT TO ddd_system_in
     USING ("Id" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "System work reads its tenant (select) for ddd_system_in" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Operators read every tenant (select) for tenancy_operator asks the policy 'Operators read every tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Tenants" FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Tenants" FOR INSERT TO ddd_system_in
     WITH CHECK (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Settings managers change the tenant (update) for authenticated asks the policy 'Settings managers change the tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Settings managers change the tenant (update) for authenticated asks the policy 'Settings managers change the tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Settings managers change the tenant (update) for authenticated" ON tenancy."Tenants" FOR UPDATE TO authenticated
     USING (("Id" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.settings.manage')))
     WITH CHECK ((("Id" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.settings.manage'))) AND ("Status" = 'Active'));
 COMMENT ON POLICY "Settings managers change the tenant (update) for authenticated" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Tenants" FOR UPDATE TO ddd_system_in
     USING (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'))
     WITH CHECK (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Tenants" FOR DELETE TO ddd_system_in
     USING (("Id" = (SELECT tenancy.system_tenant())) AND ((SELECT auth.jwt() ->> 'scope') = 'tenancy'));
 COMMENT ON POLICY "Tenancy work writes its tenant (delete) for ddd_system_in" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Kept to its tenant (all) for ddd_system_in is the policy 'Kept to its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Tenants" AS RESTRICTIVE FOR ALL TO ddd_system_in
     USING ("Id" = (SELECT tenancy.system_tenant()))
     WITH CHECK ("Id" = (SELECT tenancy.system_tenant()));
 COMMENT ON POLICY "Kept to its tenant (all) for ddd_system_in" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Closed to anonymous callers (all) for anon is the policy 'Closed to anonymous callers' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Tenants" AS RESTRICTIVE FOR ALL TO anon
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Closed to anonymous callers (all) for anon" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (select) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Tenants" AS RESTRICTIVE FOR SELECT TO tenancy_operator
     USING (true);
 COMMENT ON POLICY "Operators only read (select) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (insert) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Tenants" AS RESTRICTIVE FOR INSERT TO tenancy_operator
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (insert) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (update) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Tenants" AS RESTRICTIVE FOR UPDATE TO tenancy_operator
     USING (false)
     WITH CHECK (false);
 COMMENT ON POLICY "Operators only read (update) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
--- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0, which narrows what the permissive policies allow.
+-- Operators only read (delete) for tenancy_operator is the policy 'Operators only read' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres, which narrows what the permissive policies allow.
 CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Tenants" AS RESTRICTIVE FOR DELETE TO tenancy_operator
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
@@ -1669,7 +1669,7 @@ BEGIN
 END
 $ddd$;
 
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION "tenancy".rights_follow_grants() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$
 DECLARE
