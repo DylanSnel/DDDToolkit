@@ -1384,7 +1384,9 @@ so listing its contribution is all a host does.
 A contract that declares its `Ids` itself, to document it, gets that one implemented. Its key is the id of the
 resource's aggregate: one declared with `[EntityId<Guid>]`, as a module's contracts declare it, or, in the
 project that declares the aggregate, the id the toolkit writes beside an aggregate root declared with a value,
-`BoardId` for `[AggregateRoot<Guid>] public partial class Board`. A contract of another shape is
+`BoardId` for `[AggregateRoot<Guid>] public partial class Board`, or an id a package's switch writes into the
+project, `OrganizationUnitId` beside `[assembly: GenerateTenancyIds]` in a contracts project
+([The shortest start: the switch](tenancy.md#the-shortest-start-the-switch)). A contract of another shape is
 [DDD00038](diagnostics.md#ddd00038).
 
 <details>

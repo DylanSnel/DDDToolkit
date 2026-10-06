@@ -397,7 +397,10 @@ Two things see them only from the next project up:
   `[ObjectType<Role>]` over a written `Role` does not compile in that project. Nor does a toolkit generator that
   reads a written class by its symbol, a row access rule that names it, say. A module split by layer has those in
   the projects above, where all is well. A module of one project that needs one declares that class or id itself,
-  one line, and it wins.
+  one line, and it wins. A written id as the key of a
+  [resource access contract](row-level-security.md#a-resources-access-asked-by-its-id) needs neither: the
+  contract beside `[assembly: GenerateTenancyIds]`, and a rule of the same project that asks it, are written over
+  the id the switch writes.
 - **Code outside the root namespace** names the written types through `global using Shop.Tenants;`, the root
   namespace, rather than a using at the top of a file: the parts the generators write for your classes, a
   collection of `SeatId`s say, are files of their own, which a file's using does not reach. Code inside the root

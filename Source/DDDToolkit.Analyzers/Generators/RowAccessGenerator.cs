@@ -113,10 +113,14 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is MethodDeclarationSyntax,
             transform: static (syntaxContext, _) => Outside(syntaxContext));
 
-        context.RegisterSourceOutput(rules, static (production, rule) => Produce(production, rule, ".RowAccess"));
-        context.RegisterSourceOutput(functions, static (production, function) => Produce(production, function, ".AccessFunction"));
+        // The ids a package's switch writes into this project, [assembly: GenerateTenancyIds] say: no type yet to this
+        // generator, so a resource access contract keyed by one, and a rule that asks it, wait for the switch's plan.
+        var writtenIds = context.TemplateDefaultsPlan().Select(static (plan, _) => WrittenIdsOf(plan));
+
+        context.RegisterSourceOutput(rules.Combine(writtenIds), static (production, rule) => Produce(production, WithWrittenIds(rule.Left, rule.Right), ".RowAccess"));
+        context.RegisterSourceOutput(functions.Combine(writtenIds), static (production, function) => Produce(production, WithWrittenIds(function.Left, function.Right), ".AccessFunction"));
         context.RegisterSourceOutput(contracts, static (production, contract) => Produce(production, contract, ".AccessFunctionContract"));
-        context.RegisterSourceOutput(resourceContracts, static (production, contract) => Produce(production, contract, ".ResourceAccessContract"));
+        context.RegisterSourceOutput(resourceContracts.Combine(writtenIds), static (production, contract) => Produce(production, WithWrittenIds(contract.Left, contract.Right), ".ResourceAccessContract"));
         context.RegisterSourceOutput(questions, static (production, declared) => Produce(production, declared, ".AccessFunctions"));
         context.RegisterSourceOutput(setsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
         context.RegisterSourceOutput(scalarsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
@@ -129,6 +133,47 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         {
             production.AddSource(definition.Type.HintName(suffix), SourceText.From(Emit(definition), Encoding.UTF8));
         }
+    }
+
+    /// <summary>The ids the switches of this project write, by name, with their full names as the runtime spells them.</summary>
+    private static EquatableArray<WrittenId> WrittenIdsOf(TemplateDefaultsPlan plan)
+        => plan.Ids
+            .Select(static id => new WrittenId(id.Type.Name, id.Type.FullyQualifiedName.StartsWith("global::", System.StringComparison.Ordinal) ? id.Type.FullyQualifiedName.Substring("global::".Length) : id.Type.FullyQualifiedName))
+            .ToEquatableArray();
+
+    /// <summary>
+    /// A definition with the ids it waited for put in: each resource key no type of the compilation answered is the id
+    /// of that name a switch of this project writes, top-level in its root namespace, and is named by its full name
+    /// where the definition held a stand-in. A key no switch writes is said as it was before the switch was asked, and
+    /// nothing is added.
+    /// </summary>
+    private static RowAccessDefinition WithWrittenIds(RowAccessDefinition definition, EquatableArray<WrittenId> written)
+    {
+        if (definition.Pending.Count == 0)
+        {
+            return definition;
+        }
+
+        var diagnostics = definition.Diagnostics.ToList();
+        var members = definition.Members.ToList();
+        foreach (var pending in definition.Pending.Distinct())
+        {
+            if (written.FirstOrDefault(id => id.Name == pending.Name) is { } id)
+            {
+                members = members.Select(member => member
+                        .Replace("@" + ResourceKey.StandIn(pending.Name) + "/", "@" + id.RuntimeName + "/")
+                        .Replace("global::" + ResourceKey.StandIn(pending.Name), "global::" + id.RuntimeName))
+                    .ToList();
+            }
+            else
+            {
+                diagnostics.Add(pending.Unresolved);
+            }
+        }
+
+        return diagnostics.HasErrorsIn()
+            ? RowAccessDefinition.Failed(definition.Type, diagnostics)
+            : new RowAccessDefinition(definition.Type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
     }
 
     private static RowAccessDefinition Translate(GeneratorAttributeSyntaxContext attributed, bool isFunction, CancellationToken cancellationToken)
@@ -228,11 +273,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var model = attributed.SemanticModel.Compilation.GetSemanticModel(declaration.SyntaxTree);
-        var sql = new Translator(model, method.Parameters[0], method.Parameters[1], extras, isFunction, columnRule ? symbol.Name : null, diagnostics).Translate(body);
+        var translator = new Translator(model, method.Parameters[0], method.Parameters[1], extras, isFunction, columnRule ? symbol.Name : null, diagnostics);
+        var sql = translator.Translate(body);
+        var pending = translator.Pending.ToEquatableArray();
 
         if (diagnostics.HasErrorsIn())
         {
-            return RowAccessDefinition.Failed(type, diagnostics);
+            return RowAccessDefinition.Failed(type, diagnostics) with { Pending = pending };
         }
 
         // A column rule's SQL says so first, so an export that knows no column rules stops at it rather than write it
@@ -257,7 +304,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
         }
 
-        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
+        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members)) { Pending = pending };
     }
 
     /// <summary>
@@ -479,7 +526,21 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
     /// Whether it is the id the toolkit writes beside an aggregate root declared with a value,
     /// <c>[AggregateRoot&lt;Guid&gt;]</c>, in this very compilation.
     /// </param>
-    private sealed record ResourceKey(string RuntimeName, string TypeName, bool Generated);
+    private sealed record ResourceKey(string RuntimeName, string TypeName, bool Generated)
+    {
+        /// <summary>
+        /// The key named <paramref name="name"/> that no type of the compilation answers, which may be an id a
+        /// package's switch writes: a stand-in, which no name of a type or a function has, takes the place of the
+        /// id's full name until the switch's plan says it (<see cref="WithWrittenIds"/>).
+        /// </summary>
+        public static ResourceKey Awaiting(string name) => new(StandIn(name), "global::" + StandIn(name), Generated: true);
+
+        /// <summary>What stands in for the full name of the id named <paramref name="name"/> while it is awaited.</summary>
+        public static string StandIn(string name) => "?" + name + "?";
+    }
+
+    /// <summary>An id a switch of this project writes, by name, and its full name as the runtime spells it.</summary>
+    private sealed record WrittenId(string Name, string RuntimeName);
 
     /// <summary>
     /// The id <paramref name="key"/> names, or null when it names none this generator can find. An id the
@@ -970,13 +1031,13 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         }
 
         var resource = ResourceKeyOf(key, attributed.SemanticModel.Compilation);
+        var pending = EquatableArray<PendingResourceKey>.Empty;
         if (resource is null && key.TypeKind == TypeKind.Error)
         {
-            diagnostics.Add(DiagnosticInfo.Create(
-                DiagnosticDescriptors.RowAccessRuleShape,
-                location,
-                symbol.Name,
-                $"an id the generator can find as its key: {key.Name} is no type it sees, nor the id the toolkit writes beside one aggregate root of this project declared with a value, such as [AggregateRoot<Guid>]. Declare the id itself: [EntityId<Guid>] public readonly partial record struct {key.Name};"));
+            // No type to this generator yet, and no id written beside an aggregate root: an id a package's switch writes
+            // into this project, [assembly: GenerateTenancyIds] in a contracts project say, which only its plan names.
+            resource = ResourceKey.Awaiting(key.Name);
+            pending = new EquatableArray<PendingResourceKey>(new[] { new PendingResourceKey(key.Name, UnknownKey(location, symbol.Name, key.Name)) });
         }
         else if (resource is null || (!resource.Generated && !IsId(key)))
         {
@@ -1032,7 +1093,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
 
         if (diagnostics.HasErrorsIn() || set is not { } published || resource is null)
         {
-            return RowAccessDefinition.Failed(type, diagnostics);
+            return RowAccessDefinition.Failed(type, diagnostics) with { Pending = pending };
         }
 
         var name = ResourceAccessName(resource, published);
@@ -1045,8 +1106,19 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             ResourceAccessIdsMethod(name, resource.TypeName, key.Name, parameters, names, heldOn, declared is null ? "public" : Accessibility(declared), partial: declared is not null),
         ];
 
-        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
+        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members)) { Pending = pending };
     }
+
+    /// <summary>
+    /// DDD00038 for a resource access contract whose key nothing answers: no type the generator sees, no id written
+    /// beside an aggregate root of the project, and no id a switch of the project writes.
+    /// </summary>
+    private static DiagnosticInfo UnknownKey(LocationInfo? location, string contract, string key)
+        => DiagnosticInfo.Create(
+            DiagnosticDescriptors.RowAccessRuleShape,
+            location,
+            contract,
+            $"an id the generator can find as its key: {key} is no type it sees, nor the id the toolkit writes beside one aggregate root of this project declared with a value, such as [AggregateRoot<Guid>], nor one a package's switch writes into this project, such as [assembly: GenerateTenancyIds]. Declare the id itself: [EntityId<Guid>] public readonly partial record struct {key};");
 
     /// <summary>A resource access contract's <c>Name</c>: what a rule asks the set by, and SQL a contribution writes too.</summary>
     private static string ResourceAccessNameConstant(string name, string key, bool heldOn)
@@ -1275,6 +1347,12 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         /// </summary>
         private readonly HashSet<ISymbol> _unbound = new(SymbolEqualityComparer.Default);
 
+        /// <summary>
+        /// The resource access contracts of this compilation asked by a key no type answers yet, which an id a switch
+        /// of the project writes may: the SQL names each by a stand-in until the switch's plan says it.
+        /// </summary>
+        public List<PendingResourceKey> Pending { get; } = [];
+
         public string Translate(ExpressionSyntax expression) => expression switch
         {
             ParenthesizedExpressionSyntax parenthesized => Translate(parenthesized.Expression),
@@ -1461,11 +1539,25 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             // finds the function that answers it.
             if (ResourceAccessContractOf(owner) is { } resource)
             {
-                return resource.AttributeClass?.TypeArguments.FirstOrDefault() is { } key
-                       && ResourceAccessSetOf(resource) is { } published
-                       && ResourceKeyOf(key, model.Compilation) is { } resolved
-                    ? new Question(ResourceAccessName(resolved, published), access.Expression + ".Ids", Plain: false)
-                    : null;
+                if (resource.AttributeClass?.TypeArguments.FirstOrDefault() is not { } key || ResourceAccessSetOf(resource) is not { } published)
+                {
+                    return null;
+                }
+
+                if (ResourceKeyOf(key, model.Compilation) is { } resolved)
+                {
+                    return new Question(ResourceAccessName(resolved, published), access.Expression + ".Ids", Plain: false);
+                }
+
+                if (key.TypeKind != TypeKind.Error)
+                {
+                    return null;
+                }
+
+                // A contract of this compilation keyed by an id a switch of the project may write: asked by a stand-in
+                // until the switch's plan names it, and untranslatable, as before, where no switch writes it.
+                Pending.Add(new PendingResourceKey(key.Name, DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleUntranslatable, LocationInfo.From(invocation), invocation.ToString())));
+                return new Question(ResourceAccessName(ResourceKey.Awaiting(key.Name), published), access.Expression + ".Ids", Plain: false);
             }
 
             if ((AccessFunctionOf(owner) ?? AccessFunctionContractOf(owner)) is not { } declared)
@@ -2041,7 +2133,21 @@ internal sealed record RowAccessDefinition(
     /// <summary>Only the diagnostics: nothing is added to a class that has errors.</summary>
     public static RowAccessDefinition Failed(TypeDeclarationInfo type, List<DiagnosticInfo> diagnostics)
         => new(type, new EquatableArray<DiagnosticInfo>(diagnostics), EquatableArray<string>.Empty);
+
+    /// <summary>
+    /// The resource keys the members name by a stand-in, because no type of the compilation answers them: each is put
+    /// in, or said, once the ids a package's switch writes into the project are known.
+    /// </summary>
+    public EquatableArray<PendingResourceKey> Pending { get; init; } = EquatableArray<PendingResourceKey>.Empty;
 }
+
+/// <summary>
+/// A resource key no type of the compilation answers, which an id a package's switch writes may: its name, and what
+/// is said when no switch writes it either.
+/// </summary>
+/// <param name="Name">The key's name as written, <c>OrganizationUnitId</c>.</param>
+/// <param name="Unresolved">The diagnostic for a key no switch writes, as it was said before switches were asked.</param>
+internal sealed record PendingResourceKey(string Name, DiagnosticInfo Unresolved);
 
 internal static class RowAccessDiagnostics
 {

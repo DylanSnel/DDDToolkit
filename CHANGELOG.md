@@ -669,8 +669,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `ContributedFunction` (`ResourceAccessAnswer`). A rule that asks a set no contribution of the export answers is
   refused when its file is written, naming the rule and the resource, and saying to write the contexts or modules
   together where the one that keeps the resource is left out; so are two functions that answer one set for a
-  resource, or one whose parameters or result cannot answer it. The key is an id declared with `[EntityId<T>]`, or
-  the one `[AggregateRoot<Guid>]` has the toolkit write in the same project. A contract of another shape, keyed by
+  resource, or one whose parameters or result cannot answer it. The key is an id declared with `[EntityId<T>]`, the
+  one `[AggregateRoot<Guid>]` has the toolkit write in the same project, or one a package's switch writes there,
+  `[assembly: GenerateTenancyIds]` in a contracts project say, which a rule in that project asks as well. A
+  contract of another shape, keyed by
   something that is no id, or declared in another module than the one whose assembly holds the id, is DDD00038:
   what a module publishes of its resources is its own to say. DDD00039 names the contract among what a rule may
   ask. See [A resource's access, asked by its id](docs/row-level-security.md#a-resources-access-asked-by-its-id).

@@ -225,8 +225,9 @@ exactly one `public static bool Allows(TAggregate x, Caller caller)` whose body 
 an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
 caller, and needs a one-column key with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
 one `static partial bool Allows(TKey key, ...)` or `static partial AccessSet<TKey> Ids(...)`. A
-`[ResourceAccessContract<TKey>]` is keyed by the id of the resource's aggregate (`[EntityId<T>]`, or the id
-`[AggregateRoot<Guid>]` has the toolkit write in the same project), is declared in the module that owns that
+`[ResourceAccessContract<TKey>]` is keyed by the id of the resource's aggregate (`[EntityId<T>]`, the id
+`[AggregateRoot<Guid>]` has the toolkit write in the same project, or one a switch such as
+`[assembly: GenerateTenancyIds]` writes there), is declared in the module that owns that
 id, and declares nothing, or `static partial AccessSet<TKey> Ids()` for `ResourceAccessSet.Seen`,
 `Ids(string key)` for `HeldOn`. A question
 is a `static partial` method without a body in a `static partial [AccessFunctions]` class: `[AccessSet]`

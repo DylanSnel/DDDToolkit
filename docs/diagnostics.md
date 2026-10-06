@@ -1211,9 +1211,10 @@ The same holds, with a little more, for the others the generator reads:
   `Shape = AccessFunctionShape.Set` if the attribute names a shape.
 - **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, since
   the export finds the resource by the type of its id, and publishes `ResourceAccessSet.Seen` or `HeldOn`. The
-  id is one declared with `[EntityId<T>]`, or the one the toolkit writes beside an aggregate root of the same
-  project declared with a value, `[AggregateRoot<Guid>]`; a name the generator finds as neither is reported
-  with the line that declares it. The contract is declared in the module that owns the id, since a module
+  id is one declared with `[EntityId<T>]`, the one the toolkit writes beside an aggregate root of the same
+  project declared with a value, `[AggregateRoot<Guid>]`, or one a package's switch writes into the project,
+  `[assembly: GenerateTenancyIds]`; a name the generator finds as none of these is reported with the line that
+  declares it. The contract is declared in the module that owns the id, since a module
   publishes the sets of its own resources: one of an id whose assembly declares another module is reported,
   and the other module's rules ask the contract the owner publishes. It declares nothing, or the `Ids` its set
   is asked with for the generator to implement: `static partial AccessSet<ProjectId> Ids()` for the resources

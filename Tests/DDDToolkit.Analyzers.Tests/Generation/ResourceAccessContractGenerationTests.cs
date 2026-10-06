@@ -295,8 +295,86 @@ public class ResourceAccessContractGenerationTests
             """
             [ResourceAccessContract<CrateId>(ResourceAccessSet.Seen)]
             public static partial class CratesISee;
-            """).ShouldHaveDiagnostic("DDD00038", at: "CratesISee").GetMessage().Should().Contain(
-                "Declare the id itself: [EntityId<Guid>] public readonly partial record struct CrateId;", "no aggregate root here has the toolkit write CrateId");
+            """).ShouldHaveDiagnostic("DDD00038", at: "CratesISee").GetMessage().Should()
+            .Contain("nor one a package's switch writes into this project", "no switch here writes CrateId either")
+            .And.Contain("Declare the id itself: [EntityId<Guid>] public readonly partial record struct CrateId;", "no aggregate root here has the toolkit write CrateId");
+
+    [Fact]
+    public void An_id_a_switch_writes_into_the_contracts_project_keys_a_contract_as_a_declared_one_does()
+    {
+        // [assembly: GenerateTenancyIds] writes OrganizationUnitId into this very project, which no other generator sees
+        // while this one runs: the contract is beside the id, where its module publishes it.
+        var result = GeneratorTestHost.Create(
+                """
+                [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyIds]
+
+                namespace Shop.Contracts;
+
+                using DDDToolkit.Abstractions.Access;
+                using DDDToolkit.Abstractions.Attributes;
+
+                [ModuleContract]
+                [ResourceAccessContract<OrganizationUnitId>(ResourceAccessSet.HeldOn)]
+                public static partial class UnitsWhereIHold
+                {
+                    public static partial AccessSet<OrganizationUnitId> Ids(string key);
+                }
+                """)
+            .WithAssemblyName("Shop.Contracts")
+            .WithTenancy()
+            .WithModuleFromTheBuild("Tenants")
+            .RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldCompile();
+        result.ShouldContain(
+            "UnitsWhereIHold.ResourceAccessContract",
+            "public static partial global::DDDToolkit.Abstractions.Access.AccessSet<global::Shop.Contracts.OrganizationUnitId> Ids(string key) => throw");
+
+        var emitted = result.Emit();
+        ((string)emitted.Type("Shop.Contracts.UnitsWhereIHold").GetField("Name")!.GetRawConstantValue()!).Should().Be(
+            ResourceAccessAnswer.NameOf(emitted.Type("Shop.Contracts.OrganizationUnitId"), ResourceAccessSet.HeldOn), "the export finds the resource by the id the switch wrote");
+    }
+
+    [Fact]
+    public void A_rule_asks_a_contract_keyed_by_an_id_the_switch_of_its_own_project_writes()
+    {
+        // A module of one project: the switch writes OrganizationUnitId, the contract and the rule are beside it.
+        var result = GeneratorTestHost.Create(
+                """
+                [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]
+
+                namespace Shop;
+
+                using System;
+                using DDDToolkit.Abstractions.Access;
+                using DDDToolkit.Abstractions.Attributes;
+
+                [ResourceAccessContract<OrganizationUnitId>(ResourceAccessSet.HeldOn)]
+                public static partial class UnitsWhereIHold;
+
+                [AggregateRoot<Guid>]
+                public partial class Board
+                {
+                    public Board(BoardId id, OrganizationUnitId unit) : base(id) => Unit = unit;
+
+                    public OrganizationUnitId Unit { get; private set; }
+                }
+
+                [RowAccess<Board>(RowOperations.Read)]
+                public static partial class TheRule
+                {
+                    public static bool Allows(Board board, Caller caller) => UnitsWhereIHold.Ids("boards.view").Contains(board.Unit);
+                }
+                """)
+            .WithBuildProperty("RootNamespace", "Shop")
+            .WithTenancy()
+            .WithModuleFromTheBuild("Shop")
+            .RunCore();
+
+        result.ShouldNotHaveDiagnostic("DDD00038").ShouldNotHaveDiagnostic("DDD00039").ShouldCompile();
+        result.ShouldContain("UnitsWhereIHold.ResourceAccessContract", "public const string Name = \"@Shop.OrganizationUnitId/held_on\";");
+        RuleSql(result).Should().Be("({col:Unit} = ANY (ARRAY(SELECT {fn:@Shop.OrganizationUnitId/held_on}('boards.view'))))", "the rule asks the set by the id the switch wrote");
+    }
 
     private const string ProjectsContracts =
         """
