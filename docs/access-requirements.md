@@ -320,9 +320,9 @@ hand for whoever called it instead.
 `AccessChecks<TRequests>.RequireAsync(request)` puts the request in hand for the flow of work that asked, from
 the moment the checks let it through: `RequestInHand.Current.Request` is that request, in the method that asked
 and in whatever it runs after, the handler and the save the handler ends with among it, and
-`RequestInHand.Current.Requirement` what it declared. A request the checks refused
-is in nobody's hand. What a check kept for the request is found there without it,
-`Checked<T>.TryFindInHand(out var kept)`, and left where it is.
+`RequestInHand.Current.Requirement` what it declared. A request the checks refused is in nobody's hand. What a
+check kept for the request is found there without it, `Checked<T>.TryFindInHand(out var kept)`, and left where
+it is.
 
 ```csharp
 await checks.RequireAsync(command, cancellationToken);    // in hand from here, once it passed

@@ -2092,8 +2092,8 @@ flowchart LR
 ```
 
 Nothing is written for it. `AccessChecks<TRequests>.RequireAsync` puts every request it lets through in hand,
-with its check, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of your own
-written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
+with its check, in the flow of the method that awaited it: the behavior the generator writes, or a dispatcher of
+your own written with `async` and `await` ([asking the checks without Mediator](access-requirements.md#asking-the-checks-without-mediator)).
 The lines are written through the context's logger factory under the category of `DatabaseRefusalInterceptor`,
 and name the request and its requirement by their types, never their values; a warning carries what the save
 threw. The check is asked again only for a save the policies refused, and only when a logger listens: one more
