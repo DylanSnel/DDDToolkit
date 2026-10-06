@@ -2216,7 +2216,7 @@ nothing about a project, as a query that declares `MemberAccess.SeenWith` is fil
 | `SeatsOfMine` (query) | a signed-in user: a person's own seats are asked for before any tenant, by the verified identity of the token alone | |
 | `OverviewOfMine`, `OrganizationUnits`, `TenantSeats`, `TenantRoles`, `SeatsById`, `OrganizationUnitsById`, `RolesById` (queries) | a caller that works in a tenant | the directory answers it; `OverviewOfMine` only a seat, since only a seat has a self |
 | `CatalogueContents`, `UnitsWhereIHold`, `OpenInvitations` (queries) | a caller that works in a tenant | the open invitations are those into the units where the caller holds `tenancy.seats.manage` |
-| `AddOrganizationUnit` | `tenancy.units.manage` at the parent | that the kind is one of the application's |
+| `AddOrganizationUnit` | `tenancy.units.manage` at the parent | nothing more: the kind is the sample's own field, which the handler sets in the use case's callback ([The kind of a unit](#the-kind-of-a-unit)) |
 | `MoveOrganizationUnit`, `ArchiveOrganizationUnit` | a caller that works in a tenant | `tenancy.units.manage` at the parent the unit hangs under now, which only the use case reads, and for a move at the new parent too, and that the move gives or takes away nothing the caller could not |
 | `ChangeTenantShape` | `tenancy.settings.manage` for the whole tenant | |
 | `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit | that a seat does not place itself; for a withdrawal, what taking each role away would need |
