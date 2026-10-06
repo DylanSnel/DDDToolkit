@@ -13,7 +13,7 @@ internal static class SeatsMutations
 {
     /// <summary>Suspends a seat: it keeps its placements and roles, and counts for nothing until it is reactivated.</summary>
     [Mutation]
-    public static async Task<SampleTenancy.SeatSummary?> SeatSuspendAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> SeatSuspendAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
     {
         await sender.Send(new SuspendTenantSeat(seatId), cancellationToken);
         return await sender.SeatNowAsync(seatId, cancellationToken);
@@ -21,7 +21,7 @@ internal static class SeatsMutations
 
     /// <summary>Makes a suspended seat count again.</summary>
     [Mutation]
-    public static async Task<SampleTenancy.SeatSummary?> SeatReactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> SeatReactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
     {
         await sender.Send(new ReactivateTenantSeat(seatId), cancellationToken);
         return await sender.SeatNowAsync(seatId, cancellationToken);
@@ -29,7 +29,7 @@ internal static class SeatsMutations
 
     /// <summary>Deactivates a seat for good.</summary>
     [Mutation]
-    public static async Task<SampleTenancy.SeatSummary?> SeatDeactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> SeatDeactivateAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
     {
         await sender.Send(new DeactivateTenantSeat(seatId), cancellationToken);
         return await sender.SeatNowAsync(seatId, cancellationToken);

@@ -1,3 +1,4 @@
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
@@ -9,11 +10,24 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// keys that manage access, there and for at least as long, and never given by a seat to itself, while other
 /// roles are given by whoever holds <c>tenancy.grants.manage</c> where the seat is placed; that a move gains the
 /// mover nothing, and gives or takes away from anyone else no key that manages access the mover could not; and
-/// that a tenant always keeps an administrator. An application closes the class once, with an alias:
+/// that a tenant always keeps an administrator.
+/// <para>
+/// An application does not close the class itself. The toolkit's generator closes it over the classes a module
+/// declares with Tenancy's templates, in the project that declares them, as a class named after the module:
 /// <code>
-/// global using ShopTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases&lt;
-///     ShopTenant, TenantId, ShopOrganization, ShopUnit, OrganizationUnitId, ShopSeat, SeatId, ShopRole, RoleId&gt;;
+/// public abstract class ShopTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases&lt;
+///     global::Shop.Domain.ShopTenant, global::Shop.Contracts.TenantId, ..., global::Shop.Contracts.RoleId&gt;
+/// {
+///     private ShopTenancy() { }
+/// }
 /// </code>
+/// for <c>[assembly: Module("Shop")]</c>. A type nested in a class is found through every class derived from it, so
+/// every project that sees that one, the module's application and API projects and the host among them, takes a
+/// <c>ShopTenancy.SeatCommands</c> and answers a <c>ShopTenancy.SeatOverview</c>: the types nested here, closed over
+/// the module's classes, which the container registered and whose documentation shows. Each type parameter's
+/// <c>[TemplateType]</c> says which class fills it, as <c>AddTenancy</c>'s do, and the package's
+/// <c>[assembly: TemplateFacade]</c> asks for the class. That is why this class is abstract rather than static.
+/// </para>
 /// <para>
 /// They are plain services, not handlers: each method checks the Tenancy caller, loads what it needs
 /// through <see cref="IStore"/>, calls the aggregates, and saves once. Every command starts by asking who is
@@ -37,7 +51,16 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// is selected in it; system work begun in it is not stopped.
 /// </para>
 /// </summary>
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<
+    [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
+    [TemplateType(typeof(TenantAggregateAttribute<>))] TTenantId,
+    [TemplateType(typeof(OrganizationAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TOrganization,
+    [TemplateType(typeof(OrganizationUnitAttribute<>), Take = TemplateArgumentKind.Type)] TUnit,
+    [TemplateType(typeof(OrganizationUnitAttribute<>))] TUnitId,
+    [TemplateType(typeof(SeatAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TSeat,
+    [TemplateType(typeof(SeatAggregateAttribute<>))] TSeatId,
+    [TemplateType(typeof(RoleAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TRole,
+    [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId>
     where TTenant : TenantAggregate<TTenantId>
     where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
     where TUnit : OrganizationUnitEntity<TUnitId>
@@ -46,4 +69,13 @@ public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, T
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
     where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>;
+    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+{
+    /// <summary>
+    /// For the class the generator writes for an application, which derives from this one closed over its classes
+    /// so that every nested type is named through it. Nothing makes an instance: everything here is a nested type.
+    /// </summary>
+    protected TenancyUseCases()
+    {
+    }
+}

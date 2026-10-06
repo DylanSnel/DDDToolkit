@@ -16,7 +16,7 @@ internal static class GrantsMutations
     /// A grant made by a client starts now: there is no argument for a start.
     /// </summary>
     [Mutation]
-    public static async Task<SampleTenancy.SeatSummary?> RoleGrantAsync(
+    public static async Task<TenantsTenancy.SeatSummary?> RoleGrantAsync(
         SeatId seatId,
         OrganizationUnitId unitId,
         RoleId roleId,
@@ -31,7 +31,7 @@ internal static class GrantsMutations
 
     /// <summary>Takes a role a seat holds at a unit away.</summary>
     [Mutation]
-    public static async Task<SampleTenancy.SeatSummary?> RoleRevokeAsync(SeatId seatId, OrganizationUnitId unitId, RoleId roleId, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> RoleRevokeAsync(SeatId seatId, OrganizationUnitId unitId, RoleId roleId, [Service] ISender sender, CancellationToken cancellationToken)
     {
         await sender.Send(new RevokeGrant(seatId, unitId, roleId), cancellationToken);
         return await sender.SeatNowAsync(seatId, cancellationToken);

@@ -10,7 +10,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// It requires a caller who works in the tenant. Only a seat has a self, so the package's directory refuses
 /// everyone else with <c>tenancy.not-seated</c>, system work included.
 /// </remarks>
-public sealed record OverviewOfMine : IQuery<SampleTenancy.SeatOverview>, ITenantsRequest
+public sealed record OverviewOfMine : IQuery<TenantsTenancy.SeatOverview>, ITenantsRequest
 {
     /// <inheritdoc />
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
@@ -18,10 +18,10 @@ public sealed record OverviewOfMine : IQuery<SampleTenancy.SeatOverview>, ITenan
 
 /// <summary>Answers <see cref="OverviewOfMine"/> from the Tenancy package's directory.</summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class OverviewOfMineHandler(ITenancyReads reads) : IQueryHandler<OverviewOfMine, SampleTenancy.SeatOverview>
+public sealed class OverviewOfMineHandler(ITenancyReads reads) : IQueryHandler<OverviewOfMine, TenantsTenancy.SeatOverview>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException"><c>tenancy.not-seated</c> for every caller that is not a seat.</exception>
-    public async ValueTask<SampleTenancy.SeatOverview> Handle(OverviewOfMine query, CancellationToken cancellationToken)
+    public async ValueTask<TenantsTenancy.SeatOverview> Handle(OverviewOfMine query, CancellationToken cancellationToken)
         => await reads.AskDirectoryAsync(directory => directory.WhoAmIAsync(cancellationToken));
 }

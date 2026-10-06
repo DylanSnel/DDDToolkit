@@ -1,6 +1,6 @@
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>
     /// A unit, with its path from the root and how deep it is, the root being 1: what the package keeps of a unit,

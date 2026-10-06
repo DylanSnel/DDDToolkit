@@ -49,6 +49,9 @@ internal static class KnownTypes
     /// <summary>Assembly attribute naming a type that declares registration methods, so a referencing project finds them cheaply.</summary>
     public const string TemplateRegistrationsAttribute = AttributesNamespace + ".TemplateRegistrationsAttribute";
 
+    /// <summary>Assembly attribute naming a generic class the project that declares the application's template classes gets a class of its own of, closed over them.</summary>
+    public const string TemplateFacadeAttribute = AttributesNamespace + ".TemplateFacadeAttribute";
+
     /// <summary>Assembly attribute that declares the assembly a module.</summary>
     public const string ModuleAttribute = AttributesNamespace + ".ModuleAttribute";
 

@@ -190,8 +190,8 @@ public sealed class DemoSeederTests(SampleHosts sample) : IClassFixture<SampleHo
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenantCommands>().ProvisionAsync(
-                new SampleTenancy.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
+                new TenantsTenancy.TenantToProvision(
                     harbor.Slug,
                     harbor.Name,
                     harbor.Shape,

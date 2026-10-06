@@ -217,6 +217,62 @@ public class SupportingDomainDocsExampleTests
         """;
 
     /// <summary>
+    /// The package's use cases and a record they answer, nested in one class generic over the application's classes,
+    /// which the project that declares the classes gets closed over them, as a class named after its module.
+    /// </summary>
+    internal const string UseCases =
+        """
+        using System;
+        using System.Linq;
+        using DDDToolkit.Abstractions.Attributes;
+        using DDDToolkit.Abstractions.Interfaces;
+
+        [assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>), "{Module}Subscriptions")]
+
+        namespace Acme.Subscriptions;
+
+        public abstract partial class SubscriptionUseCases<
+            [TemplateType(typeof(SubscriptionAttribute<>), Take = TemplateArgumentKind.Type)] TSubscription,
+            [TemplateType(typeof(SubscriptionAttribute<>))] TSubscriptionId,
+            [TemplateType(typeof(InvoiceAttribute<>), Take = TemplateArgumentKind.Type)] TInvoice,
+            [TemplateType(typeof(InvoiceAttribute<>))] TInvoiceId,
+            [TemplateType(typeof(InvoiceLineAttribute<>), Take = TemplateArgumentKind.Type)] TLine,
+            [TemplateType(typeof(InvoiceLineAttribute<>))] TLineId>
+            where TSubscription : SubscriptionAggregate<TSubscriptionId>
+            where TSubscriptionId : IEntityId, IEquatable<TSubscriptionId>
+            where TInvoice : InvoiceAggregate<TInvoiceId, TSubscriptionId, TLine, TLineId>
+            where TInvoiceId : IEntityId, IEquatable<TInvoiceId>
+            where TLine : InvoiceLineEntity<TLineId>, IInvoiceLineFactory<TLine, TLineId>
+            where TLineId : IEntityId, IEquatable<TLineId>
+        {
+            // For the class the application gets, which derives from this one: nothing makes either.
+            protected SubscriptionUseCases()
+            {
+            }
+
+            public sealed record InvoiceDue(TInvoiceId Invoice, TSubscriptionId Subscription, decimal Amount);
+
+            public sealed class Dunning
+            {
+                public InvoiceDue Due(TInvoice invoice) => new(invoice.Id, invoice.SubscriptionId, invoice.Lines.Sum(line => line.Amount));
+            }
+        }
+        """;
+
+    /// <summary>A class of a project above the one that declares the classes, which names the use cases through the module's class.</summary>
+    internal const string Reminders =
+        """
+        using Shop.Billing;
+
+        namespace Shop.Billing.Application;
+
+        public sealed class Reminders(BillingSubscriptions.Dunning dunning)
+        {
+            public BillingSubscriptions.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
+        }
+        """;
+
+    /// <summary>
     /// The package's comments: a template with a second type argument, what the application identifies an author
     /// by, which an application declares once per thing it has comments on.
     /// </summary>
@@ -546,6 +602,30 @@ public class SupportingDomainDocsExampleTests
         result.ShouldContain(
             "SubscriptionModelBuilderExtensions.AddSubscriptions.Registration.",
             "AddSubscriptions<global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId, global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId, global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>(modelBuilder, schema)");
+    }
+
+    [Fact]
+    public void The_use_cases_are_named_after_the_module_where_the_classes_are_and_in_every_project_above()
+    {
+        static GeneratorTestHost Billing(GeneratorTestHost project)
+            => project
+                .WithSource(Package, "Subscriptions.cs")
+                .WithSource(UseCases, "SubscriptionUseCases.cs")
+                .WithSource(Contracts, "Contracts.cs")
+                .WithSource(Application, "Billing.cs")
+                .WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Billing\")]", "Module.cs");
+
+        var declaring = Billing(GeneratorTestHost.Create(Reminders, "Reminders.cs")).RunCore();
+        declaring.ShouldCompile();
+        declaring.ShouldContain(
+            "BillingSubscriptions.TemplateFacade",
+            "public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId, global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId, global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>");
+
+        var above = GeneratorTestHost.Create(Reminders, "Reminders.cs")
+            .WithReferencedProject("Shop.Billing", Billing)
+            .RunCore();
+        above.ShouldCompile();
+        above.HintNames.Should().NotContain("TemplateFacade", "the project above names the class of the project that declares the classes");
     }
 
     [Fact]

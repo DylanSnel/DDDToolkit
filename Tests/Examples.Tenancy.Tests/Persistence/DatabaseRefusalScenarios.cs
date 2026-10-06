@@ -94,8 +94,8 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenantCommands>().ProvisionAsync(
-                new SampleTenancy.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
+                new TenantsTenancy.TenantToProvision(
                     slug, name, TenantShape.Flat, name, Guid.NewGuid(), "Its administrator", ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
                 Cancellation);
         }

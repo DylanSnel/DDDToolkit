@@ -8,8 +8,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// package answers, under its plain name: the record is nested in a generic class, and the name HotChocolate
 /// would infer for it spells every type argument out.
 /// </summary>
-[ObjectType<SampleTenancy.SeatOverview>]
+[ObjectType<TenantsTenancy.SeatOverview>]
 internal static partial class SeatOverviewType
 {
-    static partial void Configure(IObjectTypeDescriptor<SampleTenancy.SeatOverview> descriptor) => descriptor.Name("SeatOverview");
+    static partial void Configure(IObjectTypeDescriptor<TenantsTenancy.SeatOverview> descriptor) => descriptor.Name("SeatOverview");
 }

@@ -3,7 +3,7 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>What a new tenant is provisioned with.</summary>
     /// <param name="Slug">The slug it is selected by; trimmed and lowercased.</param>

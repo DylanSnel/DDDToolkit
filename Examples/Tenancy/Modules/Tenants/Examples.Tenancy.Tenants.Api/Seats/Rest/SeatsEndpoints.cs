@@ -88,7 +88,7 @@ internal static class SeatsEndpoints
     }
 
     /// <summary>A seat as every answer of this project writes it: its id, its name and its status, never an identity.</summary>
-    internal static object Describe(SampleTenancy.SeatSummary seat) => new { seat.Id, seat.DisplayName, seat.Status };
+    internal static object Describe(TenantsTenancy.SeatSummary seat) => new { seat.Id, seat.DisplayName, seat.Status };
 
     private static object Describe(SeatOfCaller<TenantId, SeatId> mine) => new
     {
@@ -97,7 +97,7 @@ internal static class SeatsEndpoints
     };
 
     // A seat's own overview shows units and roles too, each as the feature that owns it writes it.
-    private static object Describe(SampleTenancy.SeatOverview overview) => new
+    private static object Describe(TenantsTenancy.SeatOverview overview) => new
     {
         tenant = new
         {

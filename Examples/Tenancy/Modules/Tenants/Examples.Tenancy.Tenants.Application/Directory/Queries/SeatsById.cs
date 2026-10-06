@@ -12,7 +12,7 @@ namespace Examples.Tenancy.Tenants.Application.Directory.Queries;
 /// one question takes are refused.
 /// </remarks>
 /// <param name="Ids">The seats asked about.</param>
-public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList<SampleTenancy.SeatSummary>>, ITenantsRequest
+public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList<TenantsTenancy.SeatSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
@@ -20,12 +20,12 @@ public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList
 
 /// <summary>Answers <see cref="SeatsById"/> from the Tenancy package's directory.</summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class SeatsByIdHandler(ITenancyReads reads) : IQueryHandler<SeatsById, IReadOnlyList<SampleTenancy.SeatSummary>>
+public sealed class SeatsByIdHandler(ITenancyReads reads) : IQueryHandler<SeatsById, IReadOnlyList<TenantsTenancy.SeatSummary>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// The caller's own refusal when it is nobody, or <c>tenancy.too-many-ids</c>.
     /// </exception>
-    public async ValueTask<IReadOnlyList<SampleTenancy.SeatSummary>> Handle(SeatsById query, CancellationToken cancellationToken)
+    public async ValueTask<IReadOnlyList<TenantsTenancy.SeatSummary>> Handle(SeatsById query, CancellationToken cancellationToken)
         => await reads.AskDirectoryAsync(directory => directory.SeatsByIdAsync(query.Ids, cancellationToken));
 }

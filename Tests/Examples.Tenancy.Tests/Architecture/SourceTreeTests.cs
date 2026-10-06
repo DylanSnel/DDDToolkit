@@ -367,6 +367,52 @@ public sealed partial class SourceTreeTests
     }
 
     /// <summary>
+    /// Tenancy's use cases are nested in one class generic over the Tenants module's five classes and four ids. The
+    /// toolkit's generator closes it over them in the domain project that declares them, as <c>TenantsTenancy</c>,
+    /// which every project above it sees, so no file of the sample, nor of these tests, closes it again: an alias
+    /// written by hand is the nine types once more, in every project that names a use case.
+    /// </summary>
+    [Fact]
+    public void No_file_of_the_sample_or_of_these_tests_closes_Tenancys_use_cases_itself()
+    {
+        var root = SampleLayout.RepositoryRoot();
+        string[] folders = [Path.Combine(root, "Examples", "Tenancy"), DirectoryOfProject(TheseTests)];
+        var files = folders
+            .SelectMany(folder => Directory.GetFiles(folder, "*.cs", SearchOption.AllDirectories))
+            .Select(file => Path.GetRelativePath(root, file).Replace('\\', '/'))
+            .Where(file => !file.Contains("/bin/", StringComparison.Ordinal) && !file.Contains("/obj/", StringComparison.Ordinal))
+            .ToDictionary(file => file, file => File.ReadAllText(Path.Combine(root, file)));
+
+        files.Where(file => file.Value.Contains("TenantsTenancy.", StringComparison.Ordinal)).Select(file => file.Key)
+            .Should().Contain(
+                [
+                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/SuspendTenantSeat.cs",
+                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs",
+                    "Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs",
+                    $"Tests/{TheseTests}/Infrastructure/SampleTenants.cs",
+                ],
+                "the scan reads the projects that name the use cases: the application's, the API's, the host's and these tests'");
+        files.Where(file => ClosesTenancysUseCases().IsMatch(file.Value)).Select(file => file.Key)
+            .Should().BeEmpty("every project that sees the module's classes sees TenantsTenancy, and names the use cases through it");
+
+        // What a name nested in it stands for is the package's own type, closed over the module's classes and ids:
+        // the type the container registered. The class itself is the domain project's, and is only that name.
+        typeof(TenantsTenancy).Assembly.Should().BeSameAs(typeof(Tenant).Assembly);
+        (typeof(TenantsTenancy).IsAbstract && typeof(TenantsTenancy).Namespace is null).Should().BeTrue();
+        Type[] module =
+        [
+            typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization), typeof(OrganizationUnit),
+            typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role), typeof(RoleId),
+        ];
+        typeof(TenantsTenancy).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
+        typeof(TenantsTenancy).BaseType!.GetGenericArguments().Should().Equal(module);
+
+        // Reflection writes a type nested in a generic class with the outer class's type arguments as its own.
+        typeof(TenantsTenancy.SeatCommands).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
+        typeof(TenantsTenancy.SeatCommands).GetGenericArguments().Should().Equal(module);
+    }
+
+    /// <summary>
     /// Every project file under <paramref name="directory"/>, wherever it is, but for what a build wrote
     /// (<c>bin</c>, <c>obj</c>), what a package manager fetched and the folders whose name starts with a dot.
     /// </summary>
@@ -418,6 +464,13 @@ public sealed partial class SourceTreeTests
     /// </summary>
     [GeneratedRegex(@"^(?:public|internal)\s+(?:(?:static|sealed|abstract|partial|readonly)\s+)*(?:class|record\s+struct|record|interface|enum|struct)\s+(?<name>\w+)", RegexOptions.Multiline)]
     private static partial Regex TypeDeclaration();
+
+    /// <summary>
+    /// Tenancy's use cases closed over types: <c>TenancyUseCases&lt;</c> and a type's name. What a test compares with,
+    /// the open <c>TenancyUseCases&lt;,,,,,,,,&gt;</c>, closes it over nothing.
+    /// </summary>
+    [GeneratedRegex(@"TenancyUseCases<\s*[\w.]")]
+    private static partial Regex ClosesTenancysUseCases();
 
     /// <summary>The namespace a file declares: file-scoped, or with braces as a migration's files have it.</summary>
     [GeneratedRegex(@"^namespace\s+(?<name>[\w.]+)\s*[;{]?\s*$", RegexOptions.Multiline)]

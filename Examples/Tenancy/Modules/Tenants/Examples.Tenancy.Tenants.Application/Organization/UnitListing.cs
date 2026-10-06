@@ -32,6 +32,6 @@ public sealed record UnitListing(
     /// <summary>The unit as the directory answered it, with the kind its own class keeps.</summary>
     /// <param name="unit">What the package's directory says of the unit.</param>
     /// <param name="own">The unit itself, this application's class, as the directory read it.</param>
-    internal static UnitListing Of(SampleTenancy.UnitSummary unit, OrganizationUnit own)
+    internal static UnitListing Of(TenantsTenancy.UnitSummary unit, OrganizationUnit own)
         => new(unit.Id, unit.ParentId, unit.Name, own.Kind, unit.Status, unit.Path, unit.Depth);
 }

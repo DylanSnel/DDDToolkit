@@ -20,7 +20,7 @@ public sealed record MoveOrganizationUnit(OrganizationUnitId Unit, OrganizationU
 
 /// <summary>Handles <see cref="MoveOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="organization">The package's use cases that change the organization.</param>
-public sealed class MoveOrganizationUnitHandler(SampleTenancy.OrganizationCommands organization) : ICommandHandler<MoveOrganizationUnit>
+public sealed class MoveOrganizationUnitHandler(TenantsTenancy.OrganizationCommands organization) : ICommandHandler<MoveOrganizationUnit>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

@@ -7,17 +7,8 @@ global using DDDToolkit.Supporting.Tenancy.Tests.Support;
 global using FluentAssertions;
 global using Xunit;
 
-// The use cases and the caller closed over the host's classes and ids, once, as an application does.
+// The caller closed over the host's ids, once, as an application does. The use cases are HostTenancy, which the
+// toolkit's generator writes into the test host that declares the classes, under the name its module gives it.
 global using HostCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
     DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId>;
-global using HostTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostTenant,
-    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.TenantId,
-    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostOrganization,
-    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostUnit,
-    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.OrganizationUnitId,
-    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostSeat,
-    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.SeatId,
-    DDDToolkit.Supporting.Tenancy.TestHost.Domain.HostRole,
-    DDDToolkit.Supporting.Tenancy.TestHost.Contracts.RoleId>;

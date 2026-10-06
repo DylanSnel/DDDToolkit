@@ -25,20 +25,20 @@ public sealed class DirectoryLoaderTests(SampleHosts sample) : IClassFixture<Sam
         // The loader as the schema registered it. It is the module's own, so it is found by its name, and used
         // through the interface every data loader has.
         var registered = typeof(TenantsModule).Assembly.GetType("Examples.Tenancy.Tenants.Api.Directory.GraphQL.ISeatByIdDataLoader", throwOnError: true)!;
-        var most = SampleTenancy.TenancyDirectory.MostIds;
+        var most = TenantsTenancy.TenancyDirectory.MostIds;
         SeatId[] ids = [.. Enumerable.Range(0, most).Select(_ => SeatId.CreateSequential()), .. Harbor.Seats.Select(seat => seat.Id)];
 
         using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))
         {
             await using var scope = host.Services.CreateAsyncScope();
-            var seats = (IDataLoader<SeatId, SampleTenancy.SeatSummary>)scope.ServiceProvider.GetRequiredService(registered);
+            var seats = (IDataLoader<SeatId, TenantsTenancy.SeatSummary>)scope.ServiceProvider.GetRequiredService(registered);
             sent.Clear();
 
             var found = await seats.LoadAsync(ids, Cancellation);
 
             // Nothing was refused, the seats that are there were found, and an id of nothing is nothing.
             found.Should().HaveCount(ids.Length);
-            found.OfType<SampleTenancy.SeatSummary>().Select(seat => seat.Id).Should().BeEquivalentTo(Harbor.Seats.Select(seat => seat.Id));
+            found.OfType<TenantsTenancy.SeatSummary>().Select(seat => seat.Id).Should().BeEquivalentTo(Harbor.Seats.Select(seat => seat.Id));
         }
 
         sent.Of<SeatsById>().Select(asked => asked.Ids.Count).Should().Equal([most, Harbor.Seats.Count], "one batch of the loader is as many questions as it takes");

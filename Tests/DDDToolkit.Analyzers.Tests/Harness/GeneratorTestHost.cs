@@ -11,6 +11,7 @@ using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
 using CoreModuleGenerator = DDDToolkit.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
+using CoreTemplateFacadeGenerator = DDDToolkit.Analyzers.TemplateFacadeGenerator;
 using CoreTemplateRegistrationGenerator = DDDToolkit.Analyzers.TemplateRegistrationGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
@@ -106,6 +107,7 @@ public sealed class GeneratorTestHost
         new CoreEventNamesGenerator(),
         new CoreRowAccessGenerator(),
         new CoreTemplateRegistrationGenerator(),
+        new CoreTemplateFacadeGenerator(),
         new CoreAccessBehaviorGenerator(),
         new CoreModuleGenerator(),
     ];

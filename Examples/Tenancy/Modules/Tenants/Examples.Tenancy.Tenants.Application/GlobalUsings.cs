@@ -5,7 +5,13 @@
 //
 // The module's classes are not among these. Two features of this project are called Tenant and Organization, so
 // inside it those two words are the features' namespaces, whatever is imported: the classes of those names are
-// reached through SampleTenancy below, and a file that names another of the classes imports its namespace itself.
+// reached through Tenancy's use cases, and a file that names another of the classes imports its namespace itself.
+//
+// Those use cases are not closed here either. The package nests every use case, its store and its records in one
+// class generic over the module's five classes and four ids, and the toolkit's generator closes it over the classes
+// in the domain project that declares them, as TenantsTenancy, named after the module. So a handler takes a
+// TenantsTenancy.SeatCommands, and the invitation use cases are TenantsTenancy.InvitationCommands<Invitation,
+// InvitationId>, closed over the module's invitation class as well.
 global using DDDToolkit.Access;
 global using DDDToolkit.Supporting.Tenancy.Access;
 global using Examples.Tenancy.Tenants.Application.Access;
@@ -13,40 +19,11 @@ global using Examples.Tenancy.Tenants.Application.StoredTenancy;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 global using DDDToolkit.Supporting.Tenancy;
 
-// Tenancy's use cases, closed once over this application's classes and ids. The package nests every use case, its
-// store and its DTOs in one generic class, so this project writes SampleTenancy.SeatCommands rather than nine type
-// arguments. An alias is global only in the project that declares it, and reads its target as if no other using
-// existed, hence the full names.
-global using SampleTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Tenants.Tenant,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
-
 // Tenancy's answers about the current caller, closed over the application's ids: the handlers that ask who is
-// calling, and TenantWideKey, name it once.
+// calling, and TenantWideKey, name it once. An alias is global only in the project that declares it, and reads its
+// target as if no other using existed, hence the full names.
 global using SampleAnswers = DDDToolkit.Supporting.Tenancy.Access.ITenancyAnswers<
     Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
     Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
-
-// The package's invitation use cases, closed over the application's invitation class and its id as well: issuing
-// one, listing the open ones, cancelling one and accepting one.
-global using SampleInvitations = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Tenants.Tenant,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>.InvitationCommands<
-        Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation,
-        Examples.Tenancy.Tenants.Contracts.ValueObjects.InvitationId>;

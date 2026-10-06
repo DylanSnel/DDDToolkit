@@ -16,7 +16,7 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 internal static class DirectoryAnswers
 {
     /// <summary>The seat as the directory answers it now.</summary>
-    public static async Task<SampleTenancy.SeatSummary?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> SeatNowAsync(this ISender sender, SeatId id, CancellationToken cancellationToken)
         => (await sender.Send(new SeatsById([id]), cancellationToken)).FirstOrDefault();
 
     /// <summary>The unit as the directory answers it now, with its kind.</summary>

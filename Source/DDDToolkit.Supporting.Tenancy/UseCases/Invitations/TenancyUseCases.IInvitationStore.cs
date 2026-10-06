@@ -3,7 +3,7 @@ using DDDToolkit.Security;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>
     /// Where the invitation use cases load and keep invitations, in the unit of work of <see cref="IStore"/>: what

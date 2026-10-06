@@ -18,7 +18,7 @@ internal static class SeatsQueries
     /// (<c>UnitPath</c>, <c>RoleOfMine</c>), never a half-filled entity.
     /// </summary>
     [Query]
-    public static async Task<SampleTenancy.SeatOverview> GetOverviewOfMineAsync([Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatOverview> GetOverviewOfMineAsync([Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new OverviewOfMine(), cancellationToken);
 
     /// <summary>
@@ -31,6 +31,6 @@ internal static class SeatsQueries
 
     /// <summary>Every seat of the tenant, by name.</summary>
     [Query]
-    public static async Task<IReadOnlyList<SampleTenancy.SeatSummary>> GetSeatsAsync([Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<TenantsTenancy.SeatSummary>> GetSeatsAsync([Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new TenantSeats(), cancellationToken);
 }

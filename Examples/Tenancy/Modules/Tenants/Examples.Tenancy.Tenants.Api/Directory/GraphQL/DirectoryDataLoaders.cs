@@ -25,13 +25,13 @@ internal static class DirectoryDataLoaders
 {
     /// <summary>The seats with these ids, by id.</summary>
     [DataLoader]
-    public static async Task<IReadOnlyDictionary<SeatId, SampleTenancy.SeatSummary>> GetSeatByIdAsync(
+    public static async Task<IReadOnlyDictionary<SeatId, TenantsTenancy.SeatSummary>> GetSeatByIdAsync(
         IReadOnlyList<SeatId> ids,
         ISender sender,
         CancellationToken cancellationToken)
     {
-        var seats = new Dictionary<SeatId, SampleTenancy.SeatSummary>();
-        foreach (var part in ids.Chunk(SampleTenancy.TenancyDirectory.MostIds))
+        var seats = new Dictionary<SeatId, TenantsTenancy.SeatSummary>();
+        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
         {
             foreach (var seat in await sender.Send(new SeatsById(part), cancellationToken))
             {
@@ -50,7 +50,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var units = new Dictionary<OrganizationUnitId, UnitListing>();
-        foreach (var part in ids.Chunk(SampleTenancy.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
         {
             foreach (var unit in await sender.Send(new OrganizationUnitsById(part), cancellationToken))
             {
@@ -69,7 +69,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var roles = new Dictionary<RoleId, RoleListing>();
-        foreach (var part in ids.Chunk(SampleTenancy.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
         {
             foreach (var listed in await sender.Send(new RolesById(part), cancellationToken))
             {

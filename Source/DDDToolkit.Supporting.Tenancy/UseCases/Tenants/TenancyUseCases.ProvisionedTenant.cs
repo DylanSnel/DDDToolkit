@@ -1,6 +1,6 @@
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>The ids a provisioned tenant was given.</summary>
     /// <param name="Tenant">The tenant, and its organization.</param>

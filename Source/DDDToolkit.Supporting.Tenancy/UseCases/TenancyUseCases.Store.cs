@@ -2,7 +2,7 @@ using DDDToolkit.Supporting.Tenancy.Access;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>
     /// Where the use cases load and save: one unit of work per command. The storage package implements it.

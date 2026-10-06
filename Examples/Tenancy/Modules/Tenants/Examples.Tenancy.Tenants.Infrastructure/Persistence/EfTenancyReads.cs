@@ -43,12 +43,12 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     public ITenancyReading Open() => new Reading(contexts.CreateDbContext());
 
     /// <inheritdoc />
-    public async Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<SampleTenancy.TenancyDirectory, Task<TAnswer>> ask)
+    public async Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<TenantsTenancy.TenancyDirectory, Task<TAnswer>> ask)
     {
         ArgumentNullException.ThrowIfNull(ask);
 
         await using var scope = scopes.CreateAsyncScope();
-        return await ask(scope.ServiceProvider.GetRequiredService<SampleTenancy.TenancyDirectory>());
+        return await ask(scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenancyDirectory>());
     }
 
     /// <inheritdoc />
@@ -59,10 +59,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     }
 
     /// <inheritdoc />
-    public async Task<SampleTenancy.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
+    public async Task<TenantsTenancy.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenantDirectory>().ListAsync(after, size, cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantDirectory>().ListAsync(after, size, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -98,10 +98,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     /// The package lists invitations with the use cases that issue and cancel them. Asked here for the list
     /// alone, over the context of a scope of this read's own, never the request's unit of work.
     /// </remarks>
-    public async Task<IReadOnlyList<SampleTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TenantsTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<SampleTenancy.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -113,7 +113,7 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     public async Task<IReadOnlyList<SeatGrant>> GrantsOfAsync(SeatId seat, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<SampleTenancy.IStore>();
+        var store = scope.ServiceProvider.GetRequiredService<TenantsTenancy.IStore>();
 
         if (await store.FindSeatAsync(seat, cancellationToken) is not { } found)
         {
@@ -121,7 +121,7 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
         }
 
         var roles = (await store.ListRolesAsync(found.TenantId, cancellationToken)).ToDictionary(role => role.Id, role => role.Name);
-        var units = (await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenancyDirectory>()
+        var units = (await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenancyDirectory>()
                 .UnitsByIdAsync([.. found.Placements.Select(placement => placement.UnitId).Distinct()], cancellationToken))
             .ToDictionary(unit => unit.Id, unit => unit.Path);
         var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();

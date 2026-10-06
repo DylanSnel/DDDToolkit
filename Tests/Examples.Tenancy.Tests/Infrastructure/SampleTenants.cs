@@ -20,14 +20,14 @@ public static class SampleTenants
     /// <param name="host">The host, started.</param>
     /// <param name="slug">The new tenant's slug.</param>
     /// <param name="name">Its name, and its root's.</param>
-    public static async Task<SampleTenancy.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
+    public static async Task<TenantsTenancy.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
     {
         ArgumentNullException.ThrowIfNull(host);
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenantCommands>().ProvisionAsync(
-                new SampleTenancy.TenantToProvision(
+            return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
+                new TenantsTenancy.TenantToProvision(
                     slug, name, TenantShape.Flat, name, Guid.NewGuid(), "Its administrator", ConfigureRoot: root => root.SetKind(DemoTenant.RootKind)),
                 Cancellation);
         }

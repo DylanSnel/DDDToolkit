@@ -12,7 +12,10 @@
     (DDD00023). Both are errors here, so the boundary is held and not only reported. To the generators, an
     infrastructure project is written the registrations its module's other projects need: the converters of their
     ids, their domain events under their names, and a package's registrations closed over their classes, such as
-    modelBuilder.AddTenancy() in Tenants' and AddProjectMembershipWithTenancy in Projects'.
+    modelBuilder.AddTenancy() in Tenants' and AddProjectMembershipWithTenancy in Projects'. Tenants' domain project,
+    which declares Tenancy's classes, gets TenantsTenancy: Tenancy's use cases closed over those classes and named
+    after the module, which every project above it names a use case and its records through, so none of them writes
+    the nine types.
 
     The build writes the declaration into each project, and the toolkit's generator writes [assembly: Module] from it;
     see "A module named by its folder" in docs/modules.md. The host, the shared projects and the tests are outside this

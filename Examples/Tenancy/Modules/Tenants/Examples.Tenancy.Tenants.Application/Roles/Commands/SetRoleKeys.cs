@@ -21,7 +21,7 @@ public sealed record SetRoleKeys(RoleId Role, IReadOnlyList<string> Keys) : ICom
 
 /// <summary>Handles <see cref="SetRoleKeys"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
-public sealed class SetRoleKeysHandler(SampleTenancy.RoleCommands roles) : ICommandHandler<SetRoleKeys>
+public sealed class SetRoleKeysHandler(TenantsTenancy.RoleCommands roles) : ICommandHandler<SetRoleKeys>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

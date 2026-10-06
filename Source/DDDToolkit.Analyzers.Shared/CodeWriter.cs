@@ -68,6 +68,14 @@ internal sealed class CodeWriter
 
     public override string ToString() => _builder.ToString();
 
+    /// <summary>
+    /// Text for an XML doc comment: what the application wrote, such as a module's name, can hold an
+    /// <c>&amp;</c> or a <c>&lt;</c>, which a project that builds its documentation would report as badly formed XML
+    /// inside code nobody wrote.
+    /// </summary>
+    public static string XmlText(string text)
+        => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
     private sealed class Closer(CodeWriter writer) : IDisposable
     {
         public void Dispose() => writer.Close();

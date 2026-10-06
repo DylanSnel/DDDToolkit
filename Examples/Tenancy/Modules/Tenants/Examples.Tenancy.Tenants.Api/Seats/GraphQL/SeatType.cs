@@ -13,9 +13,9 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// <see langword="null"/> all the same, which the host's conventions say once for every type with a key: a seat
 /// that is not there, or not the caller's to see, arrives as its id with nothing else, and without an error.
 /// </remarks>
-[ObjectType<SampleTenancy.SeatSummary>]
+[ObjectType<TenantsTenancy.SeatSummary>]
 [EntityKey("id")]
 internal static partial class SeatType
 {
-    static partial void Configure(IObjectTypeDescriptor<SampleTenancy.SeatSummary> descriptor) => descriptor.Name("Seat");
+    static partial void Configure(IObjectTypeDescriptor<TenantsTenancy.SeatSummary> descriptor) => descriptor.Name("Seat");
 }

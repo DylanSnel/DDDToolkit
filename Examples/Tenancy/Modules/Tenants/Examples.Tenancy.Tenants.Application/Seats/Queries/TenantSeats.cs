@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Queries;
 /// identity.
 /// </summary>
 /// <remarks>It requires a caller who works in the tenant, whom the package's directory answers.</remarks>
-public sealed record TenantSeats : IQuery<IReadOnlyList<SampleTenancy.SeatSummary>>, ITenantsRequest
+public sealed record TenantSeats : IQuery<IReadOnlyList<TenantsTenancy.SeatSummary>>, ITenantsRequest
 {
     /// <inheritdoc />
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
@@ -15,10 +15,10 @@ public sealed record TenantSeats : IQuery<IReadOnlyList<SampleTenancy.SeatSummar
 
 /// <summary>Answers <see cref="TenantSeats"/> from the Tenancy package's directory.</summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
-public sealed class TenantSeatsHandler(ITenancyReads reads) : IQueryHandler<TenantSeats, IReadOnlyList<SampleTenancy.SeatSummary>>
+public sealed class TenantSeatsHandler(ITenancyReads reads) : IQueryHandler<TenantSeats, IReadOnlyList<TenantsTenancy.SeatSummary>>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
-    public async ValueTask<IReadOnlyList<SampleTenancy.SeatSummary>> Handle(TenantSeats query, CancellationToken cancellationToken)
+    public async ValueTask<IReadOnlyList<TenantsTenancy.SeatSummary>> Handle(TenantSeats query, CancellationToken cancellationToken)
         => await reads.AskDirectoryAsync(directory => directory.ListSeatsAsync(cancellationToken));
 }

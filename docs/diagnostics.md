@@ -63,6 +63,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00062](#ddd00062) | Error | A class of one GraphQL schema is one the toolkit alone registers |
 | [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 | [DDD00064](#ddd00064) | Warning | Every project named after a module declares it |
+| [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -99,7 +100,7 @@ is a module whose keys never reach the catalogue the host runs with.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
-[DDD00042](#ddd00042) to [DDD00050](#ddd00050) and [DDD00053](#ddd00053), about
+[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053) and [DDD00065](#ddd00065), about
 [supporting domains](writing-a-supporting-domain.md), [DDD00052](#ddd00052), about a function's name, and
 [DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior,
 say what the generator could not do, and are numbered after the rest because they came later. Severity
@@ -2223,6 +2224,48 @@ severity in an `.editorconfig` section for `*.cs` files does not reach it: set i
 `Directory.Build.props`, or in a `.globalconfig` file with `is_global = true`. A project is only told about a
 project the toolkit's build wrote its `DDD_Module` into, so one built by an earlier version, or without the
 `DDDToolkit.Analyzers` package's build assets, is not reported against.
+
+## DDD00065
+
+**The class a package's use cases are named through is written where each of its templates has one class.**
+
+```csharp
+// Shop.Tenants.Domain, [assembly: Module("Tenants")], with no class declared with [SeatAggregate]
+[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'TenantsTenancy' is not written, ...
+[OrganizationAggregate<TenantId>] public sealed partial class Organization;
+[OrganizationUnit<OrganizationUnitId>] public sealed partial class OrganizationUnit;
+[RoleAggregate<RoleId>] public sealed partial class Role;
+```
+
+```csharp
+// The same project, with all five classes, and a type of the class's name in a namespace of its own
+namespace Shop.Tenants.Settings;
+
+public static class TenantsTenancy;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
+```
+
+Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares
+your classes, named after the module: `TenantsTenancy.SeatCommands`
+([Calling a use case](tenancy.md#calling-a-use-case)). Each of its type parameters is one of your classes or
+ids, so it is written when every template it takes from has one class, in that project or in a project of the
+same module it references. When it is not, the projects above that name a use case only hear that the name does
+not exist, CS0246; the project that registers Tenancy, which would say more, references the application project
+and does not build once that fails. So the project that declares the classes says why, on the first of them:
+
+| What keeps it out | What to do |
+|---|---|
+| no class is declared with one of the templates | declare it, next to the others |
+| several classes are declared with one template | keep one |
+| a class does not meet what the package's class asks of it | give it what the message names |
+| the project declares a type of that name in a namespace, which the class would hide wherever that namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` |
+
+It is information, not a warning. A module whose classes are split over two projects hears it in the first of
+them, where nothing is wrong, and gets the class in the second, where the classes are complete. A template whose
+class a parent of the project needs is that class's error already, [DDD00044](#ddd00044) or
+[DDD00045](#ddd00045), and one a registration the project can call takes from is the registration's,
+[DDD00049](#ddd00049) or [DDD00045](#ddd00045), so neither is said twice. What you keep in the global namespace
+yourself, an alias of the name at the top of a file, or a type or a namespace of it, is your own way of naming
+the classes, and the class stands back for it without a word.
 
 ## Building the model fails: the owned type must carry the key part
 

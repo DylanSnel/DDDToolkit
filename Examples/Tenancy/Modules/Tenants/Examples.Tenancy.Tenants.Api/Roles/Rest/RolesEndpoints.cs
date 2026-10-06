@@ -61,7 +61,7 @@ internal static class RolesEndpoints
     /// always read of its own. Whether a role manages access says who may give it: only someone who holds its
     /// keys that do, or whoever manages grants where the seat is placed.
     /// </summary>
-    internal static object Describe(SampleTenancy.RoleSummary role) => new
+    internal static object Describe(TenantsTenancy.RoleSummary role) => new
     {
         role.Id,
         role.Name,

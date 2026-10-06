@@ -31,6 +31,6 @@ internal static partial class SeatOfMineType
         => new(mine.Tenant, mine.Slug, mine.OrganizationName, mine.TenantStatus);
 
     /// <summary>The caller's seat in it.</summary>
-    public static SampleTenancy.SeatSummary GetSeat([Parent] SeatOfCaller<TenantId, SeatId> mine)
+    public static TenantsTenancy.SeatSummary GetSeat([Parent] SeatOfCaller<TenantId, SeatId> mine)
         => new(mine.Seat, mine.DisplayName, mine.SeatStatus);
 }

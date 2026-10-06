@@ -15,7 +15,9 @@ global using Examples.Tenancy.Catalogue;
 // What the host names of the modules in more than one place: each module's entry, from its API project, and the
 // ids every module shares. The commands and queries the seeder sends, and the keys and packs the catalogue is
 // made of, are named where they are used, each with a using of the feature it comes from. The host references
-// the API projects alone, and names nothing of a module's infrastructure project: no context, no store.
+// the API projects alone, and names nothing of a module's infrastructure project: no context, no store. Tenancy's
+// use cases, which the seeder provisions with, are TenantsTenancy, the class the toolkit's generator wrote into the
+// Tenants module's domain project, which the host sees through the API project.
 global using Examples.Tenancy.Tenants.Api;
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 global using Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.ValueObjects;
@@ -24,17 +26,3 @@ global using Examples.Tenancy.Projects.Contracts.Keys;
 global using Examples.Tenancy.Projects.Contracts.ValueObjects;
 global using Examples.Tenancy.Projects.Domain.Aggregates.ProjectRoles.ValueObjects;
 global using Examples.Tenancy.Inspections.Api;
-
-// Tenancy's use cases, closed over this application's classes and ids, as the Tenants module closes them. An
-// alias is global only in the project that declares it, so the host declares its own. It reads its target as
-// if no other using existed, hence the full names.
-global using SampleTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Tenants.Tenant,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;

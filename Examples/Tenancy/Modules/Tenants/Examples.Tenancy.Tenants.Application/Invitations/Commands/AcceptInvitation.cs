@@ -1,3 +1,4 @@
+using Examples.Tenancy.Tenants.Domain.Aggregates.Invitations;
 using Mediator;
 
 namespace Examples.Tenancy.Tenants.Application.Invitations.Commands;
@@ -36,7 +37,7 @@ public sealed record AcceptInvitation(string Token, string? DisplayName) : IComm
 /// <summary>Handles <see cref="AcceptInvitation"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="invitations">The package's use cases for invitations.</param>
 /// <param name="callers">Who is calling, as the host verified it: where the caller's address is read.</param>
-public sealed class AcceptInvitationHandler(SampleInvitations invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, SeatId>
+public sealed class AcceptInvitationHandler(TenantsTenancy.InvitationCommands<Invitation, InvitationId> invitations, ICallerAccessor callers) : ICommandHandler<AcceptInvitation, SeatId>
 {
     /// <summary>The claim of an access token that carries the account's e-mail address.</summary>
     private const string AddressClaim = "email";

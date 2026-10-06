@@ -23,10 +23,12 @@
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
 #      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
-#      Tenancy's package and writes the modules' keys into the host and nowhere else; and the packages
-#      carry their Dutch texts. Its module is declared by DDD_DeclareModule, from a Directory.Build.props,
-#      and not by a file in either project: the package's targets declare it, and its generator writes the
-#      attribute. Without the switch the two projects only share the name, and the build reports DDD00064.
+#      Tenancy's package and writes the modules' keys into the host and nowhere else; the toolkit's, which
+#      writes Tenancy's use cases closed over the classes, PressTenancy, into the domain project alone, for
+#      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
+#      DDD_DeclareModule, from a Directory.Build.props, and not by a file in either project: the package's
+#      targets declare it, and its generator writes the attribute. Without the switch the two projects only
+#      share the name, and the build reports DDD00064.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
@@ -431,6 +433,25 @@ if [ -n "$(find "$work/package-consumers/SupportingDomains/Host/obj" \( -name '*
   echo "FAILED: SupportingDomains/Host: a module was declared in the host, which sets no DDD_Module." >&2
   exit 1
 fi
+
+# Tenancy's use cases closed over the classes, PressTenancy, are written by the toolkit's generator into the domain
+# project that declares the classes, and into no project above it: those see that one, and PressNames in the host
+# names the directory through it, so the host does not compile without it.
+press_tenancy() {
+  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'PressTenancy.TemplateFacade.g.cs'
+}
+if [ -z "$(press_tenancy Domain)" ]; then
+  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no PressTenancy, which the host names Tenancy's use cases through." >&2
+  exit 1
+fi
+for project in Infrastructure Host; do
+  if [ -n "$(press_tenancy "$project")" ]; then
+    echo "FAILED: SupportingDomains/$project: PressTenancy was written again above the domain project, which already has it." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Domain: PressTenancy, which the host names Tenancy's use cases through"
 
 # Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
 expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll

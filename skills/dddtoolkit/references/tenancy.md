@@ -72,26 +72,27 @@ public sealed partial class ShopSeat
            .UseDDDToolkit(serviceProvider));
    ```
 
-4. Name the use cases through an alias. They are nested in one generic class, `TenancyUseCases<...>`,
-   closed over your classes; `AddTenancy` registers them as services. A global alias holds in the project
-   that declares it, so every project that names a use case declares it.
+4. Name the use cases through `{Module}Tenancy`, and write no alias. They are nested in one generic class,
+   `TenancyUseCases<...>`, and the toolkit's generator closes it over your classes in the project that declares
+   them, as a class named after its module: `[assembly: Module("Tenants")]` gives `TenantsTenancy`, which every
+   project above sees. `TenantsTenancy.SeatCommands` is the package's own type, which `AddTenancy` registered.
+   A hand-written `global using TenantsTenancy = ...` above it is CS0576: delete it. For another name (a module
+   called Tenancy would get `TenancyTenancy`), add one line in the project that declares the classes:
+   `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. CS0246 for the name above:
+   read DDD00065 in that project. Only a module of one project with HotChocolate types over the records keeps
+   one alias of exactly the class's name there, since another generator does not see a generated class.
 
    ```csharp
-   // GlobalUsings.cs: full names, because an alias reads its target as if there were no other using
-   global using ShopTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-       Shop.Tenancy.ShopTenant, Shop.Tenancy.Contracts.TenantId, Shop.Tenancy.ShopOrganization,
-       Shop.Tenancy.ShopUnit, Shop.Tenancy.Contracts.OrganizationUnitId, Shop.Tenancy.ShopSeat,
-       Shop.Tenancy.Contracts.SeatId, Shop.Tenancy.ShopRole, Shop.Tenancy.Contracts.RoleId>;
-
-   // ShopTenancy.TenantCommands, OrganizationCommands, SeatCommands, RoleCommands, TenancyDirectory
-   public sealed class FirstTenant(ShopTenancy.TenantCommands tenants)
+   // TenantsTenancy.TenantCommands, OrganizationCommands, SeatCommands, RoleCommands, TenancyDirectory,
+   // InvitationCommands<ShopInvitation, InvitationId>, and the records: TenantToProvision, SeatOverview, ...
+   public sealed class FirstTenant(TenantsTenancy.TenantCommands tenants)
    {
        public async Task SetUpAsync(Guid identity, CancellationToken cancellationToken)
        {
            using (TenancyWork.BeginSystem<TenantId, SeatId>())   // provisioning is system work outside any tenant
            {
                await tenants.ProvisionAsync(
-                   new ShopTenancy.TenantToProvision(
+                   new TenantsTenancy.TenantToProvision(
                        "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity, "Ada"),
                    cancellationToken);
            }

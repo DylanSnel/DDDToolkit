@@ -17,10 +17,10 @@ namespace Examples.Tenancy.Tenants.Api.Invitations.GraphQL;
 /// one question, and so are its roles and its seats. One the directory answers nothing for is
 /// <see langword="null"/>. The record has no token, so the type has none.
 /// </remarks>
-[ObjectType<SampleTenancy.OpenInvitation<InvitationId>>]
+[ObjectType<TenantsTenancy.OpenInvitation<InvitationId>>]
 internal static partial class InvitationType
 {
-    static partial void Configure(IObjectTypeDescriptor<SampleTenancy.OpenInvitation<InvitationId>> descriptor)
+    static partial void Configure(IObjectTypeDescriptor<TenantsTenancy.OpenInvitation<InvitationId>> descriptor)
     {
         descriptor.Name("Invitation");
         descriptor.Ignore(invitation => invitation.UnitId);
@@ -36,7 +36,7 @@ internal static partial class InvitationType
     /// <summary>The unit the seat would be placed in.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
     public static async Task<UnitListing?> GetUnitAsync(
-        [Parent] SampleTenancy.OpenInvitation<InvitationId> invitation,
+        [Parent] TenantsTenancy.OpenInvitation<InvitationId> invitation,
         IOrganizationUnitByIdDataLoader units,
         CancellationToken cancellationToken)
         => await units.LoadAsync(invitation.UnitId, cancellationToken);
@@ -44,15 +44,15 @@ internal static partial class InvitationType
     /// <summary>The role the seat would hold there.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
     public static async Task<RoleListing?> GetRoleAsync(
-        [Parent] SampleTenancy.OpenInvitation<InvitationId> invitation,
+        [Parent] TenantsTenancy.OpenInvitation<InvitationId> invitation,
         IRoleByIdDataLoader roles,
         CancellationToken cancellationToken)
         => await roles.LoadAsync(invitation.RoleId, cancellationToken);
 
     /// <summary>The seat that issued it, or nothing when no seat did.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<SampleTenancy.SeatSummary?> GetIssuedByAsync(
-        [Parent] SampleTenancy.OpenInvitation<InvitationId> invitation,
+    public static async Task<TenantsTenancy.SeatSummary?> GetIssuedByAsync(
+        [Parent] TenantsTenancy.OpenInvitation<InvitationId> invitation,
         ISeatByIdDataLoader seats,
         CancellationToken cancellationToken)
         => invitation.IssuedBy is { } seat ? await seats.LoadAsync(seat, cancellationToken) : null;

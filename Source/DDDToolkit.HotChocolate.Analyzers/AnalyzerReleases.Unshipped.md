@@ -63,3 +63,4 @@ DDD00061 | DDDToolkit.Access | Warning | A request that declares its access is s
 DDD00062 | DDDToolkit.GraphQL | Error | A class of one GraphQL schema is one the toolkit alone registers
 DDD00063 | DDDToolkit.Tenancy | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read
 DDD00064 | DDDToolkit.Modules | Warning | Every project named after a module declares it
+DDD00065 | DDDToolkit.Entities | Info | The class a package's use cases are named through is written where each of its templates has one class

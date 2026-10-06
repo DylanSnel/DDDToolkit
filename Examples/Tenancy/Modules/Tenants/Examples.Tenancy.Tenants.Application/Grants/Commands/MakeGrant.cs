@@ -26,7 +26,7 @@ public sealed record MakeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role
 
 /// <summary>Handles <see cref="MakeGrant"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class MakeGrantHandler(SampleTenancy.SeatCommands seats) : ICommandHandler<MakeGrant>
+public sealed class MakeGrantHandler(TenantsTenancy.SeatCommands seats) : ICommandHandler<MakeGrant>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

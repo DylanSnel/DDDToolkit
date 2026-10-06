@@ -496,6 +496,18 @@ with no field, for two methods that are one field (two overloads, or `GetX` besi
 a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
 writes, such as a data loader's interface (give the method a name of its own).
 
+## DDD00065
+
+Info, in the project that declares Tenancy's classes (or another package's that asks with
+`[assembly: TemplateFacade]`): the class named after the module that the use cases are named through,
+`{Module}Tenancy`, is not written, so every project above that names `TenantsTenancy.SeatCommands` fails with
+CS0246. Read the message for why. A template with no class: declare that class next to the others, once
+(a module split over two projects hears this in the first and gets the class in the second; nothing to do).
+Several classes of one template: keep one. A class that does not meet a constraint: give it what the message
+names. A type of that name in a namespace of the project: rename it, or name the class otherwise with
+`[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` beside `[assembly: Module]`. Never
+answer it by writing the nine-type alias in the projects above.
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

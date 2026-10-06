@@ -30,6 +30,6 @@ internal static partial class AccessHistoryEntryType
 
     /// <summary>The seat that made the change, or the seat a token stands for; nothing when no seat did.</summary>
     [Cost(DirectoryQueries.LoadedForTheRequest)]
-    public static async Task<SampleTenancy.SeatSummary?> GetBySeatAsync([Parent] AccessHistoryEntry row, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
+    public static async Task<TenantsTenancy.SeatSummary?> GetBySeatAsync([Parent] AccessHistoryEntry row, ISeatByIdDataLoader seats, CancellationToken cancellationToken)
         => row.BySeat is { } seat ? await seats.LoadAsync(seat, cancellationToken) : null;
 }

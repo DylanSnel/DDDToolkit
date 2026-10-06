@@ -223,8 +223,8 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         using (TenancyWork.BeginSystem<TenantId, SeatId>())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenantCommands>().ProvisionAsync(
-                new SampleTenancy.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
+                new TenantsTenancy.TenantToProvision(
                     Harbor.Slug,
                     Harbor.Name,
                     Harbor.Shape,
@@ -265,7 +265,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         {
             await using var scope = host.Services.CreateAsyncScope();
             var handler = new MarkTenantAsDemoHandler(
-                scope.ServiceProvider.GetRequiredService<SampleTenancy.IStore>(),
+                scope.ServiceProvider.GetRequiredService<TenantsTenancy.IStore>(),
                 scope.ServiceProvider.GetRequiredService<ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>>());
 
             var handle = async () => await handler.Handle(new MarkTenantAsDemo(), Cancellation);

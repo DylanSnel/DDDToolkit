@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>Which invitation a token is for, as the store answers it across tenants: ids, and nothing else of it.</summary>
     /// <param name="Tenant">The tenant the invitation is into.</param>

@@ -111,6 +111,19 @@ internal static class Providers
             .SelectMany(static (all, cancellationToken) => TemplateRegistrations.Resolve(all.Left.Left, all.Left.Right, cancellationToken, projectFile: all.Right));
 
     /// <summary>
+    /// The classes a package asks with <c>[assembly: TemplateFacade]</c>, closed over the classes this project
+    /// declares with its templates and named after its module, as <see cref="DDDOptionsProvider.RegistrationName"/> names
+    /// it, or what is said of one that cannot be written. A project that declares no template class pays for the
+    /// lookup of its declarations only, as for a registration; one that does reads the attributes of its
+    /// references, once per reference.
+    /// </summary>
+    public static IncrementalValuesProvider<FacadeOutcome> TemplateFacadeFiles(this IncrementalGeneratorInitializationContext context)
+        => context.DeclaredTemplateEntities()
+            .Combine(context.CompilationProvider)
+            .Combine(context.RegistrationName())
+            .SelectMany(static (all, cancellationToken) => TemplateFacades.Resolve(all.Left.Left, all.Left.Right, all.Right, cancellationToken));
+
+    /// <summary>
     /// Every class declared with a template attribute, before any is resolved: what <see cref="TemplateEntities"/>
     /// resolves, and what a registration is closed over. A package's own generator that builds on a registration
     /// starts from the same classes.

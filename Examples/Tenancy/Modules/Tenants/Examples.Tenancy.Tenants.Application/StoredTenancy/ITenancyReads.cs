@@ -31,7 +31,7 @@ namespace Examples.Tenancy.Tenants.Application.StoredTenancy;
 /// same way.</item>
 /// </list>
 /// The package's commands need no port of this module's: they load and save through the package's own store,
-/// <see cref="SampleTenancy.IStore"/>, one unit of work per request, and so does the command this module adds.
+/// <see cref="TenantsTenancy.IStore"/>, one unit of work per request, and so does the command this module adds.
 /// <para>
 /// Public, because the infrastructure project implements it and a handler's constructor names it. No route
 /// names it: a route only sends a request.
@@ -58,7 +58,7 @@ public interface ITenancyReads
     /// <typeparam name="TAnswer">What the directory answers with.</typeparam>
     /// <param name="ask">The question, put to the directory of that scope.</param>
     /// <exception cref="Exceptions.RefusalException">The directory's own refusal.</exception>
-    Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<SampleTenancy.TenancyDirectory, Task<TAnswer>> ask);
+    Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<TenantsTenancy.TenancyDirectory, Task<TAnswer>> ask);
 
     /// <summary>
     /// Every seat the caller has, in every tenant and in any status, by the verified identity of their token: the
@@ -80,7 +80,7 @@ public interface ITenancyReads
     /// <param name="size">How many tenants the page holds.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <exception cref="Exceptions.RefusalException">The directory's own refusal.</exception>
-    Task<SampleTenancy.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken);
+    Task<TenantsTenancy.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken);
 
     /// <summary>
     /// A page of the access history of <paramref name="tenant"/>, newest first: one statement, on a context of its
@@ -100,7 +100,7 @@ public interface ITenancyReads
     /// </summary>
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <exception cref="Exceptions.RefusalException">The package's own refusal.</exception>
-    Task<IReadOnlyList<SampleTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<TenantsTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// The roles <paramref name="seat"/> holds, each where and for which period, by the unit's path and then the

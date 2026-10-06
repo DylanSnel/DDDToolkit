@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>An invitation as <c>IssueAsync</c> returns it: the one time its token is shown.</summary>
     /// <param name="Id">The invitation.</param>

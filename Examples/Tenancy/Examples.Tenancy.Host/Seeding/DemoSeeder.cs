@@ -99,8 +99,8 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     {
         try
         {
-            await RunAsync<SampleTenancy.TenantCommands>(tenants => tenants.ProvisionAsync(
-                new SampleTenancy.TenantToProvision(
+            await RunAsync<TenantsTenancy.TenantCommands>(tenants => tenants.ProvisionAsync(
+                new TenantsTenancy.TenantToProvision(
                     tenant.Slug,
                     tenant.Name,
                     tenant.Shape,
@@ -178,26 +178,26 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         // Each with its kind, set on the new unit in the save that adds it, as the module's command sets it.
         foreach (var unit in tenant.Units)
         {
-            await RunAsync<SampleTenancy.OrganizationCommands>(organization
+            await RunAsync<TenantsTenancy.OrganizationCommands>(organization
                 => organization.AddUnitAsync(unit.Parent, unit.Name, cancellationToken, unit.Id, added => added.SetKind(unit.Kind)));
         }
 
         foreach (var seat in tenant.Seats)
         {
-            await RunAsync<SampleTenancy.SeatCommands>(seats
+            await RunAsync<TenantsTenancy.SeatCommands>(seats
                 => seats.AddSeatAsync(seat.Person.Id, seat.Person.Name, cancellationToken, seat.Id));
         }
 
         foreach (var seat in tenant.Seats)
         {
-            await RunAsync<SampleTenancy.SeatCommands>(seats => seats.PlaceAsync(seat.Id, seat.PlacedIn, primary: true, cancellationToken));
+            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.PlaceAsync(seat.Id, seat.PlacedIn, primary: true, cancellationToken));
         }
 
         // A start in the past is system work's to choose, which this is: a grant that has expired had to begin.
         var now = clock.GetUtcNow();
         foreach (var grant in tenant.Grants)
         {
-            await RunAsync<SampleTenancy.SeatCommands>(seats => seats.GrantAsync(
+            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.GrantAsync(
                 tenant.SeatOf(grant.Person),
                 grant.Unit,
                 tenant.Roles[grant.Pack],
@@ -210,7 +210,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         // A suspended seat keeps its placements and grants, which simply count for nothing while it is.
         foreach (var person in tenant.Suspended)
         {
-            await RunAsync<SampleTenancy.SeatCommands>(seats => seats.SuspendAsync(tenant.SeatOf(person), cancellationToken));
+            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.SuspendAsync(tenant.SeatOf(person), cancellationToken));
         }
 
         // Last, the projects. Each owner goes on the crew holding the tenant's crew lead's project role, the rest of

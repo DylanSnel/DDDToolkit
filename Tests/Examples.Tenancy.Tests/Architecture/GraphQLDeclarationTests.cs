@@ -214,7 +214,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             }
             else
             {
-                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(SampleTenancy).Assembly] : [application];
+                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenantsTenancy.SeatOverview).Assembly] : [application];
                 answers.Should().Contain(over.Assembly, "{0} is declared over what {1}'s application layer answers", typeClass.Name, module);
             }
         }

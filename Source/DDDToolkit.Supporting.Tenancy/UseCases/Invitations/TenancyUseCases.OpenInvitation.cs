@@ -2,7 +2,7 @@ using DDDToolkit.Abstractions.Interfaces;
 
 namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
-public static partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
+public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>
 {
     /// <summary>An invitation that can still be accepted, as the people who manage seats at its unit see it.</summary>
     /// <param name="Id">The invitation.</param>

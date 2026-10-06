@@ -12,8 +12,8 @@ namespace Examples.Tenancy.Tenants.Application.Operators.Queries;
 /// database role, which reads every tenant and writes nothing.
 /// </remarks>
 /// <param name="After">The marker the page before answered as its next, or <see langword="null"/> for the first page.</param>
-/// <param name="Size">How many tenants a page holds: 1 to <see cref="SampleTenancy.TenantDirectory.MostPerPage"/>.</param>
-public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<SampleTenancy.TenantDirectoryPage>, ITenantsRequest
+/// <param name="Size">How many tenants a page holds: 1 to <see cref="TenantsTenancy.TenantDirectory.MostPerPage"/>.</param>
+public sealed record AllTenants(string? After = null, int Size = AllTenants.DefaultPage) : IQuery<TenantsTenancy.TenantDirectoryPage>, ITenantsRequest
 {
     /// <summary>How many tenants a page holds when the caller does not say.</summary>
     public const int DefaultPage = 50;
@@ -24,12 +24,12 @@ public sealed record AllTenants(string? After = null, int Size = AllTenants.Defa
 
 /// <summary>Answers <see cref="AllTenants"/> from the Tenancy package's directory of tenants.</summary>
 /// <param name="reads">Where Tenancy is read.</param>
-public sealed class AllTenantsHandler(ITenancyReads reads) : IQueryHandler<AllTenants, SampleTenancy.TenantDirectoryPage>
+public sealed class AllTenantsHandler(ITenancyReads reads) : IQueryHandler<AllTenants, TenantsTenancy.TenantDirectoryPage>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">
     /// The directory's own: <c>tenancy.page-size-invalid</c>, with <c>Max</c>, and <c>tenancy.cursor-invalid</c>.
     /// </exception>
-    public async ValueTask<SampleTenancy.TenantDirectoryPage> Handle(AllTenants query, CancellationToken cancellationToken)
+    public async ValueTask<TenantsTenancy.TenantDirectoryPage> Handle(AllTenants query, CancellationToken cancellationToken)
         => await reads.TenantsAsync(query.After, query.Size, cancellationToken);
 }

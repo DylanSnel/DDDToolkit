@@ -410,7 +410,7 @@ internal static class TemplateRegistrations
     /// <param name="Argument">Which type argument of the attribute is taken when the class is not: 0 is the id.</param>
     /// <param name="IdOfArgument">True when the id of the class a later type argument names is taken, rather than that class.</param>
     /// <param name="AllowSeveral">True when the template's marker says an application may declare several classes with it.</param>
-    private sealed record Take(string Key, string AttributeName, string MetadataName, bool TakeType, int Argument, bool IdOfArgument, bool AllowSeveral);
+    internal sealed record Take(string Key, string AttributeName, string MetadataName, bool TakeType, int Argument, bool IdOfArgument, bool AllowSeveral);
 
     /// <summary>
     /// What a method's <c>[TemplateRegistration(Name = ...)]</c> says its wrapper is called: text, and between
@@ -608,9 +608,11 @@ internal static class TemplateRegistrations
     /// that is the package's mistake, and shows in the package's own tests. The id of an argument is asked of
     /// a later argument only: the first is the id already, so there it says nothing.
     /// </summary>
-    private static Take?[]? TakesOf(IMethodSymbol method)
+    private static Take?[]? TakesOf(IMethodSymbol method) => TakesOf(method.TypeParameters);
+
+    /// <summary>What <c>[TemplateType]</c> says of each of these type parameters, a method's or a type's, as <see cref="TakesOf(IMethodSymbol)"/> reads them.</summary>
+    internal static Take?[]? TakesOf(ImmutableArray<ITypeParameterSymbol> parameters)
     {
-        var parameters = method.TypeParameters;
         var takes = new Take?[parameters.Length];
         for (var position = 0; position < parameters.Length; position++)
         {
@@ -1193,13 +1195,13 @@ internal static class TemplateRegistrations
     /// The last name of a type written out in full, <c>SongCommentId</c> of <c>global::Sample.SongCommentId</c>,
     /// for an id whose symbol cannot be had; null for one with type arguments, which has no one name.
     /// </summary>
-    private static string? LastNameOf(string fullyQualified)
+    internal static string? LastNameOf(string fullyQualified)
         => fullyQualified.IndexOf('<') >= 0
             ? null
             : fullyQualified.Substring(Math.Max(fullyQualified.LastIndexOf('.'), fullyQualified.LastIndexOf(':')) + 1);
 
     /// <summary>Whether a type is, or is closed over, a type parameter: nothing a wrapper outside the class could name.</summary>
-    private static bool MentionsATypeParameter(ITypeSymbol type)
+    internal static bool MentionsATypeParameter(ITypeSymbol type)
         => type switch
         {
             ITypeParameterSymbol => true,
@@ -1215,7 +1217,7 @@ internal static class TemplateRegistrations
     private static string ShortNameOf(ITypeSymbol type, Take take)
         => take.TakeType || take.Argument == 0 ? type.Name : type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
-    private static DefinitionFactory.TemplateSource SourceOf(EntityDefinition definition, bool canGenerate)
+    internal static DefinitionFactory.TemplateSource SourceOf(EntityDefinition definition, bool canGenerate)
         => new(
             definition.Type.Name,
             definition.Type.FullyQualifiedName,
@@ -1231,7 +1233,7 @@ internal static class TemplateRegistrations
     /// has its interfaces, <c>IEntityId</c> and <c>IEquatable</c>, written by the generator, so the compilation
     /// being generated does not show them yet, and the generator's own shape check already asks for them.
     /// </summary>
-    private static string? UnmetIdConstraint(ITypeParameterSymbol parameter, INamedTypeSymbol argument)
+    internal static string? UnmetIdConstraint(ITypeParameterSymbol parameter, INamedTypeSymbol argument)
         => argument.TypeKind == TypeKind.Error ? null
             : parameter.HasValueTypeConstraint && !argument.IsValueType ? "a struct"
             : parameter.HasReferenceTypeConstraint && !argument.IsReferenceType ? "a class"
@@ -1242,7 +1244,7 @@ internal static class TemplateRegistrations
     /// meets every constraint. A class declared here is judged by what the generator will make it, as DDD00048
     /// judges it: the parent its template derives it from, closed over its own id.
     /// </summary>
-    private static string? UnmetConstraint(
+    internal static string? UnmetConstraint(
         ITypeParameterSymbol parameter,
         INamedTypeSymbol argument,
         ImmutableArray<ITypeParameterSymbol> parameters,
@@ -1288,7 +1290,7 @@ internal static class TemplateRegistrations
     /// for an aggregate root would otherwise be an error inside the registration written for the project.
     /// </para>
     /// </summary>
-    private static string? UnmetByALaterArgument(
+    internal static string? UnmetByALaterArgument(
         ITypeParameterSymbol parameter,
         ITypeSymbol argument,
         ImmutableArray<ITypeParameterSymbol> parameters,
@@ -1385,7 +1387,7 @@ internal static class TemplateRegistrations
         var summary = "Calls " + method.ContainingType.Name + "." + method.Name + " closed over this project's "
                       + DefinitionFactory.Listed(over) + (open.Count > 0 ? ", with " + DefinitionFactory.Listed(open.Select(static parameter => parameter.Name)) + " still to choose." : ".");
 
-        return new RegistrationWrapper(Escape(summary), signature.ToString(), constraints, call, wrapperName, typeArguments.ToEquatableArray());
+        return new RegistrationWrapper(CodeWriter.XmlText(summary),signature.ToString(), constraints, call, wrapperName, typeArguments.ToEquatableArray());
     }
 
     /// <summary>The constraint clause of a type parameter the wrapper keeps open, or null when it has none.</summary>
@@ -1521,10 +1523,6 @@ internal static class TemplateRegistrations
     /// <summary>A name as an identifier: a keyword gets an <c>@</c>.</summary>
     private static string Identifier(string name)
         => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
-
-    /// <summary>Text for an XML doc comment.</summary>
-    private static string Escape(string text)
-        => text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
     private sealed class TypeAndNameComparer : IEqualityComparer<(INamedTypeSymbol Type, string Name)>
     {

@@ -89,15 +89,5 @@ global using Examples.Tenancy.Host.Storage;
 global using Examples.Tenancy.Catalogue;
 global using Examples.Tenancy.Tests.Infrastructure;
 
-// Tenancy's use cases, closed over the application's classes and ids, as the Tenants module and the host close
-// them. An alias is global only in the project that declares it, so the tests declare their own.
-global using SampleTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
-    Examples.Tenancy.Tenants.Domain.Aggregates.Tenants.Tenant,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.OrganizationUnitId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.SeatId,
-    Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role,
-    Examples.Tenancy.Tenants.Contracts.ValueObjects.RoleId>;
+// Tenancy's use cases are TenantsTenancy here as in the sample: the class the toolkit's generator wrote into the
+// Tenants module's domain project, which these tests see through the projects they test.

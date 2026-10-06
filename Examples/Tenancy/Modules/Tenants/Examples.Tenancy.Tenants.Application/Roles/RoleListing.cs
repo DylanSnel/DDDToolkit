@@ -40,7 +40,7 @@ public sealed record RoleListing(
     /// </summary>
     /// <param name="roles">The roles, as the package's directory answered them.</param>
     /// <param name="withKeys">Whether the caller holds <see cref="KeysKey"/> for the whole tenant.</param>
-    internal static IReadOnlyList<RoleListing> Of(IReadOnlyList<SampleTenancy.RoleSummary> roles, bool withKeys)
+    internal static IReadOnlyList<RoleListing> Of(IReadOnlyList<TenantsTenancy.RoleSummary> roles, bool withKeys)
         => [.. roles.Select(role => new RoleListing(
             role.Id,
             role.Name,
