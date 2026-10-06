@@ -127,7 +127,6 @@ type BrokenRulesError implements CodedError {
 type Catalogue {
   permissions: [Permission!]!
   packs: [RolePack!]!
-  unitKinds: [UnitKind!]!
 }
 
 "A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
@@ -212,7 +211,7 @@ type OrganizationUnit @key(fields: "id") {
   id: UUID!
   parentId: UUID
   name: String
-  kind: String
+  kind: UnitKind
   status: UnitStatus
   path: String
   depth: Int
@@ -444,11 +443,6 @@ type TenantShapeChangePayload {
   errors: [TenantShapeChangeError!]
 }
 
-type UnitKind {
-  key: String!
-  name: String!
-}
-
 type UnitPath {
   id: UUID!
   path: String!
@@ -600,7 +594,7 @@ input InvitationCancelInput {
 input OrganizationUnitAddInput {
   parentId: UUID!
   name: String!
-  kind: String!
+  kind: UnitKind
 }
 
 input OrganizationUnitArchiveInput {
@@ -746,6 +740,13 @@ enum TenantStatus {
   suspended
   "Stopped for good, with a reason. Nothing changes a closed tenant."
   closed
+}
+
+enum UnitKind {
+  company
+  region
+  area
+  site
 }
 
 """
