@@ -20,6 +20,9 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
 
     private DistributedApplication? _app;
 
+    /// <summary>Every resource's log lines while the sample starts, by the resource's name.</summary>
+    private Dictionary<string, System.Collections.Concurrent.ConcurrentQueue<string>> _logs = [];
+
     /// <summary>The resource that serves the shop's HTTP API: the monolith, or the storefront service.</summary>
     protected abstract string ShopResource { get; }
 
@@ -61,30 +64,30 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
         _app = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
         // Every resource's log, kept while the sample starts, so a sample that never becomes healthy says
-        // why instead of timing out in silence.
+        // why instead of timing out in silence. A log is kept under the id of the resource's instance, which is
+        // known only once the instance is made, so each is watched from the first notice of that id.
         using var watching = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        var logs = _app.Services.GetRequiredService<DistributedApplicationModel>().Resources
+        _logs = _app.Services.GetRequiredService<DistributedApplicationModel>().Resources
             .ToDictionary(resource => resource.Name, _ => new System.Collections.Concurrent.ConcurrentQueue<string>());
         var loggers = _app.Services.GetRequiredService<ResourceLoggerService>();
-        foreach (var (resource, lines) in logs)
+        var notifications = _app.ResourceNotifications;
+        _ = Task.Run(async () =>
         {
-            _ = Task.Run(async () =>
+            HashSet<string> watched = [];
+            try
             {
-                try
+                await foreach (var notice in notifications.WatchAsync(watching.Token))
                 {
-                    await foreach (var batch in loggers.WatchAsync(resource).WithCancellation(watching.Token))
+                    if (watched.Add(notice.ResourceId) && _logs.TryGetValue(notice.Resource.Name, out var lines))
                     {
-                        foreach (var line in batch)
-                        {
-                            lines.Enqueue(line.Content);
-                        }
+                        _ = WatchLogAsync(loggers, notice.ResourceId, lines, watching.Token);
                     }
                 }
-                catch (OperationCanceledException)
-                {
-                }
-            });
-        }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
 
         using var starting = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         starting.CancelAfter(StartTimeout);
@@ -100,15 +103,44 @@ public abstract class ShopFixture<TAppHost> : IAsyncLifetime where TAppHost : cl
         }
         catch (OperationCanceledException) when (starting.IsCancellationRequested && !TestContext.Current.CancellationToken.IsCancellationRequested)
         {
-            var report = string.Join(Environment.NewLine + Environment.NewLine, logs.Select(log =>
-                $"--- {log.Key} ({State(log.Key)}), last lines:{Environment.NewLine}{string.Join(Environment.NewLine, log.Value.TakeLast(25))}"));
-            throw new TimeoutException($"The sample did not become healthy within {StartTimeout}.{Environment.NewLine}{report}");
+            throw new TimeoutException($"The sample did not become healthy within {StartTimeout}.{Environment.NewLine}{Report()}");
+        }
+        catch (Exception failed) when (failed is not OperationCanceledException && !TestContext.Current.CancellationToken.IsCancellationRequested)
+        {
+            // A resource that fails to start, a host whose start-up check refused, say, ends the wait at once: the
+            // same report then says why, where the exception alone says only that it failed. The last lines of a
+            // process that just exited may still be on their way.
+            await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+            throw new InvalidOperationException($"The sample did not start: {failed.Message}{Environment.NewLine}{Report()}", failed);
         }
         finally
         {
             await watching.CancelAsync();
         }
     }
+
+    /// <summary>Keeps the lines of the log of one instance of a resource, until <paramref name="cancellationToken"/>.</summary>
+    private static async Task WatchLogAsync(ResourceLoggerService loggers, string resourceId, System.Collections.Concurrent.ConcurrentQueue<string> lines, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (var batch in loggers.WatchAsync(resourceId).WithCancellation(cancellationToken))
+            {
+                foreach (var line in batch)
+                {
+                    lines.Enqueue(line.Content);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>The last lines of every resource's log while the sample started, each with its state.</summary>
+    private string Report()
+        => string.Join(Environment.NewLine + Environment.NewLine, _logs.Select(log =>
+            $"--- {log.Key} ({State(log.Key)}), last lines:{Environment.NewLine}{string.Join(Environment.NewLine, log.Value.TakeLast(25))}"));
 
     private string State(string resource)
         => _app!.ResourceNotifications.TryGetCurrentState(resource, out var state)
