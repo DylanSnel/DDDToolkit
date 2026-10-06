@@ -12,8 +12,8 @@ public static class MemberHoldDbContextOptionsExtensions
     /// Holds every save of this context that changes a resource with members to what the access check of the
     /// request in hand read of it (<see cref="MemberHoldInterceptor"/>): one changed since the check is a lost
     /// race, and one no check read, outside the application's own work, is refused. The handlers write nothing
-    /// for it. One line, after <c>UseDDDToolkit</c>, so the save it holds is the one the domain event handlers
-    /// changed as well:
+    /// for it. One line, after <c>UseDDDToolkit</c>, or after <c>UseDDDToolkitCore</c> for a context given the
+    /// toolkit's base alone, so the save it holds is the one the domain event handlers changed as well:
     /// <code>
     /// services.AddDbContext&lt;FilingContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
@@ -27,6 +27,11 @@ public static class MemberHoldDbContextOptionsExtensions
     /// The same call serves a context pool: the interceptor is one instance for the application, and the hold it
     /// asks for is the one of the request in hand in the flow that saves, whichever scope the context is of.
     /// </para>
+    /// <para>
+    /// It is no part that a registration brings and <c>UseDDDToolkit</c> puts on every context: a host switches
+    /// it on, per context. Like the parts' own calls it adds nothing the options already have, so a second call
+    /// gives the interceptor once.
+    /// </para>
     /// </summary>
     /// <param name="options">The context's options.</param>
     /// <param name="services">
@@ -35,9 +40,9 @@ public static class MemberHoldDbContextOptionsExtensions
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="services"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// No resource with members is registered in <paramref name="services"/>, or <c>UseDDDToolkit</c> was not
-    /// called on <paramref name="options"/> before: the hold would then run before the domain event handlers, and
-    /// what they change in the same save would be held to nothing.
+    /// No resource with members is registered in <paramref name="services"/>, or neither <c>UseDDDToolkit</c> nor
+    /// <c>UseDDDToolkitCore</c> was called on <paramref name="options"/> before: the hold would then run before the
+    /// domain event handlers, and what they change in the same save would be held to nothing.
     /// </exception>
     public static DbContextOptionsBuilder UseMemberHolds(this DbContextOptionsBuilder options, IServiceProvider services)
     {
@@ -55,10 +60,11 @@ public static class MemberHoldDbContextOptionsExtensions
         if (!added.Any(static existing => existing is PublishDomainEventsInterceptor))
         {
             throw new InvalidOperationException(
-                "UseMemberHolds comes after UseDDDToolkit: the domain event handlers change what a save writes as it begins, and the hold holds the whole save, "
-                + "what they changed included. Configure the context with options.UseDDDToolkit(serviceProvider).UseMemberHolds(serviceProvider).");
+                "UseMemberHolds comes after UseDDDToolkit, or after UseDDDToolkitCore: the domain event handlers change what a save writes as it begins, and the hold "
+                + "holds the whole save, what they changed included. Configure the context with options.UseDDDToolkit(serviceProvider).UseMemberHolds(serviceProvider).");
         }
 
-        return options.AddInterceptors(interceptor);
+        // Asked for twice, the hold is there once, as each part's own call adds nothing the options already have.
+        return added.Any(static existing => existing is MemberHoldInterceptor) ? options : options.AddInterceptors(interceptor);
     }
 }

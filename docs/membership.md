@@ -630,10 +630,12 @@ answer what the access questions answer, from the same rules. What a caller read
 is yours to say, in [row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the
 functions, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
 
-Membership brings nothing to a context's options: the member tables are your context's own, and so is the way it
-is wired. A context wired with `UseDDDToolkit` runs as its caller once row level security is registered, so these
+Membership brings no part to a context's options: the member tables are your context's own, and so is the way
+it is wired. A context wired with `UseDDDToolkit` runs as its caller once row level security is registered, so these
 policies hold it with nothing more to write, and with [Tenancy](#with-tenancy) it has Tenancy's save check as well
-([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)).
+([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)). The one line of Membership's that can go on a context is
+[the expert hold](#the-expert-hold), `UseMemberHolds`, which no registration brings: a host writes it after
+`UseDDDToolkit` for a context it wants held.
 
 ```csharp
 // The project that runs the export: one class per resource, with the rules it is registered with
@@ -1384,8 +1386,9 @@ foreach (var root in ChangedRoots(context))                // changed or deleted
   the version that save left. A save that failed counts for nothing: tried again with the stored values
   taken as the loaded ones, it is not at the version the check read, and is a 409 again.
 - **The save has to compare the version.** A model that does not map `Version` as a concurrency token is
-  refused at the first held save, and `UseMemberHolds` before `UseDDDToolkit` is refused where the context is
-  built: the hold runs after the domain event handlers, so it holds what they change too.
+  refused at the first held save, and `UseMemberHolds` before `UseDDDToolkit`, or before `UseDDDToolkitCore` on a
+  context given the toolkit's base alone, is refused where the context is built: the hold runs after the domain
+  event handlers, so it holds what they change too. Written twice, it holds once.
 - **What changes is held, whoever changes it in the handling.** A domain event handler that runs in the save
   and changes another resource with members is refused, unless it begins the application's own work for it.
 - **It costs no statement.** It compares versions the context loaded already. What it adds over the default

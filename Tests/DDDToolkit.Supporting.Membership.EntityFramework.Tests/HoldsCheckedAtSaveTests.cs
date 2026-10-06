@@ -303,6 +303,35 @@ public sealed class HoldsCheckedAtSaveTests
     }
 
     [Fact]
+    public void A_context_given_the_base_alone_asks_for_the_hold_after_it_and_gets_it_once()
+    {
+        using var filing = new SqliteFiling();
+        var provider = filing.Services.Provider;
+
+        // UseDDDToolkitCore adds the same interceptors of the toolkit's, so the hold goes after them there too.
+        var interceptors = new DbContextOptionsBuilder<FilingContext>().UseDDDToolkitCore(provider).UseMemberHolds(provider).UseMemberHolds(provider)
+            .Options.FindExtension<Microsoft.EntityFrameworkCore.Infrastructure.CoreOptionsExtension>()!.Interceptors!
+            .Select(interceptor => interceptor.GetType().Name)
+            .ToList();
+
+        interceptors.Should().EndWith("MemberHoldInterceptor");
+        interceptors.Should().ContainSingle(name => name == "MemberHoldInterceptor", "a second call adds nothing the options already have, as each part's own call does");
+    }
+
+    [Fact]
+    public async Task A_context_given_the_base_alone_holds_its_saves_to_the_check_as_well()
+    {
+        using var filing = await SqliteFiling.SeededAsync(wiring: (options, provider) => options.UseDDDToolkitCore(provider).UseMemberHolds(provider));
+        var data = filing.Scenario;
+
+        await FluentActions.Awaiting(() => ShareWithAChangeInBetweenAsync(filing, new ShareDocument(data.Minutes, data.Hal)))
+            .Should().ThrowAsync<ConcurrencyConflictException>("the hold is the same after the base alone as after the one call");
+
+        await filing.Services.SendAsync(TestCallers.User(data.Ada), new ShareDocument(data.Minutes, data.Hal));
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Hal, "sent again, through its checks, it is saved");
+    }
+
+    [Fact]
     public void A_context_that_asks_for_the_hold_without_a_resource_registered_is_refused()
     {
         using var provider = new ServiceCollection().BuildServiceProvider();

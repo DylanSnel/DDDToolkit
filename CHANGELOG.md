@@ -1363,21 +1363,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   read. A rule that needs how or until when the caller holds the key asks the questions for it, in one
   statement. See [From the check to the save](docs/membership.md#from-the-check-to-the-save).
 - **Membership: the expert hold.** `options.UseMemberHolds(serviceProvider)`, one line on a context after
-  `UseDDDToolkit`, holds every save that changes a resource with members, a member or a role of one included,
-  to what the access check of the request in hand read of it, with nothing written in a handler: a resource
-  changed since the check is a `ConcurrencyConflictException`, whether the caller named a version or not; one
-  no check of the request in hand read, a handler called directly, a transport around the checks, another
-  resource than the request names, is refused with an `InvalidOperationException` and nothing is saved; the
-  application's own work that trusted code began, and a new resource, pass. `MemberAccessCheck` keeps what it
-  read with the request in hand, in `Checked<MemberHold<TResourceId>>`, and the interceptor finds it there at
-  the save: the request in hand, not the scope, so a hold another request of the same scope left, a query's
-  say, lets nothing through. It costs no statement and works with context pools. A handling that saves twice is
-  held to the check at its first save and, once that succeeded, to the version it left; a save that failed
-  counts for nothing, so one tried again after it lost the race loses again. A save after the request's
+  `UseDDDToolkit` (or `UseDDDToolkitCore`), holds every save that changes a resource with members, a member or a
+  role of one included, to what the access check of the request in hand read of it, with nothing written in a
+  handler: a resource changed since the check is a `ConcurrencyConflictException`, whether the caller named a
+  version or not; one no check of the request in hand read, a handler called directly, a transport around the
+  checks, another resource than the request names, is refused with an `InvalidOperationException` and nothing is
+  saved; the application's own work that trusted code began, and a new resource, pass. `MemberAccessCheck` keeps
+  what it read with the request in hand, in `Checked<MemberHold<TResourceId>>`, and the interceptor finds it
+  there at the save: the request in hand, not the scope, so a hold another request of the same scope left, a
+  query's say, lets nothing through. It costs no statement and works with context pools. A handling that saves
+  twice is held to the check at its first save and, once that succeeded, to the version it left; a save that
+  failed counts for nothing, so one tried again after it lost the race loses again. A save after the request's
   handling returned, in a unit-of-work behavior outside the access behavior or an endpoint after `Send`, has no
-  request in hand and is refused, with a message that says so. A model that does not compare `Version` is
-  refused at the first held save, and `UseMemberHolds` before `UseDDDToolkit` where the context is built. See
-  [The expert hold](docs/membership.md#the-expert-hold).
+  request in hand and is refused, with a message that says so. A model that does not compare `Version` is refused
+  at the first held save, and `UseMemberHolds` before `UseDDDToolkit` or `UseDDDToolkitCore` where the context is
+  built. It is no part `UseDDDToolkit` puts on: no registration brings it, a host writes it per context, and a
+  second call adds nothing. See [The expert hold](docs/membership.md#the-expert-hold).
 - **Membership on Postgres.** `DDDToolkit.Supporting.Membership.Postgres` offers
   `MembershipRowAccessContribution<TMember>`: for each kind of resource, a class the application derives
   with that resource's rules and lists with `[assembly: UseRowAccessContribution]` writes four set functions

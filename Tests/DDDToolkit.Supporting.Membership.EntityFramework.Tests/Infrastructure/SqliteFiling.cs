@@ -13,7 +13,7 @@ public sealed class SqliteFiling : IDisposable
 
     /// <param name="configure">Registers what a test needs before the resources are registered.</param>
     /// <param name="ownContexts">Whether the host registers a factory for its context.</param>
-    /// <param name="wiring">What a context is given besides the toolkit's interceptors.</param>
+    /// <param name="wiring">How a context is wired instead of <c>UseDDDToolkit</c> alone (<see cref="FilingServices"/>).</param>
     public SqliteFiling(Action<IServiceCollection>? configure = null, bool ownContexts = false, Action<DbContextOptionsBuilder, IServiceProvider>? wiring = null)
     {
         _connection.Open();

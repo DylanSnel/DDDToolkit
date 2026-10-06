@@ -338,7 +338,9 @@ The mistakes it prevents most often:
   last. Do not write `UseSupabaseRowLevelSecurity` or `UseTenancy` next to it. A context that should do without
   a part, one that runs as the login role, takes `UseDDDToolkitCore` and the `Use...` calls it does want; a
   context whose model keeps rows to a tenant is refused at its first save without Tenancy's save check, so a
-  host that uses `ScopeToTenant` registers `AddTenancy`.
+  host that uses `ScopeToTenant` registers `AddTenancy`. The one call after it is Membership's expert hold,
+  `.UseMemberHolds(services)`, and only on a context the host wants every save of a resource with members held to
+  its request's check; without it the default path holds the change (`ExpectVersion`).
 - `ConfigureConventions` calls `AddDDDToolkitConventions()` and one generated `Add{Module}Converters()`
   per module, plus one per assembly that is no module and declares identifiers or single value objects.
   Only a project that references Entity Framework gets the method. A module's projects without it

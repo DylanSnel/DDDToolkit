@@ -233,7 +233,10 @@ or changes in a save is checked like any other.
 The names and positions are constants on the interceptors, `PostgresRowLevelSecurityInterceptor.PartName` and
 `TenancySaveInterceptor.PartName`, with `PartPosition` next to each. Membership brings none: its member tables
 are your context's own, and on Postgres its lock is the policies the export writes, which hold a context once
-row level security runs it as its caller.
+row level security runs it as its caller. Its [expert hold](membership.md#the-expert-hold) is no part either: no
+registration brings it, because a host decides it per context, and writes it after the one call,
+`.UseDDDToolkit(services).UseMemberHolds(services)`, or after `UseDDDToolkitCore`. It changes no row, so it may come
+after Tenancy's save check.
 
 ### A part a model cannot do without
 
