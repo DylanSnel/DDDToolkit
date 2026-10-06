@@ -364,7 +364,9 @@ a `TenantId`, an `OrganizationUnitId`, a `RoleId` and a `SeatId`, each an `[Enti
 published with `[ModuleContract]`. An organization shares its tenant's id, so there is no `OrganizationId`. They
 are public, in the project's root namespace, so every folder of it sees them without a using, and each says in
 its documentation that the switch wrote it and how to declare it yourself. The invitation is not written: it is
-the one class you may leave out, and declaring it is what turns [invitations](#invitations) on.
+the one class you may leave out, and declaring it is what turns [invitations](#invitations) on. A written class
+is the package's whole: the role remembers what its pack gave it, `KeysFromPack`, which your migration maps like
+every column, and follows the pack when the host syncs ([Packs after provisioning](#packs-after-provisioning)).
 
 Nothing is generated without the switch, and nothing you declare is replaced. A class of a template that the
 project declares, or a project of its module that it references, is yours, and the switch writes the others

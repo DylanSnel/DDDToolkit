@@ -7,6 +7,12 @@
 // adds something: the tenant whether it is a demonstration, the unit its kind and cost centre, the seat a job title,
 // and the invitation the account it made. A class declared here always wins, and the switch writes no second one.
 //
+// The role written is the package's whole: each tenant's roles start as copies of the catalogue's packs and are the
+// tenant's own to rename, re-key and archive, and a role made from a pack remembers what the pack gave it, so it
+// follows the pack when the host syncs the packs: a key the pack gains later reaches it, and what the tenant changed
+// in it stays. It is a role of the organization: given at a unit, it counts for every unit below it. A role a
+// project's crew holds is not one of these: it is a project role, kept by the Projects module beside its projects.
+//
 // The ids are not written: Examples.Tenancy.Tenants.Contracts declares them, with the prefixes they are printed with,
 // and the other modules store them from there, without a reference to the Tenancy package. The switch finds them
 // there and takes them, so the organization is declared over the contracts' TenantId, the role over its RoleId.

@@ -1560,7 +1560,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `[assembly: GenerateTenancyClasses]` in `Module.cs`, and its `Organization` and `Role`, which added nothing to the
   package's, are gone: the switch writes them, in the project's root namespace. The tenant, the unit, the seat and
   the invitation stay declared, each for what it adds, and the ids stay the contracts project's, with their
-  prefixes, which the switch takes. The migrations name the two classes by their new namespace. A test application
+  prefixes, which the switch takes. The migrations name the two classes by their new namespace, the role with its
+  `KeysFromPack`: the written role is the package's whole, so it follows its pack when the host syncs, as
+  `RolePackSyncScenarios` shows. A test application
   of one project, `DDDToolkit.Supporting.Tenancy.Switch.Tests`, writes the switch and no class or id of Tenancy's,
   and provisions a tenant through the use case on SQLite.
 - **Every sample context is wired with one call.** The Tenancy sample's three modules write
