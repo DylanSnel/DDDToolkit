@@ -44,9 +44,8 @@ public sealed class RequiredSaveCheckTests
                 await FluentActions.Awaiting(() => widgets.SaveChangesAsync(Cancellation)).Should().ThrowAsync<InvalidOperationException>().WithMessage(Refusal);
             }
 
-            // Tenancy's own check, run by hand, says the same of the registration.
-            FluentActions.Invoking(() => TenancyChecks.EnsureWired(widgets)).Should().Throw<InvalidOperationException>()
-                .WithMessage("'TestWidgetContext' keeps entities to a tenant but has no TenancySaveInterceptor*Tenancy is not registered*services.AddTenancy<…, TContext>(…)*");
+            // Tenancy's own check, run by hand, says it in the same words: one rule, the one the model states.
+            FluentActions.Invoking(() => TenancyChecks.EnsureWired(widgets)).Should().Throw<InvalidOperationException>().WithMessage(Refusal);
         }
 
         database.CountRows("Widgets").Should().Be(0, "nothing was written");

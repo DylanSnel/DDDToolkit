@@ -54,9 +54,14 @@ public static class TenancyChecks
     /// before the toolkit's interceptors, or Tenancy is not registered at all, so <c>UseDDDToolkit</c> had no save
     /// check to add. <c>UseDDDToolkit</c> adds it in its place once <c>AddTenancy</c> is registered. The store calls
     /// it before every save; call it at start-up, or before the save of a unit of work of your own, for every other
-    /// context that keeps entities to a tenant. Without it, a context that keeps rows to a tenant is still refused
-    /// at its first save where it lacks the save check, since its model requires it
-    /// (<c>ContextPartRequirements</c>), and by the start-up check <c>entity-framework.toolkit-wired</c>.
+    /// context that keeps entities to a tenant.
+    /// <para>
+    /// A context without the save check at all lacks a part its model requires, since <c>ScopeToTenant</c> states
+    /// it, and is told so in the words of <c>ContextPartRequirements</c>, which the toolkit refuses its first save
+    /// with and the start-up check <c>entity-framework.toolkit-wired</c> as well: <c>AddTenancy</c> named where
+    /// nothing registered Tenancy, <c>UseTenancy</c> where the context was given the base alone. What this adds is
+    /// what only Tenancy knows: the order, and who acted.
+    /// </para>
     /// <para>
     /// Without it a context without the save check is silent: rows of another tenant are written and the stored
     /// rights are not. A save check added too early would check the rows before the domain event handlers changed
@@ -105,20 +110,17 @@ public static class TenancyChecks
             return;
         }
 
+        if (tenancy < 0)
+        {
+            // No save check at all: the part the model requires is missing, one rule with one message, whoever asks.
+            ContextPartRequirements.EnsureRequiredParts(context);
+        }
+
         var problem = tenancy < 0
             ? "has no TenancySaveInterceptor"
             : invariants < 0
                 ? "has no DDDToolkit interceptors"
                 : "adds the TenancySaveInterceptor before the DDDToolkit interceptors";
-
-        // Where the application's services say Tenancy is not registered, the one call had no save check to add.
-        var services = context.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()?.ApplicationServiceProvider;
-        if (tenancy < 0 && services is not null && services.GetService<TenancySaveInterceptor>() is null)
-        {
-            throw new InvalidOperationException(
-                "'" + context.GetType().Name + "' keeps entities to a tenant but " + problem + ", so its saves are not checked as they should be: Tenancy is not registered, "
-                + "so UseDDDToolkit had no save check to add. Register it with services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework.");
-        }
 
         throw new InvalidOperationException(
             "'" + context.GetType().Name + "' keeps entities to a tenant but " + problem + ", so its saves are not checked as they should be. "

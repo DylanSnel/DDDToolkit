@@ -19,7 +19,7 @@ public sealed class WiringTests
         using var services = new TestServices(Wiring.WithoutTenancy);
 
         var failure = await FluentActions.Awaiting(() => services.ProvisionAsync("harbor")).Should().ThrowAsync<InvalidOperationException>();
-        failure.Which.Message.Should().Contain("has no TenancySaveInterceptor").And.Contain("UseTenancy");
+        failure.Which.Message.Should().Contain("cannot do without the part tenancy.save-check").And.Contain("options.UseTenancy(serviceProvider)");
 
         services.Database.CountRows("Tenants").Should().Be(0);
     }

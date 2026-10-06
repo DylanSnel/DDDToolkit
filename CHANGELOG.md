@@ -890,8 +890,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the interceptor. A context that keeps rows to a tenant cannot do without it: `ScopeToTenant` states so in the
   model, so such a context without the save check, because nothing registered Tenancy or it was given the base
   alone, is refused at its first save, naming `AddTenancy` or `UseTenancy`, where `UseTenancy` used to throw.
-  `tenancy.contexts-wired` holds it to the save check at start-up, whichever call wired it, and
-  `TenancyChecks.EnsureWired` names `AddTenancy` where Tenancy is not registered.
+  `tenancy.contexts-wired` and `TenancyChecks.EnsureWired` hold it to the same, in the same words, and add what
+  only Tenancy checks: the save check after the toolkit's interceptors, and who acted where the history is kept.
   See [Keeping tenants apart](docs/tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check).
 - **Tenancy: an administrators' pack may list its keys.** A `RolePack` with `Administers` that lists no keys
   makes a role that holds every live key. One that lists keys makes a role that holds those and no others, so an
