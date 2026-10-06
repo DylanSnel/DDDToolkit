@@ -14,8 +14,8 @@ public sealed record TenantSeats : IQuery<IReadOnlyList<SeatListing>>, ITenantsR
 }
 
 /// <summary>
-/// Answers <see cref="TenantSeats"/> from the Tenancy package's directory, each seat with the name its own class keeps
-/// (<see cref="SeatListing.Of"/>).
+/// Answers <see cref="TenantSeats"/> from the Tenancy package's directory: the module's own seats, each selected with
+/// the name its class keeps, by name.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
 public sealed class TenantSeatsHandler(ITenancyReads reads) : IQueryHandler<TenantSeats, IReadOnlyList<SeatListing>>
@@ -23,5 +23,8 @@ public sealed class TenantSeatsHandler(ITenancyReads reads) : IQueryHandler<Tena
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
     public async ValueTask<IReadOnlyList<SeatListing>> Handle(TenantSeats query, CancellationToken cancellationToken)
-        => SeatListing.ByName(await reads.AskDirectoryAsync(directory => directory.ListSeatsAsync(SeatListing.Of, cancellationToken)));
+    {
+        var seats = await reads.AskDirectoryAsync(directory => directory.ListSeatsAsync(cancellationToken));
+        return SeatListing.ByName(seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status)));
+    }
 }

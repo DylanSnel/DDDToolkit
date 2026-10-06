@@ -43,6 +43,17 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         Task<TOrganization?> FindOrganizationAsync(TTenantId id, CancellationToken cancellationToken);
 
         /// <summary>
+        /// The tenant's organization with all its units, for the directory to answer, or <see langword="null"/> when it
+        /// is not the current caller's. Read as the application's own classes, with every field it added to its unit
+        /// class, since the directory hands the units to the application; and read only, never for a save, as
+        /// <see cref="ListSeatsAsync"/> reads seats: a change made to a unit is not written, by this unit of work or
+        /// another.
+        /// </summary>
+        /// <param name="id">The tenant, which is the current caller's.</param>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        Task<TOrganization?> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken);
+
+        /// <summary>
         /// The seat, or <see langword="null"/> when it is not in the current caller's tenant. A storage that keeps
         /// grants to the seats that may read them, as Tenancy's policies on Postgres do, loads it with the grants
         /// the caller may read: all of its own seat's, and another seat's at the units where the caller manages
@@ -54,7 +65,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>
         /// The tenant's seats, for the directory to answer: all of them, or those among <paramref name="only"/>; an id
         /// that is no seat of the tenant is simply not among the answer. Read as the application's own seats, with
-        /// every field it added, since the directory hands them to the application's view; and read only, never for a
+        /// every field it added, since the directory hands them to the application whole; and read only, never for a
         /// save: a change made to one is not written, by this unit of work or another. A storage that keeps grants to
         /// the seats that may read them loads each seat's grants as <see cref="FindSeatAsync"/> does.
         /// </summary>

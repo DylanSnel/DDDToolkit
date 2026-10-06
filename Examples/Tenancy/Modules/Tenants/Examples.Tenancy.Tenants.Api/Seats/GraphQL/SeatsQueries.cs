@@ -14,12 +14,11 @@ internal static class SeatsQueries
 {
     /// <summary>
     /// Who the calling seat is, with the name this application keeps on it, where it is placed, which roles it holds
-    /// and every key it holds now. This is Tenancy's own answer, with the seat as the module's view of it; where it
-    /// names a unit or a role it uses small types of its own (<c>UnitPath</c>, <c>RoleOfMine</c>), never a
-    /// half-filled entity.
+    /// and every key it holds now: what the module selects from Tenancy's overview of its own seat. Where it names a
+    /// unit or a role it uses small types of its own (<c>UnitPath</c>, <c>RoleOfMine</c>), never a half-filled entity.
     /// </summary>
     [Query]
-    public static async Task<TenantsTenancy.SeatOverview<SeatListing>> GetOverviewOfMineAsync([Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<SeatOverviewListing> GetOverviewOfMineAsync([Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new OverviewOfMine(), cancellationToken);
 
     /// <summary>

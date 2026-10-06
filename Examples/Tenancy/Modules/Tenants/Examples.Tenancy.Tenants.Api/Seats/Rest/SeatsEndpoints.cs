@@ -106,12 +106,12 @@ internal static class SeatsEndpoints
     // One of the caller's own seats: its tenant, and the seat as every answer writes it, by the name that tenant keeps.
     private static object Describe(SeatOfMine mine) => new
     {
-        tenant = new { id = mine.Found.Tenant, slug = mine.Found.Slug, name = mine.Found.OrganizationName, status = mine.Found.TenantStatus },
+        tenant = new { mine.Tenant.Id, mine.Tenant.Slug, mine.Tenant.Name, mine.Tenant.Status },
         seat = Describe(mine.Seat),
     };
 
     // A seat's own overview shows units and roles too, each as the feature that owns it writes it.
-    private static object Describe(TenantsTenancy.SeatOverview<SeatListing> overview) => new
+    private static object Describe(SeatOverviewListing overview) => new
     {
         tenant = new
         {

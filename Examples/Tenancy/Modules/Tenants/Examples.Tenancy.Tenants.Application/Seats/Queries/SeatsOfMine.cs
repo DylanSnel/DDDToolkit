@@ -22,8 +22,8 @@ public sealed record SeatsOfMine : IQuery<IReadOnlyList<SeatOfMine>>, ITenantsRe
 }
 
 /// <summary>
-/// Answers <see cref="SeatsOfMine"/> from the Tenancy package, for the identity of the caller's token, each seat through
-/// the module's view of it (<see cref="SeatOfMine.Of"/>), from the seats the package read anyway.
+/// Answers <see cref="SeatsOfMine"/> from the Tenancy package, for the identity of the caller's token: the module's own
+/// seats, each beside its tenant, selected into what the picker shows, with no read more.
 /// </summary>
 /// <param name="callers">Who is calling, as the host verified it.</param>
 /// <param name="reads">Where Tenancy is read.</param>
@@ -44,6 +44,12 @@ public sealed class SeatsOfMineHandler(ICallerAccessor callers, ITenancyReads re
             throw ToolkitRefusals.Of(ToolkitRefusals.NotSignedIn);
         }
 
-        return await reads.SeatsOfAsync(caller, SeatOfMine.Of, cancellationToken);
+        var mine = await reads.SeatsOfAsync(caller, cancellationToken);
+        return
+        [
+            .. mine.Select(found => new SeatOfMine(
+                new TenantOfSeat(found.Seat.TenantId, found.Slug, found.OrganizationName, found.TenantStatus),
+                new SeatListing(found.Seat.Id, found.Seat.DisplayName, found.Seat.Status))),
+        ];
     }
 }

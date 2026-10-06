@@ -7,7 +7,7 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// <summary>
 /// A seat as the schema shows it: the name it is shown by and whether it counts, never an identity. The type is
 /// declared over the record the module's queries answer, <see cref="SeatListing"/>, so nothing is copied: the
-/// package's summary with the name this application keeps on its own seat class, which Tenancy has none of.
+/// seat's id, the name this application keeps on its own seat class, which Tenancy has none of, and its status.
 /// </summary>
 /// <remarks>
 /// Other modules name a seat by its id, and the gateway fills in the rest from here. The record says a name is

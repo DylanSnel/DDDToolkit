@@ -9,8 +9,8 @@ namespace DDDToolkit.Supporting.Tenancy.TestHost.Domain;
 /// </summary>
 /// <remarks>
 /// The name is this application's own, as an application's would be: Tenancy keeps none and reads none. Whoever makes
-/// a seat sets it in the callback of the use case that makes it, and the directory hands this class to a view, which
-/// answers it.
+/// a seat sets it in the callback of the use case that makes it, and the directory answers this class whole, from
+/// which whoever shows a seat selects it.
 /// </remarks>
 [SeatAggregate<SeatId>]
 public sealed partial class HostSeat

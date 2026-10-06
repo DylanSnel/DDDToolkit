@@ -20,8 +20,8 @@ public sealed record SeatsById(IReadOnlyList<SeatId> Ids) : IQuery<IReadOnlyList
 }
 
 /// <summary>
-/// Answers <see cref="SeatsById"/> from the Tenancy package's directory, each seat with the name its own class keeps
-/// (<see cref="SeatListing.Of"/>).
+/// Answers <see cref="SeatsById"/> from the Tenancy package's directory: the module's own seats, each selected with
+/// the name its class keeps, by name.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
 public sealed class SeatsByIdHandler(ITenancyReads reads) : IQueryHandler<SeatsById, IReadOnlyList<SeatListing>>
@@ -31,5 +31,8 @@ public sealed class SeatsByIdHandler(ITenancyReads reads) : IQueryHandler<SeatsB
     /// The caller's own refusal when it is nobody, or <c>tenancy.too-many-ids</c>.
     /// </exception>
     public async ValueTask<IReadOnlyList<SeatListing>> Handle(SeatsById query, CancellationToken cancellationToken)
-        => SeatListing.ByName(await reads.AskDirectoryAsync(directory => directory.SeatsByIdAsync(query.Ids, SeatListing.Of, cancellationToken)));
+    {
+        var seats = await reads.AskDirectoryAsync(directory => directory.SeatsByIdAsync(query.Ids, cancellationToken));
+        return SeatListing.ByName(seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status)));
+    }
 }

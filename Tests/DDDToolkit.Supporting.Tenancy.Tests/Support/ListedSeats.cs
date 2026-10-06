@@ -34,24 +34,20 @@ public sealed class ListedSeats : ISeatDirectory<TenantId, SeatId>
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<SeatOfCaller<TenantId, SeatId>>> AllOfAsync(Guid identity, CancellationToken cancellationToken)
-    {
-        Listings.Add(identity);
-        IReadOnlyList<SeatOfCaller<TenantId, SeatId>> seats = [.. _seats.Where(entry => entry.Identity == identity).Select(entry => entry.Seat)];
-        return Task.FromResult(seats);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>Hands the view the application's own seat each seat was listed with.</remarks>
-    public Task<IReadOnlyList<TView>> AllOfAsync<TSeat, TView>(Guid identity, Func<SeatOfCaller<TenantId, SeatId>, TSeat, TView> view, CancellationToken cancellationToken)
+    /// <remarks>Answers the application's own seat each seat was listed with, beside its tenant.</remarks>
+    public Task<IReadOnlyList<SeatInTenant<TSeat>>> AllOfAsync<TSeat>(Guid identity, CancellationToken cancellationToken)
         where TSeat : class
     {
         Listings.Add(identity);
-        IReadOnlyList<TView> seats =
+        IReadOnlyList<SeatInTenant<TSeat>> seats =
         [
             .. _seats
                 .Where(entry => entry.Identity == identity)
-                .Select(entry => view(entry.Seat, entry.Own as TSeat ?? throw new InvalidOperationException($"Seat {entry.Seat.Seat} was listed with no {typeof(TSeat).Name}."))),
+                .Select(entry => new SeatInTenant<TSeat>(
+                    entry.Own as TSeat ?? throw new InvalidOperationException($"Seat {entry.Seat.Seat} was listed with no {typeof(TSeat).Name}."),
+                    entry.Seat.Slug,
+                    entry.Seat.OrganizationName,
+                    entry.Seat.TenantStatus)),
         ];
         return Task.FromResult(seats);
     }

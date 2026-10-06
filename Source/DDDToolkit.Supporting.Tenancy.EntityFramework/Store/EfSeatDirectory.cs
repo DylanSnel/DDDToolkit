@@ -36,46 +36,35 @@ internal sealed class EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, 
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SeatOfCaller<TTenantId, TSeatId>>> AllOfAsync(Guid identity, CancellationToken cancellationToken)
-    {
-        var found = await SeatsWithIdentity(identity, slug: null).ToListAsync(cancellationToken).ConfigureAwait(false);
-        return found.Select(seat => seat.ToSeatOfCaller()).ToList();
-    }
-
-    /// <inheritdoc />
     /// <remarks>
-    /// One statement, as the lookup without a view, with the seats read whole beside their tenants, and tracked by
-    /// nobody: nothing a view does to a seat is saved. The identity is still the one thing looked for past the tenant
-    /// filter; the application's own filters apply.
+    /// One statement, with the seats read whole beside their tenants, and tracked by nobody: nothing done to a seat is
+    /// saved. The identity is still the one thing looked for past the tenant filter; the application's own filters
+    /// apply.
     /// </remarks>
-    public async Task<IReadOnlyList<TView>> AllOfAsync<TAsked, TView>(
-        Guid identity,
-        Func<SeatOfCaller<TTenantId, TSeatId>, TAsked, TView> view,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SeatInTenant<TAsked>>> AllOfAsync<TAsked>(Guid identity, CancellationToken cancellationToken)
         where TAsked : class
     {
-        ArgumentNullException.ThrowIfNull(view);
         if (!typeof(TAsked).IsAssignableFrom(typeof(TSeat)))
         {
             throw new InvalidOperationException(
                 $"Tenancy's seats are {typeof(TSeat).FullName}, which is no {typeof(TAsked).FullName}: "
-                + "a view of the seats takes the seat class Tenancy was added with, or a class it derives from.");
+                + "a person's seats are answered as the seat class Tenancy was added with, or a class it derives from.");
         }
 
         var found = await (from seat in SeatsOf(identity)
                            join tenant in Tenants(slug: null) on seat.TenantId equals tenant.Id
                            join organization in Organizations() on seat.TenantId equals organization.Id
-                           select new { Seat = seat, Found = new FoundSeat(tenant.Id, tenant.Slug, organization.Name, tenant.Status, seat.Id, seat.Status) })
+                           select new { Seat = seat, tenant.Slug, organization.Name, tenant.Status })
             .AsNoTracking()
             .AsSingleQuery()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return [.. found.Select(row => view(row.Found.ToSeatOfCaller(), (TAsked)(object)row.Seat))];
+        return [.. found.Select(row => new SeatInTenant<TAsked>((TAsked)(object)row.Seat, row.Slug.Value, row.Name, row.Status))];
     }
 
-    /// <summary>The identity's seats with their tenants, in the tenant with <paramref name="slug"/> when there is one; past the tenant filter and no other.</summary>
-    private IQueryable<FoundSeat> SeatsWithIdentity(Guid identity, TenantSlug? slug)
+    /// <summary>The identity's seats with their tenants, in the tenant with <paramref name="slug"/>; past the tenant filter and no other.</summary>
+    private IQueryable<FoundSeat> SeatsWithIdentity(Guid identity, TenantSlug slug)
         => from seat in SeatsOf(identity)
            join tenant in Tenants(slug) on seat.TenantId equals tenant.Id
            join organization in Organizations() on seat.TenantId equals organization.Id

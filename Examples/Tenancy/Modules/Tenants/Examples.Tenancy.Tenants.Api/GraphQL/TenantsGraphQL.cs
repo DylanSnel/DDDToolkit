@@ -3,7 +3,6 @@ using DDDToolkit.HotChocolate.Authorization;
 using Examples.Hosting;
 using Examples.Tenancy.Tenants.Api.Roles.GraphQL;
 using Examples.Tenancy.Tenants.Api.GraphQl;
-using Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 using Examples.Tenancy.Tenants.Application.Roles;
 using HotChocolate.Execution.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,9 +21,8 @@ namespace Examples.Tenancy.Tenants.Api.GraphQL;
 /// <para>
 /// A type of the schema is declared over the record the application layer answers, in a type class beside the
 /// fields that answer it, so no record is copied for the schema's sake. HotChocolate's generator registers the
-/// type classes, the fields and the data loaders, in both schemas; what is left to say here is the one record that
-/// exists only for the schema, which is internal and therefore registered by name, and who answers a field's
-/// permission key.
+/// type classes, the fields and the data loaders, in both schemas; what is left to say here is who answers a
+/// field's permission key. No record exists only for the schema.
 /// </para>
 /// <para>
 /// The two schemas are made of the same calls, and differ by name only. A class of fields marked
@@ -88,7 +86,5 @@ internal static class TenantsGraphQL
             // project as a field, the paged field of the one [QueryType] class with its connection, every
             // [ObjectType<T>] class as the type of its record, and the data loaders written from the [DataLoader]
             // methods. The same in every schema.
-            .AddTenantsTypes()
-            // The one type with no record behind it: the tenant inside one of the caller's own seats.
-            .AddObjectType<TenantOfSeat>();
+            .AddTenantsTypes();
 }

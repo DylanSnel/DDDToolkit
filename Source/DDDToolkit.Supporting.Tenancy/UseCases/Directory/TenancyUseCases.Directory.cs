@@ -13,15 +13,15 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// This is where a role's name and a unit's name and path come from. The rows the access questions read
     /// (<see cref="ITenancyReadSource{TTenantId, TSeatId, TUnitId, TRoleId}"/>) carry no text that is shown to
     /// people, so a module that reads them next to its own tables answers ids, and whoever shows them asks here
-    /// what they are: <see cref="SeatsByIdAsync(IReadOnlyCollection{TSeatId}, CancellationToken)"/>,
-    /// <see cref="RolesByIdAsync"/> and <see cref="UnitsByIdAsync(IReadOnlyCollection{TUnitId}, CancellationToken)"/>.
+    /// what they are: <see cref="SeatsByIdAsync"/>, <see cref="RolesByIdAsync"/> and <see cref="UnitsByIdAsync"/>.
     /// </para>
     /// <para>
-    /// A seat has no name in Tenancy: what a person is shown by is the application's to say, and no rule of the
-    /// package reads it. So the questions about seats take a view, as those about units do: the directory decides
-    /// which seats the caller is answered, reads them, and hands the view each one's <see cref="SeatSummary"/> next to
-    /// the application's own seat, with its identity and every field the application added. The view answers a name
-    /// the seat class keeps, or a profile of the application's found by the identity, with no statement more.
+    /// Seats and units are answered as the application's own classes, whole: the seat with its identity, its
+    /// placements and their grants and every field the application added, and the unit with every field of its own,
+    /// beside the path and depth that are not on it (<see cref="UnitInTree"/>). A seat has no name in Tenancy, and a
+    /// unit no kind: what a screen shows of them is the application's to select, with no statement more. Each is read
+    /// for the answer and tracked by nobody, so nothing done to one is saved, by the question or by a save later in
+    /// the same unit of work.
     /// </para>
     /// <para>
     /// Whoever works in a tenant reads it: a seat of it, or system work in it. No key is asked, for a list or for a
@@ -46,38 +46,21 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         public TenancyCatalogue Catalogue => catalogue;
 
         /// <summary>
-        /// Who the calling seat is: its tenant, where it is placed and with which roles, and every live key it
-        /// holds now with where it is granted and every unit it reaches. A seat asks this about itself only.
+        /// Who the calling seat is, and what it may do where: its own seat, whole, as the application's class, with
+        /// the tenant, the paths of the units it is placed at, the roles its grants name, and every live key it holds
+        /// now with where it is granted and every unit it reaches (<see cref="SeatOverview"/>). A seat asks this about
+        /// itself only.
         /// </summary>
+        /// <remarks>
+        /// The seat is read as the lists read seats, untracked, and not loaded as a command loads one: nothing done to
+        /// it is saved, by this question or by a save later in the same unit of work.
+        /// </remarks>
         /// <exception cref="Exceptions.RefusalException">
         /// <c>tenancy.not-seated</c> for every caller that is not a seat: nobody, whatever it was refused for,
         /// and system work, which has no self to show.
         /// </exception>
         public async Task<SeatOverview> WhoAmIAsync(CancellationToken cancellationToken)
         {
-            var overview = await WhoAmIAsync(static (summary, _) => summary, cancellationToken).ConfigureAwait(false);
-            return new SeatOverview(overview.Tenant, overview.Seat, overview.Placements, overview.Roles, overview.Keys);
-        }
-
-        /// <summary>
-        /// Who the calling seat is, as <see cref="WhoAmIAsync(CancellationToken)"/> answers it, with the seat answered
-        /// as <paramref name="view"/> makes it of the package's summary and the application's own seat: the name the
-        /// application keeps on its seat class, say, from the seat the directory read anyway, with no statement more.
-        /// </summary>
-        /// <typeparam name="TView">What the application answers of the seat.</typeparam>
-        /// <param name="view">
-        /// Makes the answer of the seat, once. The seat is the caller's own, read for this answer as the lists read
-        /// theirs, and tracked by nobody: read it, and change nothing on it, as nothing the view does to it is saved.
-        /// </param>
-        /// <param name="cancellationToken">Cancels the read.</param>
-        /// <exception cref="Exceptions.RefusalException">
-        /// <c>tenancy.not-seated</c> for every caller that is not a seat: nobody, whatever it was refused for,
-        /// and system work, which has no self to show.
-        /// </exception>
-        public async Task<SeatOverview<TView>> WhoAmIAsync<TView>(Func<SeatSummary, TSeat, TView> view, CancellationToken cancellationToken)
-        {
-            ArgumentNullException.ThrowIfNull(view);
-
             var gate = new Gate(store, catalogue, clock);
             if (gate.Caller.Kind != TenancyCallerKind.Seat)
             {
@@ -89,10 +72,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var now = gate.Now;
 
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
-
-            // Read as the lists read seats, untracked, and not loaded as a command loads one: the view is handed the
-            // seat, and a save later in the same unit of work writes nothing the view did to it.
+            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var seat = (await store.ListSeatsAsync(tenantId, [seatId], cancellationToken).ConfigureAwait(false)).FirstOrDefault()
                        ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
             var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false)).ToDictionary(role => role.Id);
@@ -102,24 +82,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                                                       && right.StartsAt <= now && (right.EndsAt == null || right.EndsAt > now)),
                 cancellationToken).ConfigureAwait(false);
 
-            var placements = seat.Placements
-                .Select(placement => new PlacementSummary(
-                    units.Ref(placement.UnitId),
-                    placement.IsPrimary,
-                    placement.Grants
-                        .Select(grant => new GrantSummary(
-                            grant.RoleId,
-                            roles.TryGetValue(grant.RoleId, out var role) ? role.Name : string.Empty,
-                            grant.StartsAt,
-                            grant.EndsAt,
-                            grant.AppliesAt(now)))
-                        .OrderBy(grant => grant.Role, StringComparer.OrdinalIgnoreCase)
-                        .ToArray()))
-                .OrderByDescending(placement => placement.IsPrimary)
-                .ThenBy(placement => placement.Unit.Path, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            var held = seat.Placements
+            // Only what is not on the seat: the paths of its placements' units and the roles its grants name. A role
+            // the store does not answer, one a filter of the application's own hides, is left out rather than made
+            // up, and SeatOverview.RoleOf answers null for it.
+            var placedAt = units.Refs(seat.Placements.Select(placement => placement.UnitId));
+            var named = seat.Placements
                 .SelectMany(placement => placement.Grants.Select(grant => grant.RoleId))
                 .Distinct()
                 .Select(role => roles.TryGetValue(role, out var found) ? Summary(found) : null)
@@ -143,87 +110,62 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 })
                 .ToArray();
 
-            return new SeatOverview<TView>(
+            return new SeatOverview(
                 new TenantSummary(tenant.Id, tenant.Slug.Value, organization.Name, tenant.Shape, tenant.Status),
-                view(SummaryOf(seat), seat),
-                placements,
-                held,
-                keys);
+                seat,
+                placedAt,
+                named,
+                keys,
+                now);
         }
 
         /// <summary>
-        /// The tenant's seats, each by its id and status only, in the order of their ids: a seat has no name in
-        /// Tenancy. A screen that shows them by a name asks with a view
-        /// (<see cref="ListSeatsAsync{TView}(Func{SeatSummary, TSeat, TView}, CancellationToken)"/>).
+        /// The tenant's seats, the application's own class, each whole and in the order of their ids: a seat has
+        /// nothing of Tenancy's a person would order it by, so a screen orders what it shows by what it shows. The
+        /// application selects what it shows, a name its seat class keeps, or a profile of its own found by the seat's
+        /// identity, from the seats read here, with no statement more.
         /// </summary>
-        /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
-        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public Task<IReadOnlyList<SeatSummary>> ListSeatsAsync(CancellationToken cancellationToken)
-            => ListSeatsAsync(static (summary, _) => summary, cancellationToken);
-
-        /// <summary>
-        /// The tenant's seats, each answered as <paramref name="view"/> makes it of the package's summary and the
-        /// application's own seat. That is how a seat is shown by what the application chose: a name its seat class
-        /// keeps, or a profile of its own found by the seat's identity, from the seats the directory read anyway, with
-        /// no statement more. The seats come in the order of their ids; a screen orders what it shows by what it
-        /// shows.
-        /// </summary>
-        /// <typeparam name="TView">What the application answers of a seat.</typeparam>
-        /// <param name="view">
-        /// Makes the answer of one seat, once for each. The seat is read for this answer, with its identity and every
-        /// field the application added, and is not saved: read it, and change nothing on it. What the view answers
-        /// is the application's to guard: the package's own summary never carries the identity.
-        /// </param>
+        /// <remarks>
+        /// One statement, which reads every seat with its identity, its placements and their grants, and every field
+        /// the application added; tracked by nobody, so nothing done to a seat is saved. The identity is the
+        /// application's to keep: what leaves is what it selects.
+        /// <para>
+        /// No key is asked, and only a database's own read rules narrow what of another seat is read: on Postgres,
+        /// Tenancy's policies answer another seat's grants only where the caller may read them, and elsewhere, or in a
+        /// context without row level security, every seat comes with all its placements and grants. Show another
+        /// seat's grants from a question that asks a key of its own, and select a list's seats into what every member
+        /// may see.
+        /// </para>
+        /// </remarks>
         /// <param name="cancellationToken">Cancels the read.</param>
         /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<TView>> ListSeatsAsync<TView>(Func<SeatSummary, TSeat, TView> view, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<TSeat>> ListSeatsAsync(CancellationToken cancellationToken)
         {
-            ArgumentNullException.ThrowIfNull(view);
-
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
 
-            return Views(await store.ListSeatsAsync(tenantId, only: null, cancellationToken).ConfigureAwait(false), view);
+            return InIdOrder(await store.ListSeatsAsync(tenantId, only: null, cancellationToken).ConfigureAwait(false));
         }
 
         /// <summary>
-        /// The seats among <paramref name="ids"/> that are in the caller's tenant, each by its id and status only, in
-        /// the order of their ids. An id of another tenant, or of no seat, is left out without a word: the answer
-        /// never says which.
+        /// The seats among <paramref name="ids"/> that are in the caller's tenant, as <see cref="ListSeatsAsync"/>
+        /// answers them: the application's own, whole, in the order of their ids. An id of another tenant, or of no
+        /// seat, is left out without a word: the answer never says which.
         /// </summary>
+        /// <remarks>
+        /// Each seat comes with its placements and grants as <see cref="ListSeatsAsync"/> reads them, narrowed by the
+        /// database's own read rules alone: select what the caller is shown.
+        /// </remarks>
         /// <param name="ids">The seats asked about, at most <see cref="MostIds"/> different ones.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
         /// <exception cref="Exceptions.RefusalException">
         /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public Task<IReadOnlyList<SeatSummary>> SeatsByIdAsync(IReadOnlyCollection<TSeatId> ids, CancellationToken cancellationToken)
-            => SeatsByIdAsync(ids, static (summary, _) => summary, cancellationToken);
-
-        /// <summary>
-        /// The seats among <paramref name="ids"/>, as <see cref="SeatsByIdAsync(IReadOnlyCollection{TSeatId}, CancellationToken)"/>
-        /// answers them, each answered as <paramref name="view"/> makes it of the package's summary and the
-        /// application's own seat: the name its seat class keeps, say, with no statement more.
-        /// </summary>
-        /// <typeparam name="TView">What the application answers of a seat.</typeparam>
-        /// <param name="ids">The seats asked about, at most <see cref="MostIds"/> different ones.</param>
-        /// <param name="view">
-        /// Makes the answer of one seat, once for each, in the order of their ids. The seat is read for this answer
-        /// and is not saved: read it, and change nothing on it.
-        /// </param>
-        /// <param name="cancellationToken">Cancels the read.</param>
-        /// <exception cref="Exceptions.RefusalException">
-        /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
-        /// </exception>
-        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<TView>> SeatsByIdAsync<TView>(
-            IReadOnlyCollection<TSeatId> ids,
-            Func<SeatSummary, TSeat, TView> view,
-            CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<TSeat>> SeatsByIdAsync(IReadOnlyCollection<TSeatId> ids, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
-            ArgumentNullException.ThrowIfNull(view);
 
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
@@ -233,7 +175,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return [];
             }
 
-            return Views(await store.ListSeatsAsync(tenantId, asked, cancellationToken).ConfigureAwait(false), view);
+            return InIdOrder(await store.ListSeatsAsync(tenantId, asked, cancellationToken).ConfigureAwait(false));
         }
 
         /// <summary>The tenant's roles, the active ones first, each by name.</summary>
@@ -277,47 +219,32 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
         /// <summary>
         /// The units the caller reads, by path: for a seat, the units it is placed in and every unit below them;
-        /// for system work in the tenant, every unit.
+        /// for system work in the tenant, every unit. Each is the application's own unit, whole, with its path and
+        /// depth beside it (<see cref="UnitInTree"/>), so a field the application added to its unit class, such as
+        /// what kind of unit it is, is shown from the units read here, with no statement more.
         /// </summary>
-        /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
-        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public Task<IReadOnlyList<UnitSummary>> ListUnitsAsync(CancellationToken cancellationToken)
-            => ListUnitsAsync(static (summary, _) => summary, cancellationToken);
-
-        /// <summary>
-        /// The units the caller reads, as <see cref="ListUnitsAsync(CancellationToken)"/> answers them, each
-        /// answered as <paramref name="view"/> makes it of the package's summary and the application's own unit.
-        /// That is how a field the application added to its unit class, such as what kind of unit it is, is
-        /// answered beside what Tenancy keeps: from the units the directory read anyway, with no statement more.
-        /// </summary>
-        /// <typeparam name="TView">What the application answers of a unit.</typeparam>
-        /// <param name="view">
-        /// Makes the answer of one unit, once for each, by path. The unit is the organization's own, read for this
-        /// answer: read it, and change nothing on it.
-        /// </param>
         /// <param name="cancellationToken">Cancels the read.</param>
         /// <exception cref="Exceptions.RefusalException">The caller is nobody.</exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<TView>> ListUnitsAsync<TView>(Func<UnitSummary, TUnit, TView> view, CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<UnitInTree>> ListUnitsAsync(CancellationToken cancellationToken)
         {
-            ArgumentNullException.ThrowIfNull(view);
-
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
 
-            var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
             IEnumerable<TUnitId> readable = gate.BySystem
                 ? units.Ids
                 : await store.Queries.ListAsync(gate.Questions.ReadableUnits(), cancellationToken).ConfigureAwait(false);
 
-            return units.Summaries(readable, view);
+            return units.InTree(readable);
         }
 
         /// <summary>
-        /// The units among <paramref name="ids"/> that are the caller's tenant's, by path, whichever of them the
-        /// caller is placed under: a seat that works on something at a unit it is not placed under still reads
-        /// what that unit is called. An id of another tenant, or of no unit, is left out without a word.
+        /// The units among <paramref name="ids"/> that are the caller's tenant's, as <see cref="ListUnitsAsync"/>
+        /// answers them, by path, whichever of them the caller is placed under: a seat that works on something at a
+        /// unit it is not placed under still reads what that unit is called. An id of another tenant, or of no unit,
+        /// is left out without a word.
         /// </summary>
         /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
@@ -325,33 +252,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
         /// </exception>
         /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public Task<IReadOnlyList<UnitSummary>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
-            => UnitsByIdAsync(ids, static (summary, _) => summary, cancellationToken);
-
-        /// <summary>
-        /// The units among <paramref name="ids"/>, as <see cref="UnitsByIdAsync(IReadOnlyCollection{TUnitId}, CancellationToken)"/>
-        /// answers them, each answered as <paramref name="view"/> makes it of the package's summary and the
-        /// application's own unit: a field the application added to its unit class, beside what Tenancy keeps,
-        /// with no statement more.
-        /// </summary>
-        /// <typeparam name="TView">What the application answers of a unit.</typeparam>
-        /// <param name="ids">The units asked about, at most <see cref="MostIds"/> different ones.</param>
-        /// <param name="view">
-        /// Makes the answer of one unit, once for each, by path. The unit is the organization's own, read for this
-        /// answer: read it, and change nothing on it.
-        /// </param>
-        /// <param name="cancellationToken">Cancels the read.</param>
-        /// <exception cref="Exceptions.RefusalException">
-        /// The caller is nobody, with its own code; or <c>tenancy.too-many-ids</c>.
-        /// </exception>
-        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public async Task<IReadOnlyList<TView>> UnitsByIdAsync<TView>(
-            IReadOnlyCollection<TUnitId> ids,
-            Func<UnitSummary, TUnit, TView> view,
-            CancellationToken cancellationToken)
+        public async Task<IReadOnlyList<UnitInTree>> UnitsByIdAsync(IReadOnlyCollection<TUnitId> ids, CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(ids);
-            ArgumentNullException.ThrowIfNull(view);
 
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
@@ -361,9 +264,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 return [];
             }
 
-            var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
+            var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var units = await UnitMap.ReadAsync(store, organization, cancellationToken).ConfigureAwait(false);
-            return units.Summaries(asked, view);
+            return units.InTree(asked);
         }
 
         /// <summary>
@@ -391,15 +294,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 : Comparer<TSeatId>.Create(static (one, other) => string.CompareOrdinal(one.ToString(), other.ToString()));
 
         /// <summary>
-        /// Each seat answered as <paramref name="view"/> makes it, in the order of their ids (<see cref="IdOrder"/>), so
-        /// the order is the same every time: a seat has nothing of Tenancy's that a person would order it by.
+        /// The seats in the order of their ids (<see cref="IdOrder"/>), so the order is the same every time: a seat has
+        /// nothing of Tenancy's that a person would order it by.
         /// </summary>
-        private static TView[] Views<TView>(IEnumerable<TSeat> seats, Func<SeatSummary, TSeat, TView> view)
-            => [.. seats
-                .OrderBy(seat => seat.Id, IdOrder)
-                .Select(seat => view(SummaryOf(seat), seat))];
-
-        private static SeatSummary SummaryOf(TSeat seat) => new(seat.Id, seat.Status);
+        private static TSeat[] InIdOrder(IEnumerable<TSeat> seats) => [.. seats.OrderBy(seat => seat.Id, IdOrder)];
 
         private RoleSummary[] ActiveFirst(IEnumerable<TRole> roles)
             => [.. roles
@@ -451,7 +349,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>Every unit's id.</summary>
         public IEnumerable<TUnitId> Ids => _units.Keys;
 
-        /// <summary>The map of <paramref name="organization"/>, which is loaded already: one read, of the closure.</summary>
+        /// <summary>The map of <paramref name="organization"/>, which is read already: one read, of the closure.</summary>
         public static async Task<UnitMap> ReadAsync(IStore store, TOrganization organization, CancellationToken cancellationToken)
         {
             var tenant = organization.Id;
@@ -481,17 +379,16 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             => ids.Distinct().Select(Ref).OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase).ToArray();
 
         /// <summary>
-        /// The units among <paramref name="ids"/> that the organization has, each once, by path, each answered as
-        /// <paramref name="view"/> makes it of its summary and the unit itself.
+        /// The units among <paramref name="ids"/> that the organization has, each once and whole, with its path and
+        /// depth, by path.
         /// </summary>
-        public IReadOnlyList<TView> Summaries<TView>(IEnumerable<TUnitId> ids, Func<UnitSummary, TUnit, TView> view)
+        public IReadOnlyList<UnitInTree> InTree(IEnumerable<TUnitId> ids)
             => ids
                 .Distinct()
                 .Select(Unit)
                 .OfType<TUnit>()
-                .Select(unit => (Summary: new UnitSummary(unit.Id, unit.ParentId, unit.Name, unit.Status, PathOf(unit.Id), DepthOf(unit.Id)), Unit: unit))
-                .OrderBy(pair => pair.Summary.Path, StringComparer.OrdinalIgnoreCase)
-                .Select(pair => view(pair.Summary, pair.Unit))
+                .Select(unit => new UnitInTree(unit, PathOf(unit.Id), DepthOf(unit.Id)))
+                .OrderBy(unit => unit.Path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
     }
 }

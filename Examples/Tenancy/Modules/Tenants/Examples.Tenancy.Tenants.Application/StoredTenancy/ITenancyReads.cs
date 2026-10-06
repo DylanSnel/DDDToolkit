@@ -64,17 +64,14 @@ public interface ITenancyReads
     /// <summary>
     /// Every seat the caller has, in every tenant and in any status, by the verified identity of their token: the
     /// one read that looks across tenants, and only ever for the caller's own identity; never an e-mail address.
-    /// The Tenancy package answers it (<see cref="TenantSelection{TTenantId, TSeatId}.SeatsOfAsync(Caller, CancellationToken)"/>,
-    /// with a view), by the rule it seats a caller in one tenant by: a caller whose token role holds no seat is
-    /// answered none, as a person without a seat is. Each seat is answered as <paramref name="view"/> makes it of what
-    /// the package found and the module's own seat, which the package reads in the same statement. Read in a scope of
-    /// its own, as <see cref="AskDirectoryAsync"/> is.
+    /// The Tenancy package answers it (<see cref="TenantSelection{TTenantId, TSeatId}.SeatsOfAsync{TSeat}(Caller, CancellationToken)"/>),
+    /// by the rule it seats a caller in one tenant by: a caller whose token role holds no seat is answered none, as a
+    /// person without a seat is. Each seat is the module's own, read whole beside its tenant in one statement and
+    /// tracked by nobody. Read in a scope of its own, as <see cref="AskDirectoryAsync"/> is.
     /// </summary>
-    /// <typeparam name="TView">What the module answers of a seat.</typeparam>
     /// <param name="caller">Who is calling, as the host verified it.</param>
-    /// <param name="view">Makes the answer of one seat, once for each: it reads the module's seat, and changes nothing.</param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
-    Task<IReadOnlyList<TView>> SeatsOfAsync<TView>(Caller caller, Func<SeatOfCaller<TenantId, SeatId>, Seat, TView> view, CancellationToken cancellationToken);
+    Task<IReadOnlyList<SeatInTenant<Seat>>> SeatsOfAsync(Caller caller, CancellationToken cancellationToken);
 
     /// <summary>
     /// A page of every tenant of the application, by slug, as the Tenancy package's directory of tenants answers

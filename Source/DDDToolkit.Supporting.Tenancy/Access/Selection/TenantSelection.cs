@@ -21,7 +21,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <see cref="TenantSelectionOptions.SeatedTokenRoles"/>: <c>authenticated</c> unless the application lists
 /// others. A user with another token role is nobody in every tenant, and is told what a person without a seat
 /// is told, so the answer says nothing about the seats their identity has. The list of a person's own seats,
-/// <see cref="SeatsOfAsync(Caller, CancellationToken)"/>, follows the same rule, with a view of the seats or without.
+/// <see cref="SeatsOfAsync{TSeat}(Caller, CancellationToken)"/>, follows the same rule.
 /// </para>
 /// </summary>
 /// <param name="seats">Finds the caller's seats.</param>
@@ -84,50 +84,24 @@ public sealed class TenantSelection<TTenantId, TSeatId>(ISeatDirectory<TTenantId
         => await ResolveAsync(caller, tenantSlug, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Every seat <paramref name="caller"/> has, in every tenant and in any status, for a tenant picker: looked up
-    /// by the verified identity of the caller's own token, and by nothing a request could supply. None for a
-    /// caller that is no signed-in user, and none for a user whose token role holds no seat: nothing is looked up
-    /// for them, and they are answered what a person without a seat is answered, as in
-    /// <see cref="ResolveAsync"/>.
-    /// </summary>
-    /// <param name="caller">Who is calling, as the toolkit says.</param>
-    /// <param name="cancellationToken">Cancels the lookup.</param>
-    public async Task<IReadOnlyList<SeatOfCaller<TTenantId, TSeatId>>> SeatsOfAsync(Caller caller, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(caller);
-
-        return ListedIdentity(caller) is { } identity
-            ? await seats.AllOfAsync(identity, cancellationToken).ConfigureAwait(false)
-            : [];
-    }
-
-    /// <summary>
-    /// Every seat <paramref name="caller"/> has, as <see cref="SeatsOfAsync(Caller, CancellationToken)"/> answers them
-    /// and by the same rule, each answered as <paramref name="view"/> makes it of what the directory found and the
-    /// application's own seat: a tenant picker shows a seat by the name the application keeps on its seat class, say,
-    /// as every other answer about the seat does, from the seats the lookup reads anyway. For a caller that is answered
-    /// none, nothing is looked up and the view is never asked.
+    /// Every seat <paramref name="caller"/> has, in every tenant and in any status, for a tenant picker: the
+    /// application's own seats, whole, each beside its tenant (<see cref="SeatInTenant{TSeat}"/>), so a picker shows a
+    /// seat by the name the application keeps on its seat class, say, as every other answer about the seat does. Looked
+    /// up by the verified identity of the caller's own token, and by nothing a request could supply. None for a caller
+    /// that is no signed-in user, and none for a user whose token role holds no seat: nothing is looked up for them, and
+    /// they are answered what a person without a seat is answered, as in <see cref="ResolveAsync"/>.
     /// </summary>
     /// <typeparam name="TSeat">The application's seat class, or a class it derives from.</typeparam>
-    /// <typeparam name="TView">What the application answers of a seat.</typeparam>
     /// <param name="caller">Who is calling, as the toolkit says.</param>
-    /// <param name="view">
-    /// Makes the answer of one seat, once for each, as <see cref="ISeatDirectory{TTenantId, TSeatId}.AllOfAsync{TSeat, TView}"/>
-    /// hands it: read the fields the application keeps on the seat, and change nothing.
-    /// </param>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <exception cref="InvalidOperationException"><typeparamref name="TSeat"/> is no class the storage's seats are.</exception>
-    public async Task<IReadOnlyList<TView>> SeatsOfAsync<TSeat, TView>(
-        Caller caller,
-        Func<SeatOfCaller<TTenantId, TSeatId>, TSeat, TView> view,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SeatInTenant<TSeat>>> SeatsOfAsync<TSeat>(Caller caller, CancellationToken cancellationToken)
         where TSeat : class
     {
         ArgumentNullException.ThrowIfNull(caller);
-        ArgumentNullException.ThrowIfNull(view);
 
         return ListedIdentity(caller) is { } identity
-            ? await seats.AllOfAsync(identity, view, cancellationToken).ConfigureAwait(false)
+            ? await seats.AllOfAsync<TSeat>(identity, cancellationToken).ConfigureAwait(false)
             : [];
     }
 

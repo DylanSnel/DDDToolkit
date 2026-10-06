@@ -3,7 +3,7 @@
 // infrastructure project's namespace is not among these: only the entry names it, in its own file.
 global using Examples.Tenancy.Tenants.Contracts.ValueObjects;
 
-// The package's shapes and statuses: the bodies and the answers name them. The records the routes and the GraphQL
-// types describe, TenantsTenancy.SeatOverview and the rest, need nothing here: TenantsTenancy is a class of the
+// The package's shapes and statuses: the bodies and the answers name them. The package's records the routes and the
+// GraphQL types describe, TenantsTenancy.KeyReach and the rest, need nothing here: TenantsTenancy is a class of the
 // domain project, which the toolkit's generator wrote there, and HotChocolate's generator reads it as any type.
 global using DDDToolkit.Supporting.Tenancy;

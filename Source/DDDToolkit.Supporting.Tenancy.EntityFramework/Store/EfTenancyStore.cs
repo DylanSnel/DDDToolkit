@@ -147,6 +147,14 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
 
     /// <inheritdoc />
     /// <remarks>
+    /// One statement, as <see cref="FindOrganizationAsync"/> reads the organization with its units, and not tracked:
+    /// the units are the application's own class, handed to it by the directory, and nothing done to one is saved.
+    /// </remarks>
+    public Task<TOrganization?> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
+        => context.Set<TOrganization>().AsNoTracking().Where(organization => organization.Id.Equals(id)).FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>
     /// A seat comes with its placements and their grants, two collections, in one query: a seat holds a few of
     /// each, so the rows they multiply to stay few, and the aggregate is read as one consistent whole rather than
     /// in statements that another save could come between. Saying so is also what keeps Entity Framework from
@@ -158,7 +166,7 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     /// <inheritdoc />
     /// <remarks>
     /// One statement, over the seats with their placements and grants as <see cref="FindSeatAsync"/> reads them, and
-    /// not tracked: the seats are the application's own class, read for a view of them, and nothing a view does to
+    /// not tracked: the seats are the application's own class, handed to it by the directory, and nothing done to
     /// one is saved. It names the tenant next to the tenant filter: a person's seats in other tenants, which a
     /// database may let that person read, are not among the answer.
     /// </remarks>

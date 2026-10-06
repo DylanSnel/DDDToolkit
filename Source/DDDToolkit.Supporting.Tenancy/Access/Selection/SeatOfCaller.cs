@@ -3,10 +3,10 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// A person's seat in one tenant, as the directory finds it for their verified identity: the tenant, by what a picker
-/// shows of it, and the seat by its id and status. A seat has no name in Tenancy: a picker that shows one by what the
-/// application keeps on its seat class asks with a view, which is handed the seat beside this
-/// (<see cref="ISeatDirectory{TTenantId, TSeatId}.AllOfAsync{TSeat, TView}"/>).
+/// A person's seat in one tenant, as the directory finds it for their verified identity when the caller's seat is
+/// selected (<see cref="ISeatDirectory{TTenantId, TSeatId}.FindAsync"/>): the tenant and the seat, each by its id and
+/// status, which is all the selection decides by. A tenant picker is answered the application's own seats instead
+/// (<see cref="ISeatDirectory{TTenantId, TSeatId}.AllOfAsync{TSeat}"/>).
 /// </summary>
 /// <param name="Tenant">The tenant's id.</param>
 /// <param name="Slug">The slug the tenant is selected by.</param>

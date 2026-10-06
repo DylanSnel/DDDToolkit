@@ -19,8 +19,8 @@ namespace Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 /// it provisions a tenant and in the <c>configure</c> of <c>AddSeatAsync</c>, and the module's
 /// <c>AcceptInvitation</c> in the <c>configure</c> of <c>AcceptAsync</c>, with the name the person gives. Renaming is
 /// the module's own command, <c>RenameSeat</c>, with its own rule. The package's directory, and its lookup of a
-/// person's own seats for the tenant picker, hand this class to the module's view of a seat, <c>SeatListing</c>, so
-/// every answer shows the name with no read more.
+/// person's own seats for the tenant picker, answer this class whole, and the module's queries select what they
+/// show of it into a <c>SeatListing</c>, so every answer shows the name with no read more.
 /// </para>
 /// <para>
 /// <b>Guarding the fields is this application's too.</b> In the database the package holds its own columns of the

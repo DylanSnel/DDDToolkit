@@ -90,11 +90,8 @@ public sealed class AmbientCallerRecorder
             return inner.FindAsync(identity, tenantSlug, cancellationToken);
         }
 
-        public Task<IReadOnlyList<SeatOfCaller<TenantId, SeatId>>> AllOfAsync(Guid identity, CancellationToken cancellationToken)
-            => inner.AllOfAsync(identity, cancellationToken);
-
-        public Task<IReadOnlyList<TView>> AllOfAsync<TSeat, TView>(Guid identity, Func<SeatOfCaller<TenantId, SeatId>, TSeat, TView> view, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<SeatInTenant<TSeat>>> AllOfAsync<TSeat>(Guid identity, CancellationToken cancellationToken)
             where TSeat : class
-            => inner.AllOfAsync(identity, view, cancellationToken);
+            => inner.AllOfAsync<TSeat>(identity, cancellationToken);
     }
 }

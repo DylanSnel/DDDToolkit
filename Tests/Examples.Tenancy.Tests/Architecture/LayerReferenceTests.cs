@@ -567,6 +567,7 @@ public sealed class LayerReferenceTests
             return definition == typeof(ISeatDirectory<,>)
                 || definition == typeof(TenantSelection<,>)
                 || definition == typeof(SeatOfCaller<,>)
+                || definition == typeof(SeatInTenant<>)
                 || definition == typeof(TenancyUseCases<,,,,,,,,>)
                 || definition.DeclaringType == typeof(TenancyUseCases<,,,,,,,,>);
         }
@@ -581,7 +582,7 @@ public sealed class LayerReferenceTests
         // The scan would see it: the Tenants module names all three.
         var tenancy = naming.Where(found => found.Module == "Tenants").SelectMany(found => found.Uses).Select(use => use.Type).ToList();
         tenancy.Should().Contain(typeof(TenantSelection<,>))
-            .And.Contain(typeof(SeatOfCaller<,>))
+            .And.Contain(typeof(SeatInTenant<>))
             .And.Contain(typeof(TenancyUseCases<,,,,,,,,>.TenancyDirectory));
     }
 

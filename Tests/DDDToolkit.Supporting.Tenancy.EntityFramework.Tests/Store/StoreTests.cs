@@ -60,7 +60,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
         var lin = await _services.AddSeatAsync(harbor.Tenant, Guid.NewGuid(), "Lin");
         await _services.BySystemIn(harbor.Tenant, services => services.Seats().SuspendAsync(lin, TestContext.Current.CancellationToken));
 
-        // Grace has no placement and no key: whoever works in a tenant reads its seats, for the directory's views.
+        // Grace has no placement and no key: whoever works in a tenant reads its seats, for the directory's answers.
         await _services.BySeat(harbor.Tenant, grace, async services =>
         {
             var store = services.GetRequiredService<HostTenancy.IStore>();
@@ -89,36 +89,56 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             (await store.ListSeatsAsync(orchard.Tenant, only: null, TestContext.Current.CancellationToken)).Should().BeEmpty();
             (await store.ListSeatsAsync(orchard.Tenant, [orchard.AdminSeat], TestContext.Current.CancellationToken)).Should().BeEmpty();
 
-            // And nothing it read is tracked: a view that changes a seat it was handed changes nothing a save writes.
-            all[0].Rename("changed by a view");
+            // And nothing it read is tracked: an application that changes a seat it was handed changes nothing a save writes.
+            all[0].Rename("changed by the application");
             services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty();
             (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
         });
     }
 
     [Fact]
-    public async Task The_callers_own_seat_is_handed_to_a_view_untracked_as_the_lists_hand_theirs()
+    public async Task The_callers_own_seat_comes_untracked_as_the_lists_hand_theirs()
     {
         var harbor = await _services.ProvisionAsync("harbor");
 
         await _services.BySeat(harbor.Tenant, harbor.AdminSeat, async services =>
         {
-            var me = await services.Directory().WhoAmIAsync(
-                (summary, own) =>
-                {
-                    own.Rename("changed by a view");
-                    return (summary.Id, own.DisplayName);
-                },
-                TestContext.Current.CancellationToken);
+            var me = await services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken);
+            me.Seat.Rename("changed by the application");
 
-            me.Seat.Should().Be((harbor.AdminSeat, "changed by a view"));
+            (me.Seat.Id, me.Seat.DisplayName).Should().Be((harbor.AdminSeat, "changed by the application"));
             services.Tenancy().ChangeTracker.Entries<HostSeat>().Should().BeEmpty("the caller's own seat is read as the lists read theirs, not loaded as a command loads one");
-            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing the view did");
+            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0, "a later save in the same scope writes nothing done to it");
         });
 
-        var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services =>
-            services.Directory().WhoAmIAsync((_, own) => own.DisplayName, TestContext.Current.CancellationToken));
-        again.Seat.Should().Be("Ada");
+        var again = await _services.BySeat(harbor.Tenant, harbor.AdminSeat, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
+        again.Seat.DisplayName.Should().Be("Ada");
+    }
+
+    [Fact]
+    public async Task The_organization_the_directory_reads_comes_whole_untracked_and_in_one_statement()
+    {
+        var harbor = await _services.ProvisionAsync("harbor");
+        var north = await _services.AddUnitAsync(harbor.Tenant, harbor.RootUnit, "North", unit => unit.SetCostCentre("NL-002"));
+
+        await _services.BySystemIn(harbor.Tenant, async services =>
+        {
+            var store = services.GetRequiredService<HostTenancy.IStore>();
+
+            _services.Commands.Reset();
+            var organization = (await store.ReadOrganizationAsync(harbor.Tenant, TestContext.Current.CancellationToken))!;
+            _services.Commands.Count.Should().Be(1, "the organization and its units are one statement");
+            organization.Units.Select(unit => (unit.Name, unit.CostCentre)).Should().BeEquivalentTo([("Harbor", (string?)null), ("North", "NL-002")], "the host's own units, with the field it added");
+
+            // Nothing it read is tracked: an application that changes a unit it was handed changes nothing a save writes.
+            organization.Units.Single(unit => unit.Id == north).SetCostCentre("XX-999");
+            services.Tenancy().ChangeTracker.Entries().Should().BeEmpty();
+            (await services.Tenancy().SaveChangesAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+
+            // And the directory's units are those.
+            (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Single(unit => unit.Unit.Id == north).Unit.CostCentre.Should().Be("NL-002");
+            services.Tenancy().ChangeTracker.Entries().Should().BeEmpty("the directory reads, and tracks nothing it hands out");
+        });
     }
 
     [Fact]

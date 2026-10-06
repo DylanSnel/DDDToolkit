@@ -276,7 +276,7 @@ public class TemplateFacadeTests
         // What one generator writes, the others of the same project do not see: the class is written there, in the
         // domain project, and read from the projects above it. Such a generator knows nothing of the type, so what it
         // writes is what the code spelled, and whether that compiles is up to that generator: HotChocolate's writes
-        // typeof(TenantsTenancy.SeatSummary?) for a resolver that may answer nothing, which does not.
+        // typeof(TenantsTenancy.RoleSummary?) for a resolver that may answer nothing, which does not.
         var domain = Domain("Tenants")(Project(Described("TenantsTenancy.SeatOverview", "Shop.Domain")))
             .Run([.. GeneratorTestHost.CoreGenerators(), new DescribesGenerator()]);
 

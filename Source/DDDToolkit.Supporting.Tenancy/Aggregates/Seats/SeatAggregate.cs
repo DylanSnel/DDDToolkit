@@ -19,7 +19,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// Nor does a seat have a name. No rule of Tenancy reads one, so what a person is shown by is the application's
 /// to say: a name per tenant on its own seat class, set in the callback of the use case that makes the seat; the
 /// person's own name, from the identity provider; or a profile of its own, found by <see cref="Identity"/>. The
-/// directory hands the application's own seat to a view of it, so a screen shows what the application chose.
+/// directory answers the application's own seat, whole, and the application selects what a screen shows of it.
 /// </para>
 /// <para>
 /// Placements and grants are the seat's own: it checks every change to them, and hands them out as

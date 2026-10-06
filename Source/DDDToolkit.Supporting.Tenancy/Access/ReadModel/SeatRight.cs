@@ -10,8 +10,9 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 // role's pack and keys. They never carry a text that is shown to people: no unit's name, no role's name, and
 // nothing the application keeps on its seat class, such as the name it shows a seat by. A module that maps these
 // rows can therefore not lean on Tenancy for what it shows; names are the directory's to answer, by id
-// (TenancyUseCases<...>.TenancyDirectory), a seat's through a view of the application's own seat. A property added
-// here is a column every module's model maps and every read function answers, so a test pins the exact list.
+// (TenancyUseCases<...>.TenancyDirectory), which answers the application's own seat whole, for the application to
+// select what it shows of it. A property added here is a column every module's model maps and every read function
+// answers, so a test pins the exact list.
 
 /// <summary>
 /// One key a seat holds at one unit through one role, for the period of the grant. Written by

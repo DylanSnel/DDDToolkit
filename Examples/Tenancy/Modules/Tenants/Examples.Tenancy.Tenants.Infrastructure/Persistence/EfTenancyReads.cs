@@ -52,10 +52,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<TView>> SeatsOfAsync<TView>(Caller caller, Func<SeatOfCaller<TenantId, SeatId>, Seat, TView> view, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<SeatInTenant<Seat>>> SeatsOfAsync(Caller caller, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync(caller, view, cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenantSelection<TenantId, SeatId>>().SeatsOfAsync<Seat>(caller, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -123,7 +123,7 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
         var roles = (await store.ListRolesAsync(found.TenantId, cancellationToken)).ToDictionary(role => role.Id, role => role.Name);
         var units = (await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenancyDirectory>()
                 .UnitsByIdAsync([.. found.Placements.Select(placement => placement.UnitId).Distinct()], cancellationToken))
-            .ToDictionary(unit => unit.Id, unit => unit.Path);
+            .ToDictionary(unit => unit.Unit.Id, unit => unit.Path);
         var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
 
         return

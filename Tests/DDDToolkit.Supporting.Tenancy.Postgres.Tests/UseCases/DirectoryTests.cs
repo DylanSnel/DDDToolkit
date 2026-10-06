@@ -27,9 +27,9 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             var directory = scoped.Directory();
 
             recorder.Clear();
-            (await directory.SeatsByIdAsync([Sue.Seat, Ada.Seat, Seth.Seat], Named, Cancellation)).Should().BeEquivalentTo(
+            (await directory.SeatsByIdAsync([Sue.Seat, Ada.Seat, Seth.Seat], Cancellation)).Select(seat => (seat.Id, seat.DisplayName, seat.Status)).Should().BeEquivalentTo(
                 [(Ada.Seat, "Ada", SeatStatus.Active), (Seth.Seat, "Seth", SeatStatus.Active), (Sue.Seat, "Sue", SeatStatus.Suspended)],
-                "the host's own name, from the seats the directory read");
+                "the host's own seats, with the name it keeps on them");
             var seats = recorder.Sent.Should().ContainSingle("the seats asked for are one statement").Which.Text;
             seats.Should().Contain(names.Of("Seats")).And.NotContain(TenancyFunctionNames.TenantSeats, "the host's seats are read from the seats' own table, which the policies let a seat of the tenant read");
 
@@ -41,14 +41,14 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
 
             // South is no unit Oli is placed under, and the root is above him: both are his tenant's, and named.
             recorder.Clear();
-            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Id, unit.Name, unit.Path, unit.Depth)).Should().Equal(
+            (await directory.UnitsByIdAsync([South, HarborRoot, NorthPier], Cancellation)).Select(unit => (unit.Unit.Id, unit.Unit.Name, unit.Path, unit.Depth)).Should().Equal(
                 (HarborRoot, "Harbor", "Harbor", 1),
                 (NorthPier, "North Pier", "Harbor / North / North Pier", 3),
                 (South, "South", "Harbor / South", 2));
             recorder.Sent.Should().HaveCount(2, "the organization with its units, and the closure that orders a path");
 
             (await directory.ListUnitsAsync(Cancellation)).Select(unit => unit.Path).Should().Equal(["Harbor / North / North Pier"], "the list is still the units he is placed under");
-            (await directory.ListSeatsAsync(Named, Cancellation)).Select(seat => seat.Name).Should().BeEquivalentTo(["Ada", "Eve", "Hiro", "Oli", "Seth", "Sue"]);
+            (await directory.ListSeatsAsync(Cancellation)).Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Eve", "Hiro", "Oli", "Seth", "Sue"]);
             (await directory.ListRolesAsync(Cancellation)).Select(role => role.Name).Should().Equal("Administrator", "Grants desk", "Operator", "Supervisor", "Watcher");
         });
     }
@@ -69,7 +69,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
             var directory = scoped.Directory();
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Quin.Seat, Oli.Seat], Cancellation)).Select(seat => seat.Id).Should().Equal(Oli.Seat);
             (await directory.RolesByIdAsync([OrchardRoles.Watcher, QuayRoles.Administrator, HarborRoles.Watcher], Cancellation)).Select(role => role.Id).Should().Equal(HarborRoles.Watcher);
-            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Id).Should().Equal(North);
+            (await directory.UnitsByIdAsync([OrchardRoot, QuayRoot, North], Cancellation)).Select(unit => unit.Unit.Id).Should().Equal(North);
 
             (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat], Cancellation)).Should().BeEmpty("nothing says whether an id is another tenant's or nobody's");
         });
@@ -78,7 +78,7 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         await services.BySeat(Oli.Identity, Orchard, OliInOrchard, async scoped =>
         {
             var directory = scoped.Directory();
-            (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Oli.Seat, Ada.Seat], Named, Cancellation)).Select(seat => (seat.Id, seat.Name))
+            (await directory.SeatsByIdAsync([OliInOrchard, Odette.Seat, Oli.Seat, Ada.Seat], Cancellation)).Select(seat => (seat.Id, seat.DisplayName))
                 .Should().BeEquivalentTo([(Odette.Seat, "Odette"), (OliInOrchard, "Oli")]);
             (await directory.UnitsByIdAsync([OrchardRoot, HarborRoot], Cancellation)).Select(unit => unit.Path).Should().Equal("Orchard");
         });
@@ -86,13 +86,34 @@ public abstract class DirectoryTests(TenancyPostgres postgres, TenancyNaming nam
         // System work in a tenant reads that tenant's names, and no other's.
         await services.BySystemIn(Harbor, async scoped =>
         {
-            (await scoped.Directory().SeatsByIdAsync([Ada.Seat, Odette.Seat, OliInOrchard], Named, Cancellation)).Select(seat => seat.Name).Should().Equal("Ada");
+            (await scoped.Directory().SeatsByIdAsync([Ada.Seat, Odette.Seat, OliInOrchard], Cancellation)).Select(seat => seat.DisplayName).Should().Equal("Ada");
             (await scoped.Directory().UnitsByIdAsync([NorthPier, OrchardRoot], Cancellation)).Select(unit => unit.Path).Should().Equal("Harbor / North / North Pier");
         });
     }
 
-    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
-    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
+    [Fact]
+    public async Task A_seat_the_directory_answers_comes_with_the_grants_the_policies_let_the_caller_read()
+    {
+        var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
+        await using var services = new TenancyServices(database);
+
+        // The seats come whole, and the policies decide what of them is read: every seat of the tenant and where it is
+        // placed, and of the grants those the caller may read. Oli manages nothing, so he reads his own alone.
+        var byOli = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().ListSeatsAsync(Cancellation));
+        byOli.Should().HaveCount(6).And.OnlyContain(seat => seat.Placements.Count > 0, "every seat of Harbor is placed, and its placements are the tenant's to read");
+        byOli.Where(seat => seat.Id != Oli.Seat).SelectMany(seat => seat.Placements).SelectMany(placement => placement.Grants)
+            .Should().BeEmpty("a seat that manages nothing reads no other seat's grants");
+        byOli.Single(seat => seat.Id == Oli.Seat).Placements.SelectMany(placement => placement.Grants).Should().NotBeEmpty();
+
+        // Seth manages grants at North, so he reads the grants at North and below it, and none of Ada's at the root.
+        var bySeth = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Directory().SeatsByIdAsync([Ada.Seat, Oli.Seat], Cancellation));
+        bySeth.Single(seat => seat.Id == Oli.Seat).Placements.SelectMany(placement => placement.Grants).Should().NotBeEmpty();
+        bySeth.Single(seat => seat.Id == Ada.Seat).Placements.SelectMany(placement => placement.Grants).Should().BeEmpty("Ada's grant is at the root, above where Seth manages");
+
+        // The caller's own overview has every grant of its own, each with the name of its role.
+        var me = await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().WhoAmIAsync(Cancellation));
+        me.Seat.Placements.SelectMany(placement => placement.Grants).Select(grant => me.RoleOf(grant.RoleId)?.Name).Should().Equal("Operator");
+    }
 }
 
 /// <summary>The directory's names by id, under the names Entity Framework gives the tables and columns.</summary>

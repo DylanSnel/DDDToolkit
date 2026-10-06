@@ -181,14 +181,22 @@ public sealed partial class ShopSeat
 - **A module answers ids, never Tenancy's names.** The read model has ids, keys, periods and statuses, and
   no name. What a unit or a role is called is asked of `TenancyDirectory` by id (`UnitsByIdAsync`,
   `RolesByIdAsync`) by whoever shows it.
+- **The directory answers the application's own classes, whole.** `ListSeatsAsync(ct)` and
+  `SeatsByIdAsync(ids, ct)` answer the module's `Seat`s, `ListUnitsAsync(ct)` and `UnitsByIdAsync(ids, ct)` its
+  units as `UnitInTree` (the unit, its `Path`, its `Depth`), all untracked: show them with a plain `Select`
+  (`seats.Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`). `WhoAmIAsync(ct)` answers a
+  `SeatOverview`: the `Seat` with its placements and grants, and only what is not on it (`Tenant`, `Units` by path,
+  `Roles` its grants name, `Keys`, `AsOf`; `UnitOf(id)` and `RoleOf(id)` look them up). The tenant picker's
+  `TenantSelection.SeatsOfAsync<Seat>(caller, ct)` answers `SeatInTenant<Seat>` (the seat, `Slug`,
+  `OrganizationName`, `TenantStatus`). A seat carries its identity: select what leaves, and never return the
+  class itself from a route or a GraphQL field. A listed seat carries its placements and grants too, and only
+  Postgres's policies narrow another seat's grants: show those only from a question that asks a key (the sample's
+  `SeatGrants`, `tenancy.seats.manage` for the whole tenant). `RoleOf(id)` is `null` for a role the application's
+  own filter hides.
 - **A seat has no name in Tenancy.** What a person is shown by is the application's: a field of its seat
   class (set in `ConfigureFirstSeat`, `AddSeatAsync(..., configure:)` and `AcceptAsync(..., configure:)`,
-  renamed by a use case of its own), the identity provider's name, or a profile of its own by `Identity`. The
-  directory hands the application's seat to a view: `ListSeatsAsync(SeatListing.Of, ct)`,
-  `SeatsByIdAsync(ids, SeatListing.Of, ct)`, `WhoAmIAsync(SeatListing.Of, ct)`, with
-  `SeatListing.Of(TenantsTenancy.SeatSummary seat, Seat own)`; the tenant picker's lookup takes one as well,
-  `TenantSelection.SeatsOfAsync<Seat, TView>(caller, (SeatOfCaller found, Seat own) => ..., ct)`. Never add a name
-  back to Tenancy.
+  renamed by a use case of its own), the identity provider's name, or a profile of its own by `Identity`.
+  Never add a name back to Tenancy.
 - **Who may give a role.** `tenancy.grants.manage` at the unit gives any role that manages no access. A
   role that manages access is given only by a seat that holds each of its keys that do, there and for at
   least as long, and never to itself. A tenant always keeps an administrator. Mark your own keys that give

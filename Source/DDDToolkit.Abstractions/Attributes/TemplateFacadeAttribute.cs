@@ -31,7 +31,7 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <para>
 /// <b>Why a class, and not a global alias.</b> An alias holds in the project that declares it and no further, so it
 /// would have to be written into every project, and a generator's alias is seen by the compiler but not by the
-/// other generators of the project: HotChocolate's, reading <c>[ObjectType&lt;ShopTenancy.SeatOverview&gt;]</c>,
+/// other generators of the project: HotChocolate's, reading <c>[ObjectType&lt;ShopTenancy.KeyReach&gt;]</c>,
 /// would not know the name. A class is written once, where the classes are declared, and reaches every project
 /// above it, and the generators there, through the reference. In the project that declares the classes the class
 /// is a generator's output too, so the other generators there do not see it: a module of one project that names the

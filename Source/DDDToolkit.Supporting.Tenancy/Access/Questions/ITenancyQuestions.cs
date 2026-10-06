@@ -114,7 +114,7 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
 
     /// <summary>
     /// The tenant's seats, in any status, as access facts, without a name: whether each counts. What a seat is
-    /// shown by is the application's, which the directory answers by id through a view of the application's seat.
+    /// shown by is the application's, selected from its own seat, which the directory answers whole, by id.
     /// </summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     IQueryable<SeatRow<TTenantId, TSeatId>> Seats();

@@ -26,7 +26,7 @@ namespace DDDToolkit.Analyzers.Common;
 /// <b>Why not a global alias.</b> An alias holds in the project that declares it and no further, so it would be
 /// written into every project, each one paying for the work on every edit. And a generator's output is seen by the
 /// compiler but not by the project's other generators: HotChocolate's, reading
-/// <c>[ObjectType&lt;TenantsTenancy.SeatOverview&gt;]</c> in an API project, would find no such name and write code
+/// <c>[ObjectType&lt;TenantsTenancy.KeyReach&gt;]</c> in an API project, would find no such name and write code
 /// that does not compile. The class is written once, in the project that declares the classes, and reaches every
 /// project above it through the reference, where the generators read it like any other type. A class of its own
 /// that wrapped the package's could not do this either: the records nested in the package's class are the package's,
@@ -36,7 +36,7 @@ namespace DDDToolkit.Analyzers.Common;
 /// <b>Not in the project that writes it.</b> There the same holds for the class itself: it is a generator's output,
 /// so another generator of that project does not see it, in an attribute or in a method's signature, whose types
 /// it reads from the code as written. Mediator's writes the name as it is spelled, which compiles; HotChocolate's
-/// does not know the type, and writes <c>typeof(TenantsTenancy.SeatSummary?)</c> for a resolver that may answer
+/// does not know the type, and writes <c>typeof(TenantsTenancy.RoleSummary?)</c> for a resolver that may answer
 /// nothing, which does not. A module split by layer names the records in such code in its API project, above the
 /// domain project, where all is well. A module of one project keeps an alias of exactly that name there,
 /// <c>global using TenantsTenancy = ...;</c>, which every generator of that project reads; the generator then

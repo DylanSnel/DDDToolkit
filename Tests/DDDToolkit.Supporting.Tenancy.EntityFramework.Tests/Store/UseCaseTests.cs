@@ -164,7 +164,7 @@ public sealed class UseCaseTests : IDisposable
         (await _services.StoredRightsAsync(hal)).Should().BeEquivalentTo(stored, "nothing was written when the grant ended");
         var overview = await _services.BySeat(_harbor.Tenant, hal, services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
         overview.Keys.Should().BeEmpty();
-        overview.Placements.Single().Grants.Single().AppliesNow.Should().BeFalse();
+        overview.Seat.Placements.Single().Grants.Single().AppliesAt(overview.AsOf).Should().BeFalse();
     }
 
     [Fact]
@@ -255,8 +255,8 @@ public sealed class UseCaseTests : IDisposable
 
         await _services.BySeat(orchard.Tenant, orchard.AdminSeat, async services =>
         {
-            (await services.Directory().ListSeatsAsync(Named, TestContext.Current.CancellationToken)).Select(seat => seat.Name).Should().Equal("Odette");
-            (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Select(unit => unit.Id).Should().Equal(orchard.RootUnit);
+            (await services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken)).Select(seat => seat.DisplayName).Should().Equal("Odette");
+            (await services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)).Select(unit => unit.Unit.Id).Should().Equal(orchard.RootUnit);
         });
 
         await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => _services.BySeat(orchard.Tenant, orchard.AdminSeat, services =>
@@ -277,13 +277,13 @@ public sealed class UseCaseTests : IDisposable
         var units = await AsGrace(services => services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken));
         units.Select(unit => (unit.Path, unit.Depth)).Should().Equal(("Harbor / North", 2), ("Harbor / North / Coast", 3));
 
-        var overview = await AsGrace(services => services.Directory().WhoAmIAsync(Named, TestContext.Current.CancellationToken));
-        overview.Seat.Name.Should().Be("Grace", "the host's own name, from the seat the directory read anyway");
-        overview.Placements.Should().ContainSingle().Which.Unit.Path.Should().Be("Harbor / North");
+        var overview = await AsGrace(services => services.Directory().WhoAmIAsync(TestContext.Current.CancellationToken));
+        overview.Seat.DisplayName.Should().Be("Grace", "the host's own name, on the seat the directory read");
+        overview.UnitOf(overview.Seat.Placements.Should().ContainSingle().Which.UnitId).Path.Should().Be("Harbor / North");
         overview.Keys.Single(reach => reach.Key == TenancyKeys.UnitsManage).Reaches.Select(unit => unit.Path)
             .Should().Equal("Harbor / North", "Harbor / North / Coast");
 
-        (await BySystem(services => services.Directory().ListSeatsAsync(Named, TestContext.Current.CancellationToken))).Select(seat => seat.Name)
+        (await BySystem(services => services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken))).Select(seat => seat.DisplayName)
             .Should().BeEquivalentTo(["Ada", "Grace", "Lin"]);
         (await BySystem(services => services.Directory().ListRolesAsync(TestContext.Current.CancellationToken))).Select(role => role.FromPack)
             .Should().BeEquivalentTo(_harbor.RolesByPack.Keys);
@@ -302,7 +302,8 @@ public sealed class UseCaseTests : IDisposable
             var directory = services.Directory();
 
             _services.Commands.Reset();
-            (await directory.SeatsByIdAsync([_grace, _harbor.AdminSeat, orchard.AdminSeat], Named, TestContext.Current.CancellationToken))
+            (await directory.SeatsByIdAsync([_grace, _harbor.AdminSeat, orchard.AdminSeat], TestContext.Current.CancellationToken))
+                .Select(seat => (seat.Id, seat.DisplayName, seat.Status))
                 .Should().BeEquivalentTo([(_harbor.AdminSeat, "Ada", SeatStatus.Active), (_grace, "Grace", SeatStatus.Active)]);
             _services.Commands.Count.Should().Be(1, "the seats are one statement");
             _services.Commands.Commands.Single().Should().Contain(_services.Database.TenancyTable("Seats"), "the host's name is read from the seats' own table");
@@ -313,14 +314,9 @@ public sealed class UseCaseTests : IDisposable
             _services.Commands.Count.Should().Be(1, "the roles are one statement");
 
             _services.Commands.Reset();
-            (await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], TestContext.Current.CancellationToken))
-                .Select(unit => (unit.Name, unit.Path, unit.Depth)).Should().Equal(("Harbor", "Harbor", 1), ("North", "Harbor / North", 2));
-            _services.Commands.Count.Should().Be(2, "the organization with its units, and the closure that orders a path");
-
-            _services.Commands.Reset();
-            (await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], (unit, own) => (unit.Path, Unit: own.GetType()), TestContext.Current.CancellationToken))
-                .Should().Equal(("Harbor", typeof(HostUnit)), ("Harbor / North", typeof(HostUnit)));
-            _services.Commands.Count.Should().Be(2, "a view is handed the application's own units, which the organization's statement read");
+            var units = await directory.UnitsByIdAsync([_north, _harbor.RootUnit, orchard.RootUnit], TestContext.Current.CancellationToken);
+            units.Select(unit => (unit.Unit.Name, unit.Path, unit.Depth)).Should().Equal(("Harbor", "Harbor", 1), ("North", "Harbor / North", 2));
+            _services.Commands.Count.Should().Be(2, "the organization with the application's own units, and the closure that orders a path");
 
             _services.Commands.Reset();
             (await directory.SeatsByIdAsync([], TestContext.Current.CancellationToken)).Should().BeEmpty();
@@ -378,7 +374,7 @@ public sealed class UseCaseTests : IDisposable
                 _north, "Cove", TestContext.Current.CancellationToken, configure: unit => unit.SetCostCentre("cove"))))
             .Should().ThrowAsync<DDDToolkit.Exceptions.InvariantViolationException>();
         (await _services.BySeat(_harbor.Tenant, _grace, scoped => scoped.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)))
-            .Select(unit => unit.Name).Should().Contain("Bay").And.NotContain("Cove");
+            .Select(unit => unit.Unit.Name).Should().Contain("Bay").And.NotContain("Cove");
     }
 
     [Fact]
@@ -399,7 +395,7 @@ public sealed class UseCaseTests : IDisposable
 
         _services.Database.CountRows("OrganizationUnits").Should().Be(units, "the organization never took the unit in, so the rename's save had none to write");
         (await BySystem(services => services.Directory().ListUnitsAsync(TestContext.Current.CancellationToken)))
-            .Select(unit => unit.Name).Should().Contain("Northern").And.NotContain("Ghost");
+            .Select(unit => unit.Unit.Name).Should().Contain("Northern").And.NotContain("Ghost");
     }
 
     [Fact]
@@ -484,7 +480,4 @@ public sealed class UseCaseTests : IDisposable
 
     private async Task<List<(OrganizationUnitId Unit, string Key)>> KeysAsync(SeatId seat)
         => [.. (await _services.StoredRightsAsync(seat)).Select(right => (right.UnitId, right.Key))];
-
-    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
-    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
 }

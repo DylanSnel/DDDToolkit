@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
+using DDDToolkit.Supporting.Tenancy.TestHost.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.TenancySeed;
@@ -178,8 +179,8 @@ public abstract class TenancyFunctionTests(TenancyPostgres postgres, TenancyNami
             }
 
             // The seat directory the application picks a tenant from lists the same.
-            var directory = await services.InScopeAsync(scoped => scoped.GetRequiredService<ISeatDirectory<TenantId, SeatId>>().AllOfAsync(identity, Cancellation));
-            directory.Select(seat => seat.Tenant).Should().BeEquivalentTo(expected);
+            var directory = await services.InScopeAsync(scoped => scoped.GetRequiredService<ISeatDirectory<TenantId, SeatId>>().AllOfAsync<HostSeat>(identity, Cancellation));
+            directory.Select(seat => seat.Seat.TenantId).Should().BeEquivalentTo(expected);
         }
     }
 

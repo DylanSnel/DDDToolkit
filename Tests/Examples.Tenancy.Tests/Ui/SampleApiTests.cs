@@ -12,9 +12,10 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-// The UI's record of a row of GET /me/seats, not the module's answer of the same name, which every file of this
-// project imports.
+// The UI's records of a row of GET /me/seats and its tenant, not the module's answers of the same names, which every
+// file of this project imports.
 using SeatOfMine = Examples.Tenancy.Ui.Api.Wire.SeatOfMine;
+using TenantOfSeat = Examples.Tenancy.Ui.Api.Wire.TenantOfSeat;
 
 namespace Examples.Tenancy.Tests.Ui;
 

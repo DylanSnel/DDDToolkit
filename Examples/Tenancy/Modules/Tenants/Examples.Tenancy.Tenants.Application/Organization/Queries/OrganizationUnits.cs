@@ -16,8 +16,8 @@ public sealed record OrganizationUnits : IQuery<IReadOnlyList<UnitListing>>, ITe
 }
 
 /// <summary>
-/// Answers <see cref="OrganizationUnits"/> from the Tenancy package's directory, each unit with the kind its own
-/// class keeps (<see cref="UnitListing.Of"/>).
+/// Answers <see cref="OrganizationUnits"/> from the Tenancy package's directory: the module's own units, each
+/// selected with the kind its class keeps and the path the package put beside it.
 /// </summary>
 /// <param name="reads">Where Tenancy is read: the directory, in a scope of this query's own.</param>
 public sealed class OrganizationUnitsHandler(ITenancyReads reads) : IQueryHandler<OrganizationUnits, IReadOnlyList<UnitListing>>
@@ -25,5 +25,8 @@ public sealed class OrganizationUnitsHandler(ITenancyReads reads) : IQueryHandle
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">The caller's own refusal when it is nobody.</exception>
     public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
-        => await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(UnitListing.Of, cancellationToken));
+    {
+        var units = await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(cancellationToken));
+        return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.ParentId, found.Unit.Name, found.Unit.Kind, found.Unit.Status, found.Path, found.Depth))];
+    }
 }

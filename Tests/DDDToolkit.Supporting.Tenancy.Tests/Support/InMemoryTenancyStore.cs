@@ -75,6 +75,12 @@ public sealed class InMemoryTenancyStore
     /// </summary>
     public bool KeepsOtherSeatsRights { get; set; }
 
+    /// <summary>
+    /// The roles the store answers no lookup and no list for, while the seats' grants still name them: what a filter
+    /// of the host's own on its role class does, a soft delete say.
+    /// </summary>
+    public HashSet<RoleId> HiddenRoles { get; } = [];
+
     /// <summary>The calls made since the unit of work began, in order.</summary>
     public IReadOnlyList<string> Calls => _calls;
 
@@ -199,6 +205,15 @@ public sealed class InMemoryTenancyStore
         return Task.FromResult(_organizations.TryGetValue(id, out var organization) && Visible(organization.Id) ? LoadedCopy(organization) : null);
     }
 
+    public Task<HostOrganization?> ReadOrganizationAsync(TenantId id, CancellationToken cancellationToken)
+    {
+        Record(nameof(ReadOrganizationAsync));
+
+        // A copy the unit of work does not track, as a database's read for the directory is: what is done to one of its
+        // units is never saved.
+        return Task.FromResult(_organizations.TryGetValue(id, out var organization) && Visible(organization.Id) ? Copies.Of(organization) : null);
+    }
+
     public Task<HostSeat?> FindSeatAsync(SeatId id, CancellationToken cancellationToken)
     {
         Record(nameof(FindSeatAsync));
@@ -229,8 +244,8 @@ public sealed class InMemoryTenancyStore
     {
         Record(nameof(ListSeatsAsync));
 
-        // Copies the unit of work does not track, as a database's read for a view is: what a view does to one is
-        // never saved.
+        // Copies the unit of work does not track, as a database's untracked read is: what is done to one is never
+        // saved.
         IReadOnlyList<HostSeat> seats =
         [
             .. _seats.Values
@@ -249,13 +264,14 @@ public sealed class InMemoryTenancyStore
     public Task<HostRole?> FindRoleAsync(RoleId id, CancellationToken cancellationToken)
     {
         Record(nameof(FindRoleAsync));
-        return Task.FromResult(_roles.TryGetValue(id, out var role) && Visible(role.TenantId) ? LoadedCopy(role) : null);
+        return Task.FromResult(_roles.TryGetValue(id, out var role) && Visible(role.TenantId) && !HiddenRoles.Contains(id) ? LoadedCopy(role) : null);
     }
 
     public Task<IReadOnlyList<HostRole>> ListRolesAsync(TenantId tenant, CancellationToken cancellationToken)
     {
         Record(nameof(ListRolesAsync));
-        IReadOnlyList<HostRole> roles = [.. _roles.Values.Where(role => Visible(role.TenantId) && role.TenantId == tenant).Select(LoadedCopy)];
+        IReadOnlyList<HostRole> roles =
+            [.. _roles.Values.Where(role => Visible(role.TenantId) && role.TenantId == tenant && !HiddenRoles.Contains(role.Id)).Select(LoadedCopy)];
         return Task.FromResult(roles);
     }
 

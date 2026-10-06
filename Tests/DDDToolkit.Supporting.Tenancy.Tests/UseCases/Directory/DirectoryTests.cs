@@ -5,14 +5,15 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// <summary>
 /// The directory tells a seat who it is and what it may do where, with every unit named by its path from the
 /// root, lists the tenant's seats, roles and the units the caller reads, and answers what seats, roles and units
-/// are called, by id, to whoever works in the tenant.
+/// are called, by id, to whoever works in the tenant. Seats and units come as the host's own classes, whole and
+/// tracked by nobody, with only what is not on them beside them.
 /// </summary>
 public class DirectoryTests
 {
     private static readonly DateTimeOffset Now = FixedClock.Start;
 
     [Fact]
-    public async Task WhoAmI_lists_placements_roles_and_where_each_key_reaches_with_paths()
+    public async Task WhoAmI_hands_the_hosts_own_seat_with_the_paths_roles_and_keys_that_are_not_on_it()
     {
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
@@ -22,17 +23,27 @@ public class DirectoryTests
         var me = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
 
         me.Tenant.Should().Be(new HostTenancy.TenantSummary(harness.Tenant, "harbor", "Harbor Works", TenantShape.Hierarchical, TenantStatus.Active));
-        me.Seat.Should().Be(new HostTenancy.SeatSummary(bert, SeatStatus.Active), "Tenancy keeps no name of a seat");
-        (await harness.As(bert, h => h.Directory.WhoAmIAsync(Named, default))).Seat.Should().Be((bert, "Bert", SeatStatus.Active), "the host's own name, through a view of its own seat");
+        (me.Seat.Id, me.Seat.DisplayName, me.Seat.Status).Should().Be((bert, "Bert", SeatStatus.Active), "the name is the host's own field, read with the seat");
+        me.Seat.Identity.Should().Be(harness.Store.Seat(bert).Identity);
+        me.AsOf.Should().Be(Now);
 
-        me.Placements.Select(placement => (placement.Unit.Path, placement.IsPrimary)).Should().Equal(
-            ("Harbor Works / North", true), ("Harbor Works / South", false));
-        var southGrant = me.Placements[1].Grants.Should().ContainSingle().Which;
-        southGrant.Role.Should().Be("Watcher");
-        southGrant.EndsAt.Should().Be(Now.AddDays(7));
-        southGrant.AppliesNow.Should().BeTrue();
-
+        // Where it is placed is the seat's own; the paths and the role names are what is not on it.
+        me.Units.Select(unit => (unit.Id, unit.Path)).Should().Equal((harness.Harbor.North, "Harbor Works / North"), (harness.Harbor.South, "Harbor Works / South"));
         me.Roles.Select(role => role.Name).Should().Equal("Supervisor", "Watcher");
+        var south = me.Seat.Placements.Single(placement => placement.UnitId == harness.Harbor.South);
+        south.IsPrimary.Should().BeFalse();
+        var watcher = south.Grants.Should().ContainSingle().Which;
+        me.RoleOf(watcher.RoleId)?.Name.Should().Be("Watcher");
+        me.UnitOf(south.UnitId).Path.Should().Be("Harbor Works / South");
+        watcher.EndsAt.Should().Be(Now.AddDays(7));
+        watcher.AppliesAt(me.AsOf).Should().BeTrue();
+
+        // What a host shows is a plain select over the seat, with the paths and role names beside it.
+        me.Seat.Placements
+            .OrderByDescending(placement => placement.IsPrimary)
+            .Select(placement => (me.UnitOf(placement.UnitId).Path, placement.IsPrimary, Roles: string.Join(", ", placement.Grants.Select(grant => me.RoleOf(grant.RoleId)?.Name))))
+            .Should().Equal(("Harbor Works / North", true, "Supervisor"), ("Harbor Works / South", false, "Watcher"));
+
         me.Keys.Select(key => key.Key).Should().Equal(
             TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage,
             HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
@@ -51,8 +62,79 @@ public class DirectoryTests
 
         harness.Clock.Advance(TimeSpan.FromDays(7));
         var later = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
-        later.Placements[1].Grants.Single().AppliesNow.Should().BeFalse();
+        later.AsOf.Should().Be(Now.AddDays(7));
+        later.Seat.Placements.Single(placement => placement.UnitId == harness.Harbor.South).Grants.Single().AppliesAt(later.AsOf).Should().BeFalse();
+        later.Roles.Select(role => role.Name).Should().Equal(["Supervisor", "Watcher"], "the roles its grants name, whether or not a grant applies now");
         later.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North);
+    }
+
+    [Fact]
+    public async Task An_overview_names_the_units_and_roles_of_the_seats_own_placements_and_grants_and_no_others()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.WatcherPack);
+
+        var me = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
+
+        me.Units.Select(unit => unit.Id).Should().Equal(harness.Harbor.North);
+        me.Roles.Select(role => role.Id).Should().Equal(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        FluentActions.Invoking(() => me.UnitOf(harness.Harbor.South)).Should().Throw<KeyNotFoundException>("the seat is not placed at South, so the overview read nothing of it");
+        FluentActions.Invoking(() => me.RoleOf(harness.RoleFromPack(HostCatalogue.SupervisorPack))).Should().Throw<KeyNotFoundException>();
+    }
+
+    [Fact]
+    public async Task A_grant_whose_role_the_store_does_not_answer_is_still_shown_with_no_role_made_up()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack, HostCatalogue.WatcherPack);
+        var watcher = harness.RoleFromPack(HostCatalogue.WatcherPack);
+
+        // A filter of the host's own on its role class, a soft delete say, hides the role; Bert's grant still names it.
+        harness.Store.HiddenRoles.Add(watcher);
+        var me = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
+
+        me.Roles.Select(role => role.Name).Should().Equal(["Supervisor"], "a role the store does not answer is left out rather than made up");
+        me.Seat.Placements.Single().Grants.Select(grant => grant.RoleId).Should().Contain(watcher, "the grant is the seat's own");
+        me.RoleOf(watcher).Should().BeNull("a grant of the seat names it, so it is no programming error to ask");
+        me.Seat.Placements.Single().Grants
+            .Select(grant => me.RoleOf(grant.RoleId)?.Name ?? "(a role no longer shown)")
+            .Should().BeEquivalentTo(["Supervisor", "(a role no longer shown)"], "the host shows every grant, with what it chooses for a role it cannot name");
+    }
+
+    [Fact]
+    public async Task What_is_done_to_a_seat_or_a_unit_the_directory_answered_is_never_saved()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North);
+
+        // Each answer is read for the question and tracked by nobody: a save later in the same unit of work writes
+        // nothing done to it.
+        await harness.As(bert, async h =>
+        {
+            (await h.Directory.WhoAmIAsync(default)).Seat.Rename("changed by the overview");
+            foreach (var seat in await h.Directory.ListSeatsAsync(default))
+            {
+                seat.Rename("changed by the list");
+            }
+
+            foreach (var seat in await h.Directory.SeatsByIdAsync([bert, harness.Administrator], default))
+            {
+                seat.ChangeJobTitle("changed by the question by id");
+            }
+
+            foreach (var unit in await h.Directory.ListUnitsAsync(default))
+            {
+                unit.Unit.SetCostCentre("XX-999");
+            }
+
+            await h.Store.SaveAsync(default);
+        });
+
+        harness.Store.Seat(bert).DisplayName.Should().Be("Bert");
+        harness.Store.Seat(harness.Administrator).DisplayName.Should().Be("Ada");
+        harness.Store.Seat(bert).JobTitle.Should().BeNull();
+        harness.Store.Organization(harness.Tenant).Units.Select(unit => unit.CostCentre).Should().OnlyContain(costCentre => costCentre == null);
+        harness.Store.Calls.Should().Contain("ReadOrganizationAsync").And.NotContain("FindOrganizationAsync", "the directory reads the organization, and loads it for no save");
     }
 
     [Fact]
@@ -72,7 +154,7 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task Unit_paths_run_from_the_root()
+    public async Task Units_come_whole_with_their_path_and_depth_from_the_root()
     {
         var harness = Harness.OfHarbor();
         var bert = await harness.SeatAt("Bert", harness.Harbor.North);
@@ -82,14 +164,14 @@ public class DirectoryTests
 
         all.Select(unit => (unit.Path, unit.Depth)).Should().Equal(
             ("Harbor Works", 1), ("Harbor Works / North", 2), ("Harbor Works / North / North Coast", 3), ("Harbor Works / South", 2));
-        all.Single(unit => unit.Id == harness.Harbor.NorthCoast).Should().Match<HostTenancy.UnitSummary>(
-            unit => unit.Status == UnitStatus.Archived && unit.ParentId == harness.Harbor.North);
+        all.Single(unit => unit.Unit.Id == harness.Harbor.NorthCoast).Unit.Should().Match<HostUnit>(
+            unit => unit.Status == UnitStatus.Archived && unit.ParentId == harness.Harbor.North && unit.Name == "North Coast", "the host's own unit, whole");
 
         var mine = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
         mine.Select(unit => unit.Path).Should().Equal("Harbor Works / North", "Harbor Works / North / North Coast");
 
-        var seats = await harness.As(bert, h => h.Directory.ListSeatsAsync(Named, default));
-        seats.Select(seat => seat.Name).Should().BeEquivalentTo(["Ada", "Bert"]);
+        var seats = await harness.As(bert, h => h.Directory.ListSeatsAsync(default));
+        seats.Select(seat => seat.DisplayName).Should().BeEquivalentTo(["Ada", "Bert"]);
 
         await harness.BySystemWork(h => h.Roles.ArchiveAsync(harness.RoleFromPack(HostCatalogue.WatcherPack), default));
         var roles = await harness.As(bert, h => h.Directory.ListRolesAsync(default));
@@ -133,7 +215,7 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task Seats_by_id_are_named_and_only_those_of_the_callers_tenant()
+    public async Task Seats_by_id_are_the_hosts_own_and_only_those_of_the_callers_tenant()
     {
         var harness = Harness.OfHarbor();
         var orchard = harness.Seed(2, "orchard");
@@ -141,11 +223,11 @@ public class DirectoryTests
         var cy = await harness.SeatAt("Cy", harness.Harbor.South);
         await harness.BySystemWork(h => h.Seats.SuspendAsync(cy, default));
 
-        // Bert holds no key at all: whoever works in a tenant reads its seats. The name is the host's own field,
-        // answered by its view from the seats the directory read anyway.
-        var named = await harness.As(bert, h => h.Directory.SeatsByIdAsync([cy, harness.Administrator, orchard.Administrator.Id, SeatId.CreateSequential(), cy], Named, default));
+        // Bert holds no key at all: whoever works in a tenant reads its seats. The name is the host's own field, on
+        // the seats the directory read.
+        var seats = await harness.As(bert, h => h.Directory.SeatsByIdAsync([cy, harness.Administrator, orchard.Administrator.Id, SeatId.CreateSequential(), cy], default));
 
-        named.Should().BeEquivalentTo([(harness.Administrator, "Ada", SeatStatus.Active), (cy, "Cy", SeatStatus.Suspended)]);
+        seats.Select(seat => (seat.Id, seat.DisplayName, seat.Status)).Should().BeEquivalentTo([(harness.Administrator, "Ada", SeatStatus.Active), (cy, "Cy", SeatStatus.Suspended)]);
         harness.Store.Calls.Should().Equal(["ListSeatsAsync"], "one read, of the seats themselves; the rows the access questions read have no name");
 
         (await harness.As(bert, h => h.Directory.SeatsByIdAsync([orchard.Administrator.Id, SeatId.CreateSequential()], default)))
@@ -153,36 +235,22 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task Seats_come_in_the_order_of_their_ids_with_the_package_summary_beside_the_hosts_own_seat()
+    public async Task Seats_come_whole_in_the_order_of_their_ids()
     {
         var harness = Harness.OfHarbor();
-        var seats = new List<SeatId> { harness.Administrator };
+        var seats = new List<(SeatId Id, string? Name)> { (harness.Administrator, "Ada") };
         foreach (var name in new[] { "Zed", "Bert", "Mo" })
         {
-            seats.Add(await harness.SeatAt(name, harness.Harbor.North));
+            seats.Add((await harness.SeatAt(name, harness.Harbor.North), name));
         }
 
-        var summaries = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(default));
-        var viewed = new List<(HostTenancy.SeatSummary Summary, HostSeat Own)>();
-        var listed = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(
-            (summary, own) =>
-            {
-                viewed.Add((summary, own));
-                own.Rename("changed by a view");
-                return summary.Id;
-            },
-            default));
+        var listed = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(default));
 
-        var byId = seats.Order().ToArray();
-        summaries.Select(seat => seat.Id).Should().Equal(byId, "a seat has nothing of Tenancy's a person would order it by, so the order is the ids'");
-        listed.Should().Equal(byId, "the view is asked once for each seat, in the same order");
-        viewed.Should().OnlyContain(pair => pair.Summary.Id == pair.Own.Id && pair.Summary.Status == pair.Own.Status);
-        viewed.Select(pair => pair.Own.Identity).Should().OnlyHaveUniqueItems().And.NotContain(Guid.Empty, "the host's own seat comes whole, its identity included");
-        seats.Select(seat => harness.Store.Seat(seat).DisplayName).Should().Equal(["Ada", "Zed", "Bert", "Mo"], "what a view does to a seat it was handed is never saved");
+        listed.Select(seat => (seat.Id, seat.DisplayName)).Should().Equal(
+            seats.OrderBy(seat => seat.Id), "a seat has nothing of Tenancy's a person would order it by, so the order is the ids', with the host's own field on each");
+        listed.Select(seat => seat.Identity).Should().OnlyHaveUniqueItems().And.NotContain(Guid.Empty, "the host's own seat comes whole, its identity included");
+        listed.Should().OnlyContain(seat => seat.Placements.Count == 1, "with where it is placed, as loading one reads it");
     }
-
-    /// <summary>A view of a seat as a host makes one: the package's summary with the name its own seat class keeps.</summary>
-    private static (SeatId Id, string? Name, SeatStatus Status) Named(HostTenancy.SeatSummary seat, HostSeat own) => (seat.Id, own.DisplayName, seat.Status);
 
     [Fact]
     public async Task Units_by_id_come_with_their_path_whichever_the_caller_is_placed_under()
@@ -198,18 +266,18 @@ public class DirectoryTests
         var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync(
             [harness.Harbor.South, harness.Harbor.NorthCoast, harness.Harbor.Root, orchard.North, OrganizationUnitId.CreateSequential(), harness.Harbor.South], default));
 
-        named.Should().Equal(
-            new HostTenancy.UnitSummary(harness.Harbor.Root, null, "Harbor Works", UnitStatus.Active, "Harbor Works", 1),
-            new HostTenancy.UnitSummary(harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
-            new HostTenancy.UnitSummary(harness.Harbor.South, harness.Harbor.Root, "South", UnitStatus.Active, "Harbor Works / South", 2));
-        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.Contain("FindOrganizationAsync", "the names are the organization's own units'");
+        named.Select(unit => (unit.Unit.Id, unit.Unit.ParentId, unit.Unit.Name, unit.Unit.Status, unit.Path, unit.Depth)).Should().Equal(
+            (harness.Harbor.Root, (OrganizationUnitId?)null, "Harbor Works", UnitStatus.Active, "Harbor Works", 1),
+            (harness.Harbor.NorthCoast, harness.Harbor.North, "North Coast", UnitStatus.Archived, "Harbor Works / North / North Coast", 3),
+            (harness.Harbor.South, harness.Harbor.Root, "South", UnitStatus.Active, "Harbor Works / South", 2));
+        harness.Store.Calls.Should().NotContain("ListSeatsAsync").And.Contain("ReadOrganizationAsync", "the names are the organization's own units'");
 
         (await harness.As(bert, h => h.Directory.UnitsByIdAsync([orchard.North, orchard.Root], default)))
             .Should().BeEmpty("another tenant's units are left out without a word");
     }
 
     [Fact]
-    public async Task A_view_answers_the_applications_own_field_beside_the_summary_from_the_units_the_directory_read()
+    public async Task A_field_the_host_added_to_its_unit_comes_with_the_unit_from_the_one_read()
     {
         var harness = Harness.OfHarbor();
         var orchard = harness.Seed(2, "orchard");
@@ -217,22 +285,16 @@ public class DirectoryTests
         var bay = await harness.BySystemWork(h => h.Organization.AddUnitAsync(
             harness.Harbor.North, "North Bay", default, configure: unit => unit.SetCostCentre("NB-104")));
 
-        // The units the caller reads, as the form without a view answers them, each with its cost centre.
-        var summaries = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
-        var asked = harness.Store.Calls.ToList();
-        var listed = await harness.As(bert, h => h.Directory.ListUnitsAsync((unit, own) => (Summary: unit, own.CostCentre), default));
+        // The units the caller reads, each the host's own, with its cost centre: a plain select shows it.
+        var listed = await harness.As(bert, h => h.Directory.ListUnitsAsync(default));
 
-        listed.Select(unit => unit.Summary).Should().Equal(summaries, "the view is handed the summary the directory answers anyway");
-        listed.Select(unit => (unit.Summary.Name, unit.CostCentre)).Should().Equal(("North", null), ("North Bay", "NB-104"), ("North Coast", null));
-        harness.Store.Calls.Should().Equal(asked, "the field comes from the units the directory read, with no read more");
+        listed.Select(unit => (unit.Unit.Name, unit.Unit.CostCentre)).Should().Equal(("North", null), ("North Bay", "NB-104"), ("North Coast", null));
+        harness.Store.Calls.Where(call => call.EndsWith("Async", StringComparison.Ordinal) && call != "ListAsync")
+            .Should().Equal(["ReadOrganizationAsync"], "the units come from the organization the directory read once; the closure and what the seat reads are queries over the read rows");
 
         // By id, whichever unit of the tenant the caller is placed under; another tenant's are left out as before.
-        var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync(
-            [harness.Harbor.South, bay, orchard.North], (unit, own) => (unit.Path, own.CostCentre), default));
-        named.Should().Equal(("Harbor Works / North / North Bay", "NB-104"), ("Harbor Works / South", null));
-
-        await FluentActions.Awaiting(() => harness.As(bert, h => h.Directory.ListUnitsAsync<string>(null!, default))).Should().ThrowAsync<ArgumentNullException>();
-        await FluentActions.Awaiting(() => harness.As(bert, h => h.Directory.UnitsByIdAsync<string>([bay], null!, default))).Should().ThrowAsync<ArgumentNullException>();
+        var named = await harness.As(bert, h => h.Directory.UnitsByIdAsync([harness.Harbor.South, bay, orchard.North], default));
+        named.Select(unit => (unit.Path, unit.Unit.CostCentre)).Should().Equal(("Harbor Works / North / North Bay", "NB-104"), ("Harbor Works / South", null));
     }
 
     [Fact]
@@ -338,24 +400,20 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task A_question_by_id_never_answers_an_identity()
+    public async Task What_leaves_of_a_seat_is_what_the_host_selects()
     {
         var harness = Harness.OfHarbor();
         var identity = Guid.NewGuid();
         var bert = await harness.BySystemWork(h => h.Seats.AddSeatAsync(identity, default, configure: seat => seat.Rename("Bert")));
-        var ada = harness.Store.Seat(harness.Administrator).Identity;
 
-        var named = await harness.As(harness.Administrator, h => h.Directory.SeatsByIdAsync([bert, harness.Administrator], default));
-        var listed = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync(default));
-        var shown = await harness.As(harness.Administrator, h => h.Directory.ListSeatsAsync((seat, own) => new { seat.Id, own.DisplayName }, default));
+        // The directory answers the host's seat whole, the identity with it: the host keeps it, and a select picks
+        // what it shows.
+        var seats = await harness.As(harness.Administrator, h => h.Directory.SeatsByIdAsync([bert, harness.Administrator], default));
+        seats.Single(seat => seat.Id == bert).Identity.Should().Be(identity);
 
-        named.Select(seat => seat.Id).Should().BeEquivalentTo([bert, harness.Administrator]);
-        foreach (var answer in new[] { JsonSerializer.Serialize(named), JsonSerializer.Serialize(listed), JsonSerializer.Serialize(shown) })
-        {
-            answer.Should().NotContain(identity.ToString()).And.NotContain(ada.ToString());
-        }
+        var shown = JsonSerializer.Serialize(seats.Select(seat => new { seat.Id, seat.DisplayName, seat.Status }));
 
-        JsonSerializer.Serialize(shown).Should().Contain("Bert", "a view answers what the host chose, and the host chose the name");
-        typeof(HostTenancy.SeatSummary).GetProperties().Select(property => property.Name).Should().BeEquivalentTo(["Id", "Status"]);
+        shown.Should().Contain("Bert", "the host chose the name").And.NotContain(identity.ToString());
+        shown.Should().NotContain(harness.Store.Seat(harness.Administrator).Identity.ToString());
     }
 }

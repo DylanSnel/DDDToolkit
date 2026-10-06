@@ -33,10 +33,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             Loaders: ["GetSeatByIdAsync", "GetOrganizationUnitByIdAsync", "GetRoleByIdAsync", "GetHeldUnitsByKeyAsync"],
             PagedFields: ["Query.accessHistory", "Query.tenantAccessHistory"],
             ClassesOfPagedFields: ["HistoryPagedQueries", "OperatorsPagedQueries"],
-            RecordsOfTheSchemasOwn: new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["TenantOfSeat"] = "the package answers a caller's seat as one flat row; the schema shows the tenant inside it as an object, which no record is",
-            },
+            RecordsOfTheSchemasOwn: new Dictionary<string, string>(StringComparer.Ordinal),
             AnswersOfThePackage: true)
         {
             PagedByThePackage = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -214,7 +211,7 @@ public sealed class GraphQLDeclarationTests(SampleWithoutDatabase sample) : ICla
             }
             else
             {
-                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenantsTenancy.SeatSummary).Assembly] : [application];
+                Assembly[] answers = Held[module].AnswersOfThePackage ? [application, typeof(TenantsTenancy.KeyReach).Assembly] : [application];
                 answers.Should().Contain(over.Assembly, "{0} is declared over what {1}'s application layer answers", typeClass.Name, module);
             }
         }

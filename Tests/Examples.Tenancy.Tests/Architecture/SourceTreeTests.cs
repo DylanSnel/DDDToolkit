@@ -408,7 +408,7 @@ public sealed partial class SourceTreeTests
             .Should().Contain(
                 [
                     "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/SuspendTenantSeat.cs",
-                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs",
+                    "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs",
                     "Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs",
                     $"Tests/{TheseTests}/Infrastructure/SampleTenants.cs",
                 ],

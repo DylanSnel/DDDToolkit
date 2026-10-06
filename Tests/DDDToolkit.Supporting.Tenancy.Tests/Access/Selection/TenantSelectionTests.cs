@@ -135,14 +135,14 @@ public class TenantSelectionTests
     {
         var quarry = SeatId.CreateSequential();
         var seats = new ListedSeats()
-            .With(Ada, Harbor, "harbor", AdaAtHarbor)
-            .With(Ada, new TenantId(2), "quarry", quarry, seatState: SeatStatus.Suspended)
-            .With(Guid.NewGuid(), new TenantId(3), "orchard", SeatId.CreateSequential());
+            .With(Ada, Harbor, "harbor", AdaAtHarbor, own: "Ada")
+            .With(Ada, new TenantId(2), "quarry", quarry, seatState: SeatStatus.Suspended, own: "Ada Lovelace")
+            .With(Guid.NewGuid(), new TenantId(3), "orchard", SeatId.CreateSequential(), own: "Grace");
         var selection = new TenantSelection<TenantId, SeatId>(seats);
         var cancellation = TestContext.Current.CancellationToken;
 
         // A signed-in user finds every seat of their own, whatever its status, and nobody else's.
-        (await selection.SeatsOfAsync(Caller.User(Ada), cancellation)).Select(seat => seat.Seat).Should().Equal(AdaAtHarbor, quarry);
+        (await selection.SeatsOfAsync<string>(Caller.User(Ada), cancellation)).Select(seat => seat.Seat).Should().Equal("Ada", "Ada Lovelace");
         seats.Listings.Should().Equal(Ada);
 
         // A token of hers with another role holds no seat, and learns nothing of the seats her identity has; nor
@@ -150,7 +150,7 @@ public class TenantSelectionTests
         seats.Listings.Clear();
         foreach (var caller in new[] { Caller.User(Ada, "analyst"), Caller.User(Ada, "service_role"), Caller.User(Ada, ""), Caller.Anonymous, Caller.System, Caller.SystemIn("tenancy") })
         {
-            (await selection.SeatsOfAsync(caller, cancellation)).Should().BeEmpty("{0} is answered what a person without a seat is answered", caller);
+            (await selection.SeatsOfAsync<string>(caller, cancellation)).Should().BeEmpty("{0} is answered what a person without a seat is answered", caller);
         }
 
         seats.Listings.Should().BeEmpty();
@@ -160,36 +160,26 @@ public class TenantSelectionTests
         membersOnly.SeatedTokenRoles.Clear();
         membersOnly.SeatedTokenRoles.Add("member");
         selection = new TenantSelection<TenantId, SeatId>(seats, membersOnly);
-        (await selection.SeatsOfAsync(Caller.User(Ada, "member"), cancellation)).Should().HaveCount(2);
-        (await selection.SeatsOfAsync(Caller.User(Ada), cancellation)).Should().BeEmpty();
+        (await selection.SeatsOfAsync<string>(Caller.User(Ada, "member"), cancellation)).Should().HaveCount(2);
+        (await selection.SeatsOfAsync<string>(Caller.User(Ada), cancellation)).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task A_view_of_a_persons_own_seats_is_handed_the_applications_seats_by_the_same_rule()
+    public async Task A_persons_own_seats_are_the_applications_own_each_beside_its_tenant()
     {
         var quarry = SeatId.CreateSequential();
         var seats = new ListedSeats()
             .With(Ada, Harbor, "harbor", AdaAtHarbor, own: "Ada")
-            .With(Ada, new TenantId(2), "quarry", quarry, seatState: SeatStatus.Suspended, own: "Ada Lovelace")
-            .With(Guid.NewGuid(), new TenantId(3), "orchard", SeatId.CreateSequential(), own: "Grace");
+            .With(Ada, new TenantId(2), "quarry", quarry, tenantState: TenantStatus.Suspended, own: "Ada Lovelace");
         var selection = new TenantSelection<TenantId, SeatId>(seats);
-        var cancellation = TestContext.Current.CancellationToken;
-        var asked = 0;
 
-        // What the application keeps on its seat in each tenant, such as the name it is shown by there, beside the tenant.
-        (await selection.SeatsOfAsync<string, string>(Caller.User(Ada), (found, own) => $"{found.Slug}: {own} ({found.SeatStatus})", cancellation))
-            .Should().Equal("harbor: Ada (Active)", "quarry: Ada Lovelace (Suspended)");
-        seats.Listings.Should().Equal(Ada);
+        // The application's own seat, as it keeps it in each tenant, and of the tenant only what is not on the seat.
+        var mine = await selection.SeatsOfAsync<string>(Caller.User(Ada), TestContext.Current.CancellationToken);
 
-        // A caller that is answered no seats is answered none here either: nothing is looked up, and the view is never asked.
-        seats.Listings.Clear();
-        foreach (var caller in new[] { Caller.User(Ada, "analyst"), Caller.User(Ada, "service_role"), Caller.Anonymous, Caller.System, Caller.SystemIn("tenancy") })
-        {
-            (await selection.SeatsOfAsync<string, string>(caller, (_, own) => own + ++asked, cancellation)).Should().BeEmpty("{0} is answered what a person without a seat is answered", caller);
-        }
-
-        seats.Listings.Should().BeEmpty();
-        asked.Should().Be(0);
+        mine.Should().Equal(
+            new SeatInTenant<string>("Ada", "harbor", "Tenant harbor", TenantStatus.Active),
+            new SeatInTenant<string>("Ada Lovelace", "quarry", "Tenant quarry", TenantStatus.Suspended));
+        mine.Select(seat => $"{seat.Slug}: {seat.Seat}").Should().Equal(["harbor: Ada", "quarry: Ada Lovelace"], "a picker selects what it shows, as every other answer about a seat does");
     }
 
     [Fact]

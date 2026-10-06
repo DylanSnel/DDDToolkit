@@ -1188,9 +1188,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   before the save, so the field is written with the unit, the class's rules judge it there, and a callback
   that throws saves nothing; `configure` runs before the organization takes the unit in, so one that throws
   leaves the organization as it was, for a later save in the same scope too. The directory's `ListUnitsAsync`
-  and `UnitsByIdAsync` take a view, `(UnitSummary, TUnit) => TView`, so an application answers its own field
-  beside what Tenancy keeps from the units the directory read, with no read more; the forms without one still
-  answer `UnitSummary`. With the kinds gone, and the default administrators' pack above, every part of
+  and `UnitsByIdAsync` answer the application's own units, whole, so its field is shown with a plain `Select`
+  over the units the directory read, with no read more (the directory's own entry, under Changed). With the kinds
+  gone, and the default administrators' pack above, every part of
   `ApplicationCatalogue` is optional, `new ApplicationCatalogue()` included, and so is
   `TenancyOptions.Catalogue`: left unset, Tenancy builds the catalogue from its own keys and the modules'
   contributions, and every tenant starts with the default administrators' role. A program that builds the
@@ -1229,14 +1229,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   runs once the caller and the invitation are checked and before the store has the seat, so the field is written
   with the seat, the class's rules judge it there, an event the class raises leaves with the seat's own, and a
   callback that throws saves nothing and leaves an invitation open. The directory's `ListSeatsAsync`,
-  `SeatsByIdAsync` and `WhoAmIAsync` take a view, `(SeatSummary, TSeat) => TView`, and so does the lookup of a
-  person's own seats for a tenant picker, `TenantSelection.SeatsOfAsync(caller, view)` over the new
-  `ISeatDirectory.AllOfAsync(identity, view)`, `(SeatOfCaller, TSeat) => TView`. Each view is handed the
-  application's own seat, read whole in one statement and tracked by nobody, so a screen shows what the
-  application chose with no read more, and nothing a view does to a seat is saved. The forms without a view answer
-  `SeatSummary`, now an id and a status, in the order of the ids (by the id's own comparison, so ids that are
-  numbers come as numbers do). Renaming is the application's own use case. See
-  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
+  `SeatsByIdAsync` and `WhoAmIAsync`, and the lookup of a person's own seats for a tenant picker, answer the
+  application's own seat class, whole, read in one statement and tracked by nobody (the directory's own entry,
+  under Changed), so a screen shows what the application chose with a plain `Select` and no read more. Seats come
+  in the order of their ids (by the id's own comparison, so ids that are numbers come as numbers do). Renaming is
+  the application's own use case. See
+  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1, 3.2.0-preview.2 or
+  3.2.0-preview.3:
   - Drop the first administrator's name from `TenantToProvision` (the sixth argument, `AdminDisplayName`), the
     name from `AddSeatAsync(identity, displayName, ...)`, `AcceptAsync(token, displayName, ...)` and
     `TenancyInstances.NewSeat`, and the suggested name from `IssueAsync(..., displayName, ...)` and
@@ -1248,9 +1247,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `SeatOfCaller.DisplayName` are gone, and `tenancy.name-invalid` no longer refuses a seat's name (`What`
     `display-name`, `Field` `displayName`). An event already stored keeps its payload; a `tenancy.seat-renamed`
     the outbox has not delivered yet fails as a name it does not know, so let the outbox empty before upgrading.
-  - `WhoAmIAsync()` still answers `SeatOverview`, its seat by id and status; `WhoAmIAsync(view)` answers
-    `SeatOverview<TView>`. A storage of your own implements `IStore.ListSeatsAsync` as answering the seats
-    themselves, read only, and a seat directory of your own implements `ISeatDirectory.AllOfAsync(identity, view)`.
+  - A storage of your own implements `IStore.ListSeatsAsync` as answering the seats themselves, read only. What
+    the directory and the tenant picker answer is in the directory's own entry, under Changed.
   - `AddTenancy()` no longer maps the seats' `DisplayName` column, nor `AddTenancyInvitations()` the
     invitations'. Add a migration. To keep the seats' names, add a field named `DisplayName` to your seat class
     and map it as the package did, `HasMaxLength(200)`: the migration then leaves the seats' rows as they are, and
@@ -1329,9 +1327,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     project. Every other project drops it.
   - A project above that gets CS0246 for the name: read DDD00065 in the project that declares the classes.
 - `TenancyUseCases<…>.IStore` is what the use cases ask of a storage; the Entity Framework store implements it,
-  and so does a store of your own. Among its members: `ListSeatsAsync(tenant, only, ...)`, the tenant's seats as
-  the directory shows them, all or the ones among the ids given, read from the seats themselves and never with
-  an identity; `ListTenantsAsync`, for the tenants' directory; and `AdministratorsAsync` and
+  and so does a store of your own. Among its members: `ListSeatsAsync(tenant, only, ...)` and
+  `ReadOrganizationAsync(tenant, ...)`, the application's own seats, all or the ones among the ids given, and its
+  organization with its units, each read only, for the directory to answer; `ListTenantsAsync`, for the tenants'
+  directory; and `AdministratorsAsync` and
   `RightsAMoveChangesAsync`, which answers `MoveReach` rows: what the use cases ask about every seat's rights,
   they ask the store, which a storage answers from wherever it can. `ITenancyReadSource.SeatsHoldingAt` is a
   default interface member, so a read source of your own need not implement it.
@@ -1351,9 +1350,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   module cannot read a name of Tenancy's in a query of its own; it answers ids, and names are asked of the
   directory, by id. The directory's lists and `WhoAmIAsync` answer from Tenancy's own seats, roles and units.
 - **Tenancy: names, by id.** `TenancyDirectory.SeatsByIdAsync`, `RolesByIdAsync` and `UnitsByIdAsync` answer
-  what the seats, roles and units with the ids given are called, to whoever works in the tenant, a seat or
-  system work, with no key asked: a seat's name and status and never its identity, a role with whether it
-  manages access, a unit with its path from the root, whichever unit the caller is placed under. An id of
+  the seats, roles and units with the ids given, to whoever works in the tenant, a seat or system work, with no
+  key asked: the application's own seat, whole, a role by name with whether it manages access, and the
+  application's own unit with its path from the root, whichever unit the caller is placed under. An id of
   another tenant, or of nothing, is left out of the answer without a word. A question takes at most
   `TenancyDirectory.MostIds` ids, 200; more is the new refusal `tenancy.too-many-ids`, with texts in English
   and Dutch. A question costs the same statements however many ids it carries. See
@@ -1371,7 +1370,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `EnsureSystemInRoleIsConfinedAsync` also fails when such a role has the scoped system role's privileges, or
   the privileges of the user's role, or may execute a function in Tenancy's schema, by a grant of its own or
   with the privileges of another role it was given: the access files give Tenancy's functions to signed-in
-  users and to the scoped system role alone. `TenantSelection.SeatsOfAsync(caller)` lists a person's own seats in
+  users and to the scoped system role alone. `TenantSelection.SeatsOfAsync<TSeat>(caller)` lists a person's own seats in
   every tenant by the same rule, none for a token role that holds no seat, and
   `TenancyPostgresChecks.EnsureSeatedTokenRolesAreSignedInUsers` fails at start-up for a seated token role
   that reaches the database as any role but a signed-in user's.
@@ -2016,8 +2015,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - A type of a schema is declared over the record the application's query answers with, in a static partial
     class marked `[ObjectType<T>]`, so a module has no output records and no mappings, and what the record
     holds the type shows: `Seat`, `OrganizationUnit`, `Role`, the catalogue and the calling seat's overview
-    in Tenants, `ProjectOverview` in Projects, `Inspection` in Inspections. `TenantOfSeat` is a record of the
-    schema's own, because no record of the application has its shape. The host's conventions add
+    in Tenants, `ProjectOverview` in Projects, `Inspection` in Inspections; no schema has a record of its own.
+    The host's conventions add
     `AddDDDToolkitEntityNullability()` and `AddDDDToolkitKeyAuthorization()` to every module's schema.
   - A module names another module's entity by its id (`[EntityKey]`), and Tenants answers seats, units and
     roles through three lookups that are there for the gateway alone (`[Lookup]`, `[Internal]`), each behind a
@@ -2277,8 +2276,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **The Tenancy sample keeps a unit's kind itself.** Its `OrganizationUnit` has a `UnitKind` enum (company,
   region, area, site), stored by its key in lower case (`UnitKindKeyConverter`), as the rows from before hold
   it and as REST spells it; `AddOrganizationUnit` sets it in the package's callback, and the seeder sets the
-  root's when it provisions. Its queries answer a `UnitListing`, made by the view the directory's unit queries
-  take from the units the directory read, so `GET /tenancy/units`, the directory's `/tenancy/directory/units`
+  root's when it provisions. Its queries answer a `UnitListing`, selected from the units the directory answers
+  whole, so `GET /tenancy/units`, the directory's `/tenancy/directory/units`
   and GraphQL's `OrganizationUnit` still carry `kind`, with no read more; in GraphQL it is now the enum
   `UnitKind`, and `organizationUnitAdd` takes it as one, optional. A kind the enum does not have is a 400
   `invalid-request` where it was `tenancy.unknown-unit-kind`, and the catalogue's answer has no `unitKinds`.
@@ -2290,8 +2289,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   changes. The demo seeder names each seat in the package's callbacks, and `POST /invitations/accept` and the
   mutation `invitationAccept` take the name the person gives (`displayName: String!` in GraphQL, as in `seatRename`);
   an invitation suggests none any more, so `POST /tenancy/invitations`, `personInvite` and the open invitations
-  have no `displayName`, nor the UI's invite form. Its queries answer a `SeatListing`, made by the views the
-  directory's seat questions and the tenant picker's lookup take (`SeatListing.Of`, `SeatOfMine.Of`), so
+  have no `displayName`, nor the UI's invite form. Its queries answer a `SeatListing`, selected from the seats
+  the directory's seat questions and the tenant picker's lookup answer whole, so
   `GET /me`, `GET /me/seats`, `GET /tenancy/seats`, `/tenancy/directory/seats`, GraphQL's `Seat` and
   `seatsOfMine` (in the administration schema too), the access history's `bySeat` and the UI carry `displayName`
   as before, with no read more. Renaming is the module's own command, `RenameSeat`, at
@@ -2464,6 +2463,43 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   asks its key where it acts, and a change of a seat's status asks `tenancy.seats.manage` for the whole tenant.
   The next build writes the access file that changes the policy and the three functions; the start-up check
   compares them as before. See [Who reads which grants](docs/tenancy.md#who-reads-which-grants).
+- **For the 3.2.0 previews: the directory answers the application's own seats and units, whole.** A seat and a
+  unit are the application's classes, with every field it added, so Tenancy no longer answers half of one for the
+  application to put beside the other. `TenancyDirectory.ListSeatsAsync(ct)` and `SeatsByIdAsync(ids, ct)` answer
+  the application's seats, `IReadOnlyList<TSeat>`, with their identity, placements and grants, in the order of
+  their ids. `ListUnitsAsync(ct)` and `UnitsByIdAsync(ids, ct)` answer `UnitInTree`, by path: the application's
+  unit, with its `Path` and `Depth` beside it, which are not on the unit. `WhoAmIAsync(ct)` answers
+  `SeatOverview`: the application's seat, with its placements and grants, and beside it only what is not on it,
+  the tenant, each unit it is placed at by path (`Units`, `UnitOf(id)`), the roles its grants name (`Roles`,
+  `RoleOf(id)`), every key it holds with where it reaches (`Keys`), and the moment those hold for (`AsOf`, so
+  `grant.AppliesAt(AsOf)` says whether a grant applies); nothing in it is the caller's own, so it can show any
+  seat. The tenant picker's `TenantSelection.SeatsOfAsync<TSeat>(caller, ct)`, over
+  `ISeatDirectory.AllOfAsync<TSeat>(identity, ct)`, answers `SeatInTenant<TSeat>`: the seat, and its tenant's
+  slug, name and status. Each is read in the statements it was read in before and tracked by nobody, so nothing
+  done to a seat or a unit is saved, by the question or by a later save in the same unit of work; the units come
+  from the new `IStore.ReadOrganizationAsync`, which reads the organization read only. The access rules are the
+  ones before: each question's requirement in C#, and on Postgres the policies, which answer another seat's grants
+  only where the caller may read them; elsewhere a listed seat comes with all its grants, so another seat's grants
+  are shown from a question that asks a key, as the sample's `SeatGrants` does. A seat carries its identity, so
+  what leaves is what the application selects. The Tenancy sample's queries select its `SeatListing`, `UnitListing`, `SeatOfMine` with `TenantOfSeat`
+  (now a record of the application layer, so the Tenants schema has no record of its own) and
+  `SeatOverviewListing`, and its routes and both GraphQL schemas answer as before. See
+  [Names](docs/tenancy.md#names) and [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From
+  3.2.0-preview.1, 3.2.0-preview.2 or 3.2.0-preview.3:
+  - `SeatSummary`, `UnitSummary`, `PlacementSummary`, `GrantSummary` and `SeatOverview<TView>` are gone, and so
+    are the questions that take a view. Read the seat's own fields where you read a seat summary's, and a unit's
+    own fields where you read a unit summary's `Name`, `ParentId` or `Status`, with `Path` and `Depth` beside it as
+    before: `(await directory.ListSeatsAsync(ct)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`.
+  - `SeatOverview.Placements` is gone: read `overview.Seat.Placements`, a unit's path with
+    `overview.UnitOf(placement.UnitId).Path`, a role's name with `overview.RoleOf(grant.RoleId)?.Name` (`null` for a
+    role a filter of your own on the role class hides, whose name a grant summary gave as empty), and whether a
+    grant applies with `grant.AppliesAt(overview.AsOf)`.
+  - `TenantSelection.SeatsOfAsync(caller)` and `ISeatDirectory.AllOfAsync(identity)` take the seat class,
+    `SeatsOfAsync<Seat>(caller, ct)`, and answer `SeatInTenant<Seat>`. `SeatOfCaller` stays what `FindAsync`
+    answers, for selecting the caller's seat. A seat directory of your own implements `AllOfAsync<TSeat>`, and a
+    store of your own `IStore.ReadOrganizationAsync`.
+  - Never answer the seat class itself from a route or a GraphQL field: it carries the identity. Select what you
+    show, as the sample's queries do.
 - **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
   `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
   changes with it. `UseMemberHolds` names them the same.

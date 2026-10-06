@@ -424,11 +424,16 @@ public abstract class TenancyPolicyTests(TenancyPostgres postgres, TenancyNaming
         {
             foreach (var person in new[] { Oli, Seth, Ada })
             {
+                // Of the seats the directory lists, what is compared is what every seat of the tenant reads: another
+                // seat's grants are left out where the policies let the caller read none, as the directory says. The
+                // moment an overview holds for is the clock's, and is no read.
                 async Task<object[]> ReadAsync(TenancyServices over)
                     => await over.BySeat(person.Identity, Harbor, person.Seat, async scoped => new object[]
                     {
-                        await scoped.Directory().WhoAmIAsync(Cancellation),
-                        await scoped.Directory().ListSeatsAsync(Cancellation),
+                        (await scoped.Directory().WhoAmIAsync(Cancellation)) with { AsOf = default },
+                        (await scoped.Directory().ListSeatsAsync(Cancellation))
+                            .Select(seat => new { seat.Id, seat.Identity, seat.Status, seat.DisplayName, Placements = seat.Placements.Select(placement => new { placement.UnitId, placement.IsPrimary }).ToList() })
+                            .ToList(),
                         await scoped.Directory().ListRolesAsync(Cancellation),
                         await scoped.Directory().ListUnitsAsync(Cancellation),
                     });

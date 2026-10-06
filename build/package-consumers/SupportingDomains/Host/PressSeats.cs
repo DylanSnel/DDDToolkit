@@ -12,13 +12,13 @@ namespace Acme.Press.Host;
 public static class PressSeats
 {
     /// <summary>
-    /// Whether the seats with these ids count, in the tenant the caller works in. A seat has no name in Tenancy, and
-    /// the house keeps none on its own seat class, so the view it hands the directory reads the house's seat for its
+    /// Whether the seats with these ids count, in the tenant the caller works in. The directory answers the house's own
+    /// seats, whole; a seat has no name in Tenancy, and the house keeps none on its seat class, so it selects its id and
     /// status alone.
     /// </summary>
     /// <param name="directory">Tenancy's directory, which <c>AddTenancy</c> registered.</param>
     /// <param name="seats">The seats.</param>
     /// <param name="cancellationToken">Stops the read.</param>
     public static async Task<IReadOnlyList<(SeatId Id, SeatStatus Status)>> OfAsync(PressTenancy.TenancyDirectory directory, IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
-        => await directory.SeatsByIdAsync(seats, static (seat, own) => (seat.Id, own.Status), cancellationToken);
+        => [.. (await directory.SeatsByIdAsync(seats, cancellationToken)).Select(seat => (seat.Id, seat.Status))];
 }

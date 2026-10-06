@@ -430,6 +430,13 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         public async Task<TOrganization> LoadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
             => await _store.FindOrganizationAsync(id, cancellationToken).ConfigureAwait(false) ?? throw Missing("organization", id);
 
+        /// <summary>
+        /// The tenant's organization, which is the caller's own, read only: for the directory, which hands its units
+        /// to the application and saves nothing of them.
+        /// </summary>
+        public async Task<TOrganization> ReadOrganizationAsync(TTenantId id, CancellationToken cancellationToken)
+            => await _store.ReadOrganizationAsync(id, cancellationToken).ConfigureAwait(false) ?? throw Missing("organization", id);
+
         /// <summary>A seat of the caller's tenant.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.seat-not-found</c>, for a seat of another tenant too.</exception>
         public async Task<TSeat> LoadSeatAsync(TSeatId id, CancellationToken cancellationToken)

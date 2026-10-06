@@ -797,7 +797,7 @@ flowchart LR
     Classes["Shop.Tenants<br/>your five classes,<br/>in the module Tenants"] --> Generator{{"the toolkit's<br/>generator"}}
     Generator --> Name(["TenantsTenancy,<br/>written there"])
     Name --> Application["application project<br/>TenantsTenancy.SeatCommands"]
-    Name --> Api["API project<br/>TenantsTenancy.SeatOverview,<br/>in GraphQL types too"]
+    Name --> Api["API project<br/>TenantsTenancy.KeyReach,<br/>in GraphQL types too"]
     Name --> Host["host and tests<br/>TenantsTenancy.TenantCommands"]
 ```
 
@@ -824,7 +824,7 @@ public abstract class TenantsTenancy : global::DDDToolkit.Supporting.Tenancy.Use
 
 `TenantsTenancy.TenantCommands`, `TenantsTenancy.OrganizationCommands`, `TenantsTenancy.SeatCommands`,
 `TenantsTenancy.RoleCommands` and `TenantsTenancy.TenancyDirectory` are services, registered by `AddTenancy`
-and taken in a constructor, and `TenantsTenancy.TenantToProvision` or `TenantsTenancy.SeatSummary` is a record
+and taken in a constructor, and `TenantsTenancy.TenantToProvision` or `TenantsTenancy.SeatOverview` is a record
 to name. The first call most applications write provisions a tenant:
 
 ```csharp
@@ -854,7 +854,7 @@ shows. The invitation use cases take your invitation class and its id as well:
 - **Why a class, and not an alias.** A global `using` alias holds in the project that declares it and no
   further, so every project would declare its own. A class is written once and reaches every project that
   references it, and the generators there read it as any type: HotChocolate's, reading
-  `[ObjectType<TenantsTenancy.SeatOverview>]` in an API project, sees the package's record. A generator's alias
+  `[ObjectType<TenantsTenancy.KeyReach>]` in an API project, sees the package's record. A generator's alias
   would be the compiler's to see and not theirs.
 - **The module names it**, as it names everything the generators write in that project: `[assembly: Module]`, otherwise
   `DDD_Module`, otherwise the assembly's name without the dots,
@@ -883,7 +883,7 @@ shows. The invitation use cases take your invitation class and its id as well:
 - **In the project that declares the classes, other generators do not see it.** It is one generator's output,
   and the others of that project read the code as written: Mediator's writes the name as it is spelled, which
   compiles, but HotChocolate's does not know the type, in its attributes and in a resolver's parameters and
-  return type, and writes `typeof(TenantsTenancy.SeatSummary?)` for a lookup that may answer nothing, which does
+  return type, and writes `typeof(TenantsTenancy.RoleSummary?)` for a lookup that may answer nothing, which does
   not compile. A module split by layer has its GraphQL types in its API project, above, where all is well. A
   module of one project with GraphQL types over Tenancy's records keeps one alias of exactly that name there,
   `global using TenantsTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, which every
@@ -1119,15 +1119,15 @@ public async ValueTask<OrganizationUnitId> Handle(AddOrganizationUnit command, C
 // The root's, when the tenant is provisioned
 new TenantsTenancy.TenantToProvision(slug, name, shape, name, identity, ConfigureRoot: root => root.SetKind(UnitKind.Company));
 
-// The query's handler: the directory decides which units the caller reads, the view adds the kind
-public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? ParentId, string Name, UnitKind? Kind, UnitStatus Status, string Path, int Depth)
-{
-    internal static UnitListing Of(TenantsTenancy.UnitSummary unit, OrganizationUnit own)
-        => new(unit.Id, unit.ParentId, unit.Name, own.Kind, unit.Status, unit.Path, unit.Depth);
-}
+// The query's handler: the directory decides which units the caller reads and answers your own units, whole, each
+// with its path and depth beside it; a plain select shows the kind
+public sealed record UnitListing(OrganizationUnitId Id, OrganizationUnitId? ParentId, string Name, UnitKind? Kind, UnitStatus Status, string Path, int Depth);
 
 public async ValueTask<IReadOnlyList<UnitListing>> Handle(OrganizationUnits query, CancellationToken cancellationToken)
-    => await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(UnitListing.Of, cancellationToken));
+{
+    var units = await reads.AskDirectoryAsync(directory => directory.ListUnitsAsync(cancellationToken));
+    return [.. units.Select(found => new UnitListing(found.Unit.Id, found.Unit.ParentId, found.Unit.Name, found.Unit.Kind, found.Unit.Status, found.Path, found.Depth))];
+}
 
 // Stored by its name: one line in the context's ConfigureConventions
 configurationBuilder.Properties<UnitKind>().HaveConversion<string>().HaveMaxLength(16);
@@ -1144,11 +1144,12 @@ as the unit and a rule of your class judges it there. A callback that throws lea
 the unit is not added, and not even a later save in the same scope writes it. The root works the same way,
 through `ConfigureRoot` when the tenant is provisioned.
 
-To show the kind, ask the directory with a view. `ListUnitsAsync` and `UnitsByIdAsync` take a function of the
-directory's `UnitSummary`, what Tenancy keeps of a unit, and of your own unit, which the directory read anyway,
-so you answer the two side by side with no read more. The sample does all of it: a `UnitKind` enum on its unit,
-set by its command and by its seeding, and a `UnitListing` its queries answer, the summary with the kind beside
-it.
+To show the kind, select it. `ListUnitsAsync` and `UnitsByIdAsync` answer your own units, whole, each as a
+`UnitInTree`: the unit, with its path from the root and its depth beside it, the two things a unit does not carry
+itself. So a field your unit class adds is shown with a plain `Select` over the units the directory read, with no
+read more, and nothing you do to one is saved. The sample does all of it: a `UnitKind` enum on its unit, set by
+its command and by its seeding, and a `UnitListing` its queries select, the unit's own fields with the path beside
+them.
 
 ## Who may do what
 
@@ -1559,21 +1560,22 @@ every context its host registers, under Tenancy's schema.
 What a unit is called and where it hangs, and what a role is called, are Tenancy's to answer. What a seat is
 shown by is not: Tenancy keeps no name of a seat, and your application decides where one comes from
 ([How a seat is shown](#how-a-seat-is-shown)). Tenancy's directory, `TenancyDirectory`, answers all three
-kinds all the same, from Tenancy's own seats, roles and units, and hands a seat to a view of yours:
+kinds from Tenancy's own seats, roles and units, and answers seats and units as your own classes:
 
 | Question | Answers |
 |---|---|
-| `WhoAmIAsync()` | the calling seat: its tenant, the seat by its id and status, its placements and roles by name, and every key it holds with the units it reaches, each by its path |
-| `ListSeatsAsync()` | every seat of the tenant, by its id and status, never an identity, in the order of their ids |
+| `WhoAmIAsync()` | the calling seat's `SeatOverview`: your seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it is placed at, the roles its grants name, and every key it holds now with the units it reaches |
+| `ListSeatsAsync()` | every seat of the tenant, your own class, whole, in the order of their ids |
 | `ListRolesAsync()` | every role of the tenant, the active ones first, with whether each manages access |
-| `ListUnitsAsync()` | the units the caller is placed under, each with its path from the root |
+| `ListUnitsAsync()` | the units the caller is placed under, your own class, whole, each with its path from the root and its depth (`UnitInTree`) |
 | `SeatsByIdAsync(ids)` | the seats among the ids, as `ListSeatsAsync` answers them |
 | `RolesByIdAsync(ids)` | the roles among the ids, as `ListRolesAsync` answers them |
-| `UnitsByIdAsync(ids)` | the units among the ids, each with its path, whichever of them the caller is placed under |
+| `UnitsByIdAsync(ids)` | the units among the ids, as `ListUnitsAsync` answers them, whichever of them the caller is placed under |
 
-The three questions about seats, and the two about units, also take a view: a function of what Tenancy says of
-the seat or the unit, and of your own seat or unit, which the directory read anyway. What the view makes is
-the answer, so a seat is answered with the name you keep for it, and a unit with the kind your unit class keeps.
+A seat and a unit come whole, with every field your class adds, so a screen shows a seat by the name you keep
+for it, and a unit with the kind your unit class keeps, with a plain `Select`. What Tenancy puts beside them is
+only what is not on your class: a unit's path and depth, which come from the units above it, and in an overview
+the tenant, the paths, the role names and the keys.
 
 The lists fill a picker. The three questions by id are for a screen that was answered ids by another module:
 a project names its unit and the seats of its crew by id, and the screen asks what those are called. The
@@ -1589,10 +1591,15 @@ question takes at most `TenancyDirectory.MostIds` ids, 200; more is refused with
 `tenancy.not-seated`.
 
 A question by id costs the same however many ids it carries: one statement for seats, one for roles, and two
-for units, the organization with its units and the closure that orders a path. The seats' statement reads your
-seats whole, with their placements and grants, as loading one does, and tracks none of them: a view is handed
-your own seat, every field you added included, and nothing it does to it is saved. Tenancy's own summary of a
-seat never carries the identity; your view decides what of your seat leaves.
+for units, the organization with its units and the closure that orders a path. Seats and units are read whole,
+a seat with its placements and grants as loading one does, and tracked by nobody: nothing you do to one is
+saved, by that question or by a save later in the same unit of work. A seat comes with its identity, as your
+class has it, so what leaves is what you select. On Postgres the policies decide what of a seat is read, as they
+do for every read: another seat's grants come with it only where the caller may read them
+([Who reads which grants](#who-reads-which-grants)). Only those policies narrow them: on another database, or in a
+context without row level security, a listed seat comes with every placement and grant it has. So show another
+seat's grants only from a question that asks a key, as the sample's `SeatGrants` asks `tenancy.seats.manage` for
+the whole tenant, and select a list's seats into what every member may see.
 
 ```mermaid
 sequenceDiagram
@@ -1605,7 +1612,7 @@ sequenceDiagram
     Projects-->>Page: projects, with unitId,<br/>seatId and roleId
     Page->>Names: these ids
     Names->>Tenancy: POST /tenancy/directory/<br/>seats and units, only<br/>the ids not known yet
-    Tenancy-->>Names: seats as your view<br/>names them, and paths
+    Tenancy-->>Names: each seat as you<br/>select it, and paths
     Names->>Projects: GET /project-roles<br/>the crew roles' names
     Projects-->>Names: role names
     Names-->>Page: a name for each id
@@ -1616,19 +1623,18 @@ sequenceDiagram
 <summary>Show the code: asking the directory, and a route for it</summary>
 
 ```csharp
-// The directory is registered with Tenancy. It checks the caller itself, as every use case does. The name is
-// the one your seat class keeps, and the view picks it from the seat the directory read.
+// The directory is registered with Tenancy. It checks the caller itself, as every use case does. The seats are
+// your own class, so the name is the one it keeps.
 public sealed class ProjectScreen(TenantsTenancy.TenancyDirectory directory)
 {
     public async Task<IReadOnlyDictionary<SeatId, string>> NamesOfAsync(IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
-        => (await directory.SeatsByIdAsync(seats, (seat, own) => (seat.Id, own.DisplayName), cancellationToken))
-            .ToDictionary(named => named.Id, named => named.DisplayName);
+        => (await directory.SeatsByIdAsync(seats, cancellationToken)).ToDictionary(seat => seat.Id, seat => seat.DisplayName);
 }
 ```
 
 ```csharp
 // The sample's route: a POST that only asks, since 200 ids do not fit a request line. It sends a query,
-// SeatsById, whose handler asks the directory with the module's view, SeatListing.Of.
+// SeatsById, whose handler selects the module's SeatListing from the seats the directory answers.
 group.MapPost("/tenancy/directory/seats", async (IdsAsked<SeatId> body, ISender sender, CancellationToken cancellationToken)
     => Results.Ok((await sender.Send(new SeatsById(Asked(body)), cancellationToken)).Select(Describe)));
 ```
@@ -1671,35 +1677,40 @@ about it. Three ways, and you may mix them:
    of your own. The sample does this.
 2. **The person's own name, from the identity provider.** One name in every tenant, which the person keeps
    themself. Supabase Auth keeps it in `user_metadata`, which their access token carries, so the caller's own
-   name is a claim. Another person's the provider answers by the identity your view is handed. A user may edit
+   name is a claim. Another person's the provider answers by the seat's identity. A user may edit
    their own `user_metadata`: fine for a name to show, never for something a rule decides.
 3. **A profile of your own, found by the seat's identity.** A table of yours, one row per person, with whatever
    you show of them, in every tenant; one read of yours for the identities a page shows.
 
-Whichever you choose, Tenancy hands your seat to a view: the directory's three questions about seats, and the
-lookup of a person's own seats in every tenant for a tenant picker, `TenantSelection.SeatsOfAsync(caller, view)`.
-Each decides which seats the caller is answered, reads them in one statement, your seat class whole, and asks
-your view once for each, so every screen shows what you chose with no read more:
+Whichever you choose, Tenancy answers your own seat class, whole: the directory's three questions about seats,
+and the lookup of a person's own seats in every tenant for a tenant picker, `TenantSelection.SeatsOfAsync<TSeat>(caller)`.
+Each decides which seats the caller is answered and reads them in one statement, so every screen shows what you
+chose with a plain `Select` and no read more. Beside a seat comes only what is not on it: in the overview
+`WhoAmIAsync` answers (`SeatOverview`), the tenant, the path of each unit it is placed at, the roles its grants
+name and the keys it holds; in the picker (`SeatInTenant`), the tenant:
 
 ```mermaid
 flowchart LR
-    Lists["ListSeatsAsync(view)<br/>SeatsByIdAsync(ids, view)"] --> InTenant{"works in<br/>the tenant?"}
-    Me["WhoAmIAsync(view)"] --> IsSeat{"a seat?"}
-    Picker["SeatsOfAsync(caller, view)"] --> Seated{"signed in with<br/>a seated role?"}
+    Lists["ListSeatsAsync()<br/>SeatsByIdAsync(ids)"] --> InTenant{"works in<br/>the tenant?"}
+    Me["WhoAmIAsync()"] --> IsSeat{"a seat?"}
+    Picker["SeatsOfAsync(caller)"] --> Seated{"signed in with<br/>a seated role?"}
     InTenant -- no --> Refused(["refused"])
     IsSeat -- no --> Refused
     Seated -- no --> NoSeats(["no seats"])
     InTenant -- yes --> Read["one statement:<br/>your seats, whole,<br/>tracked by nobody"]
     IsSeat -- yes --> Read
     Seated -- yes --> Read
-    Read --> View["view(what Tenancy says,<br/>your seat), once for each"]
-    View --> Answer(["your answer:<br/>the name you chose"])
+    Read --> Whole["your seats, with only<br/>what is not on them"]
+    Whole --> Select(["your Select:<br/>the name you chose"])
 ```
 
-Nothing your view does to a seat is saved, by that question or by a save later in the same unit of work. The
-picker reads across tenants, before one is picked: its view is handed your seat for the fields you keep on it,
+Nothing you do to a seat the directory answered is saved, by that question or by a save later in the same unit of
+work. The picker reads across tenants, before one is picked: it answers your seat for the fields you keep on it,
 and where the seat is placed and what it holds are its tenant's, which a database that keeps tenants apart
-leaves out there.
+leaves out there. Nothing in an overview's record is the caller's own but the question that made it, so it fits
+any seat: the seat, and beside it only what is not on it. `UnitOf(id)` and `RoleOf(id)` give the path of a
+placement's unit and the role a grant names; `RoleOf` answers `null` for a role a filter of your own on the role
+class hides, as the grant is the seat's all the same.
 
 The field is yours to guard as well. On Postgres, Tenancy's policies let every seat of a tenant, and the
 person a row is for, read the seats' rows, your columns with them; and they let a seat change its own row, and
@@ -1732,22 +1743,25 @@ new TenantsTenancy.TenantToProvision(slug, name, shape, name, identity, Configur
 await seats.AddSeatAsync(identity, cancellationToken, configure: seat => seat.Rename("Bert"));
 await invitations.AcceptAsync(command.Token, verifiedAddress, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
 
-// Shown through a view of your seat: the lists, the questions by id, and the caller's own overview.
-public sealed record SeatListing(SeatId Id, string DisplayName, SeatStatus Status)
-{
-    internal static SeatListing Of(TenantsTenancy.SeatSummary seat, Seat own) => new(seat.Id, own.DisplayName, seat.Status);
-}
+// Shown with a plain select over your own seats: the lists, the questions by id, and a seat's overview.
+public sealed record SeatListing(SeatId Id, string DisplayName, SeatStatus Status);
 
-var listed = await directory.ListSeatsAsync(SeatListing.Of, cancellationToken);
-var me = await directory.WhoAmIAsync(SeatListing.Of, cancellationToken);        // a SeatOverview<SeatListing>
+var listed = (await directory.ListSeatsAsync(cancellationToken)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status));
+
+var me = await directory.WhoAmIAsync(cancellationToken);    // a SeatOverview: your seat, and only what is not on it
+var shown = new
+{
+    Seat = new SeatListing(me.Seat.Id, me.Seat.DisplayName, me.Seat.Status),
+    Placements = me.Seat.Placements.Select(placement => new
+    {
+        me.UnitOf(placement.UnitId).Path,
+        Roles = placement.Grants.Where(grant => grant.AppliesAt(me.AsOf)).Select(grant => me.RoleOf(grant.RoleId)?.Name),
+    }),
+};
 
 // And the tenant picker, before a tenant is picked: each of the caller's own seats with the name its tenant keeps.
-public sealed record SeatOfMine(SeatOfCaller<TenantId, SeatId> Found, SeatListing Seat)
-{
-    internal static SeatOfMine Of(SeatOfCaller<TenantId, SeatId> found, Seat own) => new(found, new(found.Seat, own.DisplayName, found.SeatStatus));
-}
-
-var mine = await selection.SeatsOfAsync<Seat, SeatOfMine>(callers.Current, SeatOfMine.Of, cancellationToken);
+var mine = (await selection.SeatsOfAsync<Seat>(callers.Current, cancellationToken))
+    .Select(found => (found.Slug, found.OrganizationName, Seat: new SeatListing(found.Seat.Id, found.Seat.DisplayName, found.Seat.Status)));
 
 // Renamed by a command of yours: a seat renames itself; another seat takes seats.manage for the whole tenant.
 var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
@@ -1757,28 +1771,30 @@ await store.SaveAsync(cancellationToken);
 
 ```csharp
 // 2. The person's own name, from the identity provider: theirs in every tenant. The caller's own is a claim of
-// their token; another person's your client of the provider answers, by the identity the view hands you.
+// their token; another person's your client of the provider answers, by the seat's identity.
 var mine = callers.Current.Claim("user_metadata.full_name");
-var listed = await directory.ListSeatsAsync((seat, own) => (seat.Id, own.Identity, seat.Status), cancellationToken);
+var listed = await directory.ListSeatsAsync(cancellationToken);
 var names = await provider.NamesOfAsync([.. listed.Select(seat => seat.Identity)], cancellationToken);
 ```
 
 ```csharp
 // 3. A profile of your own, by the identity: one read of yours for the page, beside the directory's.
-var listed = await directory.ListSeatsAsync((seat, own) => (seat.Id, own.Identity, seat.Status), cancellationToken);
+var listed = await directory.ListSeatsAsync(cancellationToken);
 var identities = listed.Select(seat => seat.Identity).ToArray();
 var profiles = await shop.Profiles.Where(profile => identities.Contains(profile.Identity)).ToDictionaryAsync(profile => profile.Identity, cancellationToken);
 ```
 
-The identity is a person's, as an address is: a view picks what leaves, and the sample's answers never carry it.
+The identity is a person's, as an address is: what you select is what leaves, and the sample's answers never
+carry it.
 
 </details>
 
 The sample keeps a name per tenant on its `Seat`, with its rule (`tenants.seat.display-name`, in English and
 Dutch): its demo seeder names each seat in the callbacks, `POST /invitations/accept` takes the name the person
 gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its own command `RenameSeat`, and
-`SeatListing` is the view every answer about a seat goes through, in REST, in GraphQL and in the access history,
-the tenant picker's `GET /me/seats` and `seatsOfMine` included, through `SeatOfMine.Of`. In the database its
+`SeatListing` is what every answer about a seat shows, in REST, in GraphQL and in the access history, the tenant
+picker's `GET /me/seats` and `seatsOfMine` and the overview's `GET /me` and `overviewOfMine` included: each query
+selects it from the seats the package answered. In the database its
 column rule `NameChangesByTheSeatOrWithTheSeatsKey` holds the name to the rule of `RenameSeat`.
 
 ## Who may give a role
@@ -3660,7 +3676,7 @@ flowchart LR
 internal sealed record ReferencedSeat(SeatId Id);
 
 // Tenants.Api/Seats/GraphQL/SeatType.cs: the same type where it is owned, declared over the record the
-// module's queries answer: the directory's summary with the name the module keeps on its own seat class.
+// module's queries select from the seats the directory answers, with the name the module keeps on its seat class.
 // Nothing is copied, and nothing is said per field: the host's conventions make every field of a type with a
 // key nullable but the key, so a seat the caller may not read arrives as its id with nothing else, and without
 // an error.
@@ -3931,9 +3947,10 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   answers, the package's own included, with [`[ObjectType<T>]`](graphql.md#types-over-your-own-records) in a
   type class beside the fields, so no record is copied for the schema and nothing is mapped.
   `AddDDDToolkitEntityNullability()`, among the host's conventions, makes the fields of the four entities
-  nullable. One record is a schema's own, Tenants' `TenantOfSeat`: the package answers a caller's seat as one
-  flat row, and the schema shows the tenant inside it as an object. `GraphQLDeclarationTests` holds the three
-  modules to this, and to the loaders and the paging below.
+  nullable. No record is a schema's own: where the package answers the module's own seat, the query selects
+  what it shows into a record of the application layer, the tenant picker's `SeatOfMine` with its `TenantOfSeat`
+  and the overview's `SeatOverviewListing` among them. `GraphQLDeclarationTests` holds the three modules to
+  this, and to the loaders and the paging below.
 - **A lookup's ids are asked together.** Every data loader is written by HotChocolate's generator from a
   method marked `[DataLoader]`. The gateway asks a module once for each field of the answer that names
   something of it, so the owners of a page of projects are as a rule one `SeatsById` and the seats of their
@@ -4308,7 +4325,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
 | A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. The host gets every module's list from Tenancy's generator and registers the keys with one call; the program that exports finds the same marked lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `TenancyPermissionsOfModules.g.cs` is under the host's `obj` folder, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
-| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`SeatOverviewType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/SeatOverviewType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
+| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`KeyOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
 | No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
@@ -4328,8 +4345,8 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | No module reads Tenancy's tables. It maps the read model, as Tenancy's functions | **Code:** [`ProjectsContext.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/ProjectsContext.cs), [`TenancyModelBuilderExtensions.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Mapping/TenancyModelBuilderExtensions.cs)<br/>**Try it:** Nothing to see from outside: any list of projects asks Tenancy's functions inside its own statement ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ModuleModelTests`, `ReadFunctionTests`, `MigrationTests`, `AccessStatementTests` |
 | Key sets draw a screen, and a command asks again when it runs | **Code:** [`KeysOnProjects.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/Queries/KeysOnProjects.cs), [`ProjectAbilities.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Overview/ProjectAbilities.cs), [`ITenancyQuestions.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Questions/ITenancyQuestions.cs)<br/>**Try it:** rhea's two requests under `/access`, in the `.http` file; the actions on a project's page, filled or outlined<br/>**Test:** `KeySetScenarios`, `KeySetQuestionTests` |
-| A unit's kind is the application's: an enum on its own unit class, set by the callback of the use case that makes the unit, and answered through a view the directory hands the unit it read | **Code:** [`OrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Organizations/Entities/OrganizationUnit.cs), [`AddOrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/Commands/AddOrganizationUnit.cs), [`UnitListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/UnitListing.cs)<br/>**Try it:** `GET /tenancy/units`, each unit with its `kind`; `organizationUnits { name kind }` in GraphQL<br/>**Test:** `FlatAndHierarchicalScenarios`, `GraphQLMutationScenarios`, `OrganizationCommandsTests`, `DirectoryTests`, `AccessStatementTests`, `MigrationTests` |
-| A seat's name is the application's, kept per tenant on its own seat class with a rule of its own: set in the callbacks of the use cases that make a seat, answered through a view the directory hands the seat it read, and renamed by a command of the sample's own. Tenancy keeps no name and decides nothing with one | **Code:** [`Seat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Seats/Seat.cs), [`SeatListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/SeatListing.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs), [`AcceptInvitation.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/AcceptInvitation.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs)<br/>**Try it:** juno accepts with her name and renames her seat, in the `.http` file; `seats { displayName }` and `seatRename` in GraphQL; the name on the page Who am I<br/>**Test:** `SeatNameScenarios`, `InvitationScenarios`, `SeatCommandsTests`, `DirectoryTests`, `MigrationTests` |
+| A unit's kind is the application's: an enum on its own unit class, set by the callback of the use case that makes the unit, and shown by a plain select over the units the directory answers whole | **Code:** [`OrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Organizations/Entities/OrganizationUnit.cs), [`AddOrganizationUnit.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/Commands/AddOrganizationUnit.cs), [`UnitListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Organization/UnitListing.cs)<br/>**Try it:** `GET /tenancy/units`, each unit with its `kind`; `organizationUnits { name kind }` in GraphQL<br/>**Test:** `FlatAndHierarchicalScenarios`, `GraphQLMutationScenarios`, `OrganizationCommandsTests`, `DirectoryTests`, `AccessStatementTests`, `MigrationTests` |
+| A seat's name is the application's, kept per tenant on its own seat class with a rule of its own: set in the callbacks of the use cases that make a seat, shown by a plain select over the seats the directory answers whole, and renamed by a command of the sample's own. Tenancy keeps no name and decides nothing with one | **Code:** [`Seat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Aggregates/Seats/Seat.cs), [`SeatListing.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/SeatListing.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs), [`AcceptInvitation.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Invitations/Commands/AcceptInvitation.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs)<br/>**Try it:** juno accepts with her name and renames her seat, in the `.http` file; `seats { displayName }` and `seatRename` in GraphQL; the name on the page Who am I<br/>**Test:** `SeatNameScenarios`, `InvitationScenarios`, `SeatCommandsTests`, `DirectoryTests`, `MigrationTests` |
 | The read model carries access facts and no name. What a seat, a unit or a role is called is asked of the directory, by id | **Code:** [`ReadModel`](../Source/DDDToolkit.Supporting.Tenancy/Access/ReadModel), [`DirectoryEndpoints.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/Rest/DirectoryEndpoints.cs), [`DirectoryNames.cs`](../Examples/Tenancy/Examples.Tenancy.Ui/Api/DirectoryNames.cs)<br/>**Try it:** Name of a seat, Path of a unit and Name of a role, on the Try it page<br/>**Test:** `StrictAnswersTests`, `DirectoryScenarios`, `DirectoryNamesTests`, `ReadModelTests` |
 | Access is asked live, and a name is asked of its owner: by id over REST, through a reference in GraphQL. A copy of names that another module keeps from events is not built | **Code:** [`DirectoryQueries.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Directory/GraphQL/DirectoryQueries.cs), [`ReferencedSeat.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/GraphQL/ReferencedSeat.cs)<br/>**Try it:** "A project with names", in the GraphQL part of the `.http` file<br/>**Test:** `GraphQLLookupScenarios`, `DirectoryLookupScenarios` |
 | The sample keeps the names Entity Framework gives. A database in snake_case is a host's choice | **Code:** [`TenancyTableNames.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/Mapping/TenancyTableNames.cs)<br/>**Try it:** The recipe under [Your own naming](#your-own-naming); the sample's files under `Examples/Tenancy/supabase/migrations`<br/>**Test:** `TenancyNamingTests`, `MigrationTests` |
@@ -4642,8 +4659,8 @@ rollback;
 [token role](row-level-security.md#token-roles), a reporting job's say, is nobody in every
 tenant, with the answer of a person without a seat, `tenancy.not-seated`, and nothing is looked up for
 them. The list of a person's own seats, for a tenant picker, goes by the same rule:
-`TenantSelection.SeatsOfAsync(caller)` answers such a user no seats, as it answers a person who has none,
-and so does its form with a view.
+`TenantSelection.SeatsOfAsync<TSeat>(caller)` answers such a user no seats, as it answers a person who has
+none.
 On Postgres the contribution closes Tenancy's tables and every table kept to a tenant to the
 database role such a token role is mapped to, with a restrictive policy as it does for anonymous callers,
 so a module's rule for that role lets nothing of a tenant through. The exception is a token role listed as
