@@ -33,25 +33,25 @@ public static class TenancyDbContextOptionsExtensions
     /// renter's saves against that renter's tenant.
     /// </para>
     /// </summary>
-    /// <param name="options">The context's options.</param>
-    /// <param name="services">
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <param name="serviceProvider">
     /// The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool: the interceptor
     /// is one instance for the application, so the root provider a pool hands its callback serves as well as a
     /// scope's.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="services"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">Tenancy is not registered in <paramref name="services"/>.</exception>
-    public static DbContextOptionsBuilder UseTenancy(this DbContextOptionsBuilder options, IServiceProvider services)
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> or <paramref name="serviceProvider"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Tenancy is not registered in <paramref name="serviceProvider"/>.</exception>
+    public static DbContextOptionsBuilder UseTenancy(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        var interceptor = services.GetService<TenancySaveInterceptor>()
+        var interceptor = serviceProvider.GetService<TenancySaveInterceptor>()
             ?? throw new InvalidOperationException(
                 "UseTenancy found no TenancySaveInterceptor. Register Tenancy first, with services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework.");
 
-        var present = options.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
-        return present.OfType<TenancySaveInterceptor>().Any() ? options : options.AddInterceptors(interceptor);
+        var present = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
+        return present.OfType<TenancySaveInterceptor>().Any() ? optionsBuilder : optionsBuilder.AddInterceptors(interceptor);
     }
 
     /// <summary>Registers the part <see cref="TenancySaveInterceptor.PartName"/>, once however many times Tenancy is registered.</summary>

@@ -1973,6 +1973,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     those roles were granted. The information line of `UseDDDToolkit` names such a context the first time its
     options are built: at start in a host that adds `builder.Services.RunStartupChecks()`, and otherwise when the
     context is first used. A context on any other database is not touched, wherever its provider is configured.
+- **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
+  `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
+  changes with it. `UseMemberHolds` names them the same.
 - **For the 3.2.0 previews: the access hold is no longer the default.** A handler on a resource with members
   no longer takes what the check read, `Checked<MemberHold<TResourceId>>.TakeFor(command)`, to load the
   resource at that version: it loads the resource its request names and holds it to the request's own

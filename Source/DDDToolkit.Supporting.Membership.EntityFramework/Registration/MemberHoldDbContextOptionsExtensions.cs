@@ -33,30 +33,30 @@ public static class MemberHoldDbContextOptionsExtensions
     /// gives the interceptor once.
     /// </para>
     /// </summary>
-    /// <param name="options">The context's options.</param>
-    /// <param name="services">
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <param name="serviceProvider">
     /// The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool: the interceptor
     /// is registered with the resources, as a singleton, so a pool's root provider serves as well as a scope's.
     /// </param>
-    /// <exception cref="ArgumentNullException"><paramref name="options"/> or <paramref name="services"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> or <paramref name="serviceProvider"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// No resource with members is registered in <paramref name="services"/>, or neither <c>UseDDDToolkit</c> nor
-    /// <c>UseDDDToolkitCore</c> was called on <paramref name="options"/> before: the hold would then run before the
+    /// No resource with members is registered in <paramref name="serviceProvider"/>, or neither <c>UseDDDToolkit</c> nor
+    /// <c>UseDDDToolkitCore</c> was called on <paramref name="optionsBuilder"/> before: the hold would then run before the
     /// domain event handlers, and what they change in the same save would be held to nothing.
     /// </exception>
-    public static DbContextOptionsBuilder UseMemberHolds(this DbContextOptionsBuilder options, IServiceProvider services)
+    public static DbContextOptionsBuilder UseMemberHolds(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        var interceptor = services.GetService<MemberHoldInterceptor>()
+        var interceptor = serviceProvider.GetService<MemberHoldInterceptor>()
             ?? throw new InvalidOperationException(
                 "UseMemberHolds found no resource with members to hold a save to. Register them first, with the registration generated for each, "
                 + "services.AddDocumentMembership<TContext>(rules), of DDDToolkit.Supporting.Membership.EntityFramework.");
 
         // Interceptors run in the order they were added, and the domain event handlers change what a save writes as
         // it begins: the hold goes after them, so it holds the whole save.
-        var added = options.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
+        var added = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
         if (!added.Any(static existing => existing is PublishDomainEventsInterceptor))
         {
             throw new InvalidOperationException(
@@ -65,6 +65,6 @@ public static class MemberHoldDbContextOptionsExtensions
         }
 
         // Asked for twice, the hold is there once, as each part's own call adds nothing the options already have.
-        return added.Any(static existing => existing is MemberHoldInterceptor) ? options : options.AddInterceptors(interceptor);
+        return added.Any(static existing => existing is MemberHoldInterceptor) ? optionsBuilder : optionsBuilder.AddInterceptors(interceptor);
     }
 }
