@@ -105,7 +105,6 @@ public static class EveryUseCase
         await services.BySystemIn(Harbor, scoped => new HostTenancy.RoleCommands(
                 scoped.GetRequiredService<HostTenancy.IStore>(),
                 later,
-                scoped.GetRequiredService<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>(),
                 scoped.GetRequiredService<TimeProvider>())
             .FollowPacksAsync(cancellation));
 

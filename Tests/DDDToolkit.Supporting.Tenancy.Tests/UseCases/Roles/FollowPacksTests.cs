@@ -164,7 +164,7 @@ public class FollowPacksTests
 
     /// <summary>The role use cases over the harness's store, as the application runs them with <paramref name="catalogue"/>.</summary>
     private static HostTenancy.RoleCommands Roles(Harness harness, TenancyCatalogue catalogue)
-        => new(harness.Store, catalogue, harness.Options, harness.Clock);
+        => new(harness.Store, catalogue, harness.Clock);
 
     /// <summary>The catalogue a later version of the application ships: the watcher's pack creates widgets too, and the operator's no longer does.</summary>
     private static TenancyCatalogue Later()

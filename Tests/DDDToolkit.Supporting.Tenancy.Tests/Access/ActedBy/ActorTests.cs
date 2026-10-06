@@ -346,7 +346,7 @@ public class ActorTests
                 Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [HostCatalogue.WidgetCreate] } : pack)],
             },
             []);
-        await harness.BySystemWork(use => new HostTenancy.RoleCommands(use.Store, later, use.Options, use.Clock).FollowPacksAsync(Cancellation));
+        await harness.BySystemWork(use => new HostTenancy.RoleCommands(use.Store, later, use.Clock).FollowPacksAsync(Cancellation));
         var followed = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
         followed.Should().ContainSingle().Which.Should().BeOfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>();
         followed.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
