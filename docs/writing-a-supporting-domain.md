@@ -629,7 +629,8 @@ the document its members are of, and the application calls `services.AddDocument
 An application that splits a module into projects by layer declares the classes in its domain project,
 which references the package and not its storage, and calls the registration from its infrastructure
 project, which holds the context and declares none of the classes. The infrastructure project gets the
-registration anyway, because it declares the same `[assembly: Module]`: it is closed over the classes the
+registration anyway, because it declares the same module, with `[assembly: Module]` as below or by its folder
+([A module named by its folder](modules.md#a-module-named-by-its-folder)): it is closed over the classes the
 module's other projects declare, and only those.
 
 ```mermaid
@@ -673,7 +674,8 @@ A project of another module that references the domain project, or a project tha
 nothing and is told nothing, and the package, which declares no module, is never looked in for a class. When
 the module's projects declare a class with one of the method's templates and none with another, the
 infrastructure project is told which one, [DDD00049](diagnostics.md#ddd00049), on its `[assembly: Module]`
-attribute; the class belongs next to the others, in the domain project.
+attribute, or at its project file where its folder declares the module; the class belongs next to the others, in
+the domain project.
 
 ## Use cases closed over your classes
 
@@ -714,7 +716,7 @@ public abstract partial class SubscriptionUseCases<
 }
 ```
 
-The project that declares the classes, `[assembly: Module("Billing")]`, gets `BillingSubscriptions`, and it and
+The project that declares the classes, of the module Billing, gets `BillingSubscriptions`, and it and
 every project above it name the use cases and their records through it, without a type argument:
 
 ```csharp

@@ -62,7 +62,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `postgres.definer-owners-bypass` | `PostgresRowAccessChecks.DefinerOwnersBypassCheck` | the same | Database | Every function that runs as its owner is owned by a role the forced policies let through |
 | `supabase.migrations-applied` | `SupabaseMigrations.AppliedCheck` | `AddSupabaseMigrations` | Migrations | Every registered context has every migration applied ([Checking at start-up](supabase.md#checking-at-start-up)) |
 | `tenancy.catalogue-builds` | `TenancyChecks.CatalogueBuildsCheck` | `AddTenancy` | Services | The catalogue holds together |
-| `tenancy.contexts-wired` | `TenancyChecks.ContextsWiredCheck` | `AddTenancy` | Services | Every context that keeps rows to a tenant checks its saves |
+| `tenancy.contexts-wired` | `TenancyChecks.ContextsWiredCheck` | `AddTenancy` | Services | Every context that keeps rows to a tenant checks its saves, after the toolkit's interceptors (one without the save check is told what `entity-framework.toolkit-wired` tells it), and one that keeps the access history says who acted as Tenancy knows the caller ([Keeping tenants apart](tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check)) |
 | `tenancy.explicit-callers` | `TenancyPostgresChecks.ExplicitCallersCheck` | `AddTenancyPostgres` | Services | The host still requires explicit callers |
 | `tenancy.seated-token-roles` | `TenancyPostgresChecks.SeatedTokenRolesCheck` | `AddTenancyPostgres` | Services | Every token role Tenancy seats reaches the database as a signed-in user |
 | `tenancy.system-in-role-confined` | `TenancyPostgresChecks.SystemInRoleConfinedCheck` | `AddTenancyPostgres` | Database | System work in a tenant cannot leave it |
