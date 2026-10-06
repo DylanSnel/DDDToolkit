@@ -346,6 +346,59 @@ public class ResourceAccessContractGenerationTests
             .WithReferencedAssembly(ProjectsContracts, "Projects.Contracts").RunCore()
             .ShouldNotHaveDiagnostic("DDD00038").ShouldCompile();
 
+    /// <summary>Projects' contracts as the sample's build compiles them: the module is the folder's <c>DDD_Module</c>, and no file says it.</summary>
+    private const string ProjectsContractsOfTheBuild =
+        """
+        using DDDToolkit.Abstractions.Attributes;
+
+        namespace Projects.Contracts;
+
+        [ModuleContract]
+        [EntityId<System.Guid>]
+        public readonly partial record struct ProjectId;
+        """;
+
+    [Fact]
+    public void A_module_the_build_declares_is_held_to_the_owning_module_as_one_the_attribute_declares()
+        => GeneratorTestHost.Create(
+                """
+                using DDDToolkit.Abstractions.Attributes;
+                using Projects.Contracts;
+
+                namespace Inspections.Infrastructure;
+
+                [ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
+                public static partial class ProjectsWhereIHoldAsInspectionsSaysSo;
+                """)
+            .WithAssemblyName("Inspections.Infrastructure")
+            .WithModuleFromTheBuild("Inspections")
+            .WithReferencedProject("Projects.Contracts", project => project
+                .WithSource(ProjectsContractsOfTheBuild, "ProjectId.cs")
+                .WithModuleFromTheBuild("Projects"))
+            .RunCore()
+            .ShouldHaveDiagnostic("DDD00038", at: "ProjectsWhereIHoldAsInspectionsSaysSo").GetMessage().Should().Contain(
+                "to be declared in the module that owns ProjectId, Projects", "DDD_Module declares the module, as the sample's folders do, and the rule is the same");
+
+    [Fact]
+    public void Another_project_of_a_module_the_build_declares_declares_a_contract_of_its_id()
+        => GeneratorTestHost.Create(
+                """
+                using DDDToolkit.Abstractions.Attributes;
+                using Projects.Contracts;
+
+                namespace Projects.Infrastructure;
+
+                [ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
+                public static partial class ProjectsISee;
+                """)
+            .WithAssemblyName("Projects.Infrastructure")
+            .WithModuleFromTheBuild("Projects")
+            .WithReferencedProject("Projects.Contracts", project => project
+                .WithSource(ProjectsContractsOfTheBuild, "ProjectId.cs")
+                .WithModuleFromTheBuild("Projects"))
+            .RunCore()
+            .ShouldNotHaveDiagnostic("DDD00038").ShouldCompile();
+
     [Fact]
     public void A_set_asked_with_anything_but_Contains_is_DDD00039_that_names_the_contract_among_what_a_rule_may_ask()
         => Run(
