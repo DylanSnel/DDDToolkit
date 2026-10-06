@@ -202,8 +202,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   every one, each with a reason the log repeats. The registrations' checks: `entity-framework.toolkit-wired`
   (`AddDDDToolkitEntityFramework`); `postgres.row-level-security-wired`, `postgres.login-role-may-switch-to-callers`,
   `postgres.login-role-owns-nothing` and `postgres.definer-owners-bypass` (`AddPostgresRowLevelSecurity`, and so
-  `AddSupabaseRowLevelSecurity`); `supabase.migrations-applied` (`AddSupabaseMigrations`); Tenancy's and
-  Membership's below; and `pgmq.extension-installed` (`AddPgmqSink`, `AddPgmqConsumer`). The methods behind them
+  `AddSupabaseRowLevelSecurity`); `supabase.migrations-applied` (`AddSupabaseMigrations`);
+  `access.behaviors-registered`, Tenancy's and Membership's below; and `pgmq.extension-installed` (`AddPgmqSink`,
+  `AddPgmqConsumer`). The methods behind them
   stay, for a host that calls them by hand; one that keeps its own class and asks for the runner too runs those
   checks twice, which reads the catalogs twice and changes nothing. The checks are off until the host asks for
   them: an application upgrading within 3.x would otherwise stop at a check it never ran, the login role that
@@ -861,7 +862,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `ApplicationCatalogue` is optional, `new ApplicationCatalogue()` included, and so is
   `TenancyOptions.Catalogue`: left unset, Tenancy builds the catalogue from its own keys and the modules'
   contributions, and every tenant starts with the default administrators' role. An export that builds the
-  catalogue without the registration calls `TenancyCatalogue.Build(contributed)`, the same catalogue. A
+  catalogue without the registration calls `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)`, the same
+  catalogue (the modules' keys, below). A
   catalogue is for what Tenancy decides access with and cannot know by itself: the packs a tenant starts with,
   keys no module owns, and marks on keys that manage access. See
   [What the catalogue is for](docs/tenancy.md#what-the-catalogue-is-for) and
@@ -1796,7 +1798,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `TenancyPermissionsOfModules.All` of the catalogue's project, which no longer lists the modules' keys.
   `ModuleKeysTests` holds the host to one contribution of every module's keys, and every list a module declares
   to its mark; the exported access files are unchanged.
-
 - **The Tenancy sample declares its modules by folder.** `Examples/Tenancy/Modules/Directory.Build.props` names
   every project's module after the folder it is in and declares it with `DDD_DeclareModule`, and holds
   DDD00022 and DDD00023 as errors for all of them; the projects' `Module.cs` files are gone, and an API project's
