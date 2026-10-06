@@ -251,7 +251,11 @@ project that runs the export; where the SQL depends on what only the application
 a class for the application to derive from, and the application lists its own. Questions the package offers
 the application's rules, declared in an `[AccessFunctions(Owner = "subscriptions")]` class, are answered by
 the functions it contributes, found by their logical names, `subscriptions/active_plans`, in the default
-schema of the context that maps the package's tables.
+schema of the context that maps the package's tables. A package that keeps the access to a resource of the
+application's, as Membership keeps a resource's members, lets the application ask it by the resource's id
+instead: its function says which set it answers (`Answers` on the `ContributedFunction`), and a rule asks
+through a one-line `[ResourceAccessContract<TId>]` of the application's, so neither says the function's name
+([a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id)).
 
 What other modules read of the package's data, it gives them as functions too, and not as its tables: each
 answers rows under column names of its own, and the package ships the mapping that reads them into a module's

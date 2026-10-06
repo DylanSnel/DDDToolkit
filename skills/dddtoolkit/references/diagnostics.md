@@ -224,7 +224,11 @@ exactly one `public static bool Allows(TAggregate x, Caller caller)` whose body 
 `=>`, or a single `return`). `Caller` is `DDDToolkit.Abstractions.Access.Caller`. The same shape holds for
 an `[AccessFunction]`, which may take `string`, `bool`, `int`, `long`, `Guid` or id parameters after the
 caller, and needs a one-column key with `Shape = AccessFunctionShape.Set`. A contract declares nothing, or
-one `static partial bool Allows(TKey key, ...)` or `static partial AccessSet<TKey> Ids(...)`. A question
+one `static partial bool Allows(TKey key, ...)` or `static partial AccessSet<TKey> Ids(...)`. A
+`[ResourceAccessContract<TKey>]` is keyed by the id of the resource's aggregate (`[EntityId<T>]`, or the id
+`[AggregateRoot<Guid>]` has the toolkit write in the same project), is declared in the module that owns that
+id, and declares nothing, or `static partial AccessSet<TKey> Ids()` for `ResourceAccessSet.Seen`,
+`Ids(string key)` for `HeldOn`. A question
 is a `static partial` method without a body in a `static partial [AccessFunctions]` class: `[AccessSet]`
 returns `AccessSet<T>`, `[AccessScalar]` a value. A name is `schema.name`, `owner/name` or a relative
 `name`, letters, digits and underscores.
@@ -234,7 +238,7 @@ returns `AccessSet<T>`, `[AccessScalar]` a value. A name is `schema.name`, `owne
 Error. Part of `Allows` cannot become SQL. A rule may use the aggregate's properties (including `.Value`
 of a typed id and properties of a value object), constants, `caller.UserId`, `caller.IsSignedIn`,
 `caller.Role` and `caller.Claim("path")`, `DateTimeOffset.UtcNow` (the database's `now()`), access
-functions and `[AccessFunctions]` questions, compared with `==`, `!=`, `<`, `<=`, `>`, `>=` and combined
+functions, `[AccessFunctions]` questions and the `Ids` of a `[ResourceAccessContract]`, compared with `==`, `!=`, `<`, `<=`, `>`, `>=` and combined
 with `&&`, `||`, `!`. A set-shaped question is asked only with `.Contains(...)`. Replace method calls,
 locals and other objects: store the value as a property of the aggregate, or read it from a claim in
 `app_metadata`.

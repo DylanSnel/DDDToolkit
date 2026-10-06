@@ -65,6 +65,11 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// function and type with its schema, as every contributed function's must: nothing in it is then looked up
 /// along that path. False by default.
 /// </param>
+/// <param name="Answers">
+/// The set it answers for a resource, for the rules that ask that set by the resource's id through a
+/// <c>[ResourceAccessContract&lt;TKey&gt;]</c> rather than by this function's name; null for none. See
+/// <see cref="ResourceAccessAnswer"/>.
+/// </param>
 public sealed record ContributedFunction(
     string Name,
     string Parameters,
@@ -73,4 +78,5 @@ public sealed record ContributedFunction(
     bool SecurityDefiner = false,
     IReadOnlyList<string>? GrantTo = null,
     string Volatility = "STABLE",
-    bool Inlinable = false);
+    bool Inlinable = false,
+    ResourceAccessAnswer? Answers = null);

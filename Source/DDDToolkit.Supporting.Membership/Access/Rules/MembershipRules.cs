@@ -87,7 +87,10 @@ public sealed class MembershipRules
     /// resource it is also what the keys of a role are chosen from.
     /// </param>
     /// <param name="codes">The codes the resource refuses with; <see cref="MembershipCodes.Under"/> the name when left out.</param>
-    /// <param name="functions">The names of the resource's set functions; <see cref="MembershipFunctions.For"/> the name when left out.</param>
+    /// <param name="functions">
+    /// The names of the resource's set functions; <see cref="MembershipFunctions.For"/> the name when left out. Rules
+    /// ask the functions by the resource's id, never by name, so say them only to keep names a database already has.
+    /// </param>
     /// <param name="grantTo">The database roles that may ask the resource's functions; the signed-in user's when left out.</param>
     /// <param name="rolesKeptElsewhere">
     /// Says that the roles a member holds are kept elsewhere, by the application, and not declared in

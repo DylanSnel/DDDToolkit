@@ -322,6 +322,45 @@ public sealed class SupabaseRowAccessExportTests : IDisposable
     }
 
     [Fact]
+    public void A_rule_asks_a_set_another_modules_contribution_answers_by_the_resources_id()
+    {
+        var seen = ResourceAccessAnswer.NameOf(typeof(TicketId), ResourceAccessSet.Seen);
+        var cratesOfTicketsISee = RowAccessRule.For<Crate>(
+            "Crates of tickets I see", RowOperations.Read, $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{seen}}}())))", RowAccessRoles.User);
+        var options = Options(null, [cratesOfTicketsISee]);
+        options.RowAccessContributions.Add(new SpotContribution("following", context => context.Model.FindEntityType(typeof(Ticket)) is { } tickets
+            ? new(
+                [new ContributedFunction("tickets_i_follow", "", "SETOF " + RowAccessModel.ColumnType(tickets, nameof(Ticket.Id)), $"SELECT t.\"Id\" FROM {RowAccessModel.Table(tickets)} t",
+                    SecurityDefiner: true, GrantTo: [RowAccessRoles.User], Answers: new(typeof(TicketId), ResourceAccessSet.Seen))],
+                [],
+                [])
+            : null));
+
+        SupabaseMigrations.Export(
+            [SupabaseMigrationSource.For(() => YardContext.Create(), "yard"), SupabaseMigrationSource.For(() => DeskScaleContext.Create(), "desk")],
+            _directory,
+            options);
+
+        var crates = File.ReadAllText(Directory.GetFiles(_directory, "*_access.yard.ddd.sql").Single());
+        crates.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT desk_scale.tickets_i_follow())));", "the rule names no function, and the file writes the one that answers the set");
+        AccessFiles()[0].Should().EndWith("_access.desk.ddd.sql", "the module whose contribution answers the set comes first");
+
+        using var yard = YardContext.Create();
+        var alone = () => SupabaseMigrations.Export(yard, Path.Combine(_directory, "alone"), Options(null, [cratesOfTicketsISee]));
+        alone.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Crates of tickets I see' asks the resources the caller sees, by the id DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, "
+            + "and no row access contribution this host uses answers that set for the modules exported. Use the contribution that keeps the resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution]. *",
+            "a host that leaves out the contribution of the resource's access hears which resource, and what to use");
+
+        // The contribution listed, and the yard exported without the desk, whose context maps the tickets.
+        var withoutTheDesk = () => SupabaseMigrations.Export(yard, Path.Combine(_directory, "without-the-desk"), options);
+        withoutTheDesk.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Crates of tickets I see' asks the resources the caller sees, *Where it answers for another module, the one whose context maps the resource, "
+            + "export the modules together, SupabaseMigrations.Export with a source for each, as the build that exports every module does.",
+            "a host that lists the contribution already hears that the module keeping the resource is missing from the export");
+    }
+
+    [Fact]
     public void Contributed_functions_policies_and_statements_land_in_the_contexts_access_file_in_order()
     {
         using var context = DeskContext.Create();

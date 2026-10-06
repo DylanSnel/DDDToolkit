@@ -11,8 +11,9 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 //
 // A policy on the projects' table cannot read the crew's tables itself: their policies follow the project's, so
 // it would be asking itself. The functions the Membership package writes from the projects' rules read them
-// without their policies, and answer with the ids of the projects they allow, once per statement; this module
-// publishes two of them as contracts, which its own rules ask as other modules' rules do.
+// without their policies, and answer with the ids of the projects they allow, once per statement. This module
+// publishes two of them as contracts, by the project's id and with no function's name, and its own rules ask them
+// as other modules' rules do.
 
 /// <summary>
 /// A seat reads the projects it reaches: those whose crew it is on, and those at a unit where it holds the key to

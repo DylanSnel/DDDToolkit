@@ -9,10 +9,15 @@ namespace Examples.Tenancy.Projects.Contracts.RowAccess;
 /// </summary>
 /// <remarks>
 /// The database's side of <see cref="Gate.IProjectGate"/>: the gate answers a use case in C#, and this answers a
-/// policy, as the ids of every project the seat reaches, asked once per statement. Projects defines it; a rule
+/// policy, as the ids of every project the seat reaches, asked once per statement. Projects publishes it; a rule
 /// of another module asks <c>ProjectsISee.Ids().Contains(row.ProjectId)</c>, and never reads Projects' tables.
-/// Only a database answers it: called in C#, it throws.
+/// <para>
+/// It names no function. It is asked by the project's id, and the export writes the policy with the function that
+/// answers the projects seen: the one the Membership package writes from the projects' rules, under whatever name
+/// those rules give it. So a module that asks depends on this declaration alone, and not on how Projects answers.
+/// Only a database answers it: called in C#, <c>Ids()</c> throws.
+/// </para>
 /// </remarks>
 [ModuleContract]
-[AccessFunctionContract<ProjectId>("project_ids_i_see", Shape = AccessFunctionShape.Set)]
+[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
 public static partial class ProjectsISee;

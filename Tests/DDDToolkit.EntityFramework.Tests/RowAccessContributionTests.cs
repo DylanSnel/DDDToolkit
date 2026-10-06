@@ -117,6 +117,161 @@ public sealed class RowAccessContributionTests
         scripts[0].Script.Should().Contain("AND desk.on_duty()\n$function$;", "the contribution's own body asks it the same way");
     }
 
+    private static readonly string TicketsSeen = ResourceAccessAnswer.NameOf(typeof(TicketId), ResourceAccessSet.Seen);
+
+    private static readonly string TicketsHeldOn = ResourceAccessAnswer.NameOf(typeof(TicketId), ResourceAccessSet.HeldOn);
+
+    /// <summary>
+    /// A contribution that answers the tickets seen and those a key is held on, under names of its own, for rules
+    /// that ask by the ticket's id; with <paramref name="also"/>, a third function that answers the tickets seen again.
+    /// It answers for <paramref name="only"/> alone where one is given.
+    /// </summary>
+    private static SpotContribution Following(string owner = "following", string name = "tickets_followed", bool also = false, Type? only = null) => new(owner, context =>
+    {
+        if (context.Model.FindEntityType(typeof(Ticket)) is not { } tickets || (only is not null && context.GetType() != only))
+        {
+            return null;
+        }
+
+        var ids = "SETOF " + RowAccessModel.ColumnType(tickets, nameof(Ticket.Id));
+        var all = $"SELECT t.{RowAccessModel.Column(tickets, nameof(Ticket.Id))} FROM {RowAccessModel.Table(tickets)} t";
+        List<ContributedFunction> functions =
+        [
+            new(name, "", ids, all, SecurityDefiner: true, GrantTo: [RowAccessRoles.User], Answers: new(typeof(TicketId), ResourceAccessSet.Seen)),
+            new(name + "_with", "key text", ids, all + " WHERE $1 IS NOT NULL", SecurityDefiner: true, GrantTo: [RowAccessRoles.User], Answers: new(typeof(TicketId), ResourceAccessSet.HeldOn)),
+        ];
+        if (also)
+        {
+            functions.Add(new("tickets_seen_too", "", ids, all, SecurityDefiner: true, GrantTo: [RowAccessRoles.User], Answers: new(typeof(TicketId), ResourceAccessSet.Seen)));
+        }
+
+        return new(functions, [], []);
+    });
+
+    [Fact]
+    public void A_rule_asks_a_set_by_the_resources_id_and_gets_the_function_a_contribution_says_answers_it()
+    {
+        using var desk = DeskContext.Create();
+        using var yard = YardContext.Create();
+        var seen = RowAccessRule.For<Crate>("Crates of tickets I see", RowOperations.Read, $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{TicketsSeen}}}())))", RowAccessRoles.User);
+        var held = RowAccessRule.For<Ticket>("Tickets I may close", RowOperations.Change, $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{TicketsHeldOn}}}('tickets.close'))))", RowAccessRoles.User);
+        var export = With(Following());
+
+        var scripts = PostgresRowAccess.Scripts([yard, desk], [seen, held], [], export);
+
+        TicketsSeen.Should().Be("@DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId/seen", "a set is named by the full name of the resource's id, and the set");
+        PostgresRowAccess.FunctionNamesOf([yard, desk], [], export).Should().Equal(
+            new Dictionary<string, string>
+            {
+                ["following/tickets_followed"] = "desk.tickets_followed",
+                ["following/tickets_followed_with"] = "desk.tickets_followed_with",
+                [TicketsSeen] = "desk.tickets_followed",
+                [TicketsHeldOn] = "desk.tickets_followed_with",
+            },
+            "a set is another name for the function that answers it, wherever that function lives");
+        scripts.Select(each => each.Context).Should().Equal([desk, yard], "the yard asks a set the desk's contribution answers, so the desk's script runs first");
+        scripts[1].Script.Should().Contain("FOR SELECT TO authenticated\n    USING (\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed())));", "the rule names no function, and gets the one that answers the set");
+        scripts[0].Script.Should().Contain("(\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed_with('tickets.close'))))", "the same in the module of the resource itself");
+        scripts[0].Script.Should().Contain("GRANT EXECUTE ON FUNCTION desk.tickets_followed_with(key text) TO authenticated;")
+            .And.NotContain("@DDDToolkit", "the name a rule asks by never reaches the database");
+    }
+
+    [Fact]
+    public void SQL_a_contribution_writes_asks_a_set_the_same_way()
+    {
+        using var desk = DeskContext.Create();
+        var asking = new SpotContribution("asking", _ => new([], [], [$"SELECT {{fn:{TicketsHeldOn}}}('tickets.close')"]));
+
+        var script = PostgresRowAccess.Script(desk, [], [], With(Following(), asking));
+
+        script.Should().Contain("SELECT desk.tickets_followed_with('tickets.close');");
+    }
+
+    [Fact]
+    public void A_rule_that_asks_a_set_no_contribution_answers_is_refused_naming_the_rule_and_the_resource()
+    {
+        using var yard = YardContext.Create();
+        var seen = RowAccessRule.For<Crate>("Crates of tickets I see", RowOperations.Read, $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{TicketsSeen}}}())))", RowAccessRoles.User);
+
+        var refused = () => PostgresRowAccess.Script(yard, [seen], [], With());
+
+        refused.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Crates of tickets I see' asks the resources the caller sees, by the id DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, "
+            + "and no row access contribution answers it for the contexts this is written with. Use the contribution that keeps that resource's access, the Membership package's for a resource with members*");
+    }
+
+    [Fact]
+    public void A_context_written_alone_whose_rule_asks_a_set_another_context_answers_hears_how_to_write_it()
+    {
+        using var desk = DeskContext.Create();
+        using var yard = YardContext.Create();
+        var seen = RowAccessRule.For<Crate>("Crates of tickets I see", RowOperations.Read, $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{TicketsSeen}}}())))", RowAccessRoles.User);
+        var export = With(Following());
+
+        // The contribution is listed, and answers for the desk, which maps the tickets: the yard alone cannot know its name.
+        var alone = () => PostgresRowAccess.Script(yard, [seen], [], export);
+        var told = new RowAccessExport { Contributions = export.Contributions, FunctionNames = PostgresRowAccess.FunctionNamesOf([yard, desk], [], export) };
+
+        alone.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Crates of tickets I see' asks the resources the caller sees, *Where it answers for another context, the one that maps the resource, "
+            + "write the contexts together with PostgresRowAccess.Scripts, or hand this script that context's names in RowAccessExport.FunctionNames, from PostgresRowAccess.FunctionNamesOf(contexts, functions, export).",
+            "the host listed the contribution already, so what is missing is the context that keeps the resource");
+        PostgresRowAccess.Script(yard, [seen], [], told).Should().Contain(
+            "USING (\"Id\" = ANY (ARRAY(SELECT desk.tickets_followed())));", "handed the desk's names, the yard's script asks the desk's function");
+    }
+
+    [Fact]
+    public void An_answer_that_cannot_be_named_still_prints_for_the_message_that_shows_it()
+    {
+        var noSet = new ResourceAccessAnswer(typeof(TicketId), (ResourceAccessSet)7);
+        var noKey = new ResourceAccessAnswer(null!, ResourceAccessSet.Seen);
+        var function = new ContributedFunction("tickets_somehow", "", "SETOF uuid", "SELECT NULL::uuid", Answers: noSet);
+
+        noSet.ToString().Should().Be("ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }");
+        noKey.ToString().Should().Be("ResourceAccessAnswer { Key = , Set = Seen }");
+        function.ToString().Should().Contain(
+            "Answers = ResourceAccessAnswer { Key = DDDToolkit.EntityFramework.Tests.Infrastructure.TicketId, Set = 7 }",
+            "a log line or an assertion that prints the function shows what it says it answers");
+        new ResourceAccessAnswer(typeof(TicketId), ResourceAccessSet.Seen).Should().Be(
+            new ResourceAccessAnswer(typeof(TicketId), ResourceAccessSet.Seen), "an answer is its key and its set");
+    }
+
+    [Fact]
+    public void One_function_answers_a_set_for_a_resource()
+    {
+        using var desk = DeskContext.Create();
+        using var anotherDesk = DeskScaleContext.Create();
+
+        var twice = () => PostgresRowAccess.Script(desk, [], [], With(Following(also: true)));
+        var twoContributions = () => PostgresRowAccess.Script(desk, [], [], With(Following(), Following("watching", "tickets_watched")));
+        var twoContexts = () => PostgresRowAccess.Scripts([desk, anotherDesk], [], [], With(Following(only: typeof(DeskContext)), Following("scaled", only: typeof(DeskScaleContext))));
+
+        twice.Should().Throw<InvalidOperationException>().WithMessage(
+            "The row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution answers the resources the caller sees, by the id *TicketId with two functions for DeskContext.*");
+        twoContributions.Should().Throw<InvalidOperationException>().WithMessage("The row access contributions * and * both answer the resources the caller sees*");
+        twoContexts.Should().Throw<InvalidOperationException>().WithMessage(
+            "Two contexts answer the resources the caller sees, by the id *TicketId: DeskContext with desk.tickets_followed and DeskScaleContext with desk_scale.tickets_followed.*",
+            "a rule that asks the set would otherwise be written with whichever came last");
+    }
+
+    [Theory]
+    [InlineData(ResourceAccessSet.Seen, "key text", "SETOF uuid", "takes (key text), where the resources seen are asked without arguments")]
+    [InlineData(ResourceAccessSet.HeldOn, "", "SETOF uuid", "takes (), where the resources a key is held on are asked with the key alone, as text")]
+    [InlineData(ResourceAccessSet.HeldOn, "key text, more text", "SETOF uuid", "takes (key text, more text), where*")]
+    [InlineData(ResourceAccessSet.HeldOn, "level integer", "SETOF uuid", "takes (level integer), where*")]
+    [InlineData(ResourceAccessSet.Seen, "", "boolean", "returns boolean, where a set is answered with the resource's ids, SETOF their type")]
+    [InlineData((ResourceAccessSet)7, "", "SETOF uuid", "'7' is no set: a resource access set is Seen or HeldOn")]
+    public void A_function_that_cannot_answer_the_set_it_says_it_answers_is_refused(ResourceAccessSet set, string parameters, string returns, string problem)
+    {
+        using var desk = DeskContext.Create();
+        var wrong = new SpotContribution("wrong", _ => new(
+            [new("tickets_somehow", parameters, returns, "SELECT NULL::uuid", SecurityDefiner: true, GrantTo: [RowAccessRoles.User], Answers: new(typeof(TicketId), set))], [], []));
+
+        var refused = () => PostgresRowAccess.Script(desk, [], [], With(wrong));
+
+        refused.Should().Throw<InvalidOperationException>().WithMessage("The function 'tickets_somehow' of the row access contribution * says it answers *, and " + problem + ".");
+    }
+
     [Fact]
     public void A_contributed_definer_statement_without_search_path_is_refused()
     {

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
@@ -299,13 +300,14 @@ internal static class MembershipSql
         }
 
         // Each runs as its owner, so it reads the member rows without the policies that ask it, and is
-        // executable by the roles the rules name and no other.
+        // executable by the roles the rules name and no other. The two that answer access say so, by the type of
+        // the resource's id: a rule asks them through a [ResourceAccessContract] of that id, and never by name.
         return
         [
             new ContributedFunction(rules.Functions.AsMember, "", returns, asMember, SecurityDefiner: true, GrantTo: rules.GrantTo),
             new ContributedFunction(rules.Functions.AsMemberWith, "text", returns, asMemberWith, SecurityDefiner: true, GrantTo: rules.GrantTo),
-            new ContributedFunction(rules.Functions.Seen, "", returns, Lines([.. seen]), SecurityDefiner: true, GrantTo: rules.GrantTo),
-            new ContributedFunction(rules.Functions.HeldOn, "text", returns, Lines([.. heldOn]), SecurityDefiner: true, GrantTo: rules.GrantTo),
+            new ContributedFunction(rules.Functions.Seen, "", returns, Lines([.. seen]), SecurityDefiner: true, GrantTo: rules.GrantTo, Answers: new(id.ClrType, ResourceAccessSet.Seen)),
+            new ContributedFunction(rules.Functions.HeldOn, "text", returns, Lines([.. heldOn]), SecurityDefiner: true, GrantTo: rules.GrantTo, Answers: new(id.ClrType, ResourceAccessSet.HeldOn)),
         ];
     }
 

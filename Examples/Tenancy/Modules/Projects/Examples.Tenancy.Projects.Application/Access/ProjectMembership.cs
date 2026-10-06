@@ -33,9 +33,10 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// its own place on a crew is saved as this module's work for it. Work in any other scope holds nothing on a
 /// project.</item>
 /// </list>
-/// The functions keep the names the module's row access rules, and other modules' rules through its contracts,
-/// have always asked: <see cref="ProjectsISee"/> and <see cref="ProjectsWhereIHold"/>, and the two that answer a
-/// crew alone.
+/// Row access rules ask the projects a seat sees and those it holds a key on by the project's id, through
+/// <see cref="ProjectsISee"/> and <see cref="ProjectsWhereIHold"/>, this module's rules and other modules' alike,
+/// and the export writes their policies with whatever names these rules give the functions. The rules keep the
+/// names this sample's database already has (<see cref="Functions"/>).
 /// <para>
 /// One instance for the application, made where the module is added, from the starter roles the host declares,
 /// and registered as it is: the handlers read the rules from it. The program that exports the database's
@@ -61,14 +62,18 @@ public sealed class ProjectMembership
     public const string Scope = "projects";
 
     /// <summary>
-    /// The four functions under the names they have always had: the projects whose crew the caller is on, those
-    /// where a role it holds there gives a key, those it sees, and those it holds a key on.
+    /// The four functions under the names this sample's database has had since before the Membership package took
+    /// them from the resource's name: the projects whose crew the caller is on, those where a role it holds there
+    /// gives a key, those it sees, and those it holds a key on.
     /// </summary>
-    public static MembershipFunctions Functions { get; } = new(
-        "crew_member_project_ids",
-        "crew_project_ids",
-        FunctionOf(ProjectsISee.Name),
-        FunctionOf(ProjectsWhereIHold.Name));
+    /// <remarks>
+    /// Kept on purpose, and said here alone: the access files of Projects and Inspections create and ask these four,
+    /// and a new name would leave the old functions in a database until Projects' next access file. No rule names
+    /// them, since rules ask by the project's id. An application without such a database leaves <c>functions:</c> out
+    /// of its rules, and its functions are <c>projects_as_member</c>, <c>projects_as_member_with</c>,
+    /// <c>projects_i_see</c> and <c>projects_where_i_hold</c>.
+    /// </remarks>
+    public static MembershipFunctions Functions { get; } = new("crew_member_project_ids", "crew_project_ids", "project_ids_i_see", "project_ids_where_i_hold");
 
     /// <summary>The projects' rules, with <paramref name="starterRoles"/> as the roles every tenant starts with.</summary>
     /// <param name="starterRoles">
@@ -123,10 +128,4 @@ public sealed class ProjectMembership
 
     /// <summary>The starter roles, with the names and descriptions a tenant's roles made from them first have.</summary>
     public IReadOnlyList<StarterProjectRole> StarterRoles { get; }
-
-    /// <summary>The name a function has in the module's schema, from the logical name a contract publishes it under.</summary>
-    private static string FunctionOf(string logical)
-        => logical.StartsWith(Name + "/", StringComparison.Ordinal)
-            ? logical[(Name.Length + 1)..]
-            : throw new InvalidOperationException("'" + logical + "' is no function of the projects' rules, '" + Name + "'.");
 }

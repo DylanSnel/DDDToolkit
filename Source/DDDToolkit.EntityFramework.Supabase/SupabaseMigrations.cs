@@ -591,6 +591,16 @@ public static partial class SupabaseMigrations
         {
             if (PostgresRowAccess.FunctionsAskedBy(sql).FirstOrDefault(name => !defined.Contains(name)) is { } missing)
             {
+                if (ResourceAccessAnswer.IsName(missing))
+                {
+                    // Asked through a [ResourceAccessContract], by the resource's id: no function of a module answers it,
+                    // and a contribution answers it for the context that maps the resource, which may not be among these.
+                    throw new InvalidOperationException(
+                        $"{what} asks {ResourceAccessAnswer.Described(missing)}, and no row access contribution this host uses answers that set for the modules exported. " +
+                        "Use the contribution that keeps the resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution]. " +
+                        "Where it answers for another module, the one whose context maps the resource, export the modules together, SupabaseMigrations.Export with a source for each, as the build that exports every module does.");
+                }
+
                 throw new InvalidOperationException(
                     $"{what} asks the access function {missing}, which no [AccessFunction] in the modules this host references defines. " +
                     $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")], or use the row access contribution that writes it, with [assembly: UseRowAccessContribution].");

@@ -596,8 +596,9 @@ public static partial class PostgresRowAccess
                 if (definers.TryGetValue(definition.Logical, out var other)
                     && !string.Equals(names[definition.Logical], definition.Resolved, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException(
-                        $"The function {definition.Logical} would be {names[definition.Logical]} for {other.Context} and {definition.Resolved} for {each.Context.GetType().Name}, which both write it ({other.About}). A function has one definition: write it in one of them, or name it with its schema.");
+                    throw new InvalidOperationException(ResourceAccessAnswer.IsName(definition.Logical)
+                        ? $"Two contexts answer {ResourceAccessAnswer.Described(definition.Logical)}: {other.Context} with {names[definition.Logical]} and {each.Context.GetType().Name} with {definition.Resolved}. One function answers a set for a resource, so a rule that asks it is written with that one: write the resource's access for the context that keeps the resource."
+                        : $"The function {definition.Logical} would be {names[definition.Logical]} for {other.Context} and {definition.Resolved} for {each.Context.GetType().Name}, which both write it ({other.About}). A function has one definition: write it in one of them, or name it with its schema.");
                 }
 
                 names[definition.Logical] = definition.Resolved;
@@ -636,7 +637,9 @@ public static partial class PostgresRowAccess
     private static void EnsureOneFunctionPerName(IReadOnlyDictionary<string, string> names, IReadOnlyDictionary<string, (string Context, string About)> definers)
     {
         var byResolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (logical, resolved) in names.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+
+        // A resource access set is another name for the function a contribution says answers it, never a function of its own.
+        foreach (var (logical, resolved) in names.Where(pair => !ResourceAccessAnswer.IsName(pair.Key)).OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             if (byResolved.TryGetValue(resolved, out var other))
             {
@@ -1404,8 +1407,10 @@ public static partial class PostgresRowAccess
     /// The access functions a rule's or a function's SQL asks, by name: <c>projects.is_member</c> for
     /// <c>ProjectMembership.Allows(project, caller)</c> and for <c>ProjectMembers.Allows(task.ProjectId)</c>,
     /// and a logical name, <c>desk/tickets_i_watch</c>, for a function named relative to its owner and for a
-    /// question of an <c>[AccessFunctions]</c> class. Not those written with <c>Sql.Call</c>, or a question
-    /// named with its schema, which are functions of your own.
+    /// question of an <c>[AccessFunctions]</c> class; and the name of a resource access set,
+    /// <c>@Projects.Contracts.ProjectId/seen</c>, for a <c>[ResourceAccessContract]</c>, which the function a
+    /// contribution says answers that set resolves (<see cref="ResourceAccessAnswer"/>). Not those written with
+    /// <c>Sql.Call</c>, or a question named with its schema, which are functions of your own.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="sql"/> is null.</exception>
     public static IReadOnlyList<string> FunctionsAskedBy(string sql)
@@ -2117,10 +2122,17 @@ public static partial class PostgresRowAccess
             return name;
         }
 
-        return writing.Names.TryGetValue(name, out var resolved)
-            ? resolved
-            : throw new InvalidOperationException(
-                $"{Capitalized(what)} asks the function {name}, and none of the functions this is written with is called that. Define it with [AccessFunction<TAggregate>(\"{name}\")] in the module whose aggregate it is about, or name it with its schema, schema.name.");
+        if (writing.Names.TryGetValue(name, out var resolved))
+        {
+            return resolved;
+        }
+
+        throw new InvalidOperationException(ResourceAccessAnswer.IsName(name)
+            ? $"{Capitalized(what)} asks {ResourceAccessAnswer.Described(name)}, and no row access contribution answers it for the contexts this is written with. "
+              + "Use the contribution that keeps that resource's access, the Membership package's for a resource with members, with [assembly: UseRowAccessContribution], or in RowAccessExport.Contributions. "
+              + "Where it answers for another context, the one that maps the resource, write the contexts together with PostgresRowAccess.Scripts, "
+              + "or hand this script that context's names in RowAccessExport.FunctionNames, from PostgresRowAccess.FunctionNamesOf(contexts, functions, export)."
+            : $"{Capitalized(what)} asks the function {name}, and none of the functions this is written with is called that. Define it with [AccessFunction<TAggregate>(\"{name}\")] in the module whose aggregate it is about, or name it with its schema, schema.name.");
     }
 
     private static string Capitalized(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];

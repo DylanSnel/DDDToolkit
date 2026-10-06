@@ -70,6 +70,12 @@ internal static class KnownTypes
     /// <summary>An access function published in a module's contracts, asked by key: <c>[AccessFunctionContract&lt;TKey&gt;]</c>.</summary>
     public const string AccessFunctionContractAttribute = AttributesNamespace + ".AccessFunctionContractAttribute`1";
 
+    /// <summary>
+    /// A set the access to a resource answers, published in a module's contracts and asked by the resource's id:
+    /// <c>[ResourceAccessContract&lt;TKey&gt;]</c>.
+    /// </summary>
+    public const string ResourceAccessContractAttribute = AttributesNamespace + ".ResourceAccessContractAttribute`1";
+
     /// <summary>A class of questions only the database answers, and the owner of the functions it names: <c>[AccessFunctions]</c>.</summary>
     public const string AccessFunctionsAttribute = AttributesNamespace + ".AccessFunctionsAttribute";
 

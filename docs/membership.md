@@ -625,12 +625,12 @@ where the mapping is read.
 
 ## On Postgres: the second lock
 
-`DDDToolkit.Supporting.Membership.Postgres` writes four functions per resource, under the names its rules
-give them (`MembershipFunctions`): the resources the caller is a member of, those where it holds a role
-that gives a key, those it sees, and those it holds a key on, as a member, as the owner or from above. They
-answer what the access questions answer, from the same rules. What a caller reads and changes of a resource
-is yours to say, in [row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the
-functions, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
+`DDDToolkit.Supporting.Membership.Postgres` writes four functions per resource: the resources the caller is a
+member of, those where it holds a role that gives a key, those it sees, and those it holds a key on, as a
+member, as the owner or from above. They answer what the access questions answer, from the same rules. What a
+caller reads and changes of a resource is yours to say, in
+[row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the last two by the resource's
+id, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
 
 Membership brings no part to a context's options: the member tables are your context's own, and so is the way
 it is wired. A context wired with `UseDDDToolkit` runs as its caller once row level security is registered, so these
@@ -645,21 +645,23 @@ policies hold it with nothing more to write, and with [Tenancy](#with-tenancy) i
 
 public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules);
 
-// Your questions for them: the owner is the rules' name, the names are the rules' own
-[AccessFunctions(Owner = "documents")]
-public static partial class DocumentQuestions
-{
-    [AccessSet("documents_i_see")]
-    public static partial AccessSet<DocumentId> Seen();
+// What your rules ask, a line each: the documents a caller sees, and those it holds a key on, by the document's id
+[ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]
+public static partial class DocumentsISee;
 
-    [AccessSet("documents_where_i_hold")]
-    public static partial AccessSet<DocumentId> HeldOn(string key);
-}
+[ResourceAccessContract<DocumentId>(ResourceAccessSet.HeldOn)]
+public static partial class DocumentsWhereIHold;
 
 [RowAccess<Document>(RowOperations.Read, To = [RowAccessRoles.User])]
 public static partial class UsersReadTheDocumentsTheySee
 {
-    public static bool Allows(Document document, Caller caller) => DocumentQuestions.Seen().Contains(document.Id);
+    public static bool Allows(Document document, Caller caller) => DocumentsISee.Ids().Contains(document.Id);
+}
+
+[RowAccess<Document>(RowOperations.Change, To = [RowAccessRoles.User])]
+public static partial class UsersChangeTheDocumentsTheyWorkOn
+{
+    public static bool Allows(Document document, Caller caller) => DocumentsWhereIHold.Ids("documents.edit").Contains(document.Id);
 }
 
 // Where the resources are registered: the package's start-up check of the database
@@ -673,9 +675,21 @@ services.RunStartupChecks();
   runs it lists: the migrations run as the role that owns your tables, so nothing a reference offers gets
   there without your say ([policies a package ships](row-level-security.md#policies-a-package-ships)). It
   hands over the rules, which only your application has, and it is one line.
-- **The questions are yours to declare** because a rule is written into a policy when the project is built,
-  and the generator translates `Seen().Contains(document.Id)` from a declaration it can read. The names are
-  the rules' own, and the export refuses a question whose function nothing it is written with defines.
+- **The questions are yours to declare**, a line each, because a rule is written into a policy when the
+  project is built, and the generator translates `DocumentsISee.Ids().Contains(document.Id)` from a declaration
+  it can read. The declaration names no function: it says the document's id and the set, and the export writes
+  the policy with the function this contribution answers that set with, whatever the rules call it. A rule
+  that asks the documents when the export is not written with their contribution is refused, naming the rule
+  and the resource. The id may be declared, as `DocumentId` is here, or be the one the toolkit writes for
+  `[AggregateRoot<Guid>] public partial class Document`, in the project that declares it. In an application of
+  several modules the declarations are the owning module's contracts, which other modules' rules ask as its
+  own rules do, and no other module declares one of its own:
+  [a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id).
+- **The functions' names** follow from the rules' name: `documents_as_member`, `documents_as_member_with`,
+  `documents_i_see` and `documents_where_i_hold` for `documents`. Nothing of yours asks them by name, so say
+  them only to keep the names a database already has, `functions: new MembershipFunctions(...)` in the rules;
+  the start-up check holds the database to whichever the rules say. The sample keeps the ones its database had
+  (`ProjectMembership.Functions`).
 - **The functions** run as their owner with an empty search path, and only the database roles the rules
   name may ask them (`grantTo`, signed-in users unless you say otherwise). Whether a period applies is asked
   of the database's clock. The application's own work in a scope the rules name is answered every resource,
@@ -767,7 +781,7 @@ public static MembershipRules Rules { get; } = new(
   the owner's role in use.
 - **Each statement is asked as it runs,** as every policy is. A resource is opened with its owner on the
   list, and those rows pass like any other. The owner sees the resource from the moment its row names it, so
-  a read rule that asks `Seen()` lets the owner write the member rows of a resource it has just opened, in the
+  a read rule that asks the resources seen, `DocumentsISee.Ids()`, lets the owner write the member rows of a resource it has just opened, in the
   same save; and an owner holds every key the rules state, so state the key
   that changes the members among them where a caller opens a resource as itself. And an owner that hands
   its own resource on, holding the keys by owning it alone, holds them no longer once the owner column has

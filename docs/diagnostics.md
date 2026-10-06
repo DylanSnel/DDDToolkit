@@ -1208,6 +1208,16 @@ The same holds, with a little more, for the others the generator reads:
 - **An `[AccessFunctionContract]`** declares nothing, or one question for the generator to implement:
   `static partial bool Allows(TKey key, ...)`, or `static partial AccessSet<TKey> Ids(...)`, which also needs
   `Shape = AccessFunctionShape.Set` if the attribute names a shape.
+- **A `[ResourceAccessContract]`** is keyed by the id of the resource's aggregate, such as `ProjectId`, since
+  the export finds the resource by the type of its id, and publishes `ResourceAccessSet.Seen` or `HeldOn`. The
+  id is one declared with `[EntityId<T>]`, or the one the toolkit writes beside an aggregate root of the same
+  project declared with a value, `[AggregateRoot<Guid>]`; a name the generator finds as neither is reported
+  with the line that declares it. The contract is declared in the module that owns the id, since a module
+  publishes the sets of its own resources: one of an id whose assembly declares another module is reported,
+  and the other module's rules ask the contract the owner publishes. It declares nothing, or the `Ids` its set
+  is asked with for the generator to implement: `static partial AccessSet<ProjectId> Ids()` for the resources
+  seen, `static partial AccessSet<ProjectId> Ids(string key)` for those a key is held on
+  ([a resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id)).
 - **A question of an `[AccessFunctions]` class** is a `static partial` method without a body, in a
   `static partial` class: an `[AccessSet]` returns `AccessSet<T>`, an `[AccessScalar]` returns a value, and
   its parameters are the types above, or a type parameter constrained to `IEntityId`. An `[AccessSet]` or
@@ -1246,8 +1256,9 @@ properties, constants written in the rule, and the caller: `caller.UserId`, `cal
 `caller.Role` and `caller.Claim("app_metadata.team")`. It can compare them, with `==`, `!=`, `<`, `<=`,
 `>` and `>=`, and combine the comparisons with `&&`, `||` and `!`. The time is `DateTimeOffset.UtcNow` or
 `DateTime.UtcNow`, which the database answers as `now()`. What only the database knows it asks through an
-[access function](row-level-security.md#asking-the-aggregates-entities-access-functions) or a
-[question](row-level-security.md#set-shaped-questions) of an `[AccessFunctions]` class, and a set-shaped
+[access function](row-level-security.md#asking-the-aggregates-entities-access-functions), a
+[question](row-level-security.md#set-shaped-questions) of an `[AccessFunctions]` class, or a
+[resource access contract](row-level-security.md#a-resources-access-asked-by-its-id), and a set-shaped
 question only with `Contains`. A method call, a local variable or another object has no column and no claim
 to become, and leaving it out would make the database answer differently from the C# method, so it is an
 error on the part that cannot be translated. Store what the rule needs as a property of the aggregate, or

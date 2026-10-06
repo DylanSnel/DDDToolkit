@@ -12,23 +12,25 @@ namespace DDDToolkit.Supporting.Membership.TestHost.Access;
 // who holds the key that changes the owner, whatever the rule below lets a caller change of the resource.
 
 /// <summary>
-/// The questions about documents the database answers: the two functions of a document's membership that rules
-/// ask, under the names its rules give them and the owner the package gives them, the rules' name.
+/// The documents the caller sees, asked by the document's id: no function's name is said, and the export writes
+/// the policy with the function the package writes for the documents, whatever their rules call it.
 /// </summary>
-[AccessFunctions(Owner = "documents")]
-public static partial class DocumentQuestions
-{
-    /// <summary>The documents the caller sees.</summary>
-    [AccessSet("documents_i_see")]
-    public static partial AccessSet<DocumentId> Seen();
+[ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]
+public static partial class DocumentsISee;
 
-    /// <summary>The documents the caller holds <paramref name="key"/> on.</summary>
+/// <summary>The documents the caller holds a key on, asked by the document's id and the key, as <see cref="DocumentsISee"/> is.</summary>
+[ResourceAccessContract<DocumentId>(ResourceAccessSet.HeldOn)]
+public static partial class DocumentsWhereIHold
+{
+    /// <summary>The documents the caller holds <paramref name="key"/> on: declared to say so here, and implemented by the generator.</summary>
     /// <param name="key">A permission key.</param>
-    [AccessSet("documents_where_i_hold")]
-    public static partial AccessSet<DocumentId> HeldOn(string key);
+    public static partial AccessSet<DocumentId> Ids(string key);
 }
 
-/// <summary>The questions about folders the database answers, under the names the folder's rules give its functions.</summary>
+/// <summary>
+/// The questions about folders the database answers, under the names the folder's rules give its functions: a
+/// host may still ask the package's functions by name, as an <c>[AccessFunctions]</c> class asks any function.
+/// </summary>
 [AccessFunctions(Owner = "folders")]
 public static partial class FolderQuestions
 {
@@ -47,7 +49,7 @@ public static partial class FolderQuestions
 public static partial class UsersReadTheDocumentsTheySee
 {
     /// <summary>Whether the caller sees <paramref name="document"/>.</summary>
-    public static bool Allows(Document document, Caller caller) => DocumentQuestions.Seen().Contains(document.Id);
+    public static bool Allows(Document document, Caller caller) => DocumentsISee.Ids().Contains(document.Id);
 }
 
 /// <summary>
@@ -76,8 +78,8 @@ public static partial class UsersChangeTheDocumentsTheyWorkOn
 {
     /// <summary>Whether the caller may change <paramref name="document"/>.</summary>
     public static bool Allows(Document document, Caller caller)
-        => DocumentQuestions.HeldOn(DocumentKeys.Edit).Contains(document.Id)
-           || DocumentQuestions.HeldOn(DocumentKeys.Share).Contains(document.Id);
+        => DocumentsWhereIHold.Ids(DocumentKeys.Edit).Contains(document.Id)
+           || DocumentsWhereIHold.Ids(DocumentKeys.Share).Contains(document.Id);
 }
 
 /// <summary>A member of staff reads the folders it is on.</summary>

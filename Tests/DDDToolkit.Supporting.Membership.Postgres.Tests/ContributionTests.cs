@@ -256,12 +256,68 @@ public sealed class ContributionTests(FilingPostgres postgres)
         new FolderMembershipFunctions().Owner.Should().Be("folders");
         new MembershipRowAccessContribution<DocumentShare>(Rules("sales.orders")).Owner.Should().Be("sales-orders", "an owner is letters, digits and dashes");
 
-        // The application's rules ask them through questions that name that owner and the rules' own names.
+        // The application's rules get the rules' own names: the documents' rules ask by the document's id, and the
+        // folders' through questions that name that owner and those names.
         var script = FilingPostgres.AccessScript();
         script.Should().Contain("USING (\"Id\" = ANY (ARRAY(SELECT filing.documents_i_see())))")
             .And.Contain("USING (\"Id\" = ANY (ARRAY(SELECT filing.folder_ids_seen())))");
         (DocumentMembership.Rules.Functions.Seen, DocumentMembership.Rules.Functions.HeldOn).Should().Be(("documents_i_see", "documents_where_i_hold"));
         (FolderMembership.Rules.Functions.Seen, FolderMembership.Rules.Functions.HeldOn).Should().Be(("folder_ids_seen", "folder_ids_held"));
+    }
+
+    [Fact]
+    public void The_two_functions_that_answer_access_say_which_set_they_answer_for_the_resources_id()
+    {
+        using var context = FilingPostgres.Model();
+
+        var documents = new DocumentMembershipFunctions().Contribute(context, Export)!.Functions;
+        var folders = new FolderMembershipFunctions().Contribute(context, Export)!.Functions;
+
+        documents.Select(function => (function.Name, function.Answers)).Should().Equal(
+            ("documents_as_member", null),
+            ("documents_as_member_with", null),
+            ("documents_i_see", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.Seen)),
+            ("documents_where_i_hold", new ResourceAccessAnswer(typeof(DocumentId), ResourceAccessSet.HeldOn)));
+        folders.Select(function => (function.Name, function.Answers)).Should().Equal(
+            [
+                ("folder_ids_staffed", null),
+                ("folder_ids_staffed_with", null),
+                ("folder_ids_seen", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.Seen)),
+                ("folder_ids_held", new ResourceAccessAnswer(typeof(FolderId), ResourceAccessSet.HeldOn)),
+            ],
+            "the names are the rules' own, and a rule that asks by the folder's id gets them all the same");
+    }
+
+    [Fact]
+    public void A_rule_that_asks_by_the_resources_id_is_written_as_one_that_names_the_function()
+    {
+        var seen = ResourceAccessAnswer.NameOf(typeof(DocumentId), ResourceAccessSet.Seen);
+        DDDToolkit.Supporting.Membership.TestHost.Access.UsersReadTheDocumentsTheySee.RowAccessSql.Should().Be($"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{seen}}}())))");
+        DDDToolkit.Supporting.Membership.TestHost.Access.UsersChangeTheDocumentsTheyWorkOn.RowAccessSql.Should().Contain("{fn:@DDDToolkit.Supporting.Membership.TestHost.DocumentId/held_on}('documents.edit')");
+
+        // The same rules, naming the functions as the documents' rules call them: the file is the same, byte for byte.
+        RowAccessRule Named(RowAccessRule rule) => RowAccessRule.For<Document>(
+            rule.Name,
+            rule.Operations,
+            rule.Sql.Replace(seen, "documents/documents_i_see", StringComparison.Ordinal)
+                .Replace(ResourceAccessAnswer.NameOf(typeof(DocumentId), ResourceAccessSet.HeldOn), "documents/documents_where_i_hold", StringComparison.Ordinal),
+            [.. rule.Roles]);
+
+        var byName = FilingPostgres.Rules.Select(rule => rule.AggregateTypeName == typeof(Document).FullName ? Named(rule) : rule).ToList();
+        byName.Should().NotBeEquivalentTo(FilingPostgres.Rules, "the documents' rules ask by the document's id");
+        FilingPostgres.AccessScript(rules: byName).Should().Be(FilingPostgres.AccessScript());
+    }
+
+    [Fact]
+    public void A_rule_that_asks_a_resource_whose_membership_is_not_used_is_refused_when_the_file_is_written()
+    {
+        // The folders' contribution alone: nothing answers for the documents, whose rule asks by the document's id.
+        var read = FilingPostgres.Rules.Single(rule => rule.Name == "Users read the documents they see");
+        var refused = () => FilingPostgres.AccessScript(contributions: [new FolderMembershipFunctions()], rules: [read]);
+
+        refused.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Users read the documents they see' asks the resources the caller sees, by the id DDDToolkit.Supporting.Membership.TestHost.DocumentId, "
+            + "and no row access contribution answers it for the contexts this is written with. Use the contribution that keeps that resource's access, the Membership package's for a resource with members*");
     }
 
     [Fact]

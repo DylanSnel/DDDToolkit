@@ -127,6 +127,30 @@ public static partial class PostgresRowAccess
             }
         }
 
+        // The sets a contribution answers for a resource, which rules ask by the resource's id: another name for one
+        // of the functions above, and never a function of its own, so it is not held to a name of its own either.
+        var answered = new Dictionary<string, Contributed>(StringComparer.OrdinalIgnoreCase);
+        foreach (var contributed in contributions)
+        {
+            foreach (var function in contributed.Result.Functions.Where(function => function.Answers is not null))
+            {
+                var name = function.Answers!.Name;
+                var type = contributed.Contribution.GetType().FullName;
+                if (answered.TryGetValue(name, out var other))
+                {
+                    throw new InvalidOperationException(
+                        (ReferenceEquals(other, contributed)
+                            ? $"The row access contribution {type} answers {ResourceAccessAnswer.Described(name)} with two functions for {context.GetType().Name}. "
+                            : $"The row access contributions {other.Contribution.GetType().FullName} and {type} both answer {ResourceAccessAnswer.Described(name)} for {context.GetType().Name}. ")
+                        + "One function answers a set for a resource, so a rule that asks it is written with that one: say Answers on one of them.");
+                }
+
+                answered[name] = contributed;
+                var resolved = names.First(named => string.Equals(named.Logical, contributed.Owner + "/" + function.Name, StringComparison.OrdinalIgnoreCase)).Resolved;
+                names.Add(new Named(name, resolved, $"{function.Name}, which answers {ResourceAccessAnswer.Described(name)}, from the row access contribution {type}"));
+            }
+        }
+
         var roles = rules.Distinct().ToDictionary(rule => rule, rule => RolesOf(rule, export.Roles));
 
         // A column rule adds no policy, only a trigger, so it leaves a table a contribution keeps to itself alone.
@@ -197,6 +221,11 @@ public static partial class PostgresRowAccess
                 }
             }
 
+            if (function.Answers is { } answers && AnswerProblem(function, answers) is { } wrong)
+            {
+                throw new InvalidOperationException($"{what} says it answers {(Enum.IsDefined(answers.Set) && answers.Key is not null ? ResourceAccessAnswer.Described(answers.Name) : "a resource access set")}, and {wrong}.");
+            }
+
             ResolvedRoles(function.GrantTo ?? [], roles, what + " is granted to");
         }
 
@@ -261,6 +290,39 @@ public static partial class PostgresRowAccess
         }
 
         return new Contributed(contribution, RowAccessNames.NormalizeOwner(contribution.Owner), result);
+    }
+
+    /// <summary>
+    /// What is wrong with <paramref name="function"/> as the function that answers a resource access set, or null: it
+    /// names the resource's id and a set there is, answers with ids, <c>SETOF</c> their type, and takes what the set
+    /// is asked with, nothing for the resources seen and the key as <c>text</c> for those a key is held on.
+    /// </summary>
+    private static string? AnswerProblem(ContributedFunction function, ResourceAccessAnswer answers)
+    {
+        if (answers.Key is null)
+        {
+            return "names no type for the resource's id, which a rule asks the set by";
+        }
+
+        if (!Enum.IsDefined(answers.Set))
+        {
+            return $"'{answers.Set}' is no set: a resource access set is Seen or HeldOn";
+        }
+
+        if (!function.Returns.Trim().StartsWith("SETOF ", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"returns {function.Returns.Trim()}, where a set is answered with the resource's ids, SETOF their type";
+        }
+
+        var parameters = TopLevel(function.Parameters);
+        if (answers.Set == ResourceAccessSet.Seen)
+        {
+            return parameters.Count == 0 ? null : $"takes ({function.Parameters}), where the resources seen are asked without arguments";
+        }
+
+        return parameters is [var key] && key.Split(' ', StringSplitOptions.RemoveEmptyEntries)[^1].Equals("text", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : $"takes ({function.Parameters}), where the resources a key is held on are asked with the key alone, as text";
     }
 
     /// <summary>The table <paramref name="entity"/> is mapped to, when it is a type of <paramref name="context"/>'s model mapped to one.</summary>

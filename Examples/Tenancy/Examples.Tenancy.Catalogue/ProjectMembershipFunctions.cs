@@ -17,8 +17,9 @@ namespace Examples.Tenancy.Catalogue;
 /// <remarks>
 /// Offered here, next to the rules it is written from, and used by the project that exports, with
 /// <c>[assembly: UseRowAccessContribution(typeof(ProjectMembershipFunctions))]</c>. The export makes it with
-/// <c>new</c>, before any host exists, which is why the rules are an instance the catalogue holds. The functions
-/// keep the names the module's row access rules, and other modules' rules through its contracts, have always
-/// asked; the host's start-up check holds the database to the rules it runs with.
+/// <c>new</c>, before any host exists, which is why the rules are an instance the catalogue holds. Row access rules
+/// ask two of the functions by the project's id, through Projects' contracts, and the export writes their policies
+/// with the names the rules give the functions; the host's start-up check holds the database to the rules it runs
+/// with.
 /// </remarks>
 public sealed class ProjectMembershipFunctions() : MembershipRowAccessContribution<CrewMember>(SampleCatalogue.Projects.Rules);

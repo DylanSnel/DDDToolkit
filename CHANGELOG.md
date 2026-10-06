@@ -637,6 +637,20 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Policies a package ships](docs/row-level-security.md#policies-a-package-ships).
 - `{caller:claims}` in a rule's or a contribution's SQL is the caller's claims, `(SELECT auth.jwt())` on
   Supabase.
+- **A resource's access, asked by its id.** `[ResourceAccessContract<TKey>(ResourceAccessSet.Seen)]` on an empty
+  static partial class, in the contracts of the module that owns a resource, publishes the resources the caller
+  sees, `Ids()`, and `ResourceAccessSet.HeldOn` those it holds a key on, `Ids(string key)`, for row access rules of
+  any module to ask with `Contains`. The contract names the resource's id and the set, and no function: the
+  generator writes the set into the rule's SQL by the id's full name, and the export writes the policy with the
+  function a contribution says answers that set for the resource with that id, `Answers` on its
+  `ContributedFunction` (`ResourceAccessAnswer`). A rule that asks a set no contribution of the export answers is
+  refused when its file is written, naming the rule and the resource, and saying to write the contexts or modules
+  together where the one that keeps the resource is left out; so are two functions that answer one set for a
+  resource, or one whose parameters or result cannot answer it. The key is an id declared with `[EntityId<T>]`, or
+  the one `[AggregateRoot<Guid>]` has the toolkit write in the same project. A contract of another shape, keyed by
+  something that is no id, or declared in another module than the one whose assembly holds the id, is DDD00038:
+  what a module publishes of its resources is its own to say. DDD00039 names the contract among what a rule may
+  ask. See [A resource's access, asked by its id](docs/row-level-security.md#a-resources-access-asked-by-its-id).
 - **Privileges from the policies.** `RowAccessExport.WriteGrants` has a script of policies write the
   privileges of its tables as well, read from the policies it holds: every privilege the script's roles and
   `PUBLIC` held on a table is taken back, and a role gets each command a permissive policy allows it,
@@ -1431,6 +1445,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   no row security and may be written by a role the rules name. It returns,
   and logs as a warning, a line for each resource whose rules name no key for the lock, and refuses nothing
   for that.
+- **A membered resource's functions are asked by its id, and named by its rules.** The two functions that answer
+  access, the resources the caller sees and those it holds a key on, say so for the resource's id, so a rule asks
+  them through a one-line `[ResourceAccessContract<DocumentId>(ResourceAccessSet.Seen)]` and never by name; the
+  `[AccessFunctions(Owner = "documents")]` class with the functions' names in it is no longer needed, and still
+  works. The names are the rules' alone: `MembershipFunctions.For` the rules' name, `documents_i_see` and so on,
+  unless the rules keep names a database already has with `functions:`. A rule that asks a resource whose
+  contribution the export is not written with is refused, naming the rule and the resource. See
+  [On Postgres: the second lock](docs/membership.md#on-postgres-the-second-lock).
 - **Membership beside an organization.** A resource's rules say three things apart from each other, each with
   the default a resource of plain users has, and any of the one goes with any of the others. Who a member is:
   the caller's id, a claim, or an id the application resolves for the caller, `MemberSource.Resolved(...)`,
@@ -1807,7 +1829,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   an access file names both and a release of the toolkit is no reason for a new one. The host's connections are
   two data sources, for requests and for background work, each with its own maximum (`PostgresPools` and
   `PostgresPoolBudget` in the samples' hosting project). Projects publishes two row access contracts,
-  `ProjectsISee` and `ProjectsWhereIHold`, which Inspections' rules ask; a seat opens and changes projects and
+  `ProjectsISee` and `ProjectsWhereIHold`, a line each that names the project's id and no function, which
+  Inspections' rules and Projects' own ask; the functions that answer them keep the names the sample's database
+  had, in `ProjectMembership.Functions` alone, so its access files are what they were; a seat opens and changes projects and
   records inspections under rules of their own. Projects' context maps Tenancy's read functions and none of
   its tables. A project's and an inspection's rows say who wrote and who changed them, a project's
   number and an inspection's project are fixed once saved, and Tenancy's events that change access are kept in

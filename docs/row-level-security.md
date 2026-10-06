@@ -1317,9 +1317,11 @@ public static partial class TicketsIWatch { ... }
 ```
 
 A name with neither a schema nor an owner is [DDD00052](diagnostics.md#ddd00052). `schema.name` keeps
-working as it did, and a name with a slash, `projects/project_ids_where_i_hold`, is taken as it is, which is
-how a definition in one module matches a contract another publishes: a contract's generated `Name` is its
-logical name, so `[AccessFunction<Project>(ProjectsWhereIHold.Name)]` defines it wherever it lives.
+working as it did, and a name with a slash, `projects/is_member`, is taken as it is, which is how a
+definition in one module matches a contract another publishes. A contract's generated `Name` is the name it
+was declared with, a relative one made logical: `[AccessFunctionContract<ProjectId>("is_member")]` in Projects'
+contracts has the `Name` `projects/is_member`, and `ProjectMembers` above has `projects.is_member`. Either way
+`[AccessFunction<Project>(ProjectMembers.Name)]` defines it wherever it lives.
 
 A rule asks the function by its logical name, `{fn:desk/tickets_i_watch}` in its SQL, and a script writes
 the name the function has in the database. It knows the functions of its own context;
@@ -1332,6 +1334,102 @@ A script writes a function's name without quotes, which Postgres reads in lower 
 Framework quotes the schema it creates. So the schema a relative name lands in, the context's default
 schema or its aggregate table's, is lower case letters, digits and underscores; a script refuses a
 function it would create in `"Desk"`.
+
+### A resource's access, asked by its id
+
+A package that keeps a resource's access writes the functions that answer it, and names them itself: the
+[Membership package](membership.md#on-postgres-the-second-lock) writes, for each resource with members, the
+resources the caller sees and those it holds a key on, under names it takes from the resource's rules. A rule
+should not have to repeat those names, and a module that asks about another module's resource should not even
+know them. So it asks by the resource's id:
+
+```mermaid
+flowchart LR
+    Contract["ProjectsISee<br/>a contract of ProjectId:<br/>the projects seen"] -->|"the generator"| Rule["the rule's SQL<br/>asks the set by<br/>ProjectId and seen"]
+    Rule -->|"the export"| Policy["the policy asks<br/>projects.project_ids_i_see()"]
+    Answer["the Membership contribution<br/>project_ids_i_see answers<br/>seen for ProjectId"] -->|"says so"| Policy
+```
+
+The contract is one line, in the contracts of the module that owns the resource. It names the resource's id and
+the set, and no function: `ResourceAccessSet.Seen` publishes `Ids()`, the resources the caller sees, and
+`ResourceAccessSet.HeldOn` publishes `Ids(string key)`, those the caller holds the key on. A rule asks it as it
+asks any set, with `Contains`, once per statement. The generator writes the set into the rule's SQL by the id's
+full name and the set, and the export writes the policy with the function a contribution says answers that set
+for the resource with that id. The Membership package says so of the two functions it writes for each resource,
+so listing its contribution is all a host does.
+
+- **The name is said in one place, or in none.** The functions take their names from the resource's rules; a
+  database that already has names of its own keeps them in the rules, `functions:`, and nothing else changes. A
+  rule says neither.
+- **Another module asks the owning module's contract**, which references nothing but the id: the asking module
+  knows neither the resource's aggregate nor the package that answers. The owning module's rules ask the same
+  contract, so a question has one name in every module. And only the owning module declares one: a contract of
+  an id whose assembly declares another module is [DDD00038](diagnostics.md#ddd00038), so what a module
+  publishes of its resources stays its own to say. Any project of that module may declare it, its contracts
+  being the place where other modules can see it.
+- **Refused where nothing answers.** A rule that asks a set no contribution of the export answers, because the
+  host does not list the resource's membership, say, is refused when its access file is written, naming the
+  rule and the resource. So is one written without the context that keeps the resource, a script of one
+  context or an export of one module: the message says to write them together, or to hand the script the
+  other context's names. One function answers a set for a resource: two that say so, in one context or in two,
+  are refused, naming both.
+- **SQL of your own asks the same way.** A contract's generated `Name` is the set's name, so a contribution of
+  yours asks `{fn:...}` with `ProjectsWhereIHold.Name` in it, as the sample's `UnitChangesWithItsKeys` does.
+- **A package of your own** says which set a function answers with `Answers` on its `ContributedFunction`,
+  `new ResourceAccessAnswer(typeof(TId), ResourceAccessSet.Seen)`. Such a function returns `SETOF` the id's type,
+  and takes nothing for the resources seen, or the key as `text` for those it is held on; anything else is
+  refused when the script is written.
+
+A contract that declares its `Ids` itself, to document it, gets that one implemented. Its key is the id of the
+resource's aggregate: one declared with `[EntityId<Guid>]`, as a module's contracts declare it, or, in the
+project that declares the aggregate, the id the toolkit writes beside an aggregate root declared with a value,
+`BoardId` for `[AggregateRoot<Guid>] public partial class Board`. A contract of another shape is
+[DDD00038](diagnostics.md#ddd00038).
+
+<details>
+<summary>Show the code: Projects' contracts, a rule of each module that asks them, and the policy the export writes</summary>
+
+```csharp
+// Projects.Contracts: what other modules may ask, a line each
+[ModuleContract]
+[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
+public static partial class ProjectsISee;
+
+[ModuleContract]
+[ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
+public static partial class ProjectsWhereIHold;
+
+// Projects.Infrastructure: the module's own rule asks its contract
+[RowAccess<Project>(RowOperations.Read, To = [RowAccessRoles.User])]
+public static partial class SeatsSeeTheProjectsTheyReach
+{
+    public static bool Allows(Project project, Caller caller) => ProjectsISee.Ids().Contains(project.Id);
+}
+
+// Inspections.Infrastructure: another module's rule asks the same, by the project's id it stores
+[RowAccess<Inspection>(RowOperations.Create, To = [RowAccessRoles.User])]
+public static partial class SeatsRecordWhereTheyMay
+{
+    public static bool Allows(Inspection inspection, Caller caller)
+        => ProjectsWhereIHold.Ids(InspectionKeys.Record).Contains(inspection.ProjectId)
+            && inspection.RecordedBy == TenancyRowAccess.CallerSeat<SeatId>();
+}
+```
+
+The rule's SQL as the generator writes it, and its policy as the export writes it, with the name the projects'
+rules give the function:
+
+```sql
+-- SeatsRecordWhereTheyMay.RowAccessSql
+(({col:ProjectId} = ANY (ARRAY(SELECT {fn:@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/held_on}('inspections.record'))))
+  AND ({col:RecordedBy} = (SELECT {fn:tenancy/caller_seat}())))
+
+-- Inspections' access file
+CREATE POLICY "Seats record where they may (insert) for authenticated" ON inspections."Inspections" FOR INSERT TO authenticated
+    WITH CHECK (("ProjectId" = ANY (ARRAY(SELECT projects.project_ids_where_i_hold('inspections.record')))) AND ("RecordedBy" = (SELECT tenancy.caller_seat())));
+```
+
+</details>
 
 ### Column rules
 
@@ -1605,7 +1703,9 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   `SecurityDefiner` is false unless the contribution says otherwise. Rules and other contributions ask one
   by its logical name, `{fn:audit/entries_i_wrote}`, with the contribution's `Owner`, and a script writes
   it after the functions it asks. It carries the context's function comment, so the next script keeps it
-  while the contribution still writes it, replacing it in place, and drops it once it does not.
+  while the contribution still writes it, replacing it in place, and drops it once it does not. One that
+  answers a resource's access says which set with `Answers`, and rules ask it by the resource's id rather than
+  by its name: [a resource's access, asked by its id](#a-resources-access-asked-by-its-id).
   It returns a type, `SETOF` a type, or rows of named columns, `TABLE ("TicketId" uuid, "DueAt" timestamp with
   time zone)`. Those names are the function's own, the same in every application whatever its tables call
   their columns, which is what lets a package map a function's rows for the modules that read them.

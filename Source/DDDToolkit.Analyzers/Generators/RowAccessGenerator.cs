@@ -48,6 +48,11 @@ namespace DDDToolkit.Analyzers;
 /// question <c>(SELECT {fn:name}(...))</c>.
 /// </para>
 /// <para>
+/// The <c>Ids</c> of a <c>[ResourceAccessContract&lt;TKey&gt;]</c> names no function: it is asked by the resource's
+/// id and the set, <c>{fn:@Projects.Contracts.ProjectId/seen}</c>, which the export resolves to the function a
+/// contribution says answers that set for that resource, whatever it is called.
+/// </para>
+/// <para>
 /// The translation keeps C#'s meaning rather than SQL's, so the method and the policy answer alike for the
 /// same row and caller: <c>==</c> between values that cannot be null is <c>=</c>, and otherwise
 /// <c>IS NOT DISTINCT FROM</c>, because in C# a null equals a null; a comparison is
@@ -88,6 +93,11 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             predicate: static (node, _) => node is ClassDeclarationSyntax,
             transform: static (syntaxContext, _) => Declare(syntaxContext));
 
+        var resourceContracts = context.SyntaxProvider.ForAttributeWithMetadataName(
+            KnownTypes.ResourceAccessContractAttribute,
+            predicate: static (node, _) => node is ClassDeclarationSyntax,
+            transform: static (syntaxContext, _) => DeclareResourceAccess(syntaxContext));
+
         var questions = context.SyntaxProvider.ForAttributeWithMetadataName(
             KnownTypes.AccessFunctionsAttribute,
             predicate: static (node, _) => node is ClassDeclarationSyntax,
@@ -106,6 +116,7 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(rules, static (production, rule) => Produce(production, rule, ".RowAccess"));
         context.RegisterSourceOutput(functions, static (production, function) => Produce(production, function, ".AccessFunction"));
         context.RegisterSourceOutput(contracts, static (production, contract) => Produce(production, contract, ".AccessFunctionContract"));
+        context.RegisterSourceOutput(resourceContracts, static (production, contract) => Produce(production, contract, ".ResourceAccessContract"));
         context.RegisterSourceOutput(questions, static (production, declared) => Produce(production, declared, ".AccessFunctions"));
         context.RegisterSourceOutput(setsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
         context.RegisterSourceOutput(scalarsOutside, static (production, diagnostics) => diagnostics.ReportAll(production));
@@ -428,6 +439,150 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
         => type.GetAttributes().FirstOrDefault(static attribute =>
             attribute.AttributeClass?.OriginalDefinition is { MetadataName: "AccessFunctionContractAttribute`1" } contract
             && contract.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+    /// <summary>The <c>[ResourceAccessContract&lt;TKey&gt;]</c> on <paramref name="type"/>, or null.</summary>
+    private static AttributeData? ResourceAccessContractOf(ITypeSymbol type)
+        => type.GetAttributes().FirstOrDefault(static attribute =>
+            attribute.AttributeClass?.OriginalDefinition is { MetadataName: "ResourceAccessContractAttribute`1" } contract
+            && contract.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace);
+
+    /// <summary>
+    /// The set a <c>[ResourceAccessContract&lt;TKey&gt;]</c> publishes, as <c>ResourceAccessSet</c> numbers it: 0 for the
+    /// resources seen, 1 for those held on; null for a number the enum does not have.
+    /// </summary>
+    private static int? ResourceAccessSetOf(AttributeData attribute)
+        => attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].Value is int set && set is ResourceSeen or ResourceHeldOn ? set : null;
+
+    /// <summary>What <c>ResourceAccessSet.Seen</c> is: the resources the caller sees.</summary>
+    private const int ResourceSeen = 0;
+
+    /// <summary>What <c>ResourceAccessSet.HeldOn</c> is: the resources the caller holds a key on, asked with the key.</summary>
+    private const int ResourceHeldOn = 1;
+
+    /// <summary>
+    /// The name a rule asks a resource access set by: <c>@</c>, the full name of the resource's id as the runtime
+    /// spells it, <c>Projects.Contracts.ProjectId</c>, and the set, <c>/seen</c> or <c>/held_on</c>. No owner is
+    /// written so, so it never meets a function's logical name. The export resolves it to the function a
+    /// contribution says answers that set for the resource with that id, as <c>ResourceAccessAnswer.NameOf</c>
+    /// spells the same name from the id's type: a test keeps the two together.
+    /// </summary>
+    private static string ResourceAccessName(ResourceKey key, int set)
+        => "@" + key.RuntimeName + "/" + (set == ResourceHeldOn ? "held_on" : "seen");
+
+    /// <summary>
+    /// The id a resource access contract is keyed by: its full name as the runtime spells it, which the set's name
+    /// is made of, and as C# names it, for the <c>AccessSet</c> its <c>Ids</c> returns.
+    /// </summary>
+    /// <param name="RuntimeName">The id's full name, <c>Type.FullName</c>: <c>Projects.Contracts.ProjectId</c>.</param>
+    /// <param name="TypeName">The id as generated code names it: <c>global::Projects.Contracts.ProjectId</c>.</param>
+    /// <param name="Generated">
+    /// Whether it is the id the toolkit writes beside an aggregate root declared with a value,
+    /// <c>[AggregateRoot&lt;Guid&gt;]</c>, in this very compilation.
+    /// </param>
+    private sealed record ResourceKey(string RuntimeName, string TypeName, bool Generated);
+
+    /// <summary>
+    /// The id <paramref name="key"/> names, or null when it names none this generator can find. An id the
+    /// toolkit writes from <c>[AggregateRoot&lt;Guid&gt;]</c> in this compilation is no type yet to this generator,
+    /// since no generator sees what another one writes, so an unknown <c>BoardId</c> is the id written beside the
+    /// one aggregate root here named <c>Board</c> and declared with a value, as an access function's key is: the
+    /// short way to declare an aggregate keys a contract as the long one does. Null where no such aggregate root,
+    /// or more than one, could be meant.
+    /// </summary>
+    private static ResourceKey? ResourceKeyOf(ITypeSymbol key, Compilation compilation)
+    {
+        if (key.TypeKind != TypeKind.Error)
+        {
+            return RuntimeName(key) is { } runtime ? new ResourceKey(runtime, key.ToDisplayString(TypeFormat), Generated: false) : null;
+        }
+
+        const string Suffix = "Id";
+        if (key.Name.Length <= Suffix.Length || !key.Name.EndsWith(Suffix, System.StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        ResourceKey? found = null;
+        foreach (var aggregate in compilation.GetSymbolsWithName(key.Name.Substring(0, key.Name.Length - Suffix.Length), SymbolFilter.Type).OfType<INamedTypeSymbol>())
+        {
+            if (aggregate.IsGenericType
+                || !EntityDeclarations.IsAggregateRoot(aggregate)
+                || Identifiers.IdNameFor(aggregate.Name) != key.Name
+                || EntityDeclarations.IdArgumentOf(aggregate) is not { TypeKind: not TypeKind.Error } argument
+                || IsId(argument)
+                || RuntimeName(aggregate) is not { } runtime)
+            {
+                continue;
+            }
+
+            if (found is not null)
+            {
+                return null;
+            }
+
+            // The id is declared where the aggregate is, nesting included: Shop.Desk+Board has Shop.Desk+BoardId.
+            var typeName = aggregate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            found = new ResourceKey(
+                runtime.Substring(0, runtime.Length - aggregate.MetadataName.Length) + key.Name,
+                typeName.Substring(0, typeName.Length - aggregate.Name.Length) + key.Name,
+                Generated: true);
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="declared"/>, the type a declared <c>Ids</c> returns a set of, is the contract's key: the
+    /// same type, or, for an id the toolkit writes in this compilation, a type of the same name it cannot see either.
+    /// </summary>
+    private static bool IsTheKey(ITypeSymbol declared, ITypeSymbol key)
+        => SymbolEqualityComparer.Default.Equals(declared, key)
+           || (key.TypeKind == TypeKind.Error && declared.TypeKind == TypeKind.Error && declared.Name == key.Name);
+
+    /// <summary>
+    /// The module that owns <paramref name="key"/>, when <paramref name="contract"/> is declared outside it: the
+    /// module the id's assembly declares, where that is another assembly than the contract's, of another module or
+    /// of none. Null where the contract is the owning module's, or the id belongs to no module.
+    /// </summary>
+    private static string? OtherOwnerOf(ITypeSymbol key, INamedTypeSymbol contract)
+    {
+        if (key.ContainingAssembly is not { } assembly || SymbolEqualityComparer.Default.Equals(assembly, contract.ContainingAssembly))
+        {
+            return null;
+        }
+
+        return ModuleBoundary.ModuleOf(assembly) is { } owner && !string.Equals(owner, ModuleBoundary.ModuleOf(contract.ContainingAssembly), System.StringComparison.Ordinal)
+            ? owner
+            : null;
+    }
+
+    /// <summary>
+    /// A type's full name as the runtime spells it, <c>Type.FullName</c>: its namespace, then each type it is nested
+    /// in with a <c>+</c>, each with its arity after a backtick. Null for anything but a named type.
+    /// </summary>
+    private static string? RuntimeName(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named || named.TypeKind == TypeKind.Error || named.IsTupleType)
+        {
+            return null;
+        }
+
+        var name = named.MetadataName;
+        for (var outer = named.ContainingType; outer is not null; outer = outer.ContainingType)
+        {
+            name = outer.MetadataName + "+" + name;
+        }
+
+        return named.ContainingNamespace is { IsGlobalNamespace: false } space ? space.ToDisplayString() + "." + name : name;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="type"/> is an id: <c>[EntityId&lt;T&gt;]</c> where it is declared, <c>IEntityId</c>
+    /// once its generated part is compiled. What the export finds a resource by is the type of its aggregate's id.
+    /// </summary>
+    private static bool IsId(ITypeSymbol type)
+        => type.OriginalDefinition.GetAttributes().Any(static attribute => attribute.AttributeClass?.OriginalDefinition.MetadataName == "EntityIdAttribute`1")
+           || type.AllInterfaces.Any(static contract => contract.ToDisplayString() == KnownTypes.EntityIdInterface);
 
     /// <summary>The attribute named <paramref name="metadataName"/>, of the toolkit's attributes, on <paramref name="symbol"/>, or null.</summary>
     private static AttributeData? AttributeOf(ISymbol symbol, string metadataName)
@@ -787,6 +942,134 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             ? IdsMethod(function, keyType, typed, names, Accessibility(method), partial: true)
             : AllowsMethod(function, keyType, method.Parameters[0].Name, typed, names, Accessibility(method), partial: true);
     }
+
+    /// <summary>
+    /// A <c>[ResourceAccessContract&lt;TKey&gt;]</c>: one set the access to a resource answers, published by the
+    /// resource's id. The generator writes its <c>Name</c>, which the export resolves to the function a contribution
+    /// says answers that set for the resource, and its <c>Ids</c>: <c>Ids()</c> for the resources seen,
+    /// <c>Ids(string key)</c> for those a key is held on. A contract that declares its <c>Ids</c> itself, to document
+    /// it, gets that one implemented.
+    /// </summary>
+    private static RowAccessDefinition DeclareResourceAccess(GeneratorAttributeSyntaxContext attributed)
+    {
+        var symbol = (INamedTypeSymbol)attributed.TargetSymbol;
+        var syntax = (TypeDeclarationSyntax)attributed.TargetNode;
+        var type = DefinitionFactory.CreateTypeInfo(symbol, syntax);
+        var diagnostics = new List<DiagnosticInfo>();
+
+        var attribute = attributed.Attributes[0];
+        if (attribute.AttributeClass?.TypeArguments.FirstOrDefault() is not { } key)
+        {
+            return RowAccessDefinition.Nothing(type);
+        }
+
+        var location = LocationInfo.From(syntax.Identifier);
+        if (!symbol.IsStatic || !syntax.Modifiers.Any(SyntaxKind.PartialKeyword))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "to be a static partial class, so the generator can add its Ids method"));
+        }
+
+        var resource = ResourceKeyOf(key, attributed.SemanticModel.Compilation);
+        if (resource is null && key.TypeKind == TypeKind.Error)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                location,
+                symbol.Name,
+                $"an id the generator can find as its key: {key.Name} is no type it sees, nor the id the toolkit writes beside one aggregate root of this project declared with a value, such as [AggregateRoot<Guid>]. Declare the id itself: [EntityId<Guid>] public readonly partial record struct {key.Name};"));
+        }
+        else if (resource is null || (!resource.Generated && !IsId(key)))
+        {
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                location,
+                symbol.Name,
+                $"the id of the resource's aggregate as its key, such as ProjectId: the export finds the resource by the type of its id, and {key.ToDisplayString()} is no id"));
+        }
+        else if (!resource.Generated && OtherOwnerOf(key, symbol) is { } owner)
+        {
+            // What a module publishes of its resources is its own to say: another module asks the contract it publishes.
+            diagnostics.Add(DiagnosticInfo.Create(
+                DiagnosticDescriptors.RowAccessRuleShape,
+                location,
+                symbol.Name,
+                $"to be declared in the module that owns {key.Name}, {owner}, such as in its contracts beside the id: a module publishes the sets of its own resources, and another module's rules ask the contract it publishes"));
+        }
+
+        var set = ResourceAccessSetOf(attribute);
+        if (set is null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, location, symbol.Name, "ResourceAccessSet.Seen or ResourceAccessSet.HeldOn as the set it publishes"));
+        }
+
+        var heldOn = set == ResourceHeldOn;
+        var expected = heldOn
+            ? $"nothing, or 'static partial AccessSet<{key.Name}> Ids(string key)' without a body for the generator to implement: the resources a key is held on are asked with the key"
+            : $"nothing, or 'static partial AccessSet<{key.Name}> Ids()' without a body for the generator to implement: the resources seen are asked without arguments";
+
+        IMethodSymbol? declared = null;
+        foreach (var member in symbol.GetMembers().OfType<IMethodSymbol>().Where(static method => method.MethodKind == MethodKind.Ordinary))
+        {
+            var fits = declared is null
+                && member.Name == "Ids"
+                && member.IsStatic
+                && member.IsPartialDefinition
+                && member.PartialImplementationPart is null
+                && !member.IsGenericMethod
+                && IsAccessSet(member.ReturnType)
+                && IsTheKey(((INamedTypeSymbol)member.ReturnType).TypeArguments[0], key)
+                && member.Parameters.Length == (heldOn ? 1 : 0)
+                && member.Parameters.All(static parameter => parameter.RefKind == RefKind.None && !parameter.IsParams && parameter.Type.SpecialType == SpecialType.System_String);
+            if (fits)
+            {
+                declared = member;
+            }
+            else if (member.Name is "Ids" or "Allows")
+            {
+                diagnostics.Add(DiagnosticInfo.Create(DiagnosticDescriptors.RowAccessRuleShape, LocationInfo.From(member), symbol.Name, expected));
+            }
+        }
+
+        if (diagnostics.HasErrorsIn() || set is not { } published || resource is null)
+        {
+            return RowAccessDefinition.Failed(type, diagnostics);
+        }
+
+        var name = ResourceAccessName(resource, published);
+        var keyName = declared?.Parameters.FirstOrDefault()?.Name ?? "key";
+        List<string> parameters = heldOn ? ["string " + Identifier(keyName)] : [];
+        List<string> names = heldOn ? [keyName] : [];
+        List<string> members =
+        [
+            ResourceAccessNameConstant(name, key.Name, heldOn),
+            ResourceAccessIdsMethod(name, resource.TypeName, key.Name, parameters, names, heldOn, declared is null ? "public" : Accessibility(declared), partial: declared is not null),
+        ];
+
+        return new RowAccessDefinition(type, new EquatableArray<DiagnosticInfo>(diagnostics), new EquatableArray<string>(members));
+    }
+
+    /// <summary>A resource access contract's <c>Name</c>: what a rule asks the set by, and SQL a contribution writes too.</summary>
+    private static string ResourceAccessNameConstant(string name, string key, bool heldOn)
+        => "/// <summary>\n"
+           + "/// The name rules ask this set by: the resources " + (heldOn ? "the caller holds a key on" : "the caller sees") + ", by their id,\n"
+           + "/// <c>" + key + "</c>. The export writes it as the function that answers the set for that resource, whatever the\n"
+           + "/// package that keeps the resource's access calls it; SQL a contribution writes asks it as <c>{fn:...}</c> too.\n"
+           + "/// </summary>\n"
+           + "public const string Name = " + SymbolDisplay.FormatLiteral(name, quote: true) + ";";
+
+    /// <summary><c>Ids()</c> or <c>Ids(string key)</c>: the ids of the resources in a resource access set, which only the database answers.</summary>
+    private static string ResourceAccessIdsMethod(string name, string keyType, string key, IReadOnlyList<string> parameters, IReadOnlyList<string> names, bool heldOn, string accessibility, bool partial)
+        => "/// <summary>\n"
+           + (heldOn
+               ? "/// The ids, each a <c>" + key + "</c>, of the resources the caller holds <paramref name=\"" + names[0] + "\"/> on, which a row access\n"
+               : "/// The ids, each a <c>" + key + "</c>, of the resources the caller sees, which a row access\n")
+           + "/// rule asks with <c>Contains</c>: <c>(id = ANY (ARRAY(SELECT ...)))</c> in its policy, once per statement, with\n"
+           + "/// the function that answers the set for the resource. Only the database can answer it, so called in C# it throws.\n"
+           + "/// </summary>\n"
+           + (heldOn ? "/// <param name=\"" + names[0] + "\">A permission key.</param>\n" : "")
+           + "/// <exception cref=\"" + DatabaseOnlyException + "\">Always: the question is the database's.</exception>\n"
+           + accessibility + " static " + (partial ? "partial " : "") + AccessSetType + "<" + keyType + "> Ids(" + string.Join(", ", parameters) + ") => throw new " + DatabaseOnlyException
+           + "(" + SymbolDisplay.FormatLiteral(name + "(" + string.Join(", ", names) + ")", quote: true) + ");";
 
     /// <summary>
     /// An <c>[AccessFunctions]</c> class: each of its <c>[AccessSet]</c> and <c>[AccessScalar]</c> methods
@@ -1169,7 +1452,23 @@ public sealed class RowAccessGenerator : IIncrementalGenerator
             }
 
             var owner = MethodOf(invocation)?.ContainingType ?? model.GetSymbolInfo(access.Expression).Symbol as INamedTypeSymbol;
-            if (owner is null || (AccessFunctionOf(owner) ?? AccessFunctionContractOf(owner)) is not { } declared)
+            if (owner is null)
+            {
+                return null;
+            }
+
+            // A resource access contract names no function: the set is asked by the resource's id, and the export
+            // finds the function that answers it.
+            if (ResourceAccessContractOf(owner) is { } resource)
+            {
+                return resource.AttributeClass?.TypeArguments.FirstOrDefault() is { } key
+                       && ResourceAccessSetOf(resource) is { } published
+                       && ResourceKeyOf(key, model.Compilation) is { } resolved
+                    ? new Question(ResourceAccessName(resolved, published), access.Expression + ".Ids", Plain: false)
+                    : null;
+            }
+
+            if ((AccessFunctionOf(owner) ?? AccessFunctionContractOf(owner)) is not { } declared)
             {
                 return null;
             }

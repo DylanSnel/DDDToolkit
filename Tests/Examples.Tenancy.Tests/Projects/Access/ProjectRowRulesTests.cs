@@ -1,3 +1,4 @@
+using Examples.Tenancy.Projects.Contracts.RowAccess;
 using Examples.Tenancy.Projects.Infrastructure.Access;
 using FluentAssertions;
 
@@ -13,12 +14,21 @@ namespace Examples.Tenancy.Tests.Projects.Access;
 public sealed class ProjectRowRulesTests
 {
     [Fact]
+    public void Projects_publishes_what_a_seat_sees_and_holds_by_the_project_s_id_and_names_no_function()
+    {
+        // What a rule asks by: the project's id and the set. The export writes it as the function the Membership
+        // package writes from the projects' rules, under whatever name those rules give it.
+        ProjectsISee.Name.Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/seen");
+        ProjectsWhereIHold.Name.Should().Be("@Examples.Tenancy.Projects.Contracts.ValueObjects.ProjectId/held_on");
+    }
+
+    [Fact]
     public void A_seat_reads_the_projects_it_sees()
     {
         // One set, asked once per statement: the function the Membership package writes from the projects' rules,
-        // under the name the module publishes, which answers the crew, the owner and the organization at once.
+        // which answers the crew, the owner and the organization at once, asked through the module's own contract.
         SeatsSeeTheProjectsTheyReach.RowAccessSql.Should().Be(
-            "({col:Id} = ANY (ARRAY(SELECT {fn:projects/project_ids_i_see}())))");
+            $"({{col:Id}} = ANY (ARRAY(SELECT {{fn:{ProjectsISee.Name}}}())))");
     }
 
     [Fact]
@@ -26,11 +36,12 @@ public sealed class ProjectRowRulesTests
     {
         // Each key a command of the module asks on a project, through the same function, and opening a project at
         // a unit, which Tenancy answers.
+        var held = "{fn:" + ProjectsWhereIHold.Name + "}";
         SeatsChangeTheProjectsTheyWorkOn.RowAccessSql.Should().Be(
-            "((((({col:Id} = ANY (ARRAY(SELECT {fn:projects/project_ids_where_i_hold}('projects.edit'))))"
-            + " OR ({col:Id} = ANY (ARRAY(SELECT {fn:projects/project_ids_where_i_hold}('projects.close')))))"
-            + " OR ({col:Id} = ANY (ARRAY(SELECT {fn:projects/project_ids_where_i_hold}('projects.crew.manage')))))"
-            + " OR ({col:Id} = ANY (ARRAY(SELECT {fn:projects/project_ids_where_i_hold}('projects.owner.change')))))"
+            $"((((({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.edit'))))"
+            + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.close')))))"
+            + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.crew.manage')))))"
+            + $" OR ({{col:Id}} = ANY (ARRAY(SELECT {held}('projects.owner.change')))))"
             + " OR ({col:UnitId} = ANY (ARRAY(SELECT {fn:tenancy/units_where_i_hold}('projects.open')))))");
     }
 
