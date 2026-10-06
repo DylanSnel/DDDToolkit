@@ -627,8 +627,10 @@ public class TemplateConstraintTests
     /// <summary>An application on the Tenancy package, with one of its four ids declared as a record class, or none.</summary>
     private static GeneratorRunOutcome Tenancy(string? classId)
     {
+        // An id over anything but a Guid says how a new one is made, which Tenancy asks of each of its ids.
         string Id(string name, string value)
-            => $"[EntityId<{value}>]\npublic " + (name == classId ? "partial record " : "readonly partial record struct ") + name + ";";
+            => $"[EntityId<{value}>]\npublic " + (name == classId ? "partial record " : "readonly partial record struct ") + name
+               + (value == "Guid" ? ";" : " { public static " + name + " Create() => new(1); }");
 
         return GeneratorTestHost.Create(
                 $$"""

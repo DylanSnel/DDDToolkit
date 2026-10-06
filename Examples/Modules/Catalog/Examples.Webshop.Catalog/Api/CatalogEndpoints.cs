@@ -45,7 +45,7 @@ public static class CatalogEndpoints
                 return Results.Conflict($"{body.Sku} is already listed.");
             }
 
-            var product = new Product(ProductId.CreateSequential(), body.Sku, body.Name, price!);
+            var product = new Product(ProductId.Create(), body.Sku, body.Name, price!);
             catalog.Products.Add(product);
             await catalog.SaveChangesAsync(cancellationToken);
 

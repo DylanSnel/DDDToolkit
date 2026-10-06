@@ -775,28 +775,26 @@ public class InvitationTests
     {
         var harness = Harness.OfHarbor();
         var broken = new HostTenancy.InvitationCommands<HostInvitation, InvitationId>(
-            harness.Store, harness.Store, harness.Catalogue, harness.Options, new TenancyInvitationOptions<InvitationId>(), new AmbientCallerAccessor(), harness.Clock);
+            harness.Store, harness.Store, harness.Catalogue, harness.Options, new TenancyInvitationOptions<InvitationId> { MinLifetime = TimeSpan.FromDays(8) },
+            new AmbientCallerAccessor(), harness.Clock);
 
-        // Made by hand without a way to make an id, a use case still says what is missing.
+        // Made by hand with lifetimes out of order, a use case still says what is wrong.
         (await FluentActions.Awaiting(() => harness.As(harness.Administrator, _ => broken.IssueAsync(
                 Address, harness.Harbor.North, harness.RoleFromPack(HostCatalogue.WatcherPack), null, null, null, Cancellation)))
-            .Should().ThrowAsync<InvalidOperationException>()).WithMessage("*NewInvitationId is not set*");
+            .Should().ThrowAsync<InvalidOperationException>()).WithMessage("*lifetimes are out of order*");
 
         var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        FluentActions.Invoking(() => Register(services, options => options.NewInvitationId = InvitationId.CreateSequential))
+        FluentActions.Invoking(() => Register(services, configure: null))
             .Should().Throw<InvalidOperationException>().WithMessage("*call AddTenancy first*");
 
         Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(services, harness.Options);
-        FluentActions.Invoking(() => Register(services, _ => { })).Should().Throw<InvalidOperationException>().WithMessage("*NewInvitationId is not set*");
-        FluentActions.Invoking(() => Register(services, options =>
-            {
-                options.NewInvitationId = InvitationId.CreateSequential;
-                options.MinLifetime = TimeSpan.FromDays(8);
-            }))
+        FluentActions.Invoking(() => Register(services, options => options.MinLifetime = TimeSpan.FromDays(8)))
             .Should().Throw<InvalidOperationException>().WithMessage("*lifetimes are out of order*");
-        FluentActions.Invoking(() => Register(services, options => options.NewInvitationId = InvitationId.CreateSequential)).Should().NotThrow();
 
-        static void Register(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Action<TenancyInvitationOptions<InvitationId>> configure)
+        // Nothing is required: an invitation's id makes a new one of itself, and the lifetimes have defaults.
+        FluentActions.Invoking(() => Register(services, configure: null)).Should().NotThrow();
+
+        static void Register(Microsoft.Extensions.DependencyInjection.IServiceCollection services, Action<TenancyInvitationOptions<InvitationId>>? configure)
             => services.AddTenancyInvitationsCore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId>(configure);
     }
 }

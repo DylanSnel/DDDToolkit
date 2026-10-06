@@ -22,15 +22,9 @@ public static class PressHost
     /// <param name="services">The service collection.</param>
     public static IServiceCollection Add(IServiceCollection services)
     {
-        // The toolkit's generator: Tenancy's registration closed over this project's classes.
-        services.AddTenancy<TenancyContext>(options =>
-        {
-            options.Catalogue = PressCatalogue.Application;
-            options.NewTenantId = TenantId.CreateSequential;
-            options.NewSeatId = SeatId.CreateSequential;
-            options.NewUnitId = OrganizationUnitId.CreateSequential;
-            options.NewRoleId = RoleId.CreateSequential;
-        });
+        // The toolkit's generator: Tenancy's registration closed over this project's classes. A new id is the id's
+        // own, TenantId.Create(), which the generator writes for each of them.
+        services.AddTenancy<TenancyContext>(options => options.Catalogue = PressCatalogue.Application);
 
         // Membership's Entity Framework generator, which notices Tenancy here: a manuscript's members are seats.
         services.AddManuscriptMembershipWithTenancy<PressContext>(ManuscriptMembership.Rules);

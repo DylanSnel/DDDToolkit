@@ -286,7 +286,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
 {
     public Task HandleAsync(OrderConfirmedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        context.Shipments.Add(new Shipment(ShipmentId.CreateSequential(), contract.OrderId, message.OccurredAt));
+        context.Shipments.Add(new Shipment(ShipmentId.Create(), contract.OrderId, message.OccurredAt));
         return Task.CompletedTask;                       // no SaveChanges: the inbox saves it with its own row
     }
 }

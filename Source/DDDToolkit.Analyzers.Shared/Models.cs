@@ -214,6 +214,43 @@ internal sealed record EntityIdDefinition(
     /// record id's twin) implements it. Read off the compilation, like <see cref="IParsableAvailable"/>.
     /// </summary>
     public bool SingleValueAvailable { get; init; }
+
+    /// <summary>
+    /// True when the project can see <c>DDDToolkit.Abstractions.Interfaces.ICreatableEntityId&lt;TSelf&gt;</c>, which
+    /// only the .NET 10 build of the abstractions has. Read off the compilation, like <see cref="SingleValueAvailable"/>.
+    /// </summary>
+    public bool CreatableAvailable { get; init; }
+
+    /// <summary>What the author's own parts of the id declare called <c>Create</c> without parameters.</summary>
+    public DeclaredCreate OwnCreate { get; init; }
+
+    /// <summary>
+    /// Whether the generator writes <c>Create()</c>, making a time-ordered id as <c>CreateSequential()</c> does: for an
+    /// id over a <c>Guid</c> whose parts declare nothing of that name. A <c>Create()</c> of the author's own wins.
+    /// </summary>
+    public bool WritesCreate => Value.IsGuid && OwnCreate == DeclaredCreate.None;
+
+    /// <summary>
+    /// Whether the id implements <c>ICreatableEntityId&lt;TSelf&gt;</c>: where the project sees it, with the
+    /// generator's <c>Create()</c> or with the author's own.
+    /// </summary>
+    public bool ImplementsCreatable => CreatableAvailable && (WritesCreate || OwnCreate == DeclaredCreate.Fits);
+}
+
+/// <summary>What an id's own parts declare called <c>Create</c>, without parameters: it decides whether the generator writes one.</summary>
+internal enum DeclaredCreate
+{
+    /// <summary>Nothing: an id over a <c>Guid</c> gets the generator's, and an id over anything else has none.</summary>
+    None,
+
+    /// <summary>A public static <c>Create()</c> that answers the id: the generator implements the interface with it.</summary>
+    Fits,
+
+    /// <summary>
+    /// Something else of that name, an instance method, one that is not public or one that answers another type:
+    /// the generator writes no <c>Create()</c> beside it, and implements no interface with it.
+    /// </summary>
+    Other,
 }
 
 internal sealed record SingleValueObjectDefinition(

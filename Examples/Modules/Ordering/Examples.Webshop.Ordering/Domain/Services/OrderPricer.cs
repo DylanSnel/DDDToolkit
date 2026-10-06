@@ -40,11 +40,11 @@ public static class OrderPricer
         {
             if (string.IsNullOrWhiteSpace(line.Sku))
             {
-                lines.Add(new OrderLine(OrderLineId.CreateSequential(), line.Sku, line.Quantity, Money.Zero()));
+                lines.Add(new OrderLine(OrderLineId.Create(), line.Sku, line.Quantity, Money.Zero()));
             }
             else if (prices.TryGetValue(line.Sku, out var price))
             {
-                lines.Add(new OrderLine(OrderLineId.CreateSequential(), line.Sku, line.Quantity, price));
+                lines.Add(new OrderLine(OrderLineId.Create(), line.Sku, line.Quantity, price));
             }
             else
             {

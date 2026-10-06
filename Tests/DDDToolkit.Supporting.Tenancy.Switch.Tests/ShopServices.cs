@@ -21,15 +21,9 @@ public static class ShopServices
         services.AddDDDToolkitEntityFramework(options => options.UseOutbox<ShopContext>(outbox => outbox
             .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()));
 
-        // Generated for the classes and ids of this project: the context is the one type left to name. The ids are the
-        // application's, written or not, and so is how they are made.
-        services.AddTenancy<ShopContext>(options =>
-        {
-            options.NewTenantId = TenantId.CreateSequential;
-            options.NewUnitId = OrganizationUnitId.CreateSequential;
-            options.NewSeatId = SeatId.CreateSequential;
-            options.NewRoleId = RoleId.CreateSequential;
-        });
+        // Generated for the classes and ids of this project: the context is the one type left to name. A new id is made
+        // by the id itself, written or not: TenantId.Create(), a time-ordered Guid.
+        services.AddTenancy<ShopContext>();
 
         return services.AddDbContext<ShopContext>((provider, options) => options.UseSqlite(connection).UseDDDToolkit(provider));
     }

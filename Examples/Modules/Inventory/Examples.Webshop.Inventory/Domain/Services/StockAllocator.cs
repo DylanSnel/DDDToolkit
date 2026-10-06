@@ -52,6 +52,6 @@ public static class StockAllocator
             stock[sku].Reserve(quantity);
         }
 
-        return StockReservation.Reserved(order, lines.Select(line => new ReservedLine(ReservedLineId.CreateSequential(), line.Sku, line.Quantity)));
+        return StockReservation.Reserved(order, lines.Select(line => new ReservedLine(ReservedLineId.Create(), line.Sku, line.Quantity)));
     }
 }

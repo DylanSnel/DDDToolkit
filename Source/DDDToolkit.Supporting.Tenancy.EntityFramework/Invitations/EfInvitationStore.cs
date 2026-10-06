@@ -27,11 +27,11 @@ internal sealed class EfInvitationStore<TTenant, TTenantId, TOrganization, TUnit
     where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
     where TRole : RoleAggregate<TRoleId, TTenantId>
     where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
-    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-    where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+    where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
     where TContext : DbContext
 {
     /// <inheritdoc />

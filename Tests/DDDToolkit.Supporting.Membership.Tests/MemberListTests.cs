@@ -47,29 +47,40 @@ public sealed class MemberListTests
     [Fact]
     public void A_member_list_is_opened_once()
     {
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>([], Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>([], Owner, Codes);
         list.Open(OwnersRole, Now);
 
         FluentActions.Invoking(() => list.Open(OwnersRole, Now)).Should().Throw<InvalidOperationException>().WithMessage("*has members already*");
     }
 
     [Fact]
-    public void A_member_list_is_made_over_the_aggregates_own_collection_its_id_factory_and_its_codes()
+    public void A_member_list_is_made_over_the_aggregates_own_collection_and_its_codes()
     {
         List<DocumentShare> shares = [];
 
-        FluentActions.Invoking(() => new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(null!, Owner, DocumentShareId.CreateSequential, Codes))
+        FluentActions.Invoking(() => new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(null!, Owner, Codes))
             .Should().Throw<ArgumentNullException>();
-        FluentActions.Invoking(() => new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, null!, Codes))
-            .Should().Throw<ArgumentNullException>();
-        FluentActions.Invoking(() => new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, null!))
+        FluentActions.Invoking(() => new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, null!))
             .Should().Throw<ArgumentNullException>();
 
-        // It keeps nothing itself: what it adds is in the aggregate's collection, with an id from the factory.
-        var id = DocumentShareId.CreateSequential();
-        var added = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, () => id, Codes).Add(Member, MemberPeriod.Open(Now), Now);
+        // It keeps nothing itself: what it adds is in the aggregate's collection.
+        var added = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes).Add(Member, MemberPeriod.Open(Now), Now);
         shares.Should().ContainSingle().Which.Should().BeSameAs(added);
-        added.Id.Should().Be(id);
+    }
+
+    [Fact]
+    public void A_new_member_rows_id_is_made_by_the_id_itself_in_time_order()
+    {
+        List<DocumentShare> shares = [];
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
+
+        var first = list.Add(Member, MemberPeriod.Open(Now), Now);
+        var second = list.Add(UserId.CreateSequential(), MemberPeriod.Open(Now), Now);
+
+        // DocumentShareId.Create(), which the generator writes for an id over a Guid: a time-ordered id, made in code.
+        first.Id.IsEmpty.Should().BeFalse("the id is made before the row is saved");
+        first.Id.Value.Version.Should().Be(7);
+        second.Id.Should().NotBe(first.Id);
     }
 
     // ---------------------------------------------------------------- members and their roles
@@ -417,7 +428,7 @@ public sealed class MemberListTests
     {
         List<DocumentShare> shares = [];
         var week = Now.AddDays(7);
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
         list.Open(OwnersRole, Now);
 
         // Dee is on the document for a week: an onlooker with no end of its own, a contributor for a fortnight,
@@ -439,7 +450,7 @@ public sealed class MemberListTests
         named.RolesDropped.Select(held => held.RoleId).Should().Equal([late], "a role that was to start when the membership would have been over never counted");
 
         // Handed back on the second day, by the aggregate, which keeps who the owner is.
-        var handedBack = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, DocumentShareId.CreateSequential, Codes)
+        var handedBack = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, Codes)
             .NameOwner(Owner, OwnersRole, Now.AddDays(2));
         handedBack.EndLifted.Should().BeNull("the first owner's place had no end");
 
@@ -460,7 +471,7 @@ public sealed class MemberListTests
     public void Naming_an_owner_whose_membership_had_ended_says_that_it_began_anew_and_which_roles_went()
     {
         List<DocumentShare> shares = [];
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
         list.Open(OwnersRole, Now);
         list.Add(Member, Contributor, MemberPeriod.Between(Now, Now.AddDays(30)), Now, by: Owner);
         list.GiveRole(Member, Onlooker, MemberPeriod.Open(Now), Now, by: Owner);
@@ -543,7 +554,7 @@ public sealed class MemberListTests
 
         // The answer says both changes of the period: the start that was moved, and the end that went.
         List<DocumentShare> shares = [];
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
         list.Open(OwnersRole, Now);
         list.Add(Member, MemberPeriod.Between(Now.AddDays(10), Now.AddDays(20)), Now, by: Owner);
 
@@ -558,7 +569,7 @@ public sealed class MemberListTests
     {
         List<DocumentShare> shares = [];
         var (comes, leaves) = (Now.AddDays(10), Now.AddDays(20));
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
         list.Open(OwnersRole, Now);
 
         // Dee is to be on the document from the tenth day to the twentieth. Her roles have dates of their own:
@@ -573,7 +584,7 @@ public sealed class MemberListTests
 
         // Named owner on the first day, and the document handed back on the second.
         var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
-        new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, DocumentShareId.CreateSequential, Codes)
+        new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Member, Codes)
             .NameOwner(Owner, OwnersRole, Now.AddDays(2));
 
         (named.StartMoved, named.EndLifted).Should().Be((comes, leaves));
@@ -625,7 +636,7 @@ public sealed class MemberListTests
     public void Naming_an_owner_answers_what_happened_for_the_aggregate_to_act_on()
     {
         List<DocumentShare> shares = [];
-        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, DocumentShareId.CreateSequential, Codes);
+        var list = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, Owner, Codes);
         list.Open(OwnersRole, Now);
 
         var named = list.NameOwner(Member, OwnersRole, Now.AddDays(1));
@@ -636,7 +647,7 @@ public sealed class MemberListTests
 
         // The list does not keep who the owner is: until the aggregate does, the list still protects the old one.
         Refused.With(Codes, MembershipRefusals.OwnerProtected, () => list.Remove(Owner));
-        var kept = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, named.Owner, DocumentShareId.CreateSequential, Codes);
+        var kept = new MemberList<DocumentShare, DocumentShareId, UserId, NamedRole>(shares, named.Owner, Codes);
         kept.Remove(Owner).MemberId.Should().Be(Owner);
         Refused.With(Codes, MembershipRefusals.OwnerProtected, () => kept.Remove(Member));
     }

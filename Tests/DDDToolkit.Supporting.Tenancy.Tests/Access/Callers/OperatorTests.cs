@@ -166,10 +166,6 @@ public class OperatorTests
         services.AddTenancyCore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>(options =>
         {
             options.Catalogue = HostCatalogue.Application;
-            options.NewTenantId = () => harbor;
-            options.NewSeatId = SeatId.CreateSequential;
-            options.NewUnitId = OrganizationUnitId.CreateSequential;
-            options.NewRoleId = RoleId.CreateSequential;
             options.OperatorTokenRoles.Add(OperatorRole);
         });
         services.AddSingleton<ISeatDirectory<TenantId, SeatId>>(seats);
@@ -198,10 +194,6 @@ public class OperatorTests
             => new ServiceCollection().AddTenancyCore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>(options =>
             {
                 options.Catalogue = HostCatalogue.Application;
-                options.NewTenantId = () => new TenantId(1);
-                options.NewSeatId = SeatId.CreateSequential;
-                options.NewUnitId = OrganizationUnitId.CreateSequential;
-                options.NewRoleId = RoleId.CreateSequential;
                 configure(options);
             });
 

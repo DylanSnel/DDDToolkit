@@ -621,8 +621,12 @@ public class TemplateRegistrationTests
 
             namespace Shop;
 
+            // A long says how a new one is made, which Tenancy asks of each of its ids.
             [EntityId<long>]
-            public readonly partial record struct TenantId;
+            public readonly partial record struct TenantId
+            {
+                public static TenantId Create() => new(1);
+            }
 
             [EntityId<Guid>]
             public readonly partial record struct SeatId;

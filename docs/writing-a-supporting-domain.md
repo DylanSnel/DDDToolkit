@@ -229,6 +229,37 @@ An application class that does not implement the factory is reported,
 generated code. A `new()` constraint is no way round the factory: the parameterless constructor the
 generator writes is never public.
 
+### A package that makes the ids of its classes
+
+The line above is handed its id. A package that makes a new one itself, as Tenancy makes the id of every seat it
+adds, asks the id for it: `TLineId.Create()`, the static member of `ICreatableEntityId<TSelf>`, in code and before
+the save. The generator implements it for every `[EntityId<Guid>]`, with a time-ordered id, and an application whose
+id is over a `long` declares its own `Create()`. The package says both things, once on its code and once on its
+template:
+
+```csharp
+// The code that makes the ids asks for ids that make themselves.
+public abstract class SubscriptionUseCases<TSubscription, TSubscriptionId>
+    where TSubscription : SubscriptionAggregate<TSubscriptionId>
+    where TSubscriptionId : struct, ICreatableEntityId<TSubscriptionId>, IEquatable<TSubscriptionId>
+{
+    public static TSubscriptionId NewId() => TSubscriptionId.Create();
+}
+
+// The template says the package makes the ids of its classes.
+[AggregateRootTemplate(typeof(SubscriptionAggregate<>), CreatesIds = true)]
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class SubscriptionAttribute<TSubscriptionId> : Attribute;
+```
+
+With `CreatesIds`, a class of the application's declared over an id without a `Create()` is
+[DDD00067](diagnostics.md#ddd00067), on the class, with a code fix that adds one to the id; the registrations and
+the class the use cases are named through, which ask for the same with their constraint, stand back for it, and
+the compiler has nothing to say in code nobody wrote. Without it, the toolkit cannot tell the application which
+class to fix, so a registration says it, [DDD00050](diagnostics.md#ddd00050), and the class the use cases are
+named through, [DDD00065](diagnostics.md#ddd00065). Leave `CreatesIds` unset for a template whose ids the
+application makes itself: then its ids need nothing.
+
 ## Stored with Entity Framework
 
 Nothing changes. Entity Framework maps the application's classes, with the parent's properties and

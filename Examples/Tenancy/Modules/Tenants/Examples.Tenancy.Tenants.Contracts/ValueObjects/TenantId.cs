@@ -11,7 +11,9 @@ namespace Examples.Tenancy.Tenants.Contracts.ValueObjects;
 /// <remarks>
 /// The ids are the application's, not the Tenancy package's: the package is generic over them, and the
 /// application picks the key type and the prefix. Every one is a struct, because the package's parents hold
-/// optional ids, such as a unit's parent, as <c>Nullable&lt;T&gt;</c>.
+/// optional ids, such as a unit's parent, as <c>Nullable&lt;T&gt;</c>. The package makes a new one with the id's
+/// <c>Create()</c>, in code before the save: over a <see cref="Guid"/> the generator writes it, a time-ordered id,
+/// and an id over a <see cref="long"/> would declare its own here, a snowflake say.
 /// </remarks>
 [ModuleContract]
 [EntityId<Guid>("TEN")]

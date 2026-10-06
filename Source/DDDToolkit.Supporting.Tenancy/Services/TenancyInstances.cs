@@ -20,7 +20,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// </para>
 /// <code>
 /// var seat = TenancyInstances.NewSeat&lt;ShopSeat, SeatId, TenantId, OrganizationUnitId, RoleId&gt;(
-///     SeatId.CreateSequential(), tenantId, identity, "Ada");
+///     SeatId.Create(), tenantId, identity, "Ada");
 /// </code>
 /// </summary>
 public static class TenancyInstances

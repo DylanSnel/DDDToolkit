@@ -14,6 +14,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Core
 
+- **An id makes a new one of itself: `TId.Create()`.** Ids are made in code before the save, never by the database,
+  so a change and every event of it know the id from the start. Every id the generator writes over a `Guid`, declared
+  with `[EntityId<Guid>]`, asked for by `[AggregateRoot<Guid>]` or written by a package's switch, gets `Create()`,
+  which makes what `CreateSequential()` makes, and implements the new `ICreatableEntityId<TSelf>` with it, so code
+  that is generic over ids makes one with `TId.Create()`. A `Create()` the id declares in its partial declaration
+  wins and the generator writes none; an id over a `long`, an `int` or a `string` gets one only that way, and is
+  given the interface with it. `DDDToolkit.Abstractions` ships a `net10.0` build beside the `netstandard2.0` one,
+  which carries the interface; a project that sees it gets it implemented. See
+  [Creating identifiers](docs/identifiers.md#creating-identifiers).
+- **A package says it makes the ids of its classes, and DDD00067 asks the application's ids for a `Create()`.**
+  `[AggregateRootTemplate(..., CreatesIds = true)]` and `[EntityTemplate(..., CreatesIds = true)]` mark a template
+  whose package makes the ids of new classes itself, as Tenancy's do. A class declared with such a template over an
+  id that cannot make a new one is DDD00067, an error, on the class where it names the id; for a class a package's
+  switch writes, on the id, or on the switch when the id is another project's. The message says what the id lacks
+  and what to write: a `Create()` in the partial declaration of an `[EntityId<T>]`, with an example for its key type
+  (a snowflake or a HiLo block for a `long`, a HiLo block for an `int`); the `Create()` and `ICreatableEntityId<T>`
+  for an id written by hand, which no generator completes; the interface alone for one with a `Create()`; or, for an
+  id of a project that does not target `net10.0`, that project's target. Its code fix adds what is missing to the
+  id's declaration, wherever in the solution it is: a `Create()` that throws until its body is written, the
+  interface, or both. The class is generated all the same, and the registrations and the class
+  the use cases are named through, whose type parameters ask for `ICreatableEntityId<T>`, stand back for it rather
+  than fail in generated code; where the template does not say so, they report it themselves, DDD00050 and
+  DDD00065. No other id needs a `Create()`. See
+  [A package that makes the ids of its classes](docs/writing-a-supporting-domain.md#a-package-that-makes-the-ids-of-its-classes).
 - **A package's switch writes the classes an application adds nothing to, and their ids.** A package marks an
   assembly attribute of its own `[TemplateDefaults(typeof(SubscriptionAttribute<>), ...)]`, and an application that
   writes it, `[assembly: GenerateBillingClasses]`, gets a class of each template it declares none of, called after
@@ -889,6 +913,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
+- **Tenancy makes a new id with the id's own `Create()`, and the id options are gone.** `NewTenantId`, `NewSeatId`,
+  `NewUnitId` and `NewRoleId` of `TenancyOptions`, and `NewInvitationId` of `TenancyInvitationOptions`, are removed:
+  a use case makes the id of a new tenant, unit, seat, role or invitation with `TTenantId.Create()` and the rest, in
+  code before the save, and one given an id, for an import or seed data, still uses that one. Every option has a
+  default, so `services.AddTenancy<TContext>()` and `services.AddTenancyInvitations<TInvitation, TInvitationId,
+  TContext>()` need no callback. The ids the switch writes and every `[EntityId<Guid>]` have a `Create()`; an id over
+  a `long` declares its own, and a class over one that has none is DDD00067, since Tenancy's templates say
+  `CreatesIds = true`. The use cases, the stores and the registrations that make ids ask for
+  `ICreatableEntityId<T>` of their id type parameters, and `TenantCommands`, `OrganizationCommands`, `SeatCommands`
+  and `RoleCommands` take no options any more. See [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
 - **One line instead of the classes that add nothing.** `[assembly: GenerateTenancyClasses]` has the generator
   write each of Tenancy's classes a project leaves out, `Tenant`, `Organization`, `OrganizationUnit`, `Role` and
   `Seat`, as the package ships it, and `TenantId`, `OrganizationUnitId`, `RoleId` and `SeatId` where no project of
@@ -1363,6 +1397,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Membership
 
+- **A member list makes a new row's id with `TId.Create()`.** `MemberList` takes no id factory any more,
+  `new(members, owner, codes)`, and asks `ICreatableEntityId<TId>` of the member class's own id. The generated list is
+  written for any row id with a `Create()`, one over a `long` that declares it included, and DDD00059 says when the
+  row's id has none, and what to write, as DDD00067 does; a row id written by hand without one gets the warning
+  rather than a list that would not compile.
 - **`AddMembershipPostgres()`.** It registers the package's start-up check, `membership.functions-in-place`, which
   a host runs with its other checks (`RunStartupChecks()`): the functions and the lock of every registered
   resource's membership are written from its rules. `MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync` stays
@@ -1558,6 +1597,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrators read on the History page. The Tenants module has a migration for the roles' new column,
   `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
   hosted services that ask the database something.
+- **The samples make new ids with `TId.Create()`.** The Tenancy sample's registration sets no id options, and its
+  modules, the webshop's and the example API's make the ids of their new aggregates and rows with `ProjectId.Create()`
+  and the rest, where they called `CreateSequential()` or `CreateUnique()`. The Tenancy test host's tenant id, a `long`, declares the `Create()` Tenancy asks
+  of it.
 - **The Tenancy sample writes no class that adds nothing.** Its Tenants domain project says
   `[assembly: GenerateTenancyClasses]` in `Module.cs`, and its `Organization` and `Role`, which added nothing to the
   package's, are gone: the switch writes them, in the project's root namespace. The tenant, the unit, the seat and
@@ -2032,6 +2075,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Docs
 
+- **Docs: how a new id is made.** [Creating identifiers](docs/identifiers.md#creating-identifiers) and
+  [The identifier](docs/generated-code.md#the-identifier) show `Create()` and `ICreatableEntityId<TSelf>`,
+  [How a new id is made](docs/tenancy.md#how-a-new-id-is-made) draws how Tenancy gets one, and
+  [Ids the database never makes](docs/entity-framework.md#ids-the-database-never-makes) says why Entity Framework
+  stores the key of an id as it is given, on every provider, which new tests on Postgres and SQLite hold it to.
 - **Docs: Start-up checks, a page of its own.** [Start-up checks](docs/startup-checks.md) says what each
   registration brings, the order and why, how to turn one off, why they wait for the host to ask, and how a
   package registers one of its own. Row level security, Supabase, Tenancy, Membership, Entity Framework, Transports

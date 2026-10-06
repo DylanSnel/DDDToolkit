@@ -50,7 +50,10 @@ public class MissingTemplateClassCodeFixTests
         namespace Sample;
 
         [EntityId<long>]
-        public readonly partial record struct TenantId;
+        public readonly partial record struct TenantId
+        {
+            public static TenantId Create() => new(1);
+        }
 
         [EntityId<Guid>]
         public readonly partial record struct SeatId;
@@ -152,7 +155,10 @@ public class MissingTemplateClassCodeFixTests
             namespace Shop;
 
             [EntityId<long>]
-            public readonly partial record struct TenantId;
+            public readonly partial record struct TenantId
+            {
+                public static TenantId Create() => new(1);
+            }
 
             [EntityId<Guid>]
             public readonly partial record struct SeatId;

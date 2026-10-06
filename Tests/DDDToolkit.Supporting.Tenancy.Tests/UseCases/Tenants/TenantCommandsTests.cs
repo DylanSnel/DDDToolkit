@@ -109,9 +109,11 @@ public class TenantCommandsTests
         var catalogue = TenancyCatalogue.Build(HostCatalogue.Application with { Packs = [] }, [new Permission("gauges.read", "Gauges", "Read gauges")]);
         var harness = new Harness(catalogue);
 
+        var provisionedAs = new Dictionary<string, TenantId>(StringComparer.Ordinal);
         foreach (var (shape, slug) in new[] { (TenantShape.Flat, "kiosk"), (TenantShape.Hierarchical, "harbor") })
         {
             var provisioned = await Provision(harness, Harbor(shape, slug));
+            provisionedAs[slug] = provisioned.Tenant;
 
             // The one role the tenant gets is the default administrators', and the first seat is given it at the root.
             provisioned.RolesByPack.Keys.Should().Equal([TenancyPacks.DefaultAdministratorsKey], "a {0} tenant gets the one pack there is", shape);
@@ -139,7 +141,7 @@ public class TenantCommandsTests
         }
 
         // A flat tenant that turns hierarchical has the one pack there is already: no role is added.
-        var kiosk = new TenantId(101);
+        var kiosk = provisionedAs["kiosk"];
         var roles = harness.Store.RolesOf(kiosk).Count;
         await harness.Run(HostCaller.InSeat(kiosk, harness.Store.SeatsIn(kiosk).Single().Id),
             h => h.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, default));

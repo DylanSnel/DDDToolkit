@@ -16,7 +16,7 @@ namespace DDDToolkit.Supporting.Membership.UseCases;
 /// var existing = await db.PlotRoles.Where(role =&gt; role.GardenId == garden).ToListAsync(cancellationToken);
 /// foreach (var draft in StarterRoles.Missing(PlotMembership.Rules, existing))
 /// {
-///     db.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), garden, draft));
+///     db.PlotRoles.Add(new PlotRole(PlotRoleId.Create(), garden, draft));
 /// }
 /// </code>
 /// <para>

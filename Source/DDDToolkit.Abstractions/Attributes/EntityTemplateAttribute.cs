@@ -36,4 +36,12 @@ public sealed class EntityTemplateAttribute(Type parent) : Attribute
     /// </para>
     /// </summary>
     public bool AllowSeveral { get; set; }
+
+    /// <summary>
+    /// Whether the package makes the id of a new class of this template itself, with <c>TId.Create()</c>, as Tenancy
+    /// makes a new unit's. It means for an entity what <see cref="AggregateRootTemplateAttribute.CreatesIds"/> means
+    /// for an aggregate root: the id a class is declared with has a <c>Create()</c>, and DDD00067 says so on the class
+    /// where it has none.
+    /// </summary>
+    public bool CreatesIds { get; set; }
 }

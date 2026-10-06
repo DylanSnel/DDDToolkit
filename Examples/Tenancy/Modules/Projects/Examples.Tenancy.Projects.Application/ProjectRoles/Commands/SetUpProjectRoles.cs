@@ -64,7 +64,7 @@ public sealed class SetUpProjectRolesHandler(IProjectStore store, ProjectMembers
         foreach (var draft in missing)
         {
             var starter = membership.StarterRoles.Single(role => role.Key == draft.MadeFrom);
-            var id = command.Ids is { } ids && ids.TryGetValue(starter.Key, out var given) ? given : ProjectRoleId.CreateSequential();
+            var id = command.Ids is { } ids && ids.TryGetValue(starter.Key, out var given) ? given : ProjectRoleId.Create();
             store.Add(new ProjectRole(id, tenant, draft with { Name = starter.Name, Description = starter.Description }, membership.Rules));
         }
 

@@ -151,12 +151,14 @@ internal static class EntityDeclarations
                 : null;
 
             var allowSeveral = false;
+            var createsIds = false;
             foreach (var argument in marker.NamedArguments)
             {
                 allowSeveral |= argument.Key == "AllowSeveral" && argument.Value.Value is true;
+                createsIds |= argument.Key == "CreatesIds" && argument.Value.Value is true;
             }
 
-            return new TemplateMarker(definition, parent, isAggregateRoot, allowSeveral);
+            return new TemplateMarker(definition, parent, isAggregateRoot, allowSeveral, createsIds);
         }
 
         return null;
@@ -220,4 +222,8 @@ internal static class EntityDeclarations
 /// True when the marker says an application may declare several classes with the template: a registration
 /// that takes its types from it is then written once per class, rather than refused for there being two.
 /// </param>
-internal readonly record struct TemplateMarker(INamedTypeSymbol Attribute, INamedTypeSymbol? Parent, bool IsAggregateRoot, bool AllowSeveral = false);
+/// <param name="CreatesIds">
+/// True when the marker says the package makes the id of a new class of the template itself, with <c>TId.Create()</c>:
+/// the id a class is declared with then has a <c>Create()</c>, and DDD00067 says so where it has none.
+/// </param>
+internal readonly record struct TemplateMarker(INamedTypeSymbol Attribute, INamedTypeSymbol? Parent, bool IsAggregateRoot, bool AllowSeveral = false, bool CreatesIds = false);

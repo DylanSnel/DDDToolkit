@@ -13,7 +13,7 @@ public sealed class OpenPayment(PaymentsContext context) : IIntegrationEventHand
 {
     public Task HandleAsync(OrderPlacedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
-        context.Payments.Add(new Payment(PaymentId.CreateSequential(), contract.OrderId, new Money(contract.Total, contract.Currency)));
+        context.Payments.Add(new Payment(PaymentId.Create(), contract.OrderId, new Money(contract.Total, contract.Currency)));
         return Task.CompletedTask;
     }
 }

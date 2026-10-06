@@ -87,9 +87,7 @@ public class ProvisioningHooksTests
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("no such kind");
 
         harness.Store.SaveCount.Should().Be(0);
-        harness.Store.HasTenant(new TenantId(101)).Should().BeFalse();
-        harness.Store.HasTenant(new TenantId(102)).Should().BeFalse();
-        harness.Store.HasTenant(new TenantId(103)).Should().BeFalse();
+        (await harness.Store.ListTenantsAsync(afterSlug: null, take: 10, TestContext.Current.CancellationToken)).Should().BeEmpty("none of the three tenants was saved, whatever id it was given");
 
         // The slug was never taken: the same tenant is provisioned once the callback holds.
         var provisioned = await Provision(harness, Harbor(tenant => tenant.MarkAsDemo()));

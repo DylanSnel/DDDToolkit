@@ -89,6 +89,21 @@ public class TemplateDefaultsTests
     }
 
     [Fact]
+    public void The_ids_the_switch_writes_make_new_ones_of_themselves_for_tenancy()
+    {
+        var result = Project().RunCore();
+
+        result.ShouldCompile();
+        foreach (var id in Ids)
+        {
+            // Over a Guid, as an [EntityId<Guid>] the project declared: Create() is CreateSequential().
+            result.ShouldContain(id + ".", "public static " + id + " Create() => CreateSequential();");
+            TypeIn(result, "DDDToolkit.Sample." + id).AllInterfaces.Select(static type => type.ToDisplayString())
+                .Should().Contain("DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<DDDToolkit.Sample." + id + ">", "Tenancy makes a new {0} with {0}.Create()", id);
+        }
+    }
+
+    [Fact]
     public void Nothing_is_written_without_the_switch()
     {
         var result = Project("namespace Shop; public sealed class Unrelated;").RunCore();
@@ -211,7 +226,10 @@ public class TemplateDefaultsTests
             using DDDToolkit.Abstractions.Attributes;
 
             [EntityId<long>("TEN")]
-            public readonly partial record struct TenantId;
+            public readonly partial record struct TenantId
+            {
+                public static TenantId Create() => new(1);
+            }
             """;
 
         var result = Project(source).RunCore();
@@ -220,6 +238,62 @@ public class TemplateDefaultsTests
         result.HintNames.Should().NotContain(Written("TenantId"));
         ParentOf(result, "DDDToolkit.Sample.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<DDDToolkit.Sample.Contracts.TenantId>");
         ParentOf(result, "DDDToolkit.Sample.Role").Should().Be("DDDToolkit.Supporting.Tenancy.RoleAggregate<DDDToolkit.Sample.RoleId, DDDToolkit.Sample.Contracts.TenantId>");
+    }
+
+    [Fact]
+    public void A_class_the_switch_writes_over_a_declared_id_without_a_create_is_said_once_on_the_id()
+    {
+        const string source =
+            """
+            [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]
+
+            namespace DDDToolkit.Sample.Contracts;
+
+            using DDDToolkit.Abstractions.Attributes;
+
+            [EntityId<long>("TEN")]
+            public readonly partial record struct TenantId;
+            """;
+
+        var result = Project(source).RunCore();
+
+        // The tenant the switch writes is in no file of the project, so the id it takes is where the fix goes. The
+        // class is written all the same; what closes Tenancy's use cases over the id stands back without a word.
+        result.ShouldHaveExactlyDiagnostics("DDD00067");
+        result.ShouldHaveDiagnostic("DDD00067", at: "TenantId").GetMessage().Should().StartWith(
+            "'TenantId' has no public static Create(), and 'Tenant' is declared with [TenantAggregate], whose package makes each new TenantId with TenantId.Create()");
+        ParentOf(result, "DDDToolkit.Sample.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<DDDToolkit.Sample.Contracts.TenantId>");
+        result.HintNames.Should().NotContain("TemplateFacade", "the class the use cases are named through is closed over the id");
+        result.CompilationErrors.Should().BeEmpty("nothing closed over the id is written, so the compiler has nothing to say in code nobody wrote");
+        result.ShouldNotCrash();
+    }
+
+    [Fact]
+    public void A_class_the_switch_writes_over_an_id_of_another_project_without_a_create_is_said_on_the_switch()
+    {
+        // The layout of a module split by layer: the id in its contracts project, the switch in its domain project.
+        // The id is in no file of the domain project, so the error is where the switch is; the fix finds the id.
+        const string contracts =
+            """
+            [assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyIds]
+
+            namespace Shop.Contracts;
+
+            [DDDToolkit.Abstractions.Attributes.EntityId<long>]
+            public readonly partial record struct TenantId;
+            """;
+
+        var result = GeneratorTestHost.Create(Switch, "Classes.cs").WithAssemblyName("Shop.Domain").WithTenancy()
+            .WithReferencedProject("Shop.Contracts", project => project.WithSource(contracts, "Ids.cs").WithModuleFromTheBuild("Tenants"))
+            .WithModuleFromTheBuild("Tenants")
+            .RunCore();
+
+        result.ShouldHaveExactlyDiagnostics("DDD00067");
+        result.ShouldHaveDiagnostic("DDD00067", at: "DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses")
+            .Properties.Should().Contain("IdMetadataName", "Shop.Contracts.TenantId");
+        ParentOf(result, "Shop.Domain.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<Shop.Contracts.TenantId>");
+        result.HintNames.Should().NotContain("TemplateFacade");
+        result.CompilationErrors.Should().BeEmpty();
     }
 
     [Fact]

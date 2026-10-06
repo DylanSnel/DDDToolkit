@@ -50,7 +50,7 @@ public sealed partial class Binder
     /// left alone.
     /// </summary>
     private MemberList<BinderBorrower, BinderBorrowerId, UserId, NamedRole> Members
-        => new(_borrowers, OwnerId, BinderBorrowerId.CreateSequential, BinderMembership.Rules.Codes);
+        => new(_borrowers, OwnerId, BinderMembership.Rules.Codes);
 
     /// <summary>Lends the binder to a user in a role, both for the same period.</summary>
     public BinderBorrower LendTo(UserId borrower, NamedRole role, MemberPeriod period, DateTimeOffset now, UserId? by) => Members.Add(borrower, role, period, now, by);

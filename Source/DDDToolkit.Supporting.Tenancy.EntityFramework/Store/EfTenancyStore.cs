@@ -57,10 +57,10 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
     where TUnit : OrganizationUnitEntity<TUnitId>
     where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
     where TRole : RoleAggregate<TRoleId, TTenantId>
-    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
     where TContext : DbContext
 {
     private readonly ITenancySaveFailures[] _failures = [.. failures];

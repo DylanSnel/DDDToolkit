@@ -109,7 +109,7 @@ public sealed class OpenProjectHandler(
             throw ProjectRefusals.Of(ProjectRefusals.NumberTaken, ("Number", number));
         }
 
-        var opened = new Project(command.Id ?? ProjectId.CreateSequential(), scope.Tenant, number, command.Name, unit, owner, leadRole, clock.GetUtcNow(), command.Planned);
+        var opened = new Project(command.Id ?? ProjectId.Create(), scope.Tenant, number, command.Name, unit, owner, leadRole, clock.GetUtcNow(), command.Planned);
         store.Add(opened);
         await store.SaveAsync(cancellationToken);
         return opened.Id;

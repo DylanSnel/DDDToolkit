@@ -72,17 +72,14 @@ public static class TenantsInfrastructure
         services.AddTenancyPostgres();
 
         // Generated into this project and closed over the module's classes, like modelBuilder.AddTenancy(): the use
-        // cases, the access questions, tenant selection, the store over this context and the save interceptor. Every
-        // id is the application's to make; these are time-ordered Guids. It brings the start-up checks that the
-        // catalogue builds, that every context that keeps rows to a tenant checks its saves, and the warning for a
-        // key a role holds that the catalogue has lost.
+        // cases, the access questions, tenant selection, the store over this context and the save interceptor. A new
+        // id is the id's own, made in code before the save: TenantId.Create(), a time-ordered Guid the generator
+        // writes for every id of the contracts project. It brings the start-up checks that the catalogue builds, that
+        // every context that keeps rows to a tenant checks its saves, and the warning for a key a role holds that the
+        // catalogue has lost.
         services.AddTenancy<TenantsContext>(options =>
         {
             options.Catalogue = catalogue;
-            options.NewTenantId = TenantId.CreateSequential;
-            options.NewSeatId = SeatId.CreateSequential;
-            options.NewUnitId = OrganizationUnitId.CreateSequential;
-            options.NewRoleId = RoleId.CreateSequential;
 
             // The application's own staff: a token with this role holds no seat anywhere, and reads every tenant.
             // It runs as a database role of its own, which the exported policies let read and never write.
@@ -92,8 +89,7 @@ public static class TenantsInfrastructure
         // Invitations, generated like AddTenancy and closed over the module's classes: the invitation class and
         // its id are named. Their use cases, and the store that keeps an invitation apart from its token's digest.
         // An invitation stays open for the package's seven days.
-        services.AddTenancyInvitations<Invitation, InvitationId, TenantsContext>(options =>
-            options.NewInvitationId = InvitationId.CreateSequential);
+        services.AddTenancyInvitations<Invitation, InvitationId, TenantsContext>();
 
         // What a request of this module requires of its caller is one of Tenancy's cases, and the package's check
         // decides them: added for the module's request interface, generated like AddTenancy and closed over the

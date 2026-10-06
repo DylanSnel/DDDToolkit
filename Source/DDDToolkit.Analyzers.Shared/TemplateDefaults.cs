@@ -661,6 +661,9 @@ internal static class TemplateDefaults
             Diagnostics: EquatableArray<DiagnosticInfo>.Empty)
         {
             SingleValueAvailable = compilation.GetTypeByMetadataName(KnownTypes.SingleValueInterface) is not null,
+
+            // Over a Guid, and nobody wrote a part of it: the generator writes its Create(), as for an id declared so.
+            CreatableAvailable = compilation.GetTypeByMetadataName(KnownTypes.CreatableEntityIdInterface) is not null,
         };
     }
 
@@ -674,13 +677,15 @@ internal static class TemplateDefaults
             "project says <c>[assembly: " + by.Name + "]</c> and " + because + ".",
             "</summary>",
             "<remarks>",
-            "A <see cref=\"global::System.Guid\"/> without a prefix, made in code before a save, and published to the other modules",
-            "with <c>[ModuleContract]</c>. To choose another key type, a prefix or a comment of your own, declare it yourself,",
-            "in this project or in a project of its module that it references, and the generator writes this one no more:",
+            "A <see cref=\"global::System.Guid\"/> without a prefix, made in code before a save with <c>" + type.Name + ".Create()</c>, and",
+            "published to the other modules with <c>[ModuleContract]</c>. To choose another key type, a prefix or a comment of your own,",
+            "declare it yourself, in this project or in a project of its module that it references, and the generator writes this one",
+            "no more:",
             "<code>",
             "[ModuleContract, EntityId&lt;Guid&gt;]",
             "public readonly partial record struct " + type.Name + ";",
             "</code>",
+            "An id over anything but a <see cref=\"global::System.Guid\"/> says how a new one is made with a <c>Create()</c> of its own.",
             OutsideTheNamespace(type),
             "</remarks>",
         };

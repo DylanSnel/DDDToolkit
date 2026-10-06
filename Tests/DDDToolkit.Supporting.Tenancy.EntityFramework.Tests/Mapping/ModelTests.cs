@@ -331,17 +331,9 @@ public abstract class ModelTests(TestDatabases databases) : IAsyncLifetime
     {
         var generated = TestHostTenancy.Add(new ServiceCollection());
         var explicitServices = new ServiceCollection().AddTenancy<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, TestTenancyContext>(
-            options =>
-            {
-                options.Catalogue = HostCatalogue.Application;
-                options.NewTenantId = () => new TenantId(1);
-                options.NewSeatId = SeatId.CreateSequential;
-                options.NewUnitId = OrganizationUnitId.CreateSequential;
-                options.NewRoleId = RoleId.CreateSequential;
-            });
+            options => options.Catalogue = HostCatalogue.Application);
         explicitServices.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, DDDToolkit.Supporting.Tenancy.TestHost.Requests.IHostRequest, TestTenancyContext>();
-        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, TestTenancyContext>(
-            options => options.NewInvitationId = InvitationId.CreateSequential);
+        explicitServices.AddTenancyInvitations<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId, HostInvitation, InvitationId, TestTenancyContext>();
 
         Registrations(generated).Should().Equal(Registrations(explicitServices));
     }

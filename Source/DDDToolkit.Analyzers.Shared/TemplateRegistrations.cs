@@ -22,7 +22,10 @@ namespace DDDToolkit.Analyzers.Common;
 /// taking its id or the class itself. None is DDD00049 and several is DDD00045. A class taken that does not
 /// meet the method's constraints is DDD00050, found with the same <see cref="DefinitionFactory.Satisfies"/>
 /// that DDD00048 uses. A class that is itself refused leaves the method without a wrapper and without a
-/// second report, because its own diagnostic already says why.
+/// second report, because its own diagnostic already says why. So does an id without a <c>Create()</c> where the
+/// method asks for one, <c>where TId : ICreatableEntityId&lt;TId&gt;</c>, and the template whose class the id is of
+/// says its package makes the ids (<c>CreatesIds</c>): DDD00067 says it on that class. Any other id without one is
+/// DDD00050 here.
 /// </para>
 /// <para>
 /// A registration takes more than the id of a template with several type arguments: <c>Argument = 1</c> hands
@@ -1077,6 +1080,21 @@ internal static class TemplateRegistrations
                 : take.Argument == 0 || take.IdOfArgument
                     ? argument is INamedTypeSymbol id ? UnmetIdConstraint(parameters[position], id) : null
                     : UnmetByALaterArgument(parameters[position], argument, parameters, symbols, compilation, cancellationToken);
+
+            // An id the package makes new ones of with Create(), which it does not have. The class declared with a
+            // template whose package says it makes their ids says so itself, DDD00067, and the method stands back
+            // without a second word; any other is said here.
+            if (requirement is null && !take.TakeType && IdCreation.IsUnmet(parameters[position], argument, compilation, cancellationToken))
+            {
+                if (take.Argument == 0 && IdCreation.IsSaidOnTheClass(take.MetadataName, compilation))
+                {
+                    met = false;
+                    continue;
+                }
+
+                requirement = "an id with a public static Create() that makes a new one";
+            }
+
             if (requirement is null)
             {
                 continue;

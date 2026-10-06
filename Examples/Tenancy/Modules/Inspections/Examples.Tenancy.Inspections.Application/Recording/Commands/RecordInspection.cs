@@ -76,7 +76,7 @@ public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate
 
         var now = clock.GetUtcNow();
         var inspection = new Inspection(
-            InspectionId.CreateSequential(),
+            InspectionId.Create(),
             scope.Tenant,
             command.Project,
             command.Title,

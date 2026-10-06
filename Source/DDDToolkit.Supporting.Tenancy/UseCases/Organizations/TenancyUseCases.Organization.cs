@@ -15,12 +15,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// </summary>
     /// <param name="store">Where the organization is loaded and saved.</param>
     /// <param name="catalogue">The keys asked for.</param>
-    /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     public sealed class OrganizationCommands(
         IStore store,
         TenancyCatalogue catalogue,
-        TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
         TimeProvider clock)
     {
         /// <summary>Adds a unit below <paramref name="parent"/>.</summary>
@@ -59,7 +57,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             // The organization runs the callback before it takes the unit in: one that throws leaves the tracked
             // organization as it was, so no later save in this scope writes the unit without the application's
             // fields. What it sets is written with the unit.
-            var unit = organization.AddUnit(id ?? options.Checked().NewUnitId!(), parent, name, tenant.Shape, gate.By, configure);
+            var unit = organization.AddUnit(id ?? TUnitId.Create(), parent, name, tenant.Shape, gate.By, configure);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
             return unit.Id;
         }

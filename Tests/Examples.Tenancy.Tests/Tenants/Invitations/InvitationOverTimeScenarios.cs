@@ -39,7 +39,7 @@ public sealed class InvitationOverTimeScenarios(SampleHosts sample) : IClassFixt
         // The host's own registration, with the two lifetimes in seconds: the shortest an invitation may stay
         // open is no longer than the time it stays open by default, or the first invitation is refused.
         await using var onPostgres = await sample.StartOnPostgresAsync(services => services.Replace(ServiceDescriptor.Singleton(
-            new TenancyInvitationOptions<InvitationId> { NewInvitationId = InvitationId.CreateSequential, MinLifetime = StaysOpenFor, DefaultLifetime = StaysOpenFor })));
+            new TenancyInvitationOptions<InvitationId> { MinLifetime = StaysOpenFor, DefaultLifetime = StaysOpenFor })));
         var host = onPostgres.Host;
         using var tove = await host.ClientAsync("tove", Meadow.Slug);
         using var juno = await host.ClientAsync("juno", tenant: null);

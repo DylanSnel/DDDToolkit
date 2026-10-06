@@ -307,7 +307,24 @@ public sealed class GeneratorTestHost
         other._extraReferences.AddRange(_extraReferences);
         other = configure(other);
 
-        var outcome = other.RunCoreAnd(alsoRun);
+        return Referencing(assemblyName, other.RunCoreAnd(alsoRun));
+    }
+
+    /// <summary>
+    /// Compiles a snippet into an assembly of its own without running a generator, and references it: an assembly
+    /// as a project left it that this toolkit's generators did not build, one for another framework or of an older
+    /// version, with what its generators wrote there written out in <paramref name="source"/>.
+    /// </summary>
+    public GeneratorTestHost WithReferencedAssemblyAsBuilt(string source, string assemblyName)
+    {
+        var other = new GeneratorTestHost().WithAssemblyName(assemblyName).WithSource(source, assemblyName + ".cs");
+        other._extraReferences.AddRange(_extraReferences);
+        return Referencing(assemblyName, other.Run());
+    }
+
+    /// <summary>Emits a referenced project that compiled, and adds it to this host's references.</summary>
+    private GeneratorTestHost Referencing(string assemblyName, GeneratorRunOutcome outcome)
+    {
         outcome.ShouldCompile();
 
         using var stream = new MemoryStream();

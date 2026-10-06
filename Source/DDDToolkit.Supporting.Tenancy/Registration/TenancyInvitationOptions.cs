@@ -3,16 +3,13 @@ using DDDToolkit.Abstractions.Interfaces;
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// What an application that invites people tells Tenancy: how to make an invitation's id, which is required, as
-/// every id is, and how long an invitation stays open.
+/// What an application that invites people may tell Tenancy: how long an invitation stays open, which has defaults.
+/// A new invitation's id is made by the id itself, with its <c>Create()</c>, as every id of Tenancy's is.
 /// </summary>
 /// <typeparam name="TInvitationId">The application's invitation id.</typeparam>
 public sealed class TenancyInvitationOptions<TInvitationId>
     where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
 {
-    /// <summary>Makes a new invitation id. Required.</summary>
-    public Func<TInvitationId>? NewInvitationId { get; set; }
-
     /// <summary>How long an invitation stays open when whoever issues it does not say: seven days.</summary>
     public TimeSpan DefaultLifetime { get; set; } = TimeSpan.FromDays(7);
 
@@ -24,11 +21,9 @@ public sealed class TenancyInvitationOptions<TInvitationId>
 
     /// <summary>What is wrong with the options, or <see langword="null"/> when nothing is.</summary>
     internal string? Problem()
-        => NewInvitationId is null
-            ? "NewInvitationId is not set"
-            : MinLifetime <= TimeSpan.Zero || MinLifetime > DefaultLifetime || DefaultLifetime > MaxLifetime
-                ? "the lifetimes are out of order: MinLifetime is more than nothing, and no more than DefaultLifetime, which is no more than MaxLifetime"
-                : null;
+        => MinLifetime <= TimeSpan.Zero || MinLifetime > DefaultLifetime || DefaultLifetime > MaxLifetime
+            ? "the lifetimes are out of order: MinLifetime is more than nothing, and no more than DefaultLifetime, which is no more than MaxLifetime"
+            : null;
 
     /// <summary>The options, checked: a use case made without registration still says what is wrong.</summary>
     internal TenancyInvitationOptions<TInvitationId> Checked() => Problem() is { } problem ? throw Invalid(problem) : this;

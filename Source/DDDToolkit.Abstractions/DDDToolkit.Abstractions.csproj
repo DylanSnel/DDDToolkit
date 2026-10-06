@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <!--
+      netstandard2.0 for every project that can reference it, and net10.0 for what needs a runtime with static
+      members on interfaces: ICreatableEntityId<TSelf>, whose Create() a supporting domain makes an application's
+      ids with. A project on .NET 10 gets the second, and the generator implements the interface where it sees it.
+    -->
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Title>Domain Driven Design Toolkit - Abstractions</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;abstractions</PackageTags>

@@ -36,7 +36,7 @@ public static class CatalogMutations
     [Mutation]
     public static async Task<Product> ListProductAsync(string sku, string name, decimal price, string currency, [Service] CatalogContext catalog, CancellationToken cancellationToken)
     {
-        var product = new Product(ProductId.CreateSequential(), sku, name, new Money(price, currency).ToValid());
+        var product = new Product(ProductId.Create(), sku, name, new Money(price, currency).ToValid());
         catalog.Products.Add(product);
         await catalog.SaveChangesAsync(cancellationToken);
         return product;

@@ -66,9 +66,9 @@ public static class CatalogModule
             }
 
             catalog.Products.AddRange(
-                new Product(ProductId.CreateSequential(), "COFFEE-1KG", "Coffee beans, 1 kg", new Money(12.50m, Money.Euro).ToValid()),
-                new Product(ProductId.CreateSequential(), "MUG", "Mug", new Money(8.00m, Money.Euro).ToValid()),
-                new Product(ProductId.CreateSequential(), "GRINDER", "Espresso grinder", new Money(1450.00m, Money.Euro).ToValid()));
+                new Product(ProductId.Create(), "COFFEE-1KG", "Coffee beans, 1 kg", new Money(12.50m, Money.Euro).ToValid()),
+                new Product(ProductId.Create(), "MUG", "Mug", new Money(8.00m, Money.Euro).ToValid()),
+                new Product(ProductId.Create(), "GRINDER", "Espresso grinder", new Money(1450.00m, Money.Euro).ToValid()));
 
             await catalog.SaveChangesAsync(cancellationToken);
         }

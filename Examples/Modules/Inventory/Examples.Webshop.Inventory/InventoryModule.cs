@@ -66,9 +66,9 @@ public static class InventoryModule
             }
 
             inventory.StockItems.AddRange(
-                new StockItem(StockItemId.CreateSequential(), "COFFEE-1KG", onHand: 20),
-                new StockItem(StockItemId.CreateSequential(), "MUG", onHand: 2),
-                new StockItem(StockItemId.CreateSequential(), "GRINDER", onHand: 5));
+                new StockItem(StockItemId.Create(), "COFFEE-1KG", onHand: 20),
+                new StockItem(StockItemId.Create(), "MUG", onHand: 2),
+                new StockItem(StockItemId.Create(), "GRINDER", onHand: 5));
 
             await inventory.SaveChangesAsync(cancellationToken);
         }

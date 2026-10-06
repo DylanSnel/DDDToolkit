@@ -47,7 +47,7 @@ writes the rest:
 
 ```csharp title="OrderId.g.cs, shortened"
 [JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>
+public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<OrderId>, IParsable<OrderId>, ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -57,6 +57,7 @@ public readonly partial record struct OrderId : IEntityId<Guid>, IComparable<Ord
 
     public static OrderId CreateUnique() => new(Guid.NewGuid());
     public static OrderId CreateSequential() => new(Guid.CreateVersion7());
+    public static OrderId Create() => CreateSequential();   // how a new one is made, in code before the save
 
     public override string ToString() => /* "ORD_" followed by the Guid */;
 
@@ -764,7 +765,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
     public Task HandleAsync(OrderConfirmedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
         context.Shipments.Add(new Shipment(
-            ShipmentId.CreateSequential(), contract.OrderId, $"{contract.PostalCode}, {contract.City}", message.OccurredAt));
+            ShipmentId.Create(), contract.OrderId, $"{contract.PostalCode}, {contract.City}", message.OccurredAt));
 
         return Task.CompletedTask;
     }

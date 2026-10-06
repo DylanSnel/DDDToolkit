@@ -50,7 +50,7 @@ public static class OrderingMutations
                 .ToArray());
         }
 
-        var order = new Order(OrderId.CreateSequential(), shipTo, priced.Lines, CustomerId.Of(callers.Current));
+        var order = new Order(OrderId.Create(), shipTo, priced.Lines, CustomerId.Of(callers.Current));
         order.EnsureInvariants();
 
         orders.Add(order);

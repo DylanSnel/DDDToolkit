@@ -4,40 +4,47 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
-/// Registration asks for the ways to make each id up front and names what is missing, builds the catalogue once
-/// from the application's part, when it has one, and every module's contribution, and leaves only the store to
-/// the storage package.
+/// Registration needs no option, since every one has a default and each id makes a new one of itself; it builds
+/// the catalogue once from the application's part, when it has one, and every module's contribution, and leaves
+/// only the store to the storage package.
 /// </summary>
 public class RegistrationTests
 {
-    private static IServiceCollection AddTenancyCore(IServiceCollection services, Action<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>> configure)
+    private static IServiceCollection AddTenancyCore(IServiceCollection services, Action<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>? configure)
         => services.AddTenancyCore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>(configure);
 
     private static void EveryOption(TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId> options)
-    {
-        options.Catalogue = HostCatalogue.Application;
-        options.NewTenantId = () => new TenantId(1);
-        options.NewSeatId = SeatId.CreateSequential;
-        options.NewUnitId = OrganizationUnitId.CreateSequential;
-        options.NewRoleId = RoleId.CreateSequential;
-    }
+        => options.Catalogue = HostCatalogue.Application;
 
     [Fact]
-    public void AddTenancyCore_names_every_missing_option()
+    public async Task AddTenancyCore_needs_no_option_and_the_ids_make_new_ones_of_themselves()
     {
-        var missing = FluentActions.Invoking(() => AddTenancyCore(new ServiceCollection(), _ => { }))
-            .Should().Throw<InvalidOperationException>()
-            .WithMessage("*NewTenantId, NewSeatId, NewUnitId, NewRoleId*")
-            .Which.Message;
-        missing.Should().NotContain("Catalogue", "the catalogue has a default: the application adds nothing to it");
+        var services = AddTenancyCore(new ServiceCollection(), configure: null);
+        services.AddSingleton(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
+        services.AddSingleton<HostTenancy.IStore>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
+        services.AddScoped<ISeatDirectory<TenantId, SeatId>, ListedSeats>();
 
-        FluentActions.Invoking(() => AddTenancyCore(new ServiceCollection(), options =>
-            {
-                EveryOption(options);
-                options.NewUnitId = null;
-            }))
-            .Should().Throw<InvalidOperationException>()
-            .Which.Message.Should().Contain("NewUnitId").And.NotContain("NewSeatId");
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
+        provider.GetRequiredService<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>().Catalogue
+            .Should().BeNull("the catalogue has a default: the application adds nothing to it");
+
+        await using var scope = provider.CreateAsyncScope();
+        var store = provider.GetRequiredService<InMemoryTenancyStore>();
+        HostTenancy.ProvisionedTenant provisioned;
+        using (TenancyCallers.Begin(HostCaller.System))
+        {
+            store.BeginUnitOfWork();
+            provisioned = await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
+                new HostTenancy.TenantToProvision("harbor", "Harbor", TenantShape.Flat, "Head office", Guid.NewGuid(), "Ada"),
+                TestContext.Current.CancellationToken);
+        }
+
+        // TenantId.Create() of the host, a long, and the generator's Create() of the others, time-ordered Guids.
+        provisioned.Tenant.Value.Should().BeGreaterThan(1_000_000, "the host's TenantId counts its own numbers");
+        provisioned.AdminSeat.Value.Version.Should().Be(7);
+        provisioned.RootUnit.Value.Version.Should().Be(7);
+        provisioned.AdministratorRole.Value.Version.Should().Be(7);
+        store.HasTenant(provisioned.Tenant).Should().BeTrue();
     }
 
     [Fact]

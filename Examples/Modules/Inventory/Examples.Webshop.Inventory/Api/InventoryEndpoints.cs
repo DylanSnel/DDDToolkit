@@ -29,7 +29,7 @@ public static class InventoryEndpoints
             var item = await inventory.StockItems.SingleOrDefaultAsync(i => i.Sku == sku, cancellationToken);
             if (item is null)
             {
-                inventory.StockItems.Add(item = new StockItem(StockItemId.CreateSequential(), sku, body.Quantity));
+                inventory.StockItems.Add(item = new StockItem(StockItemId.Create(), sku, body.Quantity));
             }
             else
             {

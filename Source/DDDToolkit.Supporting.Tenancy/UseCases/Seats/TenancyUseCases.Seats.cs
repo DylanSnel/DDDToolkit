@@ -24,12 +24,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// </summary>
     /// <param name="store">Where seats and roles are loaded and saved.</param>
     /// <param name="catalogue">The keys asked for, and which keys are live.</param>
-    /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     public sealed class SeatCommands(
         IStore store,
         TenancyCatalogue catalogue,
-        TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
         TimeProvider clock)
     {
         /// <summary>Adds a seat for a verified identity, placed nowhere yet.</summary>
@@ -57,7 +55,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
-                id ?? options.Checked().NewSeatId!(), tenantId, identity, displayName, gate.By);
+                id ?? TSeatId.Create(), tenantId, identity, displayName, gate.By);
             store.Add(seat);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
             return seat.Id;

@@ -102,6 +102,8 @@ internal static class DefinitionFactory
         {
             DeclaresValidate = DeclaresValidate(symbol),
             SingleValueAvailable = HasType(compilation, KnownTypes.SingleValueInterface),
+            CreatableAvailable = HasType(compilation, KnownTypes.CreatableEntityIdInterface),
+            OwnCreate = DeclaredCreateOf(symbol),
         };
     }
 
@@ -230,6 +232,35 @@ internal static class DefinitionFactory
                  == KnownTypes.ValidationNamespace + ".ValidationErrorBuilder",
             _ => false,
         });
+
+    /// <summary>
+    /// What an id declares called <c>Create</c> without parameters, in any of its parts. A <c>public static Create()</c>
+    /// that answers the id is the author's way of making a new one, which wins over the generator's. Anything else of
+    /// the name would clash with one the generator wrote, so it writes none. A <c>Create</c> with parameters, or with
+    /// type parameters, is an overload and clashes with nothing. Of an id from a referenced project this sees the
+    /// generator's own as well, which fits.
+    /// </summary>
+    internal static DeclaredCreate DeclaredCreateOf(INamedTypeSymbol id)
+    {
+        var declared = DeclaredCreate.None;
+        foreach (var member in id.GetMembers("Create"))
+        {
+            if (member is IMethodSymbol method && (method.Parameters.Length > 0 || method.TypeParameters.Length > 0))
+            {
+                continue;
+            }
+
+            if (member is IMethodSymbol { IsStatic: true, DeclaredAccessibility: Accessibility.Public } fits
+                && SymbolEqualityComparer.Default.Equals(fits.ReturnType, id))
+            {
+                return DeclaredCreate.Fits;
+            }
+
+            declared = DeclaredCreate.Other;
+        }
+
+        return declared;
+    }
 
     /// <summary>
     /// The <c>property:</c> and <c>field:</c> attributes on a positional parameter, as source for the
@@ -512,6 +543,11 @@ internal static class DefinitionFactory
                     DiagnosticDescriptors.TemplateIdIsNotAnEntityId, type.Location, type.Name, attributeName, id.ToDisplayString()));
                 canGenerate = false;
             }
+            else if (marker.CreatesIds && id is INamedTypeSymbol namedId && IdCreation.Lacks(namedId, compilation, cancellationToken))
+            {
+                // The class itself is generated: only what makes its new ids needs the Create(), and that stands back.
+                diagnostics.Add(IdWithoutCreate(namedId, type.Name, attributeName, LocationInfo.From(IdArgumentOf(attribute, cancellationToken)) ?? type.Location));
+            }
         }
         else
         {
@@ -584,6 +620,20 @@ internal static class DefinitionFactory
             Arguments: new EquatableArray<string>(new[] { idType }),
             Bindings: bindings.OrderBy(static binding => binding.Position).ToEquatableArray());
 
+        // An id the switch writes is over a Guid and gets its Create(). One it takes, found by its name, is the
+        // project's own, and is told about where it is declared: the class written over it is in no file of the project.
+        var diagnostics = EquatableArray<DiagnosticInfo>.Empty;
+        if (marker.CreatesIds
+            && idType.StartsWith("global::", StringComparison.Ordinal)
+            && compilation.GetTypeByMetadataName(idType.Substring("global::".Length)) is { } taken
+            && IdCreation.Lacks(taken, compilation, cancellationToken))
+        {
+            diagnostics = new EquatableArray<DiagnosticInfo>(new[]
+            {
+                IdWithoutCreate(taken, type.Name, template.AttributeName, LocationInfo.From(taken.Locations.FirstOrDefault(static location => location.IsInSource)) ?? type.Location),
+            });
+        }
+
         return new EntityDefinition(
             Type: type,
             IsAggregateRoot: marker.IsAggregateRoot,
@@ -595,7 +645,7 @@ internal static class DefinitionFactory
             EfBackingFieldAttributeAvailable: HasType(compilation, KnownTypes.EfBackingFieldAttribute),
             ReadOnlySetAvailable: HasType(compilation, KnownTypes.ReadOnlySet),
             CanGenerate: true,
-            Diagnostics: EquatableArray<DiagnosticInfo>.Empty)
+            Diagnostics: diagnostics)
         {
             Template = template,
             TemplateKey = template.AttributeKey,
@@ -603,6 +653,47 @@ internal static class DefinitionFactory
             MetadataName = type.Namespace.Length > 0 ? type.Namespace + "." + type.Name : type.Name,
             ParentHasKeyParts = HasKeyParts(parent),
         };
+    }
+
+    /// <summary>
+    /// DDD00067: a class whose template's package makes its new ids, declared over an id that cannot make a new one
+    /// with <c>Create()</c>. What it lacks decides what the message asks for (<see cref="IdCreation.ShortfallOf"/>).
+    /// The id's metadata name, which fix fits and the example of a new value go with it, for the code fix that adds
+    /// what is missing to the id wherever it is declared.
+    /// </summary>
+    private static DiagnosticInfo IdWithoutCreate(INamedTypeSymbol id, string className, string attributeName, LocationInfo? location)
+    {
+        var shortfall = IdCreation.ShortfallOf(id);
+        return DiagnosticInfo.Create(
+            DiagnosticDescriptors.TemplateIdWithoutCreate,
+            location,
+            id.Name,
+            className,
+            attributeName,
+            shortfall.Lacks,
+            shortfall.Advice) with
+        {
+            Properties = new EquatableArray<string>(new[]
+            {
+                "IdMetadataName", EntityDeclarations.MetadataNameOf(id),
+                IdShortfall.Property, shortfall.Fix,
+                "IdExample", IdCreation.ExampleFor(IdCreation.ValueOf(id)),
+            }),
+        };
+    }
+
+    /// <summary>The id as the template attribute names it, <c>TenantId</c> in <c>[TenantAggregate&lt;TenantId&gt;]</c>: where DDD00067 points.</summary>
+    private static Location? IdArgumentOf(AttributeData attribute, CancellationToken cancellationToken)
+    {
+        var generic = attribute.ApplicationSyntaxReference?.GetSyntax(cancellationToken) switch
+        {
+            AttributeSyntax { Name: GenericNameSyntax name } => name,
+            AttributeSyntax { Name: QualifiedNameSyntax { Right: GenericNameSyntax right } } => right,
+            AttributeSyntax { Name: AliasQualifiedNameSyntax { Name: GenericNameSyntax aliased } } => aliased,
+            _ => null,
+        };
+
+        return generic is { TypeArgumentList.Arguments.Count: > 0 } ? generic.TypeArgumentList.Arguments[0].GetLocation() : null;
     }
 
     /// <summary>Whether a type declares <c>[KeyPart]</c> properties. The attribute survives metadata, so this answers for a referenced parent too.</summary>
@@ -1413,7 +1504,7 @@ internal static class DefinitionFactory
     /// Whether <see cref="CreateEntityId"/> refuses a partial type that carries <c>[EntityId&lt;T&gt;]</c>, by
     /// the same rules: not a record, a sealed record class, or generic, itself or through a type it is nested in.
     /// </summary>
-    private static bool EntityIdIsRefused(INamedTypeSymbol id)
+    internal static bool EntityIdIsRefused(INamedTypeSymbol id)
     {
         if (!id.IsRecord || (id.IsSealed && !id.IsValueType))
         {
@@ -1901,6 +1992,10 @@ internal static class DefinitionFactory
             Diagnostics: EquatableArray<DiagnosticInfo>.Empty)
         {
             SingleValueAvailable = HasType(compilation, KnownTypes.SingleValueInterface),
+            CreatableAvailable = HasType(compilation, KnownTypes.CreatableEntityIdInterface),
+
+            // A Create() of the author's own goes in the part of the id they wrote, as [GraphQLType<T>] does.
+            OwnCreate = authorsPart is null ? DeclaredCreate.None : DeclaredCreateOf(authorsPart),
         };
     }
 

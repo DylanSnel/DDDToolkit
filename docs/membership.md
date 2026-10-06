@@ -159,7 +159,7 @@ public sealed class DocumentHandlers(
     {
         var owner = new UserId(callers.Current.UserId!.Value);
         var ownerRole = await admission.OwnerRoleAsync(cancellationToken);           // "owner", which the rules added
-        var document = new Document(DocumentId.CreateSequential(), owner, ownerRole, clock.GetUtcNow());
+        var document = new Document(DocumentId.Create(), owner, ownerRole, clock.GetUtcNow());
         db.Documents.Add(document);
         await db.SaveChangesAsync(cancellationToken);
         return document.Id;
@@ -266,7 +266,7 @@ you write your own methods and guards over it, and not the line itself.
 partial class Document
 {
     private global::DDDToolkit.Supporting.Membership.MemberList<global::Filing.DocumentShare, global::Filing.DocumentShareId, global::Filing.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> Members
-        => new(_shares, OwnerId, global::Filing.DocumentShareId.CreateSequential, Codes);
+        => new(_shares, OwnerId, Codes);
 }
 ```
 
@@ -285,19 +285,20 @@ internal static partial class GeneratedMembershipEntityFrameworkServiceCollectio
 
 </details>
 
-It is written from four things the resource declares, and only when each is the only one of its kind there,
+It is written from three things the resource declares, and only when each is the only one of its kind there,
 so that nothing is guessed: the get-only `partial` collection of the member class, the property of what a
-member is known by (`UserId` here) that is the owner, `CreateSequential` of the member class's own id, and
-the static `MembershipCodes`. [DDD00059](diagnostics.md#ddd00059) lists each with what stands in its way,
-and says which it is when the list is not written.
+member is known by (`UserId` here) that is the owner, and the static `MembershipCodes`. A new member row's id
+is made in code by the id itself, `DocumentShareId.Create()`, which the generator writes for an
+`[EntityId<Guid>]`; a row keyed by a `long` declares its own `Create()`. [DDD00059](diagnostics.md#ddd00059)
+lists each with what stands in its way, and says which it is when the list is not written.
 
 For every other shape you write the list yourself, on the resource, and the generator leaves a resource that
-declares one alone: a resource with two properties of the member's id, a member row keyed by something else
-than a `Guid`, codes kept in a class of their own, a collection that is itself called `Members`.
+declares one alone: a resource with two properties of the member's id, codes kept in a class of their own, a
+collection that is itself called `Members`.
 
 ```csharp
 private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
-    => new(_shares, OwnerId, DocumentShareId.CreateSequential, DocumentRefusals.Membership);
+    => new(_shares, OwnerId, DocumentRefusals.Membership);
 ```
 
 `_shares` is the field the toolkit keeps `Shares` in. A resource that has no list, and cannot be given one,
@@ -1021,7 +1022,7 @@ make what is missing with your own constructor:
 var existing = await db.PlotRoles.IgnoreQueryFilters().Where(role => role.GardenId == garden).ToListAsync(cancellationToken);
 foreach (var draft in StarterRoles.Missing(PlotMembership.Rules, existing))
 {
-    db.PlotRoles.Add(new PlotRole(PlotRoleId.CreateSequential(), garden, draft));
+    db.PlotRoles.Add(new PlotRole(PlotRoleId.Create(), garden, draft));
 }
 ```
 
@@ -1037,7 +1038,7 @@ A role is made with your constructor, and changed with three operations of the p
 happened, so you raise your own events: the package raises none.
 
 ```csharp
-var role = new PlotRole(PlotRoleId.CreateSequential(), garden, new KeptRoleDraft("Fencer", "Keeps the rabbits out.", ["plots.fence"]));
+var role = new PlotRole(PlotRoleId.Create(), garden, new KeptRoleDraft("Fencer", "Keeps the rabbits out.", ["plots.fence"]));
 
 bool renamed = role.Rename("Hedger", "Keeps the rabbits out.", PlotMembership.Rules);     // the name and what it is for, both as they are to be
 RoleKeysSet set = role.SetKeys(["plots.see", "plots.fence"], PlotMembership.Rules);       // set.Added, set.Removed

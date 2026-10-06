@@ -38,4 +38,14 @@ public sealed class AggregateRootTemplateAttribute(Type parent) : Attribute
     /// registration, named after it.
     /// </summary>
     public bool AllowSeveral { get; set; }
+
+    /// <summary>
+    /// Whether the package makes the id of a new class of this template itself, in code and before the save, with
+    /// <c>TId.Create()</c>, as Tenancy makes a new seat's. False by default, for an aggregate whose new instances the
+    /// application makes. When it is set, the id a class is declared with has a <c>Create()</c>, which the generator
+    /// writes for an id over a <see cref="Guid"/> and an id over anything else declares itself; a class declared over
+    /// an id without one is DDD00067, on the class, rather than a compile error in code closed over it. The package's
+    /// code that makes the ids asks the same of its type parameter: <c>where TId : ICreatableEntityId&lt;TId&gt;</c>.
+    /// </summary>
+    public bool CreatesIds { get; set; }
 }

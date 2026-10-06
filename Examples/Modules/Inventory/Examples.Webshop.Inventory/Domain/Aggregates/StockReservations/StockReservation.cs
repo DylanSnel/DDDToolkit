@@ -36,7 +36,7 @@ public partial class StockReservation
 
     internal static StockReservation Reserved(OrderId order, IEnumerable<ReservedLine> lines)
     {
-        var reservation = new StockReservation(StockReservationId.CreateSequential(), order, ReservationStatus.Reserved, refusal: null);
+        var reservation = new StockReservation(StockReservationId.Create(), order, ReservationStatus.Reserved, refusal: null);
         reservation._lines.AddRange(lines);
         reservation.RaiseDomainEvent(new StockReserved(order));
         return reservation;
@@ -44,7 +44,7 @@ public partial class StockReservation
 
     internal static StockReservation Refused(OrderId order, string reason)
     {
-        var reservation = new StockReservation(StockReservationId.CreateSequential(), order, ReservationStatus.Refused, reason);
+        var reservation = new StockReservation(StockReservationId.Create(), order, ReservationStatus.Refused, reason);
         reservation.RaiseDomainEvent(new StockRefused(order, reason));
         return reservation;
     }

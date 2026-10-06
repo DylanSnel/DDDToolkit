@@ -674,7 +674,7 @@ public class SeatCommandsTests
 
         // Retired, the key manages nothing, and the role is given like any other.
         var retired = TenancyCatalogue.Build(marking, [gauge with { Retired = true }]);
-        await harness.As(clerk, h => new HostTenancy.SeatCommands(h.Store, retired, h.Options, h.Clock).GrantAsync(newcomer, harness.Harbor.North, keepers, null, null, default));
+        await harness.As(clerk, h => new HostTenancy.SeatCommands(h.Store, retired, h.Clock).GrantAsync(newcomer, harness.Harbor.North, keepers, null, null, default));
         harness.Store.Seat(newcomer).Placements.Single().Grants.Single().RoleId.Should().Be(keepers);
     }
 

@@ -35,6 +35,12 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// there. System work outside any tenant only provisions.
 /// </para>
 /// <para>
+/// A new tenant, unit, seat, role or invitation gets its id from the id itself, <c>TSeatId.Create()</c>, in code and
+/// before the save, so the change and every event of it know the id from the start; a command given an id, for an
+/// import or fixed seed data, uses that one. That is why each id is an <see cref="ICreatableEntityId{TSelf}"/>: the
+/// generator writes <c>Create()</c> for an id over a <see cref="Guid"/>, and an id over anything else declares it.
+/// </para>
+/// <para>
 /// A command that changes rights, or what they reach, first takes the tenant's access revision, before it
 /// reads anything, so that two such commands committed at the same time cannot both have decided on what
 /// the other changed. Placing a seat and archiving a unit take it as well: a placement widens what a seat may
@@ -66,10 +72,10 @@ public abstract partial class TenancyUseCases<
     where TUnit : OrganizationUnitEntity<TUnitId>
     where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
     where TRole : RoleAggregate<TRoleId, TTenantId>
-    where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-    where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-    where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-    where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+    where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+    where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+    where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+    where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
 {
     /// <summary>
     /// For the class the generator writes for an application, which derives from this one closed over its classes

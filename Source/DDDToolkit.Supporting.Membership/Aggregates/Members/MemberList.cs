@@ -28,12 +28,13 @@ namespace DDDToolkit.Supporting.Membership;
 /// <para>
 /// The package's generator writes <c>Members</c> on the resource a member class names, from the one collection
 /// of the member class, the one property of the member's id, which is the owner, and the one static
-/// <see cref="MembershipCodes"/> the resource declares; a new member row's id is made with the member class's
-/// <c>CreateSequential</c>, so that id is an <c>[EntityId&lt;Guid&gt;]</c>. A resource the generator cannot tell
-/// these of declares the property itself, which the generator then leaves alone:
+/// <see cref="MembershipCodes"/> the resource declares. A new member row's id is made by the id itself, with
+/// its <c>Create()</c>, which the generator writes for an <c>[EntityId&lt;Guid&gt;]</c> and an id over anything
+/// else declares. A resource the generator cannot tell these of declares the property itself, which the generator
+/// then leaves alone:
 /// <code>
 /// private MemberList&lt;DocumentShare, DocumentShareId, UserId, NamedRole&gt; Members
-///     =&gt; new(_shares, OwnerId, DocumentShareId.CreateSequential, DocumentRefusals.Membership);
+///     =&gt; new(_shares, OwnerId, DocumentRefusals.Membership);
 /// </code>
 /// </para>
 /// <para>
@@ -70,34 +71,30 @@ namespace DDDToolkit.Supporting.Membership;
 /// </para>
 /// </summary>
 /// <typeparam name="TMember">The application's member class.</typeparam>
-/// <typeparam name="TId">The member class's own id.</typeparam>
+/// <typeparam name="TId">The member class's own id, which makes a new member row's id with its <c>Create()</c>.</typeparam>
 /// <typeparam name="TMemberId">What a member is known by.</typeparam>
 /// <typeparam name="TRoleId">What a role is known by.</typeparam>
 public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     where TMember : MemberEntity<TId, TMemberId, TRoleId>
-    where TId : struct, IEntityId, IEquatable<TId>
+    where TId : struct, ICreatableEntityId<TId>, IEquatable<TId>
     where TMemberId : struct, IEntityId, IEquatable<TMemberId>
     where TRoleId : struct, IEntityId, IEquatable<TRoleId>
 {
     private readonly List<TMember> _collection;
     private readonly TMemberId _owner;
-    private readonly Func<TId> _newId;
     private readonly MembershipCodes _codes;
 
     /// <summary>The member list of one resource, over the collection its aggregate keeps.</summary>
     /// <param name="members">The aggregate's own member collection: the field behind its generated read-only property.</param>
     /// <param name="owner">The resource's owner, as the aggregate keeps it now.</param>
-    /// <param name="newId">Makes the id of a new member row, such as <c>DocumentShareId.CreateSequential</c>.</param>
     /// <param name="codes">The codes the resource refuses with.</param>
-    public MemberList(List<TMember> members, TMemberId owner, Func<TId> newId, MembershipCodes codes)
+    public MemberList(List<TMember> members, TMemberId owner, MembershipCodes codes)
     {
         ArgumentNullException.ThrowIfNull(members);
-        ArgumentNullException.ThrowIfNull(newId);
         ArgumentNullException.ThrowIfNull(codes);
 
         _collection = members;
         _owner = owner;
-        _newId = newId;
         _codes = codes;
     }
 
@@ -328,7 +325,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     private TMember NewMember(TMemberId member, MemberPeriod period, TMemberId? addedBy)
     {
         var created = HostInstances<TMember>.New();
-        created.InitializeNew(_newId(), member, period, addedBy);
+        created.InitializeNew(TId.Create(), member, period, addedBy);
         _collection.Add(created);
         return created;
     }

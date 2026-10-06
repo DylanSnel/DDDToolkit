@@ -65,6 +65,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00064](#ddd00064) | Warning | DDD_Module declares the module where the package's build step runs |
 | [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
 | [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
+| [DDD00067](#ddd00067) | Error | A class whose package makes its new ids is declared over an id with a Create() |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -101,7 +102,7 @@ is a module whose keys never reach the catalogue the host runs with.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
-[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), [DDD00065](#ddd00065) and [DDD00066](#ddd00066), about
+[DDD00042](#ddd00042) to [DDD00050](#ddd00050), [DDD00053](#ddd00053), and [DDD00065](#ddd00065) to [DDD00067](#ddd00067), about
 [supporting domains](writing-a-supporting-domain.md), [DDD00052](#ddd00052), about a function's name, and
 [DDD00056](#ddd00056) and [DDD00057](#ddd00057), about an access behavior,
 say what the generator could not do, and are numbered after the rest because they came later. Severity
@@ -1604,7 +1605,11 @@ over its own id. Give the class what the message names.
 A `[TemplateType]` that takes an id is held to the method's `struct` or `class` constraint the same way:
 an id declared as a `record class` where the method says `where TTenantId : struct` is reported on the
 class declared with the template, rather than failing inside the registration. Its interfaces are not
-judged here: the generator writes them for an entity id, which [DDD00043](#ddd00043) already asks for.
+judged here: the generator writes them for an entity id, which [DDD00043](#ddd00043) already asks for. The one
+exception is a `Create()`, which the generator writes for a `Guid` alone: where the method asks for
+`ICreatableEntityId<T>`, an id without one is reported here, unless its template says the package makes the ids
+of its classes, `CreatesIds = true`, as Tenancy's do; then [DDD00067](#ddd00067) says it on the class, and the
+registration stands back without a second word.
 
 A [later type argument of the template](writing-a-supporting-domain.md#a-template-with-more-than-one-type-argument),
 taken with `Argument = 1` and up, is whatever type you wrote there, and is held to the method's constraints
@@ -1961,14 +1966,14 @@ public sealed partial class Document                    // DDD00059: two propert
 
 For a class declared with [Membership](membership.md)'s member template, the package's generator writes the
 member list on the resource the template names: a private property `Members`, which the resource's own
-methods change its members through. It writes it from four things the resource declares, and only when each
-can be told without a guess:
+methods change its members through. It writes it from three things the resource declares and the member
+class's own id, and only when each can be told without a guess:
 
 | The list needs | It is | Not told when |
 |---|---|---|
 | the members | the one get-only `partial` property of `IReadOnlyList<TMember>`, `IReadOnlyCollection<TMember>` or `IEnumerable<TMember>`, which the toolkit keeps in a list | there is none, or there are two; a set is kept in a `HashSet` |
 | the owner | the one property of what a member is known by, the template's second type | there is none, or there are two |
-| a new row's id | `CreateSequential` of the member class's own id, an `[EntityId<Guid>]` | the id is over something else than a `Guid` |
+| a new row's id | the `Create()` of the member class's own id, which the generator writes for an `[EntityId<Guid>]` | the id is over something else, a `long` say, and declares no `Create()` |
 | the codes | the one static property or field of `MembershipCodes` on the resource | there is none, or there are two |
 
 It is also not written when the resource has a member called `Members` already, and when two member classes
@@ -1998,7 +2003,7 @@ member class, under whatever name, is left alone and hears nothing:
 
 ```csharp
 private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members
-    => new(_shares, OwnerId, DocumentShareId.CreateSequential, DocumentRefusals.Membership);
+    => new(_shares, OwnerId, DocumentRefusals.Membership);
 ```
 
 It is a warning because the resource compiles: it has no member list, so its members cannot be changed, and
@@ -2320,6 +2325,59 @@ it, so a `TenantId` in the way leaves out the four of them, with one error. No i
 not, and `AddTenancy()` and the class the use cases are named through stand back for what is left out, rather
 than report it missing ([DDD00049](#ddd00049), [DDD00065](#ddd00065)). A class or an id you declare yourself
 always wins, and is never reported: the switch takes it, or writes the rest around it.
+
+## DDD00067
+
+**A class whose package makes its new ids is declared over an id with a `Create()`.**
+
+```csharp
+[EntityId<long>]
+public readonly partial record struct TenantId;
+
+[TenantAggregate<TenantId>]   // DDD00067: 'TenantId' has no public static Create(), and 'Tenant' is declared with [TenantAggregate], whose package makes each new TenantId with TenantId.Create(), in code and before the save. ...
+public sealed partial class Tenant;
+```
+
+An id is made in code before the save, never by the database, so a change and every event of it know the id from
+the start. Tenancy makes the ids of the tenants, units, seats, roles and invitations it creates itself, with the id's
+own `Create()`. The generator writes `Create()` for every `[EntityId<Guid>]`, a time-ordered id as
+`CreateSequential()` makes. An id over a `long`, an `int` or a `string` has none, because there is no telling how a
+new one is made, so it says so in its partial declaration:
+
+```csharp
+[EntityId<long>]
+public readonly partial record struct TenantId
+{
+    public static TenantId Create() => new(Snowflakes.Next());   // a snowflake, or a number of a HiLo block
+}
+```
+
+A `Create()` of your own wins over the generator's for a `Guid` too. The message says what the id lacks, and what
+to write:
+
+- An `[EntityId<T>]` without a `Create()`: one in its partial declaration, as above, with an example of a new
+  value for its key type.
+- An id written by hand, without `[EntityId<T>]`, which no generator completes: the `Create()`, and
+  `ICreatableEntityId<TenantId>` among the interfaces it implements.
+- An id with a fitting `Create()` and without the interface: the interface. For an id of a project that does not
+  target `net10.0`, that project's target instead: only the `net10.0` build of DDDToolkit.Abstractions has
+  `ICreatableEntityId<T>`, and the generator implements it where the project sees it.
+- A `Create()` that is not `public static`, or answers another type: make it one that is.
+
+The error is on the class declared with the template, where it names the id. For a class a package's switch writes,
+which is in no file of yours, it is on the id when the id is declared in the same project, and on the switch,
+`[assembly: GenerateTenancyClasses]`, when the id is another project's, such as the module's contracts project. The
+code fix goes to the id either way, wherever in the solution it is declared, and adds what is missing: a `Create()`
+with a body that throws until you write it, the interface, or both. Where the answer is not in the id's declaration,
+a `Create()` that does not fit or a project's target, it offers nothing. The class itself is generated; the
+package's registrations and the class its use cases are named through, which ask for the same with a constraint,
+stand back for it rather than fail inside generated code.
+
+A package says which of its templates it makes the ids of, on the marker:
+`[AggregateRootTemplate(typeof(SeatAggregate<,,,>), CreatesIds = true)]`
+([A package that makes the ids of its classes](writing-a-supporting-domain.md#a-package-that-makes-the-ids-of-its-classes)).
+Only Tenancy's templates do. Any other id, one the application makes itself, needs no `Create()`, and nothing is
+said about it.
 
 ## Building the model fails: the owned type must carry the key part
 

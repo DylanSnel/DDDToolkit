@@ -434,13 +434,14 @@ Warning, on the aggregate a `[Member<TId, TMemberId, TRoleId, TResource>]` class
 aggregate, a `MemberList<TMember, TId, TMemberId, TRoleId>`, and could not: the message lists what it could
 not tell. It needs exactly one of each on the aggregate: a get-only `partial` collection of the member class
 (`IReadOnlyList<T>`, `IReadOnlyCollection<T>` or `IEnumerable<T>`); a property of `TMemberId`, the owner; a
-static property or field of `MembershipCodes`; and `TId` must be an `[EntityId<Guid>]`. A member id that
+static property or field of `MembershipCodes`; and `TId` must have a `Create()`, which the generator writes for an
+`[EntityId<Guid>]` and an id over a `long` declares itself. A member id that
 another generator writes, the id of an `[AggregateRoot<Guid>]`, cannot be seen by it: declare that id with
 `[EntityId<Guid>]` yourself. Add what is missing,
 for example `public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");`. If the
-shape cannot be told (two properties of the member's id, codes kept elsewhere, an id over a `long`), write
+shape cannot be told (two properties of the member's id, codes kept elsewhere), write
 the property by hand on the aggregate, which also silences the warning:
-`private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(_shares, OwnerId, DocumentShareId.CreateSequential, codes);`.
+`private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(_shares, OwnerId, codes);`.
 Do not rename a hand-written list to dodge the warning: any member of that `MemberList` type counts.
 
 ## DDD00060
@@ -528,6 +529,26 @@ name that is no entity id: mark it `[EntityId<Guid>]` or rename it. An id of tha
 with an id of its own. Several ids of one name in the project or the projects of its module: keep one. The classes
 that take from the one in the way are left out with it, with no id, and nothing else reports them; DDD00049 does
 not follow it. Never answer it by deleting the switch and writing every empty class by hand.
+
+## DDD00067
+
+Error, on a class declared with a template whose package makes the ids of new classes itself (Tenancy's tenant,
+unit, seat, role and invitation). When the package's switch wrote the class it is on the id, or on the switch when
+the id is another project's (the code fix still goes to the id). The id cannot make a new one with `Create()`. Ids
+are made in code before the save, never by the database. The message says what is missing:
+
+- An `[EntityId<T>]` over a `long`, an `int` or a `string` (an `[EntityId<Guid>]` gets `Create()` from the
+  generator): add `public static TenantId Create() => new(...);` to its partial declaration, with a value made in
+  code (a snowflake or a number of a HiLo block for a `long`; a HiLo number for an `int`, which a snowflake does not fit).
+- An id written by hand, without `[EntityId<T>]`: add the `Create()` and `ICreatableEntityId<TenantId>`, since no
+  generator completes it.
+- A fitting `Create()` without the interface: add the interface, or, for an id of a project that does not target
+  `net10.0`, target `net10.0` there; only that build of DDDToolkit.Abstractions has the interface.
+- A `Create()` that is not `public static` or answers another type: make it fit.
+
+The code fix adds a `Create()` stub that throws, the interface, or both; replace the stub's body. Do not switch the
+id to a `Guid` unless the application wants that key type, and do not bring back an option or a database default
+for it. Other ids need no `Create()`.
 
 ## Not a diagnostic: the owned type must carry the key part
 

@@ -119,8 +119,8 @@ public class MemberListGeneratorTests
             "private global::DDDToolkit.Supporting.Membership.MemberList<global::Shop.DocumentShare, global::Shop.DocumentShareId, global::Shop.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> Members",
             "the four types are the member class and the three its template was declared with");
         source.Should().Contain(
-            "=> new(_shares, OwnerId, global::Shop.DocumentShareId.CreateSequential, Codes);",
-            "the list of the collection, the one property of the member's id, a new id in time order, and the one static MembershipCodes");
+            "=> new(_shares, OwnerId, Codes);",
+            "the list of the collection, the one property of the member's id, and the one static MembershipCodes: a new row's id is DocumentShareId.Create()");
     }
 
     [Fact]
@@ -186,10 +186,10 @@ public class MemberListGeneratorTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldContain("Document.Members.", "=> new(_shares, OwnerId, global::Shop.DocumentShareId.CreateSequential, Codes);");
+        result.ShouldContain("Document.Members.", "=> new(_shares, OwnerId, Codes);");
         result.ShouldContain(
             "Folder.Members.",
-            "=> new(_staff, Keeper, global::Shop.FolderMemberId.CreateSequential, FolderCodes);",
+            "=> new(_staff, Keeper, FolderCodes);",
             "the owner and the codes are found by what they are, whatever they are called, and a field holds the codes as well as a property does");
     }
 
@@ -242,7 +242,8 @@ public class MemberListGeneratorTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldContain("Document.Members.", "global::Shop.DocumentShareId.CreateSequential");
+        result.ShouldContain("Document.Members.", "MemberList<global::Shop.DocumentShare, global::Shop.DocumentShareId, global::Shop.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> Members");
+        result.ShouldContain("Document.Members.", "=> new(_shares, OwnerId, Codes);");
     }
 
     // ------------------------------------------------------------------ what is left alone
@@ -264,7 +265,7 @@ public class MemberListGeneratorTests
                   public partial IReadOnlyList<DocumentShare> Shares { get; }
 
                   private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> {{name}}
-                      => new(_shares, OwnerId, DocumentShareId.CreateSequential, DocumentRefusals.Membership);
+                      => new(_shares, OwnerId, DocumentRefusals.Membership);
 
                   public void ShareWith(UserId user, MemberPeriod period, DateTimeOffset now) => {{name}}.Add(user, period, now);
                   """),
@@ -333,7 +334,7 @@ public class MemberListGeneratorTests
         result.Count("DDD00059").Should().Be(1);
         Reported(result, at: "Document").Should()
             .StartWith("'Document' has no member list, and the toolkit cannot write one over its 'DocumentShare': it declares more than one property of 'UserId' (OwnerId, WrittenBy), so which of them is its owner cannot be told.")
-            .And.EndWith("write the list yourself: private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(members, owner, newId, codes);.");
+            .And.EndWith("write the list yourself: private MemberList<DocumentShare, DocumentShareId, UserId, NamedRole> Members => new(members, owner, codes);.");
     }
 
     [Fact]
@@ -402,29 +403,69 @@ public class MemberListGeneratorTests
     }
 
     [Fact]
-    public void A_member_row_keyed_by_something_else_than_a_guid_is_told_that_no_new_id_can_be_made()
+    public void A_member_row_keyed_by_an_id_without_a_create_is_told_that_no_new_id_can_be_made()
     {
+        var result = Run(ShareNumber(withCreate: false), DocumentKeyedByShareNumber());
+
+        Reported(result, at: "Document").Should().Contain(
+            "'ShareNumber', the id of a member's row, has no public static Create(), which a new row's id is made with: declare it in the partial "
+            + "declaration of ShareNumber, public static ShareNumber Create() => new(...), with a new long made in code: a snowflake, or the next "
+            + "number of a block a HiLo sequence hands out");
+    }
+
+    [Fact]
+    public void A_member_row_keyed_by_an_id_written_by_hand_is_told_what_it_lacks_and_gets_no_list_that_fails()
+    {
+        // Partial, without [EntityId<T>]: no generator completes it, so it is what it shows, and that has no Create().
         var result = Run(
             """
-            using DDDToolkit.Abstractions.Attributes;
+            using DDDToolkit.Abstractions.Interfaces;
 
             namespace Shop;
 
-            [EntityId<long>]
-            public readonly partial record struct ShareNumber;
+            public readonly partial record struct ShareNumber(long Value) : IEntityId<long>;
             """,
-            Document(
-                """
-                    public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+            DocumentKeyedByShareNumber());
 
-                    public UserId OwnerId { get; private set; }
-
-                    public partial IReadOnlyList<DocumentShare> Shares { get; }
-                """,
-                memberTemplate: "Member<ShareNumber, UserId, NamedRole, Document>"));
-
-        Reported(result, at: "Document").Should().Contain("'ShareNumber', the id of a member's row, is not an [EntityId<Guid>], so there is no telling how a new one is made");
+        result.CompilationErrors.Should().BeEmpty("no list is written over an id it cannot make a new row's id of: no CS0315 in code nobody wrote");
+        result.ShouldNotHaveGeneratedFor("Document.Members");
+        Reported(result, at: "Document").Should().Contain(
+            "'ShareNumber', the id of a member's row, has no public static Create(), which a new row's id is made with: declare it on ShareNumber, "
+            + "public static ShareNumber Create() => new(...), with a new long made in code: a snowflake, or the next number of a block a HiLo "
+            + "sequence hands out, and add ICreatableEntityId<ShareNumber> to the interfaces it implements");
     }
+
+    [Fact]
+    public void A_member_row_keyed_by_a_long_that_says_how_a_new_one_is_made_gets_its_list()
+    {
+        var result = Run(ShareNumber(withCreate: true), DocumentKeyedByShareNumber());
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.ShouldContain("Document.Members.", "MemberList<global::Shop.DocumentShare, global::Shop.ShareNumber, global::Shop.UserId, global::DDDToolkit.Supporting.Membership.NamedRole> Members");
+    }
+
+    private static string ShareNumber(bool withCreate)
+        => """
+           using DDDToolkit.Abstractions.Attributes;
+
+           namespace Shop;
+
+           [EntityId<long>]
+           public readonly partial record struct ShareNumber
+           """
+           + (withCreate ? "\n{\n    public static ShareNumber Create() => new(1);\n}\n" : ";\n");
+
+    private static string DocumentKeyedByShareNumber()
+        => Document(
+            """
+                public static MembershipCodes Codes { get; } = MembershipCodes.Under("documents");
+
+                public UserId OwnerId { get; private set; }
+
+                public partial IReadOnlyList<DocumentShare> Shares { get; }
+            """,
+            memberTemplate: "Member<ShareNumber, UserId, NamedRole, Document>");
 
     [Fact]
     public void A_resource_whose_collection_is_called_Members_is_told_the_name_is_taken()
@@ -592,7 +633,7 @@ public class MemberListGeneratorTests
                     public partial IReadOnlyList<DocumentShare> Shares { get; }
 
                     private MemberList<DocumentShare, DocumentShareId, PatronId, NamedRole> Members
-                        => new(_shares, OwnerId, DocumentShareId.CreateSequential, MembershipCodes.Under("documents"));
+                        => new(_shares, OwnerId, MembershipCodes.Under("documents"));
 
                     public void ShareWith(PatronId patron, MemberPeriod period, DateTimeOffset now) => Members.Add(patron, period, now);
                 """,

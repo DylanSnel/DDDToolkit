@@ -23,12 +23,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// </summary>
     /// <param name="store">Where roles are loaded and saved.</param>
     /// <param name="catalogue">The keys a role may hold.</param>
-    /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     public sealed class RoleCommands(
         IStore store,
         TenancyCatalogue catalogue,
-        TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
         TimeProvider clock)
     {
         /// <summary>Makes a role by hand; it comes from no pack.</summary>
@@ -58,7 +56,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             await RequireNameFreeAsync(tenantId, name, except: null, cancellationToken).ConfigureAwait(false);
 
             var role = TenancyInstances.NewRole<TRole, TRoleId, TTenantId, TSeatId>(
-                id ?? options.Checked().NewRoleId!(), tenantId, new RoleDraft(name, description, keys), catalogue, gate.By);
+                id ?? TRoleId.Create(), tenantId, new RoleDraft(name, description, keys), catalogue, gate.By);
             store.Add(role);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
             return role.Id;

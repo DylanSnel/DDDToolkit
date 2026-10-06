@@ -70,7 +70,7 @@ public sealed class MakeProjectRoleHandler(IProjectStore store, ProjectMembershi
         await checks.RequireAsync(command, cancellationToken);
 
         var keys = MakeProjectRole.Known(command.Keys, catalogue);
-        var role = new ProjectRole(ProjectRoleId.CreateSequential(), answers.RequireTenant().Tenant, new KeptRoleDraft(command.Name, command.Description, keys), membership.Rules);
+        var role = new ProjectRole(ProjectRoleId.Create(), answers.RequireTenant().Tenant, new KeptRoleDraft(command.Name, command.Description, keys), membership.Rules);
 
         store.Add(role);
         await store.SaveAsync(cancellationToken);

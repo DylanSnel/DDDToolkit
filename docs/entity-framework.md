@@ -385,6 +385,20 @@ var unassigned = context.Orders.Count(o => o.Courier == null);    // a nullable 
 Class identifiers, declared as `partial record` rather than `readonly partial record struct`, map the
 same way and get a converter for their always-valid twin as well.
 
+### Ids the database never makes
+
+An id is made in code before the save, `OrderId.Create()`, so a change and every event of it know the id from
+the start; the database stores it, and makes none. Nothing has to be configured for that. Entity Framework
+generates a key's value on add only when the key's own type is a number or a `Guid`, and an id is a type of its
+own, which reaches its column through the converter `Add{Module}Converters` registers: the key of an
+`[EntityId<long>]` is a plain `bigint` on Postgres and an `INTEGER` SQLite numbers nothing for, and a new row
+whose id holds no value yet is saved with that value rather than one the database picks. The tests in
+`Tests/DDDToolkit.EntityFramework.Tests/Conventions/EntityIdKeyTests.cs` hold Postgres and SQLite to it, so a
+provider that ever started making ids would fail them.
+
+An id over a `long` or a `string` that a package makes, as Tenancy makes a tenant's, says how with a `Create()`
+of its own ([Creating identifiers](identifiers.md#creating-identifiers)).
+
 ### Value objects
 
 A `[ValueObject]` record is annotated `[ComplexType]`, so its properties are stored inline in the

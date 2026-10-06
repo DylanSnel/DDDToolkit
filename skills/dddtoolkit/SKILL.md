@@ -67,8 +67,11 @@ public readonly partial record struct OrderId;
   `TryParse` (prefix optional), `IParsable<T>` (so minimal API route binding works), `IComparable<T>`,
   explicit conversions to and from the raw value, and a System.Text.Json converter that writes the bare
   value. Do not add implicit conversions: they undo the type safety.
-- Create stored ids with `OrderId.CreateSequential()` (a version 7 `Guid`, index friendly), otherwise
-  `CreateUnique()`. Both exist for `Guid` only; construct other ids with the constructor.
+- Make a new id in code, before the save, with `OrderId.Create()`: for a `Guid` the generator writes it, a version 7
+  `Guid` (index friendly, as `CreateSequential()`), and implements `ICreatableEntityId<OrderId>` with it, so code that
+  is generic over ids calls `TId.Create()`. `CreateUnique()` makes a random one. An id over a `long` or a `string`
+  has no `Create()` until its partial declaration declares one, which a package that makes its ids, Tenancy, asks
+  for ([DDD00067](references/diagnostics.md)); construct other ids with the constructor. The database never makes an id.
 - A struct id cannot be null, and `default` is `Empty`. Guard with `IsEmpty`; use `OrderId?` for an
   optional id.
 - The raw type is a value type or `string` ([DDD00008](references/diagnostics.md)).
@@ -168,7 +171,7 @@ public partial class Order
             throw new InvalidOperationException("Only a draft order takes new lines.");
         }
 
-        _lines.Add(new OrderLine(OrderLineId.CreateSequential(), product, quantity));
+        _lines.Add(new OrderLine(OrderLineId.Create(), product, quantity));
         RaiseDomainEvent(new LineAdded(Id, product, quantity));
     }
 }

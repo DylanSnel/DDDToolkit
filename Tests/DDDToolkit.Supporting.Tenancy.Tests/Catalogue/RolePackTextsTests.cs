@@ -104,13 +104,13 @@ public class RolePackTextsTests
         var texts = DutchTexts();
         var harness = new Harness(New.Catalogue()) { PackTexts = texts };
 
-        await Provision(harness, Harbor(TenantShape.Flat, CultureInfo.GetCultureInfo("nl-BE")));
+        var provisioned = await Provision(harness, Harbor(TenantShape.Flat, CultureInfo.GetCultureInfo("nl-BE")));
 
         texts.Asked.Should().BeEquivalentTo(
         [
             (HostCatalogue.AdministratorPack, "nl-BE"), (HostCatalogue.OperatorPack, "nl-BE"), (HostCatalogue.WatcherPack, "nl-BE"),
         ], "a flat tenant gets no supervisor, and the culture reaches the application as it was passed");
-        harness.Store.RolesOf(new TenantId(101)).Select(role => role.Name).Should().BeEquivalentTo("Hoofdgebruiker", "Bediener", "Toeschouwer");
+        harness.Store.RolesOf(provisioned.Tenant).Select(role => role.Name).Should().BeEquivalentTo("Hoofdgebruiker", "Bediener", "Toeschouwer");
     }
 
     [Fact]
@@ -148,11 +148,12 @@ public class RolePackTextsTests
         var texts = DutchTexts().In("nl", HostCatalogue.WatcherPack, "BEDIENER", "Bekijkt widgets");
         var harness = new Harness(New.Catalogue()) { PackTexts = texts };
 
-        var refusal = await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => Provision(harness, Harbor(TenantShape.Hierarchical, Dutch)));
+        var harbor = new TenantId(101);
+        var refusal = await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => Provision(harness, Harbor(TenantShape.Hierarchical, Dutch) with { TenantId = harbor }));
 
         refusal.Arguments["Name"].Should().Be("BEDIENER");
         harness.Store.SaveCount.Should().Be(0);
-        harness.Store.HasTenant(new TenantId(101)).Should().BeFalse("a refused provisioning leaves nothing behind");
+        harness.Store.HasTenant(harbor).Should().BeFalse("a refused provisioning leaves nothing behind");
     }
 
     [Fact]
@@ -226,10 +227,6 @@ public class RolePackTextsTests
             services.AddTenancyCore<HostTenant, TenantId, HostOrganization, HostUnit, OrganizationUnitId, HostSeat, SeatId, HostRole, RoleId>(options =>
             {
                 options.Catalogue = HostCatalogue.Application;
-                options.NewTenantId = () => new TenantId(7);
-                options.NewSeatId = SeatId.CreateSequential;
-                options.NewUnitId = OrganizationUnitId.CreateSequential;
-                options.NewRoleId = RoleId.CreateSequential;
             });
             services.AddSingleton(provider => new InMemoryTenancyStore(provider.GetRequiredService<TenancyCatalogue>()));
             services.AddSingleton<HostTenancy.IStore>(provider => provider.GetRequiredService<InMemoryTenancyStore>());
@@ -243,7 +240,7 @@ public class RolePackTextsTests
             {
                 store.BeginUnitOfWork();
                 await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>()
-                    .ProvisionAsync(Harbor(TenantShape.Flat, Dutch), TestContext.Current.CancellationToken);
+                    .ProvisionAsync(Harbor(TenantShape.Flat, Dutch) with { TenantId = new TenantId(7) }, TestContext.Current.CancellationToken);
             }
 
             return [.. store.RolesOf(new TenantId(7)).Select(role => role.Name)];

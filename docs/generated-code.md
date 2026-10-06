@@ -174,7 +174,7 @@ No `OrderId.cs` exists anywhere. It is a `readonly record struct` around the `Gu
 
 ```csharp title="OrderId.g.cs, shortened"
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>
+public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>, DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -183,6 +183,8 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
     public static OrderId CreateUnique() => new(System.Guid.NewGuid());
 
     public static OrderId CreateSequential() => new(System.Guid.CreateVersion7());
+
+    public static OrderId Create() => CreateSequential();
 
     public override string ToString() => /* ORD_1b4e28ba-2fa1-11d2-883f-0016d3cca427 */;
 
@@ -196,9 +198,13 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
 ```
 
 `CreateSequential()` makes a version 7 `Guid`, which is ordered by time and friendlier to a database
-index than a random one. `ISingleValue` names the value and the way back from it, for a project that stores
-the id without declaring it. [Identifiers](identifiers.md) covers the other value types, the record form,
-the prefix and `ISingleValue`.
+index than a random one. `Create()` is the way a new `OrderId` is made, in code and before the save: here it is
+`CreateSequential()`, and it implements `ICreatableEntityId<OrderId>`, so code that is generic over ids, a
+supporting domain's use cases, makes one with `TId.Create()`. Declare a `Create()` of your own in the id's partial
+declaration and the generator writes none; an id over a `long` or a `string` gets one only that way.
+`ISingleValue` names the value and the way back from it, for a project that stores the id without declaring it.
+[Identifiers](identifiers.md#creating-identifiers) covers the other value types, the record form, the prefix,
+`Create()` and `ISingleValue`.
 
 ## `[ValueObject]`
 

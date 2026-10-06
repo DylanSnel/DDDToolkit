@@ -68,7 +68,8 @@ public sealed partial class ShopSeat
    }
    ```
 
-3. Register it, with how ids are made, and the catalogue when the application has one. `AddTenancy` brings
+3. Register it, with the catalogue when the application has one; every option has a default, and a new id is
+   the id's own `TenantId.Create()` (an id over a `long` declares it, [DDD00067](diagnostics.md)). `AddTenancy` brings
    Tenancy's save check, and `UseDDDToolkit` puts it on this context and on every context that keeps rows to a
    tenant: nothing more to write. A context given the base alone, `UseDDDToolkitCore`, takes it with `UseTenancy`
    after it.
@@ -76,10 +77,7 @@ public sealed partial class ShopSeat
    ```csharp
    services
        .AddTenancy<ShopTenancyContext>(options =>
-       {
-           options.Catalogue = ShopCatalogue.Application;   // optional: packs, keys of its own, keys that manage access
-           options.NewSeatId = SeatId.CreateSequential;     // and NewTenantId, NewUnitId, NewRoleId
-       })
+           options.Catalogue = ShopCatalogue.Application)   // optional: packs, keys of its own, keys that manage access
        .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
            .UseNpgsql(connectionString)
            .UseDDDToolkit(serviceProvider));

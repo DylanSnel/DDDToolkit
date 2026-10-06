@@ -68,7 +68,10 @@ namespace DDDToolkit.Analyzers.Common;
 /// project above would only hear that the name does not exist. A template whose class a parent of the project
 /// needs is the parent's error already, DDD00044 or DDD00045, one a registration the project can call takes from
 /// is that registration's, DDD00049 or DDD00045, and a class that cannot be generated has its own diagnostic, so
-/// none of them is said twice. A type of the name the project declares in a namespace keeps the class
+/// none of them is said twice. Nor is an id without a <c>Create()</c> where the package's class asks for one,
+/// <c>where TId : ICreatableEntityId&lt;TId&gt;</c>, and the template whose class the id is of says its package makes
+/// the ids (<c>CreatesIds</c>): DDD00067 says it on that class; a template that does not say so has it said here.
+/// A type of the name the project declares in a namespace keeps the class
 /// out too, with DDD00065 on that type: a class of the name in the global namespace would win over it in every
 /// file that imports its namespace with a using. What the application wrote in the global namespace stays its own
 /// without a word: a type or a namespace of the name, its own or one it references, or an alias of the name at the
@@ -320,6 +323,15 @@ internal static class TemplateFacades
             if (unmet is not null)
             {
                 return NotWritten(closing, "it takes '" + shown[position] + "' as '" + parameters[position].Name + "', which requires " + unmet + "; '" + shown[position] + "' does not meet it");
+            }
+
+            // An id the package makes new ones of with Create(), which it does not have. The class declared with a
+            // template whose package says it makes their ids says so itself, DDD00067; any other is said here.
+            if (!take.TakeType && IdCreation.IsUnmet(parameters[position], argument, compilation, cancellationToken))
+            {
+                return take.Argument == 0 && IdCreation.IsSaidOnTheClass(take.MetadataName, compilation)
+                    ? null
+                    : NotWritten(closing, "it takes '" + shown[position] + "' as '" + parameters[position].Name + "', which requires ICreatableEntityId<" + shown[position] + ">, an id that makes a new one with Create(); '" + shown[position] + "' " + IdCreation.ShortfallOf((INamedTypeSymbol)argument).Lacks);
             }
         }
 

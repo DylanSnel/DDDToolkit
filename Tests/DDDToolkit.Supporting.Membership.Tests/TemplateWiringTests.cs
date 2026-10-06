@@ -132,7 +132,7 @@ public sealed class TemplateWiringTests
     [Fact]
     public void A_member_class_that_was_not_declared_with_the_template_cannot_be_made()
     {
-        var list = new MemberList<HandWrittenShare, DocumentShareId, UserId, NamedRole>([], UserId.CreateSequential(), DocumentShareId.CreateSequential, DocumentRefusals.Membership);
+        var list = new MemberList<HandWrittenShare, DocumentShareId, UserId, NamedRole>([], UserId.CreateSequential(), DocumentRefusals.Membership);
 
         FluentActions.Invoking(() => list.Add(UserId.CreateSequential(), MemberPeriod.Open(Now), Now))
             .Should().Throw<Exception>()

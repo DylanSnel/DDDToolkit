@@ -23,15 +23,14 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// toolkit's default), and the tenant of each row of the log <c>AddTenancyEventLogTable</c> maps.
     /// <code>
     /// services.AddTenancy&lt;TenancyContext&gt;(options =&gt;
-    /// {
-    ///     options.NewTenantId = TenantId.CreateSequential;
-    ///     // and the other three ids
-    ///     options.Catalogue = ShopCatalogue.Application;   // optional: packs, keys of its own, marks
-    /// });
+    ///     options.Catalogue = ShopCatalogue.Application);   // optional: packs, keys of its own, marks
     /// services.AddDbContext&lt;TenancyContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
     ///     .UseDDDToolkit(serviceProvider));
     /// </code>
+    /// Every option has a default, so <c>services.AddTenancy&lt;TenancyContext&gt;()</c> is enough. A new id is made by
+    /// the id itself, <c>TSeatId.Create()</c>, in code and before the save: the generator writes it for an id over a
+    /// <see cref="Guid"/>, and an id over anything else declares its own.
     /// The store and the directory are scoped, like the context they use. The store offers a save that fails
     /// to every registered <see cref="ITenancySaveFailures"/>, which a package for one database adds, and
     /// leaves to the database what <see cref="TenancyStoreOptions"/> says, which such a package sets.
@@ -54,9 +53,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets Tenancy's options; the ways to make each id are required, the rest have defaults.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">A required option is not set; every missing one is named.</exception>
+    /// <param name="configure">Changes Tenancy's options, every one of which has a default; leave it out to keep them all.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">A token role is an operator's and seated as well.</exception>
     [TemplateRegistration]
     public static IServiceCollection AddTenancy<
         [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
@@ -70,20 +69,19 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         [TemplateType(typeof(RoleAggregateAttribute<>))] TRoleId,
         TContext>(
         this IServiceCollection services,
-        Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>> configure)
+        Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>? configure = null)
         where TTenant : TenantAggregate<TTenantId>
         where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
         where TUnit : OrganizationUnitEntity<TUnitId>
         where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
         where TRole : RoleAggregate<TRoleId, TTenantId>
-        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+        where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+        where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+        where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configure);
 
         services.AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(configure);
 
@@ -127,15 +125,14 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// cases (<c>InvitationCommands</c>) and the store they load and keep invitations through. Call it after
     /// <c>AddTenancy</c>, with the application's invitation class, its id and the context:
     /// <code>
-    /// services.AddTenancy&lt;TenancyContext&gt;(options =&gt; { /* ... */ });
-    /// services.AddTenancyInvitations&lt;ShopInvitation, InvitationId, TenancyContext&gt;(options =&gt;
-    ///     options.NewInvitationId = InvitationId.CreateSequential);
+    /// services.AddTenancy&lt;TenancyContext&gt;();
+    /// services.AddTenancyInvitations&lt;ShopInvitation, InvitationId, TenancyContext&gt;();
     /// </code>
     /// <para>
     /// That call is generated into the project that declares Tenancy's classes, closed over them, as
     /// <c>AddTenancy&lt;TenancyContext&gt;</c> is (<see cref="TemplateRegistrationAttribute"/>). The invitation
     /// class and its id are named in the call, since an application may have none. This method can be called as
-    /// well, with all twelve.
+    /// well, with all twelve. A new invitation's id is made by the id itself, <c>InvitationId.Create()</c>.
     /// </para>
     /// <para>
     /// The store is scoped, and works in the unit of work of Tenancy's own store: an invitation is saved, and its
@@ -143,12 +140,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets how an invitation's id is made, which is required, and how long one stays open.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="configure"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// Tenancy itself is not registered yet; no way to make an invitation's id is set; or the lifetimes are out of
-    /// order.
-    /// </exception>
+    /// <param name="configure">Changes how long an invitation stays open, which has defaults; leave it out to keep them.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Tenancy itself is not registered yet; or the lifetimes are out of order.</exception>
     [TemplateRegistration]
     public static IServiceCollection AddTenancyInvitations<
         [TemplateType(typeof(TenantAggregateAttribute<>), Take = TemplateArgumentKind.Type)] TTenant,
@@ -164,22 +158,21 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
         TInvitationId,
         TContext>(
         this IServiceCollection services,
-        Action<TenancyInvitationOptions<TInvitationId>> configure)
+        Action<TenancyInvitationOptions<TInvitationId>>? configure = null)
         where TTenant : TenantAggregate<TTenantId>
         where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
         where TUnit : OrganizationUnitEntity<TUnitId>
         where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
         where TRole : RoleAggregate<TRoleId, TTenantId>
         where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
-        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-        where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
+        where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+        where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+        where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+        where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+        where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
         where TContext : DbContext
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configure);
 
         services.AddTenancyInvitationsCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>(configure);
         services.AddScoped<TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>.IInvitationStore<TInvitation, TInvitationId>,

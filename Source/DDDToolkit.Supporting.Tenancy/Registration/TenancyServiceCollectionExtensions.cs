@@ -28,37 +28,31 @@ public static class TenancyServiceCollectionExtensions
     /// <item>The answers are one for the application; selection and the use cases are made per scope.</item>
     /// <item>The toolkit's caller accessor a host registered before stays; otherwise the ambient caller is read.</item>
     /// <item>A <see cref="TimeProvider"/> registered before stays; otherwise the system clock is used.</item>
+    /// <item>A new id is made by the id itself, <c>TTenantId.Create()</c>, which every id of the application's
+    /// classes has: the generator writes it for an id over a <see cref="Guid"/>, and DDD00067 asks for it on any
+    /// other.</item>
     /// </list>
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets the options; the ways to make each id are required, the rest have defaults.</param>
-    /// <exception cref="InvalidOperationException">
-    /// An option is not set, and every missing one is named; or a token role is an operator's and seated as well.
-    /// </exception>
+    /// <param name="configure">Changes the options, every one of which has a default; leave it out to keep them all.</param>
+    /// <exception cref="InvalidOperationException">A token role is an operator's and seated as well.</exception>
     public static IServiceCollection AddTenancyCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>(
         this IServiceCollection services,
-        Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>> configure)
+        Action<TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>>? configure = null)
         where TTenant : TenantAggregate<TTenantId>
         where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
         where TUnit : OrganizationUnitEntity<TUnitId>
         where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
         where TRole : RoleAggregate<TRoleId, TTenantId>
-        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
+        where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+        where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+        where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+        where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configure);
 
         var options = new TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>();
-        configure(options);
-
-        var missing = options.Missing();
-        if (missing.Count > 0)
-        {
-            throw TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>.MissingOptions(missing);
-        }
+        configure?.Invoke(options);
 
         // An operator looks across tenants and a seat acts in one: a token role that was both would be a seat
         // with every tenant's rows in reach of its database role.
@@ -100,28 +94,24 @@ public static class TenancyServiceCollectionExtensions
     /// the use cases share: the catalogue, the options, the clock and who is calling.
     /// </summary>
     /// <param name="services">The service collection.</param>
-    /// <param name="configure">Sets how an invitation's id is made, which is required, and how long one stays open.</param>
-    /// <exception cref="InvalidOperationException">
-    /// Tenancy itself is not registered yet; no way to make an invitation's id is set; or the lifetimes are out of
-    /// order.
-    /// </exception>
+    /// <param name="configure">Changes how long an invitation stays open, which has defaults; leave it out to keep them.</param>
+    /// <exception cref="InvalidOperationException">Tenancy itself is not registered yet; or the lifetimes are out of order.</exception>
     public static IServiceCollection AddTenancyInvitationsCore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TInvitation, TInvitationId>(
         this IServiceCollection services,
-        Action<TenancyInvitationOptions<TInvitationId>> configure)
+        Action<TenancyInvitationOptions<TInvitationId>>? configure = null)
         where TTenant : TenantAggregate<TTenantId>
         where TOrganization : OrganizationAggregate<TTenantId, TUnit, TUnitId>
         where TUnit : OrganizationUnitEntity<TUnitId>
         where TSeat : SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId>
         where TRole : RoleAggregate<TRoleId, TTenantId>
         where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
-        where TTenantId : struct, IEntityId, IEquatable<TTenantId>
-        where TUnitId : struct, IEntityId, IEquatable<TUnitId>
-        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
-        where TRoleId : struct, IEntityId, IEquatable<TRoleId>
-        where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
+        where TTenantId : struct, ICreatableEntityId<TTenantId>, IEquatable<TTenantId>
+        where TUnitId : struct, ICreatableEntityId<TUnitId>, IEquatable<TUnitId>
+        where TSeatId : struct, ICreatableEntityId<TSeatId>, IEquatable<TSeatId>
+        where TRoleId : struct, ICreatableEntityId<TRoleId>, IEquatable<TRoleId>
+        where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(configure);
 
         if (!services.Any(registered => registered.ServiceType == typeof(TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>)))
         {
@@ -130,7 +120,7 @@ public static class TenancyServiceCollectionExtensions
         }
 
         var options = new TenancyInvitationOptions<TInvitationId>();
-        configure(options);
+        configure?.Invoke(options);
         if (options.Problem() is { } problem)
         {
             throw TenancyInvitationOptions<TInvitationId>.Invalid(problem);

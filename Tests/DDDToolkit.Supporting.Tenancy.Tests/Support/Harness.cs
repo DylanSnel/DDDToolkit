@@ -11,21 +11,12 @@ namespace DDDToolkit.Supporting.Tenancy.Tests.Support;
 /// </summary>
 public sealed class Harness
 {
-    private long _lastTenant = 100;
-
     /// <summary>An empty store, with the host's catalogue and any contributions.</summary>
     public Harness(TenancyCatalogue catalogue)
     {
         Catalogue = catalogue;
         Store = new InMemoryTenancyStore(catalogue);
-        Options = new TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>
-        {
-            Catalogue = HostCatalogue.Application,
-            NewTenantId = () => new TenantId(Interlocked.Increment(ref _lastTenant)),
-            NewSeatId = SeatId.CreateSequential,
-            NewUnitId = OrganizationUnitId.CreateSequential,
-            NewRoleId = RoleId.CreateSequential,
-        };
+        Options = new TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId> { Catalogue = HostCatalogue.Application };
     }
 
     /// <summary>The clock the use cases read.</summary>
@@ -34,11 +25,11 @@ public sealed class Harness
     /// <summary>The catalogue the use cases and the store work with.</summary>
     public TenancyCatalogue Catalogue { get; }
 
-    /// <summary>How the use cases make new ids.</summary>
+    /// <summary>The options, with the host's catalogue: new ids are the ids' own, <c>TenantId.Create()</c> and the rest.</summary>
     public TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId> Options { get; }
 
-    /// <summary>How an invitation's id is made, and how long one stays open: the package's own lifetimes.</summary>
-    public TenancyInvitationOptions<InvitationId> InvitationOptions { get; } = new() { NewInvitationId = InvitationId.CreateSequential };
+    /// <summary>How long an invitation stays open: the package's own lifetimes.</summary>
+    public TenancyInvitationOptions<InvitationId> InvitationOptions { get; } = new();
 
     /// <summary>The store.</summary>
     public InMemoryTenancyStore Store { get; }
@@ -55,13 +46,13 @@ public sealed class Harness
     /// <summary>The packs' texts in a tenant's language, as an application registers them; none unless a test sets them.</summary>
     public IRolePackTexts? PackTexts { get; set; }
 
-    public HostTenancy.TenantCommands Tenants => new(Store, Catalogue, Options, Clock, PackTexts);
+    public HostTenancy.TenantCommands Tenants => new(Store, Catalogue, Clock, PackTexts);
 
-    public HostTenancy.OrganizationCommands Organization => new(Store, Catalogue, Options, Clock);
+    public HostTenancy.OrganizationCommands Organization => new(Store, Catalogue, Clock);
 
-    public HostTenancy.SeatCommands Seats => new(Store, Catalogue, Options, Clock);
+    public HostTenancy.SeatCommands Seats => new(Store, Catalogue, Clock);
 
-    public HostTenancy.RoleCommands Roles => new(Store, Catalogue, Options, Clock);
+    public HostTenancy.RoleCommands Roles => new(Store, Catalogue, Clock);
 
     public HostTenancy.TenancyDirectory Directory => new(Store, Catalogue, Clock);
 

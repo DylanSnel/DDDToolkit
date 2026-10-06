@@ -31,7 +31,7 @@ public sealed class BookShipment(ShippingContext context) : IIntegrationEventHan
     public Task HandleAsync(OrderConfirmedV1 contract, IntegrationEventMessage message, CancellationToken cancellationToken)
     {
         context.Shipments.Add(new Shipment(
-            ShipmentId.CreateSequential(),
+            ShipmentId.Create(),
             contract.OrderId,
             $"{contract.PostalCode}, {contract.City}",
             message.OccurredAt));

@@ -108,11 +108,7 @@ flowchart TD
 ```csharp
 // No catalogue: the keys are Tenancy's and the modules', and every tenant starts with the default
 // administrators' role, given to its first seat
-services.AddTenancy<ShopTenancyContext>(options =>
-{
-    options.NewSeatId = SeatId.CreateSequential;
-    // and NewTenantId, NewUnitId and NewRoleId; no options.Catalogue
-});
+services.AddTenancy<ShopTenancyContext>();
 
 // Keys the application owns itself, and still no pack: the default administrators' role holds them too
 public static ApplicationCatalogue Application { get; } = new(Permissions: ShopKeys.All);
@@ -296,8 +292,9 @@ Tenancy becomes a module of your application, like any other. In the order you w
    ([The shortest start: the switch](#the-shortest-start-the-switch)). Declare a class yourself where you need
    fields and rules ([How your classes add behaviour](#how-your-classes-add-behaviour)); yours always wins.
 2. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
-   a migration of your own, and `services.AddTenancy<TContext>(...)` with how your ids are made
-   ([Your tenancy module](#your-tenancy-module)).
+   a migration of your own, and `services.AddTenancy<TContext>()`, with your catalogue when you have one
+   ([Your tenancy module](#your-tenancy-module)); each id makes its own new ones
+   ([How a new id is made](#how-a-new-id-is-made)).
 3. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
    `[TenancyPermissions]`, and the host adds every module's with one generated call
    ([A module states its keys once](#a-module-states-its-keys-once)). Your part adds the role
@@ -464,11 +461,17 @@ public sealed partial class Seat
 ```
 
 The seat is declared over the `SeatId` the switch writes. Without the switch, you declare all of them, and the
-ids, which your contracts project then holds with the key type and prefix you choose:
+ids, which your contracts project then holds with the key type and prefix you choose. An id over anything but a
+`Guid` says how a new one is made ([How a new id is made](#how-a-new-id-is-made)):
 
 ```csharp
 // Shop.Tenants.Contracts
-[EntityId<long>] public readonly partial record struct TenantId;
+[EntityId<long>]
+public readonly partial record struct TenantId
+{
+    public static TenantId Create() => new(Snowflakes.Next());   // yours: a snowflake, or a number of a HiLo block
+}
+
 [EntityId<Guid>] public readonly partial record struct SeatId;
 [EntityId<Guid>] public readonly partial record struct OrganizationUnitId;
 [EntityId<Guid>] public readonly partial record struct RoleId;
@@ -499,6 +502,54 @@ public sealed partial class ShopUnit
 The package's rules run for your classes before your own, and your classes are what Entity Framework
 maps, written or declared. [Writing your own supporting domain](writing-a-supporting-domain.md) explains how
 that works.
+
+### How a new id is made
+
+```mermaid
+flowchart LR
+    Command["a use case makes<br/>a tenant, unit, seat,<br/>role or invitation"] --> Given{"given an id?<br/>an import,<br/>seed data"}
+    Given -- "yes" --> That(["that one"])
+    Given -- "no" --> Create["SeatId.Create(),<br/>in code, before<br/>the save"]
+    Create --> Whose{"whose<br/>Create()?"}
+    Whose -- "yours" --> Yours(["a snowflake,<br/>a HiLo number"])
+    Whose -- "none, over<br/>a Guid" --> Generated(["the generator's:<br/>time-ordered"])
+    Whose -- "none, over<br/>a long" --> Error(["DDD00067<br/>when it builds"])
+```
+
+Tenancy makes the id of every tenant, unit, seat, role and invitation it creates in code, before anything is saved,
+so the change and every event of it know the id from the start; the database never makes one. It asks the id
+itself, `SeatId.Create()`, and a use case given an id, for an import or seed data, uses that one instead.
+
+The generator writes `Create()` for every `[EntityId<Guid>]`, the switch's ids included: a time-ordered id, what
+`CreateSequential()` makes, which a database index keeps in order. An id over a `long`, an `int` or a `string` has
+none, because there is no telling how a new one is made, so it declares its own: for a `long` a snowflake or a
+number of a block a HiLo sequence hands out, and for an `int`, which a 64-bit snowflake does not fit, the HiLo
+number. A `Create()` of your own wins for a `Guid` too. An id you write by hand, without `[EntityId<T>]`, has nothing the generator adds, so it declares
+`Create()` and implements `ICreatableEntityId<TenantId>` itself. A class declared over an id without one is
+[DDD00067](diagnostics.md#ddd00067) when the project builds, on the class, and its code fix adds to the id what it
+lacks, a `Create()` that throws until you write its body. So there is nothing to set in the registration, and
+nothing for the database to generate: Entity Framework stores an id as a value the application gives
+([Ids the database never makes](entity-framework.md#ids-the-database-never-makes)).
+
+<details>
+<summary>Show the code: an id that says how a new one is made, and what Tenancy calls</summary>
+
+```csharp
+// Shop.Tenants.Contracts: a tenant id over a long, from a sequence that hands out blocks of a thousand
+[EntityId<long>]
+public readonly partial record struct TenantId
+{
+    public static TenantId Create() => new(TenantNumbers.Next());
+}
+
+// Every id the generator writes over a Guid, the four the switch writes among them
+public static SeatId Create() => CreateSequential();
+
+// In Tenancy's use cases, generic over your ids, where TSeatId : ICreatableEntityId<TSeatId>
+var seatId = command.AdminSeatId ?? TSeatId.Create();
+```
+
+</details>
 
 ### The context and the registration
 
@@ -552,11 +603,7 @@ Tenancy from there:
 public static IServiceCollection AddShopTenancy(this IServiceCollection services, string connectionString)
     => services
         .AddTenancy<ShopTenancyContext>(options =>
-        {
-            options.Catalogue = ShopCatalogue.Application;   // when you have one: packs, keys of your own, marks
-            options.NewSeatId = SeatId.CreateSequential;
-            // and NewTenantId, NewUnitId and NewRoleId: the ids are yours, and so is how they are made
-        })
+            options.Catalogue = ShopCatalogue.Application)   // when you have one: packs, keys of your own, marks
         .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
             .UseNpgsql(connectionString)
             .UseDDDToolkit(serviceProvider));
@@ -1667,9 +1714,8 @@ the context and one in the registration. A host that leaves them out has no tabl
 // In the context, after AddTenancy: two tables, the invitations and the digests of their tokens.
 modelBuilder.AddTenancyInvitations<ShopInvitation, InvitationId>();
 
-// In the registration, after AddTenancy.
-services.AddTenancyInvitations<ShopInvitation, InvitationId, ShopTenancyContext>(options =>
-    options.NewInvitationId = InvitationId.CreateSequential);
+// In the registration, after AddTenancy. A new invitation's id is InvitationId.Create(), as every id's is.
+services.AddTenancyInvitations<ShopInvitation, InvitationId, ShopTenancyContext>();
 
 // In the outbox, next to AddTenancyDomainEvents.
 outbox.AddTenancyInvitationEvents<TenantId, InvitationId, OrganizationUnitId, RoleId, SeatId>();
@@ -2133,7 +2179,7 @@ flowchart TB
 // The host: which token roles are operators'
 services.AddTenancy<TenancyContext>(options =>
 {
-    // the catalogue and the ids
+    // the catalogue, when you have one
     options.OperatorTokenRoles.Add("operator");
 });
 

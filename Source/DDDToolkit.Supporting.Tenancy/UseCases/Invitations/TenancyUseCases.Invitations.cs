@@ -37,8 +37,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// <param name="store">Where seats, roles and the rest are loaded, and where the unit of work is saved.</param>
     /// <param name="invitations">Where invitations are loaded and kept, in that unit of work.</param>
     /// <param name="catalogue">The keys asked for, and which roles manage access.</param>
-    /// <param name="options">How a new seat's id is made.</param>
-    /// <param name="invitationOptions">How a new invitation's id is made, and how long an invitation stays open.</param>
+    /// <param name="options">Which signed-in users may hold a seat: whom an acceptance seats.</param>
+    /// <param name="invitationOptions">How long an invitation stays open.</param>
     /// <param name="callers">Who is calling, as the toolkit says: the signed-in identity that accepts.</param>
     /// <param name="clock">What "now" is.</param>
     public sealed class InvitationCommands<TInvitation, TInvitationId>(
@@ -50,7 +50,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         ICallerAccessor callers,
         TimeProvider clock)
         where TInvitation : InvitationAggregate<TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>
-        where TInvitationId : struct, IEntityId, IEquatable<TInvitationId>
+        where TInvitationId : struct, ICreatableEntityId<TInvitationId>, IEquatable<TInvitationId>
     {
         /// <summary>The reason recorded on the grant an accepted invitation makes.</summary>
         private const string AcceptedReason = "invitation";
@@ -126,7 +126,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var token = BearerTokens.New();
             var invitation = TenancyInstances.NewInvitation<TInvitation, TInvitationId, TTenantId, TUnitId, TRoleId, TSeatId>(
-                id ?? settings.NewInvitationId!(),
+                id ?? TInvitationId.Create(),
                 tenantId,
                 address,
                 unit,
@@ -337,7 +337,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
-                seatId ?? options.Checked().NewSeatId!(),
+                seatId ?? TSeatId.Create(),
                 tenantId,
                 identity,
                 string.IsNullOrWhiteSpace(displayName) ? invitation.DisplayName ?? string.Empty : displayName,

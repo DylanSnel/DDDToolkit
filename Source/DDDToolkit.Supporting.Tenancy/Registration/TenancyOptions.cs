@@ -6,11 +6,15 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 namespace DDDToolkit.Supporting.Tenancy;
 
 /// <summary>
-/// What the application tells Tenancy: how to make a new id of each kind, which is required, and what it adds to
-/// the catalogue, which is not. The ids are the application's, of whatever key type it chose, so Tenancy never
-/// guesses how to make one; a command that is given an id (an import, fixed seed data) uses that one instead.
-/// <see cref="Catalogue"/> and <see cref="TenantSelection"/> have defaults, and <see cref="OperatorTokenRoles"/> is
-/// empty unless the application has operators.
+/// What the application tells Tenancy, all of it with a default: what it adds to the catalogue
+/// (<see cref="Catalogue"/>), which signed-in users may hold a seat (<see cref="TenantSelection"/>), and who its
+/// operators are (<see cref="OperatorTokenRoles"/>, empty unless it has any).
+/// <para>
+/// How a new id is made is no option: each id says it itself, with its <c>Create()</c>, which Tenancy calls as
+/// <c>TTenantId.Create()</c>, in code and before the save. The generator writes it for an id over a <see cref="Guid"/>,
+/// a time-ordered one, and an id over anything else declares its own (DDD00067 says so where it has none). A command
+/// that is given an id, an import or fixed seed data, uses that one instead.
+/// </para>
 /// </summary>
 public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
@@ -24,18 +28,6 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// starts with the default administrators' role (<see cref="TenancyPacks.DefaultAdministrators"/>).
     /// </summary>
     public ApplicationCatalogue? Catalogue { get; set; }
-
-    /// <summary>Makes a new tenant id. Required.</summary>
-    public Func<TTenantId>? NewTenantId { get; set; }
-
-    /// <summary>Makes a new seat id. Required.</summary>
-    public Func<TSeatId>? NewSeatId { get; set; }
-
-    /// <summary>Makes a new unit id. Required.</summary>
-    public Func<TUnitId>? NewUnitId { get; set; }
-
-    /// <summary>Makes a new role id. Required.</summary>
-    public Func<TRoleId>? NewRoleId { get; set; }
 
     /// <summary>
     /// Which signed-in users may hold a seat, by the role their token carries: those with <c>authenticated</c>
@@ -74,42 +66,4 @@ public sealed class TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId>
     /// <summary>The operator token roles that are seated as well, which no role may be: in ordinal order.</summary>
     internal IReadOnlyList<string> SeatedOperators()
         => [.. OperatorTokenRoles.Where(role => TenantSelection.Seats(role)).Order(StringComparer.Ordinal)];
-
-    /// <summary>The names of the options that are not set, in the order they are declared.</summary>
-    internal IReadOnlyList<string> Missing()
-    {
-        var missing = new List<string>();
-        if (NewTenantId is null)
-        {
-            missing.Add(nameof(NewTenantId));
-        }
-
-        if (NewSeatId is null)
-        {
-            missing.Add(nameof(NewSeatId));
-        }
-
-        if (NewUnitId is null)
-        {
-            missing.Add(nameof(NewUnitId));
-        }
-
-        if (NewRoleId is null)
-        {
-            missing.Add(nameof(NewRoleId));
-        }
-
-        return missing;
-    }
-
-    /// <summary>The options, checked: a use case made without registration still names what is missing.</summary>
-    internal TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> Checked()
-    {
-        var missing = Missing();
-        return missing.Count == 0 ? this : throw MissingOptions(missing);
-    }
-
-    internal static InvalidOperationException MissingOptions(IReadOnlyList<string> missing)
-        => new("Tenancy makes the application's ids the way it is told, and is not told for these: " + string.Join(", ", missing)
-               + ". Set them in the configure callback of AddTenancy.");
 }

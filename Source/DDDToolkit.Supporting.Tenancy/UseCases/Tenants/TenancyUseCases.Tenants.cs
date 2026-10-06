@@ -17,7 +17,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// </summary>
     /// <param name="store">Where the tenant is loaded and saved.</param>
     /// <param name="catalogue">The packs a new tenant is given.</param>
-    /// <param name="options">How new ids are made.</param>
     /// <param name="clock">What "now" is.</param>
     /// <param name="packTexts">
     /// The packs' names and descriptions in a tenant's language, when the application registered some;
@@ -28,7 +27,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     public sealed class TenantCommands(
         IStore store,
         TenancyCatalogue catalogue,
-        TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> options,
         TimeProvider clock,
         IRolePackTexts? packTexts = null)
     {
@@ -75,13 +73,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var gate = new Gate(store, catalogue, clock);
             gate.RequireSystemOutsideTenants();
-            var ids = options.Checked();
 
             var packs = catalogue.PacksFor(command.Shape).ToArray();
             RequireSeededPacks(command.RoleIds, packs, command.Shape);
 
             var slug = TenantSlug.Create(command.Slug).ToValid();
-            var tenantId = command.TenantId ?? ids.NewTenantId!();
+            var tenantId = command.TenantId ?? TTenantId.Create();
 
             // From here on the work acts in the tenant it makes and in no other: every read and the save. It is
             // still recorded as whoever began it: the system, or the operator the tenant is provisioned for, on
@@ -89,7 +86,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var by = gate.By ?? TenancyActor<TSeatId>.OfSystem(TenancyWork.SystemScope);
             using (TenancyWork.BeginSystemInAs(tenantId, by))
             {
-                return await ProvisionInAsync(command, tenantId, slug, packs, gate.Now, by, ids, cancellationToken).ConfigureAwait(false);
+                return await ProvisionInAsync(command, tenantId, slug, packs, gate.Now, by, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -101,7 +98,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             RolePack[] packs,
             DateTimeOffset now,
             TenancyActor<TSeatId> by,
-            TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> ids,
             CancellationToken cancellationToken)
         {
             if (await store.SlugTakenAsync(slug.Value, cancellationToken).ConfigureAwait(false))
@@ -109,7 +105,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 throw TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", slug.Value));
             }
 
-            var rootId = command.RootId ?? ids.NewUnitId!();
+            var rootId = command.RootId ?? TUnitId.Create();
             var tenant = TenancyInstances.NewTenant<TTenant, TTenantId, TSeatId>(tenantId, slug, command.Shape, by);
             var organization = TenancyInstances.NewOrganization<TOrganization, TTenantId, TUnit, TUnitId, TSeatId>(
                 tenantId, command.Name, rootId, command.RootName, by);
@@ -120,7 +116,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pack in packs)
             {
-                var role = NewRoleFrom(DraftOf(pack, command.Language), tenantId, command.RoleIds, ids, catalogue, by);
+                var role = NewRoleFrom(DraftOf(pack, command.Language), tenantId, command.RoleIds, catalogue, by);
                 if (!names.Add(role.Name))
                 {
                     throw TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", role.Name));
@@ -130,7 +126,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
 
             var administrators = roles[catalogue.AdministratorPackFor(command.Shape).Key];
-            var seatId = command.AdminSeatId ?? ids.NewSeatId!();
+            var seatId = command.AdminSeatId ?? TSeatId.Create();
             var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(seatId, tenantId, command.AdminIdentity, command.AdminDisplayName, by);
             seat.Place(rootId, primary: true, now, placedBy: null, by);
             seat.Grant(rootId, administrators.Id, administrators.Facts, GrantPeriod.Open(now), grantedBy: null, ProvisionedReason, by);
@@ -194,7 +190,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             var tenantId = gate.RequireTenant();
             await gate.RequireTenantWideAsync(TenancyKeys.SettingsManage, cancellationToken).ConfigureAwait(false);
-            var ids = options.Checked();
 
             // Everything is decided before the tenant changes, so a refusal leaves nothing for a later save.
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
@@ -220,7 +215,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                     throw TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", name));
                 }
 
-                added.Add(NewRoleFrom(draft, tenantId, roleIds, ids, catalogue, gate.By));
+                added.Add(NewRoleFrom(draft, tenantId, roleIds, catalogue, gate.By));
             }
 
             tenant.ChangeShape(to, gate.By);
@@ -311,11 +306,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             RoleDraft draft,
             TTenantId tenant,
             IReadOnlyDictionary<string, TRoleId>? roleIds,
-            TenancyOptions<TTenantId, TSeatId, TUnitId, TRoleId> ids,
             TenancyCatalogue catalogue,
             TenancyActor<TSeatId>? by)
         {
-            var id = roleIds is not null && roleIds.TryGetValue(draft.FromPack!, out var given) ? given : ids.NewRoleId!();
+            var id = roleIds is not null && roleIds.TryGetValue(draft.FromPack!, out var given) ? given : TRoleId.Create();
             return TenancyInstances.NewRole<TRole, TRoleId, TTenantId, TSeatId>(id, tenant, draft, catalogue, by);
         }
 

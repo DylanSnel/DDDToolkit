@@ -23,15 +23,8 @@ public static class CampusHost
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        // Generated for this project's classes: Tenant, TenantId, Organization and the rest.
-        services.AddTenancy<TenancyContext>(options =>
-        {
-            options.Catalogue = CampusCatalogue.Application;
-            options.NewTenantId = TenantId.CreateSequential;
-            options.NewSeatId = SeatId.CreateSequential;
-            options.NewUnitId = OrganizationUnitId.CreateSequential;
-            options.NewRoleId = RoleId.CreateSequential;
-        });
+        // Generated for this project's classes: Tenant, TenantId, Organization and the rest. A new id is the id's own.
+        services.AddTenancy<TenancyContext>(options => options.Catalogue = CampusCatalogue.Application);
 
         // The keys of the courses and the labs that a role of the organization can hold.
         services.AddTenancyPermissions(CampusCatalogue.Permissions);

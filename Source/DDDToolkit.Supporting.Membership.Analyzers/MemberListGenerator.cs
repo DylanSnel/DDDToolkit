@@ -20,7 +20,7 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// partial class Document
 /// {
 ///     private MemberList&lt;DocumentShare, DocumentShareId, UserId, NamedRole&gt; Members
-///         =&gt; new(_shares, OwnerId, DocumentShareId.CreateSequential, Codes);
+///         =&gt; new(_shares, OwnerId, Codes);
 /// }
 /// </code>
 /// Everything in that line is said elsewhere already: the four types by the member class, and the rest by
@@ -35,16 +35,16 @@ namespace DDDToolkit.Supporting.Membership.Analyzers;
 /// <c>IEnumerable&lt;T&gt;</c>. The list is the field that generator declares for it.</item>
 /// <item>The owner: the one property of the type a member is known by. A resource with members keeps its
 /// owner as one, so where there is one such property it is the owner.</item>
-/// <item>New rows: the member class's own id is an <c>[EntityId&lt;Guid&gt;]</c>, and a new one is made in time
-/// order.</item>
+/// <item>New rows: the member class's own id has a <c>Create()</c>, which the list makes a new row's id with:
+/// the generator writes one for an <c>[EntityId&lt;Guid&gt;]</c>, and an id over anything else declares it.</item>
 /// <item>The codes: the one static property or field of <c>MembershipCodes</c>, which the rules about the
 /// members refuse under.</item>
 /// </list>
 /// <para>
 /// <b>When nothing is written.</b> A resource that declares a member list itself, under whatever name, is left
 /// alone and hears nothing: that is the form for every shape this cannot tell, a resource with two properties
-/// of the member's id, a row keyed by something else than a <see cref="Guid"/>, codes kept elsewhere. A
-/// resource that declares none and cannot be given one is told what stands in the way (DDD00059), since its
+/// of the member's id, codes kept elsewhere. A resource that declares none and cannot be given one is told what
+/// stands in the way (DDD00059), since its
 /// members could not be changed at all. That includes a member class over a type this generator cannot see,
 /// the id of an <c>[AggregateRoot&lt;Guid&gt;]</c> that another generator writes: the application would
 /// otherwise hear only that <c>Members</c> does not exist. An id another package's switch writes into the
@@ -74,9 +74,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
 
     /// <summary>What the list is called on the resource.</summary>
     private const string PropertyName = "Members";
-
-    /// <summary>The factory the entity id generator writes for an id over a <see cref="Guid"/>: a new id, in time order.</summary>
-    private const string NewId = "CreateSequential";
 
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -175,7 +172,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                 Collection: null,
                 Field: null,
                 Owner: null,
-                OwnId: string.Empty,
                 Codes: null,
                 Declared: declared,
                 Reasons: EquatableArray<string>.Empty,
@@ -229,9 +225,13 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         }
 
         // An id this generator cannot see is either one a switch writes, over a Guid, or what is said of it instead.
-        if (ownId.TypeKind != TypeKind.Error && !MakesNewIdsInTimeOrder(ownId))
+        // What it lacks is said as DDD00067 says it: a Create() in its partial declaration, the interface as well for
+        // an id written by hand, or the target framework of the project that declares it.
+        if (ownId.TypeKind != TypeKind.Error && IdCreation.Lacks(ownId, compilation, cancellationToken))
         {
-            reasons.Add("'" + ownId.Name + "', the id of a member's row, is not an [EntityId<Guid>], so there is no telling how a new one is made");
+            var shortfall = IdCreation.ShortfallOf(ownId);
+            reasons.Add("'" + ownId.Name + "', the id of a member's row, " + shortfall.Lacks + ", which a new row's id is made with: "
+                        + char.ToLowerInvariant(shortfall.Advice[0]) + shortfall.Advice.Substring(1));
         }
 
         var codes = members
@@ -262,7 +262,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
             Collection: collection,
             Field: field,
             Owner: owners.Count == 1 ? owners[0].Name : null,
-            OwnId: Qualified(ownId),
             Codes: codes.Count == 1 ? codes[0].Name : null,
             Declared: declared,
             Reasons: reasons.ToEquatableArray(),
@@ -339,32 +338,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
            && SymbolEqualityComparer.Default.Equals(list.OriginalDefinition, listType)
            && SymbolEqualityComparer.Default.Equals(list.TypeArguments[0], member);
 
-    /// <summary>
-    /// Whether an id has the factory the list is handed: an <c>[EntityId&lt;Guid&gt;]</c>, for which the entity
-    /// id generator writes it. An id of this project does not show the factory yet, since a generator does
-    /// not see what another writes, so it is told by its attribute; one of a referenced project shows it.
-    /// </summary>
-    private static bool MakesNewIdsInTimeOrder(INamedTypeSymbol id)
-    {
-        if (id.DeclaringSyntaxReferences.IsEmpty)
-        {
-            return id.GetMembers(NewId).OfType<IMethodSymbol>().Any(static method =>
-                method is { IsStatic: true, Parameters.Length: 0, DeclaredAccessibility: Accessibility.Public });
-        }
-
-        foreach (var attribute in id.GetAttributes())
-        {
-            if (attribute.AttributeClass is { TypeArguments.Length: 1 } attributeClass
-                && EntityDeclarations.Is(attributeClass, KnownTypes.EntityIdAttribute)
-                && attributeClass.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) == "global::System.Guid")
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static string Qualified(INamedTypeSymbol type) => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
     private static string Listed(IEnumerable<ISymbol> members) => string.Join(", ", members.Select(static member => member.Name));
@@ -377,7 +350,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
     /// <param name="Collection">The resource's collection of members, or null when it cannot be told.</param>
     /// <param name="Field">The field the entity generator keeps that collection in, or null.</param>
     /// <param name="Owner">The resource's property that holds its owner, or null when it cannot be told.</param>
-    /// <param name="OwnId">The id of a member's row, written out in full, whose factory makes the id of a new one.</param>
     /// <param name="Codes">The resource's static member that holds its codes, or null when it cannot be told.</param>
     /// <param name="Declared">Whether the resource declares a member list over this member class itself.</param>
     /// <param name="Reasons">What stands in the way of writing the list, each phrased to follow "the toolkit cannot write one:".</param>
@@ -401,7 +373,6 @@ public sealed class MemberListGenerator : IIncrementalGenerator
         string? Collection,
         string? Field,
         string? Owner,
-        string OwnId,
         string? Codes,
         bool Declared,
         EquatableArray<string> Reasons,
@@ -504,7 +475,7 @@ public sealed class MemberListGenerator : IIncrementalGenerator
                             + "\"/>, and the codes it refuses under in <see cref=\"" + list.Codes + "\"/>.");
                 writer.Line("/// </summary>");
                 writer.Line("private global::" + Package + ".MemberList<" + string.Join(", ", list.TypeArguments.Select(InFull)) + "> " + PropertyName);
-                writer.Line("    => new(" + Identifier(list.Field) + ", " + Identifier(list.Owner) + ", " + InFull(list.OwnId) + "." + NewId + ", " + Identifier(list.Codes) + ");");
+                writer.Line("    => new(" + Identifier(list.Field) + ", " + Identifier(list.Owner) + ", " + Identifier(list.Codes) + ");");
             }
         }
 

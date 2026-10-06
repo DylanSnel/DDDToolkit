@@ -17,6 +17,12 @@ internal static class KnownTypes
     /// <summary>The marker interface every strongly typed id implements (metadata name of the non-generic one).</summary>
     public const string EntityIdInterface = "DDDToolkit.Abstractions.Interfaces.IEntityId";
 
+    /// <summary>
+    /// The id that makes a new one of itself, <c>TId.Create()</c>: what the generator implements for an id over a
+    /// <c>Guid</c>, and for one that declares its own <c>Create()</c>. Only the .NET 10 build of the abstractions has it.
+    /// </summary>
+    public const string CreatableEntityIdInterface = "DDDToolkit.Abstractions.Interfaces.ICreatableEntityId`1";
+
     public const string SingleValueObjectAttribute = AttributesNamespace + ".SingleValueObjectAttribute`1";
     public const string ValueObjectAttribute = AttributesNamespace + ".ValueObjectAttribute";
     public const string EntityAttribute = AttributesNamespace + ".EntityAttribute`1";
