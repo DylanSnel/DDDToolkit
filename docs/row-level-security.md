@@ -1656,8 +1656,10 @@ The check in front of a handler refuses first, with your own code and the key th
 refuses only what that check let through: a caller that lost a key between the check and the save, a handler
 that skipped its check, a rule the database holds more strictly than C# asks it. `UseDDDToolkit` answers each
 of those the same way. The save throws a `RefusalException` with the code `access.refused`, a refusal of the
-kind "not permitted": a 403 from a route and a `RefusalError` from a GraphQL mutation. A warning is logged as
-well, since the application allowed what the database does not.
+kind "not permitted": a 403 from a route and a `RefusalError` from a GraphQL mutation. A line is logged as
+well: information where the caller's rights changed between the check and the save, which the toolkit tells by
+asking the request's check again, and a warning where C# and the database disagree
+([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)).
 
 ```mermaid
 flowchart LR

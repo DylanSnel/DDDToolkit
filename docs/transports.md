@@ -326,12 +326,15 @@ UseQueue or UseQueues instead of UseTopics, and leave BindTopics off. ...
 `PgmqQueue.InstalledVersionAsync` returns the same version for a check of your own, and
 `PgmqQueue.EnsureTopicRoutingAsync` throws the same two exceptions.
 
-The check needs the database when the application starts. It runs in `StartingAsync`, and the host calls
-that for its services in the order they were registered, unless it starts them concurrently. A migration
-applied before `RunAsync` is done by then. Something that installs the extension as the host starts, a
-hosted service running a migration with `CREATE EXTENSION` for instance, has to be registered before
-`RunStartupChecks()`, which moves the checks to where it is called, or, in a host that does not call it, before
-the first sink or consumer. Where neither fits, turn the check off on the sink and on the consumer, or by its name:
+The check needs the database when the application starts. It runs in `StartingAsync`, which the host calls
+for every lifecycle service before any hosted service's `StartAsync`, and for the lifecycle services in the
+order they were registered, unless it starts them concurrently. A migration applied before `RunAsync` is done
+by then. Something that installs the extension as the host starts, with `CREATE EXTENSION` in a migration for
+instance, does it before `app.Run()`, or in the `StartingAsync` of an `IHostedLifecycleService` registered
+before `RunStartupChecks()`, which moves the checks to where it is called, or, in a host that does not call it,
+before the first sink or consumer. A plain hosted service starts after the checks, whatever its order
+([Before the server binds its port](startup-checks.md#before-the-server-binds-its-port)). Where none of these
+fits, turn the check off on the sink and on the consumer, or by its name:
 
 ```csharp
 builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.CheckExtensionOnStart = false);

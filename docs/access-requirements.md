@@ -70,6 +70,7 @@ spelled on whoever decides it:
 | a key for the whole tenant | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now | `tenancy.not-permitted`, naming the key |
 | a key at a unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it | `tenancy.not-permitted`, with the key and the unit |
 | a key on a resource | `MemberAccess.On(key, resource)`, of [Membership](membership.md#a-document-and-the-people-it-is-shared-with) | whoever holds the key on it, through its members or from above | the resource's `not-found` or `not-permitted` |
+| a query that shows the resources a key is held on | `MemberAccess.SeenWith<TResourceId>(key)`, of [Membership](membership.md#inside-your-own-statements) | every caller who signed in, and system work: the query's own statement leaves out what the caller does not hold the key on | the caller's own reason where it is nobody; the resource's `not-permitted`, naming the key, for a caller who did not sign in |
 | one of the application's operators | `TenancyAccess.RequiresOperator()` | a signed-in user with an [operator's token role](tenancy.md#operators) | `tenancy.operators-only` |
 | only the application itself | `AccessRequirement.RequiresSystemWork()` | system work trusted code began: `Caller.System`, or `Caller.SystemIn(scope)` | `access.system-only`, for every user whatever they hold, and for work nobody began a caller for |
 | something only your module knows | a record of your own | what your check lets through | your module's code |
@@ -88,9 +89,7 @@ for fails with `NoCallerException` before it is let through or refused.
   `Callers.Begin(Caller.System)`, `Callers.Begin(Caller.SystemIn(scope))` or a supporting domain's own way,
   such as Tenancy's `TenancyWork`. A host that does not require explicit callers answers the application
   itself for work nobody began a caller for, and with no accessor that knows requests a web request gets the
-  same answer; the door does not take that default for system work. A query of a resource with members
-declares what filters it, `MemberAccess.SeenWith(key)`
-([Inside your own statements](membership.md#inside-your-own-statements)).
+  same answer; the door does not take that default for system work.
 
 Each is a method on the class of whoever decides it, so the requirements read alike side by side:
 `AccessRequirement.SignedIn()`, `TenancyAccess.InTenant()`, `MemberAccess.On(key, resource)`. A method rather
@@ -449,13 +448,14 @@ its check kept, `Checked<T>`, fails there for want of it. Any other handler runs
 checks, and per table that is coarser than what one request requires. A policy has to let every member who may
 write a project's row write it, to close the project or to rename it, so it lets a rename through for one who may
 only close it. So the toolkit watches the two ways round the behavior it can see: a missing behavior stops the
-host when it starts, and a handler called in code is reported when the code builds.
+host when it starts, in a host that calls `RunStartupChecks()`, and a handler called in code is reported when the
+code builds.
 
 ```mermaid
 flowchart LR
     Sent["sent<br/>sender.Send(request)"] --> Behavior["the access behavior<br/>asks the checks"] --> Handler["the handler"]
     Direct["called directly<br/>handler.Handle(request)"] -- "DDD00061, a warning<br/>when it builds" --> Handler
-    Missing["handler registered,<br/>behavior not"] -- "access.behaviors-registered<br/>when it starts" --> Stopped["the host stops"]
+    Missing["handler registered,<br/>behavior not"] -- "access.behaviors-registered,<br/>in RunStartupChecks()" --> Stopped["the host stops"]
 ```
 
 - **The behavior is not in the pipeline.** A module registers its checks and not the behavior that asks them, a

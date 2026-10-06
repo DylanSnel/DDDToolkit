@@ -383,6 +383,8 @@ this skill:
 | Deciding what belongs in one aggregate | `aggregate-design` |
 | Events, testing | `domain-events`, `testing` |
 | Entity Framework mapping, concurrency, migrations | `entity-framework` |
+| What the registrations check at start-up, `RunStartupChecks`, turning one off | `startup-checks` |
+| Running queries as the caller, row access rules in C#, column rules | `row-level-security` |
 | Tables keyed on more than the id (`[KeyPart]`) | `composite-keys` |
 | In-process dispatch versus the outbox | `event-delivery` |
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |

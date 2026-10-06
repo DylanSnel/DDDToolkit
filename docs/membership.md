@@ -185,8 +185,10 @@ public sealed class DocumentHandlers(
 Something asks the checks in front of the handler: `AccessChecks<IFilingRequest>.RequireAsync(request)`, one
 call from your dispatcher or an endpoint filter, or, with the Mediator library, the behavior the generator
 writes for an interface marked `[AccessRequests]`. [Access requirements](access-requirements.md) has both,
-and what `IRequireAccess`, `AccessRequirement` and `Checked<T>` are. `MemberAccess.On(key, resource)` is one
-of [the requirements every request picks from](access-requirements.md#the-vocabulary), beside the toolkit's
+and what `IRequireAccess`, `AccessRequirement` and `Checked<T>` are. `MemberAccess.On(key, resource)`, and
+`MemberAccess.SeenWith<TResourceId>(key)` for a query that shows the resources a key is held on
+([Inside your own statements](#inside-your-own-statements)), are two of
+[the requirements every request picks from](access-requirements.md#the-vocabulary), beside the toolkit's
 `AccessRequirement.SignedIn()` and the rest, and Tenancy's `TenancyAccess.InTenant()` and the rest: a request
 of a module with members says which, and none leaves it to a package. With the behavior, `AddDocumentMemberAccess`
 also brings the start-up check that the behavior is in the pipeline, and a handler called past it is a warning;

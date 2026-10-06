@@ -259,7 +259,8 @@ database in snake_case.
 
 Registering Tenancy is generated the same way: `services.AddTenancy<ShopTenancyContext>(...)` is closed over
 your classes and ids, and leaves you the context to name. Both generated calls are internal to the project
-that declares your classes, or to a project with the same `[assembly: Module]` that declares none of them,
+that declares your classes, or to a project of the same module that declares none of them, declared with
+`[assembly: Module]` or by its folder ([A module named by its folder](modules.md#a-module-named-by-its-folder)),
 such as the module's infrastructure project next to its domain project
 ([In a module split by layer](writing-a-supporting-domain.md#in-a-module-split-by-layer)), so register
 Tenancy from there:
@@ -345,7 +346,8 @@ Neither call names a module, so a module that is added, or a key a module adds, 
 next build, and nothing in the host changes. While no module marks a list, before the first one does or after
 the last one is taken out, `All` is empty, and both calls compile all the same.
 
-Declaring a module means `[assembly: Module]` ([Modules](modules.md)). A module's own projects get no class: a
+Declaring a module means `[assembly: Module]`, or `DDD_Module` with `DDD_DeclareModule` set to true
+([A module named by its folder](modules.md#a-module-named-by-its-folder)). A module's own projects get no class: a
 module states its own keys and composes no other module's. A module project that does not carry the attribute
 yet gets one as well, and leaves it alone: the host's call is the one that counts.
 
@@ -867,7 +869,7 @@ What is held on one thing a module keeps at a unit is that module's own case, wi
 
 ```mermaid
 flowchart LR
-    Request["MakeGrant"] --> Door["its requirement:<br/>grants.manage at the unit"]
+    Request["MakeGrant"] --> Door["its requirement:<br/>tenancy.grants.manage at the unit"]
     Door -- "not held" --> NotPermitted["tenancy.not-permitted"]
     Door -- "held" --> UseCase["the use case: the key again,<br/>and what only it can read"]
     UseCase -- "a role it may not give" --> Exceeds["tenancy.grant-exceeds-own"]
@@ -3476,7 +3478,7 @@ sequenceDiagram
     Bearer->>Selection: the token's sub
     Selection->>Selection: her seat in harbor
     Selection->>Requirement: runs as that seat
-    Requirement->>UseCase: grants.manage<br/>at the unit: held
+    Requirement->>UseCase: tenancy.grants.manage<br/>at the unit: held
     UseCase->>UseCase: the role manages access,<br/>with keys she lacks there
     UseCase-->>UI: refused, 403 problem+json<br/>tenancy.grant-exceeds-own
     UI-->>Browser: status, code,<br/>the missing keys

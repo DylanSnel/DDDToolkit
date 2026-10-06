@@ -736,8 +736,8 @@ private void ConfirmWhenReady(DateTimeOffset at)
 
 </details>
 
-The host only switches the modules on, and sets the one thing that is the host's: how domain events that
-stay inside a module are published.
+The host only switches the modules on, says how domain events that stay inside a module are published, and
+asks for the start-up checks the registrations brought.
 
 ```csharp
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
@@ -747,6 +747,8 @@ builder.Services.AddOrderingModule(supabase);
 builder.Services.AddInventoryModule(supabase);
 builder.Services.AddPaymentsModule(supabase);
 builder.Services.AddShippingModule(supabase);
+
+builder.Services.RunStartupChecks();
 ```
 
 *[`Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)*
