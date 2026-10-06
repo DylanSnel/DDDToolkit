@@ -483,7 +483,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
                 });
 
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization", b =>
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -504,7 +504,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "Id");
                 });
 
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Aggregates.Roles.Role", b =>
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Role", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -656,7 +656,7 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Organization", b =>
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
                 {
                     b.OwnsMany("Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit", "Units", b1 =>
                         {
