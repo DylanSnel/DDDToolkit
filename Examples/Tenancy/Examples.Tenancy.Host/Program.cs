@@ -93,8 +93,8 @@ builder.Services.AddInspectionsModule(host);
 // list it marks with [TenancyPermissions]; Tenancy's generator finds those lists in the modules this host
 // references, and wrote this call into it, in the namespace named after the host's assembly, which the using of
 // Examples.Tenancy.Host above brings in. A module that is added reaches the host with no change here. The program
-// that exports the policies builds its catalogue from the list the same generator writes into the catalogue's
-// project, so the new module's keys reach the export once that project references the module as well.
+// that exports the policies finds the same marked lists in the modules it references and writes Tenancy's policies
+// with them, so the new module's keys reach the export with the reference it gets for the module's migrations.
 builder.Services.AddTenancyPermissionsOfModules();
 
 // The check that the database has every migration of every module: the migrations are the Supabase CLI's to apply,

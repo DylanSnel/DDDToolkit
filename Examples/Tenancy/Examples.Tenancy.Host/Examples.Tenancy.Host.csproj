@@ -50,8 +50,9 @@
     <!-- The texts of the host's own codes in English and Dutch, and the localizer the modules add theirs to. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
     <!--
-      GraphQL: every module registers a source schema of its own from its API project, and the gateway composes
-      them in the process into the one schema /graphql serves. The first is for what the host gives each schema.
+      GraphQL: every module registers a source schema of its own from its API project, and two gateways compose
+      them in the process, the user's at /graphql and the tenant's administration's at /admin/graphql. The first
+      is for what the host gives each schema.
     -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
     <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
