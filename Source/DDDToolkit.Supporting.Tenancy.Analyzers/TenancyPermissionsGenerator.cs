@@ -37,15 +37,17 @@ namespace DDDToolkit.Supporting.Tenancy.Analyzers;
 /// <c>TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)</c>, and a module that is added changes
 /// neither: no list of the modules is written by hand anywhere.
 /// <para>
-/// <b>Where it writes.</b> Into every project that sees the package and declares no module, with
-/// <c>[assembly: Module]</c> or by its folder with <c>DDD_DeclareModule</c>: the host, or a project the host and the
-/// export share. It collects the project's own
-/// marked lists and those of every project it references, directly or not, and writes the class when it finds none
-/// as well, with an empty <c>All</c>, so the host's one call and the export's build stay what they are while no
-/// module, or no module any more, marks a list. A project that declares a module gets nothing: a module states its
-/// own keys, and composes no other module's. The class is internal and in the namespace named after the project's
-/// assembly, so two projects that both compose the modules each have their own, and a project that sees the other's
-/// internals still names its own.
+/// <b>Where it writes.</b> Into every application that sees the package, the program the modules are composed in,
+/// and into every library that sees it and declares no module, with <c>DDD_Module</c> or <c>[assembly: Module]</c>:
+/// the host, or a project the host and the export share. It collects the project's own marked lists and those of
+/// every project it references, directly or not, and writes the class when it finds none as well, with an empty
+/// <c>All</c>, so the host's one call and the export's build stay what they are while no module, or no module any
+/// more, marks a list. A library that declares a module gets nothing: a module states its own keys, and composes no
+/// other module's. An application gets the class whether it declares a module or not, because no other project
+/// composes the modules from it: an application in one project that sets <c>DDD_Module</c> to name its code is a
+/// module too, and still has to register its own keys. The class is internal and in the namespace named after the
+/// project's assembly, so two projects that both compose the modules each have their own, and a project that sees
+/// the other's internals still names its own.
 /// </para>
 /// <para>
 /// <b>What it reports.</b> A marked list that could not be read where it is collected: not static, without a
@@ -152,12 +154,12 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
     // ------------------------------------------------------------------ the projects it references
 
     /// <summary>
-    /// What this project composes: nothing when it sees no Tenancy, and nothing to write when it declares a module.
-    /// Otherwise the lists of the projects it references that it can read, and whether it can write the
-    /// registration beside them.
+    /// What this project composes: nothing when it sees no Tenancy, and nothing to write when it is a library that
+    /// declares a module. Otherwise the lists of the projects it references that it can read, and whether it can
+    /// write the registration beside them.
     /// </summary>
     /// <param name="SeesTenancy">Whether the project references the package that declares the attribute.</param>
-    /// <param name="DeclaresModule">Whether the project declares a module, and so collects nothing.</param>
+    /// <param name="DeclaresModule">Whether the project is a library that declares a module, and so collects nothing.</param>
     /// <param name="IsLibrary">Whether the project is a library, which other projects reference, so its lists are public.</param>
     /// <param name="Namespace">The project's own namespace, from its assembly's name: where the class is written.</param>
     /// <param name="CanRegister">Whether the service collection and the package's registration are both in reach.</param>
@@ -177,8 +179,9 @@ public sealed class TenancyPermissionsGenerator : IIncrementalGenerator
             return new Composition(false, false, isLibrary, @namespace, false, EquatableArray<string>.Empty);
         }
 
-        // A module's own projects collect nothing, so they are not walked: most projects that see the package are one.
-        if (ModuleBoundary.ModuleOf(compilation.Assembly) is not null)
+        // A module's own libraries collect nothing, so they are not walked: most projects that see the package are one.
+        // An application is walked whatever it declares: it is the program, and nothing composes the modules from it.
+        if (isLibrary && ModuleBoundary.ModuleOf(compilation.Assembly) is not null)
         {
             return new Composition(true, true, isLibrary, @namespace, false, EquatableArray<string>.Empty);
         }

@@ -74,14 +74,16 @@ public sealed class GeneratorTestHost
     private readonly List<PortableExecutableReference> _extraReferences = [];
     /// <summary>
     /// What the DDDToolkit.Analyzers package's props file gives every project: each property a generator or an
-    /// analyzer reads, declared, and empty until the project sets it. <see cref="WithoutBuildProperties"/> takes
-    /// them away again.
+    /// analyzer reads, declared, and empty until the project sets it. And what its targets file gives:
+    /// <c>DDD_DeclareModule</c>, declared, whose arrival says the build step that declares a module ran.
+    /// <see cref="WithoutBuildProperties"/> takes them all away again, and <see cref="WithoutTheModuleStep"/> the last.
     /// </summary>
     private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal)
     {
         ["build_property.DDD_Module"] = string.Empty,
         ["build_property.IsTestProject"] = string.Empty,
         ["build_property.IsTestingPlatformApplication"] = string.Empty,
+        ["build_property.DDD_DeclareModule"] = string.Empty,
     };
 
     private readonly List<string> _noWarn = [];
@@ -198,7 +200,12 @@ public sealed class GeneratorTestHost
     /// <summary>The MSBuild properties as the compiler hands them to generators and analyzers alike.</summary>
     internal AnalyzerConfigOptionsProvider OptionsProvider => new TestAnalyzerConfigOptionsProvider(GlobalOptions());
 
-    /// <summary>Sets <c>build_property.DDD_Module</c>, the MSBuild property that names the generated extension methods.</summary>
+    /// <summary>
+    /// Sets <c>build_property.DDD_Module</c>, the MSBuild property, and nothing more: how the generators of a project see
+    /// it that the build does not declare a module, a test project or one that sets <c>DDD_DeclareModule</c> to false,
+    /// where it names the generated extension methods and no more. <see cref="WithModuleFromTheBuild"/> is the
+    /// project the property declares a module, and <see cref="WithoutTheModuleStep"/> one where nothing could.
+    /// </summary>
     public GeneratorTestHost WithModule(string moduleName)
     {
         _globalOptions["build_property.DDD_Module"] = moduleName;
@@ -207,14 +214,11 @@ public sealed class GeneratorTestHost
 
     /// <summary>
     /// Compiles the project the way the build of one that sets <c>DDD_Module</c> compiles it: with the file the targets
-    /// of the DDDToolkit.Analyzers package write into it, read from those targets (<see cref="ModuleDeclarationFile"/>),
-    /// and with the property itself, which the props file hands the generators. <paramref name="declares"/> is what
-    /// the file says of <c>DDD_DeclareModule</c>: "true" for a project that sets it to true, "false" for one that sets
-    /// it to false and for a test project, and null for a project that sets nothing, where <c>DDD_Module</c> only
-    /// names the generated code.
+    /// of the DDDToolkit.Analyzers package write into it, which declares the module, read from those targets
+    /// (<see cref="ModuleDeclarationFile"/>), and with the property itself, which the props file hands the generators.
     /// </summary>
-    public GeneratorTestHost WithModuleFromTheBuild(string module, string? declares = "true")
-        => WithModule(module).WithSource(ModuleDeclarationFile.For(module, declares), "obj/Debug/net10.0/" + _assemblyName + ".DDDToolkitModule.g.cs");
+    public GeneratorTestHost WithModuleFromTheBuild(string module)
+        => WithModule(module).WithSource(ModuleDeclarationFile.For(module), "obj/Debug/net10.0/" + _assemblyName + ".DDDToolkitModule.g.cs");
 
     /// <summary>Sets any MSBuild property the way <c>CompilerVisibleProperty</c> exposes it: <c>build_property.{name}</c>.</summary>
     public GeneratorTestHost WithBuildProperty(string name, string value)
@@ -226,11 +230,22 @@ public sealed class GeneratorTestHost
     /// <summary>
     /// Compiles the way a project does when the package's props file was not imported: no
     /// <c>build_property.*</c> key reaches the generators at all, which is not the same as a property
-    /// that is declared and left empty.
+    /// that is declared and left empty. The targets file, which arrives with it, was not imported either.
     /// </summary>
     public GeneratorTestHost WithoutBuildProperties()
     {
         _globalOptions.Clear();
+        return this;
+    }
+
+    /// <summary>
+    /// Compiles the way a project does whose props file was imported and whose targets file was not: the build step
+    /// that declares the module from <c>DDD_Module</c> never ran, and <c>DDD_DeclareModule</c>, which that file
+    /// declares, does not reach the generators.
+    /// </summary>
+    public GeneratorTestHost WithoutTheModuleStep()
+    {
+        _globalOptions.Remove("build_property.DDD_DeclareModule");
         return this;
     }
 

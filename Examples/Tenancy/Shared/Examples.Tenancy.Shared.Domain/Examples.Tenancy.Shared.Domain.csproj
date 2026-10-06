@@ -11,7 +11,7 @@
     of calendar days, which Projects plans a project with and Inspections says an inspection's days with. A type
     one module owns is not shared: it stays in that module's contracts project, as a project's id does.
 
-    No [assembly: Module] in this project, on purpose. The boundary analyzer keeps a module from naming another
+    Neither DDD_Module nor [assembly: Module], on purpose. The boundary analyzer keeps a module from naming another
     module's types; what is declared here belongs to no module, so every module may name it and nobody publishes
     anything. It references no module and neither Entity Framework nor ASP.NET Core: a module's domain and
     contracts projects reference it, and each module's infrastructure project says how it stores what it keeps

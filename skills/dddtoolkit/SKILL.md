@@ -277,10 +277,10 @@ public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEven
 
 - An ordinary `sealed record` deriving from `DomainEvent`, with no attribute required and no `partial`.
   `EventId` and `OccurredAt` come from the base.
-- Its stored and published name is a convention: the module from `[assembly: Module("Ordering")]` and
-  the class name, both in kebab case (`order-cancelled` without a module). A class name ending in `V`
-  and a number is that version: `OrderPlacedV2` is version 2 of `ordering.order-placed`. Do not write
-  names by hand.
+- Its stored and published name is a convention: the module, from `<DDD_Module>Ordering</DDD_Module>` or
+  `[assembly: Module("Ordering")]`, and the class name, both in kebab case (`order-cancelled` without a
+  module). A class name ending in `V` and a number is that version: `OrderPlacedV2` is version 2 of
+  `ordering.order-placed`. Do not write names by hand.
 - Renaming a class changes its name, so pin the old one when the event has been stored or published:
   `[DomainEventName("ordering.order-cancelled")]` on a domain event,
   `[IntegrationEvent("ordering.order-cancelled")]` on a contract. The generated `{Module}EventNames`

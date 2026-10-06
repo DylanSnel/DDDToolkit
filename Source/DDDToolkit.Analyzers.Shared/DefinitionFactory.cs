@@ -1067,15 +1067,6 @@ internal static class DefinitionFactory
     internal static bool DeclaresTemplateClasses(IAssemblySymbol assembly, CancellationToken cancellationToken)
         => TemplateClassesIn(assembly, cancellationToken).Count > 0;
 
-    /// <summary>
-    /// Whether an assembly declares a class with the template <paramref name="templateKey"/>: its open definition,
-    /// fully qualified, which is how a registration's <c>[TemplateType]</c> names it. Asked of a referenced assembly,
-    /// whose walk is kept, and of the project's own where few projects ask (DDD00064 of two projects that declare no
-    /// module): its symbol is new with every compilation, so its walk is kept only as long as that compilation.
-    /// </summary>
-    internal static bool DeclaresClassesWith(IAssemblySymbol assembly, string templateKey, CancellationToken cancellationToken)
-        => TemplateClassesIn(assembly, cancellationToken).ContainsKey(templateKey);
-
     private static Dictionary<string, List<INamedTypeSymbol>> TemplateClassesIn(IAssemblySymbol assembly, CancellationToken cancellationToken)
     {
         if (TemplateClassesByAssembly.TryGetValue(assembly, out var known))

@@ -96,9 +96,9 @@ public sealed class LayerReferenceTests
 
         Path.GetFileName(Path.GetDirectoryName(directory)).Should().Be(listed.Module, "{0} is in its module's folder", project);
         listed.Anchor.Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
-            .Where(metadata => metadata.Key is "DDD_Module" or "DDD_DeclareModule")
-            .Select(metadata => metadata.Key + "=" + metadata.Value)
-            .Should().BeEquivalentTo(["DDD_Module=" + listed.Module, "DDD_DeclareModule=true"], "the build declared {0}'s module from its folder", project);
+            .Where(metadata => metadata.Key == "DDD_Module")
+            .Select(metadata => metadata.Value)
+            .Should().Equal([listed.Module], "the build declared {0}'s module from its folder", project);
 
         SampleLayout.SourceFilesIn(directory)
             .Where(file => File.ReadAllText(Path.Combine(directory, file)) is var text

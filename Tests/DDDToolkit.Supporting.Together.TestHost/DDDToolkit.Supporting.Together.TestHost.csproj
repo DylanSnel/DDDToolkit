@@ -20,7 +20,7 @@
     <IsPackable>false</IsPackable>
     <AssemblyName>Campus</AssemblyName>
     <RootNamespace>Campus</RootNamespace>
-    <!-- Names the generated AddCampusConverters method. -->
+    <!-- The application's module, Campus, which also names the generated AddCampusConverters method. -->
     <DDD_Module>Campus</DDD_Module>
   </PropertyGroup>
 

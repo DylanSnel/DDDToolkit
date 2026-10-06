@@ -14,8 +14,12 @@
     declared does not reach it at all, which is how the generator tells that this file was not
     imported (DDD00014).
 
-    DDD_DeclareModule is read by the build, not by a generator, so it is not declared here: the package's targets
-    file writes what it says into the project, where every generator sees it. See DDDToolkit.Analyzers.targets.
+    DDD_Module also declares the project's module, and the generators learn that from the build rather than from
+    the property: the package's targets file writes the declaration into the project, where every generator of it
+    and of the projects that reference it sees it. DDD_DeclareModule, which a project that sets DDD_Module and is
+    meant to be no module sets to false, is read by that step, and the targets file declares it for the generators:
+    that it arrives is how they tell the step ran (DDD00064), so it belongs with the step and not here. See
+    DDDToolkit.Analyzers.targets.
 
     The property declared elsewhere is SupabaseMigrationsExport, which switches on a build step:
     DDDToolkit.EntityFramework.Supabase declares it in the targets file that holds the step, with
@@ -27,13 +31,13 @@
   <ItemGroup>
     <!--
       Names the generated {Module}EventNames, Add{Module}Converters, Add{Module}IntegrationEvents and
-      Add{Module}GraphQlRuntimeBindings in a project that declares no [assembly: Module]. The attribute wins.
+      Add{Module}GraphQlRuntimeBindings, as the module it declares does. [assembly: Module] in the source wins.
     -->
     <CompilerVisibleProperty Include="DDD_Module" />
 
     <!--
       Where a diagnostic about the project's module points when no line of its source declares the module: the
-      build declared it from DDD_Module and DDD_DeclareModule, and the file it wrote that into is no one's to edit.
+      build declared it from DDD_Module, and the file it wrote that into is no one's to edit.
     -->
     <CompilerVisibleProperty Include="MSBuildProjectFullPath" />
   </ItemGroup>

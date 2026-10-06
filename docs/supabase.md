@@ -133,7 +133,8 @@ namespace DDDToolkit.EntityFramework.Supabase.Generated
 ```
 
 Add a module with a marked factory and the next build exports its migrations too. `"Ordering"` is the
-module name the files carry, read from the module's `[assembly: Module("Ordering")]`.
+module name the files carry, the module the project declares: `<DDD_Module>Ordering</DDD_Module>` or
+`[assembly: Module("Ordering")]`.
 [How the build step works](#how-the-build-step-works) explains the module initializer.
 
 Commit the files. Supabase branching and the GitHub integration read `supabase/migrations` from the
@@ -143,11 +144,10 @@ branching you can generate them in the pipeline instead, with `Write` in a relea
 
 ## What the build writes
 
-Each file is named after its migration and its module: `20260922120000_AddOrders` in a project with
-`[assembly: Module("Ordering")]` becomes `20260922120000_AddOrders.ordering.ddd.sql`. Without a module
-attribute the context's name stands in, less its `Context`, and the build warns with
-[DDD00055](diagnostics.md#ddd00055): renaming the class would then rename every file the export looks
-for. Entity Framework ids and Supabase versions
+Each file is named after its migration and its module: `20260922120000_AddOrders` in a project of module
+Ordering becomes `20260922120000_AddOrders.ordering.ddd.sql`. Without a module the context's name stands in,
+less its `Context`, and the build warns with [DDD00055](diagnostics.md#ddd00055): renaming the class would then
+rename every file the export looks for. Entity Framework ids and Supabase versions
 are both `yyyyMMddHHmmss` timestamps, so the two histories sort the same way, and a file written with
 `supabase migration new` takes its place between them by date. The Supabase CLI reads everything
 between the first underscore and `.sql` as the name, so `.ordering.ddd` is only there for people: next

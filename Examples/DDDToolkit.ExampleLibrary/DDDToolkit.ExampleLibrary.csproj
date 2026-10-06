@@ -4,8 +4,13 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <!-- Name used for the generated Add<Module>Converters / Add<Module>GraphQlRuntimeBindings methods. -->
+    <!--
+      Name used for the generated Add<Module>Converters / Add<Module>GraphQlRuntimeBindings methods. The library
+      holds what the API project shares with it, value objects and the event interface, so it is no module of its
+      own: a shared kernel, which keeps the name and leaves the module out with DDD_DeclareModule set to false.
+    -->
     <DDD_Module>Common</DDD_Module>
+    <DDD_DeclareModule>false</DDD_DeclareModule>
   </PropertyGroup>
 
   <ItemGroup>

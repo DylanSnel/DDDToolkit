@@ -12,7 +12,7 @@
     paging over Entity Framework, each in its own infrastructure project, and a module does not reference
     another's; so what all of them need of that paging lives here, once.
 
-    No [assembly: Module] in this project, on purpose: it belongs to no module, so every module may name what it
+    Neither DDD_Module nor [assembly: Module], on purpose: it belongs to no module, so every module may name what it
     declares. It references no module and knows nothing of any of them: a list hands it its query and the refusal
     to answer with. Only a module's infrastructure project references it, since it reads how a query is ordered
     and how the paging library writes a cursor, which no other layer knows. Keep it small: a type belongs here only

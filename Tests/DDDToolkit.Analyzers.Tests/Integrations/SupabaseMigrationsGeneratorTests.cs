@@ -599,7 +599,7 @@ public sealed class SupabaseMigrationsGeneratorTests
         var reported = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00055").Subject;
         reported.Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Warning, "the files are still exported, under a name a rename would change");
         reported.GetMessage().Should().Be(
-            "'Shop.Ordering.OrderingContext' is in an assembly that declares no [assembly: Module], so its Supabase migration files are named after the context, 'ordering'. Declare the module, and the file names stay the same when the context is renamed.");
+            "'Shop.Ordering.OrderingContext' is in an assembly that declares no module, so its Supabase migration files are named after the context, 'ordering'. Declare the module, with DDD_Module or [assembly: Module], and the file names stay the same when the context is renamed.");
         result.ShouldContain("SupabaseMigrationSources", "global::Shop.Ordering.OrderingContextFactory>(null)");
 
         // In the host itself, where the warning points at the factory.

@@ -31,7 +31,7 @@
 
   <!--
     The MSBuild properties the generators read, declared in the package that carries the generators, and the
-    build step that writes the module DDD_DeclareModule declares into the project. Named after the package,
+    build step that writes the module DDD_Module declares into the project. Named after the package,
     because that is the only build/*.props, build/*.targets and their buildTransitive/ twins NuGet imports.
     build/ reaches a project that references this package itself; buildTransitive/ reaches one that gets it
     through DDDToolkit, another package or a project reference.

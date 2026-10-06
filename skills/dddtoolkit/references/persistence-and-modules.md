@@ -74,10 +74,11 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
   a seat, a unit or a role is called is asked of Tenancy's directory by id (`SeatsByIdAsync`,
   `UnitsByIdAsync`, `RolesByIdAsync`), by whoever shows it. Never map a type of the module's own onto one of
   Tenancy's tables to read a name; `TenancyModel.ReadsBeyondAccessFacts(model)` in a test finds it.
-- `DDD_Module` alone only names generated code, in a project that is no module. What makes an assembly a module
-  is `[assembly: Module("Ordering")]`, below, or `DDD_Module` with `<DDD_DeclareModule>true</DDD_DeclareModule>`
-  beside it, which has the build write that attribute. The `DDDToolkit.Analyzers` package declares the property to
-  the compiler; a build that warns DDD00014 is ignoring it, see `diagnostics.md`.
+- `DDD_Module` names the generated code and declares the project's module: the build writes
+  `[assembly: Module("Ordering")]` from it, below. In a test project, and in one that sets
+  `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it (rare: a shared kernel, a package of templates), it only
+  names the code. The `DDDToolkit.Analyzers` package declares the property to the compiler and brings the build
+  step; a build that warns DDD00014 is ignoring both, see `diagnostics.md`.
 - Mapped with no configuration: identifiers and single value objects as their raw value (generated
   converters), `[Entity<T>]` children as owned types, `[ValueObject]` records inline as complex types,
   partial collections through their backing field, `Version` as the concurrency token. Do not write
@@ -184,11 +185,12 @@ service. See `entity-framework.md`.
 
 ## Modules
 
-A module is an assembly: `[assembly: Module("Ordering")]` in any file of the project, or
-`<DDD_Module>Ordering</DDD_Module>` with `<DDD_DeclareModule>true</DDD_DeclareModule>` in its project or a
-`Directory.Build.props`, which has the build write the attribute. Two assemblies with the same name, such as
-`Ordering` and `Ordering.Contracts`, are one module. Full pages:
-`modules.md`, `module-contracts.md`.
+A module is an assembly: `<DDD_Module>Ordering</DDD_Module>` in its project file or a `Directory.Build.props`,
+which has the build write `[assembly: Module("Ordering")]`, or that attribute in any file of the project, which
+wins. Two assemblies with the same name, such as `Ordering` and `Ordering.Contracts`, are one module. A project
+that sets `DDD_Module` and must be no module, such as a shared kernel every module uses, sets
+`<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, or sets no `DDD_Module`; a test project is never
+declared. Full pages: `modules.md`, `module-contracts.md`.
 
 - Everything a module declares is private to it, `public` or not, unless it is marked
   `[ModuleContract]` or is an `[IntegrationEvent]` record (types nested in those are published too).
@@ -204,12 +206,10 @@ A module is an assembly: `[assembly: Module("Ordering")]` in any file of the pro
   Api (the routes and the module's entry, which the host references alone). Declare it once for the folder
   rather than with a `Module.cs` per project: a `Modules/Directory.Build.props` that imports the one above it
   and sets `<DDD_Module>` to the folder's name,
-  `$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))`, and
-  `<DDD_DeclareModule>true</DDD_DeclareModule>`. The build then writes `[assembly: Module]` into every project
-  below that declares none; a project that does keep one is not given a second. A project of the module that
-  is left out is DDD00064. Do not add an `<AssemblyAttribute>` item for the module: that is what the switch
-  replaces, so swap an existing one for the switch; deleting it alone makes the projects no module, and their
-  events lose the module's prefix. Inside a project the thing comes first and the kind second, and a root holds only
+  `$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))`. The
+  build then writes `[assembly: Module]` into every project below that declares none; a project that does keep
+  one is not given a second. Do not add an `<AssemblyAttribute>` item for the module: the property already
+  declares it, so an existing item can go. Inside a project the thing comes first and the kind second, and a root holds only
   `GlobalUsings.cs`, the class that registers the project, and in an API project a `Module.cs` with
   HotChocolate's own assembly attributes:
 
@@ -234,8 +234,9 @@ A module is an assembly: `[assembly: Module("Ordering")]` in any file of the pro
     each in a file of its own, an invariant as a partial of the class it is nested in. What several
     aggregates share goes in `ValueObjects` and `Services` at the root.
   - Shared by several modules: a domain type two or more modules use and none owns goes in a project of
-    its own, `Shared.Domain/ValueObjects`, with no `[assembly: Module]` and no reference to a module; a
-    module's domain and contracts projects reference it. A type one module owns stays in its contracts.
+    its own, `Shared.Domain/ValueObjects`, that declares no module (no `DDD_Module`, no `[assembly: Module]`)
+    and references none; a module's domain and contracts projects reference it. A type one module owns stays
+    in its contracts.
   - Application: a folder per feature, named by a noun of the domain, with `Commands` and `Queries` in
     it. Never a folder named `Commands`, `Queries`, `Handlers`,
     `Validators`, `Ports` or `Dtos` at a project's root. A port one feature uses lives in that feature's

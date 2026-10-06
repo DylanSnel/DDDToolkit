@@ -1,26 +1,25 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
-using System.Threading;
 using DDDToolkit.Analyzers.Common;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 
 namespace DDDToolkit.Analyzers;
 
 /// <summary>
 /// Writes <c>[assembly: Module("Ordering")]</c> into a project whose build declared it a project of module
-/// Ordering: its <c>DDD_Module</c> is <c>Ordering</c> and its <c>DDD_DeclareModule</c> is true. So a
-/// <c>Directory.Build.props</c> that names the module of every project below a folder makes them that module's
-/// projects, and none of them needs a file that says so.
+/// Ordering: its <c>DDD_Module</c> is <c>Ordering</c>. So a <c>Directory.Build.props</c> that names the module of
+/// every project below a folder makes them that module's projects, and none of them needs a file that says so.
 /// <para>
 /// The build writes the declaration into the project as <c>AssemblyMetadata</c>, with the targets of the
 /// DDDToolkit.Analyzers package, and every generator reads the module from there, through
 /// <see cref="ModuleBoundary.ModuleOf"/>: a generator never sees what another one writes, so the attribute
 /// written here would come too late for the others. It is written for what reads the compiled assembly: the
 /// module boundary analyzer, the runtime, which names a domain event after the module of its assembly, and
-/// reflection.
+/// reflection. A test project, and one that sets <c>DDD_DeclareModule</c> to false, are not declared by the build,
+/// and get nothing from here.
 /// </para>
 /// <para>
 /// It is written only where the project declares no <c>[assembly: Module]</c> at all, and that is why a generator
@@ -32,14 +31,12 @@ namespace DDDToolkit.Analyzers;
 /// always does over <c>DDD_Module</c>. The build cannot make that choice: it cannot see what the source declares.
 /// </para>
 /// <para>
-/// The same pass reports DDD00064: this project and one it references carry one module's name in <c>DDD_Module</c>,
-/// and the generators do not take them together. Only the referenced one declares the module, and this one is left
-/// out of what is written for it; only this one declares it, and the other's classes are missing here; or neither
-/// declares it, and a package's registration that this project can call and the other cannot is written for the
-/// other's template classes nowhere. The build writes a project's <c>DDD_Module</c> into it, declared or not, which
-/// is how a project that references it can tell. A project that says it is no module, with <c>DDD_DeclareModule</c>
-/// set to false, and a test project, which the build never declares, are not reported, and neither is a pair of
-/// projects without templates that declare no module: that is how an application without modules names its code.
+/// The same pass reports DDD00064 where <c>DDD_Module</c> reaches the generators and the build step that declares
+/// the module did not run: the generators arrived without the package's targets file, as an analyzer assembly or a
+/// project reference, and the property through the props file alone or a <c>CompilerVisibleProperty</c> of the
+/// project's own. The code is then named after the module and the project is no module, which nothing else would
+/// say. The targets hand the generators <c>DDD_DeclareModule</c>, set or empty, and that it arrives is how this pass
+/// tells they were imported; where they were, what they decided is right, a test project and an opt-out included.
 /// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
@@ -48,155 +45,78 @@ public sealed class ModuleGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Read off the compilation, so it runs on every edit: the project's attributes and those of the assemblies it
-        // references, which the compiler keeps for as long as the references do not change. What comes out compares
-        // equal when nothing it says changed, so the file and the diagnostics stay cached.
-        var module = context.CompilationProvider.Select(static (compilation, cancellationToken) => Read(compilation, cancellationToken));
+        // Read off the compilation, so it runs on every edit: the project's attributes, which only change with a
+        // file that declares one or with the build's word. A name compares equal when it did not change, so the file
+        // stays cached.
+        var module = context.CompilationProvider.Select(static (compilation, _) => ToWrite(compilation));
 
-        context.RegisterSourceOutput(module.Combine(context.ProjectFile()), static (production, data) =>
+        context.RegisterSourceOutput(module, static (production, name) =>
         {
-            var (found, projectFile) = data;
-
-            if (found.Write is { } name)
+            if (name is not null)
             {
                 production.AddSource("Module.g.cs", SourceText.From(Write(name), Encoding.UTF8));
             }
+        });
 
-            foreach (var pair in found.LeftOut)
+        // The name the build was meant to declare and did not: a plain value, so the report stays cached while it does
+        // not change.
+        var undeclared = context.CompilationProvider
+            .Combine(context.AnalyzerConfigOptionsProvider)
+            .Select(static (pair, _) => NotDeclared(pair.Left, pair.Right.GlobalOptions));
+
+        context.RegisterSourceOutput(undeclared.Combine(context.ProjectFile()), static (production, data) =>
+        {
+            if (data.Left is { } name)
             {
-                var (declared, consequence, declareIn) = pair.Who switch
-                {
-                    LeftOutSide.ThisProject => (
-                        "only that project declares the module",
-                        "the generators do not take this project for one of the module's projects, and nothing is written here from what the others declare",
-                        "this project"),
-                    LeftOutSide.ThatProject => (
-                        "only this project declares the module",
-                        "the generators do not take that project for one of the module's projects, and its ids, domain events and template classes are left out of what is written here",
-                        "that project"),
-                    _ => (
-                        "neither declares the module",
-                        "the generators take neither for one of the module's projects, and nothing is written here for the classes that project declares with a template: " + string.Join(", ", pair.Registrations),
-                        "both"),
-                };
-
-                DiagnosticInfo.Create(
-                    DiagnosticDescriptors.ModuleNotDeclaredByEveryProject,
-                    projectFile,
-                    pair.Other,
-                    pair.Module,
-                    declared,
-                    consequence,
-                    declareIn).Report(production);
+                DiagnosticInfo.Create(DiagnosticDescriptors.ModuleNotDeclaredByTheBuild, data.Right, name).Report(production);
             }
         });
     }
 
-    private static ModuleFacts Read(Compilation compilation, CancellationToken cancellationToken)
+    /// <summary>
+    /// The project's <c>DDD_Module</c> when it reached the generators and nothing declared it, because the package's
+    /// targets were not imported; null otherwise. The targets make <c>DDD_DeclareModule</c> a property the compiler
+    /// hands on, so where they were imported it arrives, empty when the project did not set it; where they were not,
+    /// it does not arrive at all. Without them the two marks of a test project still arrive with the props file, and
+    /// a test project is never a module; with neither file there is no <c>DDD_Module</c> either, which is DDD00014.
+    /// </summary>
+    private static string? NotDeclared(Compilation compilation, AnalyzerConfigOptions options)
     {
-        var assembly = compilation.Assembly;
-        var build = ModuleBoundary.HasModuleAttribute(assembly) ? null : ModuleBoundary.BuildModuleOf(assembly);
-        var module = ModuleBoundary.ModuleOf(assembly);
-
-        // Without the attribute's type there is nothing to write it with: a project with the generators and without
-        // DDDToolkit.Abstractions. Its generators and the projects that reference it still read the build's word.
-        var write = build is { Declares: true } declared && compilation.GetTypeByMetadataName(KnownTypes.ModuleAttribute) is not null
-            ? declared.Name
-            : null;
-
-        var leftOut = new List<LeftOutPair>();
-        if (module is null && build is { Declares: null } named)
+        if (!options.TryGetValue("build_property.DDD_Module", out var name)
+            || string.IsNullOrWhiteSpace(name)
+            || options.TryGetValue("build_property.DDD_DeclareModule", out _)
+            || IsTrue(options, "build_property.IsTestProject")
+            || IsTrue(options, "build_property.IsTestingPlatformApplication")
+            || ModuleBoundary.HasModuleAttribute(compilation.Assembly)
+            || ModuleBoundary.BuildModuleOf(compilation.Assembly) is not null)
         {
-            // This project carries a module's name and does not declare it. Told once about the first project, by
-            // name, that declares the module; failing that, about each that declares no module either and whose
-            // template classes a registration here would be closed over, were the two one module's projects.
-            string? declaring = null;
-            var undeclared = new List<LeftOutPair>();
-            foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (string.Equals(ModuleBoundary.ModuleOf(referenced), named.Name, StringComparison.Ordinal))
-                {
-                    if (declaring is null || string.CompareOrdinal(referenced.Identity.Name, declaring) < 0)
-                    {
-                        declaring = referenced.Identity.Name;
-                    }
-                }
-                else if (declaring is null
-                    && SharesTheUndeclaredName(referenced, named.Name)
-                    && TemplateRegistrations.WrittenForNobody(compilation, referenced, cancellationToken) is { Count: > 0 } registrations)
-                {
-                    undeclared.Add(new LeftOutPair(referenced.Identity.Name, named.Name, LeftOutSide.Both, registrations));
-                }
-            }
-
-            if (declaring is not null)
-            {
-                leftOut.Add(new LeftOutPair(declaring, named.Name, LeftOutSide.ThisProject, EquatableArray<string>.Empty));
-            }
-            else
-            {
-                leftOut.AddRange(undeclared);
-            }
-        }
-        else if (module is not null)
-        {
-            // This project declares the module, and references projects that carry its name and do not.
-            foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (SharesTheUndeclaredName(referenced, module))
-                {
-                    leftOut.Add(new LeftOutPair(referenced.Identity.Name, module, LeftOutSide.ThatProject, EquatableArray<string>.Empty));
-                }
-            }
+            return null;
         }
 
-        leftOut.Sort(static (left, right) => string.CompareOrdinal(left.Other, right.Other));
-        return new ModuleFacts(write, leftOut.ToEquatableArray());
+        return name.Trim();
     }
 
+    private static bool IsTrue(AnalyzerConfigOptions options, string key)
+        => options.TryGetValue(key, out var value) && string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Whether a referenced project carries <paramref name="name"/> in <c>DDD_Module</c>, as the build wrote it, and
-    /// declares no module, with the build saying nothing either way: not set to false, and no test project.
+    /// The module to write the attribute for: the one the build declared, where the project declares none itself.
+    /// Without the attribute's type there is nothing to write it with: a project with the generators and without
+    /// DDDToolkit.Abstractions. Its generators and the projects that reference it still read the build's word.
     /// </summary>
-    private static bool SharesTheUndeclaredName(IAssemblySymbol referenced, string name)
-        => !ModuleBoundary.HasModuleAttribute(referenced)
-           && ModuleBoundary.BuildModuleOf(referenced) is { Declares: null } other
-           && string.Equals(other.Name, name, StringComparison.Ordinal);
+    private static string? ToWrite(Compilation compilation)
+        => !ModuleBoundary.HasModuleAttribute(compilation.Assembly)
+           && ModuleBoundary.BuildModuleOf(compilation.Assembly) is { } declared
+           && compilation.GetTypeByMetadataName(KnownTypes.ModuleAttribute) is not null
+            ? declared
+            : null;
 
     private static string Write(string module)
     {
         var writer = new CodeWriter().Header();
-        writer.Line("// The module this project's build declared: its DDD_Module, with DDD_DeclareModule set to true. An");
-        writer.Line("// [assembly: Module] of the project's own would have been kept instead, and nothing written here.");
+        writer.Line("// The module this project's build declared: its DDD_Module. An [assembly: Module] of the project's");
+        writer.Line("// own would have been kept instead, and nothing written here.");
         writer.Line("[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute(" + SymbolDisplay.FormatLiteral(module, quote: true) + ")]");
         return writer.ToString();
-    }
-
-    /// <param name="Write">The module to write <c>[assembly: Module]</c> for, or null when there is nothing to write.</param>
-    /// <param name="LeftOut">What DDD00064 says, a pair of projects at a time, by the other project's name.</param>
-    private sealed record ModuleFacts(string? Write, EquatableArray<LeftOutPair> LeftOut);
-
-    /// <summary>This project and one it references, which carry one module's name and are not taken together.</summary>
-    /// <param name="Other">The referenced project.</param>
-    /// <param name="Module">The name both set in <c>DDD_Module</c>.</param>
-    /// <param name="Who">Which of the two declares no module.</param>
-    /// <param name="Registrations">For <see cref="LeftOutSide.Both"/>, the registrations written for the other's classes nowhere.</param>
-    private sealed record LeftOutPair(string Other, string Module, LeftOutSide Who, EquatableArray<string> Registrations);
-
-    /// <summary>Which project of a <see cref="LeftOutPair"/> declares no module.</summary>
-    private enum LeftOutSide
-    {
-        /// <summary>This one: the referenced project declares the module.</summary>
-        ThisProject,
-
-        /// <summary>The referenced one: this project declares the module.</summary>
-        ThatProject,
-
-        /// <summary>Neither, and a registration is written for the referenced project's template classes nowhere.</summary>
-        Both,
     }
 }

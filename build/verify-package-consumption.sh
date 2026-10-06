@@ -14,11 +14,14 @@
 #      an editor reads the package's comments from.
 #   2. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
 #      and produces what Check.cs names.
-#   3. build/package-consumers: DDD_Module reaches the generators wherever they run. With only
+#   3. build/package-consumers: DDD_Module reaches the generators wherever they run, and declares the
+#      project's module there, with the build step that arrives beside the props file. With only
 #      Abstractions and Analyzers, with only the DDDToolkit package, and in a project that gets the
-#      toolkit through a project reference.
+#      toolkit through a project reference. DDD_DeclareModule set to false keeps the name and leaves the
+#      module out.
 #   4. DDD00014: a project that has the generators and not their props file is told so, and a project
-#      that has both and sets no DDD_Module is not.
+#      that has both and sets no DDD_Module is not. DDD00064: one that lists DDD_Module by hand instead is
+#      told that it is no module, and none that imports the targets file is.
 #   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
 #      domain packages, an infrastructure project on their Postgres packages and a host, builds with
 #      everything it needs arriving as a dependency, Membership's two generators among it, which ship
@@ -26,9 +29,8 @@
 #      Tenancy's package and writes the modules' keys into the host and nowhere else; the toolkit's, which
 #      writes Tenancy's use cases closed over the classes, PressTenancy, into the domain project alone, for
 #      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
-#      DDD_DeclareModule, from a Directory.Build.props, and not by a file in either project: the package's
-#      targets declare it, and its generator writes the attribute. Without the switch the two projects only
-#      share the name, and the build reports DDD00064.
+#      DDD_Module, from a Directory.Build.props, and not by a file in either project: the package's targets
+#      declare it, and its generator writes the attribute.
 #   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
 #      given for the whole build, on the command line: every other project ignores it, with no crash and
 #      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
@@ -169,7 +171,7 @@ for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
 done
 
 # The props file that declares the properties the generators read, in the package that carries the
-# generators, and the targets file whose build step DDD_DeclareModule switches on. Both folders, and under
+# generators, and the targets file whose build step declares the module DDD_Module names. Both folders, and under
 # the package's id, because NuGet imports no other name: build/ for a client that knows nothing of
 # buildTransitive/, and buildTransitive/ for every project that does not reference the package itself. The
 # consumers below prove they are imported; this says which file was missing or misnamed when they fail.
@@ -209,14 +211,16 @@ do
 done
 
 # ---------------------------------------------------------------------------------------------------
-# DDD_Module reaches the generators wherever they run.
+# DDD_Module reaches the generators wherever they run, and declares the module there.
 #
 # The project above references DDDToolkit itself and two packages that depend on it, which is one of
 # several ways the generators arrive. The projects in build/package-consumers are the others. Each sets
 # <DDD_Module>Billing</DDD_Module> and declares one event, so the generator writes {Module}EventNames:
 # BillingEventNames when the property reached it, and a class named after the assembly when it did not.
 # That fallback compiles, which is why it went unnoticed, and why this reads the generated file instead
-# of leaving it to the compiler.
+# of leaving it to the compiler. The property also declares module Billing, through the build step that
+# arrives beside the props file, which writes the declaration into obj/ for the generator to write
+# [assembly: Module] from; that is read from the files as well.
 # ---------------------------------------------------------------------------------------------------
 
 cp -r "$consumers" "$work/package-consumers"
@@ -270,22 +274,72 @@ expect_no_missing_properties_warning() {
     echo "FAILED: $1: DDD00014 was reported, so the props file of $analyzers_id was not imported." >&2
     exit 1
   fi
+
+  # DDD00064 is the targets file's half: DDD_Module reached the generators, and the step that declares the
+  # module did not run, or did not tell them it ran.
+  if grep -q 'DDD00064' "$build_log"; then
+    echo "FAILED: $1: DDD00064 was reported, so the targets file of $analyzers_id was not imported, or hands the generators no DDD_DeclareModule." >&2
+    exit 1
+  fi
+}
+
+# The project folder $1 must be a project of module $2, declared by the build: the targets of the Analyzers
+# package wrote DDD_Module into obj/, and the packaged generator wrote [assembly: Module] from it. With $2 empty
+# it must be no module, with neither file.
+expect_module() {
+  local folder="$work/package-consumers/$1/obj" declaration attribute
+  declaration="$(find "$folder" -name '*.DDDToolkitModule.g.cs' | head -n 1)"
+  attribute="$(find "$folder" -path '*generated*' -name 'Module.g.cs' | head -n 1)"
+
+  if [ -z "$2" ]; then
+    if [ -n "$declaration$attribute" ]; then
+      echo "FAILED: $1: a module was declared in a project that is meant to be none." >&2
+      exit 1
+    fi
+
+    echo "    $1: no module"
+    return
+  fi
+
+  if [ -z "$declaration" ] || ! grep -qF "AssemblyMetadata(\"DDD_Module\", \"$2\")" "$declaration"; then
+    echo "FAILED: $1: the targets of $analyzers_id did not declare module $2 from DDD_Module." >&2
+    exit 1
+  fi
+
+  if [ -z "$attribute" ] || ! grep -qF "ModuleAttribute(\"$2\")" "$attribute"; then
+    echo "FAILED: $1: the generator wrote no [assembly: Module(\"$2\")] from the build's declaration." >&2
+    exit 1
+  fi
+
+  echo "    $1: module $2, declared by the build"
 }
 
 echo "==> Only Abstractions and Analyzers, the way a contracts project references the toolkit"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly Billing
 
 echo "==> Only the DDDToolkit package"
 build_consumer CoreOnly/Acme.Billing.csproj
 expect_no_missing_properties_warning CoreOnly
 expect_event_names_class CoreOnly BillingEventNames
+expect_module CoreOnly Billing
 
 echo "==> The toolkit through a project reference, and no package reference of its own"
 build_consumer ThroughProjectReference/Billing/Acme.Billing.csproj
 expect_no_missing_properties_warning ThroughProjectReference/Billing
 expect_event_names_class ThroughProjectReference/Billing BillingEventNames
+expect_module ThroughProjectReference/Billing Billing
+
+# The rare project that wants the name and not the module, a shared kernel say, sets DDD_DeclareModule to false.
+# The build step reads it, so this is what proves the package's step honours it: the class keeps the name, and
+# nothing is declared. And that the step tells the generators it ran: nothing declared, and no DDD00064.
+echo "==> DDD_DeclareModule false: the name, and no module"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_DeclareModule=false
+expect_no_missing_properties_warning ContractsOnly
+expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly ""
 
 # The other half: when the props file does not arrive, the build has to say so. This is the contracts
 # project again, with a reference that keeps the generators and excludes the package's build assets.
@@ -293,6 +347,7 @@ expect_event_names_class ThroughProjectReference/Billing BillingEventNames
 echo "==> Without the props file: DDD00014"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:WithoutToolkitBuildAssets=true
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+expect_module ContractsOnly ""
 
 if ! grep -q 'warning DDD00014' "$build_log"; then
   echo "FAILED: the generators ran without their props file and DDD00014 was not reported." >&2
@@ -304,13 +359,32 @@ if ! grep -q 'docs/diagnostics#ddd00014' "$build_log"; then
   exit 1
 fi
 
+# What DDD00014 suggests for a generator that arrives without the props file: list DDD_Module by hand. The name
+# comes back and the module does not, since the build step stayed behind with the props file, and DDD00064 says
+# so instead of leaving the project no module without a word.
+echo "==> Without the build files, DDD_Module listed by hand: the name, no module, and DDD00064"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:WithoutToolkitBuildAssets=true -p:ListModulePropertyByHand=true
+expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly ""
+
+if grep -q 'DDD00014' "$build_log"; then
+  echo "FAILED: DDD_Module was listed by hand and DDD00014 was still reported." >&2
+  exit 1
+fi
+
+if ! grep -q 'warning DDD00064' "$build_log"; then
+  echo "FAILED: DDD_Module reached the generators without the build step that declares the module, and DDD00064 was not reported." >&2
+  exit 1
+fi
+
 # And the case DDD00014 must stay out of: the props file is imported and the project sets no
 # DDD_Module. The property then reaches the generator as an empty value, which is not the same as not
 # reaching it. If the two were confused, every project that leaves the name to the assembly would warn.
-echo "==> With the props file and no DDD_Module: named after the assembly, and no warning"
+echo "==> With the props file and no DDD_Module: named after the assembly, no module, and no warning"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_Module=
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+expect_module ContractsOnly ""
 
 # ---------------------------------------------------------------------------------------------------
 # The supporting domains, Tenancy and Membership, three packages each.
@@ -406,33 +480,14 @@ for project in Domain Infrastructure; do
   fi
 done
 
-# The module, Press, is declared by the build: DDD_Module and DDD_DeclareModule in SupportingDomains'
-# Directory.Build.props, and no Module.cs. The build above compiled only because the infrastructure project took
-# the domain project for one of its module's projects; this says which half did not arrive when it does not. The
-# package's targets wrote the declaration into each project's obj/, and its generator wrote [assembly: Module]
-# from it. The host sets neither and is given neither.
-for project in Domain Infrastructure; do
-  folder="$work/package-consumers/SupportingDomains/$project/obj"
-
-  declaration="$(find "$folder" -name '*.DDDToolkitModule.g.cs' | head -n 1)"
-  if [ -z "$declaration" ] || ! grep -q 'AssemblyMetadata("DDD_DeclareModule", "true")' "$declaration"; then
-    echo "FAILED: SupportingDomains/$project: the targets of $analyzers_id did not declare the module DDD_DeclareModule asks for." >&2
-    exit 1
-  fi
-
-  attribute="$(find "$folder" -path '*generated*' -name 'Module.g.cs' | head -n 1)"
-  if [ -z "$attribute" ] || ! grep -q 'ModuleAttribute("Press")' "$attribute"; then
-    echo "FAILED: SupportingDomains/$project: the generator wrote no [assembly: Module(\"Press\")] from the build's declaration." >&2
-    exit 1
-  fi
-
-  echo "    SupportingDomains/$project: module Press, declared by the build"
-done
-
-if [ -n "$(find "$work/package-consumers/SupportingDomains/Host/obj" \( -name '*.DDDToolkitModule.g.cs' -o -name 'Module.g.cs' \))" ]; then
-  echo "FAILED: SupportingDomains/Host: a module was declared in the host, which sets no DDD_Module." >&2
-  exit 1
-fi
+# The module, Press, is declared by the build: DDD_Module in SupportingDomains' Directory.Build.props, and no
+# Module.cs. The build above compiled only because the infrastructure project took the domain project for one of
+# its module's projects; this says which half did not arrive when it does not. The package's targets wrote the
+# declaration into each project's obj/, and its generator wrote [assembly: Module] from it. The host sets no
+# DDD_Module and is given no module.
+expect_module SupportingDomains/Domain Press
+expect_module SupportingDomains/Infrastructure Press
+expect_module SupportingDomains/Host ""
 
 # Tenancy's use cases closed over the classes, PressTenancy, are written by the toolkit's generator into the domain
 # project that declares the classes, and into no project above it: those see that one, and PressNames in the host
@@ -589,25 +644,6 @@ if [ "$granted" != "anon authenticated ddd_system_in" ]; then
 fi
 
 echo "    SupportingDomains/Host: $(basename "$login_role_file")"
-
-# The same two projects without the switch, as a folder has them that deleted the AssemblyAttribute item it
-# declared its module with and did not set DDD_DeclareModule in its place: given empty on the command line,
-# which wins over the Directory.Build.props for both. They carry the name Press and are no module, so the
-# registrations the infrastructure project calls are written over the domain project's classes nowhere, and the
-# build has to say why (DDD00064, an error here) rather than leave it to the call that does not compile.
-echo "==> SupportingDomains without DDD_DeclareModule: DDD00064"
-clean_supporting_domains
-if build_consumer SupportingDomains/Infrastructure/Acme.Press.Infrastructure.csproj "-p:DDD_DeclareModule=" > /dev/null; then
-  echo "FAILED: SupportingDomains/Infrastructure built without its module, so the registrations it calls were written anyway." >&2
-  exit 1
-fi
-
-if ! grep -q "DDD00064: This project and project 'Acme.Press.Domain', which it references, set DDD_Module to 'Press', and neither declares the module" "$build_log"; then
-  echo "FAILED: SupportingDomains/Infrastructure: the two projects named Press and declaring no module were not reported, DDD00064." >&2
-  exit 1
-fi
-
-echo "    SupportingDomains/Infrastructure: DDD00064 names the domain project and the switch"
 
 for mode in Check Write ""; do
   echo "==> SupabaseMigrationsExport='$mode' for the whole build, on the command line"

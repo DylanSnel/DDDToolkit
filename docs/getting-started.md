@@ -347,9 +347,10 @@ it the generators use the assembly name with the dots removed, which works but r
 </PropertyGroup>
 ```
 
-It is only a name. Saying that a project is a *module*, with a boundary something checks, is a separate
-declaration that comes up [further down](#draw-the-module-boundary). Once a project makes it, the
-module's name is the one the generators use, and the property is no longer needed.
+It is more than a name: the property says the project is the *module* Ordering, and its domain events
+are stored under the module's name, as `ordering.order-placed`. While it is the only module, no boundary
+is checked yet; what a module is, a boundary something checks, comes up
+[further down](#draw-the-module-boundary).
 
 The context calls that method and the conventions every context shares:
 
@@ -468,7 +469,9 @@ So far there is one module. The shop has five, and they are only worth having ap
 apart: if Shipping may reach into Ordering's aggregates and tables, the two are one module with two
 names. The toolkit lets you say where the boundary is, and checks it.
 
-One assembly, one module:
+One assembly, one module, and the `DDD_Module` in the project file already declares it: the build writes it
+into the compiled assembly as `[assembly: Module("Ordering")]`, which is how the other modules' projects know
+it. The example writes the attribute in a file of the project instead, which says the same:
 
 ```csharp
 [assembly: Module("Ordering")]
@@ -476,10 +479,9 @@ One assembly, one module:
 
 *[`Ordering/Module.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Module.cs)*
 
-A module of several projects, one per layer, says it in each of them, or once for all of them: a
-`Directory.Build.props` in the module's folder that sets `DDD_Module` and `DDD_DeclareModule` declares the
-module for every project below it, and no project needs a file of its own for it
-([A module named by its folder](modules.md#a-module-named-by-its-folder)).
+A module of several projects, one per layer, says it once for all of them: a `Directory.Build.props` in the
+module's folder that sets `DDD_Module` declares the module for every project below it, and no project needs a
+file of its own for it ([A module named by its folder](modules.md#a-module-named-by-its-folder)).
 
 Nothing happens until a second assembly says it is a module too. From then on, everything an assembly
 declares is its own business unless it publishes it, and the analyzer reports another module naming an

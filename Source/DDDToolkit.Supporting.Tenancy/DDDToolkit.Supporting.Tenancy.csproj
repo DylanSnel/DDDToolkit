@@ -4,10 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <!--
-      Names the helpers the generators write into this assembly. The package declares no [assembly: Module]:
-      it is a module of whichever application references it, and its domain events carry names of their own.
+      Names the helpers the generators write into this assembly. The package is no module, so DDD_DeclareModule
+      keeps DDD_Module from declaring one: it becomes part of whichever module of an application declares Tenancy's
+      classes, which names the package's types freely, and its domain events carry names of their own.
     -->
     <DDD_Module>SupportingTenancy</DDD_Module>
+    <DDD_DeclareModule>false</DDD_DeclareModule>
     <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;organization;roles;permissions;access</PackageTags>
     <Description>Tenants, their organization tree, seats with placements and role grants, roles over a permission catalogue, and the access questions, database-agnostic.</Description>

@@ -92,8 +92,9 @@ Warning, once per project and without a line number. The generators run here but
 named after the assembly. Look at how the project references the generators. A `PackageReference` with
 `ExcludeAssets`, or with an `IncludeAssets` that leaves out `build` and `buildTransitive`: remove the
 restriction (`PrivateAssets="all"` is fine). An `<Analyzer Include="...dll" />` or a project reference
-with `OutputItemType="Analyzer"`: add `<ItemGroup><CompilerVisibleProperty Include="DDD_Module" /></ItemGroup>`
-to the project or to `Directory.Build.props`. Do not rename the call sites to the assembly-named
+with `OutputItemType="Analyzer"`: import the package's props and targets files, or add
+`<ItemGroup><CompilerVisibleProperty Include="DDD_Module" /></ItemGroup>` to the project or to
+`Directory.Build.props`, which brings the name back and not the module (DDD00064). Do not rename the call sites to the assembly-named
 methods. Not reported for an assembly with `[assembly: Module]`, whose generated code is named after
 the module.
 
@@ -113,7 +114,9 @@ entity pointing back at the root that owns it is allowed. The project can turn t
 
 ## DDD00022
 
-Warning, only when both assemblies declare `[assembly: Module(...)]`. Code in one module names a type
+Warning, only when both assemblies declare a module (`<DDD_Module>` or `[assembly: Module(...)]`). A shared kernel
+that sets `<DDD_Module>` only to name its code sets `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, or
+it is reported as a module too. Code in one module names a type
 of another module that the other module does not publish. Either depend on something it publishes (its
 ids, its `[IntegrationEvent]` records, its `[ModuleContract]` read models and interfaces), or, if the
 type really belongs in the contract, mark it `[ModuleContract]` in the module that owns it. That is the
@@ -383,10 +386,10 @@ counts too. If leaving it out is deliberate, suppress the warning with `<NoWarn>
 ## DDD00055
 
 Warning, in the project that turns the Supabase export on. A `[SupabaseMigrations]` factory whose
-assembly and whose context's assembly both declare no `[assembly: Module("...")]`, so its migration files
-are named after the context's class and the export would recognize none of them after a rename of the
-class. Add `[assembly: Module("...")]` to the project that holds the context; where files already exist
-under the context's name, use that name for the module, or rename the files once.
+assembly and whose context's assembly both declare no module, so its migration files are named after the
+context's class and the export would recognize none of them after a rename of the class. Set
+`<DDD_Module>Name</DDD_Module>` in the project that holds the context, or add `[assembly: Module("Name")]`; where
+files already exist under the context's name, use that name for the module, or rename the files once.
 
 ## DDD00056
 
@@ -485,16 +488,15 @@ Do not also pass the list to `services.AddTenancyPermissions(...)`: the host's g
 
 ## DDD00064
 
-Warning, at the project file. Two projects carry one module's name in `<DDD_Module>` and the generators do not
-take them together: no `AddTenancy()` or converters written in the infrastructure project from the domain
-project's classes and ids. Reported in the project that references the other, naming it, when only one of the two
-declares the module, or when neither does and a package's registration is written for the referenced project's
-template classes nowhere (what deleting an `<AssemblyAttribute>` item that declared the module, without adding the
-switch, comes to). Declare the module where the message says: `<DDD_DeclareModule>true</DDD_DeclareModule>` next
-to `<DDD_Module>`, best in the `Directory.Build.props` that sets the name for the whole folder, or
-`[assembly: Module("Name")]` in the project. A project that carries the name and must stay no module sets
-`<DDD_DeclareModule>false</DDD_DeclareModule>`. Do not silence it with `NoWarn`: the missing registrations are real.
-An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
+Warning, at the project file. `<DDD_Module>` reached the generators but the `DDDToolkit.Analyzers` package's
+targets file, whose build step declares the module, was not imported: the generators arrived as an analyzer
+assembly or a project reference with `OutputItemType="Analyzer"`, and the property through the props file alone
+or a hand-added `<CompilerVisibleProperty Include="DDD_Module" />`. The code is named after the module and the
+project is no module: events without the module's name, no boundary, no `AddTenancy()` or converters across the
+module's projects. Import `DDDToolkit.Analyzers.targets` beside the props file, or add `[assembly: Module("Name")]`.
+Do not silence it with `NoWarn` unless the project is meant to be no module, and then set
+`<DDD_DeclareModule>false</DDD_DeclareModule>` or drop `DDD_Module` instead. An `.editorconfig` `[*.cs]` severity
+does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 
 ## DDD00065
 

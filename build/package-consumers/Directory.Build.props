@@ -3,7 +3,7 @@
     What the consumers in this folder share. build/verify-package-consumption.sh builds them from
     a copy outside the repository, so the repository's own Directory.Build.props and Directory.Build.targets,
     which import the props and the targets of DDDToolkit.Analyzers for every project below them, never reach
-    them: they get DDD_Module and DDD_DeclareModule from the packages or not at all.
+    them: DDD_Module reaches their generators, and declares their module, through the packages or not at all.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

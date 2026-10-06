@@ -260,8 +260,8 @@ database in snake_case.
 Registering Tenancy is generated the same way: `services.AddTenancy<ShopTenancyContext>(...)` is closed over
 your classes and ids, and leaves you the context to name. Both generated calls are internal to the project
 that declares your classes, or to a project of the same module that declares none of them, declared with
-`[assembly: Module]` or by its folder ([A module named by its folder](modules.md#a-module-named-by-its-folder)),
-such as the module's infrastructure project next to its domain project
+`DDD_Module`, which its folder can set for all of them ([A module named by its folder](modules.md#a-module-named-by-its-folder)),
+or with `[assembly: Module]`, such as the module's infrastructure project next to its domain project
 ([In a module split by layer](writing-a-supporting-domain.md#in-a-module-split-by-layer)), so register
 Tenancy from there:
 
@@ -369,10 +369,10 @@ internal static class TenancyPermissionsOfModules
 
 A module states its keys on the static list where it declares them, and marks that list with
 `[TenancyPermissions]`. That is the only place: its registration adds nothing, and no other project lists them.
-In every project that references Tenancy and declares no module, the generator writes
-`TenancyPermissionsOfModules`, an internal class with the project's own marked lists and those of every project
-it references. Its namespace is named after the project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever
-the project's `RootNamespace` says:
+In every application that references Tenancy, the program the modules are composed in, and in every library
+that references it and declares no module, the generator writes `TenancyPermissionsOfModules`, an internal class
+with the project's own marked lists and those of every project it references. Its namespace is named after the
+project's assembly, `Shop.Host` for `Shop.Host.dll`, whatever the project's `RootNamespace` says:
 
 - **`TenancyPermissionsOfModules.All`**: every module's keys, one list after the other, in the order of the
   lists' names. The export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, or
@@ -384,10 +384,15 @@ Neither call names a module, so a module that is added, or a key a module adds, 
 next build, and nothing in the host changes. While no module marks a list, before the first one does or after
 the last one is taken out, `All` is empty, and both calls compile all the same.
 
-Declaring a module means `[assembly: Module]`, or `DDD_Module` with `DDD_DeclareModule` set to true
-([A module named by its folder](modules.md#a-module-named-by-its-folder)). A module's own projects get no class: a
-module states its own keys and composes no other module's. A module project that does not carry the attribute
-yet gets one as well, and leaves it alone: the host's call is the one that counts.
+Declaring a module means `DDD_Module`, set in the project file or for a folder of projects
+([A module named by its folder](modules.md#a-module-named-by-its-folder)), or `[assembly: Module]`. A module's
+own libraries get no class: a module states its own keys and composes no other module's. A module project that
+is not declared one yet gets one as well, and leaves it alone: the host's call is the one that counts. An
+application gets the class whether it declares a module or not, because nothing composes the modules from it:
+an application in one project that sets `DDD_Module` to name its code, as
+[Getting started](getting-started.md) does, is a module and the host at once, and registers its own keys with the
+same call. A library that the host and an export share, to compose the modules in one place, sets no `DDD_Module`,
+or it is a module and gets no class.
 
 The list is a static property or field, readable, declared in a class that is not generic (nor nested in one),
 whose type is a sequence of `Permission`: `IReadOnlyList<Permission>`, `IEnumerable<Permission>` or an array.
@@ -418,8 +423,8 @@ Tenancy's use cases, and the records they take and answer, are nested in one gen
 `TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`, so
 your classes and ids are named once for all of them. You do not name them yourself. The toolkit's generator
 closes the class over your classes in the project that declares them, as a class named after its module:
-the module Tenants gives `TenantsTenancy`, whether `[assembly: Module("Tenants")]` declares it or
-[its folder](modules.md#a-module-named-by-its-folder) does. Every project that references that project, the
+the module Tenants gives `TenantsTenancy`, whether [its folder](modules.md#a-module-named-by-its-folder)
+declares it with `DDD_Module` or `[assembly: Module("Tenants")]` does. Every project that references that project, the
 module's application, infrastructure and API projects, the host and your tests, names everything through it,
 and none of them writes the nine types.
 
@@ -487,8 +492,8 @@ shows. The invitation use cases take your invitation class and its id as well:
   references it, and the generators there read it as any type: HotChocolate's, reading
   `[ObjectType<TenantsTenancy.SeatOverview>]` in an API project, sees the package's record. A generator's alias
   would be the compiler's to see and not theirs.
-- **The module names it**, as it names everything the generators write in that project: the module, declared by
-  `[assembly: Module]` or by its folder, otherwise `DDD_Module`, otherwise the assembly's name without the dots,
+- **The module names it**, as it names everything the generators write in that project: `[assembly: Module]`, otherwise
+  `DDD_Module`, otherwise the assembly's name without the dots,
   so `order-management` gives `OrderManagementTenancy`. A host that sees the classes of two modules names each by
   its module.
 - **Or you name it, in one line.** A module called Tenancy would give `TenancyTenancy`. The project that declares

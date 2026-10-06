@@ -295,19 +295,18 @@ public static class ConverterExtensions
 The method lives in a `Converters` namespace under the assembly name, in a static class called
 `ConverterExtensions`. Its name comes from the first of three places that has one:
 
-1. `[assembly: Module("Ordering")]`, the module the assembly declares. It always wins, and gives
-   `AddOrderingConverters`. A project whose build declares the module from `DDD_Module`, with
-   `DDD_DeclareModule` set to true, has the same ([A module named by its folder](modules.md#a-module-named-by-its-folder)).
+1. `[assembly: Module("Ordering")]` in a file of the project. It always wins, and gives
+   `AddOrderingConverters`.
 2. The `DDD_Module` property that [Getting started](getting-started.md#store-it-with-entity-framework)
-   sets in the project file, for a project that is no module. A `Directory.Build.props` can set it for
-   a whole folder.
+   sets in the project file, which a `Directory.Build.props` can set for a whole folder. It declares the
+   module as well, and the build writes the attribute above from it
+   ([A module named by its folder](modules.md#a-module-named-by-its-folder)), except in a test project and in
+   the rare project that sets `DDD_DeclareModule` to false, where it only names the code.
 3. The assembly name with the dots removed.
 
-The property alone is only a name for generated code. What makes a project a module is the attribute, the
-boundary the analyzer checks, described in [Modules](modules.md), or the property with `DDD_DeclareModule`
-beside it, which has the build write that attribute.
-[Why not the DDD_Module MSBuild property](modules.md#why-not-the-ddd_module-msbuild-property) explains
-why the property cannot be that boundary.
+The module is the boundary the analyzer checks, described in [Modules](modules.md).
+[Why the property becomes an attribute](modules.md#why-the-property-becomes-an-attribute) explains why the
+build writes the attribute rather than leave the property to say it.
 
 Call one per module, and one per assembly that is no module. Two assemblies of one module, such as a
 module and its contracts project, share a name, and each one's method calls the ones of the module's

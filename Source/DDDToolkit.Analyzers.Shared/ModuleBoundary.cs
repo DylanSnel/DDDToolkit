@@ -23,22 +23,19 @@ namespace DDDToolkit.Analyzers.Common;
 /// are not supported.
 /// </para>
 /// <para>
-/// The build can declare the module as well: a project that sets <c>DDD_Module</c>, and <c>DDD_DeclareModule</c>
-/// to true, is compiled with both written into it as <c>AssemblyMetadata</c>, by the targets of the
-/// DDDToolkit.Analyzers package, and is that module's project as if it declared <c>[assembly: Module]</c>. The
-/// attribute still decides wherever there is one. See <see cref="ModuleOf"/>.
+/// The build declares the module as well: a project that sets <c>DDD_Module</c> is compiled with it written into it
+/// as <c>AssemblyMetadata</c>, by the targets of the DDDToolkit.Analyzers package, and is that module's project as if
+/// it declared <c>[assembly: Module]</c>. A test project, and one that sets <c>DDD_DeclareModule</c> to false, get
+/// nothing written and are no module. The attribute still decides wherever there is one. See <see cref="ModuleOf"/>.
 /// </para>
 /// </summary>
 internal static class ModuleBoundary
 {
-    /// <summary>The <c>AssemblyMetadata</c> key the build writes a project's <c>DDD_Module</c> under.</summary>
-    public const string ModuleNameMetadata = "DDD_Module";
-
     /// <summary>
-    /// The <c>AssemblyMetadata</c> key the build writes under whether <c>DDD_Module</c> declares the module:
-    /// <c>true</c>, or <c>false</c> for a project that says it does not and for a test project.
+    /// The <c>AssemblyMetadata</c> key the build declares a project's module under: its <c>DDD_Module</c>, written only
+    /// into a project the property makes a module.
     /// </summary>
-    public const string DeclareModuleMetadata = "DDD_DeclareModule";
+    public const string ModuleNameMetadata = "DDD_Module";
 
     /// <summary>File name suffixes Roslyn treats as generated code, matched the same way here.</summary>
     private static readonly string[] GeneratedFileSuffixes =
@@ -54,10 +51,10 @@ internal static class ModuleBoundary
     /// <para>
     /// <c>[assembly: Module]</c> decides, wherever it is written: in a file of the project, or in the
     /// <c>AssemblyInfo.cs</c> an <c>AssemblyAttribute</c> item gives it. Without one, the module the build declared:
-    /// the project's <c>DDD_Module</c>, when its <c>DDD_DeclareModule</c> is true. The build writes those two into
-    /// the project for every generator of it to read here, because a generator never sees what another one writes:
-    /// the <c>[assembly: Module]</c> the toolkit's generator writes from them comes too late for the others. That
-    /// attribute is for what reads the compiled assembly: the analyzers, the runtime and reflection.
+    /// the project's <c>DDD_Module</c>. The build writes it into the project for every generator of it to read here,
+    /// because a generator never sees what another one writes: the <c>[assembly: Module]</c> the toolkit's generator
+    /// writes from it comes too late for the others. That attribute is for what reads the compiled assembly: the
+    /// analyzers, the runtime and reflection.
     /// </para>
     /// <para>
     /// An assembly whose <c>[assembly: Module]</c> names no module declares none, and does not fall back on the
@@ -89,7 +86,7 @@ internal static class ModuleBoundary
             }
         }
 
-        return !declared && BuildModuleOf(attributes) is { Declares: true } build ? build.Name : null;
+        return declared ? null : BuildModuleOf(attributes);
     }
 
     /// <summary>
@@ -110,38 +107,28 @@ internal static class ModuleBoundary
     }
 
     /// <summary>
-    /// What the build wrote into the assembly about its module: the project's <c>DDD_Module</c>, and whether that
-    /// declares the module. Null when the project set no <c>DDD_Module</c>, or was built without the toolkit's
-    /// targets, which is also what an earlier version of the toolkit built.
+    /// The module the build declared in the assembly: the project's <c>DDD_Module</c>, as the targets wrote it. Null
+    /// when the project sets no <c>DDD_Module</c>, is a test project, sets <c>DDD_DeclareModule</c> to false, or was
+    /// built without the toolkit's targets, as an earlier version of the toolkit built every project.
     /// </summary>
-    public static BuildModule? BuildModuleOf(IAssemblySymbol assembly) => BuildModuleOf(assembly.GetAttributes());
+    public static string? BuildModuleOf(IAssemblySymbol assembly) => BuildModuleOf(assembly.GetAttributes());
 
-    private static BuildModule? BuildModuleOf(ImmutableArray<AttributeData> attributes)
+    private static string? BuildModuleOf(ImmutableArray<AttributeData> attributes)
     {
-        string? name = null;
-        bool? declares = null;
         foreach (var attribute in attributes)
         {
-            if (attribute.AttributeClass is not { Name: "AssemblyMetadataAttribute" } attributeClass
-                || attribute.ConstructorArguments.Length != 2
-                || attribute.ConstructorArguments[0].Value is not string key
-                || attribute.ConstructorArguments[1].Value is not string value
-                || attributeClass.ContainingNamespace.ToDisplayString() != "System.Reflection")
+            if (attribute.AttributeClass is { Name: "AssemblyMetadataAttribute" } attributeClass
+                && attribute.ConstructorArguments.Length == 2
+                && attribute.ConstructorArguments[0].Value is ModuleNameMetadata
+                && attribute.ConstructorArguments[1].Value is string name
+                && !string.IsNullOrWhiteSpace(name)
+                && attributeClass.ContainingNamespace.ToDisplayString() == "System.Reflection")
             {
-                continue;
-            }
-
-            if (key == ModuleNameMetadata && !string.IsNullOrWhiteSpace(value))
-            {
-                name = value.Trim();
-            }
-            else if (key == DeclareModuleMetadata)
-            {
-                declares = string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+                return name.Trim();
             }
         }
 
-        return name is null ? null : new BuildModule(name, declares);
+        return null;
     }
 
     /// <summary>
@@ -327,16 +314,3 @@ internal static class ModuleBoundary
            && attributeClass.Name == metadataName.Substring(metadataName.LastIndexOf('.') + 1)
            && attributeClass.ContainingNamespace.ToDisplayString() == KnownTypes.AttributesNamespace;
 }
-
-/// <summary>
-/// What the build wrote into an assembly about its module, from the MSBuild properties of the project it was built
-/// from: <c>[assembly: AssemblyMetadata("DDD_Module", "Ordering")]</c> and
-/// <c>[assembly: AssemblyMetadata("DDD_DeclareModule", "true")]</c>.
-/// </summary>
-/// <param name="Name">The project's <c>DDD_Module</c>, trimmed and never empty.</param>
-/// <param name="Declares">
-/// True when it declares the module; false when the build said it does not, because the project set
-/// <c>DDD_DeclareModule</c> to false or is a test project; null when the build said nothing either way, which is
-/// how <c>DDD_Module</c> was always taken: as a name, and no more.
-/// </param>
-internal readonly record struct BuildModule(string Name, bool? Declares);

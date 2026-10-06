@@ -77,9 +77,9 @@ public class TenancyPermissionsGeneratorTests
         """;
 
     /// <summary>
-    /// An application in one project, which declares no module: its own lists, one of them internal. Compiled as the
-    /// program it is (<see cref="GeneratorTestHost.AsApplication"/>), it may keep that one internal; compiled as a
-    /// library it may not, since a project that references it would not see the list.
+    /// An application in one project: its own lists, one of them internal. Compiled as the program it is
+    /// (<see cref="GeneratorTestHost.AsApplication"/>), it may keep that one internal, whether it declares a module or
+    /// not; compiled as a library it may not, since a project that references it would not see the list.
     /// </summary>
     private const string Kiosk =
         """
@@ -170,6 +170,40 @@ public class TenancyPermissionsGeneratorTests
         TenancyCatalogue.Build(contribution.Permissions).LiveKeys.Should().Contain(["sales.view", "stock.count", "stock.order"]);
     }
 
+    [Theory]
+    [InlineData("DDD_Module")]
+    [InlineData("[assembly: Module]")]
+    public void An_application_in_one_project_that_declares_its_module_still_collects_its_own_lists(string declaredWith)
+    {
+        // Getting started has the one project set DDD_Module, which makes it module Kiosk: it is still the program the
+        // modules are composed in, and no other project would register its keys.
+        var host = GeneratorTestHost.Create(Kiosk, "Kiosk.cs").WithAssemblyName("Kiosk").WithTenancy().WithDependencyInjection().AsApplication();
+        host = declaredWith == "DDD_Module"
+            ? host.WithModuleFromTheBuild("Kiosk")
+            : host.WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Kiosk\")]", "Module.cs");
+
+        var result = Run(host);
+
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty("its internal list is collected here, so nothing is lost");
+
+        var kiosk = result.Emit();
+        var services = (IServiceCollection)kiosk.CallStatic("Kiosk." + Written, "AddTenancyPermissionsOfModules", new ServiceCollection())!;
+        services.Should().ContainSingle().Which.ImplementationInstance.Should().BeOfType<PermissionContribution>()
+            .Which.Permissions.Select(permission => permission.Key).Should().Equal(["sales.view", "stock.count", "stock.order"]);
+    }
+
+    [Fact]
+    public void An_application_that_declares_a_module_also_collects_the_modules_it_references()
+    {
+        // A host that sets DDD_Module to name its own generated code is a module as well, and composes the others all the same.
+        var result = Run(Shop(Host, ("Shop.Ordering", Ordering), ("Shop.Billing", Billing)).WithModuleFromTheBuild("Host").AsApplication());
+
+        result.ShouldCompile();
+        result.ShouldContain(Written, "global::Shop.Billing.BillingKeys.Keys,");
+        result.ShouldContain(Written, "global::Shop.Ordering.OrderingKeys.Permissions);");
+    }
+
     [Fact]
     public void A_project_that_cannot_see_the_service_collection_gets_the_list_alone()
     {
@@ -217,8 +251,8 @@ public class TenancyPermissionsGeneratorTests
     [Fact]
     public void A_project_of_a_module_its_folder_declares_gets_nothing_either()
     {
-        // The same project with no [assembly: Module] of its own: a Directory.Build.props sets DDD_Module and
-        // DDD_DeclareModule for its folder, and the build declares the module, as the Tenancy sample's modules do.
+        // The same project with no [assembly: Module] of its own: a Directory.Build.props sets DDD_Module for its
+        // folder, and the build declares the module, as the Tenancy sample's modules do.
         var result = Run(GeneratorTestHost.Create("namespace Shop.Ordering.Infrastructure; public static class OrderingInfrastructure;")
             .WithAssemblyName("Shop.Ordering.Infrastructure").WithModuleFromTheBuild("Ordering").WithTenancy().WithDependencyInjection()
             .WithReferencedProject("Shop.Ordering", project => project.WithSource(Ordering, "Ordering.cs"), GeneratorTestHost.TenancyGenerators()));

@@ -62,10 +62,9 @@ namespace DDDToolkit.Analyzers.Common;
 /// A module can be split into projects by layer: its domain project declares the classes and has no Entity
 /// Framework, and its infrastructure project holds the context and references the registrations. That project
 /// declares no class, and gets the registrations anyway, built from the classes the module's other projects
-/// declare: the projects it references with the same <c>[assembly: Module]</c>, and only those. A project of
-/// another module, or of none, still gets nothing and hears nothing from here; one of none that carries the name of
-/// the project whose classes it would take, in <c>DDD_Module</c>, hears DDD00064 from the toolkit's module generator
-/// (<see cref="WrittenForNobody"/>). What a project of the module is told, DDD00049,
+/// declare: the projects it references of the same module, declared by <c>[assembly: Module]</c> or by the build
+/// from <c>DDD_Module</c>, and only those. A project of another module, or of none, still gets nothing and hears
+/// nothing. What a project of the module is told, DDD00049,
 /// DDD00045 or DDD00050, is reported on its <c>[assembly: Module]</c> attribute, or at its project file when no file
 /// of it that somebody edits declares the module: the build declared it from <c>DDD_Module</c>, or an
 /// <c>AssemblyAttribute</c> item wrote it into <c>obj/</c>.
@@ -149,45 +148,6 @@ internal static class TemplateRegistrations
     /// <param name="cancellationToken">Stops the work.</param>
     public static bool Registers(Compilation compilation, string templateMetadataName, CancellationToken cancellationToken)
         => MethodsIn(compilation, cancellationToken).Any(method => TakesOf(method) is { } takes && takes.Any(take => take?.MetadataName == templateMetadataName));
-
-    /// <summary>
-    /// The registrations this project can call that take a class <paramref name="referenced"/> declares with a
-    /// template, that <paramref name="referenced"/> cannot call itself, and that take a class of none of their
-    /// templates from this project: by name, each once, in order. These are the ones written for those classes
-    /// nowhere when the two are projects of no module. A project gets a registration for its own classes where it
-    /// sees the registration, and takes the classes it lacks from the projects it references; a project that
-    /// declares none of them takes them only from the projects of its own module. Empty when
-    /// <paramref name="referenced"/> declares no class with a template, which is every project built before
-    /// templates existed.
-    /// </summary>
-    /// <param name="compilation">The project.</param>
-    /// <param name="referenced">A project it references.</param>
-    /// <param name="cancellationToken">Stops the work.</param>
-    public static EquatableArray<string> WrittenForNobody(Compilation compilation, IAssemblySymbol referenced, CancellationToken cancellationToken)
-    {
-        if (!DefinitionFactory.DeclaresTemplateClasses(referenced, cancellationToken))
-        {
-            return EquatableArray<string>.Empty;
-        }
-
-        var names = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var method in MethodsIn(compilation, cancellationToken))
-        {
-            var registrations = method.ContainingAssembly;
-            if (TakesOf(method) is not { } takes
-                || !takes.Any(take => take is not null && DefinitionFactory.DeclaresClassesWith(referenced, take.Key, cancellationToken))
-                || takes.Any(take => take is not null && DefinitionFactory.DeclaresClassesWith(compilation.Assembly, take.Key, cancellationToken))
-                || SymbolEqualityComparer.Default.Equals(registrations, referenced)
-                || referenced.Modules.Any(module => module.ReferencedAssemblySymbols.Any(reference => reference.Identity.Name == registrations.Identity.Name)))
-            {
-                continue;
-            }
-
-            names.Add(method.Name);
-        }
-
-        return names.ToEquatableArray();
-    }
 
     /// <summary>
     /// What the files report, said once for the project, where the methods of several files would each say the

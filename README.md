@@ -62,7 +62,7 @@ public partial class Order { }
 | [Row level security](docs/row-level-security.md) | Running a context's queries as the caller, and row access rules written in C# as Postgres policies |
 | [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
 | [Start-up checks](docs/startup-checks.md) | What the registrations check before the host serves anything, run with one call, in a fixed order, and turned off by name |
-| [Modules](docs/modules.md) | `[assembly: Module]` and the boundary the analyzer checks |
+| [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
 | [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
@@ -194,7 +194,8 @@ transaction as the aggregate. A sink delivers it afterwards: to another module i
 pgmq queue, to a GraphQL subscription, or to one you wrote. Versioning and upcasting keep last year's
 payload readable, and an inbox keyed by message id and consumer makes the receiving side idempotent.
 
-**[Modules](docs/modules.md).** Mark an assembly `[assembly: Module("Ordering")]` and name what it
+**[Modules](docs/modules.md).** Declare a project's module with `<DDD_Module>Ordering</DDD_Module>`, once for a
+folder of projects in a `Directory.Build.props`, or with `[assembly: Module("Ordering")]`, and name what it
 publishes with `[ModuleContract]`. An analyzer then reports where another module reaches past the
 contract. It says nothing at all until both sides opt in.
 

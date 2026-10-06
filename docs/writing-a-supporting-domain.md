@@ -384,8 +384,8 @@ internal static partial class GeneratedSubscriptionModelBuilderExtensions
 
 A project gets the registration when it declares a class with at least one of the method's templates. A
 project that declares none, the package itself or a module that only refers to the ids, gets nothing and is
-told nothing, unless it declares the same `[assembly: Module]` as the projects that do
-([In a module split by layer](#in-a-module-split-by-layer)). A project that declares some and misses one is
+told nothing, unless it is a project of the same module as the projects that do, declared with `DDD_Module`
+or `[assembly: Module]` ([In a module split by layer](#in-a-module-split-by-layer)). A project that declares some and misses one is
 told which one, [DDD00049](diagnostics.md#ddd00049), and a code fix declares it. That is why the
 registrations belong in a package of their own, the way Tenancy keeps them in
 `DDDToolkit.Supporting.Tenancy.EntityFramework`: a domain module that declares one of the classes and does
@@ -629,9 +629,9 @@ the document its members are of, and the application calls `services.AddDocument
 An application that splits a module into projects by layer declares the classes in its domain project,
 which references the package and not its storage, and calls the registration from its infrastructure
 project, which holds the context and declares none of the classes. The infrastructure project gets the
-registration anyway, because it declares the same module, with `[assembly: Module]` as below or by its folder
-([A module named by its folder](modules.md#a-module-named-by-its-folder)): it is closed over the classes the
-module's other projects declare, and only those.
+registration anyway, because it declares the same module, with `DDD_Module`, which its folder can set for every
+project of the module ([A module named by its folder](modules.md#a-module-named-by-its-folder)), or with
+`[assembly: Module]` as below: it is closed over the classes the module's other projects declare, and only those.
 
 ```mermaid
 flowchart TB
@@ -674,7 +674,7 @@ A project of another module that references the domain project, or a project tha
 nothing and is told nothing, and the package, which declares no module, is never looked in for a class. When
 the module's projects declare a class with one of the method's templates and none with another, the
 infrastructure project is told which one, [DDD00049](diagnostics.md#ddd00049), on its `[assembly: Module]`
-attribute, or at its project file where its folder declares the module; the class belongs next to the others, in
+attribute, or at its project file where `DDD_Module` declares the module; the class belongs next to the others, in
 the domain project.
 
 ## Use cases closed over your classes
@@ -877,7 +877,7 @@ the package's docs has to have explained. These can be the package's to write:
     [DDD00059](diagnostics.md#ddd00059).
 - **What every module states, collected where the modules are composed.** Tenancy's generator reads the lists of
   keys the modules mark with `[TenancyPermissions]`, in the assemblies a project references, and writes them into
-  each project that declares no module, with `[assembly: Module]` or by its folder, the host among them, with the
+  each project that declares no module, with `DDD_Module` or `[assembly: Module]`, the host among them, with the
   call that registers them ([A module states its keys once](tenancy.md#a-module-states-its-keys-once)). So a
   module says a thing once that two programs need, and no project lists the modules. It writes nothing in a
   module's own projects, and a list it could not read from outside is an error where the list is declared:
@@ -935,3 +935,9 @@ handed every generator, gets nothing from Membership's, and gets the modules' ke
   or `[EntityBase]`, never two ([DDD00047](diagnostics.md#ddd00047); `[AggregateRoot<T>]` with `[Entity<T>]`
   is [DDD00009](diagnostics.md#ddd00009)).
 - One level of parent: a parent does not derive from another parent.
+- The package is no module: it becomes part of whichever module of an application declares a class with its
+  templates, which names the package's types freely. It sets no `DDD_Module`, and its generated code is named after
+  its assembly, or it sets one for that name and `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, as
+  Tenancy's and Membership's packages do. Declared a module, it would have every module that names one of its
+  unpublished types hear [DDD00022](diagnostics.md#ddd00022)
+  ([A module named by its folder](modules.md#a-module-named-by-its-folder)).

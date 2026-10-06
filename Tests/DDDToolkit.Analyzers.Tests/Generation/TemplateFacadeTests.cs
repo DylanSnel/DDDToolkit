@@ -206,7 +206,7 @@ public class TemplateFacadeTests
     [Fact]
     public void A_module_its_folder_declares_names_the_class_as_one_its_attribute_declares()
     {
-        // DDD_Module with DDD_DeclareModule beside it, as a Directory.Build.props sets them for a module's folder: the
+        // DDD_Module, as a Directory.Build.props sets it for a module's folder: the
         // build declares the module, and the class is named after it in the domain project, as the sample's
         // TenantsTenancy is, and seen by the module's projects above, which write none of their own.
         var domain = Domain(module: null)(Project(Handler("TenantsTenancy"))).WithAssemblyName("Shop.Tenants.Domain").WithModuleFromTheBuild("Tenants").RunCore();

@@ -271,43 +271,34 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   generated behavior does; a dispatcher of your own is written that way, and the message of DDD00057 now says
   so. The toolkit asks it when the policies refuse a save, below. See
   [Access requirements](docs/access-requirements.md#asking-its-check-again).
-- **A module declared by its folder: `DDD_DeclareModule`.** Set to true beside `DDD_Module`, the build declares
-  the project's module, as `[assembly: Module]` does, so a `Directory.Build.props` that names the module of every
-  project below a folder replaces a `Module.cs` in each project of a module in layers. The build writes the two
-  properties into the project as `AssemblyMetadata`, which every generator of it reads, and the toolkit's
-  generator writes `[assembly: Module("Ordering")]` from them, which the analyzers, the runtime and every project
-  that references the assembly read: the referencing project's generators take it for one of the module's
-  projects, and `modelBuilder.AddTenancy()` and the converters are written there. The attribute is written only
-  where the project declares none, in a file of its own or through an `AssemblyAttribute` item, so it is never
-  declared twice (no CS0579), and one the project declares always wins. A test project is never declared a module
-  this way, and `DDD_DeclareModule` set to false says a project carries a module's name and is no module. Without
-  the switch `DDD_Module` alone still only names generated code, so a project that sets it keeps its event names
-  and its migration file names. What the build does add to every C# project that sets `DDD_Module`, switch or
-  not, is `[assembly: AssemblyMetadata("DDD_Module", ...)]` (with `"DDD_DeclareModule"` beside it when the
-  project or the build decided, `"false"` for a test project), in `obj/<Project>.DDDToolkitModule.g.cs`: that is
-  how a project that references it tells two projects of one name apart (DDD00064). The build step ships in the
-  `DDDToolkit.Analyzers` package, as `build/` and `buildTransitive/` targets beside its props file. See
+- **A module declared by its folder: `DDD_Module`.** A project that sets `DDD_Module` is a project of that module,
+  as `[assembly: Module]` makes it one, so a `Directory.Build.props` that names the module of every project below
+  a folder replaces a `Module.cs` in each project of a module in layers. The build writes the property into the
+  project as `[assembly: AssemblyMetadata("DDD_Module", ...)]`, in `obj/<Project>.DDDToolkitModule.g.cs`, which
+  every generator of it reads, and the toolkit's generator writes `[assembly: Module("Ordering")]` from it, which
+  the analyzers, the runtime and every project that references the assembly read: the referencing project's
+  generators take it for one of the module's projects, and `modelBuilder.AddTenancy()` and the converters are
+  written there. The attribute is written only where the project declares none, in a file of its own or through an
+  `<AssemblyAttribute>` item, so it is never declared twice (no CS0579), and one the project declares always wins.
+  A test project is never declared this way. The rare project that wants the name for its generated code and is
+  meant to be no module, a shared kernel or a package of templates, says so with
+  `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, as Tenancy's and Membership's packages and
+  `DDDToolkit.ExampleLibrary` do. The build step ships in the `DDDToolkit.Analyzers` package, as `build/` and
+  `buildTransitive/` targets beside its props file. See
   [A module named by its folder](docs/modules.md#a-module-named-by-its-folder).
-
-  **Moving from an `<AssemblyAttribute>` item** that writes `[assembly: Module]` from `DDD_Module`: replace the
-  item with `<DDD_DeclareModule>true</DDD_DeclareModule>`. Deleting the item alone makes its projects no module:
-  their events are stored and published without the module's prefix, their Supabase migration files are renamed,
-  the boundary is no longer checked, and a package's registration such as `AddTenancy()` is no longer written for
-  the module, which is the only one of these DDD00064 can report.
-- DDD00064 reports two projects named after one module by `DDD_Module` that the generators do not take together,
-  in the one that references the other, at the project file, naming the other. Only the referenced one declares
-  the module: this one is left out of what the generators write for it. Only this one declares it: the other's
-  ids, domain events and template classes are left out here. Neither declares it, and a package's registration
-  this project can call and the other cannot is written for the other's template classes nowhere. Each used to
-  be found out by a call that did not compile (CS1061, CS0411, CS0234). Projects without templates that share a
-  `DDD_Module` and declare no module, how an application without modules names its code, are not reported.
+- DDD00064, at the project file: `DDD_Module` reached the generators and the build step that declares the module
+  did not run, because the generators arrived as an analyzer assembly or a project reference and the package's
+  targets file was not imported, while the property came through the props file alone or a
+  `CompilerVisibleProperty` listed by hand, as DDD00014 suggests. The code was named after the module and the
+  project was no module, without a word. The targets file now hands the generators `DDD_DeclareModule`, which is
+  how they tell it ran; a test project is not reported.
 - What a project of a module hears about the module's other projects, DDD00033 about their domain events and
   DDD00045, DDD00049 or DDD00050 about their template classes, points at the project file where no file of the
   project that somebody edits declares the module: a module the build declared, which has no attribute to point
   at, and one an `<AssemblyAttribute>` item declares, where it pointed at the `AssemblyInfo.cs` that item writes
   into `obj/`. A project with a `Module.cs` is told on its `[assembly: Module]` as before. The project file is
-  outside every source file, so a `[*.cs]` section of `.editorconfig` does not set the severity of these or of
-  DDD00064: `<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig` with `is_global = true` does. A `[*.cs]`
+  outside every source file, so a `[*.cs]` section of `.editorconfig` does not set the severity of these:
+  `<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig` with `is_global = true` does. A `[*.cs]`
   severity that reached the file in `obj/` moves there.
 - **Parts of a context, which a package brings and the host's one call applies.** `services.AddContextPart(...)`,
   in `DDDToolkit.Composition`, registers what a package adds to a context's options, a `ContextPart<TBuilder>`
@@ -966,9 +957,10 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes
-  `TenancyPermissionsOfModules` into every project that references Tenancy and declares no module, with
-  `[assembly: Module]` or by its folder with `DDD_DeclareModule`, an internal class in the namespace named after
-  the project's assembly: `All`, every module's keys, one list after the other, and
+  `TenancyPermissionsOfModules` into every application that references Tenancy, the program the modules are
+  composed in, whether it declares a module or not, and into every library that references it and declares no
+  module, with `DDD_Module` or `[assembly: Module]`: an internal class in the namespace named after the project's
+  assembly, with `All`, every module's keys, one list after the other, and
   `services.AddTenancyPermissionsOfModules()`, which adds them as one contribution. The host makes that one call,
   and an export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, so neither
   names a module, and a module that is added reaches both with the next build. While no module marks a list,
@@ -1899,10 +1891,16 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `ModuleKeysTests` holds the host to one contribution of every module's keys, and every list a module declares
   to its mark; the exported access files are unchanged.
 - **The Tenancy sample declares its modules by folder.** `Examples/Tenancy/Modules/Directory.Build.props` names
-  every project's module after the folder it is in and declares it with `DDD_DeclareModule`, and holds
+  every project's module after the folder it is in with `DDD_Module`, which declares it, and holds
   DDD00022 and DDD00023 as errors for all of them; the projects' `Module.cs` files are gone, and an API project's
   keeps only HotChocolate's attributes. `LayerReferenceTests` holds every project to the module of its folder,
   declared by the build and by no file of its own.
+- **Every sample project that sets `DDD_Module` is a module, or says it is none.** `DDDToolkit.ExampleLibrary`,
+  which the example API uses without either publishing anything, keeps the name its `AddCommonConverters` is
+  called by and sets `DDD_DeclareModule` to false. The webshop's shared kernel, whose generated code needs no
+  name, sets no `DDD_Module` any more, and the Tenancy sample's shared projects set neither `DDD_Module` nor
+  `[assembly: Module]`. `DDDToolkit.ExampleApi` is module Api, the benchmarks module Benchmarks, and the docs
+  site's sample module Shop, so the homepage shows its generated `Module.g.cs` as well.
 - **The Tenancy sample serves the tenant's administration a schema of its own.** `/admin/graphql` offers all of
   Tenancy that `/graphql` offers, and `seatGrants(seatId:)` besides: the roles another seat holds, where and for
   when, which `SeatGrants` answers for `tenancy.seats.manage` held for the whole tenant, and
@@ -1973,12 +1971,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     those roles were granted. The information line of `UseDDDToolkit` names such a context the first time its
     options are built: at start in a host that adds `builder.Services.RunStartupChecks()`, and otherwise when the
     context is first used. A context on any other database is not touched, wherever its provider is configured.
-- **A new warning on upgrade, DDD00064, for one layout.** A 3.1 application where a project that is no module
-  sets its module's name in `DDD_Module`, and references, or is referenced by, the project that declares that
-  module, built without a warning, and now gets [DDD00064](docs/diagnostics.md#ddd00064) at the project file. A
-  build that treats warnings as errors then fails. Nothing else changes: the generators wrote nothing across the
-  two before either. Set `<DDD_DeclareModule>true</DDD_DeclareModule>` beside `DDD_Module` in that project to
-  make it one of the module's projects, or `false` to say it only carries the name.
+- **A project that sets `DDD_Module` is a module.** Up to 3.1 the property only named the generated code; now it
+  declares the project's module as well, as `[assembly: Module]` does (see Added, Core). A project that set it and
+  was no module is a module from this release: its domain events are stored and published under the module's name
+  (`shop.order-placed` where they were `order-placed`, unless `[DomainEventName]` pins them), its Supabase
+  migration files are named after the module, and DDD00022 and DDD00023 hold it to the boundary of the modules it
+  references. A library that sets it and references Tenancy no longer gets `TenancyPermissionsOfModules`; an
+  application, such as a host, still does. A test project is not declared, and a project meant to be no module
+  sets `<DDD_DeclareModule>false</DDD_DeclareModule>` beside the property.
 - **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
   `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
   changes with it. `UseMemberHolds` names them the same.

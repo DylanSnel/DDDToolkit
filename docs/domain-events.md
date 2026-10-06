@@ -170,7 +170,8 @@ have been renamed in between. So every event has a name, and you rarely have to 
 ### The convention
 
 An event nobody named is named after its module and its class, both in kebab case. The module is the one
-the assembly declares with `[assembly: Module]` ([Modules](modules.md)):
+the assembly declares, with `<DDD_Module>Ordering</DDD_Module>` in its project file or with
+`[assembly: Module]` ([Modules](modules.md)):
 
 ```csharp
 [assembly: Module("Ordering")]
@@ -184,7 +185,7 @@ DomainEventName.Of<OrderPlaced>();   // "ordering.order-placed"
 DomainEventName.Of(someEvent);       // same, from an instance
 ```
 
-An assembly without `[assembly: Module]` leaves the module out: `order-placed`. The namespace plays no
+An assembly that declares no module leaves the module out: `order-placed`. The namespace plays no
 part, so moving a class to another namespace or folder changes nothing.
 
 ### Versions are in the class name

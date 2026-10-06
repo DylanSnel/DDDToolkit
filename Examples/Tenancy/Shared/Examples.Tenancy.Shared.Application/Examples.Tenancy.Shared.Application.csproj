@@ -12,7 +12,7 @@
     sizes of its own, and a module does not reference another's application project; so the check all of them
     make lives here, once.
 
-    No [assembly: Module] in this project, on purpose: it belongs to no module, so every module may name what it
+    Neither DDD_Module nor [assembly: Module], on purpose: it belongs to no module, so every module may name what it
     declares. It references no module and knows nothing of any of them: a query hands it its sizes and the
     refusals to answer with. Only a module's application project references it. Keep it small: a type belongs
     here only when every module's application project would otherwise carry a copy of it.

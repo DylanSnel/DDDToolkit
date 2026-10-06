@@ -4,10 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <!--
-      Names the helpers the generators write into this assembly. The package declares no [assembly: Module]:
-      it is part of whichever module of an application declares a member class with its template.
+      Names the helpers the generators write into this assembly. The package is no module, so DDD_DeclareModule
+      keeps DDD_Module from declaring one: it is part of whichever module of an application declares a member class
+      with its template, which names the package's types freely.
     -->
     <DDD_Module>SupportingMembership</DDD_Module>
+    <DDD_DeclareModule>false</DDD_DeclareModule>
     <Title>Domain Driven Design Toolkit - Supporting domain: Membership</Title>
     <PackageTags>ddd;domain;driven;design;toolkit;supporting;membership;members;roles;permissions;access</PackageTags>
     <Description>Access to a resource through its members: a member class an application declares for each of its resources, the roles a member holds for a period, roles a customer makes for a resource, the rules about a resource's members, and the access questions and requirements asked about them, database-agnostic.</Description>

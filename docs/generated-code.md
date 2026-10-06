@@ -26,9 +26,9 @@ dotnet add package Temp.DDDToolkit.EntityFramework   # its generator: the mappin
 dotnet add package Temp.DDDToolkit.HotChocolate      # its generator: the GraphQL bindings
 ```
 
-The registration methods the generators write are named after the module the project declares with
-`[assembly: Module]`. A project that is no module, like this sample, chooses the name with
-`DDD_Module`:
+The registration methods the generators write are named after the module the project declares. This
+sample declares module Shop with `DDD_Module` in its project file, which a `Directory.Build.props` can set
+for a whole folder of projects instead, and `[assembly: Module]` in a file of the project would say the same:
 
 ```xml
 <PropertyGroup>
@@ -85,7 +85,7 @@ public partial record Address(string Street, string City)
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 ```
 
-58 lines in, 963 lines out, in 15 files.
+58 lines in, 981 lines out, in 16 files.
 
 ## Why generate it
 
@@ -264,13 +264,13 @@ pass runs on it.
 
 ## The module
 
-This sample is no module, so it gets no file for one. A project whose build declares its module, with
-`DDD_Module` and `DDD_DeclareModule` set to true, gets the attribute it would otherwise have written itself:
+This sample's build declares module Shop from its `DDD_Module`, so the toolkit's generator writes the attribute a
+project would otherwise write itself, for the analyzer, the runtime and every project that references the assembly:
 
 ```csharp title="Module.g.cs, shortened"
-// The module this project's build declared: its DDD_Module, with DDD_DeclareModule set to true. An
-// [assembly: Module] of the project's own would have been kept instead, and nothing written here.
-[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Ordering")]
+// The module this project's build declared: its DDD_Module. An [assembly: Module] of the project's
+// own would have been kept instead, and nothing written here.
+[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Shop")]
 ```
 
 It is not written where the project declares `[assembly: Module]` already, so it never declares the module
@@ -358,9 +358,8 @@ public readonly partial record struct OrderId
 }
 ```
 
-One method registers every converter in the project. It is named after
-`<DDD_Module>Shop</DDD_Module>` in the project file, because this sample declares no module, and you
-call it from `ConfigureConventions`:
+One method registers every converter in the project. It is named after the module,
+`<DDD_Module>Shop</DDD_Module>` in the project file, and you call it from `ConfigureConventions`:
 
 ```csharp title="ConverterExtensions.g.cs, shortened"
 public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopConverters(this Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)

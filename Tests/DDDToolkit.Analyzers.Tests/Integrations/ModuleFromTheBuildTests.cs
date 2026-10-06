@@ -7,19 +7,19 @@ using Microsoft.CodeAnalysis;
 namespace DDDToolkit.Analyzers.Tests.Integrations;
 
 /// <summary>
-/// <c>DDD_DeclareModule</c>: with it set to true beside <c>DDD_Module</c>, the build declares the project's module, so a
-/// <c>Directory.Build.props</c> replaces a <c>Module.cs</c> in every project of a module. The targets of the
-/// DDDToolkit.Analyzers package write the two properties into the project as <c>AssemblyMetadata</c>, which every
-/// generator of it reads, and the toolkit's generator writes <c>[assembly: Module]</c> from them, for the analyzers, the
-/// runtime and every project that references the assembly.
+/// <c>DDD_Module</c> declares the project's module, so a <c>Directory.Build.props</c> replaces a <c>Module.cs</c> in
+/// every project of a module. The targets of the DDDToolkit.Analyzers package write the property into the project as
+/// <c>AssemblyMetadata</c>, which every generator of it reads, and the toolkit's generator writes <c>[assembly: Module]</c>
+/// from it, for the analyzers, the runtime and every project that references the assembly.
 /// <para>
 /// Each test compiles the file those targets write, read from the targets themselves (<see cref="ModuleDeclarationFile"/>).
 /// The first half is about the attribute: written where the project declares none, never beside one it declares, in a
-/// file of its own or through an <c>AssemblyAttribute</c> item, so never twice; and not at all for <c>DDD_Module</c>
-/// alone, which still only names the generated code. The second half is everything that follows from the module: the
-/// names, the registrations of a module in layers, the boundary, and where the diagnostics about it point. The last is
-/// DDD00064, for projects named after one module that are not taken together, because one of them declares no module,
-/// or neither does and a registration is written for nobody.
+/// file of its own or through an <c>AssemblyAttribute</c> item, so never twice; and not at all in a project the build
+/// does not declare, a test project or one that sets <c>DDD_DeclareModule</c> to false, where <c>DDD_Module</c> only
+/// names the generated code. The second half is everything that follows from the module: the names, the registrations
+/// of a module in layers, the boundary, and where the diagnostics about it point. Then a project the build did not
+/// declare, which is no project of the module it carries the name of, and hears nothing about it: it said so. The
+/// last is a project the build could not declare, because its targets were not imported, which hears DDD00064.
 /// </para>
 /// </summary>
 public class ModuleFromTheBuildTests
@@ -150,19 +150,18 @@ public class ModuleFromTheBuildTests
         ModulesOf(result).Should().BeEmpty();
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("false")]
-    public void DDD_Module_alone_still_only_names_the_generated_code(string? declares)
+    [Fact]
+    public void A_project_the_build_does_not_declare_keeps_the_name_and_is_no_module()
     {
-        // What every project that set DDD_Module before DDD_DeclareModule existed has: the name, and no module. A
-        // project that says it is no module, and a test project, have the same, with the build's false beside it.
-        var result = Domain().WithModuleFromTheBuild("Ordering", declares).RunCore();
+        // A test project, or one that sets DDD_DeclareModule to false, such as a shared kernel: the build writes no
+        // declaration into it, and its generators see the property alone.
+        var result = Domain().WithModule("Ordering").RunCore();
 
         result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty("the build step ran, and left the module out on purpose");
         result.HintNames.Should().NotContain("Module.g.cs");
-        result.ShouldContain("EventNames", "public static class OrderingEventNames", "DDD_Module names the class, as before");
-        result.ShouldContain("EventNames", "public const string OrderPlaced = \"order-placed\";", "and the event keeps the name it was stored under");
+        result.ShouldContain("EventNames", "public static class OrderingEventNames", "DDD_Module names the class");
+        result.ShouldContain("EventNames", "public const string OrderPlaced = \"order-placed\";", "and the event is named after its class alone, as outside every module");
 
         var emitted = result.Emit();
         emitted.Assembly.GetCustomAttributes<ModuleAttribute>().Should().BeEmpty();
@@ -263,17 +262,17 @@ public class ModuleFromTheBuildTests
         """;
 
     /// <summary>The shop's domain project: its tenant, organization and units, declared with the package's templates.</summary>
-    private static GeneratorTestHost ShopDomain(GeneratorTestHost project, string? declares = "true")
+    private static GeneratorTestHost ShopDomain(GeneratorTestHost project)
         => project
-            .WithModuleFromTheBuild("Shop", declares)
+            .WithModuleFromTheBuild("Shop")
             .WithSource(TemplateEntityTests.Ids.Replace("namespace Sample;", "namespace Shop.Domain;", StringComparison.Ordinal), "Ids.cs")
             .WithSource(TemplateEntityTests.Application.Replace("namespace Sample;", "namespace Shop.Domain;", StringComparison.Ordinal), "Classes.cs");
 
-    private static GeneratorTestHost ShopInfrastructure(string source = Infrastructure, string? domainDeclares = "true")
+    private static GeneratorTestHost ShopInfrastructure(string source = Infrastructure)
         => GeneratorTestHost.Create(source, "Startup.cs")
             .WithAssemblyName("Shop.Infrastructure")
             .WithReferencedAssembly(TemplateEntityTests.Package, "Sample.Tenancy")
-            .WithReferencedProject("Shop.Domain", project => ShopDomain(project, domainDeclares))
+            .WithReferencedProject("Shop.Domain", ShopDomain)
             .WithReferencedAssembly(TemplateRegistrationTests.Registrations, "Sample.Tenancy.Registrations");
 
     [Fact]
@@ -412,168 +411,102 @@ public class ModuleFromTheBuildTests
         result.ShouldNotHaveDiagnostic("DDD00022");
     }
 
-    // ------------------------------------------------------------------ DDD00064
+    // ------------------------------------------------------------------ a project the build did not declare
 
     [Fact]
-    public void A_project_named_after_a_module_it_references_that_declares_none_is_DDD00064_at_its_project_file()
+    public void A_project_named_after_a_module_that_the_build_did_not_declare_is_no_project_of_it_and_hears_nothing()
     {
-        // The infrastructure project carries the module's name and was left without DDD_DeclareModule: it is no project
-        // of the module, so AddTenancy() is not written and its call does not compile, which is all one used to hear.
-        var host = ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;").WithModuleFromTheBuild("Shop", declares: null);
+        // The infrastructure project carries the module's name and sets DDD_DeclareModule to false: it said it is no
+        // module, so nothing is written here from the domain project's classes, and nothing is reported either.
+        var result = ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;").WithModule("Shop").RunCore();
 
-        var result = host.RunCore();
-
-        var diagnostic = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00064").Subject;
-        diagnostic.Severity.Should().Be(DiagnosticSeverity.Warning);
-        diagnostic.Location.GetLineSpan().Path.Should().Be(host.ProjectFile);
-        diagnostic.GetMessage().Should().Be(
-            "This project and project 'Shop.Domain', which it references, set DDD_Module to 'Shop', and only that project declares the module, "
-            + "so the generators do not take this project for one of the module's projects, and nothing is written here from what the others declare. "
-            + "Declare module 'Shop' in this project: <DDD_DeclareModule>true</DDD_DeclareModule> beside DDD_Module, or [assembly: Module(\"Shop\")].");
+        result.ShouldCompile();
+        result.ReportedDiagnostics.Should().BeEmpty();
         result.HintNames.Should().NotContain("Registration");
+        result.HintNames.Should().NotContain("Module.g.cs");
     }
 
     [Fact]
-    public void A_project_of_a_module_that_references_one_named_after_it_that_declares_none_is_DDD00064_naming_that_one()
+    public void A_reference_the_build_did_not_declare_is_no_project_of_the_module_whatever_its_name()
     {
-        var host = ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;", domainDeclares: null).WithModuleFromTheBuild("Shop");
-
-        var result = host.RunCore();
-
-        var diagnostic = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00064").Subject;
-        diagnostic.Location.GetLineSpan().Path.Should().Be(host.ProjectFile);
-        diagnostic.GetMessage().Should().Be(
-            "This project and project 'Shop.Domain', which it references, set DDD_Module to 'Shop', and only this project declares the module, "
-            + "so the generators do not take that project for one of the module's projects, and its ids, domain events and template classes are left out of what is written here. "
-            + "Declare module 'Shop' in that project: <DDD_DeclareModule>true</DDD_DeclareModule> beside DDD_Module, or [assembly: Module(\"Shop\")].");
-        result.HintNames.Should().NotContain("Registration", "the classes are the domain project's, and it is no project of the module");
-    }
-
-    [Fact]
-    public void Two_projects_named_after_one_module_that_neither_declares_are_DDD00064_where_a_registration_is_written_for_nobody()
-    {
-        // The trap of removing an AssemblyAttribute item that declared the module, without setting DDD_DeclareModule in
-        // its place: both projects keep the name and neither is the module's, so AddTenancy() is written nowhere.
-        var host = ShopInfrastructure(domainDeclares: null).WithModuleFromTheBuild("Shop", declares: null);
-
-        var result = host.RunCore();
-
-        var diagnostic = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00064").Subject;
-        diagnostic.Location.GetLineSpan().Path.Should().Be(host.ProjectFile);
-        diagnostic.GetMessage().Should().Be(
-            "This project and project 'Shop.Domain', which it references, set DDD_Module to 'Shop', and neither declares the module, "
-            + "so the generators take neither for one of the module's projects, and nothing is written here for the classes that project declares with a template: AddTenancy, AddTenancyDefaults, AddTenancyWith. "
-            + "Declare module 'Shop' in both: <DDD_DeclareModule>true</DDD_DeclareModule> beside DDD_Module, or [assembly: Module(\"Shop\")].");
-        result.CompilationErrors.Should().ContainSingle(error => error.Id == "CS0411", "AddTenancy() without type arguments is written nowhere, so the call reaches the package's open method: the error the warning explains");
-    }
-
-    [Fact]
-    public void Two_projects_named_after_one_module_without_templates_are_how_an_application_without_modules_names_its_code_and_not_DDD00064()
-    {
-        // What a 3.1 application has that sets DDD_Module for every project in its Directory.Build.props: ids and events
-        // in one project, the context in the next, and no module. Nothing is written for nobody, so nothing is said.
+        // The domain project sets DDD_Module and is a test project, sets DDD_DeclareModule to false, or was built by an
+        // earlier version: no declaration was written into it, so its domain events are none of the module's.
         var result = GeneratorTestHost.Create("namespace Acme.Ordering.Infrastructure;\n\npublic static class Nothing;", "Nothing.cs")
             .WithAssemblyName("Acme.Ordering.Infrastructure")
-            .WithReferencedProject("Acme.Ordering.Domain", project => project.WithSource(OrderingDomain, "Domain.cs").WithModuleFromTheBuild("Ordering", declares: null))
-            .WithModuleFromTheBuild("Ordering", declares: null)
-            .RunCore();
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject("Acme.Ordering.Domain", project => project.WithSource(OrderingDomain, "Domain.cs").WithModule("Ordering"))
+            .WithModuleFromTheBuild("Ordering")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00064");
+        result.ReportedDiagnostics.Should().BeEmpty();
+        result.AllSources.Should().NotContain("OrderPlaced", "the event is the domain project's, and that project is no module");
+        result.AllSources.Should().NotContain("OrderId", "and so is the id, which this project does not convert");
     }
 
+    // ------------------------------------------------------------------ a project the build could not declare
+
     [Fact]
-    public void Template_classes_whose_own_project_registers_them_are_written_for_and_not_DDD00064()
+    public void A_project_whose_DDD_Module_arrives_without_the_targets_hears_DDD00064_at_its_project_file()
     {
-        // The domain project sees the registrations itself, so it is written its own AddTenancy(); a project above it
-        // that shares its name and is no module calls that one.
-        var result = GeneratorTestHost.Create("namespace Shop.Infrastructure;\n\npublic static class Nothing;", "Nothing.cs")
-            .WithAssemblyName("Shop.Infrastructure")
-            .WithReferencedAssembly(TemplateEntityTests.Package, "Sample.Tenancy")
-            .WithReferencedAssembly(TemplateRegistrationTests.Registrations, "Sample.Tenancy.Registrations")
-            .WithReferencedProject("Shop.Domain", project => ShopDomain(project, declares: null))
-            .WithModuleFromTheBuild("Shop", declares: null)
-            .RunCore();
+        // The generators arrived as a project reference, and the props file was imported without the targets: the
+        // name reaches them, and the step that declares the module never ran.
+        var host = Domain().WithModule("Ordering").WithoutTheModuleStep();
+        var result = host.RunCore();
 
         result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00064");
+        var reported = result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00064").Subject;
+        reported.Severity.Should().Be(DiagnosticSeverity.Warning, "the code compiles; it is named after a module the project is not in");
+        reported.Location.GetLineSpan().Path.Should().Be(host.ProjectFile, "no line of code is wrong");
+        reported.GetMessage().Should().Be(
+            "DDD_Module names this project's generated code after 'Ordering' and declares no module, because the build step of the DDDToolkit.Analyzers package that declares it did not run: the project is no project of module 'Ordering'. Import the package's targets file beside its props file, or declare [assembly: Module(\"Ordering\")].");
+
+        result.HintNames.Should().NotContain("Module.g.cs");
+        result.ShouldContain("EventNames", "public static class OrderingEventNames");
+        result.ShouldContain("EventNames", "public const string OrderPlaced = \"order-placed\";", "what the warning is about: no module, so no module's name on the event");
     }
 
     [Fact]
-    public void A_project_that_declares_template_classes_of_the_registration_itself_takes_the_rest_and_is_not_DDD00064()
+    public void A_DDD_Module_listed_by_hand_without_either_file_hears_DDD00064_instead_of_DDD00014()
     {
-        // This project declares the tenant and is written the registration for it, taking the organization and the
-        // units from the project it references, module or not: nothing is left without one.
-        var result = GeneratorTestHost.Create(
-                """
-                namespace Shop.Infrastructure;
+        // What DDD00014 suggests for a generator referenced as an assembly: list the property by hand. The name is
+        // back, and the module is not.
+        var result = Domain().WithoutBuildProperties().WithBuildProperty("DDD_Module", " Ordering ").RunCore();
 
-                [Sample.Tenancy.TenantAggregate<Shop.Domain.TenantId>]
-                public sealed partial class ShopTenantHere
-                {
-                    public ShopTenantHere(Shop.Domain.TenantId id, string name) : base(id, name) { }
-                }
-                """,
-                "Tenant.cs")
-            .WithAssemblyName("Shop.Infrastructure")
-            .WithReferencedAssembly(TemplateEntityTests.Package, "Sample.Tenancy")
-            .WithReferencedProject("Shop.Domain", project => ShopDomain(project, declares: null))
-            .WithReferencedAssembly(TemplateRegistrationTests.Registrations, "Sample.Tenancy.Registrations")
-            .WithModuleFromTheBuild("Shop", declares: null)
-            .RunCore();
-
-        result.ShouldNotHaveDiagnostic("DDD00064");
-        result.HintNames.Should().Contain("AddTenancy.Registration", "the registration is written here, for this project's tenant and the domain project's other classes");
+        result.ShouldNotHaveDiagnostic("DDD00014");
+        result.ReportedDiagnostics.Should().ContainSingle(diagnostic => diagnostic.Id == "DDD00064")
+            .Which.GetMessage().Should().Contain("after 'Ordering'", "the name as the generators read it, trimmed");
+        result.HintNames.Should().NotContain("Module.g.cs");
     }
 
-    [Fact]
-    public void A_project_that_says_it_is_no_module_is_not_DDD00064_either_way()
+    [Theory]
+    [InlineData("the build declared it")]
+    [InlineData("a file of the project declares it")]
+    [InlineData("the step ran and left it out")]
+    [InlineData("a test project")]
+    [InlineData("a testing platform application")]
+    [InlineData("no name")]
+    [InlineData("neither file")]
+    public void DDD00064_is_not_reported_where_nothing_was_left_undeclared(string project)
     {
-        // DDD_DeclareModule false, or a test project, which the build writes the same for.
-        ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;").WithModuleFromTheBuild("Shop", declares: "false")
-            .RunCore().ShouldNotHaveDiagnostic("DDD00064");
+        var host = project switch
+        {
+            "the build declared it" => Domain().WithModuleFromTheBuild("Ordering"),
+            "a file of the project declares it" => Domain().WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Ordering\")]", "Module.cs").WithModule("Ordering").WithoutTheModuleStep(),
+            "the step ran and left it out" => Domain().WithModule("Ordering").WithBuildProperty("DDD_DeclareModule", "false"),
+            "a test project" => Domain().WithModule("Ordering").WithoutTheModuleStep().WithBuildProperty("IsTestProject", "true"),
+            "a testing platform application" => Domain().WithModule("Ordering").WithoutTheModuleStep().WithBuildProperty("IsTestingPlatformApplication", " True "),
+            "no name" => Domain().WithModule(" ").WithoutTheModuleStep(),
+            _ => Domain().WithoutBuildProperties(),
+        };
 
-        ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;", domainDeclares: "false").WithModuleFromTheBuild("Shop")
-            .RunCore().ShouldNotHaveDiagnostic("DDD00064");
-    }
-
-    [Fact]
-    public void Projects_named_after_another_module_are_not_DDD00064()
-    {
-        ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;").WithModuleFromTheBuild("Billing", declares: null)
-            .RunCore().ShouldNotHaveDiagnostic("DDD00064");
-
-        ShopInfrastructure("namespace Shop.Infrastructure;\n\npublic static class Nothing;", domainDeclares: null).WithModuleFromTheBuild("Billing")
-            .RunCore().ShouldNotHaveDiagnostic("DDD00064");
-    }
-
-    [Fact]
-    public void A_project_named_after_a_module_with_a_Module_cs_is_one_of_its_projects_and_not_DDD00064()
-        => ShopInfrastructure()
-            .WithModule("Shop")
-            .WithSource("[assembly: DDDToolkit.Abstractions.Attributes.Module(\"Shop\")]", "Module.cs")
-            .RunCore()
-            .ShouldCompile()
-            .ShouldNotHaveDiagnostic("DDD00064");
-
-    [Fact]
-    public void A_reference_built_without_the_build_s_word_cannot_be_told_and_is_not_DDD00064()
-    {
-        // An assembly an earlier version built, or one built without the targets: it carries no DDD_Module to compare.
-        var result = GeneratorTestHost.Create("namespace Shop.Infrastructure;\n\npublic static class Nothing;", "Nothing.cs")
-            .WithAssemblyName("Shop.Infrastructure")
-            .WithReferencedProject("Shop.Domain", project => project.WithModule("Shop").WithSource(OrderingDomain, "Domain.cs"))
-            .WithModuleFromTheBuild("Shop")
-            .RunCore();
-
-        result.ShouldCompile();
-        result.ShouldNotHaveDiagnostic("DDD00064");
+        host.RunCore().ShouldNotHaveDiagnostic("DDD00064");
     }
 
     // ------------------------------------------------------------------ incremental
 
     [Fact]
-    public void The_attribute_and_the_diagnostics_are_cached_across_an_unrelated_edit()
+    public void The_attribute_is_cached_across_an_unrelated_edit()
     {
         var first = Domain().WithModuleFromTheBuild("Ordering").RunCore();
 

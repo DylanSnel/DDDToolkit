@@ -62,8 +62,9 @@ node id serializers, and makes every struct identifier a key a paged list can be
 ([Paging by an id](#paging-by-an-id)). There is one call per assembly that declares identifiers or single
 value objects. The method is generated into the namespace `{AssemblyName}.GraphQl`, on a static class named
 `HotChocolateExtensions`. The `{Module}` part is the module the assembly declares, so a project with
-`[assembly: Module("Ordering")]` gets `AddOrderingGraphQlRuntimeBindings`. A project that is no module
-takes it from the `DDD_Module` MSBuild property, and otherwise from its assembly name; see
+`<DDD_Module>Ordering</DDD_Module>` or `[assembly: Module("Ordering")]` gets `AddOrderingGraphQlRuntimeBindings`.
+A project that is no module takes it from its `DDD_Module` where it has one, and otherwise from its assembly
+name; see
 [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it).
 Two assemblies of one module share the name, and an assembly's method calls the ones of the module's
 other assemblies it references, so a schema makes one call for the module. An assembly that declares

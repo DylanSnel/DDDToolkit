@@ -10,25 +10,27 @@ you may only use what the module on the other side published.
 
 ## What a module is here
 
-**A module is an assembly.** One project, one module.
+**A module is an assembly.** One project, one module, named in its project file:
 
-```csharp
-// Ordering/AssemblyInfo.cs, or any file in the project
-[assembly: Module("Ordering")]
+```xml
+<!-- Ordering.csproj, or the Directory.Build.props of a folder of projects -->
+<DDD_Module>Ordering</DDD_Module>
 ```
 
 That is the whole declaration. Everything the assembly declares belongs to the module, and everything
-it declares is internal to the module unless it says otherwise. A folder of projects can be declared at
-once, from a `Directory.Build.props`, instead of with a file in each: see
+it declares is internal to the module unless it says otherwise. The build turns the property into
+`[assembly: Module("Ordering")]` in the compiled assembly, which is how every project that references it
+knows the module, and a project may write that attribute in any file itself instead; one in the source
+wins. Set in a `Directory.Build.props`, the property declares a whole folder of projects at once: see
 [A module named by its folder](#a-module-named-by-its-folder).
 
 Two assemblies may carry the same name, and then they are one module. That is how you split a module
 into `Ordering.Domain` and `Ordering.Infrastructure` without inventing a boundary between them; see
 [A module in layers](#a-module-in-layers).
 
-An assembly with no `[Module]` is not a module. It is never reported for, and never reported against.
-The framework, your NuGet packages, a shared kernel and every project you have not got round to yet
-all stay out of the way. Nothing changes in a codebase until somebody adds the attribute.
+An assembly with no module is never reported for, and never reported against. The framework, your
+NuGet packages, a shared kernel and every project you have not got round to yet all stay out of the
+way. Nothing changes in a codebase until somebody sets `DDD_Module` or adds the attribute.
 
 ## What it publishes
 
@@ -241,9 +243,10 @@ A module can be as many projects as its layers: a contracts project with what it
 with its aggregates and events, an application project with its use cases, an infrastructure project with
 its context and migrations, and an API project with its routes and the module's entry. Every one of them
 declares the same module, Ordering, so they are one module to the analyzer, and the domain, application and
-contracts projects reference neither Entity Framework nor ASP.NET Core. Each can say so with
-`[assembly: Module("Ordering")]`, or the folder they are in says it for all of them
-([A module named by its folder](#a-module-named-by-its-folder)).
+contracts projects reference neither Entity Framework nor ASP.NET Core. The folder they are in says so for all
+of them, with `DDD_Module` in its `Directory.Build.props`
+([A module named by its folder](#a-module-named-by-its-folder)), or each says it with
+`[assembly: Module("Ordering")]`.
 
 The generators treat the projects of one module as one module too. What Entity Framework needs is written
 where Entity Framework is, into the infrastructure project, from what the other projects declare:
@@ -336,29 +339,27 @@ host's connections for requests and one on those for background work.
 ### A module named by its folder
 
 A module in layers is several projects that all say the same thing. Rather than a `Module.cs` in each of them,
-the `Directory.Build.props` of the module's folder can say it once, for every project below it:
+the `Directory.Build.props` of the module's folder says it once, for every project below it:
 
 ```xml
 <DDD_Module>Ordering</DDD_Module>
-<DDD_DeclareModule>true</DDD_DeclareModule>
 ```
 
-`DDD_Module` names the module, and `DDD_DeclareModule` makes that name the module the project declares. A
-project there is the module's exactly as if it declared `[assembly: Module("Ordering")]`: the analyzer holds it to
-the boundary, the generators take it together with the module's other projects, the runtime stores its events as
-`ordering.order-placed`, and a project that references it sees the module, because the compiled assembly carries
-the attribute. A project added to the folder is the module's from its first build. The
+A project there is the module's exactly as if it declared `[assembly: Module("Ordering")]`: the analyzer holds it
+to the boundary, the generators take it together with the module's other projects, the runtime stores its events
+as `ordering.order-placed`, and a project that references it sees the module, because the compiled assembly
+carries the attribute. A project added to the folder is the module's from its first build. The
 [Tenancy sample](../Examples/README.md#the-tenancy-sample) declares its three modules this way, each named after
 its folder: [`Examples/Tenancy/Modules/Directory.Build.props`](../Examples/Tenancy/Modules/Directory.Build.props).
 
 The build takes two steps, because a source generator never sees what another generator writes. First the
-build writes the two properties into a file of the project, as assembly metadata, and every generator reads
-the module from there. Then the toolkit's generator writes `[assembly: Module("Ordering")]` from them, for what
+build writes the property into a file of the project, as assembly metadata, and every generator reads the
+module from there. Then the toolkit's generator writes `[assembly: Module("Ordering")]` from it, for what
 reads the compiled assembly: the analyzer, the runtime and every project that references it.
 
 ```mermaid
 flowchart LR
-    Props["Directory.Build.props<br/>DDD_Module, DDD_DeclareModule"] --> Build["the build<br/>writes them into obj/"]
+    Props["Directory.Build.props<br/>DDD_Module"] --> Build["the build<br/>writes it into obj/"]
     Build --> Generators["every generator<br/>of the project"]
     Build --> Module["the toolkit's generator<br/>writes [assembly: Module]"]
     Module --> Dll["Ordering.Domain.dll"]
@@ -377,7 +378,6 @@ flowchart LR
   <PropertyGroup>
     <!-- The name of the folder the project's folder is in. -->
     <DDD_Module>$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))</DDD_Module>
-    <DDD_DeclareModule>true</DDD_DeclareModule>
   </PropertyGroup>
 </Project>
 ```
@@ -385,7 +385,6 @@ flowchart LR
 ```csharp
 // obj/Debug/net10.0/Ordering.Domain.DDDToolkitModule.g.cs, written by the build
 [assembly: global::System.Reflection.AssemblyMetadata("DDD_Module", "Ordering")]
-[assembly: global::System.Reflection.AssemblyMetadata("DDD_DeclareModule", "true")]
 
 // Module.g.cs, written by the toolkit's generator, in a project that declares no module itself
 [assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Ordering")]
@@ -393,7 +392,9 @@ flowchart LR
 
 The build step is in the `DDDToolkit.Analyzers` package, as `build/` and `buildTransitive/` targets beside its
 props file, so it arrives wherever the generators do. A project that references the generators as a bare
-analyzer assembly gets no build step: declare its module with the attribute.
+analyzer assembly, or as a project with `OutputItemType="Analyzer"`, gets no build step: import the targets file
+as you import the props file, or declare its module with the attribute.
+[DDD00064](diagnostics.md#ddd00064) says so where `DDD_Module` reaches the generators and nothing declared it.
 
 </details>
 
@@ -410,44 +411,41 @@ and there is no CS0579 to fix:
 
 A project that kept its `Module.cs` when the folder got its `Directory.Build.props` builds as before, and the
 file can go when convenient. So does a folder that declares its modules with an `<AssemblyAttribute>` item that
-writes `[assembly: Module]` from `DDD_Module`, which is how a folder did it before `DDD_DeclareModule`.
+writes `[assembly: Module]` from `DDD_Module`, and the item can go as well: the property declares the same
+module.
 
-**Moving from an `<AssemblyAttribute>` item.** Replace the item with `<DDD_DeclareModule>true</DDD_DeclareModule>`;
-do not only delete it. Without the item and without the switch, `DDD_Module` is a name again and the projects are
-no module: their events are stored and published under other names (`order-placed` where they were
-`ordering.order-placed`), their Supabase migration files are named differently, the analyzer stops checking the
-boundary, and a package's registration such as `AddTenancy()` is no longer written where the context is. Only the
-last is reported ([DDD00064](diagnostics.md#ddd00064), below): projects that share a `DDD_Module` and declare no
-module are also how an application without modules names its code, so the build cannot tell the rest from a
-mistake.
+**A project that is no module.** Two kinds of project set `DDD_Module` and are not declared a module by the
+build; the property only names their generated code. One is a test project, which tests the modules from
+outside and names what they do not publish: the build knows it by the mark its test SDK sets,
+`IsTestProject` or `IsTestingPlatformApplication`. The other is rare: a project whose generated code wants a
+name of its own, `Add{Name}Converters` and the rest, and that is meant to be no module, such as a shared
+kernel every module uses without either side publishing anything, or a package of templates that becomes part
+of whichever module declares a class with them. It says so beside the property:
 
-`DDD_DeclareModule` is off unless you set it, because `DDD_Module` alone has always been a name and no more. An
-application without modules sets it to name its generated code, as [Getting started](getting-started.md#store-it-with-entity-framework)
-does, and so do test projects and shared kernels. Made a module, such a project would store its events under
-another name (`shop.order-placed` where it stored `order-placed`), its Supabase migration files would be named
-after the module, and the analyzer would start reporting its references. So set the switch where you mean a
-module, next to `DDD_Module` in the `Directory.Build.props` of the modules' folder.
+```xml
+<!-- SharedKernel.csproj: names its generated code, and is no module -->
+<DDD_Module>SharedKernel</DDD_Module>
+<DDD_DeclareModule>false</DDD_DeclareModule>
+```
 
-It never declares a test project a module, even when it reaches one: a test project tests the modules from
-outside, and names what they do not publish. Nor a project that sets `DDD_DeclareModule` to false, which says it
-carries a module's name and is no module. Either can still declare `[assembly: Module]` itself.
+Declared a module, such a project would have every module that names one of its unpublished types hear
+[DDD00022](diagnostics.md#ddd00022), and its domain events stored under its name.
+[`DDDToolkit.ExampleLibrary`](../Examples/DDDToolkit.ExampleLibrary/DDDToolkit.ExampleLibrary.csproj), whose
+`AddCommonConverters` the example API calls, is such a project, and so are Tenancy's and Membership's packages.
+A project that wants neither the module nor the name sets no `DDD_Module` at all, and its generated code is
+named after its assembly, as the
+[webshop's shared kernel](../Examples/Modules/SharedKernel/Examples.Webshop.SharedKernel/Examples.Webshop.SharedKernel.csproj)
+does; one that inherits the property from a folder's `Directory.Build.props` clears it with `<DDD_Module />`.
+A host that sets `DDD_Module` to name its own generated code is that module too, and its domain events carry the
+module's name; the samples' hosts set none, since the composition root is no module.
 
-**When one project of a module is left out.** A project that carries the module's name in `DDD_Module` and does
-not declare the module is no project of it, and gets nothing the generators write for the module: no
-`AddTenancy()` closed over the domain project's classes, no converters for its ids. The first sign used to be a
-call that did not compile. Now the build says which project is left out, [DDD00064](diagnostics.md#ddd00064), in
-the project that references the other: the one that declares the module and references a project that carries
-its name, or the one that carries the name and references a project that declares it. Where neither declares it,
-the build speaks up only when a package's registration is written for nobody: the referenced project declares
-classes with the package's templates, and this project can call the registration and that one cannot.
-
-DDD00064, and a diagnostic about the module that has no line of code to point at, such as
-[DDD00049](diagnostics.md#ddd00049) on a module whose projects declare no class for a template, point at the
+A diagnostic about the module that has no line of code to point at, such as
+[DDD00049](diagnostics.md#ddd00049) on a module whose projects declare no class for a template, points at the
 project file. A severity in an `.editorconfig` section for `*.cs` files does not reach a diagnostic there; set it
 with `<NoWarn>` or `<WarningsAsErrors>`, as the sample does for DDD00022 and DDD00023, or in a global analyzer
-config, a `.globalconfig` file with `is_global = true`. That now includes DDD00033, DDD00045, DDD00049 and
-DDD00050 in a project whose module an `<AssemblyAttribute>` item declares: they pointed at the `AssemblyInfo.cs`
-that item writes into `obj/`, where a `[*.cs]` section did reach them.
+config, a `.globalconfig` file with `is_global = true`. That includes DDD00033, DDD00045, DDD00049 and
+DDD00050 in a project whose module an `<AssemblyAttribute>` item declares: they point at the project file, not
+at the `AssemblyInfo.cs` that item writes into `obj/`, where a `[*.cs]` section did reach them.
 
 ### Folders inside the layers
 
@@ -632,24 +630,27 @@ generators look for that name in three places, and the first one that answers wi
 
 | Where | Who it is for |
 |---|---|
-| `[assembly: Module("Ordering")]` | A module. It always wins. |
-| `<DDD_Module>Ordering</DDD_Module>` with `<DDD_DeclareModule>true</DDD_DeclareModule>` | A module the build declares: the build writes the attribute above. |
-| `<DDD_Module>Shop</DDD_Module>` alone | A project that is no module: a shared kernel, an application without modules, a test project. |
+| `[assembly: Module("Ordering")]` | A module that says so in its source. It always wins. |
+| `<DDD_Module>Ordering</DDD_Module>` | A module: the build writes the attribute above from it. |
+| `<DDD_Module>Tests</DDD_Module>` in a test project, or beside `<DDD_DeclareModule>false</DDD_DeclareModule>` | A project that is no module and names its generated code: a test project, a shared kernel. |
 | The assembly name, with the dots removed | A project with neither. |
 
 `DDD_Module` is an MSBuild property, so a `Directory.Build.props` can set it for every project in a
-folder. The attribute is what one assembly says about itself, which is why it wins: a module below
-that folder still gets its own name.
+folder. The name is also the module the project declares, and the build writes `[assembly: Module]` for it, so
+a `Directory.Build.props` that sets it makes every project below it that module: put it in the folder of one
+module's projects, not above a host or a shared project. In a test project, and in one that sets
+`DDD_DeclareModule` to false, it only names the generated code.
 
 ```xml
+<!-- Modules/Ordering/Directory.Build.props: every project below is module Ordering -->
 <PropertyGroup>
-  <DDD_Module>Shop</DDD_Module>
+  <DDD_Module>Ordering</DDD_Module>
 </PropertyGroup>
 ```
 
-Alone, the property names generated code and nothing else. With `DDD_DeclareModule` set to true beside it,
-the name is the module the project declares, and the build writes `[assembly: Module]` for it: see
-[A module named by its folder](#a-module-named-by-its-folder).
+The attribute is what one assembly says about itself, which is why it wins: a project below that folder that
+declares `[assembly: Module("Sales")]` is module Sales. A folder of several modules names each after its own
+folder instead: see [A module named by its folder](#a-module-named-by-its-folder).
 
 ### Two assemblies, one module
 
@@ -681,8 +682,8 @@ declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declar
 that holds the generators also holds a props file declaring the properties they read, and NuGet imports
 that file into each project the generators run in: one that references the package itself, one that
 gets it as a dependency of `DDDToolkit`, and one that gets it through a project reference. There is
-nothing to add to a project file. The build step that `DDD_DeclareModule` switches on arrives beside it, as a
-targets file in the same package.
+nothing to add to a project file. The build step that declares the module the property names arrives beside it,
+as a targets file in the same package.
 
 So there are two supported ways to reference the toolkit, and a module with a
 [contracts project](module-contracts.md#a-project-of-its-own) uses both:
@@ -706,7 +707,7 @@ flowchart LR
     Contracts --> Analyzers
     subgraph Analyzers ["DDDToolkit.Analyzers"]
         direction TB
-        Generators["the generators"] ~~~ Props["props: declares DDD_Module"] ~~~ Targets["targets: DDD_DeclareModule"]
+        Generators["the generators"] ~~~ Props["props: declares DDD_Module"] ~~~ Targets["targets: declares the module"]
     end
 ```
 
@@ -741,29 +742,31 @@ public sealed record InvoiceSent(InvoiceId InvoiceId);
 ```
 
 The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module.
-The attribute names the class; a contracts project that is no module would set `DDD_Module` for that,
-which is what [`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/Acme.Billing.Contracts.csproj)
-does to prove the property arrives. Where such a project and a project that declares the module reference
-each other, the build warns with [DDD00064](diagnostics.md#ddd00064) that the generators do not take the two
-together. Set `<DDD_DeclareModule>true</DDD_DeclareModule>` beside `DDD_Module` to make the contracts project
-one of the module's projects, or `false` to say it only carries the name.
+`<DDD_Module>Billing</DDD_Module>` in the project file declares the same module as the attribute, through the
+build step that arrives with the package, and is how
+[`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/Acme.Billing.Contracts.csproj)
+declares it, to prove the property and the step both arrive.
 
 </details>
 
 Both rows are built against the packed packages on every pull request, together with a project that
 gets the toolkit only through a project reference, and the build fails if `DDD_Module` did not name
-the generated class in any of them.
+the generated class, or did not declare the module, in any of them.
 
 If the generators do arrive and the props file does not, because a reference excludes the package's
-build assets, `DDD_Module` is ignored. The build says so with [DDD00014](diagnostics.md#ddd00014)
-rather than naming everything after the assembly without a word. A module is not affected: its name
-comes from the attribute, and the property is not read.
+build assets, `DDD_Module` is ignored, and the build step that would declare the module, excluded with
+it, declares nothing. The build says so with [DDD00014](diagnostics.md#ddd00014) rather than naming
+everything after the assembly without a word. A module that declares itself with `[assembly: Module]` is
+not affected: its name comes from the attribute, and the property is not read. If the property arrives and the
+build step does not, because the props file is imported without the targets file, or the property is listed by
+hand as DDD00014 suggests, `DDD_Module` names the code and declares no module, and the build says that with
+[DDD00064](diagnostics.md#ddd00064).
 
 ## Adopting this on an existing codebase
 
-1. Pick the module with the fewest things pointing at it and add `[assembly: Module]` to it. Nothing
-   happens yet, because nothing else is a module.
-2. Add `[assembly: Module]` to one of its callers. Now you get a list.
+1. Pick the module with the fewest things pointing at it and set `DDD_Module` in its project file, or
+   add `[assembly: Module]` to it. Nothing happens yet, because nothing else is a module.
+2. Do the same for one of its callers. Now you get a list.
 3. Work the list. Most entries are a published id that was never marked, or a query that should be a
    published read model.
 4. Turn `DDD00023` into an error for those two projects when its list is empty, then `DDD00022`.
@@ -787,22 +790,24 @@ already enforces `internal` at the assembly boundary. Put a module in its own pr
 is done by C# itself. What the analyzer adds is the other half, which C# has no word for: *public, but
 not for you*.
 
-### Why not the DDD_Module MSBuild property
+### Why the property becomes an attribute
 
-`DDD_Module` alone is not this. It is an MSBuild property, which means it reaches the compiler of the
-project that sets it and travels no further. The compiler building `Ordering` cannot read what
-`Billing.csproj` set. So on its own it can name generated code in a project that is no module, and it
-cannot be a boundary. The traffic goes one way only: the attribute names a module's generated code as
-well, and wins over the property where a project has both. What the two name, and how the property
-reaches the generators, is [above](#ddd_module-and-the-package-that-brings-it).
+`DDD_Module` is an MSBuild property, which means it reaches the compiler of the project that sets it and
+travels no further. The compiler building `Ordering` cannot read what `Billing.csproj` set, so a property alone
+could name generated code and could not be a boundary. That is why the build writes the attribute from it:
+what travels is the attribute in the compiled assembly, and the boundary is the attribute. The property is the
+way to write it once, for a project or for a whole folder
+([A module named by its folder](#a-module-named-by-its-folder)), and the attribute in a project's source wins
+over it. What the two name, and how the property reaches the generators, is
+[above](#ddd_module-and-the-package-that-brings-it).
 
-`DDD_DeclareModule` does not change that. It has the build write the attribute from the property, so what
-travels is still the attribute in the compiled assembly, and the boundary is still the attribute; the
-property is one more way to write it, once for a whole folder
-([A module named by its folder](#a-module-named-by-its-folder)). It is a switch of its own, and not what
-`DDD_Module` means by itself, because projects that set `DDD_Module` and are no module, an application
-without modules among them, would otherwise become modules on an upgrade, and store their events under new
-names.
+Naming a project's generated code after a module and declaring the module are one property, because they are one
+fact: a project whose events, converters and registrations carry a module's name is that module's. A separate
+switch for the declaration would let a project carry a module's name and be left out of the module, which the
+build would then have to warn about. The rare project that wants the name and not the module, a shared kernel or
+a package, says so with `DDD_DeclareModule` set to false, and a test project is told by its own marks. The one
+way left to carry the name and not the module by accident is to leave the package's build step behind, and
+[DDD00064](diagnostics.md#ddd00064) is that warning.
 
 ## Related
 

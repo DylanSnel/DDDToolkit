@@ -2,9 +2,9 @@
   <!--
     The sample's modules: a folder each, and in it a project per layer. Modules/Projects/Examples.Tenancy.Projects.Domain
     is a project of module Projects, because it is in the folder Projects. That is said once, here, for every project
-    below: DDD_Module is the name of the folder a project's folder is in, and DDD_DeclareModule makes that name the
-    module the project declares, as [assembly: Module("Projects")] would. No project has a file that says so, and a
-    layer added to a module is that module's from its first build.
+    below: DDD_Module is the name of the folder a project's folder is in, and that is the module the project declares,
+    as [assembly: Module("Projects")] would. No project has a file that says so, and a layer added to a module is that
+    module's from its first build.
 
     So Projects' five projects, Tenants' five and Inspections' four are three modules. To the boundary analyzer, a
     project may name what the projects of its own module declare, and of another module only what that one publishes:
@@ -28,7 +28,6 @@
 
   <PropertyGroup>
     <DDD_Module>$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))</DDD_Module>
-    <DDD_DeclareModule>true</DDD_DeclareModule>
     <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
   </PropertyGroup>
 </Project>
