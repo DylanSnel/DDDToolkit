@@ -423,33 +423,6 @@ COMMENT ON FUNCTION tenancy.roles_with_key(key text) IS 'DDDToolkit access funct
 REVOKE ALL ON FUNCTION tenancy.roles_with_key(key text) FROM PUBLIC;
 
 -- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
-CREATE OR REPLACE FUNCTION tenancy.seats_holding_at(key text, unit uuid) RETURNS TABLE ("SeatId" uuid)
-    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-SELECT DISTINCT r."SeatId" FROM "tenancy"."SeatRights" r
-JOIN "tenancy"."OrganizationUnitPaths" p ON p."AncestorId" = r."UnitId" AND p."TenantId" = r."TenantId"
-JOIN "tenancy"."Seats" s ON s."Id" = r."SeatId" AND s."TenantId" = r."TenantId" AND s."Status" = 'Active'
-WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = $1 AND tenancy.key_is_live($1)
-  AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
-  AND p."DescendantId" = $2
-  AND (r."SeatId" = (SELECT tenancy.caller_seat()) OR ((SELECT tenancy.holds_key('tenancy.grants.manage')) OR (SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage'))))
-$function$;
-COMMENT ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) IS 'DDDToolkit access function of TenantsContext';
-REVOKE ALL ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) FROM PUBLIC;
-
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
-CREATE OR REPLACE FUNCTION tenancy.tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
-    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
-SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
-JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
-WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
-  AND r."EndsAt" IS NULL AND r."StartsAt" <= pg_catalog.now()
-  AND u."ParentId" IS NULL
-  AND ((SELECT tenancy.holds_key('tenancy.grants.manage')) OR (SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))
-$function$;
-COMMENT ON FUNCTION tenancy.tenant_administrators() IS 'DDDToolkit access function of TenantsContext';
-REVOKE ALL ON FUNCTION tenancy.tenant_administrators() FROM PUBLIC;
-
--- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
 CREATE OR REPLACE FUNCTION tenancy.tenant_placements() RETURNS TABLE ("SeatId" uuid, "UnitId" uuid, "IsPrimary" boolean, "TenantId" uuid)
     LANGUAGE sql STABLE AS $function$
 SELECT t."SeatId", t."UnitId", t."IsPrimary", t."TenantId"
@@ -531,12 +504,39 @@ FROM "tenancy"."SeatRights" r
 JOIN "tenancy"."OrganizationUnitPaths" p ON p."AncestorId" = r."UnitId" AND p."TenantId" = r."TenantId"
 WHERE r."TenantId" = (SELECT tenancy.caller_tenant())
   AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
-  AND (r."SeatId" = (SELECT tenancy.caller_seat()) OR tenancy.manages_access(r."Key"))
+  AND (r."SeatId" = (SELECT tenancy.caller_seat()) OR (tenancy.manages_access(r."Key") AND NOT EXISTS (SELECT 1 FROM "tenancy"."OrganizationUnitPaths" o WHERE o."AncestorId" = r."UnitId" AND o."TenantId" = r."TenantId" AND o."DescendantId" = CASE WHEN p."DescendantId" = $1 THEN $2 ELSE $1 END)))
   AND p."DescendantId" IN ($1, $2)
   AND $1 = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) AND $2 = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage')))
 $function$;
 COMMENT ON FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) FROM PUBLIC;
+
+-- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+CREATE OR REPLACE FUNCTION tenancy.seats_holding_at(key text, unit uuid) RETURNS TABLE ("SeatId" uuid)
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
+SELECT DISTINCT r."SeatId" FROM "tenancy"."SeatRights" r
+JOIN "tenancy"."OrganizationUnitPaths" p ON p."AncestorId" = r."UnitId" AND p."TenantId" = r."TenantId"
+JOIN "tenancy"."Seats" s ON s."Id" = r."SeatId" AND s."TenantId" = r."TenantId" AND s."Status" = 'Active'
+WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = $1 AND tenancy.key_is_live($1)
+  AND r."StartsAt" <= pg_catalog.now() AND (r."EndsAt" IS NULL OR r."EndsAt" > pg_catalog.now())
+  AND p."DescendantId" = $2
+  AND (r."SeatId" = (SELECT tenancy.caller_seat()) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage'))) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage'))) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))
+$function$;
+COMMENT ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) IS 'DDDToolkit access function of TenantsContext';
+REVOKE ALL ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) FROM PUBLIC;
+
+-- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
+CREATE OR REPLACE FUNCTION tenancy.tenant_administrators() RETURNS TABLE ("SeatId" uuid, "RoleId" uuid)
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
+SELECT r."SeatId", r."RoleId" FROM "tenancy"."SeatRights" r
+JOIN "tenancy"."OrganizationUnits" u ON u."Id" = r."UnitId" AND u."TenantId" = r."TenantId"
+WHERE r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Key" = 'tenancy.roles.manage'
+  AND r."EndsAt" IS NULL AND r."StartsAt" <= pg_catalog.now()
+  AND u."ParentId" IS NULL
+  AND (r."SeatId" = (SELECT tenancy.caller_seat()) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage'))) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage'))) OR r."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))
+$function$;
+COMMENT ON FUNCTION tenancy.tenant_administrators() IS 'DDDToolkit access function of TenantsContext';
+REVOKE ALL ON FUNCTION tenancy.tenant_administrators() FROM PUBLIC;
 
 -- Written by the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
 CREATE OR REPLACE FUNCTION tenancy.units_where_i_hold_in_tenant(tenant uuid, key text) RETURNS SETOF uuid
@@ -588,8 +588,6 @@ GRANT EXECUTE ON FUNCTION tenancy.holds_tenant_wide(key text) TO authenticated, 
 GRANT EXECUTE ON FUNCTION tenancy.readable_units() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.rewrite_tenant_rights() TO ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.roles_with_key(key text) TO authenticated, ddd_system_in;
-GRANT EXECUTE ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION tenancy.tenant_administrators() TO authenticated;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_placements() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_roles() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_seats() TO authenticated, ddd_system_in;
@@ -599,6 +597,8 @@ GRANT EXECUTE ON FUNCTION tenancy.tenants_to_sweep() TO ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.unit_parent(unit uuid) TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.units_where_i_hold(key text) TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.rights_a_move_changes(parent uuid, new_parent uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION tenancy.seats_holding_at(key text, unit uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION tenancy.tenant_administrators() TO authenticated;
 GRANT EXECUTE ON FUNCTION tenancy.units_where_i_hold_in_tenant(tenant uuid, key text) TO authenticated;
 
 ALTER TABLE tenancy."InvitationDigests" ENABLE ROW LEVEL SECURITY;
@@ -1176,7 +1176,7 @@ ALTER TABLE tenancy."SeatRoleGrants" FORCE ROW LEVEL SECURITY;
 
 -- Seats and managers read grants (select) for authenticated asks the policy 'Seats and managers read grants' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
 CREATE POLICY "Seats and managers read grants (select) for authenticated" ON tenancy."SeatRoleGrants" FOR SELECT TO authenticated
-    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat()) OR ((SELECT tenancy.holds_key('tenancy.grants.manage')) OR (SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))));
+    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat()) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage'))) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.seats.manage'))) OR "tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.units.manage'))) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage'))));
 COMMENT ON POLICY "Seats and managers read grants (select) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
 -- System work reads its tenant (select) for ddd_system_in asks the policy 'System work reads its tenant' of the row access contribution Examples.Tenancy.Catalogue.SampleTenancyContribution in Examples.Tenancy.Catalogue 1.0.0.
