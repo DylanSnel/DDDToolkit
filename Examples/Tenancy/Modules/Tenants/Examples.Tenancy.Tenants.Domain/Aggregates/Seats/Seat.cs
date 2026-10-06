@@ -22,6 +22,13 @@ namespace Examples.Tenancy.Tenants.Domain.Aggregates.Seats;
 /// person's own seats for the tenant picker, hand this class to the module's view of a seat, <c>SeatListing</c>, so
 /// every answer shows the name with no read more.
 /// </para>
+/// <para>
+/// <b>Guarding the fields is this application's too.</b> In the database the package holds its own columns of the
+/// seat, its id, identity, tenant and status, and nothing of these. Its policy lets a seat change its own row, and a
+/// seat that manages seats or grants anywhere in the tenant change any seat's row. The module's infrastructure holds
+/// the name to the rule of <c>RenameSeat</c> with a column rule of its own; the job title has no command and no rule,
+/// and is as writable as the row.
+/// </para>
 /// </remarks>
 [SeatAggregate<SeatId>]
 public sealed partial class Seat

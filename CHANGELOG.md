@@ -672,8 +672,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   statement for a trigger written in a contribution, `RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege',
   CONSTRAINT = ..., HINT = 'ddd:access.refused', MESSAGE = ...;`, and a trigger written by hand says the same;
   one that raises `42501` without the hint fails as before. Every access guard the toolkit writes raises it: the
-  trigger of a column rule, the Membership package's lock on an owner column, and Tenancy's triggers on a seat's
-  status and on who changed a row; the triggers that hold what may never be, whoever writes, keep their codes.
+  trigger of a column rule, the Membership package's lock on an owner column, and Tenancy's triggers on what a
+  seat is, on a seat's status, on what a role's pack gave it and on who changed a row; the triggers that hold what
+  may never be, whoever writes, keep their codes.
   The code stays `42501`, which the Data API answers with a 403 and a pgTAP test expects, and the caller learns
   nothing of the guard: its name belongs to the schema, and the warning carries it. The mark is the hint, which
   a `RAISE` hands on as written and Postgres never translates, so it reads the same in any server language.
@@ -1256,6 +1257,31 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     drops the invitations' column with the names they suggested. On Postgres, export the access files again: the
     privileges on the invitations name one column less, and those on the seats one less too when you do not keep
     the name.
+- **Tenancy on Postgres: the database guards a seat's own columns, and leaves the application's to it.** The policy
+  on the seats lets a seat change its own row, and a seat that manages seats or grants anywhere in the tenant
+  change any seat's row: every save of a seat writes its version, a grant and a placement as much as a status, so
+  each of those use cases needs the row. It stays as wide as that on purpose: the grants key could be asked at the
+  seat's units, but the policy is also all that lets the application's own commands write the row, which the
+  application cannot widen and narrows column by column, so holding it to the units would decide for the
+  application which of its fields a grants manager writes. The cost is that such a seat may write the version of
+  any seat, as a seats manager anywhere could already. A policy cannot say which columns, so Tenancy holds its own
+  beside it, one by one. The id, the identity and the tenant change for no seat, whatever it manages, its own row
+  included, and not for the tables' owner either: the trigger `tenancy_seat_identity_is_fixed` now holds the id as
+  well, and refuses as an access guard, `42501` with the toolkit's hint, where it raised `check_violation`, so a
+  save that changes one of them behind the aggregate's back is `access.refused`. No use case of Tenancy changes
+  them; only Tenancy's system work in the seat's tenant passes, so that a one-off of yours inside
+  `TenancyWork.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
+  person, and the policies keep that to Tenancy's scope and its tenant. Background work under `Caller.System`, a
+  migration and the SQL editor change none of them. The status stays held by `tenancy_seat_status_is_managed`, and
+  the version is the row's. Tenancy decides nothing about the columns your seat class adds, a job title say: each
+  is as writable as the row until a [column rule](docs/row-level-security.md#column-rules) of yours holds it to the
+  rule of your command, which a table Tenancy keeps to itself takes, since a column rule adds no policy. An entity
+  your seat class holds, a collection, is written with the seat's row by the same callers, and no column rule
+  holds its table: data that needs a narrower rule goes in a table of your own, or is held by a trigger in a
+  contribution of yours. Where the export writes privileges, the id and the tenant are no column a caller may
+  update, as before, and Postgres refuses them before the trigger is asked. The next build writes the access file
+  that changes the trigger. See
+  [What the database guards on a seat](docs/tenancy.md#what-the-database-guards-on-a-seat).
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes
@@ -2273,6 +2299,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `tenancy.seats.manage` for the whole tenant. The migration `InvitationsSuggestNoName` drops the invitations'
   name and leaves the seats' column, now the seat class's own, as it was; its exported file and the access file
   after it follow.
+- **The Tenancy sample holds a seat's name in the database to the rule of its command.** Tenancy guards its own
+  columns of a seat and none of the sample's, and its policy lets a seat that gives roles at one unit write every
+  seat's row, so such a seat renamed every seat of the tenant with a statement of its own, past the check in
+  `RenameSeat`. `NameChangesByTheSeatOrWithTheSeatsKey`, a column rule in the Tenants module's infrastructure
+  (`Access`), holds the name to that command's rule: the seat itself, or a seat that manages seats for the whole
+  tenant. The job title has no command and no rule, and is as writable as the row. The exporter writes the access
+  file `*_access.tenants.ddd.sql` that adds the rule's trigger, with Tenancy's own changed one.
 - **The Tenancy sample states each module's keys once.** `ProjectCatalogue.Permissions` and
   `InspectionCatalogue.Permissions` are marked `[TenancyPermissions]`, and neither module's registration adds
   them any more. The host adds both with the generated `AddTenancyPermissionsOfModules()`, and the program

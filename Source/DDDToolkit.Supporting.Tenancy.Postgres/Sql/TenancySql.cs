@@ -151,6 +151,9 @@ internal static class TenancySql
     /// <summary>The property of a role that holds what its pack gave it, which a sync of the packs compares the pack with.</summary>
     private const string KeysFromPackProperty = "KeysFromPack";
 
+    /// <summary>What the trigger on what a seat is tells a statement it refuses.</summary>
+    internal const string SeatIdentityRefusal = "A seat keeps the id, the identity and the tenant it was made with: only Tenancy's system work in its tenant changes them.";
+
     /// <summary>What the trigger on a seat's status tells a statement it refuses.</summary>
     internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.";
 
@@ -197,7 +200,7 @@ internal static class TenancySql
             Invitations(tenancy, policies, exclusive, unread);
             HostEntities(tenancy, policies, exclusive);
             History(tenancy, written.RemovesOldHistory, policies, exclusive);
-            statements.AddRange(Triggers(tenancy));
+            statements.AddRange(Triggers(tenancy, written));
         }
         else if (TenancyModel.EventLogOf(model) is not null)
         {
@@ -1167,6 +1170,18 @@ internal static class TenancySql
         Add(paths, "Unit managers write the tree", "UPDATE", tree, tree);
         Add(paths, "Unit managers write the tree", "DELETE", tree, null);
 
+        // A seat's row is written by every use case that changes the seat, since each save writes the seat's version:
+        // its status, with the seats key for the whole tenant; a placement, with the seats key at the unit, for any
+        // seat of the tenant; a grant, with the grants key at a unit the seat is placed at; and the seat itself,
+        // taking away what is its own. The application's own commands on its seat class write it too, and this policy
+        // is all that lets them: the application cannot widen it, since Tenancy keeps the table to itself, and narrows
+        // it column by column with column rules of its own. So the policy asks the seats or the grants key held
+        // anywhere in the tenant, or the seat itself, and holds the grants key to no unit of the seat's: that would
+        // decide for the application which of its own fields a grants manager writes. What that costs is the version:
+        // a grants manager at one unit writes the version of any seat, which makes a save of that seat at the same
+        // moment a concurrency conflict, as a seats manager anywhere could already. What is Tenancy's on the row the
+        // triggers hold column by column: the id, the identity and the tenant change for no seat, and the status only
+        // as the use cases change it. The application's own columns are its own to hold: Tenancy decides nothing of them.
         var seatTenant = T(C(seats, "TenantId"));
         var seat = Both(seatTenant, $"({K(SeatsKey)} OR {K(GrantsKey)} OR {C(seats, "Id")} = {callerSeat})");
         Add(seats, "Members and the person read seats", "SELECT", $"({seatTenant} OR {C(seats, "Identity")} = {Uid})", null);
@@ -1628,14 +1643,15 @@ internal static class TenancySql
 
     /// <summary>
     /// The trigger that writes the rights, and the triggers that keep what a policy cannot see, because it is
-    /// about rows other than the one written, or about the row as it was: a tenant keeps an administrator, every
-    /// right is backed by a grant, the closure follows the tree, a seat, a placement and a grant keep what
-    /// they are about, and a seat's status changes only by a seat that may give or take away what it holds. The
-    /// rights are written as the row they follow from is; a tenant's administrator, the
-    /// rights' grants and the closure are checked at commit, once the save has written every row it writes, the
-    /// others as the row changes; all of them fire for every role, the tables' owner included. Each can run again.
+    /// about rows other than the one written, about the row as it was, or about one of its columns: a tenant keeps
+    /// an administrator, every right is backed by a grant, the closure follows the tree, a placement and a grant
+    /// keep what they are about, a seat keeps what it is for every caller but Tenancy's system work in its tenant,
+    /// and a seat's status changes only by a seat that may give or take away what it holds. The rights are written
+    /// as the row they follow from is; a tenant's administrator, the rights' grants and the closure are checked at
+    /// commit, once the save has written every row it writes, the others as the row changes; all of them fire for
+    /// every role, the tables' owner included. Each can run again.
     /// </summary>
-    private static IEnumerable<string> Triggers(TenancyTables tenancy)
+    private static IEnumerable<string> Triggers(TenancyTables tenancy, Written written)
     {
         var schema = Quoted(tenancy.Schema);
         foreach (var statement in RightsFollowTriggers(tenancy, schema))
@@ -1659,6 +1675,11 @@ internal static class TenancySql
         }
 
         foreach (var statement in IdentityTriggers(tenancy, schema))
+        {
+            yield return statement;
+        }
+
+        foreach (var statement in SeatIdentityTriggers(tenancy, schema, written))
         {
             yield return statement;
         }
@@ -1993,16 +2014,16 @@ internal static class TenancySql
     }
 
     /// <summary>
-    /// The rows that keep what they are about as they change: a seat its identity and tenant, a placement its seat,
-    /// unit and tenant, a grant its seat, unit, role and the seat that gave it, and a role the pack it was made from,
-    /// which a sync of the packs makes it follow. Entity Framework never changes these; a query that did would move a
-    /// row past the checks its policy makes of a new one.
+    /// The rows that keep what they are about as they change, whoever writes: a placement its seat, unit and tenant,
+    /// a grant its seat, unit, role and the seat that gave it, and a role the pack it was made from, which a sync of
+    /// the packs makes it follow. Entity Framework never changes these; a query that did would move a row past the
+    /// checks its policy makes of a new one. What a seat is, its id, identity and tenant, Tenancy's system work in a
+    /// tenant may change, so its trigger is an access guard of its own (<see cref="SeatIdentityTriggers"/>).
     /// </summary>
     private static IEnumerable<string> IdentityTriggers(TenancyTables tenancy, string schema)
     {
         (IEntityType Table, string Function, string Constraint, string[] Properties, string Message)[] fixedRows =
         [
-            (tenancy.Seats, SeatIdentityIsFixed, SeatIdentityIsFixedConstraint, ["TenantId", "Identity"], "A seat keeps the identity and the tenant it was made with."),
             (tenancy.Placements, PlacementIsFixed, PlacementIsFixedConstraint, ["SeatId", "UnitId", "TenantId"], "A placement keeps its seat, its unit and its tenant."),
             (tenancy.Grants, GrantIsFixed, GrantIsFixedConstraint, ["SeatId", "UnitId", "RoleId", "GrantedBy"], "A grant keeps its seat, its unit, its role and the seat that gave it."),
             (tenancy.Roles, RolePackIsFixed, RolePackIsFixedConstraint, ["FromPack"], "A role keeps the pack it was made from."),
@@ -2074,11 +2095,59 @@ internal static class TenancySql
     }
 
     /// <summary>
+    /// The trigger on what a seat is: its id, the verified identity it belongs to, and its tenant, which none of
+    /// Tenancy's use cases changes once the seat is made. The identity links the seat to a person's account: a seat
+    /// that wrote another one into it would hand the seat, and every key it holds, to that account. A seat moved to
+    /// another tenant would leave its placements, grants and rights in the one it came from, and a seat given another
+    /// id would leave every row that names it, Tenancy's and the modules', naming none. The policy on the seats lets a
+    /// seat change its own row, and a seats or a grants manager anywhere in the tenant change any seat's row, since
+    /// every save of a seat writes its version; a policy cannot say which columns.
+    /// <para>
+    /// No use case of Tenancy changes them once the seat is made: provisioning, adding a seat, accepting an invitation
+    /// and an import write all three as they make it, which is an insert and none of this trigger's business. So every
+    /// role but the scoped system role is refused: every seat, whatever it manages, background work as the
+    /// application itself, and the tables' owner, so a migration or the SQL editor too. Tenancy's system work in a
+    /// tenant passes, which <c>TenancyWork.BeginSystemIn</c> begins, so that a one-off of the application's own can
+    /// link a seat to the identity another sign-in provider gives the same person. The policies keep that work to
+    /// Tenancy's scope and to its tenant, so it moves no seat to another tenant either.
+    /// </para>
+    /// <para>
+    /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint, since it holds who may: a save that
+    /// changed one of them behind the aggregate's back is refused with <c>access.refused</c>. It runs as its caller,
+    /// so it asks the role the statement runs as.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<string> SeatIdentityTriggers(TenancyTables tenancy, string schema, Written written)
+    {
+        var seats = tenancy.Seats;
+        var function = $"{schema}.{SeatIdentityIsFixed}";
+        var columns = new[] { "Id", "TenantId", "Identity" }.Select(property => C(seats, property)).ToList();
+
+        yield return
+            $"CREATE OR REPLACE FUNCTION {function}() RETURNS trigger\n" +
+            "    LANGUAGE plpgsql SET search_path = '' AS $body$\n" +
+            "BEGIN\n" +
+            "    -- Tenancy's system work in a tenant may; the policies keep it to Tenancy's scope and to that tenant.\n" +
+            $"    IF CURRENT_USER IS DISTINCT FROM {RowAccessModel.Literal(written.SystemInRole)} THEN\n" +
+            $"        {RowAccessModel.Refusal(SeatIdentityIsFixedConstraint, SeatIdentityRefusal)}\n" +
+            "    END IF;\n" +
+            "    RETURN NEW;\n" +
+            "END\n" +
+            "$body$";
+        yield return $"REVOKE ALL ON FUNCTION {function}() FROM PUBLIC";
+        yield return $"DROP TRIGGER IF EXISTS {SeatIdentityIsFixedConstraint} ON {Q(seats)}";
+        yield return
+            $"CREATE TRIGGER {SeatIdentityIsFixedConstraint} BEFORE UPDATE OF {string.Join(", ", columns)} ON {Q(seats)}\n" +
+            $"    FOR EACH ROW WHEN (({string.Join(", ", columns.Select(column => "OLD." + column))}) IS DISTINCT FROM ({string.Join(", ", columns.Select(column => "NEW." + column))}))\n" +
+            $"    EXECUTE FUNCTION {function}()";
+    }
+
+    /// <summary>
     /// The trigger on a seat's status. The status decides whether the seat's grants count, and the trigger that
     /// writes the rights follows it: a seat made active again gets every right of its grants back, and one
     /// suspended or deactivated loses them. The policy on the seats lets a seats or a grants manager anywhere, and
-    /// the seat itself, change the row, for the columns that give nothing. So a change of status by a seat is
-    /// held here to what giving and taking away those grants one by one is held to: the calling seat holds
+    /// the seat itself, change the row, since every save of a seat writes its version. So a change of status by a
+    /// seat is held here to what giving and taking away those grants one by one is held to: the calling seat holds
     /// <see cref="TenancyKeys.SeatsManage"/> for the whole tenant, as the use cases ask, and for every grant of
     /// the seat that has not ended, of an active role, each key of that role that manages access at the grant's
     /// unit. Its own grants that apply now are its own hold, so a seat that manages seats suspends itself.

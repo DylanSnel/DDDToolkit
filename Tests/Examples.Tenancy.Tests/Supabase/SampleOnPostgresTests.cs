@@ -541,6 +541,64 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
     }
 
     /// <summary>
+    /// Tenancy's policy on the seats lets a seat write its own row, and a seat that manages seats or grants anywhere in
+    /// the tenant write any seat's row, since every save of a seat writes its version. Tenancy holds its own columns of
+    /// the row, and decides nothing about the sample's: its column rule holds a seat's name to the rule of
+    /// <c>RenameSeat</c>, and the job title, which no command changes, is as writable as the row. A statement that goes
+    /// round the application renames a seat only as the seat itself or as a seat that manages seats for the whole
+    /// tenant, and changes no seat's identity or tenant, whoever sends it.
+    /// </summary>
+    [Fact]
+    public async Task A_statement_that_goes_round_the_application_renames_a_seat_only_by_the_rule_of_RenameSeat_and_moves_no_seat()
+    {
+        await using var sample = await StartedAsync();
+        var leo = Harbor.SeatOf(DemoPeople.Leo).Value;
+
+        async Task<int> ChangeAsync(DemoPerson by, string set)
+        {
+            await using var connection = await AsSeatAsync(sample, by, Harbor);
+            await using var command = new NpgsqlCommand($"""UPDATE tenancy."Seats" SET {set} WHERE "Id" = '{leo}'""", connection);
+            return await command.ExecuteNonQueryAsync(Cancellation);
+        }
+
+        async Task ShouldBeRefusedAsync(DemoPerson by, string set, string guard)
+        {
+            var refused = (await FluentActions.Awaiting(() => ChangeAsync(by, set)).Should().ThrowAsync<PostgresException>(set)).Which;
+            (refused.SqlState, refused.Hint, refused.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "ddd:access.refused", guard), "{0} may not: {1}", by.Name, set);
+        }
+
+        // Hana gives roles at the root and rhea manages seats at North, where leo is: the policy lets each of them write
+        // leo's row, and the sample's column rule keeps his name from both.
+        await ShouldBeRefusedAsync(DemoPeople.Hana, "\"DisplayName\" = 'Leo, by Hana'", "seats_displayname_column_rule");
+        await ShouldBeRefusedAsync(DemoPeople.Rhea, "\"DisplayName\" = 'Leo, by Rhea'", "seats_displayname_column_rule");
+
+        // Leo renames himself, and maud, who manages seats for the whole tenant, renames him again.
+        (await ChangeAsync(DemoPeople.Leo, "\"DisplayName\" = 'Leo Marsh'")).Should().Be(1);
+        (await ChangeAsync(DemoPeople.Maud, "\"DisplayName\" = 'Leopold'")).Should().Be(1);
+
+        // The job title has no rule of the sample's: whoever may write the row writes it.
+        (await ChangeAsync(DemoPeople.Hana, "\"JobTitle\" = 'Surveyor'")).Should().Be(1);
+
+        // What a seat is, Tenancy holds: nobody links leo's seat to another account, ada and leo himself included. Nor
+        // does anybody move it to meadow: the exported privileges leave the tenant, as on every table kept to a
+        // tenant, and the key out of the columns a caller may change at all, so Postgres refuses those before the
+        // trigger is asked, as a privilege missing rather than as a guard.
+        await ShouldBeRefusedAsync(DemoPeople.Ada, "\"Identity\" = gen_random_uuid()", "tenancy_seat_identity_is_fixed");
+        await ShouldBeRefusedAsync(DemoPeople.Leo, "\"Identity\" = gen_random_uuid()", "tenancy_seat_identity_is_fixed");
+        foreach (var set in new[] { $"\"TenantId\" = '{Meadow.Id.Value}'", "\"Id\" = gen_random_uuid()" })
+        {
+            var moved = (await FluentActions.Awaiting(() => ChangeAsync(DemoPeople.Ada, set)).Should().ThrowAsync<PostgresException>(set)).Which;
+            (moved.SqlState, moved.ConstraintName).Should().Be((PostgresErrorCodes.InsufficientPrivilege, null), set);
+        }
+
+        // What was let through is all that changed.
+        await using var owner = new NpgsqlConnection(sample.Database.AsMigrationRole);
+        await owner.OpenAsync(Cancellation);
+        (await RowAsync(owner, $"SELECT \"DisplayName\", \"JobTitle\", \"Identity\" = '{DemoPeople.Leo.Id}' FROM tenancy.\"Seats\" WHERE \"Id\" = '{leo}'"))
+            .Should().Equal("Leopold", "Surveyor", true);
+    }
+
+    /// <summary>
     /// The policy for changing a project counts the key to open projects at the project's unit too, because a
     /// project that is moved has to pass where it arrives. So a seat that may only open projects at a unit gets
     /// past that policy for every project there, and holds none of the keys the commands on a project ask. The

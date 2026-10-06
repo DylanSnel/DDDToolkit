@@ -139,6 +139,55 @@ public sealed class TenancyPostgres : IAsyncLifetime
             .Select(each => each.Script)];
     }
 
+    /// <summary>The role that owns the tables and the functions of a database <see cref="ForceAsync"/> forced: it bypasses the policies.</summary>
+    public const string MigrationRole = "tenancy_forced_migrations";
+
+    /// <summary>
+    /// Writes the access files of <paramref name="database"/> again with every policy forced on the tables' owner,
+    /// from <paramref name="rules"/> or the widgets' own, and hands the tables, the functions and the schemas to
+    /// <see cref="MigrationRole"/>, which may bypass the policies, as the role that runs an application's migrations
+    /// does: under forced policies the functions that run as their owner see nothing otherwise. The application keeps
+    /// logging in as the role that owned them, which now owns nothing and becomes its callers' roles.
+    /// </summary>
+    public static async Task ForceAsync(TestDatabase database, CancellationToken cancellationToken, IReadOnlyList<RowAccessRule>? rules = null)
+    {
+        foreach (var script in AccessScripts(rules: rules, names: database.Names, export: written => new RowAccessExport { Roles = written.Roles, Contributions = written.Contributions, ForceRowLevelSecurity = true }))
+        {
+            await ExecuteAsync(database.ConnectionString, script, cancellationToken);
+        }
+
+        // The role is the server's, and a test of another class may be making it at the same time: the second finds it.
+        await ExecuteAsync(database.SuperuserConnectionString, $"""
+            DO $roles$
+            DECLARE
+                owned record;
+            BEGIN
+                BEGIN
+                    CREATE ROLE {MigrationRole} NOLOGIN BYPASSRLS;
+                EXCEPTION WHEN duplicate_object OR unique_violation THEN
+                    NULL;
+                END;
+
+                FOR owned IN
+                    SELECT pg_catalog.format('ALTER TABLE %I.%I OWNER TO {MigrationRole}', n.nspname, c.relname) AS statement
+                    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets') AND c.relkind = 'r'
+                    UNION ALL
+                    SELECT pg_catalog.format('ALTER ROUTINE %s OWNER TO {MigrationRole}', p.oid::pg_catalog.regprocedure)
+                    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets')
+                    UNION ALL
+                    SELECT pg_catalog.format('ALTER SCHEMA %I OWNER TO {MigrationRole}', n.nspname)
+                    FROM pg_catalog.pg_namespace n
+                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets')
+                LOOP
+                    EXECUTE owned.statement;
+                END LOOP;
+            END
+            $roles$;
+            """, cancellationToken);
+    }
+
     /// <summary>Tenancy's context on Npgsql under the default names, for its model: it never connects.</summary>
     public static TestTenancyContext TenancyModel() => TenancyNaming.Default.TenancyModel();
 

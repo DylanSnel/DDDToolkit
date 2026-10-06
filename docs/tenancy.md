@@ -1703,9 +1703,12 @@ leaves out there.
 
 The field is yours to guard as well. On Postgres, Tenancy's policies let every seat of a tenant, and the
 person a row is for, read the seats' rows, your columns with them; and they let a seat change its own row, and
-a seat that manages seats or grants anywhere in the tenant change any seat's row. So a name may be read and
-changed that way by more callers than your own rule names, and a field you would show to fewer people, or keep
-from the person themself or from those managers, belongs in a table of your own, with a rule of your own.
+a seat that manages seats or grants anywhere in the tenant change any seat's row, since every save of a seat
+writes its version. Tenancy guards its own columns of the row and decides nothing about yours: who may change a
+name is said by a column rule of yours, as the sample's says it for the rule of its command
+([What the database guards on a seat](#what-the-database-guards-on-a-seat)). A column rule holds a change and
+never a read, so a field you would show to fewer people than every member of the tenant belongs in a table of
+your own, with a rule of your own.
 
 <details>
 <summary>Show the code: a name per tenant, the provider's name, and a profile of your own</summary>
@@ -1775,7 +1778,8 @@ The sample keeps a name per tenant on its `Seat`, with its rule (`tenants.seat.d
 Dutch): its demo seeder names each seat in the callbacks, `POST /invitations/accept` takes the name the person
 gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its own command `RenameSeat`, and
 `SeatListing` is the view every answer about a seat goes through, in REST, in GraphQL and in the access history,
-the tenant picker's `GET /me/seats` and `seatsOfMine` included, through `SeatOfMine.Of`.
+the tenant picker's `GET /me/seats` and `seatsOfMine` included, through `SeatOfMine.Of`. In the database its
+column rule `NameChangesByTheSeatOrWithTheSeatsKey` holds the name to the rule of `RenameSeat`.
 
 ## Who may give a role
 
@@ -2962,7 +2966,7 @@ nothing about a project, as a query that declares `MemberAccess.SeenWith` is fil
 | `MakePlacement`, `WithdrawPlacement` | `tenancy.seats.manage` at the unit | that a seat does not place itself; for a withdrawal, what taking each role away would need |
 | `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit | for a role that manages access, that the caller holds its keys that do, there and for long enough, and never gives it to itself; that the tenant keeps an administrator |
 | `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant | what taking or giving each of the seat's roles would need; that the tenant keeps an administrator |
-| `RenameSeat` | a caller that works in a tenant | no use case of the package: the name is the sample's own field, and its handler asks the sample's own rule, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)) |
+| `RenameSeat` | a caller that works in a tenant | no use case of the package: the name is the sample's own field, and its handler asks the sample's own rule, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)), and a column rule of the sample's holds the name to the same rule in the database ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
 | `CreateTenantRole`, `SetRoleKeys`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant | that only an administrator adds, takes out or archives what manages access |
 | `InvitePerson` | `tenancy.seats.manage` for the whole tenant | `tenancy.grants.manage` at the unit, and the rule every grant is held to |
 | `CancelInvitation` | a caller that works in a tenant | `tenancy.seats.manage` at the invitation's unit, which only the use case reads; anyone else is told there is no such invitation |
@@ -4342,6 +4346,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
 | The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsKey.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
 | A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `projects.project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
 | Connections are budgeted per purpose: one pool for requests and one for background work | **Code:** [`PostgresPools.cs`](../Examples/Shared/Examples.Hosting/PostgresPools.cs), [`ContextsByPurpose.cs`](../Examples/Shared/Examples.Hosting/ContextsByPurpose.cs)<br/>**Try it:** `Sample:Pools:Requests` and `Sample:Pools:Background`, in the host's settings<br/>**Test:** `SampleOnPostgresTests` |
@@ -4929,7 +4934,7 @@ tenant reads through the use cases, and writes where the use case asks the key:
 | Tenants, Organizations | the tenant; and the tenants where the person has a seat, which the tenant picker lists | the tenant with `tenancy.settings.manage` for the whole tenant, and never its status; the organization with that, or with `tenancy.units.manage` held |
 | OrganizationUnits | the tenant's | with `tenancy.units.manage` at the parent to add, at the unit or at its parent to rename or move, and at the new parent for a move; a unit that has a parent is never left without one, since a key held at a root is held for the whole tenant |
 | OrganizationUnitPaths | the tenant's | with `tenancy.units.manage` held; the trigger checks the rest |
-| Seats | the tenant's, and the person's own in any tenant | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage`, or by the seat itself; its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (a trigger, below) |
+| Seats | the tenant's, and the person's own in any tenant | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage` held anywhere, or by the seat itself, since every save of a seat writes its version; its id, identity and tenant by no seat, and its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (triggers, below); your own columns as your column rules say ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
 | SeatPlacements | the tenant's | placed with `tenancy.seats.manage` at the unit, for a seat of the tenant; withdrawn with it there, or by the seat itself, once the placement holds no grant; changed with it held, and made primary only where it is held at the unit, since making one primary demotes the old one wherever that is |
 | SeatRoleGrants | the seat's own; another seat's where the caller manages grants, seats or units at the grant's unit or above it, or roles for the whole tenant ([who reads which grants](#who-reads-which-grants)) | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
 | SeatRights | the seat's own | by no caller: the database writes them |
@@ -4947,9 +4952,10 @@ it manages grants, seats or units, or everywhere when it manages roles for the w
 
 A seat takes away its own grants and placements without the keys the use cases ask for: taking away
 its own access never gives it any, and the same save removes its keys before the rows that would need them.
-A placement, a grant and a seat keep what they are about: the triggers below refuse a change of a placement's
-seat, unit or tenant, of a grant's seat, unit, role or giver, and of a seat's identity or tenant. The use
-cases never change these, and each such change would move a row past the checks its policy makes of a new one.
+A placement and a grant keep what they are about, and a seat what it is: the triggers below refuse a change of a
+placement's seat, unit or tenant, of a grant's seat, unit, role or giver, and, to every caller but Tenancy's
+system work in the seat's tenant, of a seat's id, identity or tenant. The use cases never change these, and each such change would move a row past
+the checks its policy makes of a new one, or hand a seat to another account.
 
 **Roles that manage access.** `manages_access(key)` is written from your catalogue, Tenancy's five keys that
 manage access and the ones you mark. A grant of a role that holds a key that manages access is given, changed and taken away
@@ -5009,13 +5015,16 @@ write the tenant into such a rule yourself.
 
 **Your own entities on Tenancy's classes**, such as a note on a tenant, are read with the row they belong
 to, in the caller's tenant, and written by whoever may change that row. Tenancy's tables, and these, are the
-contribution's alone: a rule or another contribution that would add a policy to one is refused.
+contribution's alone: a rule or another contribution that would add a policy to one is refused. A
+[column rule](row-level-security.md#column-rules) adds no policy, so one of yours may hold a column you added to
+one of Tenancy's classes; it cannot hold an entity's table, whose rows follow the row they belong to
+([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
 
 **The triggers** that check, next to the one that writes the rights, fire for every role, the tables' owner
 included. A use case trips the first only in a race with another that takes away an administrator, and the one
 on a seat's status only when the calling seat loses a key between the use case's check and its save; the others,
-the one on what a role's pack gave it included, it never trips. The first three check at commit what the
-transaction wrote, the last three as the row changes:
+the ones on what a seat is and on what a role's pack gave it included, it never trips. The first three check at
+commit what the transaction wrote, the last four as the row changes:
 
 - a tenant, active or suspended, keeps an administrator: a seat that holds `tenancy.roles.manage` at the root
   with no end, through an active role, and is active itself. A closed tenant needs none, and a tenant that has
@@ -5025,8 +5034,12 @@ transaction wrote, the last three as the row changes:
 - every right a seat holds comes from a grant of an active role of its tenant that holds the key, for the
   grant's period;
 - the paths of a unit are exactly the units above it and itself, in its tenant;
-- a seat keeps the identity and the tenant it was made with, a placement its seat, unit and tenant, a grant
-  its seat, unit, role and the seat that gave it, and a role the pack it was made from;
+- a placement keeps its seat, unit and tenant, a grant its seat, unit, role and the seat that gave it, and a role
+  the pack it was made from;
+- a seat keeps the id, the identity and the tenant it was made with, which no use case changes. No seat changes
+  them, whatever it manages, and neither does the tables' owner: only Tenancy's system work in the seat's tenant,
+  so that a one-off of yours can link a seat to another identity, and the policies keep that work to its tenant
+  ([What the database guards on a seat](#what-the-database-guards-on-a-seat));
 - a seat's status changes only by a seat that could give and take away what the status gives and takes
   away. The rights follow the status: a seat made active again gets every grant back, and one suspended or
   deactivated loses them. So the calling seat holds `tenancy.seats.manage` for the whole tenant, as the use
@@ -5041,12 +5054,13 @@ transaction wrote, the last three as the row changes:
 
 The first four hold what may never be, whoever writes, and raise `check_violation`: a use case that trips one
 has a bug, and fails as one, except the last administrator, which Tenancy's store answers with the use case's
-own refusal. The last two are access guards: they hold who may, and refuse as a policy does, with `42501` and the
+own refusal. The last three are access guards: they hold who may, and refuse as a policy does, with `42501` and the
 toolkit's hint.
 
-A save a policy or one of those two triggers denies is refused with `access.refused`, a refusal of the kind "not
+A save a policy or one of those three triggers denies is refused with `access.refused`, a refusal of the kind "not
 permitted": an insert or an update whose new row a policy refuses, a status the calling seat lost a key for
-between the use case's check and its save, and an update or a delete of a row a policy hides from the statement.
+between the use case's check and its save, a seat's identity changed behind the aggregate's back, and an update
+or a delete of a row a policy hides from the statement.
 That last one changes no row, exactly as a lost race does, so the row is read again first; a row somebody else
 changed or removed stays a concurrency conflict. See [When the database refuses](row-level-security.md#when-the-database-refuses).
 It is logged after asking the request's access check again
@@ -5055,6 +5069,131 @@ request that requires a key, `ForTheWholeTenant` or `AtUnit`, is refused by that
 the key, and an information line says that the seat's rights changed between the check and the save. What a use
 case of Tenancy's checks past what its request declares, behind `InTenant()` say, is not asked again: a save of
 such a request that the database denies stays a warning, which names the requirement it asked.
+
+### What the database guards on a seat
+
+A seat's row holds Tenancy's columns and yours side by side: its id, its tenant, the identity of the person it
+belongs to, its status and the version the toolkit keeps of every aggregate, and whatever your seat class adds, a
+name or a job title. A policy is asked of a row and never of a column, and every save of a seat writes its
+version: a placement and a grant as much as a status, and a command of yours that renames it. So the policy on the
+seats lets the row be changed by every caller one of those use cases admits: a seat that manages seats or grants
+anywhere in the tenant, and the seat itself, which takes away what is its own and may be renamed by its own
+command.
+
+It asks those keys anywhere, and not at the seat's units, on purpose. The seats key places any seat of the tenant
+at the caller's unit, so anywhere is what that use case asks. The grants key could be asked at the units the seat
+is placed at, which is all a grant needs, but the policy is also all that lets your own commands write the row:
+you cannot widen it, since Tenancy keeps the table to itself, and you narrow it column by column with column
+rules. Holding it to the units would decide for you which of your fields a grants manager writes. Beside the
+policy, Tenancy holds its own columns one by one, and leaves yours to you:
+
+```mermaid
+flowchart LR
+    Update["An UPDATE<br/>of a seat"] --> Policy{"may the caller<br/>change the row?"}
+    Policy -- no --> Skipped(["the statement<br/>skips the row"])
+    Policy -- "yes: itself, or seats<br/>or grants managed<br/>anywhere" --> Column{"which column<br/>changes?"}
+    Column -- "id, identity,<br/>tenant" --> System{"Tenancy's system<br/>work in its tenant?"}
+    Column -- status --> Status{"seats key for the<br/>tenant, and the keys<br/>of its grants?"}
+    Column -- "a column<br/>of yours" --> Yours{"your column<br/>rule allows it,<br/>or you have none?"}
+    Column -- version --> Written(["written"])
+    System -- yes --> Written
+    Status -- yes --> Written
+    Yours -- yes --> Written
+    System -- no --> Refused(["refused: 42501,<br/>access.refused"])
+    Status -- no --> Refused
+    Yours -- no --> Refused
+```
+
+- **What a seat is, no seat changes.** The id, the identity and the tenant stay what the seat was made with, for
+  every seat, whatever it manages, its own row included. The identity links the seat to a person's account, so a
+  seat that wrote another one into it would hand the seat, and every key it holds, to that account; a seat moved
+  to another tenant would leave its placements, grants and rights in the first; and a seat given another id would
+  leave every row that names it naming none. A trigger refuses each as a policy refuses, `42501` with the
+  toolkit's hint, so a save that tries is `access.refused`. No use case of Tenancy changes them once the seat is
+  made: provisioning, adding a seat, accepting an invitation and an import write all three as they make the seat,
+  an insert. Only Tenancy's system work in the seat's tenant passes, the scoped system role that
+  `TenancyWork.BeginSystemIn` begins, so that a one-off of yours can link a seat to the identity another sign-in
+  provider gives the same person, with an `ExecuteUpdate` of the seat inside it (the code is below). The policies
+  keep that work to Tenancy's scope and to its tenant, so it moves no seat to another tenant. Anything else changes
+  none of them: background work under `Caller.System`, and a migration or the SQL editor running as the tables'
+  owner, which the trigger refuses as it refuses a seat. Where the export
+  [writes the privileges](row-level-security.md#privileges-from-the-policies), the id, a key, and the tenant, as on
+  every table kept to a tenant, are no column a caller may update at all, and Postgres refuses those before the
+  trigger is asked, as a privilege missing.
+- **The status changes as the use cases change it**, only by a seat that holds `tenancy.seats.manage` for the
+  whole tenant and the keys that manage access of the seat's grants ([What the policies check](#what-the-policies-check)).
+- **The version is the row's.** Every save of the seat writes it, a save of your own commands included, so whoever
+  may change the row writes it, and nothing more holds it. A seat that gives roles at one unit may so write the
+  version of a seat it gives nothing to: that changes nothing the seat holds, and makes a save of that seat at the
+  same moment a concurrency conflict, as a seats manager anywhere could already.
+- **Your columns are yours.** Tenancy reads none of them and decides nothing about them, so each is as writable as
+  the row: by the seat itself, and by a seat that manages seats or grants anywhere in the tenant. Where your
+  command asks more than that, hold the column to your command's rule with a
+  [column rule](row-level-security.md#column-rules) of yours, written where your other rules are, beside your
+  infrastructure. It adds no policy, so a table Tenancy keeps to itself takes it, and it holds the roles a caller's
+  statement runs as, never your own work in a tenant. A column rule holds a change; reading follows the row, which
+  every member of the tenant reads, so a field you would show to fewer people belongs in a table of your own. An
+  entity your seat class holds, a collection, is no column: its table is written with the seat's row, by the same
+  callers, Tenancy keeps it to itself, and no column rule holds it ([DDD00038](diagnostics.md#ddd00038)). Data
+  that needs a narrower rule belongs in a table of your own with a rule of your own, or is held by a trigger in a
+  [contribution](row-level-security.md#policies-a-package-ships) of yours, which refuses with the toolkit's hint
+  as every access guard does, as the sample's `UnitChangesWithItsKeys` holds a project's unit.
+
+<details>
+<summary>Show the code: the sample's column rule on a seat's name, the trigger that keeps what a seat is, and a one-off that links a seat to another identity</summary>
+
+The sample keeps a name per tenant on its seat, and renames it with its own command, `RenameSeat`: a seat renames
+itself, and another seat takes `tenancy.seats.manage` for the whole tenant. Its column rule says the same to the
+database. The job title has no command, and no rule: it is as writable as the row.
+
+```csharp
+// Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs
+[RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]
+public static partial class NameChangesByTheSeatOrWithTheSeatsKey
+{
+    public static bool Allows(Seat seat, Caller caller)
+        => seat.Id == TenancyRowAccess.CallerSeat<SeatId>() || TenancyRowAccess.HoldsTenantWide(RenameSeat.RequiredKey);
+}
+```
+
+What Tenancy writes for what a seat is, under the sample's names. It runs as its caller, so it asks the role the
+statement runs as:
+
+```sql
+CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = '' AS $body$
+BEGIN
+    IF CURRENT_USER IS DISTINCT FROM 'ddd_system_in' THEN
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tenancy_seat_identity_is_fixed', HINT = 'ddd:access.refused',
+            MESSAGE = 'A seat keeps the id, the identity and the tenant it was made with: only Tenancy''s system work in its tenant changes them.';
+    END IF;
+    RETURN NEW;
+END
+$body$;
+
+CREATE TRIGGER tenancy_seat_identity_is_fixed BEFORE UPDATE OF "Id", "TenantId", "Identity" ON "tenancy"."Seats"
+    FOR EACH ROW WHEN ((OLD."Id", OLD."TenantId", OLD."Identity") IS DISTINCT FROM (NEW."Id", NEW."TenantId", NEW."Identity"))
+    EXECUTE FUNCTION "tenancy".seat_identity_is_fixed();
+```
+
+A one-off of yours that links a seat to the identity another sign-in provider gave the same person runs as
+Tenancy's system work in the seat's tenant, which the trigger lets through:
+
+```csharp
+using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+{
+    await context.Set<Seat>()
+        .Where(seat => seat.Id == seatId)
+        .ExecuteUpdateAsync(set => set.SetProperty(seat => seat.Identity, newIdentity), cancellationToken);
+}
+```
+
+</details>
+
+In the sample's harbor, hana, who gives roles at the root, and rhea, who manages seats at North, may each write
+leo's row, and the column rule keeps his name from both; leo renames himself, maud, who manages seats for the whole
+tenant, renames him, and hana changes his job title, which no rule holds. Nobody, ada included, links his seat to
+another account (`SampleOnPostgresTests`).
 
 ### Who reads which grants
 
@@ -5106,10 +5245,13 @@ does not repeat it:
   suspends, deactivates or reactivates, where the trigger asks only that it holds the key now;
 - what a move may give or take away, the mover's own keys and anyone's keys that manage access, and the old
   parent's key;
-- which of a seat's columns a seats or grants manager changes, and every other change of state, such as
-  archiving a unit;
+- every change of state a policy cannot tell from another change of the row, such as archiving a unit;
 - the keys a seat needs to take away its own grants and placements, and which packs a tenant's shape
   asks for.
+
+The columns you add to Tenancy's classes are neither: Tenancy checks nothing about them, in C# or in SQL. Your
+own command's rule holds them in C#, and a column rule of yours in the database, where without one they are as
+writable as the row ([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
 
 A key you retire stops answering in C# at once. In SQL it stops once the access file that writes
 `key_is_live` again is applied: it gets no new right, and every question about the caller or the roles asks
@@ -5159,8 +5301,8 @@ its row first.
   `IgnoreQueryFilters()`, `FromSql`, `ExecuteUpdate` or a filter left out still sees and changes only that
   seat's tenant, and cannot give or take away a role at a unit the seat does not manage, move a placement or
   a grant, widen a subtree through the closure, make its unit a root, read another seat's rights, write a
-  right, change a seat's identity, give a suspended seat its grants back or take another's away by its status,
-  close its tenant, or remove the last administrator.
+  right, change a seat's id, identity or tenant, give a suspended seat its grants back or take another's away
+  by its status, close its tenant, or remove the last administrator.
 - **It does not stop SQL an attacker controls on your application's connection.** Postgres checks `SET ROLE`
   against the role that logged in, not the one in use, so any statement there can switch to the scoped system
   role or any other role the login role belongs to, and set the claims and the tenant to anything.

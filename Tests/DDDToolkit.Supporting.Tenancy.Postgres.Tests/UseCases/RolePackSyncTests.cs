@@ -24,9 +24,6 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
 {
     private const string RoleFollowedItsPack = "tenancy.role-followed-its-pack";
 
-    /// <summary>The role that owns the tables and the functions here, as the role that runs an application's migrations does: it bypasses the policies.</summary>
-    private const string Migrations = "tenancy_sync_migrations";
-
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
     [Fact]
@@ -123,11 +120,9 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
     }
 
     /// <summary>
-    /// A seeded database whose Operator role in Harbor an older version of the application made, then the access
-    /// files again with every policy forced on the tables' owner, and the tables, the functions and the schemas
-    /// handed to a role that may bypass the policies, as the role that runs an application's migrations is: under
-    /// forced policies the functions that run as their owner see nothing otherwise. The application keeps logging in
-    /// as the role that owned them, which now owns nothing and becomes its callers' roles.
+    /// A seeded database whose Operator role in Harbor an older version of the application made, then forced
+    /// (<see cref="TenancyPostgres.ForceAsync"/>): every policy holds the tables' owner, and the tables belong to a
+    /// role that bypasses them, as the role that runs an application's migrations does.
     /// </summary>
     private async Task<TestDatabase> BehindAndForcedAsync()
     {
@@ -145,39 +140,7 @@ public sealed class RolePackSyncTests(TenancyPostgres postgres)
             await owner.CommitAsync(Cancellation);
         }
 
-        foreach (var script in TenancyPostgres.AccessScripts(export: written => new RowAccessExport { Roles = written.Roles, Contributions = written.Contributions, ForceRowLevelSecurity = true }))
-        {
-            await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
-        }
-
-        await TenancyPostgres.ExecuteAsync(database.SuperuserConnectionString, $"""
-            DO $roles$
-            DECLARE
-                owned record;
-            BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{Migrations}') THEN
-                    CREATE ROLE {Migrations} NOLOGIN BYPASSRLS;
-                END IF;
-
-                FOR owned IN
-                    SELECT pg_catalog.format('ALTER TABLE %I.%I OWNER TO {Migrations}', n.nspname, c.relname) AS statement
-                    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets') AND c.relkind = 'r'
-                    UNION ALL
-                    SELECT pg_catalog.format('ALTER ROUTINE %s OWNER TO {Migrations}', p.oid::pg_catalog.regprocedure)
-                    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets')
-                    UNION ALL
-                    SELECT pg_catalog.format('ALTER SCHEMA %I OWNER TO {Migrations}', n.nspname)
-                    FROM pg_catalog.pg_namespace n
-                    WHERE n.nspname IN ('ddd', 'tenancy', 'widgets')
-                LOOP
-                    EXECUTE owned.statement;
-                END LOOP;
-            END
-            $roles$;
-            """, Cancellation);
-
+        await TenancyPostgres.ForceAsync(database, Cancellation);
         return database;
     }
 

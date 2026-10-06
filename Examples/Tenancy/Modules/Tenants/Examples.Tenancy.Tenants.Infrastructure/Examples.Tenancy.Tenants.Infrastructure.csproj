@@ -11,11 +11,12 @@
   <!--
     Where Tenancy is stored, on Postgres: the context its tables live in, marked [SupabaseMigrations], with its
     migrations (the build writes the design-time factory dotnet ef and the Supabase export make it with beside it),
-    the adapter of the application project's port, the start-up checks, and AddTenantsInfrastructure, which
-    registers them. It declares none of the tenancy classes and none of the ids, and gets modelBuilder.AddTenancy(),
-    services.AddTenancy<TContext>() and the ids' converters anyway, generated from what the domain and contracts
-    projects declare, because it declares the same module. Only the module's entry, in the API project, calls its
-    registration; the host does not reference this project.
+    the adapter of the application project's port, the start-up checks, what the database holds about the module's
+    own field on the seat (Access: a column rule, which the export writes as a trigger), and
+    AddTenantsInfrastructure, which registers the rest. It declares none of the tenancy classes and none of the ids,
+    and gets modelBuilder.AddTenancy(), services.AddTenancy<TContext>() and the ids' converters anyway, generated
+    from what the domain and contracts projects declare, because it declares the same module. Only the module's
+    entry, in the API project, calls its registration; the host does not reference this project.
   -->
 
   <ItemGroup>

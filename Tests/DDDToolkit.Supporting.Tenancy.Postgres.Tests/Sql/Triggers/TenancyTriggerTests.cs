@@ -335,7 +335,7 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
     }
 
     [Fact]
-    public async Task A_seats_identity_or_tenant_cannot_change_by_a_query()
+    public async Task A_seats_id_identity_or_tenant_changes_by_a_query_of_system_work_alone()
     {
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
 
@@ -343,14 +343,21 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
         [
             "UPDATE tenancy.\"Seats\" SET \"Identity\" = gen_random_uuid() WHERE \"Id\" = $1",
             "UPDATE tenancy.\"Seats\" SET \"TenantId\" = 2 WHERE \"Id\" = $1",
+            "UPDATE tenancy.\"Seats\" SET \"Id\" = gen_random_uuid() WHERE \"Id\" = $1",
         ];
 
         foreach (var change in changes)
         {
-            // Ada may change any seat of Harbor; the owner is past every policy. Neither changes these.
+            // Ada may change any seat of Harbor, and Oli his own; the owner is past every policy. None of them changes
+            // these, and each is refused as a policy refuses, so a save is answered with access.refused.
             await using (var ada = await AsCaller.PersonAsync(database, Ada.Identity, Harbor, Cancellation))
             {
                 (await IdentityRefusedAsync(ada, change)).Should().Be("tenancy_seat_identity_is_fixed");
+            }
+
+            await using (var oli = await AsCaller.PersonAsync(database, Oli.Identity, Harbor, Cancellation))
+            {
+                (await IdentityRefusedAsync(oli, change)).Should().Be("tenancy_seat_identity_is_fixed");
             }
 
             await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))
@@ -359,14 +366,29 @@ public abstract class TenancyTriggerTests(TenancyPostgres postgres, TenancyNamin
             }
         }
 
+        // Tenancy's system work in the seat's tenant links the seat to another identity, as a one-off of the
+        // application's own would after a new sign-in provider, and moves it to no other tenant: the policy that keeps
+        // it to its tenant refuses the new row.
+        await using (var system = await AsCaller.SystemInAsync(database, Harbor, TenancyWork.SystemScope, Cancellation))
+        {
+            (await system.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Identity\" = gen_random_uuid() WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value)).Should().Be(1);
+            var moved = (await FluentActions.Awaiting(() => system.AttemptAsync("UPDATE tenancy.\"Seats\" SET \"TenantId\" = 2 WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value))
+                .Should().ThrowAsync<PostgresException>()).Which;
+            (moved.SqlState, moved.Hint).Should().Be((PostgresErrorCodes.InsufficientPrivilege, null), "a policy refused the new row, and no trigger");
+        }
+
         // Anything else about the seat changes, and the same values again are no change.
         await using var same = await AsCaller.OwnerAsync(database, Cancellation);
-        (await same.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Identity\" = \"Identity\", \"TenantId\" = \"TenantId\", \"DisplayName\" = 'Oliver' WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value))
+        (await same.ExecuteAsync("UPDATE tenancy.\"Seats\" SET \"Id\" = \"Id\", \"Identity\" = \"Identity\", \"TenantId\" = \"TenantId\", \"DisplayName\" = 'Oliver' WHERE \"Id\" = $1", Cancellation, Oli.Seat.Value))
             .Should().Be(1);
         await same.CommitAsync(Cancellation);
 
         async Task<string?> IdentityRefusedAsync(AsCaller caller, string change)
-            => (await FluentActions.Awaiting(() => caller.ExecuteAsync(change, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>()).Which.ConstraintName;
+        {
+            var refused = (await FluentActions.Awaiting(() => caller.ExecuteAsync(change, Cancellation, Oli.Seat.Value)).Should().ThrowAsync<PostgresException>(change)).Which;
+            (refused.SqlState, refused.Hint).Should().Be((PostgresErrorCodes.InsufficientPrivilege, "ddd:access.refused"), change);
+            return refused.ConstraintName;
+        }
     }
 
     [Fact]

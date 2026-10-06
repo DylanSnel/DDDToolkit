@@ -1582,6 +1582,28 @@ everywhere, rather than write such a policy.
   toolkit's hint, as every access guard the toolkit writes refuses. Through Entity Framework the save is refused as one
   a policy refuses is: a `RefusalException` with the code `access.refused`, and a warning that names the
   trigger. See [When the database refuses](#when-the-database-refuses).
+- **It holds a field of yours on a package's class as well.** A package that ships a class you derive from, Tenancy's
+  seat say, writes the policies of its table itself and guards its own columns there, and nothing you add. Its
+  table is one the package [keeps to itself](#policies-a-package-ships), where a rule that would add a policy is
+  refused; a column rule adds none, so it is taken there like anywhere else.
+
+The policy on Tenancy's seats lets a seat change its own row, and a seat that manages seats or grants anywhere in
+the tenant change any seat's row, since every save of a seat writes its version. A job title you add to your seat
+class is as writable as that, because the package decides nothing about it. Whether to hold it, and to what, is
+yours to say, with the key your command that changes it asks:
+
+```csharp
+[RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.JobTitle)])]
+public static partial class JobTitlesChangeWithTheSeatsKey
+{
+    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.HoldsTenantWide(TenancyKeys.SeatsManage);
+}
+```
+
+A seat that gives roles at one unit may then still write every seat's row, and none of their job titles. The sample
+holds a seat's name the same way, to the rule of its own command that renames one, the seat itself or a seat that
+manages seats for the whole tenant, and leaves its job title as writable as the row. See
+[What the database guards on a seat](tenancy.md#what-the-database-guards-on-a-seat).
 
 [DDD00038](diagnostics.md#ddd00038) reports a column rule for another operation than `Change`, which are about
 whole rows; a name in `Columns` that is no property of the aggregate or of a value object it holds, or is a
@@ -1839,7 +1861,9 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   one name on a table are refused, naming both. Every table a contributed policy names gets row level
   security.
 - **Tables a contribution keeps to itself**, its `ExclusiveTables`, get row level security and policies
-  from it alone: a rule, or another contribution, that would add one is refused, naming both.
+  from it alone: a rule, or another contribution, that would add one is refused, naming both. A
+  [column rule](#column-rules) adds no policy, and holds a column of such a table all the same: a field the
+  application added to the package's class, say.
 - **Statements** come last, one statement each, and can run again: triggers and the functions they run.
   A statement's function gets no grants from the script, so only a trigger's may be `SECURITY DEFINER`,
   since nobody can call a trigger function on its own, and it says `SET search_path = ''`, since the
@@ -1880,7 +1904,7 @@ somebody else changed it first. That case is told apart by reading the row again
   it is about, and a missing privilege is `42501` too. So an access guard says it is one: SQLSTATE `42501`, its
   own name as the constraint, and the hint `ddd:access.refused`. Every access guard the toolkit writes does: the
   trigger of a [column rule](#column-rules), the Membership package's lock on an owner column, and Tenancy's
-  triggers on a seat's status and on who changed a row.
+  triggers on what a seat is, on a seat's status, on what a role's pack gave it and on who changed a row.
 - **It stays `42501`, with a hint, rather than a code of the toolkit's own.** `42501` is what every tool already
   reads as "not allowed": the Data API answers it with a 403, and a pgTAP test that expects a refusal expects it.
   To those a code of the toolkit's own would be a failure of another kind. The hint of a `RAISE` is the

@@ -225,7 +225,12 @@ as start-up checks, which `services.RunStartupChecks()` runs with the others. A 
 set-shaped: once per statement, never per row. There a seat reads its own rights and grants, and another seat's
 grants only at the units where it holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage`,
 or all of them with `tenancy.roles.manage` for the whole tenant; `ITenancyQuestions.SeatsHoldingAt` answers by the
-same rule on every database. See `tenancy.md`, "On Postgres: the second lock" and "Who reads which grants".
+same rule on every database. The database guards Tenancy's own columns of a seat (no seat changes its id, identity
+or tenant; its status only as the use cases do) and none of yours: a field you add to the seat class is as writable
+as the row, by the seat itself and by a seat that manages seats or grants anywhere in the tenant, until a column
+rule of yours holds it to your command's rule, beside your infrastructure:
+`[RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]`.
+See `tenancy.md`, "On Postgres: the second lock", "Who reads which grants" and "What the database guards on a seat".
 
 ## A module on Tenancy, as the sample lays it out
 

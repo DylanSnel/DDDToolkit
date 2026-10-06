@@ -14,8 +14,11 @@ namespace Examples.Tenancy.Tenants.Application.Seats.Commands;
 /// tenant, so nobody is refused before the handler; the handler asks the rest of the rule itself, as only it knows
 /// which seat is renamed. System work in the tenant holds every key there.
 /// <para>
-/// On Postgres the database's policy on the seats lets the same callers change the row, and more: a seat that
-/// manages seats or grants anywhere. The handler's rule is the narrower one, and the policy is the floor beneath it.
+/// On Postgres the database holds the name to the same rule. Tenancy's policy on the seats lets more callers change
+/// the row, a seat that manages seats or grants anywhere in the tenant, since every save of a seat writes its version;
+/// the package guards its own columns of the row and decides nothing about this module's. So the module's column rule,
+/// <c>NameChangesByTheSeatOrWithTheSeatsKey</c> beside its infrastructure, holds the name to this rule for a
+/// statement that goes round the handler, and a save it refuses is <c>access.refused</c>.
 /// </para>
 /// </remarks>
 /// <param name="Seat">The seat.</param>
