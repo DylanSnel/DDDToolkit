@@ -85,7 +85,7 @@ public partial record Address(string Street, string City)
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 ```
 
-58 lines in, 981 lines out, in 16 files.
+58 lines in, 995 lines out, in 16 files.
 
 ## Why generate it
 
