@@ -483,83 +483,6 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
                 });
 
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<long>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Organizations", "tenancy");
-
-                    b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "Id");
-                });
-
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("FromPack")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.PrimitiveCollection<string[]>("Keys")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.PrimitiveCollection<string[]>("KeysFromPack")
-                        .HasColumnType("text[]");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("NormalizedName")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "NormalizedName")
-                        .IsUnique()
-                        .HasAnnotation("DDDToolkit:RefusesAs:Code", "tenancy.role-name-taken")
-                        .HasAnnotation("DDDToolkit:RefusesAs:Kind", "Conflict")
-                        .HasAnnotation("DDDToolkit:RefusesAs:Message", "The tenant has a role named {Name} already.");
-
-                    b.ToTable("Roles", "tenancy");
-
-                    b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
-                });
-
             modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat", b =>
                 {
                     b.Property<Guid>("Id")
@@ -647,6 +570,83 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                     b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "Id");
                 });
 
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Organizations", "tenancy");
+
+                    b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "Id");
+                });
+
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Role", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("FromPack")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.PrimitiveCollection<string[]>("Keys")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.PrimitiveCollection<string[]>("KeysFromPack")
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique()
+                        .HasAnnotation("DDDToolkit:RefusesAs:Code", "tenancy.role-name-taken")
+                        .HasAnnotation("DDDToolkit:RefusesAs:Kind", "Conflict")
+                        .HasAnnotation("DDDToolkit:RefusesAs:Message", "The tenant has a role named {Name} already.");
+
+                    b.ToTable("Roles", "tenancy");
+
+                    b.HasAnnotation("DDDToolkit:Tenancy:TenantProperty", "TenantId");
+                });
+
             modelBuilder.Entity("DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyInvitationDigest<Examples.Tenancy.Tenants.Contracts.ValueObjects.InvitationId, Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId>", b =>
                 {
                     b.HasOne("Examples.Tenancy.Tenants.Domain.Aggregates.Invitations.Invitation", null)
@@ -654,59 +654,6 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DDDToolkit.Supporting.Tenancy.EntityFramework.TenancyInvitationDigest<Examples.Tenancy.Tenants.Contracts.ValueObjects.InvitationId, Examples.Tenancy.Tenants.Contracts.ValueObjects.TenantId>", "InvitationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
-                {
-                    b.OwnsMany("Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit", "Units", b1 =>
-                        {
-                            b1.Property<Guid>("Id")
-                                .HasColumnType("uuid");
-
-                            b1.Property<string>("CostCentre")
-                                .HasColumnType("text");
-
-                            b1.Property<string>("Kind")
-                                .HasMaxLength(16)
-                                .HasColumnType("character varying(16)");
-
-                            b1.Property<string>("Name")
-                                .IsRequired()
-                                .HasMaxLength(200)
-                                .HasColumnType("character varying(200)");
-
-                            b1.Property<Guid?>("ParentId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<string>("Status")
-                                .IsRequired()
-                                .HasMaxLength(32)
-                                .HasColumnType("character varying(32)");
-
-                            b1.Property<Guid>("TenantId")
-                                .HasColumnType("uuid");
-
-                            b1.HasKey("Id");
-
-                            b1.HasIndex("ParentId");
-
-                            b1.HasIndex("TenantId");
-
-                            b1.HasIndex(new[] { "TenantId" }, "IX_OrganizationUnits_TenantId_WhereRoot")
-                                .IsUnique()
-                                .HasDatabaseName("IX_OrganizationUnits_TenantId_WhereRoot")
-                                .HasFilter("\"ParentId\" IS NULL")
-                                .HasAnnotation("DDDToolkit:RefusesAs:Code", "tenancy.one-root")
-                                .HasAnnotation("DDDToolkit:RefusesAs:Kind", "Conflict")
-                                .HasAnnotation("DDDToolkit:RefusesAs:Message", "The tree has one root, no more and no fewer.");
-
-                            b1.ToTable("OrganizationUnits", "tenancy");
-
-                            b1.WithOwner()
-                                .HasForeignKey("TenantId");
-                        });
-
-                    b.Navigation("Units");
                 });
 
             modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Aggregates.Seats.Seat", b =>
@@ -784,6 +731,59 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Placements");
+                });
+
+            modelBuilder.Entity("Examples.Tenancy.Tenants.Domain.Organization", b =>
+                {
+                    b.OwnsMany("Examples.Tenancy.Tenants.Domain.Aggregates.Organizations.Entities.OrganizationUnit", "Units", b1 =>
+                        {
+                            b1.Property<Guid>("Id")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("CostCentre")
+                                .HasColumnType("text");
+
+                            b1.Property<string>("Kind")
+                                .HasMaxLength(16)
+                                .HasColumnType("character varying(16)");
+
+                            b1.Property<string>("Name")
+                                .IsRequired()
+                                .HasMaxLength(200)
+                                .HasColumnType("character varying(200)");
+
+                            b1.Property<Guid?>("ParentId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("Status")
+                                .IsRequired()
+                                .HasMaxLength(32)
+                                .HasColumnType("character varying(32)");
+
+                            b1.Property<Guid>("TenantId")
+                                .HasColumnType("uuid");
+
+                            b1.HasKey("Id");
+
+                            b1.HasIndex("ParentId");
+
+                            b1.HasIndex("TenantId");
+
+                            b1.HasIndex(new[] { "TenantId" }, "IX_OrganizationUnits_TenantId_WhereRoot")
+                                .IsUnique()
+                                .HasDatabaseName("IX_OrganizationUnits_TenantId_WhereRoot")
+                                .HasFilter("\"ParentId\" IS NULL")
+                                .HasAnnotation("DDDToolkit:RefusesAs:Code", "tenancy.one-root")
+                                .HasAnnotation("DDDToolkit:RefusesAs:Kind", "Conflict")
+                                .HasAnnotation("DDDToolkit:RefusesAs:Message", "The tree has one root, no more and no fewer.");
+
+                            b1.ToTable("OrganizationUnits", "tenancy");
+
+                            b1.WithOwner()
+                                .HasForeignKey("TenantId");
+                        });
+
+                    b.Navigation("Units");
                 });
 #pragma warning restore 612, 618
         }
