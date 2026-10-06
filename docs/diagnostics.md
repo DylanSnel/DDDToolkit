@@ -66,13 +66,15 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00065](#ddd00065) | Info | The class a package's use cases are named through is written where each of its templates has one class |
 | [DDD00066](#ddd00066) | Error | A package's switch writes a class or an id where its name is free and its id is known |
 | [DDD00067](#ddd00067) | Error | A class whose package makes its new ids is declared over an id with a Create() |
+| [DDD00068](#ddd00068) | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
 reads well and does not do what it looks like it does. [DDD00021](#ddd00021) is about the boundary
 between two aggregates; [DDD00022](#ddd00022) and [DDD00023](#ddd00023) are about the boundary
 between two [modules](modules.md) and say nothing at all until a project declares itself one, and
-[DDD00064](#ddd00064) about a project whose `DDD_Module` could not declare one;
+[DDD00064](#ddd00064) about a project whose `DDD_Module` could not declare one, and [DDD00068](#ddd00068) about
+one whose `DDD_ModuleContracts` could not make it its module's contracts;
 [DDD00024](#ddd00024) to [DDD00027](#ddd00027) are about [invariants](invariants.md), where the
 failure worth catching is a rule that is written, tested, and never run; [DDD00028](#ddd00028) to
 [DDD00030](#ddd00030) are about [composite keys](composite-keys.md), and the section after them lists
@@ -647,8 +649,10 @@ namespace Crm;
 public sealed record CustomerSummary(CustomerId Id, string Name);
 ```
 
-or go through something already published, which for an aggregate is usually its id and its
-integration events:
+or, when it belongs in Crm's contracts project, put it there: a project that says it is its module's contracts,
+with `<DDD_ModuleContracts>true</DDD_ModuleContracts>` or `[assembly: ModuleContracts]`, publishes every public
+type it declares without a mark on each ([A contracts project](modules.md#a-contracts-project)). Or go through
+something already published, which for an aggregate is usually its id and its integration events:
 
 ```csharp
 namespace Sales;
@@ -661,8 +665,12 @@ public sealed class OrderReport
 
 A module is an assembly that declares one: with `DDD_Module` in its project file, which the build turns into
 `[assembly: Module("Name")]`, or with that attribute in its source. Its published contract is every type
-marked `[ModuleContract]`, every type marked `[IntegrationEvent]`, and anything nested inside one of
-those. Everything else the assembly declares is the owning team's business, `public` or not.
+marked `[ModuleContract]`, every type marked `[IntegrationEvent]`, anything nested inside one of
+those, and every public type of a project of the module that says it is the module's contracts. Everything else
+the assembly declares is the owning team's business, `public` or not. A project is never the module's contracts
+because of its name: `Legal.Contracts` may be a domain about contracts, and only the property or the attribute
+says otherwise. An `internal` type of a contracts project is not published, even to a project its
+`InternalsVisibleTo` lets in.
 
 The rule is silent unless both assemblies declare a module, so it reports nothing in a codebase that
 has not opted in, and never against the framework, a NuGet package or a shared kernel. Two assemblies
@@ -715,8 +723,9 @@ module loads rows owned by the other, and one `SaveChanges` writes into both ins
 The two modules can then no longer be tested, migrated or separated on their own, and nothing in the
 code looks wrong.
 
-Publishing the entity does not help and does not silence this rule. `[ModuleContract]` says you may
-name a type; it cannot say you may make that type part of your own transaction.
+Publishing the entity does not help and does not silence this rule, and neither does declaring it in the other
+module's contracts project. `[ModuleContract]` and `[assembly: ModuleContracts]` say you may name a type; they
+cannot say you may make that type part of your own transaction.
 
 ### What reports and what does not
 
@@ -725,6 +734,7 @@ name a type; it cannot say you may make that type part of your own transaction.
 | A field or property typed as another module's `[Entity<T>]` or `[AggregateRoot<T>]` | Yes |
 | A collection, array or dictionary holding one | Yes |
 | One that the other module publishes with `[ModuleContract]` | Yes |
+| One in the other module's contracts project, `DDD_ModuleContracts` or `[assembly: ModuleContracts]` | Yes |
 | A property typed as the other module's id | No |
 | An entity of the same module | No |
 | An entity of an assembly that declares no module | No |
@@ -2378,6 +2388,48 @@ A package says which of its templates it makes the ids of, on the marker:
 ([A package that makes the ids of its classes](writing-a-supporting-domain.md#a-package-that-makes-the-ids-of-its-classes)).
 Only Tenancy's templates do. Any other id, one the application makes itself, needs no `Create()`, and nothing is
 said about it.
+
+## DDD00068
+
+**DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute.**
+
+```xml
+<!-- Billing.Contracts.csproj: the analyzers of this version, and a DDDToolkit.Abstractions from before the attribute -->
+<PropertyGroup>
+  <DDD_ModuleContracts>true</DDD_ModuleContracts>   <!-- DDD00068 -->
+</PropertyGroup>
+<ItemGroup>
+  <PackageReference Include="DDDToolkit.Abstractions" Version="3.1.0" />
+  <PackageReference Include="DDDToolkit.Analyzers" Version="..." />
+</ItemGroup>
+```
+
+`DDD_ModuleContracts` set to `true` makes a project its module's contracts: the toolkit's generator writes
+`[assembly: ModuleContracts]` into it, and every public type of it is published to the other modules
+([A contracts project](modules.md#a-contracts-project)). The attribute is declared in `DDDToolkit.Abstractions`, and
+the generator ships in `DDDToolkit.Analyzers`, two packages a contracts project may reference separately. Where the
+project references a `DDDToolkit.Abstractions` older than the attribute, or none, there is nothing to write it with:
+
+```
+DDD_ModuleContracts is true, and the project publishes nothing by it: the toolkit's generator writes
+[assembly: ModuleContracts] from it, and no DDDToolkit.Abstractions the project references declares that
+attribute. Reference the DDDToolkit.Abstractions of the same version as DDDToolkit.Analyzers, or mark each type
+the other modules may name [ModuleContract].
+```
+
+The property is the project's explicit choice, and without this warning it would be dropped without a word. The
+first sign would be [DDD00022](#ddd00022) in every module that names one of the project's types, saying the type
+is not published, which points away from the cause.
+
+Reference the `DDDToolkit.Abstractions` of the same version as the analyzers; a project that references the
+`DDDToolkit` package gets both at one version. Where that cannot be done yet, mark each type the other modules may
+name `[ModuleContract]` and drop the property. A project whose property is anything but `true` is not reported, and
+neither is one that declares `[assembly: ModuleContracts]` itself.
+
+It is reported at the project file, since no line of code is wrong. That is outside every source file, so a
+severity in an `.editorconfig` section for `*.cs` files does not reach it: set it with `<NoWarn>` or
+`<WarningsAsErrors>` in the project file or a `Directory.Build.props`, or in a `.globalconfig` file with
+`is_global = true`.
 
 ## Building the model fails: the owned type must carry the key part
 

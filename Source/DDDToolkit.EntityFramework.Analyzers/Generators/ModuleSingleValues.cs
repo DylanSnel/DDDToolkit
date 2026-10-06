@@ -17,7 +17,8 @@ namespace DDDToolkit.EntityFramework.Analyzers;
 ///   has no nested converter of its own, which is what a type declared in a project without Entity Framework looks
 ///   like. One that has one is registered by its own project's <c>Add{Module}Converters()</c>, of the same name, which
 ///   this one calls.</description></item>
-///   <item><description>The published ones, <c>[ModuleContract]</c>, of an assembly of another module, which this module
+///   <item><description>The published ones, <c>[ModuleContract]</c> or public in an assembly that is its module's
+///   contracts, <c>[assembly: ModuleContracts]</c>, of an assembly of another module, which this module
 ///   may store (DDD00022 allows nothing else): with <c>SingleValueConverter</c> where the type has no converter of its
 ///   own, and with its own nested converter where its project references Entity Framework. The other module's
 ///   registration has another name, which nothing here calls, so the published types are registered here either way:
@@ -53,7 +54,7 @@ internal static class ModuleSingleValues
     /// <param name="Type">The type, fully qualified.</param>
     /// <param name="Value">The value it stores as, fully qualified.</param>
     /// <param name="ColumnLength">The column length its attribute asks for, or -1.</param>
-    /// <param name="Published">Whether it is published, <c>[ModuleContract]</c>, itself or as the twin of a published type.</param>
+    /// <param name="Published">Whether it is published, as <see cref="ModuleBoundary.IsPublished"/> reads it, itself or as the twin of a published type.</param>
     /// <param name="OwnConverter">Its nested converter, fully qualified, or null when it has none.</param>
     private sealed record Found(INamedTypeSymbol Symbol, string Type, string Value, int ColumnLength, bool Published, string? OwnConverter);
 

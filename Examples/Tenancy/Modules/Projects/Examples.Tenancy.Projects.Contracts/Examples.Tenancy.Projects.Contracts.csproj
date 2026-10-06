@@ -14,6 +14,9 @@
     this project references neither Entity Framework nor the Tenancy packages: a module that asks Projects a
     question does not thereby depend on how Projects answers it, nor on how anything is stored. The gate's answer
     carries a project's planned range, a value object the modules share, so the shared domain project is here.
+
+    Every public type here is published, and none is marked [ModuleContract] for it: the modules' Directory.Build.props
+    makes each project whose name ends in .Contracts its module's contracts, with DDD_ModuleContracts.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Domain\Examples.Tenancy.Shared.Domain.csproj" />

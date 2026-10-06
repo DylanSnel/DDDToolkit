@@ -29,9 +29,14 @@ namespace DDDToolkit.Analyzers.Tests.Harness;
 /// </summary>
 public static class ReferenceSets
 {
-    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyCore = new(() =>
+    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyFramework = new(() =>
     [
         .. Basic.Reference.Assemblies.Net100.References.All,
+    ]);
+
+    private static readonly Lazy<ImmutableArray<PortableExecutableReference>> LazyCore = new(() =>
+    [
+        .. Framework,
         MetadataReference.CreateFromFile(typeof(ValueObject).Assembly.Location),
         MetadataReference.CreateFromFile(typeof(ValueObjectAttribute).Assembly.Location),
     ]);
@@ -93,6 +98,12 @@ public static class ReferenceSets
 
     /// <summary>.NET 10 reference assemblies plus DDDToolkit and DDDToolkit.Abstractions.</summary>
     public static ImmutableArray<PortableExecutableReference> Core => LazyCore.Value;
+
+    /// <summary>
+    /// The .NET 10 reference assemblies alone: a project with the generators and none of the toolkit's assemblies, or,
+    /// with the attributes it does have written out in its source, one with an older DDDToolkit.Abstractions.
+    /// </summary>
+    public static ImmutableArray<PortableExecutableReference> Framework => LazyFramework.Value;
 
     /// <summary>Only the assembly declaring <c>[BackingField]</c> and <c>[Owned]</c>.</summary>
     public static PortableExecutableReference EntityFrameworkAbstractions => LazyEntityFrameworkAbstractions.Value;

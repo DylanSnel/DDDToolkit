@@ -412,6 +412,77 @@ public class EntityFrameworkGeneratorTests
         result.ShouldNotContain("ConverterExtensions", "LedgerLineId", "another module's own ids are its business (DDD00022)");
     }
 
+    [Theory]
+    [InlineData("its source")]
+    [InlineData("its build")]
+    public void The_ids_of_another_modules_contracts_project_are_registered_without_a_ModuleContract_each(string declaredBy)
+    {
+        // The contracts project says once that every public type of it is published, and keeps an internal id to itself.
+        var result = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject(
+                "Billing.Contracts",
+                project =>
+                {
+                    project = project
+                        .WithModuleFromTheBuild("Billing")
+                        .WithSource(
+                            """
+                            using System;
+                            using DDDToolkit.Abstractions.Attributes;
+
+                            namespace Billing.Contracts;
+
+                            [EntityId<Guid>]
+                            public readonly partial record struct InvoiceNumber;
+
+                            [EntityId<Guid>]
+                            public partial record PayerId;
+
+                            [EntityId<Guid>]
+                            internal readonly partial record struct LedgerLineId;
+                            """);
+
+                    return declaredBy == "its source"
+                        ? project.WithSource("[assembly: DDDToolkit.Abstractions.Attributes.ModuleContracts]", "AssemblyInfo.cs")
+                        : project.WithBuildProperty("DDD_ModuleContracts", "true");
+                })
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.InvoiceNumber", "global::System.Guid"));
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.PayerId", "global::System.Guid"));
+        result.ShouldContain("ConverterExtensions", Registered("global::Billing.Contracts.ValidPayerId", "global::System.Guid"), "the twin of a published id is the published id, validated");
+        result.ShouldNotContain("ConverterExtensions", "LedgerLineId", "an internal id is the contracts project's own");
+    }
+
+    [Fact]
+    public void The_ids_of_a_project_named_Contracts_that_says_nothing_are_not_registered()
+    {
+        var result = Infrastructure()
+            .WithEntityFrameworkRuntime()
+            .WithReferencedProject(
+                "Billing.Contracts",
+                project => project
+                    .WithModuleFromTheBuild("Billing")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        namespace Billing.Contracts;
+
+                        [EntityId<Guid>]
+                        public readonly partial record struct InvoiceNumber;
+                        """))
+            .WithReferencedAssembly(SalesDomain, "Sales.Domain")
+            .RunCoreAnd(GeneratorTestHost.EntityFrameworkGenerators());
+
+        result.ShouldCompile();
+        result.ShouldNotContain("ConverterExtensions", "InvoiceNumber", "a project is never its module's contracts because of its name");
+    }
+
     [Fact]
     public void An_id_whose_assembly_has_its_own_converter_is_left_to_it()
     {

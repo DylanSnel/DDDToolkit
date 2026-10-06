@@ -20,6 +20,5 @@ namespace Examples.Tenancy.Tenants.Contracts.ValueObjects;
 /// </remarks>
 /// <param name="Kind">What kind of actor it was: <c>seat</c>, <c>operator</c>, <c>system</c> or <c>token</c>.</param>
 /// <param name="Seat">The seat, when a seat changed it.</param>
-[ModuleContract]
 [ValueObject]
 public partial record ChangedBy(string Kind, SeatId? Seat);

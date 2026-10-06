@@ -14,7 +14,8 @@ namespace DDDToolkit.HotChocolate.Analyzers;
 /// <c>ChangeTypeProvider</c>, which is what a type declared in a project without DDDToolkit.HotChocolate looks like.
 /// <list type="bullet">
 ///   <item><description>Every one of an assembly of this project's own module: its domain and contracts projects.</description></item>
-///   <item><description>The published ones, <c>[ModuleContract]</c>, of an assembly of another module, which are the
+///   <item><description>The published ones, <c>[ModuleContract]</c> or public in an assembly that is its module's
+///   contracts, <c>[assembly: ModuleContracts]</c>, of an assembly of another module, which are the
 ///   only ones this module may name (DDD00022 allows nothing else).</description></item>
 /// </list>
 /// An assembly that declares no module is left alone: a package or a shared kernel without a module is not something

@@ -231,6 +231,11 @@ public string InvoiceHeader(CustomerSummary customer) => $"Invoice for {customer
 `[ModuleContract]` on its own does nothing until the assemblies say which module they belong to. That
 is on purpose: adding it early costs nothing, and it starts to count when the second module arrives.
 
+A project that holds nothing but the contract, as the next section's does, says so once rather than on each type:
+`<DDD_ModuleContracts>true</DDD_ModuleContracts>` in its project file, or `[assembly: ModuleContracts]` in any file of
+it, and every public type it declares is published. That is always the project's own word, never its name; see
+[A contracts project](modules.md#a-contracts-project).
+
 ## A project of its own
 
 The attribute is enough to draw the line. The example shop goes one step further and gives each
@@ -306,7 +311,9 @@ split them:
   aggregates, its `DbContext` and its handlers are not merely forbidden in Shipping, they are not
   there. No analyzer is needed to stop a navigation to `Order` when `Order` cannot be named at all.
 - **One file says what the module promises.** Reviewing a change to the contract means reviewing one
-  small project, and a pull request that touches it is visibly a change to a promise.
+  small project, and a pull request that touches it is visibly a change to a promise. With
+  `DDD_ModuleContracts` the project is the list itself: every public type in it is published, so a type added
+  there is part of the contract without a second step, and one the project keeps to itself is `internal`.
 - **Consumers get few dependencies.** Referencing the contracts brings the contracts, not Ordering's
   Entity Framework model or its packages. The example's contracts project does reference
   `DDDToolkit.EntityFramework`, for one reason: it declares the published `OrderId`, and with the
@@ -319,7 +326,10 @@ project that references Entity Framework also registers the published ids of the
 references, with `SingleValueConverter<T, TValue>`, or with the id's own converter where its project
 references Entity Framework, so a module's one call covers whatever it stores either way (see
 [Identifiers](identifiers.md#stored-by-a-project-that-does-not-declare-it)). The Tenancy sample's contracts
-projects, Tenancy's and Projects', are built that way: each references `DDDToolkit` and nothing else.
+projects, Tenants' and Projects', are built that way: neither references Entity Framework or a Tenancy package
+(Projects' also references the sample's shared domain project, for the planned `DateRange` its gate answers with), and
+neither marks a type `[ModuleContract]`, because the props of the modules' folder make every project whose name ends
+in `.Contracts` its module's contracts. That condition on the name is the sample's own; the toolkit reads none.
 
 For a small codebase the split can wait. `[ModuleContract]` in the module's own project, with the
 analyzer watching the other modules, draws the same line with one project fewer.

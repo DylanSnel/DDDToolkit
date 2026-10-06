@@ -67,6 +67,9 @@ internal static class KnownTypes
     /// <summary>Type attribute that puts a type in its module's published contract.</summary>
     public const string ModuleContractAttribute = AttributesNamespace + ".ModuleContractAttribute";
 
+    /// <summary>Assembly attribute that puts every public type of the assembly in its module's published contract.</summary>
+    public const string ModuleContractsAttribute = AttributesNamespace + ".ModuleContractsAttribute";
+
     /// <summary>Type attribute that names a published message. A published message is part of the contract too.</summary>
     public const string IntegrationEventAttribute = AttributesNamespace + ".IntegrationEventAttribute";
 

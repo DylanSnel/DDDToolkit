@@ -10,7 +10,8 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// <para>
 /// One assembly is one module. Everything the assembly declares belongs to it, and everything it
 /// declares is internal to it unless the type carries <c>[ModuleContract]</c> or
-/// <c>[IntegrationEvent]</c>.
+/// <c>[IntegrationEvent]</c>, or is public in an assembly that is the module's contracts,
+/// <c>[assembly: ModuleContracts]</c>.
 /// </para>
 /// <para>
 /// The attribute only means something when both sides opt in. Another module that names one of this

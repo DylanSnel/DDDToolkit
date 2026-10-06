@@ -2,10 +2,13 @@
 
   <!--
     A contracts project: the attributes and the generators, without the DDDToolkit package and its base
-    types. The generators run here, so DDD_Module has to reach them from the generators' own package.
+    types. The generators run here, so DDD_Module has to reach them from the generators' own package, and
+    DDD_ModuleContracts with it, from which the toolkit's generator writes [assembly: ModuleContracts]: every
+    public type here is published to the other modules.
   -->
   <PropertyGroup>
     <DDD_Module>Billing</DDD_Module>
+    <DDD_ModuleContracts>true</DDD_ModuleContracts>
   </PropertyGroup>
 
   <ItemGroup>

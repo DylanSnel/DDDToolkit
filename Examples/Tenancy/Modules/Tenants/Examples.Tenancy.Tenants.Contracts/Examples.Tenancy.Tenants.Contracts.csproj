@@ -14,6 +14,9 @@
     registers the published ids of other modules. So this project references neither Entity Framework nor the
     Tenancy packages; a module that reads these ids does not thereby depend on how Tenancy works, nor on how
     anything is stored.
+
+    Every public type here is published, and none is marked [ModuleContract] for it: the modules' Directory.Build.props
+    makes each project whose name ends in .Contracts its module's contracts, with DDD_ModuleContracts.
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />

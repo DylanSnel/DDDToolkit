@@ -447,8 +447,9 @@ readonly partial record struct OrderId : IEntityId<Guid>, ..., ISingleValue<Orde
 
 and `DDDToolkit.EntityFramework` has one converter for all of them, `SingleValueConverter<T, TValue>`. The
 generated `Add{Module}Converters()` of the project that holds the context registers it for every identifier
-of its module's other projects that has no converter of its own, and for the published
-(`[ModuleContract]`) ones of other modules, so the context still calls one method for all of them:
+of its module's other projects that has no converter of its own, and for the published ones of other modules
+(`[ModuleContract]`, or every public one of a [contracts project](modules.md#a-contracts-project)), so the context
+still calls one method for all of them:
 
 ```csharp title="ConverterExtensions.g.cs of Ordering.Infrastructure, shortened"
 modelConfigurationBuilder.Properties<OrderId>().HaveConversion<SingleValueConverter<OrderId, Guid>>();

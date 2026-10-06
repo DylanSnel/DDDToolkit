@@ -1,4 +1,3 @@
-using DDDToolkit.Abstractions.Attributes;
 using Examples.Tenancy.Shared.Domain.ValueObjects;
 
 namespace Examples.Tenancy.Projects.Contracts.Gate;
@@ -17,5 +16,4 @@ namespace Examples.Tenancy.Projects.Contracts.Gate;
 /// a project may know its plan, so it is answered with <paramref name="Visible"/>, whatever the key asked about.
 /// A module that records on a project keeps what it records to these days, and refuses with a code of its own.
 /// </param>
-[ModuleContract]
 public sealed record ProjectAnswer(bool Visible, bool Allowed, bool Closed, DateRange? Planned = null);

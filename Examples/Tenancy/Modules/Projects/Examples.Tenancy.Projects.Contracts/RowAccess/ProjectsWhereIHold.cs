@@ -18,6 +18,5 @@ namespace Examples.Tenancy.Projects.Contracts.RowAccess;
 /// database answers it: called in C#, <c>Ids(key)</c> throws.
 /// </para>
 /// </remarks>
-[ModuleContract]
 [ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
 public static partial class ProjectsWhereIHold;

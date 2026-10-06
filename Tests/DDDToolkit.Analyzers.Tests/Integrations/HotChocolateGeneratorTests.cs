@@ -596,6 +596,35 @@ public class HotChocolateGeneratorTests
     }
 
     [Fact]
+    public void The_ids_of_another_modules_contracts_project_get_graphql_bindings_without_a_ModuleContract_each()
+    {
+        // The contracts project's build says once that every public type of it is published.
+        var result = Api()
+            .WithHotChocolate()
+            .WithReferencedProject(
+                "Billing.Contracts",
+                project => project
+                    .WithModuleFromTheBuild("Billing")
+                    .WithBuildProperty("DDD_ModuleContracts", "true")
+                    .WithSource(
+                        """
+                        using System;
+                        using DDDToolkit.Abstractions.Attributes;
+
+                        namespace Billing.Contracts;
+
+                        [EntityId<Guid>]
+                        public readonly partial record struct InvoiceNumber;
+                        """))
+            .RunCoreAnd(GeneratorTestHost.HotChocolateGenerators());
+
+        result.ShouldCompile();
+        result.ShouldContain("BindingExtensions", Bound("global::Billing.Contracts.InvoiceNumber", "UuidType"));
+        result.ShouldContain("BindingExtensions", Converted("global::Billing.Contracts.InvoiceNumber", "global::System.Guid"));
+        result.ShouldContain("BindingExtensions", WrittenIntoNodeIds("global::Billing.Contracts.InvoiceNumber", "global::System.Guid"));
+    }
+
+    [Fact]
     public void An_id_whose_assembly_binds_it_itself_is_not_bound_twice()
     {
         // The contracts project references HotChocolate, as it used to have to: it binds its ids itself.

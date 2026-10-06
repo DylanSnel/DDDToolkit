@@ -1,4 +1,3 @@
-using DDDToolkit.Abstractions.Attributes;
 using Examples.Tenancy.Projects.Contracts.ValueObjects;
 
 namespace Examples.Tenancy.Projects.Contracts.Gate;
@@ -12,7 +11,6 @@ namespace Examples.Tenancy.Projects.Contracts.Gate;
 /// organization, so the asking module never learns which one it was. Only the keys that act on a project come
 /// through a crew: opening a project, naming its owner and managing the organization never do, whoever asks.
 /// </remarks>
-[ModuleContract]
 public interface IProjectGate
 {
     /// <summary>What the caller may do with <paramref name="project"/> as far as <paramref name="key"/> goes.</summary>

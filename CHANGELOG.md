@@ -340,6 +340,26 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `CompilerVisibleProperty` listed by hand, as DDD00014 suggests. The code was named after the module and the
   project was no module, without a word. The targets file now hands the generators `DDD_DeclareModule`, which is
   how they tell it ran; a test project is not reported.
+- **A contracts project says once that it is one: `[assembly: ModuleContracts]` or `DDD_ModuleContracts`.** Every
+  public type of a project that carries the new assembly attribute is part of its module's published contract, so
+  another module names its ids, read models, keys and interfaces without DDD00022 and without a `[ModuleContract]`
+  on each; a type the project keeps to itself is `internal`, and is not published even to a project its
+  `InternalsVisibleTo` lets in. `<DDD_ModuleContracts>true</DDD_ModuleContracts>`, in the project file or a
+  `Directory.Build.props`, has the toolkit's generator write the attribute, in `ModuleContracts.g.cs`, unless the
+  project declares it itself, so it is never declared twice; only `true` counts, in any case. The property is
+  declared in the props file of the `DDDToolkit.Analyzers` package beside `DDD_Module`, and needs no build step:
+  the other modules read what a project publishes from the compiled assembly, and the one generator of the project
+  itself that asks, the one that marks `{Module}EventNames` `[ModuleContract]`, reads the property as well, so the
+  property and the attribute in source write the same class. A type's own
+  `[ModuleContract]` keeps working, and an entity in a contracts project is still DDD00023 in a module that holds
+  it. The toolkit never takes a project for contracts because of its name, since a module may be about contracts
+  of another kind; a codebase that wants its `*.Contracts` projects to be contracts says so in its own props, with
+  `Condition="$(MSBuildProjectName.EndsWith('.Contracts'))"`, which the docs give as a tip. The converters and
+  GraphQL bindings a module writes for the published ids of the modules it references read the attribute too. A
+  project that sets the property and references a `DDDToolkit.Abstractions` older than the attribute, or none, has
+  nothing to write it with, and hears the new warning DDD00068 at its project file, rather than the other modules
+  hearing DDD00022 for each of its types without a word about why. See
+  [A contracts project](docs/modules.md#a-contracts-project).
 - What a project of a module hears about the module's other projects, DDD00033 about their domain events and
   DDD00045, DDD00049 or DDD00050 about their template classes, points at the project file where no file of the
   project that somebody edits declares the module: a module the build declared, which has no attribute to point
@@ -1617,6 +1637,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administrators read on the History page. The Tenants module has a migration for the roles' new column,
   `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
   hosted services that ask the database something.
+- **The Tenancy sample's contracts projects publish every public type, and mark none.** The modules'
+  `Directory.Build.props` sets `DDD_ModuleContracts` for each project whose name ends in `.Contracts`, a convention of
+  the sample's own beside the `DDD_Module` it names each module with, and the thirteen `[ModuleContract]`s of the
+  Tenants and Projects contracts are gone: the ids, the keys, the gate, the token roles, `ChangedBy` and the access
+  functions other modules ask. The package consumers' contracts project sets the property too, and the
+  package check asserts the attribute it writes.
 - **The samples make new ids with `TId.Create()`.** The Tenancy sample's registration sets no id options, and its
   modules, the webshop's and the example API's make the ids of their new aggregates and rows with `ProjectId.Create()`
   and the rest, where they called `CreateSequential()` or `CreateUnique()`. The Tenancy test host's tenant id, a `long`, declares the `Create()` Tenancy asks

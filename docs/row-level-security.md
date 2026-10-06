@@ -1393,12 +1393,10 @@ project, `OrganizationUnitId` beside `[assembly: GenerateTenancyIds]` in a contr
 <summary>Show the code: Projects' contracts, a rule of each module that asks them, and the policy the export writes</summary>
 
 ```csharp
-// Projects.Contracts: what other modules may ask, a line each
-[ModuleContract]
+// Projects.Contracts, the module's contracts project: what other modules may ask, a line each
 [ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)]
 public static partial class ProjectsISee;
 
-[ModuleContract]
 [ResourceAccessContract<ProjectId>(ResourceAccessSet.HeldOn)]
 public static partial class ProjectsWhereIHold;
 

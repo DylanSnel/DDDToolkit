@@ -118,15 +118,19 @@ Warning, only when both assemblies declare a module (`<DDD_Module>` or `[assembl
 that sets `<DDD_Module>` only to name its code sets `<DDD_DeclareModule>false</DDD_DeclareModule>` beside it, or
 it is reported as a module too. Code in one module names a type
 of another module that the other module does not publish. Either depend on something it publishes (its
-ids, its `[IntegrationEvent]` records, its `[ModuleContract]` read models and interfaces), or, if the
-type really belongs in the contract, mark it `[ModuleContract]` in the module that owns it. That is the
-owning team's decision, so point it out rather than adding the attribute silently.
+ids, its `[IntegrationEvent]` records, its `[ModuleContract]` read models and interfaces, or any public type of a
+contracts project that sets `<DDD_ModuleContracts>true</DDD_ModuleContracts>` or `[assembly: ModuleContracts]`), or,
+if the type really belongs in the contract, publish it in the module that owns it: when the owner's contracts project
+says it is one, move the type there and make it public, with no mark; otherwise mark it `[ModuleContract]`. Do not add
+`[ModuleContract]` to a type of a project that already says it is contracts; it changes nothing. A project named
+`*.Contracts` that says neither publishes nothing by its name. That is the owning team's decision, so point it out
+rather than publishing the type silently.
 
 ## DDD00023
 
 Warning. An entity of one module stores an entity or aggregate root of another module in a field or
 property. Store the other module's published id instead and react to its integration events.
-Publishing the entity with `[ModuleContract]` does not fix this and does not silence it.
+Publishing the entity, with `[ModuleContract]` or in a contracts project, does not fix this and does not silence it.
 
 ## DDD00024
 
@@ -549,6 +553,16 @@ are made in code before the save, never by the database. The message says what i
 The code fix adds a `Create()` stub that throws, the interface, or both; replace the stub's body. Do not switch the
 id to a `Guid` unless the application wants that key type, and do not bring back an option or a database default
 for it. Other ids need no `Create()`.
+
+## DDD00068
+
+Warning, at the project file. `<DDD_ModuleContracts>true</DDD_ModuleContracts>` asks the generator to write
+`[assembly: ModuleContracts]`, and the project cannot name that attribute: it references a `DDDToolkit.Abstractions`
+older than the attribute, or none. The project publishes nothing by the property, and the other modules would hear
+DDD00022 for each of its types. Reference the `DDDToolkit.Abstractions` of the same version as
+`DDDToolkit.Analyzers` (as `DDDToolkit` brings both, a project that references `DDDToolkit` has it). Only if the
+version cannot move, mark the published types `[ModuleContract]` and drop the property. Do not silence it with `NoWarn`.
+An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 
 ## Not a diagnostic: the owned type must carry the key part
 

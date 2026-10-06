@@ -1,5 +1,4 @@
 using DDDToolkit.Abstractions.Access;
-using DDDToolkit.Abstractions.Attributes;
 
 namespace Examples.Tenancy.Tenants.Contracts.TokenRoles;
 
@@ -13,7 +12,6 @@ namespace Examples.Tenancy.Tenants.Contracts.TokenRoles;
 /// operators', the host maps each to a database role, and the project that exports the policies writes them for
 /// that role.
 /// </remarks>
-[ModuleContract]
 public static class SampleTokenRoles
 {
     /// <summary>

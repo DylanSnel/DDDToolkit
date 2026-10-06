@@ -50,6 +50,11 @@ Everything else in the assembly, `public` or not, is the module's own business. 
 want that, what belongs in a contract and where to keep it is a page of its own:
 [Module contracts](module-contracts.md).
 
+A project that holds nothing but what its module publishes, a contracts project, says so once instead of on
+every type: `<DDD_ModuleContracts>true</DDD_ModuleContracts>` in its project file, or
+`[assembly: ModuleContracts]` in any file of it, and every public type of it is published. See
+[A contracts project](#a-contracts-project).
+
 ## What the analyzer catches
 
 ### DDD00022, using what is not published
@@ -450,6 +455,102 @@ config, a `.globalconfig` file with `is_global = true`. That includes DDD00033, 
 DDD00050 in a project whose module an `<AssemblyAttribute>` item declares: they point at the project file, not
 at the `AssemblyInfo.cs` that item writes into `obj/`, where a `[*.cs]` section did reach them.
 
+### A contracts project
+
+A module's contracts project exists to be named by the other modules: its ids, its read models, its keys and the
+interfaces they ask it through. Marking each of those `[ModuleContract]` says the same thing once per type, and a
+type added to the project without the mark is [DDD00022](diagnostics.md#ddd00022) in every module that names it.
+So the project says it once, in its project file:
+
+```xml
+<!-- Ordering.Contracts.csproj -->
+<DDD_ModuleContracts>true</DDD_ModuleContracts>
+```
+
+or with `[assembly: ModuleContracts]` in any file of it. Every public type of the project is then part of the
+module's contract, and a type it keeps to itself is `internal`, which C# already holds every other project to. A
+type's own `[ModuleContract]` keeps meaning what it means, in this project and in any other project of the module.
+Publishing an entity this way does not make it holdable: [DDD00023](diagnostics.md#ddd00023) still fires on a
+module that stores it.
+
+**Always the project's own choice.** The toolkit never takes a project for its module's contracts because of its
+name. A module may be about contracts of another kind, legal ones say, and its `Legal.Contracts` project its domain;
+a toolkit that published everything in it for that name would open the module up without anybody deciding it. Only
+the property or the attribute makes a project a contracts project.
+
+**Tip: one line for a folder of modules.** A codebase whose contracts projects all end in `.Contracts` can say so once,
+in the `Directory.Build.props` of its modules' folder. That condition on the name is the codebase's own convention,
+written in its own props, and not something the toolkit reads:
+
+```xml
+<!-- Directory.Build.props: every project whose name ends in .Contracts is its module's contracts -->
+<PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Contracts'))">
+  <DDD_ModuleContracts>true</DDD_ModuleContracts>
+</PropertyGroup>
+```
+
+The [Tenancy sample](../Examples/README.md#the-tenancy-sample) does this in
+[`Examples/Tenancy/Modules/Directory.Build.props`](../Examples/Tenancy/Modules/Directory.Build.props), beside the
+`DDD_Module` it names each module with, and none of its contracts types carries `[ModuleContract]`. A project the
+condition reaches that is not meant to publish everything sets `<DDD_ModuleContracts>false</DDD_ModuleContracts>` in
+its own project file, which MSBuild reads after the props.
+
+From the property, the toolkit's generator writes `[assembly: ModuleContracts]` into the project, which is where
+the other modules read it: the module boundary analyzer of a module that names one of the project's types, and
+the converters and GraphQL bindings a module writes for the published ids of the modules it references.
+
+```mermaid
+flowchart LR
+    Props["Directory.Build.props<br/>or the project file:<br/>DDD_ModuleContracts"] --> Generator["the toolkit's generator<br/>writes [assembly: ModuleContracts]"]
+    Generator --> Dll["Ordering.Contracts.dll"]
+    Dll --> Analyzer["another module's analyzer:<br/>every public type may be named"]
+    Dll --> Registrations["another module's converters<br/>and GraphQL bindings of its ids"]
+```
+
+Unlike `DDD_Module`, the property needs no build step that writes it into the project first. That step is there
+because every generator of a project asks which module it is in, and a generator never sees what another one writes.
+Whether a type is published matters to the other modules, and they read it from the compiled assembly, where the
+attribute is. The one generator of the project itself that asks, the one that writes `{Module}EventNames` and marks
+it `[ModuleContract]` when every event it names is published, reads the property as well, so the property and the
+attribute in source give the same class. The attribute is written only where the project declares none itself, in a
+file of its own or through an `<AssemblyAttribute>` item, so it is never declared twice.
+
+<details>
+<summary>Show the code: a contracts project that says so, and what the generator writes</summary>
+
+```xml
+<!-- Ordering.Contracts.csproj, or a Directory.Build.props above it -->
+<PropertyGroup>
+  <DDD_ModuleContracts>true</DDD_ModuleContracts>
+</PropertyGroup>
+```
+
+```csharp
+// Ordering.Contracts: published, and nothing on the types says so
+[EntityId<Guid>("ORD")]
+public readonly partial record struct OrderId;
+
+public sealed record OrderSummary(OrderId Id, decimal Total);
+
+public interface IOrderLookup
+{
+    Task<OrderSummary?> FindAsync(OrderId id, CancellationToken cancellationToken);
+}
+
+// ModuleContracts.g.cs, written by the toolkit's generator, in a project that declares no [assembly: ModuleContracts]
+[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleContractsAttribute]
+```
+
+Only `true` counts, in any case, as MSBuild compares it; `false`, an empty value and anything else make no
+contracts project. The property reaches the generator through the props file of the `DDDToolkit.Analyzers` package,
+as `DDD_Module` does ([How the property reaches the generators](#how-the-property-reaches-the-generators)). A project
+whose generators arrive without that file, as a bare analyzer assembly, gets nothing from the property: it declares
+the attribute in its source instead. A project that sets the property and references a `DDDToolkit.Abstractions`
+older than the attribute, or none, has nothing to write it with, and hears [DDD00068](diagnostics.md#ddd00068) at
+its project file rather than find out from the other modules' DDD00022.
+
+</details>
+
 ### Folders inside the layers
 
 Inside a layer project the thing comes first and the kind second. A folder is named for what its classes are
@@ -460,7 +561,8 @@ belongs to a crew over five folders; a folder named `Crew` keeps the crew togeth
 [Tenancy sample](../Examples/README.md#the-tenancy-sample):
 
 ```
-Directory.Build.props             every project of a module's folder declares that module; see above
+Directory.Build.props             every project of a module's folder declares that module, and each *.Contracts
+                                  project is its module's contracts; see above
 Projects/
   Examples.Tenancy.Projects.Contracts/
     ValueObjects/                 ProjectId.cs
@@ -681,7 +783,8 @@ generate it, call the second as an ordinary static method.
 ### How the property reaches the generators
 
 A generator can only read an MSBuild property the project
-declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declares `DDD_Module`.** The package
+declares as visible to the compiler. **The `DDDToolkit.Analyzers` package declares `DDD_Module`**, and
+`DDD_ModuleContracts` beside it ([A contracts project](#a-contracts-project)). The package
 that holds the generators also holds a props file declaring the properties they read, and NuGet imports
 that file into each project the generators run in: one that references the package itself, one that
 gets it as a dependency of `DDDToolkit`, and one that gets it through a project reference. There is
@@ -710,7 +813,7 @@ flowchart LR
     Contracts --> Analyzers
     subgraph Analyzers ["DDDToolkit.Analyzers"]
         direction TB
-        Generators["the generators"] ~~~ Props["props: declares DDD_Module"] ~~~ Targets["targets: declares the module"]
+        Generators["the generators"] ~~~ Props["props: declares DDD_Module<br/>and DDD_ModuleContracts"] ~~~ Targets["targets: declares the module"]
     end
 ```
 
@@ -734,6 +837,7 @@ flowchart LR
 
 ```csharp
 [assembly: Module("Billing")]
+[assembly: ModuleContracts]
 
 [EntityId<Guid>("INV")]
 public readonly partial record struct InvoiceId;
@@ -744,11 +848,13 @@ public sealed record InvoiceSummary(InvoiceId Id, decimal Total);
 public sealed record InvoiceSent(InvoiceId InvoiceId);
 ```
 
-The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module.
+The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module, and every
+public type is published ([A contracts project](#a-contracts-project)).
 `<DDD_Module>Billing</DDD_Module>` in the project file declares the same module as the attribute, through the
-build step that arrives with the package, and is how
+build step that arrives with the package, and `<DDD_ModuleContracts>true</DDD_ModuleContracts>` says the same as
+the second attribute. Both are how
 [`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/Acme.Billing.Contracts.csproj)
-declares it, to prove the property and the step both arrive.
+says it, to prove the properties and the step arrive.
 
 </details>
 

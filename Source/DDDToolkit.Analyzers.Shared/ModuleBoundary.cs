@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DDDToolkit.Analyzers.Common;
 
@@ -27,6 +28,11 @@ namespace DDDToolkit.Analyzers.Common;
 /// as <c>AssemblyMetadata</c>, by the targets of the DDDToolkit.Analyzers package, and is that module's project as if
 /// it declared <c>[assembly: Module]</c>. A test project, and one that sets <c>DDD_DeclareModule</c> to false, get
 /// nothing written and are no module. The attribute still decides wherever there is one. See <see cref="ModuleOf"/>.
+/// </para>
+/// <para>
+/// What a module publishes is read off the type, and off its assembly: <c>[ModuleContract]</c> and
+/// <c>[IntegrationEvent]</c> on the type, or <c>[assembly: ModuleContracts]</c> on a module's contracts project, which
+/// publishes every public type of it. See <see cref="IsPublished"/>.
 /// </para>
 /// </summary>
 internal static class ModuleBoundary
@@ -197,7 +203,13 @@ internal static class ModuleBoundary
 
     /// <summary>
     /// Whether the type is part of its module's published contract: it carries <c>[ModuleContract]</c> or
-    /// <c>[IntegrationEvent]</c>, or it is nested inside a type that does.
+    /// <c>[IntegrationEvent]</c>, or it is nested inside a type that does, or it is public in an assembly that is its
+    /// module's contracts, <c>[assembly: ModuleContracts]</c>.
+    /// <para>
+    /// Public means public all the way out: a public type nested in an internal one is no more published than the
+    /// internal one, and an internal type another module may name through <c>InternalsVisibleTo</c> is not published
+    /// either. The assembly's name counts for nothing: a project called <c>Legal.Contracts</c> may be a module's domain.
+    /// </para>
     /// </summary>
     public static bool IsPublished(ITypeSymbol type)
     {
@@ -210,7 +222,64 @@ internal static class ModuleBoundary
             }
         }
 
+        return IsPublic(type) && type.ContainingAssembly is { } assembly && HasModuleContractsAttribute(assembly);
+    }
+
+    /// <summary>
+    /// Whether the assembly says it is its module's contracts: it carries <c>[assembly: ModuleContracts]</c>, declared
+    /// in its source, through an <c>AssemblyAttribute</c> item, or by the toolkit's generator from
+    /// <c>DDD_ModuleContracts</c>. The other modules read it from the compiled assembly, where all three are. A
+    /// generator of the project itself sees the first two only, since no generator sees what another one writes, so
+    /// one that asks about the project's own types reads <see cref="IsContractsByTheBuild"/> beside it.
+    /// </summary>
+    public static bool HasModuleContractsAttribute(IAssemblySymbol assembly)
+    {
+        foreach (var attribute in assembly.GetAttributes())
+        {
+            if (IsToolkitAttribute(attribute, KnownTypes.ModuleContractsAttribute))
+            {
+                return true;
+            }
+        }
+
         return false;
+    }
+
+    /// <summary>
+    /// Whether the project's build makes it its module's contracts: its <c>DDD_ModuleContracts</c> is <c>true</c>, and
+    /// the toolkit's generator can write <c>[assembly: ModuleContracts]</c> from it, because the project can name the
+    /// attribute. A generator of the project that asks whether one of the project's own types is published reads this
+    /// as well as <see cref="IsPublished"/>, which sees an attribute in source and not the one written from the
+    /// property. So both ways of saying it write the same code, as the <c>[ModuleContract]</c> on
+    /// <c>{Module}EventNames</c> does.
+    /// </summary>
+    public static bool IsContractsByTheBuild(Compilation compilation, AnalyzerConfigOptions options)
+        => SaysModuleContracts(options) && compilation.GetTypeByMetadataName(KnownTypes.ModuleContractsAttribute) is not null;
+
+    /// <summary>
+    /// Whether the project's <c>DDD_ModuleContracts</c> is <c>true</c>: in any case and with spaces around it, as
+    /// MSBuild compares it. Anything else, an empty value included, says nothing. Only the property is read, never the
+    /// project's name.
+    /// </summary>
+    public static bool SaysModuleContracts(AnalyzerConfigOptions options)
+        => options.TryGetValue("build_property.DDD_ModuleContracts", out var value)
+           && string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the type, and every type it is nested in, is public: what <c>[assembly: ModuleContracts]</c> publishes
+    /// of a type that carries no mark of its own.
+    /// </summary>
+    public static bool IsPublic(ITypeSymbol type)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            if (current.DeclaredAccessibility != Accessibility.Public)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>Whether the type is declared an entity or an aggregate root, in any of the ways <see cref="EntityDeclarations"/> knows.</summary>

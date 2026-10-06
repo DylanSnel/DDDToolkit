@@ -8,6 +8,7 @@ using CoreAccessBehaviorGenerator = DDDToolkit.Analyzers.AccessBehaviorGenerator
 using CoreEntityGenerator = DDDToolkit.Analyzers.EntityGenerator;
 using CoreEntityIdGenerator = DDDToolkit.Analyzers.EntityIdGenerator;
 using CoreEventNamesGenerator = DDDToolkit.Analyzers.EventNamesGenerator;
+using CoreModuleContractsGenerator = DDDToolkit.Analyzers.ModuleContractsGenerator;
 using CoreModuleGenerator = DDDToolkit.Analyzers.ModuleGenerator;
 using CoreRowAccessGenerator = DDDToolkit.Analyzers.RowAccessGenerator;
 using CoreSingleValueObjectGenerator = DDDToolkit.Analyzers.SingleValueObjectGenerator;
@@ -82,6 +83,7 @@ public sealed class GeneratorTestHost
     private readonly Dictionary<string, string> _globalOptions = new(StringComparer.Ordinal)
     {
         ["build_property.DDD_Module"] = string.Empty,
+        ["build_property.DDD_ModuleContracts"] = string.Empty,
         ["build_property.IsTestProject"] = string.Empty,
         ["build_property.IsTestingPlatformApplication"] = string.Empty,
         ["build_property.DDD_DeclareModule"] = string.Empty,
@@ -91,6 +93,7 @@ public sealed class GeneratorTestHost
     private readonly List<DiagnosticAnalyzer> _analyzers = [];
     private string _assemblyName = DefaultAssemblyName;
     private OutputKind _outputKind = OutputKind.DynamicallyLinkedLibrary;
+    private bool _withoutTheToolkit;
 
     private GeneratorTestHost()
     {
@@ -114,6 +117,7 @@ public sealed class GeneratorTestHost
         new CoreTemplateDefaultsGenerator(),
         new CoreAccessBehaviorGenerator(),
         new CoreModuleGenerator(),
+        new CoreModuleContractsGenerator(),
     ];
 
     /// <summary>The generators in DDDToolkit.EntityFramework.Analyzers.</summary>
@@ -248,6 +252,17 @@ public sealed class GeneratorTestHost
     public GeneratorTestHost WithoutTheModuleStep()
     {
         _globalOptions.Remove("build_property.DDD_DeclareModule");
+        return this;
+    }
+
+    /// <summary>
+    /// Compiles against the framework alone, without DDDToolkit and DDDToolkit.Abstractions: a project with the
+    /// generators and none of the toolkit's assemblies, or, with the attributes it does have written out in its source,
+    /// one that references an older DDDToolkit.Abstractions than the generators.
+    /// </summary>
+    public GeneratorTestHost WithoutTheToolkitAssemblies()
+    {
+        _withoutTheToolkit = true;
         return this;
     }
 
@@ -499,7 +514,7 @@ public sealed class GeneratorTestHost
 
     /// <summary>Every reference the snippet compiles against.</summary>
     public IReadOnlyList<PortableExecutableReference> References
-        => [.. ReferenceSets.Core, .. _extraReferences.Distinct()];
+        => [.. _withoutTheToolkit ? ReferenceSets.Framework : ReferenceSets.Core, .. _extraReferences.Distinct()];
 
     private sealed class TestAnalyzerConfigOptionsProvider(Dictionary<string, string> globalOptions) : AnalyzerConfigOptionsProvider
     {

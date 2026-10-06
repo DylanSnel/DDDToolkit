@@ -18,7 +18,8 @@
 #      project's module there, with the build step that arrives beside the props file. With only
 #      Abstractions and Analyzers, with only the DDDToolkit package, and in a project that gets the
 #      toolkit through a project reference. DDD_DeclareModule set to false keeps the name and leaves the
-#      module out.
+#      module out. DDD_ModuleContracts reaches the generator in the contracts project, which writes
+#      [assembly: ModuleContracts] from it.
 #   4. DDD00014: a project that has the generators and not their props file is told so, and a project
 #      that has both and sets no DDD_Module is not. DDD00064: one that lists DDD_Module by hand instead is
 #      told that it is no module, and none that imports the targets file is.
@@ -314,11 +315,26 @@ expect_module() {
   echo "    $1: module $2, declared by the build"
 }
 
+# The project folder $1 must be its module's contracts: DDD_ModuleContracts reached the packaged generator through
+# the props file, and it wrote [assembly: ModuleContracts] from it. No build step is involved.
+expect_module_contracts() {
+  local file
+  file="$(find "$work/package-consumers/$1/obj" -path '*generated*' -name 'ModuleContracts.g.cs' | head -n 1)"
+
+  if [ -z "$file" ] || ! grep -qF 'ModuleContractsAttribute]' "$file"; then
+    echo "FAILED: $1: the generator wrote no [assembly: ModuleContracts] from DDD_ModuleContracts." >&2
+    exit 1
+  fi
+
+  echo "    $1: its module's contracts, from DDD_ModuleContracts"
+}
+
 echo "==> Only Abstractions and Analyzers, the way a contracts project references the toolkit"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly BillingEventNames
 expect_module ContractsOnly Billing
+expect_module_contracts ContractsOnly
 
 echo "==> Only the DDDToolkit package"
 build_consumer CoreOnly/Acme.Billing.csproj

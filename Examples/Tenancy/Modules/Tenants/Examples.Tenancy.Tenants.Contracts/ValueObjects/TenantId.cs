@@ -15,6 +15,5 @@ namespace Examples.Tenancy.Tenants.Contracts.ValueObjects;
 /// <c>Create()</c>, in code before the save: over a <see cref="Guid"/> the generator writes it, a time-ordered id,
 /// and an id over a <see cref="long"/> would declare its own here, a snowflake say.
 /// </remarks>
-[ModuleContract]
 [EntityId<Guid>("TEN")]
 public readonly partial record struct TenantId;

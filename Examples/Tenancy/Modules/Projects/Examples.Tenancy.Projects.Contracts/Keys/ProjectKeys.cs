@@ -1,5 +1,3 @@
-using DDDToolkit.Abstractions.Attributes;
-
 namespace Examples.Tenancy.Projects.Contracts.Keys;
 
 /// <summary>
@@ -12,7 +10,6 @@ namespace Examples.Tenancy.Projects.Contracts.Keys;
 /// question, and the host names them when it builds the role packs. Neither needs to know how Projects
 /// describes them.
 /// </remarks>
-[ModuleContract]
 public static class ProjectKeys
 {
     /// <summary>See a project and its crew.</summary>

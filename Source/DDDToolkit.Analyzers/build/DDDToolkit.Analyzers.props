@@ -36,6 +36,16 @@
     <CompilerVisibleProperty Include="DDD_Module" />
 
     <!--
+      Says the project is its module's contracts when it is true: the toolkit's generator writes
+      [assembly: ModuleContracts], and every public type of the project is published to the other modules. Only the
+      property says so, never the project's name; a folder that wants its *.Contracts projects to be contracts sets it
+      with a condition of its own. It needs no build step: the other modules read what a project publishes from the
+      compiled assembly, where the generator wrote the attribute, and the one generator of the project itself that
+      asks, the one that writes {Module}EventNames, reads this property as well.
+    -->
+    <CompilerVisibleProperty Include="DDD_ModuleContracts" />
+
+    <!--
       Where a diagnostic about the project's module points when no line of its source declares the module: the
       build declared it from DDD_Module, and the file it wrote that into is no one's to edit.
     -->

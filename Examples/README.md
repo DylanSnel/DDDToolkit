@@ -569,7 +569,7 @@ keys their commands ask.
 ```
 Tenancy/
   Modules/
-    Directory.Build.props                          declares each project's module, named after its folder, with DDD_Module: no Module.cs per project
+    Directory.Build.props                          declares each project's module, named after its folder, with DDD_Module: no Module.cs per project; and makes each *.Contracts project its module's contracts, with DDD_ModuleContracts: no [ModuleContract] per type
     Tenants/
       Examples.Tenancy.Tenants.Contracts           the ids, and the operators' token role
       Examples.Tenancy.Tenants.Domain              the application's classes on the package, a folder per aggregate it adds to; Module.cs with Tenancy's switch, which writes the organization and the role; and TenantsTenancy, which the generator writes here and the use cases are named through

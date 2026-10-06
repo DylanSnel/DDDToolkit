@@ -971,9 +971,9 @@ Which types those are:
 
 - **Every identifier and single value object of the module's other projects**: the projects that declare
   the same `[assembly: Module]`.
-- **The published ones of the other modules it references**, marked `[ModuleContract]`. They are the only
-  ones the module may name ([DDD00022](diagnostics.md#ddd00022)), so they are the only ones its schema
-  can show.
+- **The published ones of the other modules it references**, marked `[ModuleContract]` or public in a
+  [contracts project](modules.md#a-contracts-project). They are the only ones the module may name
+  ([DDD00022](diagnostics.md#ddd00022)), so they are the only ones its schema can show.
 - **Not a type that has a nested provider.** Its project references the package and binds it in its own
   `Add{Module}GraphQlRuntimeBindings()`. A project of the same module that references it calls that method
   from its own, and does not bind again what it bound; another module's, the schema still calls.

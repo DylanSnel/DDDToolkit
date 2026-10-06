@@ -59,8 +59,9 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 - A project without Entity Framework, such as a module's domain or contracts project, has no converters of
   its own. The generated `Add{Module}Converters()` of a project of the same `[assembly: Module]` that does
   reference it registers them with `SingleValueConverter<T, TValue>`, through `ISingleValue<TSelf, TValue>`,
-  which every generated id and single value object implements; it also registers the `[ModuleContract]`
-  ids of other modules that have no converter of their own. So a layered module's domain and contracts
+  which every generated id and single value object implements; it also registers the published ids of other
+  modules (`[ModuleContract]`, or public in a contracts project that sets `DDD_ModuleContracts`) that have no
+  converter of their own. So a layered module's domain and contracts
   projects need no Entity Framework, and its infrastructure project gets the method even when it declares
   no ids. A project without a module registers only its own.
 - A registration a package closes over the application's classes, such as `modelBuilder.AddTenancy()` and
@@ -193,14 +194,18 @@ that sets `DDD_Module` and must be no module, such as a shared kernel every modu
 declared. Full pages: `modules.md`, `module-contracts.md`.
 
 - Everything a module declares is private to it, `public` or not, unless it is marked
-  `[ModuleContract]` or is an `[IntegrationEvent]` record (types nested in those are published too).
+  `[ModuleContract]` or is an `[IntegrationEvent]` record (types nested in those are published too), or is public
+  in a contracts project that says so: `<DDD_ModuleContracts>true</DDD_ModuleContracts>` or
+  `[assembly: ModuleContracts]`. Never by name: a project called `*.Contracts` is no contracts project until it
+  says it. A folder that wants that convention sets the property itself, in its own props, under
+  `Condition="$(MSBuildProjectName.EndsWith('.Contracts'))"`.
 - Publish identifiers, integration events, and where really needed a read model or an interface. Never
   publish entities; another module holding one is DDD00023 whether published or not.
 - Keep published types free of unpublished ones: a published record of primitives and published ids.
 - The rules report nothing until both sides are modules. Once a project's list is empty, hold it with
   `<WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>`.
 - A common layout is a `*.Contracts` project per module holding the published ids and integration
-  events; other modules reference only that project.
+  events; other modules reference only that project. It sets `DDD_ModuleContracts` rather than marking each type.
 - A module in layers is a project per layer, every one declaring the same module: Contracts, Domain,
   Application, Infrastructure (the context, the migrations, the adapters, and the generated registrations) and
   Api (the routes and the module's entry, which the host references alone). Declare it once for the folder
