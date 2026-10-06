@@ -242,19 +242,13 @@ public sealed class PgmqConsumerTests : IAsyncLifetime
         services.AddDDDToolkitEntityFramework(options => options.MapIntegrationEvents(contracts => contracts.Register<ShelfOpenedV3>()));
         if (requireExplicitCallers)
         {
-            // The module's context runs under row level security, which asks who is calling on every connection.
+            // The module's context runs under row level security, which asks who is calling on every connection:
+            // UseDDDToolkit below puts it on the context once it is registered.
             services.AddPostgresRowLevelSecurity();
             services.RequireExplicitCallers();
         }
 
-        services.AddDbContext<PgmqContext>((provider, options) =>
-        {
-            options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider);
-            if (requireExplicitCallers)
-            {
-                options.UsePostgresRowLevelSecurity(provider);
-            }
-        });
+        services.AddDbContext<PgmqContext>((provider, options) => options.UseNpgsql(database.ConnectionString).UseDDDToolkit(provider));
         services.AddModuleIntegrationEvents<PgmqContext>(module =>
         {
             if (around is not null)

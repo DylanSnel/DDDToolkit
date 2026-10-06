@@ -220,8 +220,9 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, Cancellation, names);
         var yard = OrganizationUnitId.CreateSequential();
 
-        // A host that registered Tenancy for Postgres and left row level security off its contexts: every command runs
-        // as the application, which owns the tables, and the database is told of no signed-in user. Seth supervises North,
+        // A host that registered Tenancy for Postgres and gave its contexts the toolkit's base alone, without row level
+        // security: every command runs as the application, which owns the tables, and the database is told of no
+        // signed-in user. Seth supervises North,
         // so the use case finds him to manage units at North and at North Pier, and asks what a move between them changes.
         await using (var unsecured = new TenancyServices(database, rowLevelSecurity: false))
         {
@@ -231,7 +232,7 @@ public abstract class CrossSeatQuestionTests(TenancyPostgres postgres, TenancyNa
             // with nothing in the database to check it afterwards: the store takes it for no answer instead.
             var unanswered = await FluentActions.Awaiting(() => unsecured.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Organization().MoveUnitAsync(yard, NorthPier, Cancellation)))
                 .Should().ThrowAsync<InvalidOperationException>();
-            unanswered.Which.Message.Should().Contain("does not see the seat the application acts as").And.Contain("UsePostgresRowLevelSecurity");
+            unanswered.Which.Message.Should().Contain("does not see the seat the application acts as").And.Contain("UseDDDToolkit once row level security is registered").And.Contain("UsePostgresRowLevelSecurity");
         }
 
         await using (var owner = await AsCaller.OwnerAsync(database, Cancellation))

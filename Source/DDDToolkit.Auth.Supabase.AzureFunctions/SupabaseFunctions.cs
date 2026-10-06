@@ -12,10 +12,11 @@ namespace DDDToolkit.Auth.Supabase.AzureFunctions;
 /// var builder = FunctionsApplication.CreateBuilder(args);
 /// builder.UseSupabaseAuth();
 /// builder.Services.AddSupabaseAuth("https://&lt;ref&gt;.supabase.co");
+/// builder.Services.AddDDDToolkitEntityFramework();   // UseDDDToolkit is DDDToolkit.EntityFramework's
 /// builder.Services.AddSupabaseRowLevelSecurity();   // or AddPostgresRowLevelSecurity() off Supabase
 /// builder.Services.AddDbContext&lt;OrderingContext&gt;((provider, options) => options
 ///     .UseNpgsql(connectionString)
-///     .UseSupabaseRowLevelSecurity(provider));
+///     .UseDDDToolkit(provider));                   // runs the context as its caller, with the toolkit
 /// </code>
 /// </summary>
 public static class SupabaseFunctions

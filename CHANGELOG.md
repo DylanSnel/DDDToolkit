@@ -291,9 +291,50 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   outside every source file, so a `[*.cs]` section of `.editorconfig` does not set the severity of these or of
   DDD00064: `<NoWarn>`, `<WarningsAsErrors>` or a `.globalconfig` with `is_global = true` does. A `[*.cs]`
   severity that reached the file in `obj/` moves there.
+- **Parts of a context, which a package brings and the host's one call applies.** `services.AddContextPart(...)`,
+  in `DDDToolkit.Composition`, registers what a package adds to a context's options, a `ContextPart<TBuilder>`
+  with a name and a position, once per name however often its registration runs. `ContextParts<TBuilder>.ApplyTo`
+  applies every registered part that belongs on the builder at hand, the lowest position first and two of one
+  position as registered; a part says whether it belongs from what the builder holds (`AppliesTo`), and where the
+  builder cannot tell yet it goes on, and what it adds passes over at use what it has nothing to do for.
+  `services.GetContextParts<TBuilder>()` reads them before the host is built. `UseDDDToolkit` applies the parts
+  of a context's options, below. See [A part of your own](docs/entity-framework.md#a-part-of-your-own).
 
 #### Entity Framework and row level security
 
+- **`UseDDDToolkitCore`: the toolkit's own interceptors, and nothing a package brings**, which is what
+  `UseDDDToolkit` added up to 3.1. It is for a context that should do without a part the host registered, one on
+  Postgres that runs as the role the application logged in as while the others run as their caller, say, and
+  that takes the parts it does want with their own `Use...` calls after it. It adds the interceptors the options
+  do not have yet, so a second call adds nothing, and leaves in the options that the base alone was asked for,
+  which the start-up check of row level security reads. See
+  [`UseDDDToolkitCore`](docs/entity-framework.md#usedddtoolkitcore).
+- **A part a model cannot do without.** `model.RequireContextPart(part, interceptor, registeredWith, addedWith)`
+  states, as text in a model annotation, that a context of the model needs a part: the toolkit's first interceptor
+  refuses its first save where the context's options lack the part's interceptor, before anything is written,
+  naming the registration where nothing registered the part and `UseDDDToolkit`, or the part's own call after
+  `UseDDDToolkitCore`, where something did. `entity-framework.toolkit-wired`, and
+  `ContextPartRequirements.EnsureRequiredParts`, hold every registered context to the same at start-up. See
+  [A part a model cannot do without](docs/entity-framework.md#a-part-a-model-cannot-do-without).
+- **Row level security comes with `UseDDDToolkit`.** `AddPostgresRowLevelSecurity`, and so
+  `AddSupabaseRowLevelSecurity`, bring it to every context on Postgres that `UseDDDToolkit` wires, as the part
+  `postgres.row-level-security` at position 100 (`PostgresRowLevelSecurityInterceptor.PartName` and
+  `PartPosition`), after the toolkit's own interceptors. A context whose provider is configured and is not
+  Postgres's is passed over. One whose provider comes later, further down the options callback or in
+  `OnConfiguring`, gets the interceptor, which passes over every connection and save of a context that turns out
+  not to be on Postgres, before it asks who is calling: so the 3.1 chain works whatever the order, and a context on
+  Postgres runs as its caller wherever its provider was set. `UsePostgresRowLevelSecurity` and
+  `UseSupabaseRowLevelSecurity` stay, for a context without the toolkit or one given the base alone, and add
+  nothing to options that already have the interceptor. See
+  [Running queries as the caller](docs/row-level-security.md#running-queries-as-the-caller).
+- The first time the options of a context type are built with any part, one information line, of the category
+  `DDDToolkit.EntityFramework.ContextParts`, names the context and the parts, and says how a context does without
+  one. It is written once per context type, however many scopes build the options: at start for a host that runs
+  its start-up checks, which build every registered context, and otherwise when the context is first used.
+- `postgres.row-level-security-wired`, and `PostgresRowAccessChecks.EnsureRowLevelSecurityWired`, take a context
+  given the base alone, `UseDDDToolkitCore`, as one that runs as the login role on purpose, by what that call
+  leaves in its options. Every other context on Postgres without row level security is refused, one that added
+  the toolkit's interceptors by hand included, and the message names both calls.
 - `ISingleValue<TSelf, TValue>`, implemented explicitly by every generated id, single value object and
   always-valid twin, and `SingleValueConverter<T, TValue>`, which stores any of them. The generated
   `Add{Module}Converters()` also registers, with it, those of the module's other projects that have no
@@ -817,9 +858,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a tenant starts with, keys of its own and marks on keys that manage access. The use cases provision a tenant, place
   seats, give roles and change them, each held to who may give a role, and a tenant keeps an administrator.
   `TenantSelection` finds the seat a request's verified identity has in the tenant the request names,
-  `ScopeToTenant` and `UseTenancy` keep an entity's rows to a tenant with a filter and a save check, and a
+  `ScopeToTenant` and Tenancy's save check keep an entity's rows to a tenant with a filter and a save check, and a
   module asks where the caller holds a key inside a query of its own, through `ITenancyQuestions`. Every refusal
   has a code, with texts in English and Dutch. See [Tenancy](docs/tenancy.md).
+- **Tenancy: the save check comes with `UseDDDToolkit`.** `AddTenancy` brings it as the part `tenancy.save-check`,
+  last, at the highest position there is (`TenancySaveInterceptor.PartName` and `PartPosition`): after the
+  toolkit's own interceptors, after row level security and after any part of a host's own, so a row such a part
+  adds is checked like any other. It goes on every context `UseDDDToolkit` wires: Tenancy's own context, where it
+  also writes the closure and the rights a save changes, a module's context that keeps rows to a tenant, and a
+  context that keeps none, which it passes over at its first save. No registration names the contexts Tenancy is
+  for, because the options are built before the model that decides it; a module added later is kept to the tenant
+  by the same call. `UseTenancy` stays, after `UseDDDToolkitCore`, and adds nothing to options that already have
+  the interceptor. A context that keeps rows to a tenant cannot do without it: `ScopeToTenant` states so in the
+  model, so such a context without the save check, because nothing registered Tenancy or it was given the base
+  alone, is refused at its first save, naming `AddTenancy` or `UseTenancy`, where `UseTenancy` used to throw.
+  `tenancy.contexts-wired` holds it to the save check at start-up, whichever call wired it, and
+  `TenancyChecks.EnsureWired` names `AddTenancy` where Tenancy is not registered.
+  See [Keeping tenants apart](docs/tenancy.md#keeping-tenants-apart-the-filter-and-the-save-check).
 - **Tenancy: an administrators' pack may list its keys.** A `RolePack` with `Administers` that lists no keys
   makes a role that holds every live key. One that lists keys makes a role that holds those and no others, so an
   application can have administrators who run access without holding the keys to its modules' work. The list
@@ -1016,7 +1071,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the kind of an actor is that word whatever the serializer's options say about enums.
 - **Tenancy: who changed a row.** `entity.RecordsWhoChanged()` adds six shadow columns to an entity kept to a
   tenant, who wrote the row first and who changed it last, each as a kind, a seat and an operator's identity,
-  and the save interceptor of `UseTenancy` fills them from the Tenancy caller. Who wrote a row first is fixed
+  and Tenancy's save interceptor fills them from the Tenancy caller. Who wrote a row first is fixed
   once the row is there. On Postgres the contribution writes a trigger on every such table that holds a
   signed-in user to its own seat, keeps scoped system work from writing a seat's kind, and lets neither change
   who wrote the row first. The first save refuses a model that calls it on an entity that is not kept to a
@@ -1378,6 +1433,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **Every sample context is wired with one call.** The Tenancy sample's three modules write
+  `UseDDDToolkit(application)` where they wrote `UseDDDToolkit`, `UseSupabaseRowLevelSecurity` and `UseTenancy`,
+  and the webshop's Supabase host registers row level security and nothing per context:
+  `ModuleDatabase.WithRowLevelSecurity()` is gone, since `UseDDDToolkit` brings it to every module's context on
+  Postgres once the host registers it.
 - **The Tenancy sample has no start-up class of its own.** `PostgresStartupCheck`, `TenancyStartupCheck` and
   `ProjectFunctionsCheck` are gone: the host calls `RunStartupChecks()`, and the checks are the ones the
   registrations of its modules bring, Membership's through `AddMembershipPostgres()` in the Projects module. The
@@ -1834,9 +1894,34 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   preset it names that is gone. The page goes from what Tenancy is, through adopting it step by step and the
   sample, to the reference for Postgres, and the agent skill has a reference for supporting domains and Tenancy
   and one for GraphQL.
+- **Docs: one call per context.** [Entity Framework](docs/entity-framework.md#usedddtoolkit) says what
+  `UseDDDToolkit` adds, in which order and on which contexts, with a diagram, and has `UseDDDToolkitCore`, a part
+  of your own and a part a model cannot do without. Getting started, Row level security, Supabase, Tenancy,
+  Membership, Start-up checks and the agent skill show the one call where they showed the chain; Row level
+  security and Supabase install and register `DDDToolkit.EntityFramework` where they use it, and say what a
+  context given the base alone may do where the login role owns and holds nothing.
 
 ### Changed
 
+- **`UseDDDToolkit` adds what the registered packages bring, after the toolkit's own interceptors.** Up to 3.1 it
+  added the toolkit's interceptors and nothing else, and a context ran as its caller only with
+  `UseSupabaseRowLevelSecurity` or `UsePostgresRowLevelSecurity` in its own options. Now, once
+  `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity` is registered, every context on Postgres that
+  `UseDDDToolkit` wires runs as its caller, and once `AddTenancy` is registered every context has Tenancy's save
+  check, each in the order the toolkit holds a context to. A context's options are one call,
+  `UseNpgsql(...).UseDDDToolkit(services)`, and a module added later is wired like the others. The chain written
+  out, `UseDDDToolkit(services).UseSupabaseRowLevelSecurity(services).UseTenancy(services)`, keeps working
+  unchanged and gives each interceptor once. See [`UseDDDToolkit`](docs/entity-framework.md#usedddtoolkit).
+  - **Breaking, for one kind of context.** A context on Postgres that was left without row level security on
+    purpose, in an application that registered it for its other contexts, now runs as its caller. Configure it
+    with `UseDDDToolkitCore(services)` and the `Use...` calls of the parts it does want, before upgrading. Until
+    then its queries run as their caller's role instead of the role the application logged in as. Where that
+    login role owns the tables or is a superuser, that takes rights away: the caller sees and changes what the
+    policies let it. Where it was a restricted role, it can give more: background work runs as `SystemRole`, on
+    Supabase often `service_role`, which passes every policy, and a request as `authenticated` or `anon` with what
+    those roles were granted. The information line of `UseDDDToolkit` names such a context the first time its
+    options are built: at start in a host that adds `builder.Services.RunStartupChecks()`, and otherwise when the
+    context is first used. A context on any other database is not touched, wherever its provider is configured.
 - **For the 3.2.0 previews: the access hold is no longer the default.** A handler on a resource with members
   no longer takes what the check read, `Checked<MemberHold<TResourceId>>.TakeFor(command)`, to load the
   resource at that version: it loads the resource its request names and holds it to the request's own

@@ -5,6 +5,7 @@ using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
 using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,7 +41,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 public static class PostgresRowAccessChecks
 {
     /// <summary>
-    /// The start-up check that every registered context on Postgres runs its commands as the caller
+    /// The start-up check that every registered context on Postgres runs its commands as the caller, but one
+    /// configured with <c>UseDDDToolkitCore</c> and left without row level security on purpose
     /// (<see cref="EnsureRowLevelSecurityWired"/>). It opens nothing, so it runs with the checks of the services,
     /// first: a context without the interceptor would fail the questions the other checks put through it.
     /// </summary>
@@ -68,7 +70,14 @@ public static class PostgresRowAccessChecks
     public const string DefinerOwnersBypassCheck = "postgres.definer-owners-bypass";
 
     /// <summary>The name Npgsql's provider for Entity Framework gives itself: what a context on Postgres reports.</summary>
-    private const string NpgsqlProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+    internal const string NpgsqlProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
+
+    /// <summary>
+    /// What <c>UseDDDToolkitCore</c> leaves in a context's options, and <c>UseDDDToolkit</c> does not: that the
+    /// application asked for the toolkit's base alone. This package references <c>DDDToolkit.EntityFramework</c> no
+    /// more than it references Npgsql, so the name of the type is what it goes by.
+    /// </summary>
+    private const string BaseAlone = "DDDToolkit.EntityFramework.BaseAloneExtension";
 
     /// <summary>The toolkit's own schema, which every check looks at next to the context's.</summary>
     private const string ToolkitSchema = "ddd";
@@ -411,18 +420,25 @@ public static class PostgresRowAccessChecks
 
     /// <summary>
     /// Throws unless <paramref name="context"/> runs its commands through
-    /// <see cref="PostgresRowLevelSecurityInterceptor"/>. Without it every command runs as the role the
-    /// application logged in as: past every policy where that role owns the tables, and refused outright where
-    /// it holds nothing.
+    /// <see cref="PostgresRowLevelSecurityInterceptor"/>, or was configured with <c>UseDDDToolkitCore</c> and left
+    /// without it on purpose. Without it every command runs as the role the application logged in as: past every
+    /// policy where that role owns the tables, and refused outright where it holds nothing.
+    /// <para>
+    /// A context wired with <c>UseDDDToolkit</c> has it, since that call adds it to every context on Postgres once row
+    /// level security is registered. A context given the base alone, <c>UseDDDToolkitCore</c>, keeps that in its
+    /// options: that call is how an application says a context runs as the login role, and it is taken as meant.
+    /// Every other context without the interceptor is refused, one that added the toolkit's interceptors by hand
+    /// included: nothing there says the login role was meant.
+    /// </para>
     /// </summary>
     /// <param name="context">The context to check; it is not opened.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The context's options have no row level security interceptor.</exception>
+    /// <exception cref="InvalidOperationException">The context's options have no row level security interceptor, and were not given the base alone.</exception>
     public static void EnsureRowLevelSecurityWired(DbContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (InterceptorOf(context) is null)
+        if (InterceptorOf(context) is null && !GivenTheBaseAlone(context))
         {
             throw NotWired(context);
         }
@@ -494,15 +510,23 @@ public static class PostgresRowAccessChecks
 
     /// <summary>The row level security interceptor among <paramref name="context"/>'s, or null where it has none.</summary>
     private static PostgresRowLevelSecurityInterceptor? InterceptorOf(DbContext context)
-        => (context.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()?.Interceptors ?? [])
-            .OfType<PostgresRowLevelSecurityInterceptor>()
-            .FirstOrDefault();
+        => InterceptorsOf(context).OfType<PostgresRowLevelSecurityInterceptor>().FirstOrDefault();
 
-    /// <summary>What a context without the row level security interceptor is told, with the way to configure it.</summary>
+    /// <summary>The interceptors of <paramref name="context"/>'s options, in the order they were added.</summary>
+    private static IEnumerable<IInterceptor> InterceptorsOf(DbContext context)
+        => context.GetService<IDbContextOptions>().FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
+
+    /// <summary>Whether <paramref name="context"/>'s options were given the toolkit's base alone, with <c>UseDDDToolkitCore</c>.</summary>
+    private static bool GivenTheBaseAlone(DbContext context)
+        => context.GetService<IDbContextOptions>().Extensions.Any(extension => string.Equals(extension.GetType().FullName, BaseAlone, StringComparison.Ordinal));
+
+    /// <summary>What a context without the row level security interceptor is told, with the ways to configure it.</summary>
     private static InvalidOperationException NotWired(DbContext context)
         => new(
             $"'{context.GetType().Name}' does not run its commands as the caller: its options have no {nameof(PostgresRowLevelSecurityInterceptor)}, so every command would run as the role the application logged in as. " +
-            $"Configure it with options.{nameof(DependencyInjection.UsePostgresRowLevelSecurity)}(serviceProvider), or UseSupabaseRowLevelSecurity on Supabase, after services.{nameof(DependencyInjection.AddPostgresRowLevelSecurity)}().");
+            "Configure it with options.UseDDDToolkit(serviceProvider), which adds it to every context on Postgres once row level security is registered; " +
+            $"a context wired otherwise takes it with options.{nameof(DependencyInjection.UsePostgresRowLevelSecurity)}(serviceProvider), or UseSupabaseRowLevelSecurity on Supabase. " +
+            "A context that should run as the role the application logged in as is configured with options.UseDDDToolkitCore(serviceProvider), which says so.");
 
     /// <summary>
     /// Every role <paramref name="options"/> switches a caller to, each once, with what it is to a message and the

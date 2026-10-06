@@ -163,14 +163,32 @@ public sealed class EntityFrameworkChecksTests : IDisposable
     }
 
     [Fact]
-    public void A_context_without_the_interceptor_fails_the_row_level_security_check()
+    public void A_context_without_the_interceptor_fails_the_row_level_security_check_unless_it_was_given_the_base_alone()
     {
-        using var without = Host<ApiaryContext>((provider, options) => options.UseDDDToolkit(provider));
-        using var with = Host<ApiaryContext>((provider, options) => options.UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider));
+        using var bare = Host<ApiaryContext>((_, _) => { });
+        using var core = Host<ApiaryContext>((provider, options) => options.UseDDDToolkitCore(provider));
+        using var with = Host<ApiaryContext>((provider, options) => options.UseDDDToolkitCore(provider).UsePostgresRowLevelSecurity(provider));
 
-        FluentActions.Invoking(() => Check(without, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().Throw<InvalidOperationException>().WithMessage(
+        FluentActions.Invoking(() => Check(bare, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().Throw<InvalidOperationException>().WithMessage(
             "'ApiaryContext' does not run its commands as the caller: its options have no PostgresRowLevelSecurityInterceptor, so every command would run as the role the application logged in as. " +
-            "Configure it with options.UsePostgresRowLevelSecurity(serviceProvider), or UseSupabaseRowLevelSecurity on Supabase, after services.AddPostgresRowLevelSecurity().");
+            "Configure it with options.UseDDDToolkit(serviceProvider), which adds it to every context on Postgres once row level security is registered; " +
+            "a context wired otherwise takes it with options.UsePostgresRowLevelSecurity(serviceProvider), or UseSupabaseRowLevelSecurity on Supabase. " +
+            "A context that should run as the role the application logged in as is configured with options.UseDDDToolkitCore(serviceProvider), which says so.");
+        FluentActions.Invoking(() => Check(core, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().NotThrow(
+            "UseDDDToolkitCore is how an application says a context runs as the login role, and the options keep that it was called");
+
+        // The toolkit's interceptors added by hand, as a host may, say nothing of the kind: all four, or one of them.
+        using var byHand = Host<ApiaryContext>((provider, options) => options.AddInterceptors(
+            new PublishDomainEventsInterceptor(provider, provider.GetRequiredService<DDDEntityFrameworkOptions>()),
+            provider.GetRequiredService<InvariantInterceptor>(),
+            provider.GetRequiredService<AggregateVersionInterceptor>(),
+            provider.GetRequiredService<DatabaseRefusalInterceptor>()));
+        using var oneByHand = Host<ApiaryContext>((provider, options) => options.AddInterceptors(provider.GetRequiredService<DatabaseRefusalInterceptor>()));
+        FluentActions.Invoking(() => Check(byHand, EntityFrameworkChecks.EnsureToolkitWired)).Should().NotThrow("the toolkit takes its interceptors added by hand");
+        FluentActions.Invoking(() => Check(byHand, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().Throw<InvalidOperationException>(
+            "nothing in a context wired by hand says the login role was meant").WithMessage("'ApiaryContext' does not run its commands as the caller*");
+        FluentActions.Invoking(() => Check(oneByHand, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().Throw<InvalidOperationException>()
+            .WithMessage("'ApiaryContext' does not run its commands as the caller*");
         FluentActions.Invoking(() => Check(with, PostgresRowAccessChecks.EnsureRowLevelSecurityWired)).Should().NotThrow();
         FluentActions.Invoking(() => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(null!)).Should().Throw<ArgumentNullException>();
     }

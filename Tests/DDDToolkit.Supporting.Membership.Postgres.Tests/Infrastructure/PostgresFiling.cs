@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Postgres;
 using Npgsql;
 
@@ -23,7 +24,7 @@ public sealed class PostgresFiling : IDisposable
                 configure?.Invoke(services);
             },
             ownContexts,
-            wiring: asCaller ? (options, provider) => options.UsePostgresRowLevelSecurity(provider) : null);
+            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider));
         Scenario = new FilingScenario(DateTimeOffset.UtcNow);
     }
 

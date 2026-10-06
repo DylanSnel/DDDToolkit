@@ -298,7 +298,8 @@ internal sealed class EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, T
                 throw new InvalidOperationException(
                     "The database answered nothing about the rights a move of a unit changes. It answers a seat that manages units at both parents, which the calling seat " +
                     "was just found to do, and it does not see the seat the application acts as. The context that maps Tenancy's tables must send its commands as the " +
-                    "signed-in user, in the seat's tenant: on Postgres, add UsePostgresRowLevelSecurity to its options and begin the user's caller around the command.");
+                    "signed-in user, in the seat's tenant: on Postgres, wire it with UseDDDToolkit once row level security is registered, or add UsePostgresRowLevelSecurity " +
+                    "after UseDDDToolkitCore, and begin the user's caller around the command.");
             }
 
             return answered;

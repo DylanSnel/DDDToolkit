@@ -1,30 +1,41 @@
 using System.Data.Common;
 using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Access;
+using DDDToolkit.Composition;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace DDDToolkit.EntityFramework.Postgres;
 
-/// <summary>Registers row level security for the contexts that should run under the caller's role.</summary>
+/// <summary>Registers row level security for the contexts on Postgres, which then run under the caller's role.</summary>
 public static class DependencyInjection
 {
     /// <summary>
-    /// Registers <see cref="PostgresRowLevelSecurityInterceptor"/>. Add it to each context that should run
-    /// under the caller's role with <see cref="UsePostgresRowLevelSecurity"/>.
+    /// Registers <see cref="PostgresRowLevelSecurityInterceptor"/>, and brings it to every context on Postgres
+    /// that <c>UseDDDToolkit</c> wires, as the part <see cref="PostgresRowLevelSecurityInterceptor.PartName"/>: each
+    /// then runs under its caller's role. <c>UseDDDToolkit</c> is <c>DDDToolkit.EntityFramework</c>'s, registered
+    /// with <c>AddDDDToolkitEntityFramework</c>:
     /// <code>
+    /// services.AddDDDToolkitEntityFramework();
     /// services.AddPostgresRowLevelSecurity();
     /// services.AddDbContext&lt;OrderingContext&gt;((provider, options) => options
     ///     .UseNpgsql(connectionString)
-    ///     .UsePostgresRowLevelSecurity(provider));
+    ///     .UseDDDToolkit(provider));
     /// </code>
+    /// A context without the toolkit takes it with <see cref="UsePostgresRowLevelSecurity"/>, this package on its
+    /// own: <c>options.UseNpgsql(connectionString).UsePostgresRowLevelSecurity(provider)</c>. One that should run as
+    /// the role the application logged in as, while the others run as their caller, is configured with
+    /// <c>UseDDDToolkitCore</c>.
+    /// <para>
     /// Who is calling is whatever a host registered: in ASP.NET Core, the request's user, once
     /// <c>AddSupabaseJwtBearer</c> from <c>DDDToolkit.Auth.Supabase.AspNetCore</c> is there. Without one,
     /// it is the caller <see cref="Callers.Begin"/> made current, or <see cref="Caller.System"/> outside any
     /// (<see cref="AmbientCallerAccessor"/>), which is what an Azure Function, a worker service or a test wants.
     /// With <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>, outside any it is nobody,
     /// and the context's first command fails instead of running as the system.
+    /// </para>
     /// <para>
     /// It brings the start-up checks of <see cref="PostgresRowAccessChecks"/>, over every registered context on
     /// Postgres, which a host runs with <c>services.RunStartupChecks()</c>.
@@ -118,6 +129,13 @@ public static class DependencyInjection
     /// <summary>
     /// Runs this context's queries under the caller's role and claims, so Postgres's row level security
     /// applies to them. Needs <see cref="AddPostgresRowLevelSecurity(IServiceCollection, Action{PostgresRowLevelSecurityOptions}?)"/>.
+    /// <para>
+    /// <c>UseDDDToolkit</c> calls it for every context on Postgres once row level security is registered, so a
+    /// context wired with that one call needs nothing more. It is for a context configured with
+    /// <c>UseDDDToolkitCore</c>, which takes the parts it wants one by one, and for one without the toolkit's
+    /// interceptors. It adds nothing to options that already have the interceptor, so a chain that calls it after
+    /// <c>UseDDDToolkit</c> gives it once.
+    /// </para>
     /// </summary>
     /// <param name="optionsBuilder">The context's options.</param>
     /// <param name="serviceProvider">
@@ -135,7 +153,8 @@ public static class DependencyInjection
         var interceptor = serviceProvider.GetService<PostgresRowLevelSecurityInterceptor>()
             ?? throw new InvalidOperationException("Row level security is not registered. Call services.AddPostgresRowLevelSecurity() first.");
 
-        return optionsBuilder.AddInterceptors(interceptor);
+        var present = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
+        return present.OfType<PostgresRowLevelSecurityInterceptor>().Any() ? optionsBuilder : optionsBuilder.AddInterceptors(interceptor);
     }
 
     private static IServiceCollection AddInterceptor(this IServiceCollection services, Action<PostgresRowLevelSecurityOptions>? configure)
@@ -148,10 +167,35 @@ public static class DependencyInjection
         services.Replace(ServiceDescriptor.Singleton(options));
         services.TryAddSingleton<PostgresRowLevelSecurityInterceptor>();
 
+        // Every context on Postgres that UseDDDToolkit wires runs as its caller, without a call of its own.
+        services.AddContextPart(new ContextPart<DbContextOptionsBuilder>(
+            PostgresRowLevelSecurityInterceptor.PartName,
+            PostgresRowLevelSecurityInterceptor.PartPosition,
+            (contextOptions, provider) => contextOptions.UsePostgresRowLevelSecurity(provider))
+        {
+            AppliesTo = MayBeOnPostgres,
+        });
+
         // What the lock relies on in the database and in the contexts, checked before the host starts once it
         // runs its start-up checks.
         PostgresRowAccessChecks.AddStartupChecks(services);
 
         return services;
     }
+
+    /// <summary>
+    /// Whether <paramref name="options"/> may be those of a context on Postgres: false only where a provider is
+    /// configured and it is not Npgsql's, the name Entity Framework reports as the context's provider. This package
+    /// references no Npgsql, so the name is what it goes by, as in the start-up checks.
+    /// <para>
+    /// Where no provider is configured yet, because the options callback calls <c>UseDDDToolkit</c> before
+    /// <c>UseNpgsql</c>, or the context sets its provider in <c>OnConfiguring</c>, which Entity Framework runs after the
+    /// callback, the part goes on: the interceptor passes over a context that turns out not to be on Postgres when it
+    /// is used, and runs one that is as its caller. Refusing would break a chain 3.1 accepted, and leaving it off
+    /// would run a context on Postgres as the login role, in silence.
+    /// </para>
+    /// </summary>
+    private static bool MayBeOnPostgres(DbContextOptionsBuilder options)
+        => options.Options.Extensions.FirstOrDefault(extension => extension.Info.IsDatabaseProvider) is not { } provider
+           || string.Equals(provider.GetType().Assembly.GetName().Name, PostgresRowAccessChecks.NpgsqlProvider, StringComparison.Ordinal);
 }

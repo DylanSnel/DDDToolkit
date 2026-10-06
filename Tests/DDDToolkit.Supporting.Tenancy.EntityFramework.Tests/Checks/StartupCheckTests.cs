@@ -52,7 +52,15 @@ public sealed class StartupCheckTests
 
         var run = () => RunAllAsync(services.Provider);
 
-        (await run.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*keeps entities to a tenant but has no TenancySaveInterceptor*");
+        // The toolkit's check of the contexts, which runs first, finds the part the model requires missing, and
+        // names the call that puts it on; Tenancy's own check of the contexts would refuse it as well.
+        (await run.Should().ThrowAsync<InvalidOperationException>()).WithMessage(
+            "*cannot do without the part tenancy.save-check*no TenancySaveInterceptor*options.UseTenancy(serviceProvider).");
+        FluentActions.Invoking(() =>
+        {
+            using var scope = services.Provider.CreateScope();
+            TenancyChecks.EnsureWired(scope.ServiceProvider.GetRequiredService<TestWidgetContext>());
+        }).Should().Throw<InvalidOperationException>().WithMessage("*keeps entities to a tenant but has no TenancySaveInterceptor*");
     }
 
     [Fact]

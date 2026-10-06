@@ -108,7 +108,7 @@ public static class TenancyPostgresChecks
 
         var interceptor = services.GetService<PostgresRowLevelSecurityInterceptor>()
             ?? throw new InvalidOperationException(
-                "Row level security is not registered, so Tenancy's policies see no caller. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(), and UsePostgresRowLevelSecurity on the contexts.");
+                "Row level security is not registered, so Tenancy's policies see no caller. Call services.AddSupabaseRowLevelSecurity() or services.AddPostgresRowLevelSecurity() next to AddTenancyPostgres(): UseDDDToolkit then runs every context on Postgres as its caller.");
 
         if (!interceptor.RequireExplicitCallers)
         {
@@ -297,7 +297,8 @@ public static class TenancyPostgresChecks
         {
             throw new InvalidOperationException(
                 "The context that maps Tenancy's tables asked the database as " + own.Role + ", and not as the scoped system role " + role + ", which Tenancy's reads across tenants begin: " +
-                "it does not say who is calling, so those reads would be answered nothing. Add UsePostgresRowLevelSecurity(serviceProvider) to the options of that context.");
+                "it does not say who is calling, so those reads would be answered nothing. Configure it with UseDDDToolkit(serviceProvider), which runs every context on Postgres as its caller once row level security is registered; " +
+                "after UseDDDToolkitCore, add UsePostgresRowLevelSecurity(serviceProvider) to its options.");
         }
 
         var other = await AskedInAsync(services, AnotherScope, cancellationToken).ConfigureAwait(false);

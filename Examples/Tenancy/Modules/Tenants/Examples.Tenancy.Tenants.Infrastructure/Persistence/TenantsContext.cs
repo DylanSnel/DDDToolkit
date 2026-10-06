@@ -18,9 +18,9 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 /// classes and ids, which the domain and contracts projects declare; the fields and rules the classes add
 /// (<see cref="OrganizationUnit.Kind"/>, <see cref="OrganizationUnit.CostCentre"/>, <see cref="Seat.JobTitle"/>)
 /// are mapped by the toolkit's conventions like any aggregate's, the kind by its key
-/// (<see cref="UnitKindKeyConverter"/>). Tenant isolation, the save check and the rights writer arrive through
-/// <c>UseTenancy</c> on the options, which the module passes to
-/// <see cref="PostgresPools.AddContext{TContext,TFactory}"/>.
+/// (<see cref="UnitKindKeyConverter"/>). The save check, and the writer of what a save changes of the access
+/// questions' tables, arrive with the options instead: <c>AddTenancy</c> brings them, and <c>UseDDDToolkit</c>, in
+/// the options the module passes to <see cref="PostgresPools.AddContext{TContext,TFactory}"/>, puts them on.
 /// <para>
 /// Invitations are the application's to have or not, so they are a call of their own,
 /// <c>AddTenancyInvitations</c>: two more tables, the invitations and, apart from them, the digests of their tokens.

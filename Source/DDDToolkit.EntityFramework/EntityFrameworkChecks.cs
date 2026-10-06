@@ -51,15 +51,23 @@ public static class EntityFrameworkChecks
             {
                 EnsureToolkitWired(context);
             }
+            else
+            {
+                // A model of a library's own may still require a part, Tenancy's save check for rows kept to a tenant.
+                ContextPartRequirements.EnsureRequiredParts(context);
+            }
         }
     });
 
     /// <summary>
-    /// Throws when <paramref name="context"/> was built without <c>UseDDDToolkit</c>: its domain events would
-    /// stay on their aggregates, its invariants would not be checked and its versions not bumped, without a
-    /// word. It also throws when the context's model and its outbox disagree: the model maps an event log that
+    /// Throws when <paramref name="context"/> was built without <c>UseDDDToolkit</c> or <c>UseDDDToolkitCore</c>:
+    /// its domain events would stay on their aggregates, its invariants would not be checked and its versions not
+    /// bumped, without a word. It also throws when the context's model and its outbox disagree: the model maps an event log that
     /// no <c>outbox.KeepEventLog()</c> keeps, or the context has an outbox of its own
-    /// (<c>UseOutbox&lt;TContext&gt;</c>) whose table, or whose event log, the model does not map.
+    /// (<c>UseOutbox&lt;TContext&gt;</c>) whose table, or whose event log, the model does not map. And it throws when
+    /// the model requires a part of a context its options do not have
+    /// (<see cref="ContextPartRequirements.EnsureRequiredParts"/>): a context that keeps rows to a tenant without
+    /// Tenancy's save check, say, because nothing registered Tenancy.
     /// <para>
     /// The interceptors are read from the context's options each time, because two contexts of one type can be
     /// given different options. A host that adds the toolkit's interceptors by hand passes as long as the three
@@ -110,6 +118,8 @@ public static class EntityFrameworkChecks
                 $"'{name}' has the DDDToolkit interceptors in another order than UseDDDToolkit adds them, so an invariant could miss what a handler changed, or a version be bumped by a save that was refused. " +
                 "Configure it with options.UseDDDToolkit(serviceProvider), which adds domain events, then invariants, then versions.");
         }
+
+        ContextPartRequirements.EnsureRequiredParts(context);
 
         var options = ((PublishDomainEventsInterceptor)interceptors[events]).Options;
         var outbox = options.OutboxFor(context.GetType());

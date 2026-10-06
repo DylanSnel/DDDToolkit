@@ -629,6 +629,11 @@ answer what the access questions answer, from the same rules. What a caller read
 is yours to say, in [row access rules](row-level-security.md#row-access-rules-written-in-c) that ask the
 functions, and the member tables follow the resource's rules, as every table of an aggregate's entities does.
 
+Membership brings nothing to a context's options: the member tables are your context's own, and so is the way it
+is wired. A context wired with `UseDDDToolkit` runs as its caller once row level security is registered, so these
+policies hold it with nothing more to write, and with [Tenancy](#with-tenancy) it has Tenancy's save check as well
+([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)).
+
 ```csharp
 // The project that runs the export: one class per resource, with the rules it is registered with
 [assembly: UseRowAccessContribution(typeof(DocumentMembershipFunctions))]

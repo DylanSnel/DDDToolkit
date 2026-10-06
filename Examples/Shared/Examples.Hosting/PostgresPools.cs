@@ -95,7 +95,11 @@ public sealed class PostgresPools : IAsyncDisposable
     /// </typeparam>
     /// <param name="services">The host's services.</param>
     /// <param name="schema">The module's schema, where its migration history is.</param>
-    /// <param name="wire">What the context is wired with after its provider: the toolkit, row level security, and whatever else the module's contexts need.</param>
+    /// <param name="wire">
+    /// What the context is wired with after its provider: <c>UseDDDToolkit</c>, which brings what the host's
+    /// registrations bring, row level security and Tenancy's save check among them, and whatever else the module's
+    /// contexts need.
+    /// </param>
     public IServiceCollection AddContext<TContext, TFactory>(IServiceCollection services, string schema, Action<IServiceProvider, DbContextOptionsBuilder> wire)
         where TContext : DbContext
         where TFactory : IDesignTimeDbContextFactory<TContext>, new()

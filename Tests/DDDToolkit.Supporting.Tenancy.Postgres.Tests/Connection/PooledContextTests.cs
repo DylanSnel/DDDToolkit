@@ -352,7 +352,7 @@ public abstract class PooledContextTests(TenancyPostgres postgres, TenancyNaming
             foreach (var context in new DbContext[] { ofTheScope, ofTheFactory })
             {
                 context.IsPooled().Should().BeTrue();
-                FluentActions.Invoking(() => TenancyChecks.EnsureWired(context)).Should().NotThrow("UseTenancy comes after UseDDDToolkit in the pool's options");
+                FluentActions.Invoking(() => TenancyChecks.EnsureWired(context)).Should().NotThrow("UseDDDToolkit puts the save check after the toolkit's interceptors in the pool's options too");
             }
 
             // One set of options for every context of the pool: the same interceptors, in the same order.

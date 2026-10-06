@@ -1,5 +1,4 @@
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
@@ -24,9 +23,11 @@ public static class ProjectsInfrastructure
 {
     /// <summary>
     /// Registers how Projects is stored. The host says where its tables live and where what it publishes goes
-    /// (see <see cref="ModuleHost"/>). Tenancy must be registered first: Projects' context checks its saves with
-    /// Tenancy's interceptor. The module runs on Postgres and on nothing else, so the host is one built on its
-    /// connections (<see cref="ModuleHost.OnPostgres"/>).
+    /// (see <see cref="ModuleHost"/>). Tenancy must be registered as well, by the Tenants module: Projects' context
+    /// checks its saves with Tenancy's interceptor, which <c>AddTenancy</c> brings to every context, and its model,
+    /// which keeps projects to a tenant, has its first save refused where nothing brought it. The module runs on
+    /// Postgres and on nothing else, so the host is one built on its connections
+    /// (<see cref="ModuleHost.OnPostgres"/>).
     /// </summary>
     /// <param name="services">The host's services.</param>
     /// <param name="host">The host's two decisions: the database, and the transport.</param>
@@ -38,22 +39,22 @@ public static class ProjectsInfrastructure
         ArgumentNullException.ThrowIfNull(membership);
 
         // The context, from a pool: the reads, which each take a context of their own, and the request's own
-        // context both draw on it. UseTenancy comes after UseDDDToolkit: the save check then sees what the toolkit's
-        // interceptors let through, and refuses a project of another tenant before anything is written.
+        // context both draw on it. The provider is the pools' to set, on the host's connections for requests or for
+        // the background. The factory is the one dotnet ef and the export build the context with: its migrations are
+        // what the host is checked against.
         //
-        // The chain is written out: the toolkit, then the caller's role and claims on every connection, so the
-        // exported policies see who asks, then Tenancy's save check. The provider comes first, and is the pools'
-        // to set, on the host's connections for requests or for the background. The factory is the one dotnet ef
-        // and the export build the context with: its migrations are what the host is checked against.
+        // One call wires it, each lock in its place: the toolkit's interceptors, then what the host's registrations
+        // bring. Row level security, which the host registered, puts the caller's role and claims on every
+        // connection, so the exported policies see who asks. Tenancy's save check, which AddTenancy brought, comes
+        // after the toolkit's interceptors, so it sees what they let through, and refuses a project of another
+        // tenant before anything is written.
         //
         // The default path, and no hold: a command's handler loads the project its request names, with the version
         // its caller named, and the save, the project's rules and the policies hold the write. A host that also
         // wants every save of a project tied to the version its request's check read adds .UseMemberHolds(application)
-        // after UseTenancy: the expert hold of the Membership package, which no handler writes a line for.
+        // after UseDDDToolkit: the expert hold of the Membership package, which no handler writes a line for.
         host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, ProjectsContext.Schema, (application, options) => options
-            .UseDDDToolkit(application)
-            .UseSupabaseRowLevelSecurity(application)
-            .UseTenancy(application));
+            .UseDDDToolkit(application));
 
         // The application's two ports. What a command changes goes through the request's context, its unit of
         // work, taken from the pool when the request first asks for it; what a query or an access check reads

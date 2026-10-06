@@ -15,7 +15,8 @@ namespace DDDToolkit.EntityFramework.Tests;
 /// Each registration of the Entity Framework packages brings the start-up checks of what it registers, once
 /// however often it is called, in the stage that says when it can run: a host gets them without naming one. And
 /// what they look at: every registered context, but a context that maps none of the toolkit's classes needs none of
-/// its interceptors, and one that is not on Postgres none of the checks of Postgres.
+/// its interceptors, one that is not on Postgres none of the checks of Postgres, and one given the toolkit's base alone
+/// runs as the login role on purpose.
 /// </summary>
 public sealed class StartupCheckRegistrationTests : IDisposable
 {
@@ -80,6 +81,41 @@ public sealed class StartupCheckRegistrationTests : IDisposable
             .AddDbContext<LibraryContext>((provider, options) => options.UseSqlite(_db.Connection).UseDDDToolkit(provider))
             .AddDbContext<NotesOfALibrary>(options => options.UseSqlite(_db.Connection)));
         await host.StopAsync(Cancellation);
+    }
+
+    [Fact]
+    public async Task The_check_of_row_level_security_takes_a_context_given_the_base_alone_as_meant_and_stops_one_without_the_toolkit()
+    {
+        // On Postgres, which the check asks without connecting: UseDDDToolkit would have run the context as its caller,
+        // so UseDDDToolkitCore without row level security is the application saying it runs as the login role.
+        await RowLevelSecurityWiredAsync(options => options.UseNpgsql("Host=nowhere.invalid;Database=unused"), (provider, options) => options.UseDDDToolkitCore(provider));
+        await RowLevelSecurityWiredAsync(options => options.UseNpgsql("Host=nowhere.invalid;Database=unused"), (provider, options) => options.UseDDDToolkit(provider));
+
+        // Without the toolkit at all nothing says the login role was meant.
+        var bare = () => RowLevelSecurityWiredAsync(options => options.UseNpgsql("Host=nowhere.invalid;Database=unused"), (_, _) => { });
+        (await bare.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should()
+            .StartWith("'SupabaseShelfContext' does not run its commands as the caller").And.Contain("UseDDDToolkitCore(serviceProvider), which says so");
+    }
+
+    /// <summary>
+    /// Runs the check <see cref="PostgresRowAccessChecks.RowLevelSecurityWiredCheck"/> alone, which opens no connection,
+    /// over a host with row level security registered and a context on <paramref name="database"/> wired by
+    /// <paramref name="wire"/>.
+    /// </summary>
+    private static async Task RowLevelSecurityWiredAsync(Action<DbContextOptionsBuilder> database, Action<IServiceProvider, DbContextOptionsBuilder> wire)
+    {
+        var services = new ServiceCollection();
+        services.AddDDDToolkitEntityFramework();
+        services.AddPostgresRowLevelSecurity();
+        services.AddDbContext<SupabaseShelfContext>((provider, options) =>
+        {
+            database(options);
+            wire(provider, options);
+        });
+
+        var check = services.GetStartupChecks().Registered.Single(registered => registered.Name == PostgresRowAccessChecks.RowLevelSecurityWiredCheck);
+        await using var host = services.BuildServiceProvider();
+        await check.RunAsync(host, Cancellation);
     }
 
     /// <summary>

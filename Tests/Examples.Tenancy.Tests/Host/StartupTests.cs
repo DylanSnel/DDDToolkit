@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using DDDToolkit.EntityFramework;
+using DDDToolkit.EntityFramework.Interceptors;
+using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Startup;
 using DDDToolkit.Supporting.Tenancy;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
@@ -73,6 +75,16 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
             .Should().BeEmpty("a first start, and a crew changed as its lead may, give nothing to warn about");
         logs.Entries.Should().Contain(entry => entry.Category == typeof(DemoSeeder).FullName, "the host's logs are the ones read here");
 
+        // Each module's context was given what the host registered by UseDDDToolkit alone, and the log said so, once
+        // per context, as information.
+        var wired = logs.Entries.Where(entry => entry.Category == "DDDToolkit.EntityFramework.ContextParts").ToList();
+        wired.Should().OnlyContain(entry => entry.Level == LogLevel.Information);
+        foreach (var context in new[] { nameof(TenantsContext), nameof(ProjectsContext), nameof(InspectionsContext) })
+        {
+            wired.Should().ContainSingle(entry => entry.Message.StartsWith($"UseDDDToolkit gave '{context}' ", StringComparison.Ordinal))
+                .Which.Message.Should().Contain(": postgres.row-level-security, tenancy.save-check.");
+        }
+
         // The host has no start-up class of its own: every check its registrations brought ran, in their order,
         // and passed, before it served anything.
         var checks = host.Services.GetRequiredService<StartupChecks>().InOrder().Select(check => check.Name).ToList();
@@ -81,7 +93,7 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
     }
 
     [Fact]
-    public async Task Every_context_is_wired_through_the_toolkit_chain()
+    public async Task Every_context_is_wired_by_the_one_call_with_what_the_host_registered()
     {
         var host = await sample.SharedAsync();
         await using var scope = host.Services.CreateAsyncScope();
@@ -94,9 +106,21 @@ public sealed class StartupTests(SampleHosts sample) : IClassFixture<SampleHosts
             var context = (DbContext)scope.ServiceProvider.GetRequiredService(contextType);
             var toolkit = () => EntityFrameworkChecks.EnsureToolkitWired(context);
             var tenancy = () => TenancyChecks.EnsureWired(context);
+            var asCaller = () => PostgresRowAccessChecks.EnsureRowLevelSecurityWired(context);
 
             toolkit.Should().NotThrow("{0} saves through the toolkit's interceptors, and its outbox and the history it keeps are in its model", contextType.Name);
-            tenancy.Should().NotThrow("{0} keeps rows to a tenant, so UseTenancy must come after UseDDDToolkit", contextType.Name);
+            tenancy.Should().NotThrow("{0} keeps rows to a tenant, and UseDDDToolkit gave it Tenancy's save check after the toolkit's interceptors", contextType.Name);
+            asCaller.Should().NotThrow("{0} runs as its caller: the host registered row level security, and UseDDDToolkit put it on the context", contextType.Name);
+
+            // Each module wrote UseDDDToolkit and nothing more: the toolkit's interceptors, then the caller on every
+            // connection, then Tenancy's save check, each once, in that order.
+            Interceptors(context).Select(interceptor => interceptor is TenancySaveInterceptor ? typeof(TenancySaveInterceptor) : interceptor.GetType()).Take(6).Should().Equal(
+                [
+                    typeof(PublishDomainEventsInterceptor), typeof(InvariantInterceptor), typeof(AggregateVersionInterceptor), typeof(DatabaseRefusalInterceptor),
+                    typeof(PostgresRowLevelSecurityInterceptor), typeof(TenancySaveInterceptor),
+                ],
+                "{0} is wired by the one call",
+                contextType.Name);
         }
     }
 

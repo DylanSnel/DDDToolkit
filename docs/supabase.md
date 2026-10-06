@@ -334,15 +334,16 @@ sequenceDiagram
 ```
 
 <details>
-<summary>Show the code: switched on in the host, per context</summary>
+<summary>Show the code: switched on in the host, once for every context</summary>
 
 ```csharp
 builder.Services.AddAuthentication().AddSupabaseJwtBearer("https://<ref>.supabase.co");
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());   // the toolkit, Temp.DDDToolkit.EntityFramework
 builder.Services.AddSupabaseRowLevelSecurity();
 
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseNpgsql(connectionString)
-    .UseSupabaseRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));                       // runs it as its caller, with the toolkit
 
 // after Build()
 app.UseAuthentication();
@@ -357,9 +358,14 @@ does the stack the Supabase CLI starts. A project still on the legacy JWT secret
 that one, and for tokens an application signs itself, pass the secret as well, as
 [Two kinds of token](#two-kinds-of-token) shows.
 
-`AddSupabaseRowLevelSecurity` and `UseSupabaseRowLevelSecurity` are Postgres's row level security with the
-roles every Supabase project has. Every time a context opens a connection, the caller's role and the
-token's claims go on it, as PostgREST puts them on for each request:
+`AddSupabaseRowLevelSecurity` is Postgres's row level security with the roles every Supabase project has, and
+`UseDDDToolkit`, the toolkit's call on a context's options, from `Temp.DDDToolkit.EntityFramework`, puts it on
+every context on Postgres once it is registered: a context needs no call of its own. This package works without
+the toolkit as well: a context without it takes `UseSupabaseRowLevelSecurity` instead. A context that should run
+as the role the application logged in as is configured with `UseDDDToolkitCore`
+([`UseDDDToolkitCore`](entity-framework.md#usedddtoolkitcore)); it then does what that role may, which on a
+project that logs in as a role that owns and holds nothing is nothing at all. Every time a context opens a
+connection, the caller's role and the token's claims go on it, as PostgREST puts them on for each request:
 
 | The caller | Runs as | `auth.uid()` |
 |---|---|---|
@@ -518,7 +524,7 @@ builder.Services.AddSupabaseRowLevelSecurity(options => options.Scope = RowLevel
 
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseNpgsql("Host=aws-0-eu-west-1.pooler.supabase.com;Port=6543;Database=postgres;Username=postgres.<ref>;Password=...;No Reset On Close=true;Max Auto Prepare=0")
-    .UseSupabaseRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));
 ```
 
 Nothing is then set for a session: a command outside a transaction carries a call that sets the role and
@@ -894,10 +900,11 @@ var builder = FunctionsApplication.CreateBuilder(args);
 builder.UseSupabaseAuth();
 
 builder.Services.AddSupabaseAuth("https://<ref>.supabase.co");
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseNpgsql(connectionString)
-    .UseSupabaseRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));
 ```
 
 A queue, timer or Service Bus trigger has no request and runs as the system, unless the function begins a

@@ -21,9 +21,9 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 /// and stay one statement. Tenancy's access file makes the functions and Entity Framework creates none, so this
 /// context's migrations never touch them.</item>
 /// <item><b>The tenant.</b> <c>ScopeToTenant</c> puts the tenant filter on <see cref="Project"/> and on
-/// <see cref="ProjectRole"/>, next to any filter of the module's own, and marks them for the save check of
-/// <c>UseTenancy</c>: a project or a project role of another tenant is neither read nor written, whoever loaded or
-/// made it. The crew is kept to its project's tenant through the project that owns it.</item>
+/// <see cref="ProjectRole"/>, next to any filter of the module's own, and marks them for Tenancy's save check,
+/// which <c>UseDDDToolkit</c> adds: a project or a project role of another tenant is neither read nor written,
+/// whoever loaded or made it. The crew is kept to its project's tenant through the project that owns it.</item>
 /// <item><b>Instants.</b> Every <see cref="DateTimeOffset"/> is stored as its UTC instant, whatever offset it
 /// was written with, so a crew member's period and a crew role's are compared in SQL, and Tenancy's grant
 /// periods in the read model the same way.</item>

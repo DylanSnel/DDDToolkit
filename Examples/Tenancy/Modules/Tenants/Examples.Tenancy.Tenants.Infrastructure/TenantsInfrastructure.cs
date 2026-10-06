@@ -1,6 +1,5 @@
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
-using DDDToolkit.EntityFramework.Supabase;
 using Examples.Tenancy.Tenants.Application.Access;
 using Examples.Tenancy.Tenants.Application.Roles;
 using Examples.Hosting;
@@ -37,8 +36,9 @@ public static class TenantsInfrastructure
     /// <c>services.AddTenancyPermissionsOfModules()</c>, which Tenancy's generator writes into it.
     /// <para>
     /// The module runs on Postgres and on nothing else, so the host is one built on its connections
-    /// (<see cref="ModuleHost.OnPostgres"/>), and has registered row level security first, with
-    /// <c>AddSupabaseRowLevelSecurity</c>: the contexts here run every command as the caller.
+    /// (<see cref="ModuleHost.OnPostgres"/>), and has registered row level security, with
+    /// <c>AddSupabaseRowLevelSecurity</c>, which <c>UseDDDToolkit</c> puts on the context here: it runs every command
+    /// as the caller.
     /// </para>
     /// </summary>
     /// <param name="services">The host's services.</param>
@@ -52,17 +52,17 @@ public static class TenantsInfrastructure
 
         // The context, from a pool: the reads, which each take a context of their own, and the request's own
         // context both draw on it. The options are built once per pool, with the application's services, and every
-        // interceptor in them asks who is calling when it is used.
+        // interceptor in them asks who is calling when it is used. The provider is the pools' to set: one data source
+        // for requests and one for the background, shared by every module. The factory is the one dotnet ef and the
+        // export build the context with: its migrations are what the host is checked against.
         //
-        // The chain is written out, since each link is a lock of its own: the toolkit's interceptors, then the
-        // caller's role and claims on every connection, so the policies see who asks, then Tenancy's save check,
-        // which so sees what the toolkit let through. The provider comes first, and is the pools' to set: one data
-        // source for requests and one for the background, shared by every module. The factory is the one dotnet ef
-        // and the export build the context with: its migrations are what the host is checked against.
+        // One call wires it, each lock in its place: the toolkit's interceptors, then the caller's role and claims on
+        // every connection, which the host's row level security brings, so the policies see who asks, then Tenancy's
+        // save check, which AddTenancy below brings, and which so sees what the toolkit let through. Here, in
+        // Tenancy's own context, it also writes the closure of every organization a save changes, which the access
+        // questions read; in the other modules' contexts it keeps their rows to the caller's tenant.
         host.RequirePostgres().AddContext<TenantsContext, TenantsContextFactory>(services, TenantsContext.Schema, (application, options) => options
-            .UseDDDToolkit(application)
-            .UseSupabaseRowLevelSecurity(application)
-            .UseTenancy(application));
+            .UseDDDToolkit(application));
 
         // The tenant of Tenancy's caller on every connection, the rights left to the database, whose trigger
         // writes them, and every flow of work required to say who it runs as. It brings Tenancy's start-up checks

@@ -188,10 +188,15 @@ public sealed class TenancyServices : IAsyncDisposable
 
     private static void Configure(DbContextOptionsBuilder options, IServiceProvider provider, bool rowLevelSecurity, Action<DbContextOptionsBuilder>? contexts)
     {
-        options.UseDDDToolkit(provider).UseTenancy(provider);
+        // One call brings what the services registered: the toolkit, the caller on every connection, Tenancy's save
+        // check. A context left to run as the login role says so, with the base alone and Tenancy's check named.
         if (rowLevelSecurity)
         {
-            options.UsePostgresRowLevelSecurity(provider);
+            options.UseDDDToolkit(provider);
+        }
+        else
+        {
+            options.UseDDDToolkitCore(provider).UseTenancy(provider);
         }
 
         contexts?.Invoke(options);

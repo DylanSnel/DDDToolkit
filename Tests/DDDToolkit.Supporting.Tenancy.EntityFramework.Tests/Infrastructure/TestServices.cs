@@ -8,14 +8,20 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests.Infrastructure;
 /// <summary>How the contexts of a <see cref="TestServices"/> add Tenancy's interceptor.</summary>
 public enum Wiring
 {
-    /// <summary><c>UseDDDToolkit</c> and then <c>UseTenancy</c>, as documented.</summary>
+    /// <summary><c>UseDDDToolkit</c> alone, as documented: it adds Tenancy's interceptor, which <c>AddTenancy</c> brought.</summary>
     Wired,
 
-    /// <summary><c>UseDDDToolkit</c> only: Tenancy's interceptor forgotten.</summary>
+    /// <summary><c>UseDDDToolkitCore</c> only: Tenancy's interceptor left out.</summary>
     WithoutTenancy,
 
-    /// <summary><c>UseTenancy</c> and then <c>UseDDDToolkit</c>: the wrong order.</summary>
+    /// <summary><c>UseTenancy</c> and then <c>UseDDDToolkitCore</c>: the wrong order.</summary>
     TenancyFirst,
+
+    /// <summary>The chain written out before the one call, <c>UseDDDToolkit</c> and then <c>UseTenancy</c>.</summary>
+    WrittenOut,
+
+    /// <summary><c>UseDDDToolkitCore</c> and then <c>UseTenancy</c>: the parts taken one by one.</summary>
+    OneByOne,
 }
 
 /// <summary>
@@ -250,13 +256,19 @@ public sealed class TestServices : IDisposable
         switch (wiring)
         {
             case Wiring.Wired:
-                options.UseDDDToolkit(provider).UseTenancy(provider);
-                break;
-            case Wiring.WithoutTenancy:
                 options.UseDDDToolkit(provider);
                 break;
+            case Wiring.WithoutTenancy:
+                options.UseDDDToolkitCore(provider);
+                break;
             case Wiring.TenancyFirst:
-                options.UseTenancy(provider).UseDDDToolkit(provider);
+                options.UseTenancy(provider).UseDDDToolkitCore(provider);
+                break;
+            case Wiring.WrittenOut:
+                options.UseDDDToolkit(provider).UseTenancy(provider);
+                break;
+            case Wiring.OneByOne:
+                options.UseDDDToolkitCore(provider).UseTenancy(provider);
                 break;
         }
 

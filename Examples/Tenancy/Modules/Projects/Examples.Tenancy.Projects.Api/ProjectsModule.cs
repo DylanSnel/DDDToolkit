@@ -49,7 +49,9 @@ public static class ProjectsModule
     /// list the module marks with <c>[TenancyPermissions]</c>. The host says where its tables live and where
     /// what it publishes goes (see <see cref="ModuleHost"/>), and hands over the starter roles the application
     /// declares for its tenants' crews, which the projects' rules are made with. Tenancy must be registered first:
-    /// Projects asks Tenancy's answers, and its context checks its saves with Tenancy's interceptor.
+    /// Projects asks Tenancy's answers. Its context keeps rows to a tenant, so it cannot do without Tenancy's save
+    /// check, which <c>AddTenancy</c> brings and <c>UseDDDToolkit</c> puts on it, in whichever order the modules are
+    /// registered; in a host without Tenancy its first save is refused.
     /// </summary>
     /// <param name="services">The host's services.</param>
     /// <param name="host">The host's two decisions: the database, and the transport.</param>

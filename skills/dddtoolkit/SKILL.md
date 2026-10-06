@@ -333,6 +333,12 @@ The mistakes it prevents most often:
 - `UseDDDToolkit(services)` takes the provider the registration's callback hands it,
   `AddDbContext((services, options) => ...)` or a pool's, never one built or kept by hand. A pool hands it
   the root provider, and `AddScopedFromPool<TContext>()` binds each rental to the scope that rents it.
+- `UseDDDToolkit` is the one call per context: it adds the toolkit's interceptors and what the registered
+  packages bring, row level security on Postgres and Tenancy's save check, each in its place, the save check
+  last. Do not write `UseSupabaseRowLevelSecurity` or `UseTenancy` next to it. A context that should do without
+  a part, one that runs as the login role, takes `UseDDDToolkitCore` and the `Use...` calls it does want; a
+  context whose model keeps rows to a tenant is refused at its first save without Tenancy's save check, so a
+  host that uses `ScopeToTenant` registers `AddTenancy`.
 - `ConfigureConventions` calls `AddDDDToolkitConventions()` and one generated `Add{Module}Converters()`
   per module, plus one per assembly that is no module and declares identifiers or single value objects.
   Only a project that references Entity Framework gets the method. A module's projects without it

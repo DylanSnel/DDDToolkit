@@ -16,8 +16,9 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <summary>
     /// Registers Tenancy over <typeparamref name="TContext"/>, the context whose model calls <c>AddTenancy</c>:
     /// everything <see cref="TenancyServiceCollectionExtensions.AddTenancyCore"/> registers, the store the use
-    /// cases load and save through, the seat directory tenant selection asks, the interceptor <c>UseTenancy</c>
-    /// adds to a context, the query executor, and what an event log asks: who acted, as Tenancy knows the caller
+    /// cases load and save through, the seat directory tenant selection asks, the save interceptor, brought to
+    /// every context <c>UseDDDToolkit</c> wires as Tenancy's part (<see cref="TenancySaveInterceptor.PartName"/>),
+    /// the query executor, and what an event log asks: who acted, as Tenancy knows the caller
     /// (<see cref="TenancyActedByAccessor"/>, put around the accessor registered before this call, or around the
     /// toolkit's default), and the tenant of each row of the log <c>AddTenancyEventLogTable</c> maps.
     /// <code>
@@ -29,8 +30,7 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// });
     /// services.AddDbContext&lt;TenancyContext&gt;((serviceProvider, options) =&gt; options
     ///     .UseNpgsql(connectionString)
-    ///     .UseDDDToolkit(serviceProvider)
-    ///     .UseTenancy(serviceProvider));
+    ///     .UseDDDToolkit(serviceProvider));
     /// </code>
     /// The store and the directory are scoped, like the context they use. The store offers a save that fails
     /// to every registered <see cref="ITenancySaveFailures"/>, which a package for one database adds, and
@@ -91,9 +91,10 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
             EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRoleId, TContext>>();
 
         // One interceptor for every context: it keeps no state, and every context that keeps entities to a
-        // tenant adds the same one.
+        // tenant adds the same one. UseDDDToolkit adds it to every context it wires, as Tenancy's part.
         services.TryAddSingleton<TenancySaveInterceptor,
             TenancySaveInterceptor<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>>();
+        TenancyDbContextOptionsExtensions.AddPart(services);
         services.TryAddSingleton(EfQueryExecutor.Instance);
         services.TryAddSingleton<IQueryExecutor>(EfQueryExecutor.Instance);
 

@@ -88,13 +88,180 @@ explains both and when to use which.
 
 ### `UseDDDToolkit`
 
-Adds the toolkit's interceptors to the context: the one that delivers domain events, the one that
-checks invariants and the one that raises the version. Pass the `IServiceProvider` that the options
-callback gives you. With `AddDbContext` that provider belongs to the same scope as the context, so a
-handler that injects `OrderingContext` receives the very instance that is saving. With a context pool
-the callback runs once and is handed the application's root provider, and the handlers get the scope
-the context was rented in instead; see [Contexts from a pool](#contexts-from-a-pool).
-[The interceptors](#the-interceptors) lists them in the order they run.
+Wires the context for the toolkit, with one call. It adds the toolkit's own interceptors, the ones that
+deliver domain events, check invariants, raise the version and answer a save the database refused, and then
+whatever the packages the host registered bring to a context: row level security once
+`AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity` is registered, Tenancy's save check once
+`AddTenancy` is. A host that registered none of them gets the toolkit's interceptors and nothing else.
+
+Pass the `IServiceProvider` that the options callback gives you. With `AddDbContext` that provider belongs to
+the same scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
+saving. With a context pool the callback runs once and is handed the application's root provider, and the
+handlers get the scope the context was rented in instead; see [Contexts from a pool](#contexts-from-a-pool).
+[The interceptors](#the-interceptors) lists the toolkit's own in the order they run.
+
+```mermaid
+flowchart LR
+    Call["UseNpgsql(...)<br/>.UseDDDToolkit(services)"] --> Own["the toolkit's<br/>own interceptors"]
+    Own -- "AddSupabaseRowLevelSecurity()<br/>brought it, at 100" --> Rls["row level security<br/>on a context on Postgres"]
+    Rls -- "AddTenancy()<br/>brought it, last" --> Tenancy["Tenancy's save check<br/>does what the model asks"]
+```
+
+Each registration announces its part with a position, and the one call puts every part after the toolkit's
+own interceptors, the lowest position first. That is the order the toolkit holds a context to. Tenancy's save
+check comes last, at the highest position there is, so it sees what the domain event handlers changed, only
+aggregates that passed their invariants, and every row another part added to the save.
+
+Whether a part belongs on a context is decided from what the options say when the call is made. Row level
+security is left off a context whose provider is configured and is not Postgres's. A context whose provider
+comes later, further down the options callback or in `OnConfiguring`, gets it, and the interceptor passes over
+the context at every use where it turns out not to be on Postgres: so a context on Postgres runs as its caller
+wherever its provider was set. What the options cannot say at all, the model, a part decides when it is used:
+Tenancy's save check sits on every context, checks the rows of one that keeps rows to a tenant, writes the
+rights in Tenancy's own context, and passes over a context that has neither. So no registration names the
+contexts it is for, and a module added later is wired by the same call. A model that cannot do without a part
+says so, and a context of it without the part is refused at its first save
+([A part a model cannot do without](#a-part-a-model-cannot-do-without)).
+
+<details>
+<summary>Show the code: three contexts in one host, one call each</summary>
+
+```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
+builder.Services.AddSupabaseRowLevelSecurity();
+builder.Services.AddShopTenancy(connectionString);       // AddTenancy<ShopTenancyContext>, with its context
+
+// A module's context that keeps its rows to a tenant: the toolkit, row level security, Tenancy's save check
+builder.Services.AddDbContext<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+
+// A context of shared data on Postgres: the same three; the save check finds no row of a tenant, and checks none
+builder.Services.AddDbContext<CatalogContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+
+// A context on SQLite in the same host: no row level security, which is Postgres's
+builder.Services.AddDbContext<ReportsContext>((services, options) => options
+    .UseSqlite(reportsConnectionString)
+    .UseDDDToolkit(services));
+```
+
+</details>
+
+The `Use...` calls of the packages stay, and each adds nothing a context already has. A chain written out as it
+was before the one call, `UseDDDToolkit(services).UseSupabaseRowLevelSecurity(services).UseTenancy(services)`,
+gives each interceptor once, as does `UseDDDToolkit` called twice. The first time the options of a context type
+are built with a part, the log says so, once, as information:
+
+```text
+UseDDDToolkit gave 'OrderingContext' what the host's registrations bring, after the toolkit's own interceptors: postgres.row-level-security, tenancy.save-check. A context that should do without one is configured with UseDDDToolkitCore and the Use... calls of the parts it does want.
+```
+
+**Coming from 3.1.** Up to 3.1, `UseDDDToolkit` added the toolkit's interceptors alone, and a context ran as its
+caller only with `UseSupabaseRowLevelSecurity` or `UsePostgresRowLevelSecurity` in its own options. Now every
+context on Postgres that `UseDDDToolkit` wires runs as its caller once row level security is registered. A
+context you left without it on purpose moves to `UseDDDToolkitCore`, below, before you upgrade. Until it does,
+its queries run as the role of their caller instead of the role the application logged in as. Where the login
+role owns the tables or is a superuser, as it usually is, that takes rights away: the caller sees and changes
+what the policies let it. Where the login role was a restricted one, it can give more instead: background work
+runs as `SystemRole`, which on Supabase is often `service_role`, past every policy, and a request as
+`authenticated` or `anon`, with whatever those roles were granted. The line above names the context the first
+time its options are built, which without start-up checks is the first time something uses it;
+`builder.Services.RunStartupChecks()` builds every registered context before the first request, so every line is
+in the log at start.
+
+### `UseDDDToolkitCore`
+
+The base alone: the toolkit's own interceptors, and nothing a package brings, which is what `UseDDDToolkit`
+added up to 3.1. It is for a context that should do without a part the host registered, a context on Postgres
+that runs as the role the application logged in as while the others run as their caller, say. Such a context
+takes the parts it does want with their own calls, after it:
+
+```csharp
+// Runs as the login role, and still keeps its rows to a tenant
+builder.Services.AddDbContext<ReportsContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkitCore(services)
+    .UseTenancy(services));
+```
+
+Writing it is the decision, and the options keep it. The [start-up check](startup-checks.md) of row level
+security, `postgres.row-level-security-wired`, takes a context given the base alone as meant; one without row
+level security that was wired otherwise, with the toolkit's interceptors added by hand say, is still refused.
+A part the context's model cannot do without is still held to: a context that keeps rows to a tenant needs
+Tenancy's save check, whichever call wired it.
+
+Running as the login role means doing what that role may. Where the host keeps to
+[a login that owns nothing](row-level-security.md#a-login-that-owns-nothing), as the start-up check
+`postgres.login-role-owns-nothing` holds it to, the login role holds nothing on the tables, and the database
+refuses such a context's first command. It reads past the policies only where the login role owns the tables,
+in a host that skips that check with a reason. Work across callers usually belongs to a system caller instead,
+`Callers.Begin(Caller.SystemIn("reports"))`, in a context that runs as its caller.
+
+### A part of your own
+
+A package of yours, or the application's own infrastructure, brings a part the same way the toolkit's packages
+do: registered next to what it is about, with a name and a position, and `UseDDDToolkit` puts it in its place on
+every context it belongs on.
+
+```csharp
+public static IServiceCollection AddBillingAudit(this IServiceCollection services)
+{
+    services.TryAddSingleton<BillingAuditInterceptor>();
+    return services.AddContextPart(new ContextPart<DbContextOptionsBuilder>(
+        "billing.audit",
+        position: 150,                                       // after row level security, at 100
+        (options, provider) => options.UseBillingAudit(provider)));
+}
+```
+
+`UseBillingAudit` is the method a host calls when it takes the parts one by one, and like the toolkit's it adds
+nothing the options already have. Left as it is, the part goes on every context, and its interceptor decides at
+each use whether the context gives it anything to do, as Tenancy's does. `AppliesTo` passes over a context by
+what its options say, as row level security does by the provider. Where the options cannot tell yet, let the part
+go on and its interceptor pass over at use what it has nothing to do for, as row level security does for a
+provider set later: a part that is left off when nothing can be told yet fails open. Two registrations of one
+name bring the part once. Tenancy's save check comes last, whatever position yours has, so a row your part adds
+or changes in a save is checked like any other.
+
+| Part | Brought by | Position | Goes on |
+|---|---|---|---|
+| `postgres.row-level-security` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | 100 | every context that may be on Postgres; it passes over one that is not |
+| `tenancy.save-check` | `AddTenancy` | last, `int.MaxValue` | every context; it checks those that keep rows to a tenant |
+
+The names and positions are constants on the interceptors, `PostgresRowLevelSecurityInterceptor.PartName` and
+`TenancySaveInterceptor.PartName`, with `PartPosition` next to each. Membership brings none: its member tables
+are your context's own, and on Postgres its lock is the policies the export writes, which hold a context once
+row level security runs it as its caller.
+
+### A part a model cannot do without
+
+A part goes on every context the one call wires, and a context needs it because of what its model holds: Tenancy's
+save check, for a context that keeps rows to a tenant. Where nothing registered the part, or the context was given
+the base alone, the one call has nothing to add, and the context would save without it. So the model says what it
+cannot do without. `ScopeToTenant` states the save check, and a mapping of your own states its part with
+`RequireContextPart`:
+
+```csharp
+entity.Metadata.Model.RequireContextPart(
+    "billing.audit",
+    typeof(BillingAuditInterceptor),
+    registeredWith: "services.AddBillingAudit()",
+    addedWith: "options.UseBillingAudit(serviceProvider)");
+```
+
+A context whose model requires a part its options do not have is refused at its first save, before anything is
+written, and by the start-up check `entity-framework.toolkit-wired` before the first request. The part is seen on
+a context by the interceptor it adds. Where nothing registered it, the message names the registration:
+
+```text
+'ProjectsContext' cannot do without the part tenancy.save-check, which its model requires, and its options have no TenancySaveInterceptor, so its saves would go without it. No registration brought it. Register it with services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework, and options.UseDDDToolkit(serviceProvider) puts it on every context.
+```
+
+Where one did, the message names `UseDDDToolkit`, and the part's own call after `UseDDDToolkitCore`. The requirement
+is an annotation of the model whose value is text, so the model still goes into a migration's snapshot and a
+compiled model.
 
 ### `AddDDDToolkitConventions` and `Add{Module}Converters`
 
@@ -618,7 +785,9 @@ context catches a child entity or a collection the split left unmapped.
 
 ## The interceptors
 
-`UseDDDToolkit` adds four interceptors, in the order they run:
+`UseDDDToolkit` and `UseDDDToolkitCore` add the toolkit's own four interceptors, in the order they run,
+before any part a package brings. The first of them also refuses a save of a context that lacks a part its model
+requires ([A part a model cannot do without](#a-part-a-model-cannot-do-without)):
 
 | | Interceptor | Why there |
 |---|---|---|
@@ -637,8 +806,8 @@ interceptors by hand.
 
 ### Checking the wiring
 
-A context built without `UseDDDToolkit` saves, and simply checks no invariant, bumps no version and
-stores no event. Nothing fails, so nobody notices. `EntityFrameworkChecks` says so at start-up, before the
+A context built without `UseDDDToolkit`, or `UseDDDToolkitCore`, saves, and simply checks no invariant,
+bumps no version and stores no event. Nothing fails, so nobody notices. `EntityFrameworkChecks` says so at start-up, before the
 first request. `AddDDDToolkitEntityFramework` registers it as the [start-up check](startup-checks.md)
 `entity-framework.toolkit-wired`, and one call runs it with every other check the host's registrations brought:
 
@@ -649,7 +818,8 @@ builder.Services.RunStartupChecks();
 
 It looks at every context the host registers that maps one of the toolkit's classes: an entity or an aggregate,
 or the table of the outbox, the inbox or the event log. A context a library brings for its own tables needs none
-of the interceptors, and is passed over. By hand, it is:
+of the interceptors, and is passed over. Every context, either kind, is also held to the parts its model requires
+([A part a model cannot do without](#a-part-a-model-cannot-do-without)). By hand, it is:
 
 ```csharp
 var app = builder.Build();

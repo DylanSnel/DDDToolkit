@@ -23,7 +23,11 @@ public sealed class FilingServices : IDisposable
     /// <c>AddScopedFromPool</c>), as one does whose readings each take a context of their own, rather than
     /// registering the context alone (<c>AddDbContext</c>).
     /// </param>
-    /// <param name="wiring">What a context is given besides the toolkit's interceptors, such as the caller's role on every connection.</param>
+    /// <param name="wiring">
+    /// How a context is wired once it is on the database: <c>UseDDDToolkit</c>, which brings what the services
+    /// registered, row level security among them, unless the test says otherwise, as <c>UseDDDToolkitCore</c> does
+    /// for a context that runs as the login role.
+    /// </param>
     public FilingServices(
         Action<DbContextOptionsBuilder> database,
         TimeProvider clock,
@@ -47,8 +51,15 @@ public sealed class FilingServices : IDisposable
         void Options(IServiceProvider provider, DbContextOptionsBuilder options)
         {
             database(options);
-            options.UseDDDToolkit(provider);
-            wiring?.Invoke(options, provider);
+            // One call brings what the services registered, unless the test wires the context itself.
+            if (wiring is null)
+            {
+                options.UseDDDToolkit(provider);
+            }
+            else
+            {
+                wiring(options, provider);
+            }
             options.AddInterceptors(provider.GetRequiredService<CommandCounter>());
         }
 

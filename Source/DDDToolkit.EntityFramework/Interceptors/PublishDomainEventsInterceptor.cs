@@ -85,6 +85,9 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
     {
         if (eventData.Context is { } context)
         {
+            // First, so a context without a part its model cannot do without saves nothing and delivers nothing.
+            ContextPartRequirements.EnsureRequiredParts(context);
+
             // Documented: the sync path blocks on the async delegate.
             DeliverAsync(context, CancellationToken.None).GetAwaiter().GetResult();
         }
@@ -97,6 +100,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
     {
         if (eventData.Context is { } context)
         {
+            ContextPartRequirements.EnsureRequiredParts(context);
             await DeliverAsync(context, cancellationToken).ConfigureAwait(false);
         }
 

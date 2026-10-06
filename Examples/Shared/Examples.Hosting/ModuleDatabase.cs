@@ -20,8 +20,9 @@ namespace Examples.Hosting;
 /// <list type="bullet">
 /// <item><see cref="Sqlite"/>: a file per module, created from the model on start-up. No setup at all.</item>
 /// <item><see cref="Supabase"/>: Postgres, where Supabase applies the migrations from
-/// <c>supabase/migrations</c> and the application only checks that none is missing. With
-/// <see cref="WithRowLevelSecurity"/>, Supabase's policies apply to the modules' queries as well.</item>
+/// <c>supabase/migrations</c> and the application only checks that none is missing. Once the host registers
+/// <c>services.AddSupabaseRowLevelSecurity()</c>, Supabase's policies apply to the modules' queries as well:
+/// <c>UseDDDToolkit</c> brings it to every module's context.</item>
 /// <item><see cref="Postgres"/>: Postgres, where the application applies its own migrations on start-up.</item>
 /// <item><see cref="SqlServer"/>: SQL Server, likewise, from the module's
 /// <c>Examples.Webshop.{Module}.Migrations.SqlServer</c> assembly.</item>
@@ -46,18 +47,6 @@ public abstract record ModuleDatabase
 
     /// <summary>SQL Server, where the application applies the migrations itself on start-up.</summary>
     public static ModuleDatabase SqlServer(string connectionString) => new SqlServerDatabase(connectionString);
-
-    /// <summary>
-    /// This Supabase database, with row level security applied to every module's own queries, not only
-    /// to the Data API's: each request's queries run as the user whose Supabase access token it carried,
-    /// or as <c>anon</c> without one, and work outside a request as the role the host logged in as. The
-    /// host registers the interceptor with <c>services.AddSupabaseRowLevelSecurity()</c>, and who is
-    /// calling with <c>AddSupabaseJwtBearer</c> from <c>DDDToolkit.Auth.Supabase.AspNetCore</c>.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">This is not a Supabase database.</exception>
-    public ModuleDatabase WithRowLevelSecurity() => this is PostgresDatabase { AppliesMigrations: false } supabase
-        ? supabase with { RowLevelSecurity = true }
-        : throw new InvalidOperationException("Row level security for the modules' queries is Supabase's: its roles, its auth.uid(), its policies. Call it on ModuleDatabase.Supabase(...).");
 
     /// <summary>
     /// The usual host's choice: Supabase when the configuration has a <c>Supabase</c> connection string,
@@ -149,7 +138,8 @@ public abstract record ModuleDatabase
     /// <param name="schema">The module's schema, which also names its SQLite file.</param>
     /// <param name="configure">
     /// What the module adds to its context's options on every database. It runs after <c>UseDDDToolkit</c>, so an
-    /// interceptor it adds sees a save after the toolkit's interceptors have.
+    /// interceptor it adds sees a save after the toolkit's interceptors, and the parts the host's registrations
+    /// brought, have.
     /// </param>
     public IServiceCollection AddContext<TContext, TFactory>(
         IServiceCollection services,
@@ -163,15 +153,11 @@ public abstract record ModuleDatabase
 
         void Options(IServiceProvider provider, DbContextOptionsBuilder options)
         {
+            // The provider first, so UseDDDToolkit can tell which of what the host registered belongs here: on
+            // Supabase with row level security registered, every connection this context opens runs as the caller,
+            // so Supabase's policies apply to it; on SQLite there is nothing of the kind.
             Configure(options, schema);
             options.UseDDDToolkit(provider);
-
-            // Every connection this context opens runs as the caller, so Supabase's policies apply to it.
-            if (this is PostgresDatabase { RowLevelSecurity: true })
-            {
-                options.UseSupabaseRowLevelSecurity(provider);
-            }
-
             configure?.Invoke(provider, options);
         }
 
@@ -206,7 +192,7 @@ public abstract record ModuleDatabase
                 .ConfigureWarnings(warnings => warnings.Ignore(SqliteEventId.SchemaConfiguredWarning));
     }
 
-    private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations, bool RowLevelSecurity = false) : ModuleDatabase
+    private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations) : ModuleDatabase
     {
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
             => UsePostgres(options, ConnectionString, schema);

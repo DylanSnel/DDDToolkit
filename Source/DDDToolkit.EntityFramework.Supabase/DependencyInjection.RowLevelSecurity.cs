@@ -11,16 +11,23 @@ public static partial class DependencyInjection
     /// <summary>
     /// Postgres's row level security, <c>DDDToolkit.EntityFramework.Postgres</c>, with the roles every
     /// Supabase project has, so the policies that guard the Data API guard the application's queries too.
-    /// Add it to each context with <see cref="UseSupabaseRowLevelSecurity"/>.
+    /// <c>UseDDDToolkit</c>, of <c>DDDToolkit.EntityFramework</c>, adds it to every context on Postgres, as the part
+    /// <see cref="PostgresRowLevelSecurityInterceptor.PartName"/>.
     /// <code>
+    /// services.AddDDDToolkitEntityFramework();
     /// services.AddSupabaseRowLevelSecurity();
     /// services.AddDbContext&lt;OrderingContext&gt;((provider, options) => options
     ///     .UseNpgsql(connectionString)
-    ///     .UseSupabaseRowLevelSecurity(provider));
+    ///     .UseDDDToolkit(provider));
     /// </code>
+    /// A context without the toolkit takes it with <see cref="UseSupabaseRowLevelSecurity"/>, this package on its
+    /// own. One that should run as the role the application logged in as, while the others run as their caller, is
+    /// configured with <c>UseDDDToolkitCore</c>.
+    /// <para>
     /// Who is calling is whatever a host registered: in ASP.NET Core, the request's user, once
     /// <c>AddSupabaseJwtBearer</c> from <c>DDDToolkit.Auth.Supabase.AspNetCore</c> is there. Without one,
     /// it is the caller <see cref="Callers.Begin"/> made current, or <see cref="Caller.System"/> outside any.
+    /// </para>
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="configure">
@@ -49,6 +56,8 @@ public static partial class DependencyInjection
     /// <summary>
     /// Runs this context's queries under the caller's role and claims, so Supabase's policies apply to them
     /// as they do to the Data API. Needs <see cref="AddSupabaseRowLevelSecurity(IServiceCollection, Action{PostgresRowLevelSecurityOptions}?)"/>.
+    /// <c>UseDDDToolkit</c> already calls it for a context on Postgres; it adds nothing to options that have the
+    /// interceptor, so a chain that calls it as well gives it once.
     /// </summary>
     /// <param name="optionsBuilder">The context's options.</param>
     /// <param name="serviceProvider">The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool.</param>

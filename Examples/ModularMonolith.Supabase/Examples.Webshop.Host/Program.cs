@@ -70,8 +70,9 @@ if (signedIn)
         }
     });
 
+    // Every module's context is wired with UseDDDToolkit, which brings this to each context on Postgres: nothing
+    // else to write for the modules' queries to run as their caller.
     builder.Services.AddSupabaseRowLevelSecurity();
-    database = database.WithRowLevelSecurity();
 
     // Row level security brings start-up checks of the role the host logs in as, and one is that it owns nothing.
     // This host logs in as postgres, which owns the modules' tables, as the Supabase page starts out: the policies

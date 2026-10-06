@@ -15,22 +15,44 @@ has the same thing with Supabase's roles and `auth` functions, and its build wri
 
 ```bash
 dotnet add package Temp.DDDToolkit.EntityFramework.Postgres
+dotnet add package Temp.DDDToolkit.EntityFramework            # the toolkit's own, which UseDDDToolkit is
 ```
+
+The package works on its own, for any context, and with the rest of the toolkit. The examples here use the
+toolkit, `DDDToolkit.EntityFramework`, as an application of the toolkit does.
 
 ## Running queries as the caller
 
 ```csharp
+builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 builder.Services.AddPostgresRowLevelSecurity();
 
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseNpgsql(connectionString)
-    .UsePostgresRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));
 ```
+
+The registration is all there is to switch on. `UseDDDToolkit`, the call that wires a context for the toolkit,
+puts the interceptor on every context on Postgres once row level security is registered, after the toolkit's
+own interceptors, so no context needs a call of its own and a module added later runs as its caller like the
+others ([`UseDDDToolkit`](entity-framework.md#usedddtoolkit)). A context whose provider is set later, further
+down the callback or in `OnConfiguring`, gets the interceptor as well, which passes it over at every use where it
+turns out not to be on Postgres.
 
 Every time the context opens a connection, the interceptor sets a role and the caller's token claims on
 it, the way PostgREST does for each request, in one statement. Through a pooler that hands each
 transaction another server connection it sets them per transaction instead:
 [How the settings travel](#how-the-settings-travel).
+
+Two contexts take it otherwise. One without the toolkit, this package on its own, takes it with
+`options.UseNpgsql(connectionString).UsePostgresRowLevelSecurity(provider)`. One that should run as the role the
+application logged in as, while the others run as their caller, is configured with `UseDDDToolkitCore(provider)`,
+the toolkit's base alone, and the `Use...` calls of what else it wants: that call is the decision, and the
+[start-up check](#a-login-that-owns-nothing) takes it as meant. Such a context does what the login role may:
+where that role owns and holds nothing, as the start-up check `postgres.login-role-owns-nothing` holds a host to,
+the database refuses its first command, and it reads past the policies only where the login role owns the
+tables, in a host that skips that check with a reason. A chain written out as before,
+`UseDDDToolkit(provider).UsePostgresRowLevelSecurity(provider)`, still works and gives the interceptor once.
 
 ```sql
 SELECT set_config('role', 'authenticated', false), set_config('request.jwt.claims', '{"sub":"…"}', false), …
@@ -172,7 +194,7 @@ builder.Services.AddPostgresRowLevelSecurity(options => options.Scope = RowLevel
 
 builder.Services.AddDbContext<OrderingContext>((provider, options) => options
     .UseNpgsql("Host=pooler;Port=6432;Database=shop;Username=app;Password=...;No Reset On Close=true;Max Auto Prepare=0")
-    .UsePostgresRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));
 ```
 
 ```sql
@@ -578,8 +600,7 @@ handed:
 ```csharp
 builder.Services.AddPooledDbContextFactory<OrderingContext>((provider, options) => options
     .UseNpgsql(connectionString)
-    .UseDDDToolkit(provider)
-    .UsePostgresRowLevelSecurity(provider));
+    .UseDDDToolkit(provider));
 builder.Services.AddScopedFromPool<OrderingContext>();
 ```
 
@@ -2003,8 +2024,12 @@ and every finding with the statement that fixes it. A login role that owns a sch
 the role the migrations run as: then the one finding is that, with the one fix, to log in as a role of its
 own and keep that one for the migrations. The third opens nothing: it throws unless the context runs its commands
 through the row level security interceptor, without which every command runs as the login role, and is
-refused outright where that role holds nothing. As a start-up check it runs first, with the checks that read the
-services: a context without the interceptor would fail the other two without saying why.
+refused outright where that role holds nothing. `UseDDDToolkit` gives every context on Postgres the interceptor,
+so what it finds is a context wired some other way: without the toolkit, or with the toolkit's interceptors
+added by hand. A context given the toolkit's base alone, `UseDDDToolkitCore`, passes: that call is how an
+application says a context runs as the login role, and its options keep that it was made. As a start-up check it
+runs first, with the checks that read the services: a context without the interceptor would fail the other two
+without saying why.
 
 ### Forcing row level security
 

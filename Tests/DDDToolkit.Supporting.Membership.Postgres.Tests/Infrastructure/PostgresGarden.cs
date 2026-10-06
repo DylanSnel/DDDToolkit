@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.TestHost.Access;
 using Npgsql;
@@ -53,7 +54,7 @@ public sealed class PostgresGarden : IDisposable
                 services.AddPostgresRowLevelSecurity();
                 configure?.Invoke(services);
             },
-            wiring: asCaller ? (options, provider) => options.UsePostgresRowLevelSecurity(provider) : null,
+            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider),
             sheds: sheds);
         Scenario = new GardenScenario(DateTimeOffset.UtcNow);
     }

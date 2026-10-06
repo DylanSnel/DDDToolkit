@@ -8,6 +8,8 @@ using DDDToolkit.EntityFramework.Storage;
 using DDDToolkit.Interfaces;
 using DDDToolkit.Startup;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -77,6 +79,9 @@ public static class DependencyInjection
             // or the host registered an accessor that knows more. A singleton, asked once per save.
             services.TryAddSingleton<IActedByAccessor, CallerActedByAccessor>();
 
+            // Which contexts UseDDDToolkit gave the parts the packages bring, so each is named once in the log.
+            services.TryAddSingleton<ContextParts>();
+
             // Every context saves through the interceptors above, or the host does not start, once it runs its checks.
             services.AddStartupCheck(EntityFrameworkChecks.ToolkitWired);
         }
@@ -135,21 +140,42 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Adds every DDDToolkit interceptor to the context, in the order they run: domain event
-    /// delivery (<see cref="PublishDomainEventsInterceptor"/>), then the aggregates' own invariants
-    /// (<see cref="InvariantInterceptor"/>), which therefore sees whatever the handlers changed,
-    /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes after them so
-    /// a rejected save leaves no version bumped, and last <see cref="DatabaseRefusalInterceptor"/>, which
-    /// only answers a save the database refused: the refusal a unique index declares, or
-    /// <c>access.refused</c> for a row a policy denied.
+    /// Wires the context for the toolkit, with one call: the toolkit's own interceptors
+    /// (<see cref="UseDDDToolkitCore"/>), then every part the registered packages bring for a context's options, in
+    /// their order. Row level security, which <c>AddPostgresRowLevelSecurity</c> and
+    /// <c>AddSupabaseRowLevelSecurity</c> bring, goes on a context that may be on Postgres; Tenancy's save check,
+    /// which <c>AddTenancy</c> brings, last, on every context, where it checks the saves of the ones that keep rows
+    /// to a tenant. A host that registered none of them gets the toolkit's interceptors and nothing else.
+    /// <code>
+    /// services.AddDbContext&lt;OrderingContext&gt;((services, options) => options
+    ///     .UseNpgsql(connectionString)
+    ///     .UseDDDToolkit(services));
+    /// </code>
+    /// <para>
+    /// Whether a part belongs on the context is worked out from what the options hold when this is called: row level
+    /// security is left off a context whose provider is configured and is not Postgres's. What the options cannot
+    /// say yet, a part decides when it is used: row level security passes over a context whose provider, configured
+    /// after this call or in <c>OnConfiguring</c>, turns out not to be Postgres's, and Tenancy's save check over one
+    /// whose model keeps no rows to a tenant. A model that cannot do without a part says so, and a context whose
+    /// options lack it is refused at its first save (<see cref="ContextPartRequirements"/>).
+    /// </para>
+    /// <para>
+    /// A context that should do without a part the host registered is configured with
+    /// <see cref="UseDDDToolkitCore"/> and the <c>Use...</c> calls of the parts it does want. Those calls stay, and
+    /// add nothing the options already have, so a chain written out in full,
+    /// <c>UseDDDToolkit(provider).UseSupabaseRowLevelSecurity(provider).UseTenancy(provider)</c>, still gives each
+    /// interceptor once. The first time the options of a context type are built with any part, an information line
+    /// names the context and the parts: up to 3.1 this call added the toolkit's interceptors alone, and a context that now runs as its
+    /// caller, say, is named where the log says what it was given.
+    /// </para>
     /// <para>
     /// Pass the provider handed to the options callback: of <c>AddDbContext</c>, a scope's, so handlers
     /// resolve from the same scope as the context; of a context pool (<c>AddPooledDbContextFactory</c>,
     /// <c>AddDbContextPool</c>), the application's root provider, because a pool builds its options once.
     /// Under a pool the handlers get the scope a context was rented in instead, which
     /// <see cref="PooledContexts.AddScopedFromPool{TContext}"/> and
-    /// <see cref="PooledContexts.BindToScope{TContext}"/> name. Nothing scoped is resolved here, so the call
-    /// is the same for every registration.
+    /// <see cref="PooledContexts.BindToScope{TContext}"/> name. Nothing scoped is resolved here, nor by the parts
+    /// of the toolkit's packages, so the call is the same for every registration.
     /// </para>
     /// </summary>
     /// <param name="optionsBuilder">The context's options.</param>
@@ -161,18 +187,93 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        optionsBuilder.AddInterceptors(
-            // Built, not resolved: the registration is scoped, and a pool's callback has no scope to resolve it from.
-            new PublishDomainEventsInterceptor(serviceProvider, serviceProvider.GetRequiredService<DDDEntityFrameworkOptions>()),
-            serviceProvider.GetRequiredService<InvariantInterceptor>(),
-            serviceProvider.GetRequiredService<AggregateVersionInterceptor>(),
-            serviceProvider.GetRequiredService<DatabaseRefusalInterceptor>());
-
+        AddToolkitInterceptors(optionsBuilder, serviceProvider);
+        ContextParts.Apply(optionsBuilder, serviceProvider);
         return optionsBuilder;
+    }
+
+    /// <summary>
+    /// Adds the toolkit's own interceptors to the context, and nothing a package brings: what
+    /// <see cref="UseDDDToolkit"/> did up to 3.1. In the order they run: domain event delivery
+    /// (<see cref="PublishDomainEventsInterceptor"/>), then the aggregates' own invariants
+    /// (<see cref="InvariantInterceptor"/>), which therefore sees whatever the handlers changed,
+    /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes after them so
+    /// a rejected save leaves no version bumped, and last <see cref="DatabaseRefusalInterceptor"/>, which
+    /// only answers a save the database refused: the refusal a unique index declares, or
+    /// <c>access.refused</c> for a row a policy denied.
+    /// <para>
+    /// It is for a context that should do without a part the host registered: one on Postgres that runs as the
+    /// role the application logged in as while the others run as their caller, say. Such a context takes the parts
+    /// it does want by their own calls, after this one:
+    /// </para>
+    /// <code>
+    /// options.UseNpgsql(connectionString).UseDDDToolkitCore(services).UseTenancy(services);
+    /// </code>
+    /// <para>
+    /// Writing it is the decision, and the options keep it: the start-up check of row level security takes a context
+    /// on Postgres that was given the base alone with this call, and no row level security, as one that runs as the
+    /// login role on purpose. A context that added the toolkit's interceptors by hand says nothing of the kind, and is
+    /// still refused. A part the context's model cannot do without is still held to: Tenancy's save check, for a
+    /// context that keeps rows to a tenant (<see cref="ContextPartRequirements"/>).
+    /// </para>
+    /// <para>
+    /// It adds the interceptors the options do not have yet, so a second call adds nothing. The provider is the
+    /// one <see cref="UseDDDToolkit"/> is handed, for the same reasons.
+    /// </para>
+    /// </summary>
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <param name="serviceProvider">The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool.</param>
+    /// <exception cref="ArgumentNullException">An argument is null.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="AddDDDToolkitEntityFramework"/> was not called.</exception>
+    public static DbContextOptionsBuilder UseDDDToolkitCore(this DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
+    {
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+
+        AddToolkitInterceptors(optionsBuilder, serviceProvider);
+
+        // What the call says, kept where a check can read it: the base alone, on purpose.
+        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(BaseAloneExtension.Instance);
+        return optionsBuilder;
+    }
+
+    /// <summary>
+    /// Adds the toolkit's own interceptors the options do not have yet, in the order they run: what both
+    /// <see cref="UseDDDToolkit"/> and <see cref="UseDDDToolkitCore"/> start with.
+    /// </summary>
+    private static void AddToolkitInterceptors(DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
+    {
+        var present = optionsBuilder.Options.FindExtension<CoreOptionsExtension>()?.Interceptors ?? [];
+        List<IInterceptor> missing = [];
+
+        if (!present.OfType<PublishDomainEventsInterceptor>().Any())
+        {
+            // Built, not resolved: the registration is scoped, and a pool's callback has no scope to resolve it from.
+            missing.Add(new PublishDomainEventsInterceptor(serviceProvider, serviceProvider.GetRequiredService<DDDEntityFrameworkOptions>()));
+        }
+
+        AddUnlessPresent<InvariantInterceptor>(present, missing, serviceProvider);
+        AddUnlessPresent<AggregateVersionInterceptor>(present, missing, serviceProvider);
+        AddUnlessPresent<DatabaseRefusalInterceptor>(present, missing, serviceProvider);
+
+        if (missing.Count > 0)
+        {
+            optionsBuilder.AddInterceptors(missing);
+        }
     }
 
     /// <summary>Alias of <see cref="UseDDDToolkit"/>, kept for readers of the 2.x API.</summary>
     public static void AddDomainEventInterceptor(this DbContextOptionsBuilder ctx, IServiceProvider scvc) => ctx.UseDDDToolkit(scvc);
+
+    /// <summary>Adds the registered <typeparamref name="TInterceptor"/> to <paramref name="missing"/> unless <paramref name="present"/> holds one.</summary>
+    private static void AddUnlessPresent<TInterceptor>(IEnumerable<IInterceptor> present, List<IInterceptor> missing, IServiceProvider serviceProvider)
+        where TInterceptor : class, IInterceptor
+    {
+        if (!present.OfType<TInterceptor>().Any())
+        {
+            missing.Add(serviceProvider.GetRequiredService<TInterceptor>());
+        }
+    }
 
     /// <summary>
     /// Registers <see cref="OutboxProcessor{TContext}"/> (scoped) so it can be resolved and driven

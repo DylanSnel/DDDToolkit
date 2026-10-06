@@ -104,11 +104,14 @@ public sealed class KeptLogLines : ILoggerProvider
     private readonly List<(string Category, LogLevel Level, string Message, Exception? Exception)> _entries = [];
 
     /// <summary>What the loggers of <typeparamref name="T"/>'s category wrote.</summary>
-    public IReadOnlyList<(string Category, LogLevel Level, string Message, Exception? Exception)> Of<T>()
+    public IReadOnlyList<(string Category, LogLevel Level, string Message, Exception? Exception)> Of<T>() => Of(typeof(T).FullName!);
+
+    /// <summary>What the loggers of <paramref name="category"/> wrote: the category of a class the test cannot name, an internal one of the toolkit's.</summary>
+    public IReadOnlyList<(string Category, LogLevel Level, string Message, Exception? Exception)> Of(string category)
     {
         lock (_entries)
         {
-            return [.. _entries.Where(entry => entry.Category == typeof(T).FullName)];
+            return [.. _entries.Where(entry => entry.Category == category)];
         }
     }
 

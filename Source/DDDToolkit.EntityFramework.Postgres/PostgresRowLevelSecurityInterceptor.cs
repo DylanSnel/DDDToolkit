@@ -29,8 +29,10 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// own and <c>auth.uid()</c> on Supabase, and every policy on every table the context touches applies.
 /// </summary>
 /// <remarks>
-/// Register it with <c>services.AddPostgresRowLevelSecurity()</c> and add it to a context with
-/// <c>options.UsePostgresRowLevelSecurity(provider)</c>.
+/// Register it with <c>services.AddPostgresRowLevelSecurity()</c>: <c>options.UseDDDToolkit(provider)</c> then adds it
+/// to every context on Postgres, and <c>options.UsePostgresRowLevelSecurity(provider)</c> to one configured without it.
+/// A context on another database that has it all the same, because its provider was configured after
+/// <c>UseDDDToolkit</c>, is passed over at every use: nothing is set, and nobody is asked who is calling.
 /// <para>
 /// <b>In <see cref="RowLevelSecurityScope.Connection"/> scope, the default, the settings last as long as the
 /// connection is open, not as long as a transaction.</b> Entity
@@ -128,6 +130,20 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </remarks>
 public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionInterceptor, IDbCommandInterceptor, IDbTransactionInterceptor, ISaveChangesInterceptor
 {
+    /// <summary>
+    /// The name of the part row level security brings to a context's options (<c>ContextPart</c>):
+    /// <c>AddPostgresRowLevelSecurity</c> and <c>AddSupabaseRowLevelSecurity</c> register it, and <c>UseDDDToolkit</c>
+    /// adds this interceptor to every context that may be on Postgres. The information line of <c>UseDDDToolkit</c>
+    /// names it.
+    /// </summary>
+    public const string PartName = "postgres.row-level-security";
+
+    /// <summary>
+    /// Where the part goes among the parts of a context's options: after the toolkit's own interceptors, which come
+    /// before every part, and before Tenancy's save check, which comes last.
+    /// </summary>
+    public const int PartPosition = 100;
+
     /// <summary>
     /// The setting a transaction's own statement marks the transaction with. A context handed a transaction
     /// asks the server for it, rather than trust what was remembered about a transaction object: a provider may
@@ -270,14 +286,22 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <inheritdoc />
     public override InterceptionResult ConnectionOpening(DbConnection connection, ConnectionEventData eventData, InterceptionResult result)
     {
-        EnsureConnects(connection);
+        if (!NotOnPostgres(eventData?.Context))
+        {
+            EnsureConnects(connection);
+        }
+
         return result;
     }
 
     /// <inheritdoc />
     public override ValueTask<InterceptionResult> ConnectionOpeningAsync(DbConnection connection, ConnectionEventData eventData, InterceptionResult result, CancellationToken cancellationToken = default)
     {
-        EnsureConnects(connection);
+        if (!NotOnPostgres(eventData?.Context))
+        {
+            EnsureConnects(connection);
+        }
+
         return ValueTask.FromResult(result);
     }
 
@@ -290,7 +314,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </remarks>
     public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
     {
-        if (_scope == RowLevelSecurityScope.Transaction)
+        if (_scope == RowLevelSecurityScope.Transaction || NotOnPostgres(eventData?.Context))
         {
             return;
         }
@@ -310,7 +334,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <remarks>As <see cref="ConnectionOpened"/>: a statement that fails, or is cancelled, closes the connection.</remarks>
     public override async Task ConnectionOpenedAsync(DbConnection connection, ConnectionEndEventData eventData, CancellationToken cancellationToken = default)
     {
-        if (_scope == RowLevelSecurityScope.Transaction)
+        if (_scope == RowLevelSecurityScope.Transaction || NotOnPostgres(eventData?.Context))
         {
             return;
         }
@@ -388,7 +412,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </remarks>
     InterceptionResult<DbTransaction> IDbTransactionInterceptor.TransactionStarting(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result)
     {
-        if (BeforeTransaction(connection, eventData?.Context) is { } pending)
+        if (!NotOnPostgres(eventData?.Context) && BeforeTransaction(connection, eventData?.Context) is { } pending)
         {
             Send(connection, pending);
         }
@@ -399,7 +423,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <inheritdoc />
     async ValueTask<InterceptionResult<DbTransaction>> IDbTransactionInterceptor.TransactionStartingAsync(DbConnection connection, TransactionStartingEventData eventData, InterceptionResult<DbTransaction> result, CancellationToken cancellationToken)
     {
-        if (BeforeTransaction(connection, eventData?.Context) is { } pending)
+        if (!NotOnPostgres(eventData?.Context) && BeforeTransaction(connection, eventData?.Context) is { } pending)
         {
             await SendAsync(connection, pending, cancellationToken).ConfigureAwait(false);
         }
@@ -415,7 +439,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </remarks>
     DbTransaction IDbTransactionInterceptor.TransactionStarted(DbConnection connection, TransactionEndEventData eventData, DbTransaction result)
     {
-        if (_scope == RowLevelSecurityScope.Transaction)
+        if (_scope == RowLevelSecurityScope.Transaction && !NotOnPostgres(eventData?.Context))
         {
             try
             {
@@ -434,7 +458,7 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <inheritdoc />
     async ValueTask<DbTransaction> IDbTransactionInterceptor.TransactionStartedAsync(DbConnection connection, TransactionEndEventData eventData, DbTransaction result, CancellationToken cancellationToken)
     {
-        if (_scope == RowLevelSecurityScope.Transaction)
+        if (_scope == RowLevelSecurityScope.Transaction && !NotOnPostgres(eventData?.Context))
         {
             try
             {
@@ -460,6 +484,11 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// </remarks>
     DbTransaction IDbTransactionInterceptor.TransactionUsed(DbConnection connection, TransactionEventData eventData, DbTransaction result)
     {
+        if (NotOnPostgres(eventData?.Context))
+        {
+            return result;
+        }
+
         if (Remembered(connection, result) is { } remembered)
         {
             using var read = MarkCommand(connection, result);
@@ -481,6 +510,11 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     /// <inheritdoc />
     async ValueTask<DbTransaction> IDbTransactionInterceptor.TransactionUsedAsync(DbConnection connection, TransactionEventData eventData, DbTransaction result, CancellationToken cancellationToken)
     {
+        if (NotOnPostgres(eventData?.Context))
+        {
+            return result;
+        }
+
         if (Remembered(connection, result) is { } remembered)
         {
             var read = MarkCommand(connection, result);
@@ -1241,6 +1275,11 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     private void EnsureCurrent(DbCommand command, CommandEventData eventData)
     {
+        if (NotOnPostgres(eventData.Context))
+        {
+            return;
+        }
+
         Applied? joined = null;
         if (Elsewhere(command, eventData.Context) is { } elsewhere)
         {
@@ -1256,6 +1295,11 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     private async ValueTask EnsureCurrentAsync(DbCommand command, CommandEventData eventData, CancellationToken cancellationToken)
     {
+        if (NotOnPostgres(eventData.Context))
+        {
+            return;
+        }
+
         Applied? joined = null;
         if (Elsewhere(command, eventData.Context) is { } elsewhere)
         {
@@ -1406,11 +1450,21 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
 
     private void SaveInATransaction(DbContext? context)
     {
-        if (_scope == RowLevelSecurityScope.Transaction && context is not null)
+        if (_scope == RowLevelSecurityScope.Transaction && context is not null && !NotOnPostgres(context))
         {
             context.Database.AutoTransactionBehavior = AutoTransactionBehavior.Always;
         }
     }
+
+    /// <summary>
+    /// Whether <paramref name="context"/> is on another database than Postgres, so nothing here is for it.
+    /// <c>UseDDDToolkit</c> adds this interceptor to a context whose provider it could not see yet, one configured
+    /// after the call or in <c>OnConfiguring</c>; such a context on SQLite, say, is passed over at every use, before
+    /// anything asks who is calling. One on Postgres, whenever its provider was configured, is run as its caller. An
+    /// event that names no context is taken as Postgres's, so what cannot be told fails closed.
+    /// </summary>
+    private static bool NotOnPostgres(DbContext? context)
+        => context is not null && !string.Equals(context.Database.ProviderName, PostgresRowAccessChecks.NpgsqlProvider, StringComparison.Ordinal);
 
     private static DbParameter Parameter(DbCommand command, string value)
     {

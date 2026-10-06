@@ -40,13 +40,30 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// them, in the same transaction, and the save writes the closure alone.
 /// </para>
 /// <para>
-/// <c>AddTenancy</c> on the service collection registers the one instance; <c>UseTenancy</c> adds it to a
-/// context. It must come after <c>UseDDDToolkit</c>, so it sees what the domain event handlers changed and only
+/// <c>AddTenancy</c> on the service collection registers the one instance; <c>UseDDDToolkit</c> adds it to every
+/// context it wires, and <c>UseTenancy</c> to a context configured with <c>UseDDDToolkitCore</c>. It must come
+/// after the toolkit's own interceptors, so it sees what the domain event handlers changed and only
 /// aggregates that passed their invariants; <see cref="TenancyChecks.EnsureWired"/> checks both.
 /// </para>
 /// </summary>
 public abstract class TenancySaveInterceptor : SaveChangesInterceptor
 {
+    /// <summary>
+    /// The name of the part Tenancy brings to a context's options (<c>ContextPart</c>): <c>AddTenancy</c> registers
+    /// it, and <c>UseDDDToolkit</c> adds this interceptor to every context it wires. The information line of
+    /// <c>UseDDDToolkit</c> names it, and so does the model of a context that keeps rows to a tenant, which cannot
+    /// do without it.
+    /// </summary>
+    public const string PartName = "tenancy.save-check";
+
+    /// <summary>
+    /// Where the part goes among the parts of a context's options: last, the highest position there is. After the
+    /// toolkit's own interceptors, which come before every part, so the save check sees what the domain event
+    /// handlers changed and only aggregates that passed their invariants; and after every other part, whatever
+    /// position a host gives one of its own, so a row such a part adds or changes is checked like any other.
+    /// </summary>
+    public const int PartPosition = int.MaxValue;
+
     private const int MaxOwnershipDepth = 32;
 
     /// <summary>Only Tenancy derives from it, closed over the application's classes.</summary>

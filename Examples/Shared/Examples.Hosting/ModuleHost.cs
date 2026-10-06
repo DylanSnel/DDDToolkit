@@ -40,14 +40,16 @@ public sealed record ModuleHost(ModuleDatabase Database, Action<OutboxOptions> P
     /// <summary>
     /// A modular monolith on Postgres, with every module's context on <paramref name="pools"/>: the migrations
     /// are applied by whoever owns the database, from the files the modules export, and the host only checks
-    /// that none is missing. <see cref="Database"/> says the same, for whatever reads it.
+    /// that none is missing. <see cref="Database"/> says the same, for whatever reads it. Row level security is the
+    /// host's to register, with <c>AddSupabaseRowLevelSecurity</c>; <c>UseDDDToolkit</c> then runs every module's
+    /// context as its caller.
     /// </summary>
     /// <param name="pools">The host's connections, which it makes once and disposes when it stops.</param>
     /// <param name="connectionString">The connection string the pools were made from.</param>
     public static ModuleHost OnPostgres(PostgresPools pools, string connectionString)
     {
         ArgumentNullException.ThrowIfNull(pools);
-        return InProcess(ModuleDatabase.Supabase(connectionString).WithRowLevelSecurity()) with { Postgres = pools };
+        return InProcess(ModuleDatabase.Supabase(connectionString)) with { Postgres = pools };
     }
 
     /// <summary>

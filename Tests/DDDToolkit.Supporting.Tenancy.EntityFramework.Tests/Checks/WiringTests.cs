@@ -7,13 +7,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace DDDToolkit.Supporting.Tenancy.EntityFramework.Tests;
 
 /// <summary>
-/// A context whose saves Tenancy does not check, because <c>UseTenancy</c> was forgotten or came before
-/// <c>UseDDDToolkit</c>, fails loudly instead of writing what nobody checked.
+/// A context whose saves Tenancy does not check, because it was given the toolkit's base alone,
+/// <c>UseDDDToolkitCore</c>, without <c>UseTenancy</c>, or because <c>UseTenancy</c> came before the toolkit's
+/// interceptors, fails loudly instead of writing what nobody checked. <c>UseDDDToolkit</c> alone wires it.
 /// </summary>
 public sealed class WiringTests
 {
     [Fact]
-    public async Task Forgetting_UseTenancy_fails_loudly_on_save()
+    public async Task The_base_alone_without_UseTenancy_fails_loudly_on_save()
     {
         using var services = new TestServices(Wiring.WithoutTenancy);
 
@@ -24,7 +25,7 @@ public sealed class WiringTests
     }
 
     [Fact]
-    public async Task UseTenancy_before_UseDDDToolkit_fails_loudly()
+    public async Task UseTenancy_before_the_toolkits_interceptors_fails_loudly()
     {
         using var services = new TestServices(Wiring.TenancyFirst);
 
@@ -43,9 +44,9 @@ public sealed class WiringTests
         FluentActions.Invoking(() => TenancyChecks.EnsureWired(scope.ServiceProvider.GetRequiredService<TestWidgetContext>())).Should().NotThrow();
         FluentActions.Invoking(() => TenancyChecks.EnsureWired(scope.ServiceProvider.GetRequiredService<TestTenancyContext>())).Should().NotThrow();
 
-        // The same consumer without Tenancy's interceptor: options, not the context's type, decide.
+        // The same consumer given the base alone, without Tenancy's interceptor: options, not the context's type, decide.
         var unwired = new DbContextOptionsBuilder<TestWidgetContext>().UseSqlite(services.Sqlite.Connection);
-        unwired.UseDDDToolkit(scope.ServiceProvider);
+        unwired.UseDDDToolkitCore(scope.ServiceProvider);
         await using var widgets = new TestWidgetContext(unwired.Options);
         FluentActions.Invoking(() => TenancyChecks.EnsureWired(widgets)).Should().Throw<InvalidOperationException>()
             .WithMessage("*" + nameof(TestWidgetContext) + "*UseTenancy*");

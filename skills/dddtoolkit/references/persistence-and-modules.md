@@ -26,6 +26,12 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
     .UseDDDToolkit(services));   // the callback's provider: handlers then get this same context instance
 ```
 
+`UseDDDToolkit` is the only call a context needs, after its provider: it adds the toolkit's interceptors and
+whatever a registered package brings to a context, row level security on Postgres (`AddSupabaseRowLevelSecurity`,
+`AddPostgresRowLevelSecurity`) and Tenancy's save check (`AddTenancy`), each in its place. `UseDDDToolkitCore`
+adds the toolkit's interceptors alone, for a context that should do without a part, such as one that runs as
+the login role; it takes the parts it does want with their own `Use...` calls after it.
+
 ```csharp
 using DDDToolkit.EntityFramework.Conventions;
 using Ordering.Converters;                   // generated: {AssemblyName}.Converters

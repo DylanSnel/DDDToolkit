@@ -161,8 +161,9 @@ Tenancy becomes a module of your application, like any other. In the order you w
    shows the call, and the alias every use case is named through. A request that asks for a tenant says who
    may send it, and its handler begins the system work itself
    ([Who may ask, and what the work runs as](#who-may-ask-and-what-the-work-runs-as)).
-6. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity and `UseTenancy` on its context, after
-   `UseDDDToolkit` ([Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check)).
+6. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity; `UseDDDToolkit` on its context gives it
+   Tenancy's save check, which `AddTenancy` brought
+   ([Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check)).
 7. **Ask in your modules.** A module maps the read model and asks where the caller holds a key, inside its
    own query ([Who may do what](#who-may-do-what)). A request says what it requires of its caller, and a
    check holds the caller to it before the handler runs
@@ -274,12 +275,12 @@ public static IServiceCollection AddShopTenancy(this IServiceCollection services
         })
         .AddDbContext<ShopTenancyContext>((serviceProvider, options) => options
             .UseNpgsql(connectionString)
-            .UseDDDToolkit(serviceProvider)
-            .UseTenancy(serviceProvider));
+            .UseDDDToolkit(serviceProvider));
 ```
 
-`UseTenancy` comes after `UseDDDToolkit`, on this context and on every context that keeps its own entities
-to a tenant; [Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check) says why, and what
+`AddTenancy` brings Tenancy's save check to every context `UseDDDToolkit` wires, after the toolkit's own
+interceptors: this one, and every context that keeps its own entities to a tenant, with nothing more to write.
+[Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check) says why it goes there, and what
 checks it.
 [A registration closed over your classes](writing-a-supporting-domain.md#a-registration-closed-over-your-classes)
 explains how the calls without your classes come about.
@@ -1569,33 +1570,68 @@ rows from your reads only. Tenancy still sees them when it writes the rights a s
 checks that a slug, a person or a role name is free, because the database sees them too. A seat your
 filter hides keeps its rights; suspend or deactivate it to take them away.
 
-The save check is what `UseTenancy` adds, and it belongs after `UseDDDToolkit`. There it sees
-what the domain event handlers changed, and only aggregates that passed their invariants; added before,
-it would check rows that are still to change. Tenancy's store checks its own context before every save,
-and `TenancyChecks.EnsureWired(context)` checks any other, so a forgotten or misplaced `UseTenancy` fails
-loudly rather than writing unchecked rows. `AddTenancy` registers it as the [start-up check](startup-checks.md)
+The save check is Tenancy's part of a context's options. `AddTenancy` brings it, and `UseDDDToolkit` puts it on
+every context it wires, after the toolkit's own interceptors and last of all the parts. There it sees what the
+domain event handlers changed, only aggregates that passed their invariants, and every row another part added to
+the save; added before, it would check rows that are still to change.
+
+```mermaid
+flowchart LR
+    Add["AddTenancy()<br/>brings the save check"] --> Call["UseDDDToolkit(services)<br/>on every context"]
+    Call --> Own["Tenancy's own context<br/>checks its rows, writes<br/>the closure and the rights"]
+    Call --> Module["a module's context<br/>with ScopeToTenant<br/>checks its rows"]
+    Call --> Other["a context that keeps<br/>nothing to a tenant<br/>saves as it would"]
+```
+
+The check goes on every context alike because what decides its work is the model, and the options are built before
+the model is. So it asks the model at every save, once per model: in Tenancy's own context it checks the rows and
+writes the closure and the rights the save changes, in a module's context it checks the rows `ScopeToTenant` keeps
+to a tenant, and in a context with neither it does nothing. No registration lists the contexts Tenancy is for, and
+a module added later is kept to the tenant by the same one call.
+
+A context that keeps rows to a tenant cannot do without the save check, and its model says so: `ScopeToTenant`
+states it ([A part a model cannot do without](entity-framework.md#a-part-a-model-cannot-do-without)). So such a
+context without it fails loudly rather than writing unchecked rows, at its first save, before anything is
+written: where nothing registered Tenancy, the message names `AddTenancy`, and where the context was given the
+base alone, it names `UseTenancy`. Tenancy's store checks its own context before every save as well, and
+`TenancyChecks.EnsureWired(context)` checks any other, the order included: the save check before the toolkit's
+interceptors is refused too. `AddTenancy` registers it as the [start-up check](startup-checks.md)
 `tenancy.contexts-wired`, over every context the host registers, with `tenancy.catalogue-builds` and
-`tenancy.unknown-stored-keys`; a host runs them with `services.RunStartupChecks()`.
+`tenancy.unknown-stored-keys`; a host runs them with `services.RunStartupChecks()`. It holds a context configured
+with `UseDDDToolkitCore` to the same: such a context takes the save check with `UseTenancy`, after it.
+
+<details>
+<summary>Show the code: a module's context, and one that takes the parts one by one</summary>
 
 ```csharp
 // A module's context that keeps its own rows to a tenant
 services.AddDbContext<ProjectsContext>((serviceProvider, options) => options
     .UseNpgsql(connectionString)
-    .UseDDDToolkit(serviceProvider)
-    .UseTenancy(serviceProvider));   // after UseDDDToolkit: EnsureWired refuses it the other way round
+    .UseDDDToolkit(serviceProvider));   // the toolkit's interceptors, row level security where it is registered, the save check
+
+// A context that runs as the login role on purpose, where that role may read the tables, and still keeps its rows to a tenant
+services.AddDbContext<ReportsContext>((serviceProvider, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkitCore(serviceProvider)
+    .UseTenancy(serviceProvider));      // after the toolkit's interceptors: EnsureWired refuses it the other way round
 ```
+
+</details>
+
+A context given the base alone does what the login role may. Where that role owns and holds nothing, as
+[a login that owns nothing](row-level-security.md#a-login-that-owns-nothing) asks, the database refuses its first
+command; the reads across tenants Tenancy itself needs go through [system work](#system-work) instead.
 
 Both read the caller when they are used: the filter when a query runs, the save check at every save.
 Neither keeps anything on a context or in its options. So a context taken from a
 [pool](entity-framework.md#contexts-from-a-pool) is kept to the tenant of whoever rented it, for what it
 saves as for what it reads, and an instance another tenant's request gave back a moment ago refuses a row
-of that tenant like any other. The same calls go in the pool's options, Tenancy's own context included:
+of that tenant like any other. The same call goes in the pool's options, Tenancy's own context included:
 
 ```csharp
 services.AddPooledDbContextFactory<ProjectsContext>((serviceProvider, options) => options
     .UseNpgsql(connectionString)
-    .UseDDDToolkit(serviceProvider)
-    .UseTenancy(serviceProvider));
+    .UseDDDToolkit(serviceProvider));
 services.AddScopedFromPool<ProjectsContext>();   // a scope's own context, which a command saves through
 ```
 
@@ -1796,7 +1832,7 @@ modelBuilder.Entity<Project>(project =>
 });
 ```
 
-That adds six shadow columns, which the save interceptor of `UseTenancy` fills in from the Tenancy caller
+That adds six shadow columns, which Tenancy's save interceptor fills in from the Tenancy caller
 the save runs as: both sets on a new row, and the last three on a row that changes.
 
 | Who acted | `…ByKind` | `…BySeat` | `…ByIdentity` |
@@ -2007,9 +2043,7 @@ public static IEndpointRouteBuilder MapProjectsOperations(this IEndpointRouteBui
 
 // Projects.Infrastructure: the context on the host's connections, from a pool, and an adapter for each port
 host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, ProjectsContext.Schema, (application, options) => options
-    .UseDDDToolkit(application)
-    .UseSupabaseRowLevelSecurity(application)
-    .UseTenancy(application));
+    .UseDDDToolkit(application));   // the toolkit, the caller on every connection, Tenancy's save check
 services.AddScoped<IProjectStore, EfProjectStore>();
 services.AddScoped<IProjectReads, EfProjectReads>();
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IProjectsRequest, ProjectsContext>();   // Tenancy's check, for this module's requests
@@ -3694,7 +3728,8 @@ public sealed class ShopTenancyRowAccess()
   as the application, past every policy ([Fail-closed callers](row-level-security.md#fail-closed-callers)).
   It also leaves the rights to the database (`TenancyStoreOptions.DatabaseKeepsRights`), which writes them
   and answers what the use cases ask about other seats ([below](#what-the-policies-check)).
-  Your contexts use `UsePostgresRowLevelSecurity` as well as `UseTenancy`.
+  With row level security registered, `UseDDDToolkit` runs your contexts as their caller and gives them
+  Tenancy's save check, with nothing more to write.
 - **The contribution** is a [row access contribution](row-level-security.md#policies-a-package-ships).
   Which keys manage access is yours to say, so its SQL is written from your catalogue: derive a class that
   builds it as your registration does, from your part and your modules' keys, `TenancyPermissionsOfModules.All`,

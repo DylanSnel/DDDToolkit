@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.TestHost.Access;
 
@@ -89,7 +90,7 @@ public sealed class PostgresDepot : IDisposable
             options => options.UseNpgsql(database.ConnectionString),
             TimeProvider.System,
             services => services.AddPostgresRowLevelSecurity(),
-            wiring: asCaller ? (options, provider) => options.UsePostgresRowLevelSecurity(provider) : null);
+            wiring: asCaller ? null : (options, provider) => options.UseDDDToolkitCore(provider));
         Scenario = new DepotScenario(DateTimeOffset.UtcNow);
     }
 

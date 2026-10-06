@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.Supporting.Tenancy.Access;
 using Microsoft.EntityFrameworkCore;
@@ -18,6 +19,9 @@ namespace DDDToolkit.Supporting.Tenancy.EntityFramework;
 /// </summary>
 public static class TenancyModelBuilderExtensions
 {
+    /// <summary>The registration that brings the save check, as a context that lacks it is told to write it.</summary>
+    private const string TenancyRegistration = "services.AddTenancy<…, TContext>(…) of DDDToolkit.Supporting.Tenancy.EntityFramework";
+
     /// <summary>
     /// Maps Tenancy's tables, closed over the application's classes and ids, into the context's default
     /// schema: the tenants, organizations with their units, seats with their placements and grants, roles,
@@ -42,7 +46,7 @@ public static class TenancyModelBuilderExtensions
     /// </para>
     /// <para>
     /// Every table that has a tenant gets the tenant filter (<see cref="TenancyQueryFilter"/>), and the save
-    /// check of <c>UseTenancy</c> reads the tenant of every row written to them.
+    /// check, which <c>UseDDDToolkit</c> adds, reads the tenant of every row written to them.
     /// </para>
     /// <para>
     /// The views of the read model carry access facts only, here as in a module's model: ids, keys, periods,
@@ -292,7 +296,7 @@ public static class TenancyModelBuilderExtensions
     /// <summary>
     /// Keeps an entity of any module to the current Tenancy caller's tenant. It adds the tenant filter, a named
     /// query filter that sits next to the entity's other named filters rather than replacing them, and marks
-    /// the entity for the save check of <c>UseTenancy</c>: a row of another tenant is refused before anything is
+    /// the entity for Tenancy's save check, which <c>UseDDDToolkit</c> adds: a row of another tenant is refused before anything is
     /// written, whoever loaded or made it.
     /// <code>
     /// modelBuilder.Entity&lt;Project&gt;().ScopeToTenant(project =&gt; project.TenantId);
@@ -303,8 +307,9 @@ public static class TenancyModelBuilderExtensions
     /// out of <c>UPDATE</c>.
     /// </para>
     /// <para>
-    /// Owned types are kept through their owner: scope the owner. The context must use <c>UseTenancy</c>,
-    /// which <see cref="TenancyChecks.EnsureWired"/> checks.
+    /// Owned types are kept through their owner: scope the owner. The context must have the save check, which
+    /// <c>UseDDDToolkit</c> adds (<c>UseTenancy</c> after <c>UseDDDToolkitCore</c>), and
+    /// <see cref="TenancyChecks.EnsureWired"/> checks it.
     /// </para>
     /// </summary>
     /// <typeparam name="TEntity">The entity.</typeparam>
@@ -338,6 +343,10 @@ public static class TenancyModelBuilderExtensions
     {
         entity.HasQueryFilter(TenancyQueryFilter.Name, TenancyQueryFilter.Of(tenant));
         entity.HasAnnotation(TenancyMapping.TenantPropertyAnnotation, property);
+
+        // A context of this model cannot do without the save check: where it lacks it, because nothing registered
+        // Tenancy or the context was given the base alone, its first save is refused rather than written unchecked.
+        entity.Metadata.Model.RequireContextPart(TenancySaveInterceptor.PartName, typeof(TenancySaveInterceptor), TenancyRegistration, "options.UseTenancy(serviceProvider)");
 
         // A row never moves to another tenant: Entity Framework refuses a save that changed the property, and the
         // privileges an export writes from the policies leave its column out of UPDATE.

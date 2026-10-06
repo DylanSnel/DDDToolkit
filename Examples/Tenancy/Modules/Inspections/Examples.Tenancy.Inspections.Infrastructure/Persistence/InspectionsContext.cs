@@ -14,8 +14,8 @@ namespace Examples.Tenancy.Inspections.Infrastructure.Persistence;
 /// see or record on a project is Projects' answer, asked through its gate, not a question this module asks in
 /// its own queries.</item>
 /// <item><b>The tenant.</b> <c>ScopeToTenant</c> puts the tenant filter on <see cref="Inspection"/> and marks it
-/// for the save check of <c>UseTenancy</c>: an inspection of another tenant is neither read nor written, whoever
-/// loaded or made it.</item>
+/// for Tenancy's save check, which <c>UseDDDToolkit</c> adds: an inspection of another tenant is neither read nor
+/// written, whoever loaded or made it.</item>
 /// <item><b>Instants.</b> Every <see cref="DateTimeOffset"/> is stored as its UTC instant, whatever offset it
 /// was written with, so a project's inspections are ordered in SQL.</item>
 /// </list>

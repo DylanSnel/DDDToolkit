@@ -384,8 +384,11 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
 ```
 
 `UseDDDToolkit` adds the interceptors that deliver domain events, run the invariants and raise the
-version when the context saves. The argument to `AddDDDToolkitEntityFramework` says how the events are
-delivered. The example hands them to [Mediator](https://github.com/martinothamar/Mediator) handlers in
+version when the context saves. It stays the one call when the application grows: what a package you register
+later brings to a context, [row level security](row-level-security.md) on Postgres or
+[Tenancy](tenancy.md)'s save check, it adds as well, each in its place, so the context's options do not change
+([`UseDDDToolkit`](entity-framework.md#usedddtoolkit) says how). The argument to
+`AddDDDToolkitEntityFramework` says how the events are delivered. The example hands them to [Mediator](https://github.com/martinothamar/Mediator) handlers in
 the same process, which is what `DDDToolkit.Mediator` adds; the outbox, further down, is the other
 way. An aggregate that raised events refuses to save until one of the two is configured, rather than
 dropping them. See [Domain event delivery](event-delivery.md).

@@ -15,10 +15,11 @@ namespace DDDToolkit.Auth.Supabase.AspNetCore;
 /// ones supabase-js sends, and each request's user as the caller row level security runs its queries as.
 /// <code>
 /// builder.Services.AddAuthentication().AddSupabaseJwtBearer("https://&lt;ref&gt;.supabase.co");
+/// builder.Services.AddDDDToolkitEntityFramework();   // UseDDDToolkit is DDDToolkit.EntityFramework's
 /// builder.Services.AddSupabaseRowLevelSecurity();   // or AddPostgresRowLevelSecurity() off Supabase
 /// builder.Services.AddDbContext&lt;OrderingContext&gt;((provider, options) => options
 ///     .UseNpgsql(connectionString)
-///     .UseSupabaseRowLevelSecurity(provider));
+///     .UseDDDToolkit(provider));                   // runs the context as its caller, with the toolkit
 ///
 /// app.UseAuthentication();
 /// </code>
