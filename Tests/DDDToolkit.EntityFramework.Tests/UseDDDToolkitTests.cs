@@ -188,7 +188,7 @@ public sealed class UseDDDToolkitTests : IDisposable
         registered.AddContextPart(new ContextPart<DbContextOptionsBuilder>("tests.first", -1, (options, _) => options.AddInterceptors(new First())));
         registered.AddContextPart(new ContextPart<DbContextOptionsBuilder>("tests.audit", 50, (_, _) => throw new InvalidOperationException("A second part of a name is not registered.")));
 
-        registered.GetContextParts<DbContextOptionsBuilder>().InOrder.Select(part => (part.Name, part.Position)).Should().Equal(
+        registered.GetContextParts<DbContextOptionsBuilder>().InOrder().Select(part => (part.Name, part.Position)).Should().Equal(
             ("tests.first", -1), (PostgresRowLevelSecurityInterceptor.PartName, PostgresRowLevelSecurityInterceptor.PartPosition), ("tests.audit", 150));
 
         using var services = registered.BuildServiceProvider();

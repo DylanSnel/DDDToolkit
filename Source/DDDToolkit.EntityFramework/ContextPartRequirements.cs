@@ -139,7 +139,7 @@ public static class ContextPartRequirements
 
         bool? registered = services is null
             ? null
-            : (services.GetService(typeof(ContextParts<DbContextOptionsBuilder>)) as ContextParts<DbContextOptionsBuilder>)?.InOrder
+            : (services.GetService(typeof(ContextParts<DbContextOptionsBuilder>)) as ContextParts<DbContextOptionsBuilder>)?.InOrder()
                 .Any(part => string.Equals(part.Name, requirement.Part, StringComparison.Ordinal)) ?? false;
 
         return new InvalidOperationException(registered switch

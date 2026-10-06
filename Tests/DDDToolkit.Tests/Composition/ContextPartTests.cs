@@ -22,7 +22,7 @@ public sealed class ContextPartTests
             .AddContextPart(Part("tests.tenancy", 50));
 
         var parts = services.GetContextParts<Recipe>();
-        parts.InOrder.Select(part => part.ToString()).Should().Equal(
+        parts.InOrder().Select(part => part.ToString()).Should().Equal(
             "tests.row-level-security (100)", "tests.tenancy (200)", "tests.audit (300)", "tests.history (300)");
 
         var recipe = new Recipe();

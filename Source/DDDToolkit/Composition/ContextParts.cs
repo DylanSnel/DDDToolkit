@@ -19,9 +19,11 @@ public sealed class ContextParts<TBuilder>
 
     /// <summary>
     /// Every registered part in the order they are applied: by <see cref="ContextPart{TBuilder}.Position"/>, and two
-    /// of one position as they were registered.
+    /// of one position as they were registered. A method, as <c>StartupChecks.InOrder()</c> is, so the two holders a
+    /// host's services keep read alike.
     /// </summary>
-    public IReadOnlyList<ContextPart<TBuilder>> InOrder => _inOrder;
+    /// <returns>The registered parts, in the order they are applied.</returns>
+    public IReadOnlyList<ContextPart<TBuilder>> InOrder() => _inOrder;
 
     /// <summary>
     /// Applies to <paramref name="builder"/> every part that belongs on it, in order, and says which those were.
