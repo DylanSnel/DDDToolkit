@@ -63,3 +63,12 @@ public sealed class PostgresRefusalTests(PostgresFixture fixture) : ProviderRefu
     /// <inheritdoc />
     protected override string DefaultSchema => "public";
 }
+
+/// <summary>Where two modules keep their migration histories, against PostgreSQL.</summary>
+[Collection(PostgresCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.Postgres)]
+public sealed class PostgresMigrationHistoryTests(PostgresFixture fixture) : ProviderMigrationHistoryTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string ProvidersDefaultSchema => "public";
+}

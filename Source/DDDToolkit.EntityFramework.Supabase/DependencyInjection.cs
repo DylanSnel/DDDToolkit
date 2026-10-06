@@ -83,6 +83,13 @@ public static partial class DependencyInjection
     /// whatever caller is current: the history is the application's to read, also on a context with row
     /// level security in a host that requires explicit callers.
     /// </para>
+    /// <para>
+    /// Where a context misses migrations, it also asks whether the context reads its history from the table its
+    /// design-time factory's context records the migrations in, which is where every exported file records its
+    /// migration. Where the two differ, the migrations may well be applied, and recorded where the application does
+    /// not look, and the exception says so: the options of the factory and those of the application name the history
+    /// differently, <c>UseDDDToolkit</c> in the one without <c>UseDDDToolkitDesignTime</c> in the other, say.
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
     /// <exception cref="SupabaseMigrationsPendingException">A registered context has migrations the database does not.</exception>
@@ -93,6 +100,7 @@ public static partial class DependencyInjection
         await using var scope = services.CreateAsyncScope();
         using var system = Callers.Begin(Caller.System);
         var pending = new List<(string Context, IReadOnlyList<string> Migrations)>();
+        var elsewhere = new List<string>();
 
         foreach (var source in services.GetSupabaseMigrationSources())
         {
@@ -102,12 +110,16 @@ public static partial class DependencyInjection
             if (missing.Count > 0)
             {
                 pending.Add((source.ContextType.Name, missing));
+                if (SupabaseMigrationsPendingException.HistoryElsewhere(source, context) is { } said)
+                {
+                    elsewhere.Add(said);
+                }
             }
         }
 
         if (pending.Count > 0)
         {
-            throw new SupabaseMigrationsPendingException(pending);
+            throw new SupabaseMigrationsPendingException(pending, elsewhere);
         }
     }
 }

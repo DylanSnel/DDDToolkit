@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using Examples.Webshop.Inventory.Infrastructure.Persistence;
 using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,8 @@ public sealed class InventoryContextFactory : IDesignTimeDbContextFactory<Invent
     public InventoryContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<InventoryContext>();
-        ModuleDatabase.UseSqlServer(options, "Server=unused", InventoryContext.Schema);
+        // The migration history in the module's schema, where the host's UseDDDToolkit keeps it.
+        ModuleDatabase.UseSqlServer(options, "Server=unused").UseDDDToolkitDesignTime();
         return new(options.Options);
     }
 }

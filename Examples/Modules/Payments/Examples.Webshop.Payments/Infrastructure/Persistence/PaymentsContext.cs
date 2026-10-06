@@ -1,8 +1,8 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Hosting;
 using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Payments.Converters;
 using Microsoft.EntityFrameworkCore;
@@ -44,9 +44,5 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
 public sealed class PaymentsContextFactory : IDesignTimeDbContextFactory<PaymentsContext>
 {
     public PaymentsContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<PaymentsContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", PaymentsContext.Schema);
-        return new PaymentsContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<PaymentsContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

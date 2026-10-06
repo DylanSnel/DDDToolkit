@@ -1,8 +1,8 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Hosting;
 using Examples.Webshop.Inventory.Converters;
 using Examples.Webshop.Ordering.Contracts.Converters;
 using Microsoft.EntityFrameworkCore;
@@ -45,9 +45,5 @@ public sealed class InventoryContext(DbContextOptions<InventoryContext> options)
 public sealed class InventoryContextFactory : IDesignTimeDbContextFactory<InventoryContext>
 {
     public InventoryContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<InventoryContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", InventoryContext.Schema);
-        return new InventoryContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<InventoryContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

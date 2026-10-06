@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Supabase;
 using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -6,10 +7,10 @@ using Microsoft.EntityFrameworkCore.Design;
 namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 
 /// <summary>
-/// How <c>dotnet ef</c> and the Supabase export build a <see cref="ProjectsContext"/>: on Postgres, with the
-/// migration history in the module's schema, as a running host has it
-/// (<see cref="ModuleDatabase.UsePostgres(DbContextOptionsBuilder, string, string)"/>). Neither connects, so the
-/// connection string names no server. The infrastructure project is its own startup project:
+/// How <c>dotnet ef</c> and the Supabase export build a <see cref="ProjectsContext"/>: on Postgres, with what the toolkit
+/// gives a context that has no services, <c>UseDDDToolkitDesignTime()</c>: the migration history in the module's
+/// schema, where a running host, wired with <c>UseDDDToolkit</c>, reads it. Neither connects, so the connection string
+/// names no server. The infrastructure project is its own startup project:
 /// <code>
 /// dotnet ef migrations add Name --project Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure --startup-project Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure --output-dir Persistence/Migrations --context ProjectsContext
 /// dotnet build Examples/Tenancy/Examples.Tenancy.Exporter
@@ -23,9 +24,5 @@ namespace Examples.Tenancy.Projects.Infrastructure.Persistence;
 public sealed class ProjectsContextFactory : IDesignTimeDbContextFactory<ProjectsContext>
 {
     public ProjectsContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<ProjectsContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", ProjectsContext.Schema);
-        return new ProjectsContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<ProjectsContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

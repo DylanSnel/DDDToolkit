@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using DDDToolkit.EntityFramework.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace DDDToolkit.EntityFramework.Postgres;
@@ -529,13 +531,12 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// Lets the bookkeeping role read the context's migration history, where the database has one: a database
-    /// made from the model alone has none, and several contexts usually share one.
+    /// made from the model alone has none, and several contexts may share one.
     /// </summary>
     private static string MigrationHistoryStatement(DbContext context, string system, ISqlGenerationHelper sql)
     {
-        var relational = RelationalOptionsExtension.Extract(context.GetService<IDbContextOptions>());
-        var schema = relational.MigrationsHistoryTableSchema ?? DefaultSchema;
-        var history = sql.DelimitIdentifier(relational.MigrationsHistoryTableName ?? HistoryTableName, schema);
+        var (schema, name) = MigrationHistoryOf(context);
+        var history = sql.DelimitIdentifier(name, schema);
         var role = sql.DelimitIdentifier(system);
 
         return Blocks(1, new StringBuilder()
@@ -554,6 +555,37 @@ public static partial class PostgresRowAccess
 
     /// <summary>The table Entity Framework keeps its migration history in unless the context's options name another.</summary>
     private const string HistoryTableName = "__EFMigrationsHistory";
+
+    /// <summary>
+    /// Where <paramref name="context"/> keeps its migration history: the table its history repository records a
+    /// migration in. That is Entity Framework's own answer, whatever placed the table: the options, which name it with
+    /// <c>MigrationsHistoryTable</c>; <c>UseDDDToolkit</c>, <c>UseDDDToolkitCore</c> or <c>UseDDDToolkitDesignTime</c> of
+    /// <c>DDDToolkit.EntityFramework</c>, which keep it in the default schema of the model the migrations are made from;
+    /// or a repository of the host's own. So the grant names the table the migrations are recorded in. A table named
+    /// without a schema is in Postgres's default one.
+    /// </summary>
+    private static (string Schema, string Name) MigrationHistoryOf(DbContext context)
+    {
+        var recording = context.GetService<IHistoryRepository>().GetInsertScript(new HistoryRow("00000000000000_WhereTheHistoryIs", "0"));
+        if (HistoryInsert().Match(recording) is { Success: true } match)
+        {
+            return (match.Groups["schema"].Success ? Undelimited(match.Groups["schema"].Value) : DefaultSchema, Undelimited(match.Groups["name"].Value));
+        }
+
+        // A repository that records a migration otherwise than with an INSERT INTO: the table the options name, if any.
+        var relational = RelationalOptionsExtension.Extract(context.GetService<IDbContextOptions>());
+        return (relational.MigrationsHistoryTableSchema ?? DefaultSchema, relational.MigrationsHistoryTableName ?? HistoryTableName);
+    }
+
+    /// <summary>An identifier as the SQL writes it, without the double quotes Postgres needs around some.</summary>
+    private static string Undelimited(string identifier)
+        => identifier.Length > 1 && identifier[0] == '"' && identifier[^1] == '"'
+            ? identifier[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal)
+            : identifier;
+
+    /// <summary>The table an insert into the history writes to: its schema, if it names one, and its name, each delimited or not.</summary>
+    [GeneratedRegex("""^\s*INSERT INTO (?:(?<schema>"(?:[^"]|"")+"|[^\s."(]+)\.)?(?<name>"(?:[^"]|"")+"|[^\s."(]+) \(""", RegexOptions.CultureInvariant)]
+    private static partial Regex HistoryInsert();
 
     /// <summary>
     /// The guard of the context's tables that only grow, an event log: the trigger function

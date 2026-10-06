@@ -69,6 +69,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00068](#ddd00068) | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute |
 | [DDD00069](#ddd00069) | Warning | A module's row access contribution is listed by the project that runs the export |
 | [DDD00070](#ddd00070) | Error | A member a library marks for a package's row access contribution is public |
+| [DDD00071](#ddd00071) | Warning | A design-time factory keeps the migration history where the application does |
 | [DDD00072](#ddd00072) | Error | What a package's row access contribution is made from is found once, and is what it takes |
 | [DDD00073](#ddd00073) | Error | A row access contribution a package writes is not listed again |
 | [DDD00074](#ddd00074) | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context |
@@ -107,6 +108,8 @@ is a message that reaches its handler with nothing having asked what it requires
 the Membership package could not tell, and which member class names the wrong resource.
 [DDD00063](#ddd00063) is about [a module's permission keys](tenancy.md#a-module-states-its-keys-once), where it
 is a module whose keys never reach the catalogue the host runs with.
+[DDD00071](#ddd00071) is about [the migration history](entity-framework.md#the-migration-history), where it is a
+`dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
@@ -2482,6 +2485,42 @@ project could not say why. Make the member public, in public types, with a publi
 An application, the program that runs the export or the host, may keep its own marks internal: nothing
 references it for them. A list of keys marked `[TenancyPermissions]` is held to the same by
 [DDD00063](#ddd00063).
+
+## DDD00071
+
+**A design-time factory keeps the migration history where the application does.**
+
+```csharp
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)   // DDD00071: 'OrderingContextFactory' makes its 'OrderingContext' without UseDDDToolkitDesignTime(), ...
+        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").Options);
+}
+```
+
+`UseDDDToolkit` keeps a context's migration history in the context's default schema, beside its tables:
+`ordering."__EFMigrationsHistory"` for a model with `HasDefaultSchema("ordering")`
+([The migration history](entity-framework.md#the-migration-history)). `dotnet ef` and the
+[Supabase export](supabase.md) make the context through its design-time factory instead, before any host exists,
+so the factory says the same with `UseDDDToolkitDesignTime()`. Without it, `dotnet ef database update`, a
+migrations script, a migration bundle and the exported files record every migration in the provider's default
+schema, `public` or `dbo`, while the running application reads its own schema's history: `Migrate()` tries to apply
+the first migration again and fails on a table that is there, and on Supabase the start-up check reports every
+migration missing.
+
+```csharp
+public OrderingContext CreateDbContext(string[] args)
+    => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+```
+
+Add the call after the provider; the code fix does it, in front of the options' `.Options`. It is reported in a
+project that references `DDDToolkit.EntityFramework`, at `CreateDbContext` of a factory whose class calls none of
+`UseDDDToolkitDesignTime`, `UseDDDToolkit`, `UseDDDToolkitCore` and `MigrationsHistoryTable`, in `CreateDbContext`
+or in a method, property or field of the class it reads. A factory whose options a helper of another class makes is
+reported too, since the analyzer reads one class at a time: add the call after the helper, which adds nothing the
+options have already. A context the host does not wire with the toolkit, and whose history is where Entity
+Framework keeps it, names the table in the factory's options and the host's alike,
+`MigrationsHistoryTable(HistoryRepository.DefaultTableName)`, or suppresses the warning.
 
 ## DDD00072
 

@@ -585,6 +585,19 @@ does not see it and would make the package's contribution as if nothing were mar
 static in a public class, with a public getter. Do not move the mark to a copy of the value: mark the value the
 host runs with.
 
+## DDD00071
+
+Warning, at `CreateDbContext` of an `IDesignTimeDbContextFactory<TContext>` in a project that references
+`DDDToolkit.EntityFramework`, whose class calls none of `UseDDDToolkitDesignTime`, `UseDDDToolkit`,
+`UseDDDToolkitCore` and `MigrationsHistoryTable`. `UseDDDToolkit` keeps the migration history in the context's
+default schema; without the call `dotnet ef` and the Supabase export record it in `public` or `dbo`, where the
+application never reads it. Add `.UseDDDToolkitDesignTime()` after the provider:
+`new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`; the
+code fix does exactly that. Where a helper of another class makes the options, add the call after the helper. Only
+for a context the host does not wire with the toolkit, name the history in both the factory's and the host's
+options instead, `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Never answer it by writing
+`MigrationsHistoryTable(..., schema)` in the factory alone.
+
 ## DDD00072
 
 Error, in the project that turns the Supabase export on, at the marked member where it is in that project. A

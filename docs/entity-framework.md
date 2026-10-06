@@ -92,7 +92,9 @@ Wires the context for the toolkit, with one call. It adds the toolkit's own inte
 deliver domain events, check invariants, raise the version and answer a save the database refused, and then
 whatever the packages the host registered bring to a context: row level security once
 `AddSupabaseRowLevelSecurity` or `AddPostgresRowLevelSecurity` is registered, Tenancy's save check once
-`AddTenancy` is. A host that registered none of them gets the toolkit's interceptors and nothing else.
+`AddTenancy` is. A host that registered none of them gets the toolkit's interceptors and nothing else. Every
+context it wires keeps its migration history in its own default schema, beside its tables; see
+[The migration history](#the-migration-history).
 
 Pass the `IServiceProvider` that the options callback gives you. With `AddDbContext` that provider belongs to
 the same scope as the context, so a handler that injects `OrderingContext` receives the very instance that is
@@ -174,7 +176,8 @@ in the log at start.
 ### `UseDDDToolkitCore`
 
 The base alone: the toolkit's own interceptors, and nothing a package brings, which is what `UseDDDToolkit`
-added up to 3.1. It is for a context that should do without a part the host registered, a context on Postgres
+added up to 3.1. The migration history is the toolkit's own, not a package's part, so the base keeps it in the
+context's default schema too. It is for a context that should do without a part the host registered, a context on Postgres
 that runs as the role the application logged in as while the others run as their caller, say. Such a context
 takes the parts it does want with their own calls, after it:
 
@@ -657,6 +660,11 @@ dotnet ef migrations add AddOutbox
 dotnet ef database update
 ```
 
+The one line to write is in the context's design-time factory, the one `dotnet ef` makes the context with: it
+calls `UseDDDToolkitDesignTime()` after its provider, so `dotnet ef` records the migrations in the history the
+running application reads. The build reports a factory without it
+([DDD00071](diagnostics.md#ddd00071)); [The migration history](#the-migration-history) says why.
+
 The outbox table is part of the model as soon as `AddDomainEventOutbox(Database)` is in `OnModelCreating`, so
 the next migration you scaffold contains it, `ddd` schema and all. Opting in is that one call. There
 is no separate package, no separate migration history table and no separate command. The same goes for
@@ -674,6 +682,104 @@ If you map the outbox table before you need it, as the example context does, swi
 in-process dispatch to the outbox later costs no migration at all.
 
 On Supabase the CLI applies migrations, not Entity Framework; see [Supabase](#supabase).
+
+### The migration history
+
+Entity Framework records the migrations it applied in a table of its own, `__EFMigrationsHistory`. Left to
+itself it keeps that table in the provider's default schema, `public` on Postgres and `dbo` on SQL Server,
+whatever schema the model's tables are in. Two modules that share a database would share one history, and each
+would read the other's migrations as its own. So the toolkit keeps the history in the context's default schema,
+beside its tables: a model with `HasDefaultSchema("ordering")` keeps it in `ordering."__EFMigrationsHistory"`,
+and nothing in the options says so.
+
+```mermaid
+flowchart LR
+    Host["the host<br/>UseNpgsql(...).UseDDDToolkit(services)"] --> Named{"the options name<br/>a history table?"}
+    Factory["the design-time factory<br/>UseNpgsql(...).UseDDDToolkitDesignTime()"] --> Named
+    Named -- "yes" --> Theirs["that table"]
+    Named -- "no, the model has<br/>a default schema" --> Schema["ordering.__EFMigrationsHistory"]
+    Named -- "no, and it has none" --> Providers["the provider's default<br/>public, dbo"]
+```
+
+`UseDDDToolkit` does it, and so does `UseDDDToolkitCore`, because the history is the toolkit's own and no
+package's part. The provider may be configured before the call or after it, or in `OnConfiguring`, and every
+relational provider gets the same; SQLite, which has no schemas, leaves the schema's name out of the history as
+it does out of the tables.
+
+The other way in is the design-time factory. `dotnet ef` and the [Supabase export](supabase.md) make the
+context through it, before any host exists, so it has no services to hand `UseDDDToolkit`. It writes
+`UseDDDToolkitDesignTime()` instead, which adds what `UseDDDToolkit` adds that needs no service: today that is
+the migration history and nothing else. Without it the factory's context keeps Entity Framework's default, and
+`dotnet ef database update`, a migrations script, a migration bundle and the exported files record every
+migration in a table the running application does not read: its `Migrate()` then tries to apply the first
+migration again and fails on a table that is there. So the build reports a factory, in a project that references
+`DDDToolkit.EntityFramework`, that leaves the call out ([DDD00071](diagnostics.md#ddd00071)), and a code fix adds
+it. On Supabase the [start-up check](supabase.md#checking-at-start-up) also says so when it finds the migrations
+missing for that reason.
+
+Options that name a history table with `MigrationsHistoryTable` keep it where they name it, so that is how an
+application puts it elsewhere. A model without a default schema keeps the provider's default. A history
+repository of the host's own, put in with `ReplaceService<IHistoryRepository, ...>()` in either of its forms, is
+kept, and decides where its history is. One exception needs the table named: options that hand Entity Framework
+an internal service provider of their own, with `UseInternalServiceProvider`. Entity Framework hands no options
+extension the services of a provider it did not build, so the toolkit cannot place the history there, while the
+design-time factory, which has no such provider, would place it in the schema. Such options are refused as the
+context is made, unless they name the table, `MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema)`,
+in the host's options and the factory's alike.
+
+<details>
+<summary>Show the code: a module's context, its design-time factory and its host</summary>
+
+```csharp
+public sealed class OrderingContext(DbContextOptions<OrderingContext> options) : DbContext(options)
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("ordering");        // the tables, and so the migration history
+        modelBuilder.AddDomainEventOutbox(Database, schema: "ordering");
+    }
+}
+
+// dotnet ef and the Supabase export make the context with this, without the application's services
+public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
+{
+    public OrderingContext CreateDbContext(string[] args)
+        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+}
+
+// the host
+builder.Services.AddDbContext<OrderingContext>((services, options) => options
+    .UseNpgsql(connectionString)
+    .UseDDDToolkit(services));
+```
+
+</details>
+
+**Coming from 3.1.** Up to 3.1 a context whose model has a default schema, and whose options named no history
+table, kept its history in the provider's default schema. It is now looked for in the context's own schema,
+where there is none yet: `Migrate()` would try to apply every migration again and fail on the first table that
+is there, and the Supabase start-up check would report every migration missing. Before upgrading, do one of two
+things.
+
+Keep the table where it is by naming it, in the application's options and the design-time factory's alike. This
+is the way for a context whose migrations are exported to Supabase: every file exported so far records its
+migration in that table, and a factory that placed the history elsewhere would make the export report each of
+those files as changed.
+
+```csharp
+options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName));
+```
+
+Or, for a context whose migrations Entity Framework applies, and where the table holds that one context's
+migrations and no other's, move it into the schema once, before the application starts on the new release, and
+add `UseDDDToolkitDesignTime()` to the factory:
+
+```sql
+-- Postgres
+ALTER TABLE public."__EFMigrationsHistory" SET SCHEMA ordering;
+-- SQL Server
+ALTER SCHEMA ordering TRANSFER dbo.__EFMigrationsHistory;
+```
 
 ## What is generated and what is a convention
 

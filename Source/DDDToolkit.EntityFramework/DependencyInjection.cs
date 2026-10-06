@@ -177,6 +177,14 @@ public static class DependencyInjection
     /// <see cref="PooledContexts.BindToScope{TContext}"/> name. Nothing scoped is resolved here, nor by the parts
     /// of the toolkit's packages, so the call is the same for every registration.
     /// </para>
+    /// <para>
+    /// The context's migration history goes in its default schema, beside its tables, so the modules that share a
+    /// database each keep a history of their own: <c>ordering."__EFMigrationsHistory"</c> for a model with
+    /// <c>HasDefaultSchema("ordering")</c>. Options that name a history table, with <c>MigrationsHistoryTable</c>
+    /// before or after this call, keep it where they name it; a model without a default schema keeps the provider's.
+    /// A design-time factory, which has no services to hand this call, gives its context the same history with
+    /// <see cref="UseDDDToolkitDesignTime(DbContextOptionsBuilder)"/>.
+    /// </para>
     /// </summary>
     /// <param name="optionsBuilder">The context's options.</param>
     /// <param name="serviceProvider">The provider handed to the options callback, of <c>AddDbContext</c> or of a context pool.</param>
@@ -187,14 +195,15 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        AddToolkitInterceptors(optionsBuilder, serviceProvider);
+        AddToolkitBase(optionsBuilder, serviceProvider);
         ContextParts.Apply(optionsBuilder, serviceProvider);
         return optionsBuilder;
     }
 
     /// <summary>
-    /// Adds the toolkit's own interceptors to the context, and nothing a package brings: what
-    /// <see cref="UseDDDToolkit"/> did up to 3.1. In the order they run: domain event delivery
+    /// Adds the toolkit's own interceptors to the context, and its migration history in the context's default schema,
+    /// and nothing a package brings: what <see cref="UseDDDToolkit"/> did up to 3.1, with the history where
+    /// <see cref="UseDDDToolkit"/> keeps it now. In the order they run: domain event delivery
     /// (<see cref="PublishDomainEventsInterceptor"/>), then the aggregates' own invariants
     /// (<see cref="InvariantInterceptor"/>), which therefore sees whatever the handlers changed,
     /// then optimistic concurrency (<see cref="AggregateVersionInterceptor"/>), which comes after them so
@@ -217,6 +226,11 @@ public static class DependencyInjection
     /// context that keeps rows to a tenant (<see cref="ContextPartRequirements"/>).
     /// </para>
     /// <para>
+    /// The migration history is the base's, not a package's: a context given the base alone keeps it in its default
+    /// schema as <see cref="UseDDDToolkit"/> does, so moving a context from the one call to the other leaves its
+    /// history where it is.
+    /// </para>
+    /// <para>
     /// It adds the interceptors the options do not have yet, so a second call adds nothing. The provider is the
     /// one <see cref="UseDDDToolkit"/> is handed, for the same reasons.
     /// </para>
@@ -230,7 +244,7 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(optionsBuilder);
         ArgumentNullException.ThrowIfNull(serviceProvider);
 
-        AddToolkitInterceptors(optionsBuilder, serviceProvider);
+        AddToolkitBase(optionsBuilder, serviceProvider);
 
         // What the call says, kept where a check can read it: the base alone, on purpose.
         ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(BaseAloneExtension.Instance);
@@ -238,8 +252,61 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Adds the toolkit's own interceptors the options do not have yet, in the order they run: what both
-    /// <see cref="UseDDDToolkit"/> and <see cref="UseDDDToolkitCore"/> start with.
+    /// What a design-time factory gives its context of the toolkit: what <see cref="UseDDDToolkit"/> adds that needs
+    /// no service, which is the migration history in the context's default schema. <c>dotnet ef</c> and the Supabase
+    /// export make the context through that factory, before any host exists, so they cannot hand it the application's
+    /// services; with this call the scripts they write record the migrations in the table the running application
+    /// reads.
+    /// <code>
+    /// [SupabaseMigrations]
+    /// public sealed class OrderingContextFactory : IDesignTimeDbContextFactory&lt;OrderingContext&gt;
+    /// {
+    ///     public OrderingContext CreateDbContext(string[] args)
+    ///         => new(new DbContextOptionsBuilder&lt;OrderingContext&gt;().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
+    /// }
+    /// </code>
+    /// <para>
+    /// Without it the factory's context keeps the history in the provider's default schema, <c>public</c> on Postgres,
+    /// while the running one, wired with <see cref="UseDDDToolkit"/>, keeps it in the model's: <c>dotnet ef database
+    /// update</c> and the exported files would record every migration where the application does not look, which the
+    /// build reports as DDD00071 at the factory's <c>CreateDbContext</c>. A host's
+    /// options may call it too, and it adds nothing they already have, so options shared by the host and the factory
+    /// are written once. It adds no interceptor: a design-time context saves nothing.
+    /// </para>
+    /// </summary>
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    public static DbContextOptionsBuilder UseDDDToolkitDesignTime(this DbContextOptionsBuilder optionsBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+
+        ((IDbContextOptionsBuilderInfrastructure)optionsBuilder).AddOrUpdateExtension(MigrationHistoryExtension.Instance);
+        return optionsBuilder;
+    }
+
+    /// <summary>
+    /// <see cref="UseDDDToolkitDesignTime(DbContextOptionsBuilder)"/> for the options of one context type, so a factory
+    /// takes their <c>Options</c> in the same expression and hands them to the context's constructor.
+    /// </summary>
+    /// <typeparam name="TContext">The context.</typeparam>
+    /// <param name="optionsBuilder">The context's options.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    public static DbContextOptionsBuilder<TContext> UseDDDToolkitDesignTime<TContext>(this DbContextOptionsBuilder<TContext> optionsBuilder)
+        where TContext : DbContext
+        => (DbContextOptionsBuilder<TContext>)UseDDDToolkitDesignTime((DbContextOptionsBuilder)optionsBuilder);
+
+    /// <summary>
+    /// What both <see cref="UseDDDToolkit"/> and <see cref="UseDDDToolkitCore"/> start with: the toolkit's own
+    /// interceptors, and the migration history in the context's default schema.
+    /// </summary>
+    private static void AddToolkitBase(DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
+    {
+        AddToolkitInterceptors(optionsBuilder, serviceProvider);
+        UseDDDToolkitDesignTime(optionsBuilder);
+    }
+
+    /// <summary>
+    /// Adds the toolkit's own interceptors the options do not have yet, in the order they run.
     /// </summary>
     private static void AddToolkitInterceptors(DbContextOptionsBuilder optionsBuilder, IServiceProvider serviceProvider)
     {

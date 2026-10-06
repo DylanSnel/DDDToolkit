@@ -69,9 +69,10 @@ public sealed class PostgresPools : IAsyncDisposable
     /// of it would use whichever data source the first rental asked for. Hence two pools, and a choice per rental.
     /// </para>
     /// <para>
-    /// The provider is this method's to set: Npgsql on the pool's data source, the migration history in
-    /// <paramref name="schema"/>, the migrations from the context's own assembly. <paramref name="wire"/> adds the
-    /// rest, in the order the module writes it. It runs once per pool, with the application's own services, so it
+    /// The provider is this method's to set: Npgsql on the pool's data source, the migrations from the context's own
+    /// assembly. <paramref name="wire"/> adds the rest, in the order the module writes it: <c>UseDDDToolkit</c> among
+    /// it, which keeps the migration history in the module's schema, where the design-time factory's
+    /// <c>UseDDDToolkitDesignTime()</c> keeps it too. It runs once per pool, with the application's own services, so it
     /// reads no caller, no request and nothing scoped; what <c>services.ConfigureDbContext</c> added for the
     /// context is applied after it, as a pool registered the usual way applies it.
     /// </para>
@@ -94,25 +95,23 @@ public sealed class PostgresPools : IAsyncDisposable
     /// <c>dotnet ef</c> and the export build the context with.
     /// </typeparam>
     /// <param name="services">The host's services.</param>
-    /// <param name="schema">The module's schema, where its migration history is.</param>
     /// <param name="wire">
     /// What the context is wired with after its provider: <c>UseDDDToolkit</c>, which brings what the host's
     /// registrations bring, row level security and Tenancy's save check among them, and whatever else the module's
     /// contexts need.
     /// </param>
-    public IServiceCollection AddContext<TContext, TFactory>(IServiceCollection services, string schema, Action<IServiceProvider, DbContextOptionsBuilder> wire)
+    public IServiceCollection AddContext<TContext, TFactory>(IServiceCollection services, Action<IServiceProvider, DbContextOptionsBuilder> wire)
         where TContext : DbContext
         where TFactory : IDesignTimeDbContextFactory<TContext>, new()
     {
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
         ArgumentNullException.ThrowIfNull(wire);
 
         DbContextOptions<TContext> Options(IServiceProvider application, DbDataSource source)
         {
             var options = new DbContextOptionsBuilder<TContext>();
             options.UseApplicationServiceProvider(application);
-            ModuleDatabase.UsePostgres(options, source, schema);
+            options.UseNpgsql(source);
             wire(application, options);
             foreach (var added in application.GetServices<IDbContextOptionsConfiguration<TContext>>())
             {

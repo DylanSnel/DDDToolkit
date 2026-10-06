@@ -53,7 +53,7 @@ public static class ProjectsInfrastructure
         // its caller named, and the save, the project's rules and the policies hold the write. A host that also
         // wants every save of a project tied to the version its request's check read adds .UseMemberHolds(application)
         // after UseDDDToolkit: the expert hold of the Membership package, which no handler writes a line for.
-        host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, ProjectsContext.Schema, (application, options) => options
+        host.RequirePostgres().AddContext<ProjectsContext, ProjectsContextFactory>(services, (application, options) => options
             .UseDDDToolkit(application));
 
         // The application's two ports. What a command changes goes through the request's context, its unit of

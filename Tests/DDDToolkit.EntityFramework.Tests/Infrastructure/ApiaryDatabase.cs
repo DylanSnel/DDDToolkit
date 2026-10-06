@@ -165,10 +165,14 @@ public sealed class ApiaryDatabase
         await command.ExecuteNonQueryAsync(CancellationToken.None);
     }
 
-    /// <summary>The apiary's model on this database, as the owner and with nothing of the toolkit's: for scripts, and for what the assertions read.</summary>
+    /// <summary>
+    /// The apiary's model on this database, as the owner, as a design-time factory makes it: with what the toolkit gives a
+    /// context without services, its migration history in the apiary's schema, and nothing else of the toolkit's. For
+    /// scripts, and for what the assertions read.
+    /// </summary>
     public ApiaryContext ModelContext()
     {
-        var options = new DbContextOptionsBuilder<ApiaryContext>().UseNpgsql(OwnerConnectionString).Options;
+        var options = new DbContextOptionsBuilder<ApiaryContext>().UseNpgsql(OwnerConnectionString).UseDDDToolkitDesignTime().Options;
         return Logged ? new LoggedApiaryContext(options) : new ApiaryContext(options);
     }
 

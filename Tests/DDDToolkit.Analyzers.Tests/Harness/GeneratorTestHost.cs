@@ -16,6 +16,7 @@ using CoreTemplateDefaultsGenerator = DDDToolkit.Analyzers.TemplateDefaultsGener
 using CoreTemplateFacadeGenerator = DDDToolkit.Analyzers.TemplateFacadeGenerator;
 using CoreTemplateRegistrationGenerator = DDDToolkit.Analyzers.TemplateRegistrationGenerator;
 using CoreValueObjectGenerator = DDDToolkit.Analyzers.ValueObjectGenerator;
+using EfDesignTimeFactoryAnalyzer = DDDToolkit.EntityFramework.Analyzers.DesignTimeFactoryAnalyzer;
 using EfEntityGenerator = DDDToolkit.EntityFramework.Analyzers.EntityGenerator;
 using EfIntegrationEventsGenerator = DDDToolkit.EntityFramework.Analyzers.IntegrationEventsGenerator;
 using EfSingleValueObjectConverterGenerator = DDDToolkit.EntityFramework.Analyzers.SingleValueObjectConverterGenerator;
@@ -152,6 +153,9 @@ public sealed class GeneratorTestHost
 
     /// <summary>The diagnostic analyzers in DDDToolkit.Analyzers, as opposed to its generators.</summary>
     public static DiagnosticAnalyzer[] CoreAnalyzers() => [new ModuleBoundaryAnalyzer(), new InvariantAnalyzer(), new AccessRequestsAnalyzer(), new DirectHandlerCallAnalyzer(), new ApplicationMarkAnalyzer()];
+
+    /// <summary>The diagnostic analyzers in DDDToolkit.EntityFramework.Analyzers, as opposed to its generators.</summary>
+    public static DiagnosticAnalyzer[] EntityFrameworkAnalyzers() => [new EfDesignTimeFactoryAnalyzer()];
 
     public GeneratorTestHost WithSource(string source, string path = "Source.cs")
     {

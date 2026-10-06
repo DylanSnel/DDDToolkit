@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using Examples.Webshop.Shipping.Infrastructure.Persistence;
 using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,8 @@ public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<Shippin
     public ShippingContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<ShippingContext>();
-        ModuleDatabase.UseSqlServer(options, "Server=unused", ShippingContext.Schema);
+        // The migration history in the module's schema, where the host's UseDDDToolkit keeps it.
+        ModuleDatabase.UseSqlServer(options, "Server=unused").UseDDDToolkitDesignTime();
         return new(options.Options);
     }
 }

@@ -6,7 +6,6 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -28,7 +27,8 @@ namespace Examples.Hosting;
 /// <c>Examples.Webshop.{Module}.Migrations.SqlServer</c> assembly.</item>
 /// </list>
 /// Every module lives in a schema of its own with its own migration history, outbox and inbox, so any
-/// number of modules can share one database without seeing each other's tables.
+/// number of modules can share one database without seeing each other's tables. The history is the toolkit's to
+/// place: <c>UseDDDToolkit</c> keeps it in the context's default schema, so nothing here names it.
 /// </remarks>
 public abstract record ModuleDatabase
 {
@@ -63,30 +63,6 @@ public abstract record ModuleDatabase
     }
 
     /// <summary>
-    /// Postgres with the migration history in <paramref name="schema"/>. The module's design-time factory
-    /// calls this too, so the application and <c>dotnet ef</c> agree on where the history is.
-    /// </summary>
-    public static void UsePostgres(DbContextOptionsBuilder options, string connectionString, string schema)
-        => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema));
-
-    /// <summary>
-    /// Postgres on a data source the host made, with the migration history in <paramref name="schema"/>. The
-    /// migrations are the ones next to the context, in its own assembly, which is where Entity Framework looks
-    /// when it is told nothing else. <see cref="PostgresPools"/> calls it for each of its two data sources.
-    /// </summary>
-    /// <param name="options">The context's options.</param>
-    /// <param name="source">The data source.</param>
-    /// <param name="schema">The module's schema.</param>
-    public static DbContextOptionsBuilder UsePostgres(DbContextOptionsBuilder options, System.Data.Common.DbDataSource source, string schema)
-    {
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentException.ThrowIfNullOrWhiteSpace(schema);
-
-        return options.UseNpgsql(source, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema));
-    }
-
-    /// <summary>
     /// The connection string every SQLite database of the samples is opened with: the file at
     /// <paramref name="path"/>, and no connection pool.
     /// </summary>
@@ -110,18 +86,17 @@ public abstract record ModuleDatabase
     }
 
     /// <summary>
-    /// SQL Server with the migration history in <paramref name="schema"/>, and the migrations from the
-    /// assembly named after the context's own with <c>.Migrations.SqlServer</c> behind it: the module's
-    /// SQL Server migrations, which a host on SQL Server references next to the module.
+    /// SQL Server, with the migrations from the assembly named after the context's own with
+    /// <c>.Migrations.SqlServer</c> behind it: the module's SQL Server migrations, which a host on SQL Server
+    /// references next to the module. Their history is in the module's schema, where <c>UseDDDToolkit</c> keeps it,
+    /// and where <c>UseDDDToolkitDesignTime()</c> keeps it for the design-time factory that calls this.
     /// </summary>
-    public static void UseSqlServer(DbContextOptionsBuilder options, string connectionString, string schema)
+    public static DbContextOptionsBuilder UseSqlServer(DbContextOptionsBuilder options, string connectionString)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         var migrations = options.Options.ContextType.Assembly.GetName().Name + ".Migrations.SqlServer";
-        options.UseSqlServer(connectionString, sql => sql
-            .MigrationsHistoryTable(HistoryRepository.DefaultTableName, schema)
-            .MigrationsAssembly(migrations));
+        return options.UseSqlServer(connectionString, sql => sql.MigrationsAssembly(migrations));
     }
 
     /// <summary>
@@ -135,7 +110,10 @@ public abstract record ModuleDatabase
     /// migrations the start-up check compares with the database.
     /// </typeparam>
     /// <param name="services">The host's services.</param>
-    /// <param name="schema">The module's schema, which also names its SQLite file.</param>
+    /// <param name="schema">
+    /// The module's schema, which names its SQLite file. On the other databases the model says it, and the migration
+    /// history goes there by itself.
+    /// </param>
     /// <param name="configure">
     /// What the module adds to its context's options on every database. It runs after <c>UseDDDToolkit</c>, so an
     /// interceptor it adds sees a save after the toolkit's interceptors, and the parts the host's registrations
@@ -194,14 +172,16 @@ public abstract record ModuleDatabase
 
     private sealed record PostgresDatabase(string ConnectionString, bool AppliesMigrations) : ModuleDatabase
     {
+        // The migrations are the ones next to the context, in its own assembly, where Entity Framework looks when it
+        // is told nothing else; their history is in the module's schema, where UseDDDToolkit keeps it.
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
-            => UsePostgres(options, ConnectionString, schema);
+            => options.UseNpgsql(ConnectionString);
     }
 
     private sealed record SqlServerDatabase(string ConnectionString) : ModuleDatabase
     {
         private protected override void Configure(DbContextOptionsBuilder options, string schema)
-            => UseSqlServer(options, ConnectionString, schema);
+            => UseSqlServer(options, ConnectionString);
     }
 
     /// <summary>

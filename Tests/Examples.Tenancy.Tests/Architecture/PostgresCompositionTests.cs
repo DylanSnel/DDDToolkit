@@ -11,6 +11,7 @@ using Examples.Tenancy.Tenants.Contracts.TokenRoles;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Examples.Tenancy.Tests.Architecture;
@@ -104,7 +105,9 @@ public sealed partial class PostgresCompositionTests
     /// database misses, and stops when one does. So a running context has to find the migrations its module's
     /// design-time factory finds, the ones <c>dotnet ef</c> writes and the export turns into files, and look for
     /// their history in the same table. A running context that found none would call an empty database complete.
-    /// Nothing names an assembly to either: both read the context's own, where the migrations are.
+    /// Nothing names an assembly to either: both read the context's own, where the migrations are. Nothing names the
+    /// history either: <c>UseDDDToolkit</c> in the host and <c>UseDDDToolkitDesignTime</c> in the factory keep it in the
+    /// module's schema, and the statement each one's history repository records a migration with is the same.
     /// </summary>
     [Fact]
     public async Task The_running_host_checks_the_migrations_the_design_time_factories_find()
@@ -127,11 +130,18 @@ public sealed partial class PostgresCompositionTests
             var (atRunTime, atDesignTime) = (RelationalOptionsExtension.Extract(running.GetService<IDbContextOptions>()), RelationalOptionsExtension.Extract(designTime.GetService<IDbContextOptions>()));
             atRunTime.MigrationsAssembly.Should().BeNull("the migrations are in the assembly of {0}", source.ContextType.Name);
             atDesignTime.MigrationsAssembly.Should().BeNull();
-            (atRunTime.MigrationsHistoryTableSchema, atRunTime.MigrationsHistoryTableName)
-                .Should().Be((atDesignTime.MigrationsHistoryTableSchema, atDesignTime.MigrationsHistoryTableName), "both look for the history in one table");
-            atRunTime.MigrationsHistoryTableSchema.Should().Be(running.Model.GetDefaultSchema(), "which is in the module's own schema");
+            new[] { atRunTime.MigrationsHistoryTableSchema, atRunTime.MigrationsHistoryTableName, atDesignTime.MigrationsHistoryTableSchema, atDesignTime.MigrationsHistoryTableName }
+                .Should().AllSatisfy(named => named.Should().BeNull("the sample names no history table: the toolkit keeps it in the module's schema"));
+
+            var history = $"{running.Model.GetDefaultSchema()}.\"{HistoryRepository.DefaultTableName}\"";
+            RecordingOf(running).Should().Contain($"INSERT INTO {history} (", "the host reads the history in the module's own schema")
+                .And.Be(RecordingOf(designTime), "and dotnet ef and the export record the migrations in the same table");
         }
     }
+
+    /// <summary>The statement <paramref name="context"/>'s history repository records a migration with.</summary>
+    private static string RecordingOf(DbContext context)
+        => context.GetService<IHistoryRepository>().GetInsertScript(new HistoryRow("20260101000000_Probe", "10.0.0"));
 
     [Fact]
     public void The_host_runs_no_export()
@@ -172,15 +182,22 @@ public sealed partial class PostgresCompositionTests
     {
         // The host's two data sources bound what it holds on the database. A module that made a data source, or
         // named a connection string, would hold connections nobody budgeted. The design-time factories connect to
-        // nothing, and take their provider from the shared hosting project.
+        // nothing: the one provider a module names is theirs, on an address that leads nowhere, as the docs write it.
         var modules = Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "Modules");
         string[] forbidden = ["NpgsqlDataSource", "UseNpgsql(", "NpgsqlConnection", "GetConnectionString"];
+        const string Nowhere = "UseNpgsql(\"Host=unused\")";
 
-        var offending = SampleLayout.SourceFilesIn(modules)
+        var files = SampleLayout.SourceFilesIn(modules)
             .Where(file => !file.Contains("/Migrations/", StringComparison.Ordinal))
-            .Where(file => forbidden.Any(File.ReadAllText(Path.Combine(modules, file)).Contains));
+            .Select(file => (File: file, Text: File.ReadAllText(Path.Combine(modules, file))))
+            .ToList();
+        var offending = files.Where(each => forbidden.Any(each.Text.Replace(Nowhere, string.Empty, StringComparison.Ordinal).Contains)).Select(each => each.File);
+        var nowhere = files.Where(each => each.Text.Contains(Nowhere, StringComparison.Ordinal)).Select(each => Path.GetFileName(each.File));
 
         offending.Should().BeEmpty("a module registers its context on the connections the host hands it");
+        nowhere.Should().BeEquivalentTo(
+            ["InspectionsContextFactory.cs", "ProjectsContextFactory.cs", "TenantsContextFactory.cs"],
+            "only a design-time factory names a provider, and it connects to nothing");
     }
 
     /// <summary>

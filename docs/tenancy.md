@@ -591,7 +591,10 @@ public sealed class ShopTenancyContext(DbContextOptions<ShopTenancyContext> opti
 ```
 
 The migrations are yours too, made from your model in the project where the context lives. The package
-has none, because it cannot know your database.
+has none, because it cannot know your database. Their history is in the context's schema, `tenancy` here, where
+`UseDDDToolkit` keeps it; the context's design-time factory, which `dotnet ef` makes it with, keeps it there too
+with `UseDDDToolkitDesignTime()` after its provider
+([The migration history](entity-framework.md#the-migration-history)).
 
 Given the context's `Database`, `AddTenancy` keeps two of the aggregates' rules in the database as well:
 a tenant's organization has a single root, and a seat a single primary placement. Each is a unique index

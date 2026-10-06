@@ -6,7 +6,8 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// [SupabaseMigrations]
 /// public sealed class OrderingContextFactory : IDesignTimeDbContextFactory&lt;OrderingContext&gt;
 /// {
-///     public OrderingContext CreateDbContext(string[] args) => ...; // UseNpgsql("Host=unused")
+///     public OrderingContext CreateDbContext(string[] args)
+///         => new(new DbContextOptionsBuilder&lt;OrderingContext&gt;().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 /// }
 /// </code>
 /// <para>
@@ -19,7 +20,10 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// <para>
 /// The factory has to be a public, non-abstract class with a public parameterless constructor that
 /// implements <c>IDesignTimeDbContextFactory&lt;TContext&gt;</c>; the build reports DDD00031 otherwise.
-/// The files are named after the module the assembly declares with <c>[assembly: Module("...")]</c>.
+/// The files are named after the module the assembly declares with <c>[assembly: Module("...")]</c>. The
+/// connection string points nowhere, since the export opens no connection, and <c>UseDDDToolkitDesignTime()</c>
+/// keeps the migration history the files record in the context's default schema, where the host's
+/// <c>UseDDDToolkit</c> reads it; DDD00071 reports a factory without it.
 /// </para>
 /// <para>
 /// The marker is explicit on purpose. Not every context with migrations belongs to Supabase, and a

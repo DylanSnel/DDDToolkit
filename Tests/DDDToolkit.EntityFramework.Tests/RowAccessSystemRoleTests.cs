@@ -175,19 +175,21 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
     [Fact]
     public async Task The_system_role_holds_the_bookkeeping_tables_and_nothing_else()
     {
-        // A database that was migrated has a history of its migrations, which the bookkeeping role reads.
+        // A database that was migrated has a history of its migrations, in the apiary's schema where the toolkit keeps
+        // it, which the bookkeeping role reads.
         var database = await ApiaryDatabase.CreateAsync(postgres, logged: true);
         using var model = database.ModelContext();
         await database.RunAsOwnerAsync(
-            """
-            CREATE TABLE public."__EFMigrationsHistory" ("MigrationId" character varying(150) PRIMARY KEY, "ProductVersion" character varying(32) NOT NULL);
-            INSERT INTO public."__EFMigrationsHistory" VALUES ('20260901120000_CreateApiary', '10.0.0');
+            $"""
+            CREATE TABLE {ApiaryContext.Schema}."__EFMigrationsHistory" ("MigrationId" character varying(150) PRIMARY KEY, "ProductVersion" character varying(32) NOT NULL);
+            INSERT INTO {ApiaryContext.Schema}."__EFMigrationsHistory" VALUES ('20260901120000_CreateApiary', '10.0.0');
             """,
             Cancellation);
         await database.RunAsOwnerAsync(PostgresRowAccess.Script(model, ApiaryRules.All, [], database.Export), Cancellation);
 
         (await database.PrivilegesAsync(Cancellation)).Where(privilege => privilege.Contains(" ddd_system ", StringComparison.Ordinal)).Should().Equal(
             [
+                $"{ApiaryContext.Schema}.__EFMigrationsHistory ddd_system SELECT",
                 "ddd.EventLog ddd_system DELETE",
                 "ddd.EventLog ddd_system SELECT(Id)",
                 "ddd.EventLog ddd_system SELECT(RecordedAt)",
@@ -202,8 +204,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
                 "ddd.OutboxMessages ddd_system UPDATE(NextAttemptAt)",
                 "ddd.OutboxMessages ddd_system UPDATE(ProcessedAt)",
             ],
-            "what reading, marking and deleting the toolkit's own rows asks, and no privilege on a table of the apiary's own");
-        (await database.ListAsOwnerAsync("SELECT pg_catalog.has_table_privilege('ddd_system', 'public.\"__EFMigrationsHistory\"', 'SELECT')::text", Cancellation)).Should().Equal("true");
+            "what reading the history, and reading, marking and deleting the toolkit's own rows asks, and no privilege on a table of the apiary's own");
 
         await using var host = database.BuildHost();
         await ApiaryDatabase.AsAsync(host, ApiaryDatabase.Alice, async context =>

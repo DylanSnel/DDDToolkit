@@ -1,4 +1,3 @@
-using Examples.Hosting;
 using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using FluentAssertions;
@@ -29,7 +28,7 @@ public sealed class ProjectsModelTests
     {
         // The context as a host on Postgres configures it. Nothing connects: the address leads nowhere.
         var options = new DbContextOptionsBuilder<ProjectsContext>();
-        ModuleDatabase.UsePostgres(options, "Host=model-only", ProjectsContext.Schema);
+        options.UseNpgsql("Host=model-only");
         using var projects = new ProjectsContext(options.Options);
         var model = projects.Model;
 
@@ -66,7 +65,7 @@ public sealed class ProjectsModelTests
         // A host that runs the parts of a request side by side hands each a context from a pool. The model, with
         // the functions it reads Tenancy through, is built once for the database, not per instance.
         var services = new ServiceCollection();
-        services.AddPooledDbContextFactory<ProjectsContext>(options => ModuleDatabase.UsePostgres(options, "Host=model-only", ProjectsContext.Schema));
+        services.AddPooledDbContextFactory<ProjectsContext>(options => options.UseNpgsql("Host=model-only"));
         using var provider = services.BuildServiceProvider();
         var pool = provider.GetRequiredService<IDbContextFactory<ProjectsContext>>();
 

@@ -1,9 +1,9 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Shipping.Converters;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -50,15 +50,12 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
 
 /// <summary>
 /// How <c>dotnet ef migrations add</c> and the Supabase export build a <see cref="ShippingContext"/>:
-/// on Postgres, and pointing nowhere, because neither of them opens a connection.
+/// on Postgres, and pointing nowhere, because neither of them opens a connection. <c>UseDDDToolkitDesignTime()</c> keeps
+/// the migration history in the module's schema, where the host's <c>UseDDDToolkit</c> keeps it.
 /// </summary>
 [SupabaseMigrations]
 public sealed class ShippingContextFactory : IDesignTimeDbContextFactory<ShippingContext>
 {
     public ShippingContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<ShippingContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", ShippingContext.Schema);
-        return new ShippingContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<ShippingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

@@ -1,3 +1,4 @@
+using DDDToolkit.EntityFramework;
 using Examples.Hosting;
 using Examples.Webshop.Catalog.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,8 @@ public sealed class CatalogContextFactory : IDesignTimeDbContextFactory<CatalogC
     public CatalogContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<CatalogContext>();
-        ModuleDatabase.UseSqlServer(options, "Server=unused", CatalogContext.Schema);
+        // The migration history in the module's schema, where the host's UseDDDToolkit keeps it.
+        ModuleDatabase.UseSqlServer(options, "Server=unused").UseDDDToolkitDesignTime();
         return new(options.Options);
     }
 }

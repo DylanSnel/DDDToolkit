@@ -69,6 +69,7 @@ DDD00067 | DDDToolkit.Entities | Error | A class whose package makes its new ids
 DDD00068 | DDDToolkit.Modules | Warning | DDD_ModuleContracts makes a project its module's contracts where the project can name the attribute
 DDD00069 | DDDToolkit.Supabase | Warning | A module's row access contribution is listed by the project that runs the export
 DDD00070 | DDDToolkit.Supabase | Error | A member a library marks for a package's row access contribution is public
+DDD00071 | DDDToolkit.EntityFramework | Warning | A design-time factory keeps the migration history where the application does
 DDD00072 | DDDToolkit.Supabase | Error | What a package's row access contribution is made from is found once, and is what it takes
 DDD00073 | DDDToolkit.Supabase | Error | A row access contribution a package writes is not listed again
 DDD00074 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context

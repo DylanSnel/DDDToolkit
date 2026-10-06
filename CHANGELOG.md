@@ -379,6 +379,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Entity Framework and row level security
 
+- **`UseDDDToolkitDesignTime()`: what a design-time factory gives its context of the toolkit.** `dotnet ef` and the
+  Supabase export make a context through its `IDesignTimeDbContextFactory`, before any host exists, so they have
+  no services to hand `UseDDDToolkit`. This call adds what `UseDDDToolkit` adds that needs none, which is the
+  migration history in the context's default schema (see Changed), so their scripts and the exported files record
+  each migration in the table the running application reads:
+  `new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`. It
+  adds no interceptor, and nothing options already have. See
+  [The migration history](docs/entity-framework.md#the-migration-history).
+- **DDD00071, a warning, reports a design-time factory that leaves the call out**, at its `CreateDbContext`, in a
+  project that references `DDDToolkit.EntityFramework`: one whose class calls none of `UseDDDToolkitDesignTime`,
+  `UseDDDToolkit`, `UseDDDToolkitCore` and `MigrationsHistoryTable`. Such a factory's `dotnet ef database update`,
+  scripts, bundles and exported files record the migrations in the provider's default schema, where the running
+  application does not look, and on a host that applies its own migrations nothing else would say so before the
+  first migration failed on a table that is there. A code fix adds `.UseDDDToolkitDesignTime()` in front of the
+  options' `.Options`. See [DDD00071](docs/diagnostics.md#ddd00071).
 - **`UseDDDToolkitCore`: the toolkit's own interceptors, and nothing a package brings**, which is what
   `UseDDDToolkit` added up to 3.1. It is for a context that should do without a part the host registered, one on
   Postgres that runs as the role the application logged in as while the others run as their caller, say, and
@@ -1671,6 +1686,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The samples name no migration history table.** The toolkit keeps every module's history in its schema, so
+  `ModuleDatabase.UsePostgres`, which only named it, is gone, `ModuleDatabase.UseSqlServer` lost its schema
+  argument, `PostgresPools.AddContext` lost it as well, and each design-time factory, the Tenancy sample's three and
+  the webshop's ten, writes `UseDDDToolkitDesignTime()` after its provider. The Postgres factories are one
+  expression, as the docs write them:
+  `new(new DbContextOptionsBuilder<TenantsContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options)`.
+  The migrations, their snapshots and the exported files are unchanged: the history is the same table in the same
+  schema.
 - **The Tenancy sample syncs its role packs.** Its host calls `SyncRolePacks()` after `RunStartupChecks()`, so a
   key a module brings later reaches the flat tenants' Tenant admin and a key added to a pack reaches every role made
   from it, at the next start. A role that followed its pack is kept in the access history, which the tenant's
@@ -2212,6 +2235,32 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Changed
 
+- **`UseDDDToolkit` keeps a context's migration history in its default schema.** A context whose model has a
+  default schema, `modelBuilder.HasDefaultSchema("ordering")`, keeps its history in
+  `ordering."__EFMigrationsHistory"` without its options naming it, so the modules that share a database each keep
+  a history of their own, where they shared the provider's one in `public` or `dbo` unless every module repeated
+  its schema in `MigrationsHistoryTable`. `UseDDDToolkitCore` does the same, and a design-time factory says it with
+  the new `UseDDDToolkitDesignTime()` (see Added), so `dotnet ef`, the Supabase export and the running application
+  read and write one table. Options that name a history table keep it where they name it, a model without a
+  default schema keeps the provider's, a history repository the host put in with `ReplaceService`, in either of
+  its forms, keeps its own place, and it works on every relational provider, configured before the call, after it
+  or in `OnConfiguring`. Options with an internal service provider of their own (`UseInternalServiceProvider`),
+  which the toolkit cannot reach, are refused as the context is made unless they name the history table. The grant
+  an exported access file gives the bookkeeping role on the history names the table the context's history
+  repository records the migrations in. When the Supabase start-up check finds migrations missing because the
+  running context and its design-time factory look in different tables, its message names both, and says what to
+  do where the exported files were applied already and where they were not. See
+  [The migration history](docs/entity-framework.md#the-migration-history).
+  - **Breaking, for a context with a default schema whose options named no history table.** Its history was in the
+    provider's default schema and is now looked for in its own: `Migrate()` would try to apply every migration again
+    and fail on the first table that is there, and the Supabase check would report every migration missing. Before
+    upgrading, keep it where it is by naming it in the application's options and the factory's,
+    `UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName))`,
+    which is the way for a context exported to Supabase, whose files already record their migrations in that table.
+    A context whose migrations Entity Framework applies may instead move the table into the schema once, where it
+    holds that context's migrations alone, and add `UseDDDToolkitDesignTime()` to its factory:
+    `ALTER TABLE public."__EFMigrationsHistory" SET SCHEMA ordering;` on Postgres,
+    `ALTER SCHEMA ordering TRANSFER dbo.__EFMigrationsHistory;` on SQL Server.
 - **`UseDDDToolkit` adds what the registered packages bring, after the toolkit's own interceptors.** Up to 3.1 it
   added the toolkit's interceptors and nothing else, and a context ran as its caller only with
   `UseSupabaseRowLevelSecurity` or `UsePostgresRowLevelSecurity` in its own options. Now, once

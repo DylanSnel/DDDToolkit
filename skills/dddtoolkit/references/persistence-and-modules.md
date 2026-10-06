@@ -30,7 +30,12 @@ builder.Services.AddDbContext<OrderingContext>((services, options) => options
 whatever a registered package brings to a context, row level security on Postgres (`AddSupabaseRowLevelSecurity`,
 `AddPostgresRowLevelSecurity`) and Tenancy's save check (`AddTenancy`), each in its place. `UseDDDToolkitCore`
 adds the toolkit's interceptors alone, for a context that should do without a part, such as one that runs as
-the login role; it takes the parts it does want with their own `Use...` calls after it.
+the login role; it takes the parts it does want with their own `Use...` calls after it. Both keep the context's
+migration history in its default schema (`HasDefaultSchema`), so never write `MigrationsHistoryTable` for that;
+a design-time factory, which has no services, writes
+`new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options`
+so `dotnet ef` and the Supabase export record migrations where the host reads them (DDD00071 reports a factory
+without it).
 
 ```csharp
 using DDDToolkit.EntityFramework.Conventions;

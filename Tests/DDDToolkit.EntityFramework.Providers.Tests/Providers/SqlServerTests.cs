@@ -64,3 +64,12 @@ public sealed class SqlServerRefusalTests(SqlServerFixture fixture) : ProviderRe
     /// <inheritdoc />
     protected override string DefaultSchema => "dbo";
 }
+
+/// <summary>Where two modules keep their migration histories, against SQL Server.</summary>
+[Collection(SqlServerCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.SqlServer)]
+public sealed class SqlServerMigrationHistoryTests(SqlServerFixture fixture) : ProviderMigrationHistoryTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string ProvidersDefaultSchema => "dbo";
+}

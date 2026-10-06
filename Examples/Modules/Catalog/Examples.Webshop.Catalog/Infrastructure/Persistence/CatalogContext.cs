@@ -1,7 +1,7 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Hosting;
 using Examples.Webshop.Catalog.Converters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -39,14 +39,14 @@ public sealed class CatalogContext(DbContextOptions<CatalogContext> options) : D
     }
 }
 
-/// <summary>How <c>dotnet ef</c> and the Supabase export build a <see cref="CatalogContext"/>.</summary>
+/// <summary>
+/// How <c>dotnet ef</c> and the Supabase export build a <see cref="CatalogContext"/>: on Postgres, with
+/// <c>UseDDDToolkitDesignTime()</c>, which keeps the migration history in the module's schema, where the host's
+/// <c>UseDDDToolkit</c> keeps it.
+/// </summary>
 [SupabaseMigrations]
 public sealed class CatalogContextFactory : IDesignTimeDbContextFactory<CatalogContext>
 {
     public CatalogContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<CatalogContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", CatalogContext.Schema);
-        return new CatalogContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<CatalogContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

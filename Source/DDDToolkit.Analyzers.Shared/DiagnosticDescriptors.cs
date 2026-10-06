@@ -20,6 +20,7 @@ internal static class DiagnosticDescriptors
     private const string Access = "DDDToolkit.Access";
     private const string Membership = "DDDToolkit.Membership";
     private const string Tenancy = "DDDToolkit.Tenancy";
+    private const string EntityFramework = "DDDToolkit.EntityFramework";
 
     /// <summary>
     /// The reference page of docs/diagnostics.md on the docs site, where every id is a heading of its own.
@@ -611,6 +612,15 @@ internal static class DiagnosticDescriptors
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "A package's row access contribution is made in the project that runs the Supabase export, from the static members the application marks with the attributes the package names, [TenancyCatalogue], [TenancyOperators] or [MembershipRules<TMember>] among them; each such attribute says so with [ApplicationMark]. That project finds the marks in the projects it references, and of a library it sees what is public and nothing else: a member that is internal, or declared in a type that is, is not there for it at all. The export would then write Tenancy's policies from the default catalogue rather than the application's, or leave a resource's functions out, and nothing in that project could say why, since it never saw the mark. So the library that declares the member reports it, where it is declared: make it public, in public types, with a public getter. An application, the program that runs the export itself or the host, may keep its own marks internal, since no project references it for them. A list of keys marked [TenancyPermissions] is held to the same by DDD00063.");
+
+    public static readonly DiagnosticDescriptor DesignTimeFactoryWithoutTheToolkit = Create(
+        id: "DDD00071",
+        title: "A design-time factory keeps the migration history where the application does",
+        messageFormat: "'{0}' makes its '{1}' without UseDDDToolkitDesignTime(), so dotnet ef and the Supabase export record the migrations in the provider's default schema, while a host that wires the context with UseDDDToolkit reads them in the context's own. Add .UseDDDToolkitDesignTime() to its options, after the provider.",
+        category: EntityFramework,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "UseDDDToolkit and UseDDDToolkitCore keep a context's migration history in the context's default schema, beside its tables: ordering.\"__EFMigrationsHistory\" for a model with HasDefaultSchema(\"ordering\"). dotnet ef and the Supabase export make the context through its IDesignTimeDbContextFactory instead, before any host exists, so the factory says the same with UseDDDToolkitDesignTime(), which adds what UseDDDToolkit adds that needs no service. Without it, dotnet ef database update, a migrations script, a migration bundle and the exported files record every migration in the provider's default schema, public or dbo, while the running application reads the history in the context's schema: Migrate() tries to apply the first migration again and fails on a table that is there, and on Supabase the start-up check reports every migration missing. Reported at CreateDbContext of a factory, in a project that references DDDToolkit.EntityFramework, whose class calls none of UseDDDToolkitDesignTime, UseDDDToolkit, UseDDDToolkitCore and MigrationsHistoryTable, in CreateDbContext or in a method, property or field of the class it reads. Options made by a helper of another class are not looked into: the factory adds the call after the helper, which adds nothing the options have already. A context the host does not wire with the toolkit, and that keeps its history where Entity Framework keeps it, names the table in the factory's options and the host's alike, MigrationsHistoryTable(HistoryRepository.DefaultTableName), or suppresses the warning. A code fix adds .UseDDDToolkitDesignTime() in front of the options' .Options.");
 
     public static readonly DiagnosticDescriptor RowAccessContributionCannotBeMade = Create(
         id: "DDD00072",

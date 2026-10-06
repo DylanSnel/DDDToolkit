@@ -44,7 +44,7 @@ public static class InspectionsInfrastructure
         // connection, so the exported policies see who asks. Tenancy's save check, which AddTenancy brought, comes
         // after the toolkit's interceptors, so it sees what they let through, and refuses an inspection of another
         // tenant before anything is written.
-        host.RequirePostgres().AddContext<InspectionsContext, InspectionsContextFactory>(services, InspectionsContext.Schema, (application, options) => options
+        host.RequirePostgres().AddContext<InspectionsContext, InspectionsContextFactory>(services, (application, options) => options
             .UseDDDToolkit(application));
 
         // The application's two ports. What a command records goes through the request's context, its unit of

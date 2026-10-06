@@ -1,9 +1,9 @@
+using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using Examples.Webshop.Ordering.Converters;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 
@@ -85,14 +85,15 @@ public sealed class OrderingContext(DbContextOptions<OrderingContext> options) :
 /// <c>[SupabaseMigrations]</c> is what puts Ordering's migrations in <c>supabase/migrations</c>: the host
 /// turns the export on, and its build finds this factory without anybody listing it.
 /// </para>
+/// <para>
+/// <c>UseDDDToolkitDesignTime()</c> keeps the migration history in the module's schema, where the host's
+/// <c>UseDDDToolkit</c> keeps it, so what <c>dotnet ef</c> applies and the files the export writes are recorded where
+/// the host reads them.
+/// </para>
 /// </summary>
 [SupabaseMigrations]
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<OrderingContext>();
-        ModuleDatabase.UsePostgres(options, "Host=unused", OrderingContext.Schema);
-        return new OrderingContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }

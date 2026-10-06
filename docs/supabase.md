@@ -38,11 +38,7 @@ The design-time factory of each module's context is marked:
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<OrderingContext>();
-        OrderingContext.UsePostgres(options, "Host=unused");
-        return new OrderingContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }
 ```
 
@@ -77,13 +73,14 @@ is enough. That is exactly what the design-time factory `dotnet ef` already uses
 public sealed class OrderingContextFactory : IDesignTimeDbContextFactory<OrderingContext>
 {
     public OrderingContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<OrderingContext>();
-        OrderingContext.UsePostgres(options, "Host=unused");
-        return new OrderingContext(options.Options);
-    }
+        => new(new DbContextOptionsBuilder<OrderingContext>().UseNpgsql("Host=unused").UseDDDToolkitDesignTime().Options);
 }
 ```
+
+`UseDDDToolkitDesignTime()` is `DDDToolkit.EntityFramework`'s, for a context the host wires with `UseDDDToolkit`:
+it keeps the migration history where the host does, in the context's default schema, so the files record each
+migration in the table the application reads. See
+[The migration history](entity-framework.md#the-migration-history).
 
 and turn the export on in the project that references every module: the host of a modular monolith,
 the presentation layer of a service.
@@ -225,7 +222,14 @@ builder.Services.RunStartupChecks();
 ```
 
 It asks each context's own migration history and throws a `SupabaseMigrationsPendingException` that
-names every context with migrations missing, and each missing migration. Registering the same context
+names every context with migrations missing, and each missing migration. Where the running context reads its
+history from another table than the one its design-time factory's context records the migrations in, which is
+where the exported files record them, the message says that as well, with both tables: the migrations may well
+be applied, and recorded where the application does not look. It also says what to do. Where those files were
+applied to a database already, the application names the table they record in, with the `MigrationsHistoryTable`
+the message spells out, since an applied file keeps the table it was exported with. Where none was applied
+anywhere yet, the factory gets the application's history instead, `UseDDDToolkitDesignTime()` where the application
+calls `UseDDDToolkit`, and the files are exported again and the local database reset. Registering the same context
 twice registers it once, and the check once however many contexts there are; with no sources registered there is
 no check, which is what a module running on something other than Supabase wants.
 
@@ -262,14 +266,12 @@ builder.Services.SkipStartupCheck(
 ## Several modules, one Supabase project
 
 A Supabase project is one database, so a modular monolith's modules share it. Give each module a
-schema of its own and a migration history table in that schema, and export them all into the same
-`supabase/migrations`:
+schema of its own, and export them all into the same `supabase/migrations`. The migration history table goes in
+that schema by itself: `UseDDDToolkit` in the host and `UseDDDToolkitDesignTime()` in the design-time factory keep
+it there ([The migration history](entity-framework.md#the-migration-history)).
 
 ```csharp
 public const string Schema = "ordering";
-
-public static void UsePostgres(DbContextOptionsBuilder options, string connectionString)
-    => options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema));
 
 protected override void OnModelCreating(ModelBuilder modelBuilder)
 {
@@ -277,6 +279,10 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
     modelBuilder.AddDomainEventOutbox(Database);
 }
 ```
+
+A context the host does not wire with `DDDToolkit.EntityFramework` names the table itself, in the host's options
+and the factory's alike:
+`UseNpgsql(connectionString, npgsql => npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, Schema))`.
 
 Each module's migrations only ever see its own history table, so neither can report the other's as
 pending. Supabase has one history, which interleaves the modules by timestamp. That is fine, because no
