@@ -1973,6 +1973,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     those roles were granted. The information line of `UseDDDToolkit` names such a context the first time its
     options are built: at start in a host that adds `builder.Services.RunStartupChecks()`, and otherwise when the
     context is first used. A context on any other database is not touched, wherever its provider is configured.
+- **A new warning on upgrade, DDD00064, for one layout.** A 3.1 application where a project that is no module
+  sets its module's name in `DDD_Module`, and references, or is referenced by, the project that declares that
+  module, built without a warning, and now gets [DDD00064](docs/diagnostics.md#ddd00064) at the project file. A
+  build that treats warnings as errors then fails. Nothing else changes: the generators wrote nothing across the
+  two before either. Set `<DDD_DeclareModule>true</DDD_DeclareModule>` beside `DDD_Module` in that project to
+  make it one of the module's projects, or `false` to say it only carries the name.
 - **For the 3.2.0 previews: `UseTenancy` names its parameters `optionsBuilder` and `serviceProvider`**, as
   `UseDDDToolkit` and the row level security calls it is chained with do; a call that named them by the old names
   changes with it. `UseMemberHolds` names them the same.

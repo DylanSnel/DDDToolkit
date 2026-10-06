@@ -743,7 +743,10 @@ public sealed record InvoiceSent(InvoiceId InvoiceId);
 The generators write `InvoiceId` and `BillingEventNames.InvoiceSent` here, as they would in the module.
 The attribute names the class; a contracts project that is no module would set `DDD_Module` for that,
 which is what [`build/package-consumers/ContractsOnly`](../build/package-consumers/ContractsOnly/Acme.Billing.Contracts.csproj)
-does to prove the property arrives.
+does to prove the property arrives. Where such a project and a project that declares the module reference
+each other, the build warns with [DDD00064](diagnostics.md#ddd00064) that the generators do not take the two
+together. Set `<DDD_DeclareModule>true</DDD_DeclareModule>` beside `DDD_Module` to make the contracts project
+one of the module's projects, or `false` to say it only carries the name.
 
 </details>
 
