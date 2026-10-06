@@ -837,7 +837,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Checking at start-up](docs/supabase.md#checking-at-start-up).
 - **Roles and caller functions for the Supabase export.** `SupabaseMigrationOptions.Roles` and
   `SupabaseMigrationOptions.CallerFunctions`, and in the build the project properties
-  `SupabaseRowAccessRoles` (`user=…|anonymous=…|system-in=…`) and `SupabaseCallerFunctions`
+  `SupabaseRowAccessRoles` (`user=…|anonymous=…|system-in=…|system=…`) and `SupabaseCallerFunctions`
   (`uid=…|role=…|claims=…`). The pairs are separated by `|`, because MSBuild splits the export's variables
   at every `;`; a `;` fails the build, and an unknown key, a malformed pair, a role no policy can be for
   or a caller function that is not a call without arguments is an `error :` line. See
@@ -958,7 +958,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   [Enum values, spelled your way](docs/graphql.md#enum-values-spelled-your-way).
 - **GraphQL bindings for ids of other projects.** The generated `Add{Module}GraphQlRuntimeBindings()` also
   binds the ids and single value objects of the module's other projects that have no nested provider of
-  their own, and the published (`[ModuleContract]`) ones of other modules: each to the default scalar of its
+  their own, and the published ones of other modules (`[ModuleContract]`, or every public type of a contracts
+  project): each to the default scalar of its
   value, with `SingleValueChangeTypeProvider<T, TValue>` as its converter and, for an identifier over a value
   a node id can carry, `SingleValueNodeIdSerializer<T, TValue>`, both new in `DDDToolkit.HotChocolate.Types`
   and both through `ISingleValue`. A module's domain and contracts projects therefore need no HotChocolate
@@ -1191,8 +1192,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   answer `UnitSummary`. With the kinds gone, and the default administrators' pack above, every part of
   `ApplicationCatalogue` is optional, `new ApplicationCatalogue()` included, and so is
   `TenancyOptions.Catalogue`: left unset, Tenancy builds the catalogue from its own keys and the modules'
-  contributions, and every tenant starts with the default administrators' role. An export that builds the
-  catalogue without the registration calls `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)`, the same
+  contributions, and every tenant starts with the default administrators' role. A program that builds the
+  catalogue without the host's services calls `TenancyCatalogue.Build(TenancyPermissionsOfModules.All)`, the same
   catalogue (the modules' keys, below). A
   catalogue is for what Tenancy decides access with and cannot know by itself: the packs a tenant starts with,
   keys no module owns, and marks on keys that manage access. See
@@ -1226,7 +1227,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   module, with `DDD_Module` or `[assembly: Module]`: an internal class in the namespace named after the project's
   assembly, with `All`, every module's keys, one list after the other, and
   `services.AddTenancyPermissionsOfModules()`, which adds them as one contribution. The host makes that one call,
-  and an export builds with `TenancyCatalogue.Build(application, TenancyPermissionsOfModules.All)`, so neither
+  and the Supabase export hands Tenancy's row access contribution the same marked lists (see Changed), so neither
   names a module, and a module that is added reaches both with the next build. While no module marks a list,
   `All` is empty and both still compile. A marked list the composing project could not read is the new error
   DDD00063 where it is declared: one that is not static, has no getter, is a static virtual or abstract member of
@@ -1244,8 +1245,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - Mark each module's list of keys with `[TenancyPermissions]`, make it public, and take
     `services.AddTenancyPermissions(thatList)` out of the module's registration.
   - Call `services.AddTenancyPermissionsOfModules()` once in the host, with `using <the host's assembly name>;`
-    in a top-level `Program.cs`, and build the export's catalogue from `TenancyPermissionsOfModules.All` instead
-    of a list of the modules' keys, in a project that declares no module.
+    in a top-level `Program.cs`. The export lists no keys either: it finds the marked lists itself, and the
+    application marks its own part of the catalogue `[TenancyCatalogue]` (see Changed).
 - **Tenancy: no project writes the nine types.** The project that declares a module's Tenancy classes gets
   `{Module}Tenancy` from the toolkit's generator, `TenantsTenancy` for the module Tenants: a class that derives
   from `TenancyUseCases<...>` closed over them, through which every project that sees it names the use cases and
@@ -1786,9 +1787,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   functions other modules ask. The package consumers' contracts project sets the property too, and the
   package check asserts the attribute it writes.
 - **The samples make new ids with `TId.Create()`.** The Tenancy sample's registration sets no id options, and its
-  modules, the webshop's and the example API's make the ids of their new aggregates and rows with `ProjectId.Create()`
-  and the rest, where they called `CreateSequential()` or `CreateUnique()`. The Tenancy test host's tenant id, a `long`, declares the `Create()` Tenancy asks
-  of it.
+  modules, the webshop's and the example API's make the ids of their new aggregates and rows with
+  `ProjectId.Create()` and the rest, where they called `CreateSequential()` or `CreateUnique()`. The Tenancy test
+  host's tenant id, a `long`, declares the `Create()` Tenancy asks of it.
 - **The Tenancy sample writes no class that adds nothing.** Its Tenants domain project says
   `[assembly: GenerateTenancyClasses]` in `Module.cs`, and its `Organization` and `Role`, which added nothing to the
   package's, are gone: the switch writes them, in the project's root namespace. The tenant, the unit, the seat and
@@ -1943,7 +1944,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     words.
 - **Tenancy sample: GraphQL, one schema composed from a source schema per module.** The host serves `/graphql` next
   to its routes. Each module's API project holds a source schema of its own, in a `GraphQL` folder per feature
-  beside `Rest`, and the host composes the three in the process with `AddInMemoryFusionGateway()`. Every
+  beside `Rest`, and the host composes them in the process with the in-memory gateway, one for the users and one
+  for the tenant's administration (below). Every
   query and mutation sends the command or query its route sends. See
   [GraphQL in the sample](docs/tenancy.md#graphql-in-the-sample).
   - A query or a mutation is a static method marked `[Query]` or `[Mutation]`, with `[Service]` on what is
@@ -2135,10 +2137,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   A field of `/graphql` reads through the same contexts as a route, on the connections for
   requests and as its caller. The names are as Entity Framework gives them.
 - **Tenancy sample: a module's migrations are in its infrastructure project.** A module has one set, beside
-  its context in `Persistence/Migrations`, and one `[SupabaseMigrations]` factory (`TenantsContextFactory`,
-  `ProjectsContextFactory`, `InspectionsContextFactory`) that `dotnet ef`, the export and the host's start-up
-  check all build the context with. The module registers its context with that factory
-  (`PostgresPools.AddContext<TContext, TFactory>`), and the migrations are found in the context's own assembly.
+  its context in `Persistence/Migrations`, and its context is marked `[SupabaseMigrations]`, so the build writes the
+  design-time factory beside it (`TenantsContextDesignTimeFactory`, `ProjectsContextDesignTimeFactory`,
+  `InspectionsContextDesignTimeFactory`) that `dotnet ef`, the export and the host's start-up check all build the
+  context with. The module registers its context with `PostgresPools.AddContext<TContext>`, and the migrations are
+  found in the context's own assembly.
   `MigrationTests` holds each module to it without a connection: no pending model change, the ids a database
   already holds, and each module's own tables and no other's.
 - **The Tenancy sample's AppHost starts Supabase's own images, with the real login.** One command,
@@ -2426,7 +2429,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     accepting an invitation `tenancy.identity-required`. And in a host that requires explicit callers, a
     request that requires system work and runs as nobody fails with `NoCallerException`.
 - **For the 3.2.0 previews: a package's row access contribution is written because the application references
-  the package.** `3.2.0-preview.1` and `3.2.0-preview.2` wrote one only when the project that runs the export
+  the package.** `3.2.0-preview.1` to `3.2.0-preview.3` wrote one only when the project that runs the export
   listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned
   (DDD00054) about one it did not list. Tenancy on Postgres and Membership on Postgres now write their SQL into
   every application that references them, from what it marks, so the class and its line go:
@@ -2455,7 +2458,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - The start-up checks of both packages, and the export's refusal of a rule that asks a set nothing answers,
     say to mark the catalogue, the operators or the rules where they said to list a class; the check that finds
     Tenancy's functions written from another catalogue names `[TenancyCatalogue]` and where the export must see it.
-
 - **For the 3.2.0 previews: `RolePack.Shape` is `RolePack.SeededFor`.** The name read as if a role had a shape,
   and a role has none: the property says which tenants are given a copy of the pack, one provisioned with that
   shape or changed to it, and `null` still means every shape. Nothing else changes. A catalogue writes
@@ -2468,7 +2470,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RolePack.seededFor` in GraphQL, where both answered `shape`. See
   [The administrators' pack](docs/tenancy.md#the-administrators-pack).
 - **For the 3.2.0 previews: `AddSupabaseAuthAdmin` takes the project's URL**, as `AddSupabaseJwtBearer` does,
-  and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` and `3.2.0-preview.2` took Auth's own address
+  and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` to `3.2.0-preview.3` took Auth's own address
   there. A call that passes a project's `https://<ref>.supabase.co/auth/v1` works as before, because a URL that
   already ends in `/auth/v1` is taken as it is. A call that passes a bare Auth server's address still compiles,
   but its calls then go to `{address}/auth/v1/...`, where that server has nothing, and every one of them fails
@@ -2484,7 +2486,21 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - The Tenancy sample's `SampleAuthentication.AuthUrlOf(configuration)` is
     `SampleAuthentication.ProjectOf(configuration)`, which reads `Supabase:Url`, `Supabase:JwtSecret` and
     `Supabase:AuthUrl` into a `SupabaseAuthOptions` for the bearer and the admin client alike.
-
+- **For the 3.2.0 previews: Tenancy's id options are gone.** `TenancyOptions.NewTenantId`, `NewSeatId`, `NewUnitId`
+  and `NewRoleId`, and `TenancyInvitationOptions.NewInvitationId`, with which the previews made a new id, are
+  removed: Tenancy makes one with the id's own `Create()` (see Added, Tenancy). Delete the lines that set them;
+  `services.AddTenancy<TContext>()` needs no callback. An id the generator writes over a `Guid` has the method
+  already; one over a `long`, an `int` or a `string` declares it in its partial declaration, or the class over it is
+  DDD00067, whose code fix adds a `Create()` for you to write. See
+  [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
+- **For the 3.2.0 previews: `InMemoryFusionGatewayOptions.ServedApart` is gone.** `3.2.0-preview.3` left a schema
+  out of the in-memory gateway with it and served that schema with `MapGraphQL`. Give it a gateway of its own
+  instead, `AddInMemoryFusionGateway("admin", ["admin", ...])` with the source schemas it composes with, mapped as
+  an endpoint, `MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(...)`, and name the
+  user's gateway too, since `AddInMemoryFusionGateway()` beside named ones composes their schemas as well. A schema
+  a gateway lists is a source schema, `AddSourceSchemaDefaults()`; one you keep serving with `MapGraphQL`, outside
+  every gateway, stays out of them once each gateway lists its schemas by name. See
+  [Several gateways](docs/graphql.md#several-gateways).
 - **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
   others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
   and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up
@@ -2499,8 +2515,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   or factory must be one the build can make". Besides a factory the generated code cannot create, it reports, in
   the context's project, a marked context the build cannot write a factory for and that has none of its own, and,
   where the export runs, a marked context whose assembly, or the exporting application itself, holds more than one
-  factory for it, whose assembly holds none, or that the project cannot see. The export's warning for a project that references nothing to export now says "No context or
-  factory marked [SupabaseMigrations]".
+  factory for it, whose assembly holds none, or that the project cannot see. The export's warning for a project
+  that references nothing to export now says "No context or factory marked [SupabaseMigrations]".
 - **The Supabase export writes the privileges and forces the policies unless a project turns them off.**
   `SupabaseMigrationOptions.WriteGrants` and `SupabaseMigrationOptions.ForceRowLevelSecurity` are `true` by
   default, and the build reads an unset `SupabaseRowAccessGrants` as `Write` and an unset
