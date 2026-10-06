@@ -468,7 +468,8 @@ public sealed partial class TenancyCatalogue
 
             if (pack.Administers && pack.Keys is not { Count: > 0 })
             {
-                // It lists nothing, and so holds every live key: one declared later comes with it.
+                // It lists nothing, and so holds every live key: one declared later comes with it, and reaches the
+                // roles made from the pack before at the next sync of the packs.
                 result.Add(pack with { Keys = live });
                 continue;
             }

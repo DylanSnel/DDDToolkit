@@ -863,31 +863,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
-- **Tenancy: a role made from a pack follows its pack.** A key added to the catalogue later, a module's new keys in
-  an administrators' pack that lists none or a key added to a pack, used to reach the tenants provisioned after it
-  and never the roles tenants already had. Now a role remembers what its pack gave it, `RoleAggregate.KeysFromPack`,
-  and `FollowPack` compares that with the pack as the catalogue builds it now: a key the pack gained is added, a key
-  it lost is taken out, and what the tenant changed itself stays. What a role remembers is always its pack's keys, so
-  a role an import made from a pack with keys of its own keeps them. A key the tenant added that the pack gains later
-  is the pack's from then on; a key the tenant took out that the pack loses and gains again comes back; a key that
-  is no longer live is never taken out; an archived role, and a role whose pack the catalogue no longer has, are left
-  as they are; and a role stored before the column, or made from a pack the catalogue did not have, with no record,
-  follows as if its pack had given it nothing yet, gaining every key of the pack it lacks and losing none. Each role
-  whose keys change raises `RoleFollowedItsPack`: the tenant, the role, the pack, the keys `Added` and `Removed`,
-  those of them that manage access, and who made the change. It is kept in the access history; the package sends no
-  message. The host turns it on with `builder.Services.SyncRolePacks()`, a call of its own and no start-up check,
-  which runs `IRolePackSync` once the host has started, in the background: every active and suspended tenant, one
-  after the other, as Tenancy's system work in each, one save per tenant that takes the access revision first, so a
-  second run changes nothing and two instances at once commit a tenant once. `AddTenancy` registers
-  `IRolePackSync` for a host that runs it from a deployment step or an operator's endpoint, and
-  `RoleCommands.FollowPacksAsync` follows the packs in one tenant, system work's alone. A role whose following would
-  leave the tenant without an administrator is left as it is, and named in the answer. A key that manages access
-  follows the same rule. The roles' table has a column more on every database, `KeysFromPack`, nullable, which a
-  migration of the application's adds. On Postgres no seat changes it (`tenancy_role_follows_its_pack`), a role
-  keeps the pack it was made from (`tenancy_role_pack_is_fixed`), and a role a seat adds names no pack, or is an
-  exact copy of one that remembers exactly the pack's keys. The sync writes under the policies, forced ones
-  included. See
-  [Packs after provisioning](docs/tenancy.md#packs-after-provisioning).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
   and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
   brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
@@ -939,19 +914,45 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy: an administrators' pack when the application declares none.** A catalogue that declares no
   administrators' pack at all gets `TenancyPacks.DefaultAdministrators` from `TenancyCatalogue.Build`: key
   `administrator`, named Administrator, for every shape, seeded on provision and listed first, with no keys, so
-  it holds every live key, one a module adds later included. A tenant's first seat is given its role, so a
-  catalogue need not name a pack: `new ApplicationCatalogue(Permissions: ...)`, or `Packs: []` as before, and
-  calls that name packs are unchanged. A catalogue that declares an administrators' pack
-  for one shape and not the other is still refused, and the problem now says the default is added only when
-  none is declared. While the default is added, a pack of the application's that has its key, or one of its
-  names ignoring case, Administrator or the Dutch Beheerder, is refused, with the fix: rename the pack, or
-  declare it with `Administers: true`. `TenancyCatalogue.HasDefaultAdministrators` says whether a built
+  it holds every live key, one a module adds later included: a tenant provisioned after that gets the key with
+  the role, and a tenant that has the role already gets it when the host syncs the packs (below). A tenant's
+  first seat is given its role, so a catalogue need not name a pack: `new ApplicationCatalogue(Permissions:
+  ...)`, or `Packs: []` as before, and calls that name packs are unchanged. A catalogue that declares an
+  administrators' pack for one shape and not the other is still refused, and the problem now says the default is
+  added only when none is declared. While the default is added, a pack of the application's that has its key, or
+  one of its names ignoring case, Administrator or the Dutch Beheerder, is refused, with the fix: rename the pack,
+  or declare it with `Administers: true`. `TenancyCatalogue.HasDefaultAdministrators` says whether a built
   catalogue has it. Its role is named by the application's `IRolePackTexts` first, by the pack's key, and
   otherwise by the package, in English or Dutch, from `TenancyPackTexts.resx` and its Dutch twin. On Postgres
   the access file written from the catalogue has the pack, so `pack_keys('administrator')` answers every live
   key and `EnsurePoliciesAreInPlaceAsync` agrees with the catalogue the application runs. An application that
   switches to it keeps its tenants' old administrators' roles; a change of shape then copies the default, and
   is refused while the tenant has a role of the same name.
+- **Tenancy: a role made from a pack follows its pack.** A key added to the catalogue later, a module's new keys in
+  an administrators' pack that lists none or a key added to a pack, used to reach the tenants provisioned after it
+  and never the roles tenants already had. Now a role remembers what its pack gave it, `RoleAggregate.KeysFromPack`,
+  and `FollowPack` compares that with the pack as the catalogue builds it now: a key the pack gained is added, a key
+  it lost is taken out, and what the tenant changed itself stays. What a role remembers is always its pack's keys, so
+  a role an import made from a pack with keys of its own keeps them. A key the tenant added that the pack gains later
+  is the pack's from then on; a key the tenant took out that the pack loses and gains again comes back; a key that
+  is no longer live is never taken out; an archived role, and a role whose pack the catalogue no longer has, are left
+  as they are; and a role stored before the column, or made from a pack the catalogue did not have, with no record,
+  follows as if its pack had given it nothing yet, gaining every key of the pack it lacks and losing none. Each role
+  whose keys change raises `RoleFollowedItsPack`: the tenant, the role, the pack, the keys `Added` and `Removed`,
+  those of them that manage access, and who made the change. It is kept in the access history; the package sends no
+  message. The host turns it on with `builder.Services.SyncRolePacks()`, a call of its own and no start-up check,
+  which runs `IRolePackSync` once the host has started, in the background: every active and suspended tenant, one
+  after the other, as Tenancy's system work in each, one save per tenant that takes the access revision first, so a
+  second run changes nothing and two instances at once commit a tenant once. `AddTenancy` registers
+  `IRolePackSync` for a host that runs it from a deployment step or an operator's endpoint, and
+  `RoleCommands.FollowPacksAsync` follows the packs in one tenant, system work's alone. A role whose following would
+  leave the tenant without an administrator is left as it is, and named in the answer. A key that manages access
+  follows the same rule. The roles' table has a column more on every database, `KeysFromPack`, nullable, which a
+  migration of the application's adds. On Postgres no seat changes it (`tenancy_role_follows_its_pack`), a role
+  keeps the pack it was made from (`tenancy_role_pack_is_fixed`), and a role a seat adds names no pack, or is an
+  exact copy of one that remembers exactly the pack's keys. The sync writes under the policies, forced ones
+  included. See
+  [Packs after provisioning](docs/tenancy.md#packs-after-provisioning).
 - **Tenancy: a unit has no kind, and an application needs no catalogue.** No access rule read a unit's kind:
   Tenancy only checked that it was one of the catalogue's and kept it. So the package keeps none, and an
   application that tells its units apart adds a field of its own to its unit class, an enum say, set in a
