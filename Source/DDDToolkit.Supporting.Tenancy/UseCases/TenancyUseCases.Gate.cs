@@ -94,16 +94,20 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             }
         }
 
-        /// <summary>Only system work in the tenant suspends, reactivates or closes it.</summary>
+        /// <summary>
+        /// Only system work in the tenant does <paramref name="work"/>: suspending, reactivating or closing it, or making
+        /// its roles follow their packs.
+        /// </summary>
+        /// <param name="work">What the use case does, as the start of a sentence that ends "by system work in that tenant".</param>
         /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat; the caller's own refusal for nobody.</exception>
-        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
-        public TTenantId RequireSystemInTenant()
+        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant, told what to begin for <paramref name="work"/>.</exception>
+        public TTenantId RequireSystemInTenant(string work)
             => Caller.Kind switch
             {
                 TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
                 TenancyCallerKind.Seat => throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly),
                 TenancyCallerKind.System => throw new InvalidOperationException(
-                    "A tenant is suspended, reactivated or closed by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it."),
+                    $"{work} by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it."),
                 _ => throw Refusal(),
             };
 

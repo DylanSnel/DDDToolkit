@@ -5,6 +5,7 @@ using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.UseCases;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace DDDToolkit.Supporting.Tenancy;
 
@@ -160,6 +161,42 @@ public static class TenancyServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(permissions);
 
         services.AddSingleton(new PermissionContribution(permissions));
+        return services;
+    }
+
+    /// <summary>
+    /// Brings every tenant's roles up to the packs they were made from, in the background, once the host has
+    /// started: after its start-up checks, when it runs them, and after every hosted service has started. A role
+    /// made from a pack gets the keys the pack gained since the role was made or last followed it, a module's new
+    /// keys in an administrators' pack that lists none among them, and loses the keys the pack lost; what the
+    /// tenant changed itself stays. Each role that changes raises
+    /// <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>, for the host to tell the tenant's
+    /// administrators; the package sends no message itself.
+    /// <code>
+    /// builder.Services.RunStartupChecks();
+    /// builder.Services.SyncRolePacks();
+    /// </code>
+    /// <para>
+    /// It runs <see cref="IRolePackSync"/>, which Tenancy's storage package registers with <c>AddTenancy</c>, once per
+    /// start of the host, as Tenancy's system work in each tenant, one tenant after the other. A second run changes
+    /// nothing, and so does a run on another instance of the host at the same time as this one: whichever commits
+    /// second finds the roles following their packs already. A tenant it cannot sync is logged and left for the next
+    /// start, and the host keeps serving meanwhile. A host that wants it elsewhere, in a deployment step or behind an
+    /// operator's endpoint, leaves this call out and runs <see cref="IRolePackSync"/> itself.
+    /// </para>
+    /// <para>
+    /// It is a call of its own, and not a start-up check: a check reads and changes nothing, and stops a start that
+    /// would go wrong, while this changes the tenants' roles, and the host may serve without it. Calling it more than
+    /// once runs it once.
+    /// </para>
+    /// </summary>
+    /// <param name="services">The application's services.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    public static IServiceCollection SyncRolePacks(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RolePackSyncService>());
         return services;
     }
 }

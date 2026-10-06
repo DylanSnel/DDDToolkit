@@ -201,7 +201,9 @@ internal static class TenancyMapping
 
     /// <summary>
     /// The roles' table. A tenant's role names are unique ignoring case, through the normalized name the save
-    /// fills in, rather than through the name, which a case-sensitive collation would compare exactly.
+    /// fills in, rather than through the name, which a case-sensitive collation would compare exactly. What its
+    /// pack gave a role is the table's alone, a column that may be empty: a role made by hand has no pack, and a
+    /// role stored before the column was there remembers nothing yet.
     /// </summary>
     internal static void Roles<TRole, TRoleId, TTenantId>(EntityTypeBuilder<TRole> role, TenancyTableNames tables)
         where TRole : RoleAggregate<TRoleId, TTenantId>
@@ -215,6 +217,7 @@ internal static class TenancyMapping
         Refuses(role.HasIndex(nameof(RoleAggregate<TRoleId, TTenantId>.TenantId), NormalizedNameColumn).IsUnique(), TenancyRefusals.RoleNameTaken);
         role.Property(row => row.Name).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxNameLength);
         role.Property(row => row.Description).HasMaxLength(RoleAggregate<TRoleId, TTenantId>.MaxDescriptionLength);
+        role.PrimitiveCollection(row => row.KeysFromPack);
         RoleColumns<TRoleId, TTenantId>(role);
         role.ScopeToTenant(row => row.TenantId);
     }

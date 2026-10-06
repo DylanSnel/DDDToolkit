@@ -257,7 +257,7 @@ public class ActorTests
     [Fact]
     public void Every_tenancy_event_type_carries_who_made_the_change()
     {
-        EventTypes.Should().HaveCount(28, "an event that is added is registered with the outbox and, when it changes access, kept in the history");
+        EventTypes.Should().HaveCount(29, "an event that is added is registered with the outbox and, when it changes access, kept in the history");
 
         foreach (var type in EventTypes)
         {
@@ -338,6 +338,19 @@ public class ActorTests
 
         var bySystem = harness.Store.SavedEvents.Skip(before).ToList();
         bySystem.Should().NotBeEmpty().And.OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
+
+        // ... Harbor's roles follow a pack the application changed, as its work too, ...
+        var later = TenancyCatalogue.Build(
+            HostCatalogue.Application with
+            {
+                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.WatcherPack ? pack with { Keys = [HostCatalogue.WidgetCreate] } : pack)],
+            },
+            []);
+        await harness.BySystemWork(use => new HostTenancy.RoleCommands(use.Store, later, use.Options, use.Clock).FollowPacksAsync(Cancellation));
+        var followed = harness.Store.SavedEvents.Skip(before + bySystem.Count).ToList();
+        followed.Should().ContainSingle().Which.Should().BeOfType<RoleFollowedItsPack<TenantId, RoleId, SeatId>>();
+        followed.Should().OnlyContain(raised => ByOf(raised) == TenancyActor<SeatId>.OfSystem(TenancyWork.SystemScope));
+        bySystem.AddRange(followed);
 
         // ... made a tree by its administrator, with the roles of the new shape, ...
         await harness.Run(HostCaller.InSeat(quay.Tenant, quay.AdminSeat), use => use.Tenants.ChangeShapeAsync(TenantShape.Hierarchical, roleIds: null, language: null, Cancellation));

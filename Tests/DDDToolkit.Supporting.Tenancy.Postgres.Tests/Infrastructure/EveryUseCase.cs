@@ -1,5 +1,6 @@
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 using static DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure.TenancySeed;
 
 namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests.Infrastructure;
@@ -92,6 +93,21 @@ public static class EveryUseCase
         await As(Ada, scoped => scoped.Roles().SetKeysAsync(HarborRoles.Operator, [HostCatalogue.WidgetRead], cancellation));
         await As(Ada, scoped => scoped.Roles().SetKeysAsync(HarborRoles.Supervisor, [TenancyKeys.UnitsManage, TenancyKeys.SeatsManage, HostCatalogue.WidgetChange], cancellation));
         await As(Ada, scoped => scoped.Roles().ArchiveAsync(HarborRoles.Watcher, cancellation));
+
+        // The roles follow their packs, by system work in the tenant, once the application ships a catalogue whose
+        // supervisor's pack also reads the history: Harbor's Supervisor gains that key, and keeps out what Ada took out.
+        var later = TenancyCatalogue.Build(
+            HostCatalogue.Application with
+            {
+                Packs = [.. HostCatalogue.Application.Packs.Select(pack => pack.Key == HostCatalogue.SupervisorPack ? pack with { Keys = [.. pack.Keys, TenancyKeys.HistoryView] } : pack)],
+            },
+            []);
+        await services.BySystemIn(Harbor, scoped => new HostTenancy.RoleCommands(
+                scoped.GetRequiredService<HostTenancy.IStore>(),
+                later,
+                scoped.GetRequiredService<TenancyOptions<TenantId, SeatId, OrganizationUnitId, RoleId>>(),
+                scoped.GetRequiredService<TimeProvider>())
+            .FollowPacksAsync(cancellation));
 
         // The tenant: renamed by the administrator; suspended and started again by system work, which alone may.
         await As(Ada, scoped => scoped.Tenants().RenameOrganizationAsync("Harbor Group", cancellation));

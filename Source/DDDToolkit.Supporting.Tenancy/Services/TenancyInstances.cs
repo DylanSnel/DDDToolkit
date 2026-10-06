@@ -97,7 +97,11 @@ public static class TenancyInstances
         return seat;
     }
 
-    /// <summary>A new active role, its keys expanded from the catalogue, with <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/> raised.</summary>
+    /// <summary>
+    /// A new active role, its keys expanded from the catalogue, with <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>
+    /// raised. A role made from a pack remembers the pack's keys as the catalogue builds it, whatever keys the draft
+    /// gives the role: an import's own keys are the tenant's, and a later sync of the packs leaves them as they are.
+    /// </summary>
     /// <typeparam name="TRole">The application's role class.</typeparam>
     /// <typeparam name="TRoleId">The application's role id.</typeparam>
     /// <typeparam name="TTenantId">The application's tenant id.</typeparam>

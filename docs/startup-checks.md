@@ -235,6 +235,10 @@ is wrong and what puts it right. Registering a check under a name already taken 
 registration that is called twice brings its check once. Name it with a prefix of your own, a dot and what holds,
 and keep `OnByDefault` for a check your package ran by itself before, as pgmq's did.
 
+A check reads and changes nothing. Work that changes data at start-up is not a check, and has a call of its own
+beside `RunStartupChecks()`: Tenancy's `SyncRolePacks()`, which brings every tenant's roles up to the packs they
+were made from once the host has started, is one ([Packs after provisioning](tenancy.md#packs-after-provisioning)).
+
 ## Where to look next
 
 - [Access requirements](access-requirements.md#when-nothing-asks-the-checks), for the check of the access behaviors.

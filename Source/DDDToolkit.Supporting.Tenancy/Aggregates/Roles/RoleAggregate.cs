@@ -16,6 +16,12 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <see cref="FromPack"/>, and only when it is made.
 /// </para>
 /// <para>
+/// A role made from a pack follows it (<see cref="FollowPack{TSeatId}"/>): it remembers what the pack gave it
+/// (<see cref="KeysFromPack"/>), so a key the pack gains later is added to it, a key the pack loses is taken out,
+/// and what the tenant changed itself stays as the tenant left it. The application runs that for every tenant
+/// with <c>services.SyncRolePacks()</c>; nothing else changes a role behind the tenant's back.
+/// </para>
+/// <para>
 /// Whoever holds <see cref="TenancyKeys.RolesManage"/> may put any key into any role. That is on purpose:
 /// that key is the administrator's key, and an administrator can give themselves anything already. A key
 /// added to a role reaches every seat that holds the role, seats that gave themselves the role included, so
@@ -61,14 +67,30 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     /// <summary>The permission keys the role grants: expanded, distinct and in ordinal order.</summary>
     public IReadOnlyList<string> Keys { get; private set; } = [];
 
+    /// <summary>
+    /// The keys its pack gave the role, as the pack held them when the role was made from it or last followed it:
+    /// what the next <see cref="FollowPack{TSeatId}"/> compares the pack with, to tell a key the pack gained or
+    /// lost from one the tenant added or took out itself. Expanded, distinct and in ordinal order: the pack's keys,
+    /// whatever keys the role was made with. <see langword="null"/> for a role made by hand, and for one made before
+    /// roles remembered it or from a pack the catalogue did not have then, which follows its pack as if the pack had
+    /// given it nothing yet.
+    /// </summary>
+    public IReadOnlyList<string>? KeysFromPack { get; private set; }
+
     /// <summary>This role's status and keys as a snapshot, for a seat's rules.</summary>
     public RoleFacts Facts => new(Status == RoleStatus.Active, Keys);
 
     /// <summary>
     /// What a constructor would do: gives a new instance its id, tenant, name, description and keys, and
-    /// remembers the pack it came from; starts it active, and raises
-    /// <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>. Called once, by <see cref="TenancyInstances"/>,
-    /// right after the instance is made.
+    /// remembers the pack it came from, with that pack's keys as the catalogue builds it as what the pack gave it;
+    /// starts it active, and raises <see cref="RoleCreated{TTenantId, TRoleId, TSeatId}"/>. Called once, by
+    /// <see cref="TenancyInstances"/>, right after the instance is made.
+    /// <para>
+    /// The record is the pack's, not the draft's: provisioning drafts exactly the pack, but an import or a seeding
+    /// may make a role from a pack with keys of its own, and those are the tenant's, which a later sync leaves as
+    /// they are. A draft that names a pack the catalogue does not have is remembered with no record, as a role
+    /// stored before roles remembered their pack's keys is.
+    /// </para>
     /// </summary>
     internal void InitializeNew<TSeatId>(TRoleId id, TTenantId tenantId, RoleDraft draft, TenancyCatalogue catalogue, TenancyActor<TSeatId>? by)
         where TSeatId : struct, IEntityId, IEquatable<TSeatId>
@@ -86,6 +108,7 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
         Description = description;
         Keys = keys;
         FromPack = string.IsNullOrWhiteSpace(draft.FromPack) ? null : draft.FromPack.Trim();
+        KeysFromPack = PackKeys(FromPack, catalogue);
         Status = RoleStatus.Active;
 
         RaiseDomainEvent(new RoleCreated<TTenantId, TRoleId, TSeatId>(tenantId, id, FromPack, by));
@@ -181,6 +204,117 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
             .Order(StringComparer.Ordinal)
             .ToArray();
     }
+
+    /// <summary>
+    /// Follows the pack the role was made from, as <paramref name="catalogue"/> builds it now. What the pack gave
+    /// the role the last time (<see cref="KeysFromPack"/>) is compared with what the pack holds now: a key the pack
+    /// gained is added to the role, and a key it lost is taken out. What the tenant changed itself stays: a key it
+    /// took out of the role stays out while the pack still holds it, and a key it added stays while the pack never
+    /// held it. The pack's keys are remembered for the next time.
+    /// <para>
+    /// Four things the comparison cannot tell apart are settled this way. A key the tenant added by hand that the
+    /// pack gains later is the pack's from then on, and goes when the pack loses it. A key the tenant took out that
+    /// the pack loses, and gains again later, comes back as a key the pack gained: once the pack lost it, the record
+    /// no longer holds it, and the event names it, among the keys that manage access when it manages access. A key
+    /// that is not live, retired or no longer known, is never taken out: it grants nothing, and retiring a key
+    /// changes no role. And a role that has no record yet, made before roles remembered their pack's keys, follows
+    /// as if the pack had given it nothing: it gets every key the pack holds that it lacks, and loses none. A live
+    /// key the role keeps brings the keys it implies, as everywhere a role's keys are set.
+    /// </para>
+    /// <para>
+    /// A key that manages access follows the same rule, whoever runs this: only the application's code puts a key
+    /// in a pack. The event says which of the keys that came in or went out manage access, so whoever is told
+    /// about the change, the tenant's administrators say, can see it.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: a role does not know it by itself.</typeparam>
+    /// <param name="catalogue">The catalogue the pack is read from, as the application runs with it now.</param>
+    /// <param name="by">Who makes the change, for the event; <see langword="null"/> when nobody is named.</param>
+    /// <returns>
+    /// Whether the role changed: its keys, which raises <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>,
+    /// or only what it remembers of its pack, or the order its keys were stored in, which raises nothing.
+    /// <see langword="false"/> for a role made by hand, one whose pack the catalogue no longer has, and one that
+    /// follows its pack already.
+    /// </returns>
+    /// <exception cref="RefusalException"><c>tenancy.role-archived</c>: an archived role follows nothing.</exception>
+    public bool FollowPack<TSeatId>(TenancyCatalogue catalogue, TenancyActor<TSeatId>? by = null)
+        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+    {
+        if (KeysAfterFollowing(catalogue) is not { } following)
+        {
+            return false;
+        }
+
+        var remembered = KeysFromPack is { } record && record.SequenceEqual(following.Remembered, StringComparer.Ordinal);
+        KeysFromPack = following.Remembered;
+
+        var before = Keys;
+        var sorted = following.Keys.SequenceEqual(before, StringComparer.Ordinal);
+        Keys = following.Keys;
+
+        // The keys are compared as sets: a row may hold them in another order than the role keeps them, a seat's copy
+        // of a pack for one, and only a key that came in or went out is a change the event tells.
+        var added = following.Keys.Except(before, StringComparer.Ordinal).ToArray();
+        var removed = before.Except(following.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        if (added.Length == 0 && removed.Length == 0)
+        {
+            return !remembered || !sorted;
+        }
+
+        RaiseDomainEvent(new RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>(
+            TenantId,
+            Id,
+            FromPack!,
+            added,
+            removed,
+            added.Concat(removed).Where(catalogue.ManagesAccess).Order(StringComparer.Ordinal).ToArray(),
+            by));
+        return true;
+    }
+
+    /// <summary>
+    /// The keys <see cref="FollowPack{TSeatId}"/> would leave the role with, and what it would remember of its pack,
+    /// refused the same way and nothing changed: a use case decides on the role's future before it changes it.
+    /// <see langword="null"/> for a role with no pack to follow: made by hand, or made from a pack the catalogue no
+    /// longer has.
+    /// </summary>
+    internal (IReadOnlyList<string> Keys, IReadOnlyList<string> Remembered)? KeysAfterFollowing(TenancyCatalogue catalogue)
+    {
+        ArgumentNullException.ThrowIfNull(catalogue);
+        RequireActive();
+
+        if (PackKeys(FromPack, catalogue) is not { } now)
+        {
+            return null;
+        }
+
+        var given = KeysFromPack ?? [];
+
+        var held = new HashSet<string>(Keys, StringComparer.Ordinal);
+        held.UnionWith(now.Except(given, StringComparer.Ordinal));
+        held.ExceptWith(given.Except(now, StringComparer.Ordinal).Where(catalogue.IsLive));
+
+        var keys = held
+            .Where(key => !catalogue.IsLive(key))
+            .Concat(catalogue.Expand(held.Where(catalogue.IsLive)))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        return (keys, now);
+    }
+
+    /// <summary>
+    /// The keys of the pack <paramref name="pack"/> as <paramref name="catalogue"/> builds it, distinct and in ordinal
+    /// order: what a role made from it remembers, whatever keys it was made with. The pack as built holds live keys
+    /// only, expanded; an administrators' pack that lists none, every live key. <see langword="null"/> for no pack,
+    /// or one the catalogue does not have.
+    /// </summary>
+    private static string[]? PackKeys(string? pack, TenancyCatalogue catalogue)
+        => pack is null
+            ? null
+            : catalogue.Packs.FirstOrDefault(candidate => string.Equals(candidate.Key, pack, StringComparison.Ordinal)) is { } built
+                ? built.Keys.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray()
+                : null;
 
     /// <summary>Archives the role. It stays, granted wherever it was, and grants nothing from now on.</summary>
     /// <typeparam name="TSeatId">The application's seat id, which the actor is closed over: a role does not know it by itself.</typeparam>

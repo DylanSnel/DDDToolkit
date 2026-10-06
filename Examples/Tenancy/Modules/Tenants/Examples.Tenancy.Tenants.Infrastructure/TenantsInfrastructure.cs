@@ -117,6 +117,9 @@ public static class TenantsInfrastructure
         {
             // What changes who may do what is kept in the access history as well, by the save that stores it in
             // the outbox, and each row says who made the change. A rename changes nobody's access, and is left out.
+            // A role that followed its pack, once the host's SyncRolePacks() found the pack changed, is among what is
+            // kept: it is how the sample tells a tenant's administrators, who read it on the History page, with the
+            // keys that came in and went out. A host that mails them maps the event to a contract of its own.
             // An invitation's own events are stored and kept off the sinks like the rest, and are no part of the
             // history: what an acceptance changes is in it as the seat's own events.
             outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()

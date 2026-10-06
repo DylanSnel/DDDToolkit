@@ -102,6 +102,10 @@ internal static class TenancySql
 
     internal const string InvitationTermsAreFixed = "invitation_terms_are_fixed";
 
+    internal const string RolePackIsFixed = "role_pack_is_fixed";
+
+    internal const string RoleFollowsItsPack = "role_follows_its_pack";
+
     /// <summary>The constraint names the triggers raise with, which a translation of failures reads.</summary>
     internal const string AdministratorRemainsConstraint = "tenancy_administrator_remains";
 
@@ -118,6 +122,10 @@ internal static class TenancySql
     internal const string SeatStatusIsManagedConstraint = "tenancy_seat_status_is_managed";
 
     internal const string InvitationTermsAreFixedConstraint = "tenancy_invitation_terms_are_fixed";
+
+    internal const string RolePackIsFixedConstraint = "tenancy_role_pack_is_fixed";
+
+    internal const string RoleFollowsItsPackConstraint = "tenancy_role_follows_its_pack";
 
     /// <summary>The trigger that writes the rights as a grant, a seat or a role is written.</summary>
     internal const string RightsFollowGrantsTrigger = "tenancy_rights_follow_grants";
@@ -136,6 +144,12 @@ internal static class TenancySql
     internal const string AttributionOfSystemWork = "System work records a row as written and changed by no seat.";
 
     internal const string AttributionIsKept = "Who wrote a row first does not change.";
+
+    /// <summary>What the trigger on what a role's pack gave it tells a statement it refuses.</summary>
+    internal const string RoleFollowsItsPackRefusal = "What its pack gave a role is written as the role is made from the pack, and as Tenancy's own system work makes it follow the pack: by no seat.";
+
+    /// <summary>The property of a role that holds what its pack gave it, which a sync of the packs compares the pack with.</summary>
+    private const string KeysFromPackProperty = "KeysFromPack";
 
     /// <summary>What the trigger on a seat's status tells a statement it refuses.</summary>
     internal const string SeatStatusRefusal = "A seat's status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.";
@@ -983,9 +997,12 @@ internal static class TenancySql
             (var column, var store) => $"EXISTS (SELECT 1 FROM {Elements(store, alias + "." + column)} AS held(k) WHERE held.k = {value})",
         };
 
-    /// <summary>The keys of <paramref name="alias"/>'s role as a set of rows with one column, <c>k</c>, named <paramref name="name"/>.</summary>
-    private static string KeysOf(IEntityType roles, string alias, string name)
-        => KeysColumn(roles) switch
+    /// <summary>
+    /// The keys of <paramref name="alias"/>'s role as a set of rows with one column, <c>k</c>, named <paramref name="name"/>:
+    /// the keys it grants, or with <paramref name="property"/> another list of keys of the role, such as what its pack gave it.
+    /// </summary>
+    private static string KeysOf(IEntityType roles, string alias, string name, string property = "Keys")
+        => KeysColumn(roles, property) switch
         {
             (var column, KeysStore.Array) => $"pg_catalog.unnest({alias}.{column}) AS {name}(k)",
             (var column, var store) => $"{Elements(store, alias + "." + column)} AS {name}(k)",
@@ -1021,21 +1038,36 @@ internal static class TenancySql
     private static string Contained(IEntityType roles, IEntityType table)
         => $"NOT EXISTS ({Managed(roles, table)} AND NOT ({TenancyTables.Own(table, "UnitId")} = ANY (ARRAY(SELECT {Fn(UnitsWhereIHold)}(managed.k)))))";
 
-    /// <summary>The role written is a copy of a pack of the catalogue: it names the pack, and holds exactly its keys.</summary>
+    /// <summary>
+    /// The role written is a copy of a pack of the catalogue: it names the pack, holds exactly its keys, and
+    /// remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with.
+    /// </summary>
     private static string CopyOfItsPack(IEntityType roles)
     {
         var pack = $"{Fn(PackKeys)}({TenancyTables.Own(roles, "FromPack")})";
-        var held = $"SELECT held.k FROM {KeysOf(roles, Q(roles), "held")}";
         var packed = $"SELECT pg_catalog.unnest({pack})";
-        return $"({pack} IS NOT NULL AND NOT EXISTS ({held} EXCEPT {packed}) AND NOT EXISTS ({packed} EXCEPT {held}))";
+        string Exactly(string property)
+        {
+            var held = $"SELECT held.k FROM {KeysOf(roles, Q(roles), "held", property)}";
+            return $"NOT EXISTS ({held} EXCEPT {packed}) AND NOT EXISTS ({packed} EXCEPT {held})";
+        }
+
+        return $"({pack} IS NOT NULL AND {Exactly("Keys")} AND {TenancyTables.Own(roles, KeysFromPackProperty)} IS NOT NULL AND {Exactly(KeysFromPackProperty)})";
     }
 
-    /// <summary>The roles' keys column and how it is stored: an array, <c>text[]</c> on Npgsql by default, or a JSON document.</summary>
+    /// <summary>The role written is made by hand: it names no pack, and remembers nothing a pack gave it.</summary>
+    private static string MadeByHand(IEntityType roles)
+        => $"({TenancyTables.Own(roles, "FromPack")} IS NULL AND {TenancyTables.Own(roles, KeysFromPackProperty)} IS NULL)";
+
+    /// <summary>
+    /// A column of the roles that holds keys, their keys by default, and how it is stored: an array, <c>text[]</c> on
+    /// Npgsql by default, or a JSON document.
+    /// </summary>
     /// <exception cref="InvalidOperationException">The model stores the keys some other way.</exception>
-    private static (string Column, KeysStore Store) KeysColumn(IEntityType roles)
+    private static (string Column, KeysStore Store) KeysColumn(IEntityType roles, string property = "Keys")
     {
-        var column = C(roles, "Keys");
-        var type = TenancyTables.ColumnType(roles, "Keys").Trim().ToLowerInvariant();
+        var column = C(roles, property);
+        var type = TenancyTables.ColumnType(roles, property).Trim().ToLowerInvariant();
         return type.EndsWith("[]", StringComparison.Ordinal) ? (column, KeysStore.Array)
             : type == "jsonb" ? (column, KeysStore.Jsonb)
             : type == "json" ? (column, KeysStore.Json)
@@ -1167,11 +1199,18 @@ internal static class TenancySql
         Add(rights, "A seat reads its own rights", "SELECT", Both(T(C(rights, "TenantId")), ownSeat(rights)), null);
 
         // A role's keys that manage access change only with the role key held for the whole tenant, which every
-        // change of a role asks here. A settings manager adds only copies of the catalogue's packs, as the use
-        // case that changes a tenant's shape does.
+        // change of a role asks here. A role manager adds a role made by hand, which names no pack, as the use case
+        // that makes a role does; a role that names a pack is added only as a copy of it, remembering exactly what
+        // the pack gave it, by a role or a settings manager, as the use case that changes a tenant's shape adds it.
+        // So no seat makes a role that a sync of the packs would give what its pack never gave it.
         var roleTenant = T(C(roles, "TenantId"));
         Add(roles, "Members read roles", "SELECT", roleTenant, null);
-        Add(roles, "Role and settings managers add roles", "INSERT", null, Both(roleTenant, $"({W(RolesKey)} OR {Both(W(SettingsKey), CopyOfItsPack(roles))})"));
+        Add(
+            roles,
+            "Role and settings managers add roles",
+            "INSERT",
+            null,
+            Both(roleTenant, $"({Both(W(RolesKey), MadeByHand(roles))} OR {Both($"({W(RolesKey)} OR {W(SettingsKey)})", CopyOfItsPack(roles))})"));
         Add(roles, "Role managers change roles", "UPDATE", Both(roleTenant, W(RolesKey)), Both(roleTenant, W(RolesKey)));
 
         // The revision is a counter every change of access takes, a seat's change of its own included: taking away
@@ -1603,6 +1642,11 @@ internal static class TenancySql
             yield return statement;
         }
 
+        foreach (var statement in PackTriggers(tenancy, schema))
+        {
+            yield return statement;
+        }
+
         foreach (var statement in InvitationTriggers(tenancy, schema))
         {
             yield return statement;
@@ -1924,8 +1968,9 @@ internal static class TenancySql
 
     /// <summary>
     /// The rows that keep what they are about as they change: a seat its identity and tenant, a placement its seat,
-    /// unit and tenant, and a grant its seat, unit, role and the seat that gave it. Entity Framework never changes
-    /// these; a query that did would move a row past the checks its policy makes of a new one.
+    /// unit and tenant, a grant its seat, unit, role and the seat that gave it, and a role the pack it was made from,
+    /// which a sync of the packs makes it follow. Entity Framework never changes these; a query that did would move a
+    /// row past the checks its policy makes of a new one.
     /// </summary>
     private static IEnumerable<string> IdentityTriggers(TenancyTables tenancy, string schema)
     {
@@ -1934,6 +1979,7 @@ internal static class TenancySql
             (tenancy.Seats, SeatIdentityIsFixed, SeatIdentityIsFixedConstraint, ["TenantId", "Identity"], "A seat keeps the identity and the tenant it was made with."),
             (tenancy.Placements, PlacementIsFixed, PlacementIsFixedConstraint, ["SeatId", "UnitId", "TenantId"], "A placement keeps its seat, its unit and its tenant."),
             (tenancy.Grants, GrantIsFixed, GrantIsFixedConstraint, ["SeatId", "UnitId", "RoleId", "GrantedBy"], "A grant keeps its seat, its unit, its role and the seat that gave it."),
+            (tenancy.Roles, RolePackIsFixed, RolePackIsFixedConstraint, ["FromPack"], "A role keeps the pack it was made from."),
         ];
 
         foreach (var (table, name, constraint, properties, message) in fixedRows)
@@ -2062,6 +2108,47 @@ internal static class TenancySql
         yield return
             $"CREATE TRIGGER {SeatStatusIsManagedConstraint} BEFORE UPDATE OF {status} ON {Q(seats)}\n" +
             $"    FOR EACH ROW WHEN (OLD.{status} IS DISTINCT FROM NEW.{status})\n" +
+            $"    EXECUTE FUNCTION {function}()";
+    }
+
+    /// <summary>
+    /// The trigger on what a role's pack gave it, which a sync of the packs compares the pack with to tell a key the
+    /// pack gained or lost from one the tenant added or took out. The policy on the roles lets a seat that manages
+    /// roles for the whole tenant change the row, and its keys with it; what the pack gave the role it does not
+    /// change: a seat that wrote it could have the next sync add to the role what the pack never gave it, or take out
+    /// what the tenant added. It is written when the role is made, as a copy of its pack (the policy on new roles), and
+    /// as Tenancy's own system work makes the role follow its pack, which the policies keep to Tenancy's scope.
+    /// <para>
+    /// Only a seat is held to it. System work and the tables' owner are no seat: the function that finds the calling
+    /// seat answers them nothing, so a migration that fills the column for rows written before it was there passes.
+    /// It refuses as a policy does, with <c>42501</c> and the toolkit's hint, since it holds who may.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<string> PackTriggers(TenancyTables tenancy, string schema)
+    {
+        var roles = tenancy.Roles;
+        var function = $"{schema}.{RoleFollowsItsPack}";
+        var (column, store) = KeysColumn(roles, KeysFromPackProperty);
+        var changed = store == KeysStore.Json
+            ? $"OLD.{column}::pg_catalog.jsonb IS DISTINCT FROM NEW.{column}::pg_catalog.jsonb"
+            : $"OLD.{column} IS DISTINCT FROM NEW.{column}";
+
+        yield return
+            $"CREATE OR REPLACE FUNCTION {function}() RETURNS trigger\n" +
+            "    LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$\n" +
+            "BEGIN\n" +
+            "    -- System work and the tables' owner are no seat, and are not held to this.\n" +
+            $"    IF (SELECT {Fn(CallerSeat)}()) IS NOT NULL THEN\n" +
+            $"        {RowAccessModel.Refusal(RoleFollowsItsPackConstraint, RoleFollowsItsPackRefusal)}\n" +
+            "    END IF;\n" +
+            "    RETURN NEW;\n" +
+            "END\n" +
+            "$body$";
+        yield return $"REVOKE ALL ON FUNCTION {function}() FROM PUBLIC";
+        yield return $"DROP TRIGGER IF EXISTS {RoleFollowsItsPackConstraint} ON {Q(roles)}";
+        yield return
+            $"CREATE TRIGGER {RoleFollowsItsPackConstraint} BEFORE UPDATE OF {column} ON {Q(roles)}\n" +
+            $"    FOR EACH ROW WHEN ({changed})\n" +
             $"    EXECUTE FUNCTION {function}()";
     }
 

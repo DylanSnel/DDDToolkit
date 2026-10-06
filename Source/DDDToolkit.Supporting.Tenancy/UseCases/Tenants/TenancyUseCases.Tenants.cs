@@ -277,7 +277,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         private async Task ChangeStatusAsync(Action<TTenant, TenancyActor<TSeatId>?> change, CancellationToken cancellationToken)
         {
             var gate = new Gate(store, catalogue, clock);
-            var tenantId = gate.RequireSystemInTenant();
+            var tenantId = gate.RequireSystemInTenant("A tenant is suspended, reactivated or closed");
 
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
             change(tenant, gate.By);

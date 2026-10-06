@@ -32,6 +32,12 @@ public sealed class CommandHook : DbCommandInterceptor
     /// <summary>Runs <paramref name="race"/> once, when <paramref name="context"/> saves, before anything is written.</summary>
     public void BeforeSave(DbContext context, Func<Task> race) => Arm(new Armed(context, null, race));
 
+    /// <summary>
+    /// Runs <paramref name="race"/> once, when any context of these services saves, before anything is written: for
+    /// work that makes its contexts itself, out of the test's reach.
+    /// </summary>
+    public void BeforeAnySave(Func<Task> race) => Arm(new Armed(null, null, race));
+
     public override InterceptionResult<DbDataReader> ReaderExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
     {
         RunDue(eventData.Context, beforeSave: false);
@@ -143,7 +149,7 @@ public sealed class CommandHook : DbCommandInterceptor
         Func<Task>? race = null;
         lock (_gate)
         {
-            if (_armed is { } armed && ReferenceEquals(armed.Context, context) && (beforeSave ? armed.After is null : armed.Due))
+            if (_armed is { } armed && (armed.Context is null ? beforeSave : ReferenceEquals(armed.Context, context)) && (beforeSave ? armed.After is null : armed.Due))
             {
                 _armed = null;
                 Fired = true;
@@ -157,9 +163,10 @@ public sealed class CommandHook : DbCommandInterceptor
         }
     }
 
-    private sealed class Armed(DbContext context, Func<string, bool>? after, Func<Task> race)
+    private sealed class Armed(DbContext? context, Func<string, bool>? after, Func<Task> race)
     {
-        public DbContext Context { get; } = context;
+        /// <summary>The context it fires for, or <see langword="null"/> for the first of any to save.</summary>
+        public DbContext? Context { get; } = context;
 
         public Func<string, bool>? After { get; } = after;
 

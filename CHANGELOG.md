@@ -849,6 +849,31 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Tenancy
 
+- **Tenancy: a role made from a pack follows its pack.** A key added to the catalogue later, a module's new keys in
+  an administrators' pack that lists none or a key added to a pack, used to reach the tenants provisioned after it
+  and never the roles tenants already had. Now a role remembers what its pack gave it, `RoleAggregate.KeysFromPack`,
+  and `FollowPack` compares that with the pack as the catalogue builds it now: a key the pack gained is added, a key
+  it lost is taken out, and what the tenant changed itself stays. What a role remembers is always its pack's keys, so
+  a role an import made from a pack with keys of its own keeps them. A key the tenant added that the pack gains later
+  is the pack's from then on; a key the tenant took out that the pack loses and gains again comes back; a key that
+  is no longer live is never taken out; an archived role, and a role whose pack the catalogue no longer has, are left
+  as they are; and a role stored before the column, or made from a pack the catalogue did not have, with no record,
+  follows as if its pack had given it nothing yet, gaining every key of the pack it lacks and losing none. Each role
+  whose keys change raises `RoleFollowedItsPack`: the tenant, the role, the pack, the keys `Added` and `Removed`,
+  those of them that manage access, and who made the change. It is kept in the access history; the package sends no
+  message. The host turns it on with `builder.Services.SyncRolePacks()`, a call of its own and no start-up check,
+  which runs `IRolePackSync` once the host has started, in the background: every active and suspended tenant, one
+  after the other, as Tenancy's system work in each, one save per tenant that takes the access revision first, so a
+  second run changes nothing and two instances at once commit a tenant once. `AddTenancy` registers
+  `IRolePackSync` for a host that runs it from a deployment step or an operator's endpoint, and
+  `RoleCommands.FollowPacksAsync` follows the packs in one tenant, system work's alone. A role whose following would
+  leave the tenant without an administrator is left as it is, and named in the answer. A key that manages access
+  follows the same rule. The roles' table has a column more on every database, `KeysFromPack`, nullable, which a
+  migration of the application's adds. On Postgres no seat changes it (`tenancy_role_follows_its_pack`), a role
+  keeps the pack it was made from (`tenancy_role_pack_is_fixed`), and a role a seat adds names no pack, or is an
+  exact copy of one that remembers exactly the pack's keys. The sync writes under the policies, forced ones
+  included. See
+  [Packs after provisioning](docs/tenancy.md#packs-after-provisioning).
 - **Tenancy's checks are start-up checks.** `AddTenancy` brings `tenancy.catalogue-builds`, `tenancy.contexts-wired`
   and `tenancy.unknown-stored-keys`, which logs a key a role holds that the catalogue has lost; `AddTenancyPostgres`
   brings `tenancy.explicit-callers`, `tenancy.seated-token-roles`, `tenancy.system-in-role-confined`,
@@ -1465,6 +1490,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 #### Samples
 
+- **The Tenancy sample syncs its role packs.** Its host calls `SyncRolePacks()` after `RunStartupChecks()`, so a
+  key a module brings later reaches the flat tenants' Tenant admin and a key added to a pack reaches every role made
+  from it, at the next start. A role that followed its pack is kept in the access history, which the tenant's
+  administrators read on the History page. The Tenants module has a migration for the roles' new column,
+  `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
+  hosted services that ask the database something.
 - **Every sample context is wired with one call.** The Tenancy sample's three modules write
   `UseDDDToolkit(application)` where they wrote `UseDDDToolkit`, `UseSupabaseRowLevelSecurity` and `UseTenancy`,
   and the webshop's Supabase host registers row level security and nothing per context:

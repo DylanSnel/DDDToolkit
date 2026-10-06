@@ -153,7 +153,7 @@ public sealed partial class MigrationTests
     {
         var expected = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
-            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved", "20261005214244_UnitKindAsEnum"],
+            ["Tenants"] = ["20261001215449_Initial", "20261002014829_Invitations", "20261002081230_InvitedAccounts", "20261003012526_RoleUseRemoved", "20261005214244_UnitKindAsEnum", "20261006072714_KeysFromPack"],
             ["Projects"] = ["20261001215453_Initial", "20261003012507_ProjectRoles"],
             ["Inspections"] = ["20261001215456_Initial"],
         };

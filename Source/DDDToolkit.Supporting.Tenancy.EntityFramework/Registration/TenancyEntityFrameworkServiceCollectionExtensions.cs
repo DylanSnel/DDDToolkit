@@ -47,6 +47,11 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
     /// <c>services.RunStartupChecks()</c>: the catalogue builds, every context that keeps rows to a tenant checks
     /// its saves, and a key a role holds that the catalogue has lost is logged.
     /// </para>
+    /// <para>
+    /// And it registers <see cref="IRolePackSync"/> over the context, which brings every tenant's roles up to the
+    /// packs they were made from: <c>services.SyncRolePacks()</c> runs it once the host has started, and a host may
+    /// run it itself.
+    /// </para>
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configure">Sets Tenancy's options; the ways to make each id are required, the rest have defaults.</param>
@@ -89,6 +94,11 @@ public static class TenancyEntityFrameworkServiceCollectionExtensions
             EfTenancyStore<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>();
         services.AddScoped<ISeatDirectory<TTenantId, TSeatId>,
             EfSeatDirectory<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRoleId, TContext>>();
+
+        // What services.SyncRolePacks() runs once the host has started, and a host runs itself from a deployment step
+        // or an operator's endpoint: every tenant's roles follow their packs, tenant by tenant, over this context.
+        services.TryAddSingleton<IRolePackSync,
+            EfRolePackSync<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId, TContext>>();
 
         // One interceptor for every context: it keeps no state, and every context that keeps entities to a
         // tenant adds the same one. UseDDDToolkit adds it to every context it wires, as Tenancy's part.

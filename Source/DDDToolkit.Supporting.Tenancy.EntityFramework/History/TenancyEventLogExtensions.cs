@@ -19,7 +19,8 @@ public static class TenancyEventLogExtensions
     /// <item>A unit added, moved or archived.</item>
     /// <item>A seat added, suspended, reactivated or deactivated; placed in a unit, withdrawn from one, and its primary placement changed.</item>
     /// <item>A role granted to a seat or revoked from it.</item>
-    /// <item>A role created, its keys changed, with the keys that came in and went out, or archived.</item>
+    /// <item>A role created, its keys changed, with the keys that came in and went out, or archived; and a role that
+    /// followed its pack once the application changed the pack, with the same.</item>
     /// </list>
     /// <para>
     /// A rename changes nobody's access, so the four events that say a tenant's organization, a unit, a seat or a
@@ -80,6 +81,7 @@ public static class TenancyEventLogExtensions
         log.Keep<RoleCreated<TTenantId, TRoleId, TSeatId>>();
         log.Keep<RoleKeysChanged<TTenantId, TRoleId, TSeatId>>();
         log.Keep<RoleArchived<TTenantId, TRoleId, TSeatId>>();
+        log.Keep<RoleFollowedItsPack<TTenantId, TRoleId, TSeatId>>();
 
         return log;
     }

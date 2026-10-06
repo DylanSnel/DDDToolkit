@@ -53,8 +53,10 @@ suspended, deactivated or reactivated by the same rule, and a unit moved away fr
 roles are given by whoever holds `tenancy.grants.manage` where the seat is placed.
 [Who may give a role](#who-may-give-a-role) has the details.
 
-A tenant's roles start as copies of the catalogue's packs, and are the tenant's own from then on. Whoever
-holds `tenancy.roles.manage` for the whole tenant may put any key of the catalogue into any role, so that
+A tenant's roles start as copies of the catalogue's packs, and are the tenant's own to rename and re-key from
+then on. A role made from a pack still follows that pack when your application changes it, once the host syncs
+the packs, and what the tenant changed itself stays ([Packs after provisioning](#packs-after-provisioning)).
+Whoever holds `tenancy.roles.manage` for the whole tenant may put any key of the catalogue into any role, so that
 key is what makes an administrator: an active seat, placed at the root, that holds it there through a grant
 with no end. A key that manages access is added to a role, or taken out, by an administrator alone
 ([who may give a role](#who-may-give-a-role)).
@@ -69,7 +71,8 @@ that manage access, so whoever holds it can give the next role: a tenant cannot 
 not declare it. When your catalogue declares no administrators' pack at all, `TenancyCatalogue.Build` adds
 Tenancy's own, `TenancyPacks.DefaultAdministrators`: key `administrator`, named Administrator, for every
 shape, seeded when a tenant is provisioned. It lists no keys, so it holds every live key, one a module adds
-later included. So the smallest application declares no catalogue at all: its modules mark their keys, the
+later included, and a tenant that has the role already gets that key at the next sync of the packs
+([Packs after provisioning](#packs-after-provisioning)). So the smallest application declares no catalogue at all: its modules mark their keys, the
 host adds them with one generated call ([A module states its keys once](#a-module-states-its-keys-once)), and
 `options.Catalogue` stays unset. Packs that administer nothing, such as a viewer's, sit next to the default
 one.
@@ -136,6 +139,154 @@ can give every role, and appointing an area manager needs no system work. The li
 role starts with, not a wall around the seat: an administrator still puts any key into a role, and gives
 itself a role that manages no access, as every seat that manages grants may.
 
+### Packs after provisioning
+
+A tenant's roles are copies of the packs it was given, and the tenant changes them as it likes. Your packs change
+too: a module you add brings keys that an administrators' pack listing none now holds, and you add a key to a pack,
+or take one out. A tenant provisioned before that still has the role the old pack made. One call of the host's,
+`SyncRolePacks()`, brings those roles up to their packs once the host has started, in every tenant, without
+undoing what a tenant changed itself.
+
+```mermaid
+flowchart LR
+    Gave["what the pack<br/>gave the role"] --> Compare{"compared with<br/>the pack now"}
+    Now["the pack as your<br/>catalogue has it"] --> Compare
+    Compare -- gained --> Added["added to<br/>the role"]
+    Compare -- lost --> Removed["taken out of<br/>the role"]
+    Compare -- same --> Kept(["the tenant's own<br/>changes stay"])
+    Added --> Event["RoleFollowedItsPack,<br/>and remembered"]
+    Removed --> Event
+```
+
+Every role made from a pack remembers what the pack gave it, `KeysFromPack`: as the pack was when the role was
+made, and since then as it was when the role last followed it. The sync compares that with the pack as your
+catalogue builds it now. A key the pack gained is added to the role, and a key it lost is taken out. A key the
+tenant took out of the role stays out while the pack still holds it, and a key the tenant added stays while the
+pack never held it: neither is a change of the pack. Say a tenant took closing boards out of its Project lead, and
+you later add archiving boards to that pack: at the next start the role gets archiving, and closing stays out. A
+tenant whose Administrator came from the default administrators' pack gets the keys of a module you add, and
+nobody makes a role for them by hand.
+
+What the comparison cannot tell apart is settled this way:
+
+| Case | What the sync does |
+|---|---|
+| A key the tenant added by hand, which the pack gains later and loses again | Once the pack holds it, it is the pack's: it goes when the pack loses it, and the event says so |
+| A key the tenant took out, which the pack loses and later gains again | It comes back as a key the pack gained: once the pack lost it, the role no longer remembers it. The event names it, among the keys that manage access when it manages access |
+| A key that is no longer live, retired or removed from your code | It stays on the role. It grants nothing, and retiring a key changes no role |
+| A key that a key the role keeps implies | It stays, or comes with that key, as everywhere a role's keys are set |
+| An archived role | Left as it is: it grants nothing, and changes no more |
+| A role an import or a seeding made from a pack with keys of its own | It remembers the pack's keys, not its own, so what it holds beyond the pack, or lacks, is the tenant's and stays |
+| A role whose pack your catalogue no longer has | It keeps its keys and what it remembers, and follows the pack again if you declare it again under the same key |
+| A role made before roles remembered their pack, whose column is empty, or made from a pack your catalogue did not have then | It follows as if the pack had given it nothing yet: it gets every key of the pack it lacks, and loses none |
+| A role whose keys are stored in another order | The same keys are no change: they are saved in order, and no event is raised |
+| A role whose following would take the administrator key from the tenant's last administrators | Left as it is, and named in the answer. It follows once the tenant has an administrator through another role |
+
+A key that manages access follows the same rule. An administrator alone adds one to a role or takes one out
+([who may give a role](#who-may-give-a-role)), but only your code puts a key in a pack, so the sync, which is your
+application's work, follows the pack in those keys too. The event names them apart, so whoever tells the tenant
+can say that the change gives or takes away power over other people's access.
+
+**Turning it on** is one call, next to the start-up checks and not among them: a check reads and changes nothing,
+and this changes the tenants' roles. It runs once per start, in the background, after the start-up checks and
+after every hosted service has started, so a seeding of your own is done by then; the host serves meanwhile. It
+visits the active and the suspended tenants one after the other, and in each runs `RoleCommands.FollowPacksAsync`
+as Tenancy's system work in that tenant, so on Postgres it writes under the policies, in Tenancy's own scope. Each
+tenant is one save, which takes the tenant's access revision first, as every change of rights does. So a second run
+changes nothing, and two instances of the host that start at once cannot both commit a tenant: the one that loses
+reads the tenant again and finds nothing left to change. A tenant whose sync fails is logged, and left for the
+next start.
+
+`AddTenancy` registers what the call runs, `IRolePackSync`. A host that would rather sync from a deployment step,
+or behind an endpoint of its operators, leaves the call out and runs that itself, and an operator who syncs one
+tenant runs the use case in it, recorded as the operator.
+
+<details>
+<summary>Show the code: turning the sync on, and running it yourself</summary>
+
+```csharp
+// The host
+builder.Services.RunStartupChecks();
+builder.Services.SyncRolePacks();   // once the host has started, every tenant's roles follow their packs
+
+// A deployment step, or an operator's endpoint for every tenant: the same, run when you say
+var report = await services.GetRequiredService<IRolePackSync>().SyncAsync(cancellationToken);
+if (!report.Succeeded)
+{
+    foreach (var (tenant, error) in report.Failed)
+    {
+        logger.LogError(error, "The roles of tenant {Tenant} did not follow their packs", tenant);
+    }
+}
+
+// One tenant, for an operator, whom the events then name
+using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
+{
+    var followed = await roles.FollowPacksAsync(cancellationToken);   // ShopTenancy.RoleCommands
+    // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirPack
+}
+```
+
+</details>
+
+**Telling the tenant.** Each role that changes raises `RoleFollowedItsPack`: the tenant, the role, the pack, the
+keys that came in, `Added`, and went out, `Removed`, those of them that manage access, `ManagingAccess`, and who
+made the change, `By`, the system. The package sends no message itself. `AddTenancyEventLog` keeps the event in the
+[access history](#access-history), where the tenant's administrators read it, and that is all the sample does. To
+mail them, publish the event as a contract of your own and handle that where your application sends mail.
+
+<details>
+<summary>Show the code: mailing a tenant's administrators when a role followed its pack</summary>
+
+```csharp
+// The contract, in the module that publishes it
+[IntegrationEvent]
+public sealed record RoleFollowedItsPackV1(long TenantId, Guid RoleId, string Pack, string[] Added, string[] Removed, string[] ManagingAccess);
+
+// Tenancy's outbox: mapped before AddTenancyDomainEvents, which keeps every event it has no mapping for off the sinks
+options.UseOutbox<ShopTenancyContext>(outbox => outbox
+    .PublishAs<RoleFollowedItsPack<TenantId, RoleId, SeatId>, RoleFollowedItsPackV1>(followed => new RoleFollowedItsPackV1(
+        followed.TenantId.Value, followed.RoleId.Value, followed.Pack, [.. followed.Added], [.. followed.Removed], [.. followed.ManagingAccess]))
+    .AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()
+    .KeepEventLog(log => log.AddTenancyEventLog<TenantId, SeatId, OrganizationUnitId, RoleId>()));
+
+// Where your application sends mail: who administers the tenant, and where to write to them, is yours to know
+public sealed class TellTheAdministrators(IShopAdministrators administrators, IMailer mailer)
+    : IIntegrationEventHandler<RoleFollowedItsPackV1>
+{
+    public async Task HandleAsync(RoleFollowedItsPackV1 followed, IntegrationEventMessage message, CancellationToken cancellationToken)
+    {
+        // A role may only gain keys, or only lose them: a line is written for what happened, and none for what did not
+        string?[] lines =
+        [
+            $"The role made from the pack {followed.Pack} changed with the application.",
+            followed.Added.Length > 0 ? $"It gained {string.Join(", ", followed.Added)}." : null,
+            followed.Removed.Length > 0 ? $"It lost {string.Join(", ", followed.Removed)}." : null,
+            followed.ManagingAccess.Length > 0 ? $"It changes who may manage access: {string.Join(", ", followed.ManagingAccess)}." : null,
+        ];
+        var body = string.Join(Environment.NewLine, lines.OfType<string>());
+
+        foreach (var address in await administrators.AddressesAsync(followed.TenantId, cancellationToken))
+        {
+            await mailer.SendAsync(address, "A role changed with the application", body, cancellationToken);
+        }
+    }
+}
+```
+
+The handler is delivered at least once, so it remembers the message it mailed for, by `message.MessageId`, when a
+second mail would matter. [Integration events](integration-events.md) has the handler's registration, and where it
+says what it runs as.
+
+</details>
+
+The roles' table has one column more, `KeysFromPack`, on every database, which a migration of yours adds like any
+change of the model: nullable, so the rows stored before it have none, and follow as the table above says. On
+Postgres the export writes two triggers and a stricter policy for it as well. A seat that changes a role does not
+change the column: a trigger refuses that, as a policy refuses, and another keeps the pack a role was made from. A
+role a seat adds names no pack, or is an exact copy of one, remembering exactly the pack's keys
+([What the policies check](#what-the-policies-check)).
+
 ## Adopting it, step by step
 
 Tenancy becomes a module of your application, like any other. In the order you would do it:
@@ -152,7 +303,8 @@ Tenancy becomes a module of your application, like any other. In the order you w
    packs a tenant starts with, keys no module owns, and a mark on every key that manages access
    ([What the catalogue is for](#what-the-catalogue-is-for)). Declare no administrators' pack, and every tenant
    starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)); need none of the rest, and
-   leave the catalogue out.
+   leave the catalogue out. `SyncRolePacks()` in the host brings a pack you change later to the roles tenants
+   already made from it ([Packs after provisioning](#packs-after-provisioning)).
 4. **Say who is calling, per request.** After authentication, `TenantSelection` finds the seat the token's
    identity has in the tenant the request names, and that seat is the caller for the rest of the request
    ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy) has the middleware).
@@ -1604,7 +1756,8 @@ The use cases ask it whenever they make a role from a pack, in the language you 
 
 Without a language, without registered texts, or where `For` answers `null`, a role gets the catalogue's
 texts. The texts are chosen once. Afterwards the role is the tenant's own, renamed like any role, and a
-tenant that changes its language later keeps its roles' names. A translated name is checked like any role's
+tenant that changes its language later keeps its roles' names. A role that [follows its pack](#packs-after-provisioning)
+follows it in its keys alone: its name and description stay the tenant's. A translated name is checked like any role's
 name: blank or too long is `tenancy.name-invalid`, and two packs of one shape under one name, ignoring case,
 are `tenancy.role-name-taken`, so give every pack a name of its own in every language.
 
@@ -1976,7 +2129,7 @@ options.UseOutbox<TenancyContext>(outbox => outbox
 | A unit | `tenancy.organization-unit-added`, `tenancy.organization-unit-moved`, `tenancy.organization-unit-archived` |
 | A seat | `tenancy.seat-added`, `tenancy.seat-suspended`, `tenancy.seat-reactivated`, `tenancy.seat-deactivated`, `tenancy.seat-placed`, `tenancy.seat-withdrawn`, `tenancy.primary-placement-changed` |
 | A seat's roles | `tenancy.organization-role-granted`, `tenancy.organization-role-revoked` |
-| A role | `tenancy.role-created`, `tenancy.role-keys-changed`, `tenancy.role-archived` |
+| A role | `tenancy.role-created`, `tenancy.role-keys-changed`, `tenancy.role-archived`, `tenancy.role-followed-its-pack` |
 
 A rename changes nobody's access, so the four events that say the organization, a unit, a seat or a role is
 called something else are left out: `tenancy.organization-renamed`, `tenancy.organization-unit-renamed`,
@@ -1988,7 +2141,8 @@ keeps every event of the context.
 [actor](#who-changed-a-row) of the caller whose command raised it, a seat, an operator by its verified
 identity, the system with its scope, or a token. So an event about a tenant, a unit or a role is closed over
 the seat id as well (`TenantSuspended<TenantId, SeatId>`), and `RoleKeysChanged` also names the keys that came
-in, `Added`, and went out, `Removed`, implied keys included. The use cases pass their caller's actor. A method
+in, `Added`, and went out, `Removed`, implied keys included, as `RoleFollowedItsPack` does for a role that
+[followed its pack](#packs-after-provisioning). The use cases pass their caller's actor. A method
 of an aggregate that you call yourself takes it as its last argument, `by`; a tenant, an organization and a
 role do not know the seat id's type, so with nobody to name you name the type: `tenant.Activate<SeatId>()`.
 
@@ -3638,6 +3792,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleTenancyContribution.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleTenancyContribution.cs), `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
 | A catalogue that declares no administrators' pack gets Tenancy's own, holding every live key, for every shape; one that declares an administrators' pack declares one for every shape | **Code:** [`TenancyPacks.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyPacks.cs), [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs)<br/>**Try it:** Not in the sample: it declares an administrators' pack for each shape. The publishing house the package check builds against the packed packages declares none ([`Tenants.cs`](../build/package-consumers/SupportingDomains/Domain/Tenants.cs)), and the check finds the default in the access file its export writes<br/>**Test:** `CatalogueTests`, `TenantCommandsTests`, `ProvisioningTests`, and the package check, build/verify-package-consumption.sh |
+| A role made from a pack follows its pack once the host syncs the packs: what the pack gained is added and what it lost is taken out, what the tenant changed itself stays, and the tenant's administrators read it in the history. The host turns it on with a call of its own, not among its start-up checks | **Code:** [`RoleAggregate.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/Roles/RoleAggregate.cs), [`TenancyUseCases.Roles.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Roles/TenancyUseCases.Roles.cs), [`EfRolePackSync.cs`](../Source/DDDToolkit.Supporting.Tenancy.EntityFramework/RolePacks/EfRolePackSync.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs)<br/>**Try it:** On [the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts), whose database stays: start the host once and stop it, add a key to a pack in [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), build `Examples.Tenancy.Exporter`, which writes a new `*_access.tenants.ddd.sql`, run `supabase migration up`, and start the host again: the role has the key, and maud reads `tenancy.role-followed-its-pack` on the History page. Under the AppHost the database is new every run, so provisioning gives the key and the sync has nothing to follow<br/>**Test:** `RoleFollowsItsPackTests`, `FollowPacksTests`, `RolePackSyncTests`, `RolePackSyncScenarios` |
 | A crew member holds several roles, each with dates of its own. The roles are the tenant's project roles, kept by the Projects module with the Membership package: made from starter roles when a tenant is set up, and the tenant's own to make, rename, re-key and archive | **Code:** [`CrewMember.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/Projects/Entities/CrewMember.cs), [`ProjectRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), [`SetUpProjectRoles.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/ProjectRoles/Commands/SetUpProjectRoles.cs)<br/>**Try it:** The crew table on a project's page, and the Crew roles page. Presets `organization-role-on-a-crew` and `crew-role-held-twice`<br/>**Test:** `CrewMembershipScenarios`, `ProjectRoleScenarios`, `ProjectCrewTests` |
 | A seat that gives up its own place on a crew is saved as the application's work for that seat, because a database that checks rows judges each statement by the rows as they are then. Only for the command whose check let it through, the request in hand: a handler reached around its check saves as the caller, and the database judges it. That save writes the one project it changed and refuses when the unit of work holds anything else. It is the sample's answer; the toolkit has no general one | **Code:** [`OwnPlaceOnTheCrew.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/OwnPlaceOnTheCrew.cs), [`EfProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Persistence/EfProjectStore.cs)<br/>**Try it:** No preset. In the UI, leo gives vic Crew lead on Pier 7, and vic takes that role from himself<br/>**Test:** `CrewRoleScenarios`, `AccessHoldScenarios` |
 
@@ -4261,7 +4416,7 @@ tenant reads through the use cases, and writes where the use case asks the key:
 | SeatPlacements | the tenant's | placed with `tenancy.seats.manage` at the unit, for a seat of the tenant; withdrawn with it there, or by the seat itself, once the placement holds no grant; changed with it held, and made primary only where it is held at the unit, since making one primary demotes the old one wherever that is |
 | SeatRoleGrants | the seat's own; every grant of the tenant for a seat that holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage` somewhere, or `tenancy.roles.manage` for the whole tenant | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
 | SeatRights | the seat's own | by no caller: the database writes them |
-| Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant; added with that, or with `tenancy.settings.manage` as a copy of one of your catalogue's packs |
+| Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant, which adds a role made by hand, naming no pack; a copy of one of your catalogue's packs, remembering exactly its keys, is added with that or with `tenancy.settings.manage`. What a role's pack gave it no seat changes (a trigger, below) |
 | TenancyAccessRevisions | the tenant's, for a person with a seat there of any status | by the same person: it is a counter every change of access takes, a seat's change of its own included |
 | The access history, where the context maps one | the tenant's, with `tenancy.history.view` for the whole tenant | added about the person's own seat, in the tenant the connection names; changed and removed by no caller ([Access history](#access-history)) |
 | Invitations and the digests of their tokens, where the context maps them | an invitation with `tenancy.seats.manage` at its unit; a digest by no caller | added by a seat that could add the seat and make the grant itself, and changed to cancelled and nothing else ([Invitations](#invitations)) |
@@ -4285,8 +4440,9 @@ only by a seat that holds each such key at the grant's unit, and never given by 
 much it holds. The same goes for withdrawing a placement: the database would take its grants with it, so a
 placement goes only once its grants are gone. Every change of a role, of its keys and archiving it included,
 takes `tenancy.roles.manage` for the whole tenant. A settings manager adds a role only as a copy of a pack,
-as the use case that changes a tenant's shape does: it names the pack, and holds exactly the keys `pack_keys`
-says. When you mark another key, or change a pack, the next build writes these functions again, and the
+as the use case that changes a tenant's shape does: it names the pack, holds exactly the keys `pack_keys` says, and
+remembers exactly those as what the pack gave it, which the next sync of the packs compares the pack with. A role
+manager adds such a copy too, or a role made by hand that names no pack and remembers none. When you mark another key, or change a pack, the next build writes these functions again, and the
 access file it writes is the migration: nobody writes it by hand. An administrators' pack that lists no keys
 holds every key, Tenancy's default one included, so adding a key writes them again as well.
 
@@ -4339,9 +4495,10 @@ to, in the caller's tenant, and written by whoever may change that row. Tenancy'
 contribution's alone: a rule or another contribution that would add a policy to one is refused.
 
 **The triggers** that check, next to the one that writes the rights, fire for every role, the tables' owner
-included. A use case trips the first only in a race with another that takes away an administrator, and the
-last only when the calling seat loses a key between the use case's check and its save; the others it never
-trips. The first three check at commit what the transaction wrote, the last two as the row changes:
+included. A use case trips the first only in a race with another that takes away an administrator, and the one
+on a seat's status only when the calling seat loses a key between the use case's check and its save; the others,
+the one on what a role's pack gave it included, it never trips. The first three check at commit what the
+transaction wrote, the last three as the row changes:
 
 - a tenant, active or suspended, keeps an administrator: a seat that holds `tenancy.roles.manage` at the root
   with no end, through an active role, and is active itself. A closed tenant needs none, and a tenant that has
@@ -4351,22 +4508,26 @@ trips. The first three check at commit what the transaction wrote, the last two 
 - every right a seat holds comes from a grant of an active role of its tenant that holds the key, for the
   grant's period;
 - the paths of a unit are exactly the units above it and itself, in its tenant;
-- a seat keeps the identity and the tenant it was made with, a placement its seat, unit and tenant, and a
-  grant its seat, unit, role and the seat that gave it;
+- a seat keeps the identity and the tenant it was made with, a placement its seat, unit and tenant, a grant
+  its seat, unit, role and the seat that gave it, and a role the pack it was made from;
 - a seat's status changes only by a seat that could give and take away what the status gives and takes
   away. The rights follow the status: a seat made active again gets every grant back, and one suspended or
   deactivated loses them. So the calling seat holds `tenancy.seats.manage` for the whole tenant, as the use
   cases ask, and holds, at the unit of each grant of the seat that has not ended, every key that manages
   access of that grant's role. Its own grants that apply now are its own hold, so a seat that manages seats
   suspends itself. System work and the tables' owner are no seat and are not held to it; the policies, and
-  the administrator a tenant keeps, hold those.
+  the administrator a tenant keeps, hold those;
+- what a role's pack gave it, which the [sync of the packs](#packs-after-provisioning) compares the pack with, is
+  changed by no seat: a role manager who wrote it could have the next sync add to the role what the pack never gave
+  it. It is written as a role is made from its pack, and as Tenancy's own system work makes the role follow it.
+  System work and the tables' owner are no seat, so a migration that fills the column passes.
 
 The first four hold what may never be, whoever writes, and raise `check_violation`: a use case that trips one
 has a bug, and fails as one, except the last administrator, which Tenancy's store answers with the use case's
-own refusal. The last is an access guard: it holds who may, and refuses as a policy does, with `42501` and the
+own refusal. The last two are access guards: they hold who may, and refuse as a policy does, with `42501` and the
 toolkit's hint.
 
-A save a policy or that trigger denies is refused with `access.refused`, a refusal of the kind "not
+A save a policy or one of those two triggers denies is refused with `access.refused`, a refusal of the kind "not
 permitted": an insert or an update whose new row a policy refuses, a status the calling seat lost a key for
 between the use case's check and its save, and an update or a delete of a row a policy hides from the statement.
 That last one changes no row, exactly as a lost race does, so the row is read again first; a row somebody else
@@ -4602,3 +4763,7 @@ choices.
   asked of the directory, by id.
 - It does not publish integration events or create tables. Those are your module's.
 - It never links a seat to a person by their e-mail address. A seat is linked to a verified identity.
+- It does not copy a pack you add later into the tenants that exist already: a tenant gets the packs of its shape when
+  it is provisioned, and those of a new shape when it changes shape. The [sync](#packs-after-provisioning) brings
+  the roles a tenant has up to their packs, and makes none. Nor does it send a message about what the sync
+  changed: it raises the event, and the access history keeps it.

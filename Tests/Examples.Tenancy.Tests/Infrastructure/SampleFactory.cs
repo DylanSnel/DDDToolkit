@@ -71,9 +71,9 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
     /// </summary>
     /// <remarks>
     /// The host is given a connection string nothing answers, and what would use it at start-up is taken out or
-    /// turned off: every hosted service of the sample and of the toolkit's Entity Framework package, which are the
-    /// seeding and the outbox pollers, are taken out, and the start-up checks are turned off, with the reason, the
-    /// way a host does without them. ASP.NET Core's own hosted services stay, and so does the in-memory gateway's
+    /// turned off: every hosted service of the sample, of the toolkit's Entity Framework package and of the supporting
+    /// domains, which are the seeding, the outbox pollers and Tenancy's sync of the role packs, are taken out, and the
+    /// start-up checks are turned off, with the reason, the way a host does without them. ASP.NET Core's own hosted services stay, and so does the in-memory gateway's
     /// check that the modules' schemas compose. Nothing else of the host is changed, so a request that needs a row
     /// fails here, which is what such a test should never send.
     /// </remarks>
@@ -112,8 +112,9 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
         => new(Environments.Development, new Dictionary<string, string> { ["ConnectionStrings:" + SampleStorage.ConnectionString] = string.Empty }, services: null);
 
     /// <summary>
-    /// Whether a registration is a hosted service of the sample or of the toolkit's Entity Framework package:
-    /// those are the ones that ask the database something when the host starts, or keep asking while it runs.
+    /// Whether a registration is a hosted service of the sample, of the toolkit's Entity Framework package or of a
+    /// supporting domain: those are the ones that ask the database something when the host starts, or keep asking
+    /// while it runs, Tenancy's sync of the role packs once the host has started among them.
     /// </summary>
     private static bool NeedsTheDatabaseAtStartUp(ServiceDescriptor descriptor)
     {
@@ -129,7 +130,8 @@ public sealed class SampleFactory : WebApplicationFactory<Program>
         var assembly = implementation.Assembly.GetName().Name!;
 
         return assembly.StartsWith("Examples.Tenancy.", StringComparison.Ordinal)
-            || assembly.StartsWith("DDDToolkit.EntityFramework", StringComparison.Ordinal);
+            || assembly.StartsWith("DDDToolkit.EntityFramework", StringComparison.Ordinal)
+            || assembly.StartsWith("DDDToolkit.Supporting.", StringComparison.Ordinal);
     }
 
     /// <summary>

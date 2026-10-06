@@ -6,7 +6,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 {
     /// <summary>
     /// The tenant's roles: making them, renaming them, changing their keys and archiving them. Each needs
-    /// <see cref="TenancyKeys.RolesManage"/> for the whole tenant.
+    /// <see cref="TenancyKeys.RolesManage"/> for the whole tenant. Following the packs the roles were made from,
+    /// once the application changed them, is system work's alone (<see cref="FollowPacksAsync"/>).
     /// <para>
     /// A holder of that key may put any live key into any role, keys it does not hold included. That is on
     /// purpose: it is the administrator's key, and an administrator can give themselves anything already. One
@@ -144,6 +145,98 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             await gate.EnsureAdministratorRemainsAsync(tenantId, AdministratorLoss.OfRole(role), cancellationToken).ConfigureAwait(false);
             archived.Archive(gate.By);
             await store.SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Every active role of the caller's tenant that was made from a pack follows that pack, as the catalogue the
+        /// application runs with builds it now (<see cref="RoleAggregate{TRoleId, TTenantId}.FollowPack{TSeatId}"/>):
+        /// a key the pack gained since is added, a key it lost is taken out, and what the tenant changed itself stays.
+        /// Each role whose keys change raises <see cref="RoleFollowedItsPack{TTenantId, TRoleId, TSeatId}"/>, and the
+        /// change reaches every seat that holds the role at the save, the one save of the command.
+        /// <para>
+        /// System work in the tenant alone runs it, as <c>services.SyncRolePacks()</c> does for every tenant once
+        /// the host has started, through <see cref="IRolePackSync"/>; an operator's request begins
+        /// <c>TenancyWork.BeginOperatorIn(tenant, operator)</c> for one tenant, and the events name the operator. No
+        /// seat runs it: what a pack holds is the application's decision, keys that manage access included, and an
+        /// administrator changes a role with <see cref="SetKeysAsync"/>.
+        /// </para>
+        /// <para>
+        /// It takes the tenant's access revision first, as every change of rights does, and saves only when a role
+        /// changed: a second run in a row reads, and writes nothing. Two runs at the same time cannot both commit; the
+        /// one that fails on the revision changes nothing when it runs again. The last-administrator rule holds for
+        /// it as for anyone: a role whose following would take the administrator key from the tenant's last
+        /// administrators is left as it is, and named in the answer.
+        /// </para>
+        /// </summary>
+        /// <param name="cancellationToken">Cancels the work.</param>
+        /// <returns>The roles that changed, the roles kept for an administrator, and the roles whose pack is gone.</returns>
+        /// <exception cref="Exceptions.RefusalException"><c>access.system-only</c> for a seat.</exception>
+        /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
+        public async Task<PacksFollowed> FollowPacksAsync(CancellationToken cancellationToken)
+        {
+            var gate = new Gate(store, catalogue, clock);
+            var tenantId = gate.RequireSystemInTenant("A tenant's roles are made to follow their packs");
+            await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+            var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false))
+                .Where(role => role.FromPack is not null && role.Status == RoleStatus.Active)
+                .OrderBy(role => role.FromPack, StringComparer.Ordinal)
+                .ToArray();
+
+            // Everything is decided before a role changes, so a refusal leaves nothing for a later save to write. The
+            // administrators as last saved are read once, and only when a role would lose the administrator key: the
+            // roles that lose it are counted together, so two of them cannot each leave the other's administrators.
+            var following = new List<TRole>();
+            var kept = new List<TRoleId>();
+            var gone = new List<TRoleId>();
+            var losing = new HashSet<TRoleId>();
+            IReadOnlyList<(TSeatId Seat, TRoleId Role)>? administrators = null;
+            foreach (var role in roles)
+            {
+                if (role.KeysAfterFollowing(catalogue) is not { } next)
+                {
+                    gone.Add(role.Id);
+                    continue;
+                }
+
+                if (role.Holds(TenancyKeys.AdministratorKey) && !next.Keys.Contains(TenancyKeys.AdministratorKey, StringComparer.Ordinal))
+                {
+                    administrators ??= await store.AdministratorsAsync(tenantId, gate.Now, cancellationToken).ConfigureAwait(false);
+                    if (administrators.Count > 0 && administrators.All(pair => losing.Contains(pair.Role) || pair.Role.Equals(role.Id)))
+                    {
+                        kept.Add(role.Id);
+                        continue;
+                    }
+
+                    losing.Add(role.Id);
+                }
+
+                following.Add(role);
+            }
+
+            // A role whose keys changed raised its event. One that saves only what it remembers of its pack, or its keys
+            // in the order a role keeps them, is saved without one: the same keys are no change to tell anyone about.
+            var changed = new List<TRoleId>();
+            var saves = false;
+            foreach (var role in following)
+            {
+                var before = role.Keys.ToHashSet(StringComparer.Ordinal);
+                if (role.FollowPack(catalogue, gate.By))
+                {
+                    saves = true;
+                    if (!before.SetEquals(role.Keys))
+                    {
+                        changed.Add(role.Id);
+                    }
+                }
+            }
+
+            if (saves)
+            {
+                await store.SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return new PacksFollowed(changed, kept, gone);
         }
 
         private async Task RequireNameFreeAsync(TTenantId tenant, string name, TRoleId? except, CancellationToken cancellationToken)
