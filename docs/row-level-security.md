@@ -2100,12 +2100,11 @@ threw. The check is asked again only for a save the policies refused, and only w
 check, which every other save does without. Asked again, a check keeps nothing for a handler (`Checked<T>`), so
 nothing of that second asking stays behind.
 
-What is asked again is the check the request declared. A rule a handler checks itself, past what its request
-declared, is not part of it. Nor is the gate inside a package's use case: a request that leaves the checking to
-the package, as the requests of Tenancy's use cases do with `TenancyRequirement.DecidedByThePackage`, declares a
-requirement whose check asks nothing of the caller, so asked again it lets the caller through. A change of rights
-against either is still a warning, and the warning names the requirement that was asked again, so it shows when
-that one asked nothing. A save made after the handler returned, by a pipeline behavior around the access
+What is asked again is the requirement the request declared. A rule a handler checks itself, past what its
+request declared, is not part of it. Nor is what a package's use case asks past it: a request handed to one of
+Tenancy's use cases declares what the use case asks first, `TenancyAccess.InTenant()` say, and the use case asks
+the rest itself. A change of rights against either is still a warning, and the warning names the requirement
+that was asked again, so it shows how little that one asked. A save made after the handler returned, by a pipeline behavior around the access
 behavior, runs outside the handler's flow and finds no check to ask: the warning without a request. A check that
 gives no answer the second time leaves the warning too, and the warning says why: its connection gone, say, or a
 `ConcurrencyConflictException` because what the request is about moved on from the version it named, which says
