@@ -1029,6 +1029,78 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
     }
 
     [Fact]
+    public async Task A_handler_of_inspections_reached_past_the_mediator_records_nothing_on_a_closed_project()
+    {
+        await using var host = await sample.StartAsync();
+        var pier = Harbor.ProjectNamed("Pier 7").Id;
+        const string Title = "Recorded past the door on a closed project";
+
+        using (AsSeatOf(DemoPeople.Rhea))
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CloseProject(pier), Cancellation);
+        }
+
+        // Juno is a surveyor on Pier 7's crew: she holds the key to record, so the database would write her
+        // inspection, since that a closed project takes none is the application's to say. Called directly, the
+        // command passed no check, and the handler, which asks Projects' gate again, says it.
+        using (AsSeatOf(DemoPeople.Juno))
+        {
+            (await RefusalOfAsync(host, new RecordInspection(pier, Title))).Code.Should().Be(InspectionRefusals.ProjectClosed, "sent, the check refuses it");
+
+            await using var scope = host.Services.CreateAsyncScope();
+            var record = ActivatorUtilities.CreateInstance<RecordInspectionHandler>(scope.ServiceProvider);
+            var recording = async () => await record.Handle(new RecordInspection(pier, Title), Cancellation);
+            (await recording.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(InspectionRefusals.ProjectClosed);
+
+            var listed = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new ProjectInspections(pier), Cancellation);
+            listed.Items.Items.Select(inspection => inspection.Title).Should().NotContain(Title, "the handler called directly recorded nothing");
+        }
+    }
+
+    [Fact]
+    public async Task A_project_closed_between_the_check_and_the_handler_takes_no_inspection()
+    {
+        // The project is open when the access check asks Projects' gate, and closed by the time the handler asks it
+        // for the planned range: the handler holds that answer to the check's rule, so the close is not ignored.
+        await using var host = await sample.StartAsync(services =>
+            services.AddScoped<IPipelineBehavior<RecordInspection, InspectionId>, PierClosedMeanwhile>());
+        var pier = Harbor.ProjectNamed("Pier 7").Id;
+        const string Title = "Recorded in the race";
+
+        using (AsSeatOf(DemoPeople.Juno))
+        {
+            (await RefusalOfAsync(host, new RecordInspection(pier, Title))).Code.Should().Be(InspectionRefusals.ProjectClosed);
+        }
+
+        using (AsSeatOf(DemoPeople.Rhea))
+        {
+            await using var scope = host.Services.CreateAsyncScope();
+            var listed = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new ProjectInspections(pier), Cancellation);
+            listed.Items.Items.Select(inspection => inspection.Title).Should().NotContain(Title);
+            listed.CanRecord.Should().BeFalse("the project is closed");
+        }
+    }
+
+    /// <summary>
+    /// Closes Pier 7 after the access check of a <see cref="RecordInspection"/> let it through and before its
+    /// handler runs: in a scope of its own and as Rhea, who may close it, as her request arriving in between would.
+    /// </summary>
+    private sealed class PierClosedMeanwhile(IServiceScopeFactory scopes) : IPipelineBehavior<RecordInspection, InspectionId>
+    {
+        public async ValueTask<InspectionId> Handle(RecordInspection message, MessageHandlerDelegate<RecordInspection, InspectionId> next, CancellationToken cancellationToken)
+        {
+            using (SampleCallers.BeginSeatOf(DemoPeople.Rhea, DemoData.Harbor))
+            {
+                await using var scope = scopes.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new CloseProject(message.Project), cancellationToken);
+            }
+
+            return await next(message, cancellationToken);
+        }
+    }
+
+    [Fact]
     public async Task A_host_that_leaves_a_module_s_access_behavior_out_does_not_start_and_says_the_line_that_adds_it()
     {
         // The module's checks are registered and the behavior that asks them is not, so its requests would reach

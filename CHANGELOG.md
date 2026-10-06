@@ -1981,11 +1981,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   the save tied to it adds `UseMemberHolds(serviceProvider)` to its context, and its handlers drop the line. The
   Tenancy sample's handlers take nothing from their checks any more: `IProjectStore.LoadAsync(id,
   expectedVersion)`, `ProjectsAccessCheck` keeps no unit, `InspectionsAccessCheck` keeps no project, and
-  `GatedProject` and `GatedProjects` are gone; a handler called directly is held by the database alone, where it
+  `GatedProject` and `GatedProjects` are gone; a handler called directly is held by the database, where it
   threw before, and recording an inspection asks Projects' gate a second time, in the handler, for the
-  project's planned range. A seat that gives up its own place on a crew is saved as the application's work only
-  for the command whose check let it through, the request in hand, and as the caller otherwise, so a handler
-  reached around its check is refused by the database there too. `AccessChecks.RequireAsync` puts the request in hand for the flow that asked
+  project's planned range, and holds that answer to the check's own rule. The database knows nothing of a closed
+  project, so that rule is the application's: a handler of inspections called directly, or one whose project
+  was closed after its check, is refused with `projects.closed` in the handler. A seat that gives up its own
+  place on a crew is saved as the application's work only for the command whose check let it through, the
+  request in hand, and as the caller otherwise, so a handler reached around its check is refused by the
+  database there too. `AccessChecks.RequireAsync` puts the request in hand for the flow that asked
   (`RequestInHand`).
 - **For the 3.2.0 previews: every request says what it requires.** `3.2.0-preview.1` and `3.2.0-preview.2`
   shipped `AccessRequirement.Open(reason)` and Tenancy's `DecidedByThePackage`, `SystemWorkInTenant` and

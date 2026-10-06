@@ -25,7 +25,9 @@ namespace Examples.Tenancy.Inspections.Application.Access;
 /// <para>
 /// It keeps nothing for the handler. A request that passes is handled on the project it names, which is the one
 /// the gate answered for; what the handler needs of the project besides, the days it is planned for, it asks the
-/// gate itself, as it is when the inspection is recorded.
+/// gate itself, as it is when the inspection is recorded, and holds that answer to this check's rule
+/// (<see cref="Require"/>): the database writes an inspection for a seat that holds the key and knows nothing of a
+/// closed project, so the handler says that too.
 /// </para>
 /// <para>
 /// A request about several projects (<see cref="InspectionsRequirement.OnProjectsInReach"/>) is refused for none
@@ -103,7 +105,17 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
     /// Refuses unless the answer lets the caller do what <paramref name="key"/> stands for; on an open project only,
     /// when <paramref name="open"/> says the request adds to it.
     /// </summary>
-    private static void Require(ProjectAnswer answer, string key, bool open)
+    /// <remarks>
+    /// A handler that asks the gate again holds its fresh answer to this same rule, so a handler called directly
+    /// refuses what the check would have, and a project closed since the check takes nothing.
+    /// </remarks>
+    /// <param name="answer">The gate's answer about the caller and the project.</param>
+    /// <param name="key">The key the request requires on the project.</param>
+    /// <param name="open">Whether the request adds to the project, which a closed project refuses.</param>
+    /// <exception cref="Exceptions.RefusalException">
+    /// <c>projects.not-found</c>, <c>projects.closed</c> or <c>projects.not-permitted</c>, in that order.
+    /// </exception>
+    internal static void Require(ProjectAnswer answer, string key, bool open)
     {
         if (!answer.Visible)
         {
