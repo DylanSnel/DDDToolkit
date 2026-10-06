@@ -296,7 +296,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var role = Harbor.AdministratorsRole;
         IMessage[] commands =
         [
-            new AddOrganizationUnit(unit, "Annex", "region"),
+            new AddOrganizationUnit(unit, "Annex", UnitKind.Region),
             new MakePlacement(seat, unit, Primary: false),
             new WithdrawPlacement(seat, unit),
             new MakeGrant(seat, unit, role, Until: null, Reason: null),
