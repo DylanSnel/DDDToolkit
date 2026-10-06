@@ -160,16 +160,28 @@ public sealed partial class PostgresCompositionTests
     }
 
     [Fact]
-    public void The_policies_are_exported_for_the_roles_the_host_runs_as()
+    public async Task The_policies_are_exported_for_the_roles_the_host_runs_as()
     {
         // The export runs before any configuration is read, so its roles are a property of the exporter's project,
-        // and the host's are code. Nothing but this keeps the two the same until the host's start-up check
-        // compares the database with them.
-        var roles = XDocument.Load(ExporterFile).Descendants("SupabaseRowAccessRoles").Single().Value.Split('|');
+        // and the host's are its own: the defaults, and in code what it adds. The exporter says only what differs
+        // from the defaults, the operators' token role, and so does the host.
+        XDocument.Load(ExporterFile).Descendants("SupabaseRowAccessRoles").Single().Value
+            .Should().Be($"token:{SampleTokenRoles.Operator}={SampleTokenRoles.Operator}", "every other role is the default, which nothing has to say");
 
-        roles.Should().Contain("system=" + SampleStorage.BookkeepingRole)
-            .And.Contain($"token:{SampleTokenRoles.Operator}={SampleTokenRoles.Operator}")
-            .And.Contain(["user=authenticated", "anonymous=anon", "system-in=ddd_system_in"]);
+        await using var host = SampleFactory.WithoutDatabase();
+        var options = host.Services.GetRequiredService<DDDToolkit.EntityFramework.Postgres.PostgresRowLevelSecurityOptions>();
+        (options.UserRole, options.AnonymousRole, options.SystemInRole, options.SystemRole)
+            .Should().Be(("authenticated", "anon", "ddd_system_in", SupabaseRowLevelSecurity.DefaultSystemRole), "the host switches to the defaults, the toolkit's bookkeeping role among them, without a word in code");
+        options.TokenRoles.Should().Equal(new Dictionary<string, string> { [SampleTokenRoles.Operator] = SampleTokenRoles.Operator });
+
+        // What the files record is what the host's start-up check compares with: the same roles, in every module's
+        // newest file, so whichever the database applied last says them.
+        foreach (var (module, sql) in NewestAccessFiles())
+        {
+            RecordedRoles().Match(sql).Groups["roles"].Value.Should().Be(
+                $$$"""{"user":"authenticated","anonymous":"anon","system-in":"ddd_system_in","system":"ddd_system","token":{"{{{SampleTokenRoles.Operator}}}":"{{{SampleTokenRoles.Operator}}}"}}""",
+                "{0}'s access file records the roles it was written for", module);
+        }
 
         var exporter = XDocument.Load(ExporterFile);
         exporter.Descendants("SupabaseRowAccessGrants").Should().BeEmpty("the export writes the privileges from the policies unless a project turns it off, so the exporter says nothing of it");
@@ -177,15 +189,22 @@ public sealed partial class PostgresCompositionTests
         exporter.Descendants("SupabaseLoginRole").Single().Value.Should().Be(SampleOnPostgres.LoginRole, "the role the host logs in as is made by the export, a member of these roles and of nothing else");
     }
 
+    /// <summary>The newest access file of every module, by the module's name.</summary>
+    private static Dictionary<string, string> NewestAccessFiles()
+        => Directory.GetFiles(Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "supabase", "migrations"), "*_access.*.ddd.sql")
+            .GroupBy(file => Path.GetFileName(file).Split('.')[^3])
+            .ToDictionary(module => module.Key, module => File.ReadAllText(module.Max(StringComparer.Ordinal)!));
+
+    /// <summary>The roles an access file records on the ddd schema, as the comment it sets says them.</summary>
+    [GeneratedRegex("""recorded constant text := 'DDDToolkit row access roles: (?<roles>[^']*)';""")]
+    private static partial Regex RecordedRoles();
+
     [Fact]
     public void Every_modules_newest_access_file_writes_its_privileges_and_forces_its_policies()
     {
         // What the export does unless a project turns it off, in the files the database is made from: a policy and
         // the privilege it needs come from one rule, and the tables' owner is held to the policies as every role is.
-        var exported = Path.Combine(SampleLayout.RepositoryRoot(), "Examples", "Tenancy", "supabase", "migrations");
-        var newest = Directory.GetFiles(exported, "*_access.*.ddd.sql")
-            .GroupBy(file => Path.GetFileName(file).Split('.')[^3])
-            .ToDictionary(module => module.Key, module => File.ReadAllText(module.Max(StringComparer.Ordinal)!));
+        var newest = NewestAccessFiles();
 
         newest.Keys.Should().BeEquivalentTo(["tenants", "projects", "inspections"]);
         foreach (var (module, sql) in newest)

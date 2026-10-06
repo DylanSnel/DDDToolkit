@@ -82,8 +82,10 @@ public static partial class PostgresRowAccess
     /// Whether a script has something to write for <paramref name="context"/> beyond what rules, access functions
     /// and contributions give it: a table that only grows, an event log, to guard, or, with
     /// <see cref="RowAccessExport.WriteGrants"/>, tables of the toolkit's own, an outbox, an inbox or an event
-    /// log, to write the privileges of. The Supabase export asks it, so a module with neither a rule nor a
-    /// contribution still gets its access file.
+    /// log, to write the privileges of, or a bookkeeping role, <see cref="RowAccessRoleNames.System"/>, to make and
+    /// to give the context's migration history. The Supabase export asks it, so a module with neither a rule nor a
+    /// contribution still gets its access file: every migrated context has a history, and the system caller that
+    /// checks at start-up that every migration ran reads it as the bookkeeping role, which only a file lets in.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="export"/> is null.</exception>
     public static bool WritesFor(DbContext context, RowAccessExport export)
@@ -92,7 +94,8 @@ public static partial class PostgresRowAccess
         ArgumentNullException.ThrowIfNull(export);
 
         var tables = ToolkitTablesOf(context);
-        return tables.Any(table => table.Kind == ToolkitTableKind.Kept) || (export.WriteGrants && tables.Count > 0);
+        return tables.Any(table => table.Kind == ToolkitTableKind.Kept)
+            || (export.WriteGrants && (tables.Count > 0 || export.Roles.System is not null));
     }
 
     /// <summary>

@@ -809,6 +809,30 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   at every `;`; a `;` fails the build, and an unknown key, a malformed pair, a role no policy can be for
   or a caller function that is not a call without arguments is an `error :` line. See
   [Roles and caller functions of your own](docs/supabase.md#roles-and-caller-functions-of-your-own).
+- **The roles are said once, in the project file, and the host checks them against the database.** The build
+  records `SupabaseRowAccessRoles` in an application whose project sets it, and that is not a test project, as
+  `[assembly: AssemblyMetadata("SupabaseRowAccessRoles", "...")]` in a file of its own under `obj`, the way
+  `DDD_Module` declares a module; a value with a `"`, a `\` or a `;` stops the build with the reason, since it
+  is written as it is on every platform, and a value written over several lines is recorded on one.
+  `AddSupabaseRowLevelSecurity` takes what it recorded as its defaults, read from the assembly whose code calls it,
+  else from the application the host's environment names (`IHostEnvironment.ApplicationName`, the host's also where
+  a library registers row level security or `WebApplicationFactory` runs the host in a test), else from the entry
+  assembly, so a host whose export runs in it says a custom role or a token role there and nowhere in code; what the
+  host's own code sets still wins, and a recorded value the export would refuse stops the registration with the
+  export's message. Where the export runs in a project of its own, the property in a `Directory.Build.props` above
+  both says it once. Every access file now ends by recording the roles it was written for as the comment on the
+  `ddd` schema, and the start-up check `supabase.roles-match-access-files`
+  (`SupabaseRowAccessChecks.RolesMatchAccessFilesCheck`, `EnsureRolesMatchAccessFilesAsync(context, cancellationToken)`
+  by hand, which reads the roles from the context's interceptor), which `AddSupabaseRowLevelSecurity` brings,
+  compares the roles each context on Postgres that runs as its caller switches to with that record. It runs as the
+  login role, in the stage of the login and before `postgres.login-role-may-switch-to-callers`, and names each
+  difference with the fixes on both sides: the pair of the host's own `SupabaseRowAccessRoles` or the line of its
+  code, and the pair of the exporter's. A database without a record passes, and so does a host without a scoped
+  system role, for that one; files without a bookkeeping role expect a system caller that runs as the login role or
+  as one of the platform's roles. The next build writes a new access file for every module, which adds the record
+  and nothing else. `PostgresRowLevelSecurityInterceptor.Options` is public, so such a check reads the roles a
+  context really runs with. See
+  [Roles and caller functions of your own](docs/supabase.md#roles-and-caller-functions-of-your-own).
 - **The role the application logs in as, written by the export.** `<SupabaseLoginRole>sample_api</SupabaseLoginRole>`
   in the project that exports, beside `SupabaseRowAccessRoles`, and `SupabaseMigrationOptions.LoginRole` by hand,
   write the migration that makes that role, `{version}_login_role.sample_api.ddd.sql`: `NOLOGIN NOINHERIT`,
@@ -2452,14 +2476,44 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     migration of its own (`grant ddd_system_in to <login role>;`), or names it with `SupabaseLoginRole`, whose
     migration does: every access file now makes the scoped system role, and
     `EnsureLoginRoleMaySwitchToCallersAsync` asks about it wherever it exists.
-  - While the access files write the privileges, a `system=` pair of `SupabaseRowAccessRoles` that names one of
-    Postgres's or Supabase's own roles, `service_role` for one, fails the build with an `error :` line and exit
-    code 2, and `Roles.System` set so fails an export by hand before anything is written. Every file makes the
-    bookkeeping role and holds it to the policies, so such a role would fail every file where it was applied.
-    Leave the pair out where the system caller runs as `service_role`.
+  - While the access files write the privileges, `Roles.System` set to one of Postgres's or Supabase's own
+    roles, `service_role` for one, fails an export by hand before anything is written: every file makes the
+    bookkeeping role and holds it to the policies, so such a role would fail every file where it was applied. The
+    build's `system=service_role` says another thing since, below.
   - `Examples/ModularMonolith.Supabase` keeps its grants written by hand with `SupabaseRowAccessGrants` set to
     `None`, since a guest reprices products in Catalog, which has no rules, and its new Ordering access file
     forces the policies. `Examples.Tenancy.Exporter` drops both properties, and its files are what they were.
+- **On Supabase every kind of caller has a default role, the system caller's included.** `SupabaseRowAccessRoles`
+  takes `user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system` for every pair it leaves out,
+  and so do `SupabaseMigrationOptions.Roles` by hand, now `SupabaseRowLevelSecurity.DefaultRoles`, and
+  `AddSupabaseRowLevelSecurity`, whose `SystemRole` is `ddd_system` (`SupabaseRowLevelSecurity.DefaultSystemRole`)
+  where it was `null`. The access files make that role and give it the toolkit's bookkeeping and nothing else, so
+  an application that logs in as a role that owns nothing writes neither the property nor `SystemRole`. Every
+  module gets an access file for it, also one without a rule or any of the toolkit's tables, since the system caller
+  reads each module's migration history at start-up (`PostgresRowAccess.WritesFor` says so for a script that writes
+  privileges and has a bookkeeping role). `system=none` runs the system caller as the role the application logs in
+  as, and `system=service_role`, or another of the platform's roles, runs it as that role, past the policies: either
+  way the files make no bookkeeping role. That pair was refused while the files wrote the privileges, and is the way
+  to say it now. With the `system` pair left out, a pair that gives a caller `ddd_system`, `anonymous=ddd_system` for
+  one, fails the export and the registration as `system=anon` does. With `SupabaseRowAccessGrants` set to `None`
+  and the `system` pair left out, the build warns that no file makes `ddd_system`. See
+  [Privileges, forced policies and the bookkeeping role](docs/supabase.md#privileges-forced-policies-and-the-bookkeeping-role).
+  - **Breaking, for a host that registers `AddSupabaseRowLevelSecurity` and left `SystemRole` unset.** 3.1.0 ran its
+    work outside a request as the role it logged in as, and now runs it as `ddd_system`, which reads the outbox,
+    the inbox and the migration history and nothing else, and exists only where the access files made it. A host
+    that logs in as the tables' owner and runs its background work as that owner on purpose says
+    `<SupabaseRowAccessRoles>system=none</SupabaseRowAccessRoles>` in its own project file, which the build records
+    in it, and in the exporter's as well where the export runs in a project of its own, so the files make no
+    bookkeeping role and record that they made none. `options.SystemRole = null` in code alone is enough only where
+    the database has no access file of this version, a host without the export: the files of an export that left
+    the pair out give the bookkeeping to `ddd_system`, and the start-up check stops a host whose system caller runs
+    as the login role against them. One whose system caller runs as `service_role` says `system=service_role` in
+    the same places. A project that wrote the default pairs out may drop them, and a host that set
+    `SystemRole = "ddd_system"` may drop that line; its files and its roles stay as they are. An export that left
+    the pair out writes `ddd_system` into every access file with its next build.
+  - `Examples/ModularMonolith.Supabase` says `system=none` in its host's project file, since it logs in as
+    `postgres` and its work outside a request runs as that owner on purpose. `Examples.Tenancy.Exporter` maps the
+    operators' token role and nothing else, and the Tenancy host maps it in code and sets no `SystemRole`.
 - **Supabase Auth: two kinds of token, each checked with its own kind of key.** Auth signs a user's token
   with a signing key whose public half it publishes (ES256 or RS256), or with the project's JWT secret
   (HS256). A host given the secret, with `UseSupabaseJwtSecret` or `SupabaseAuthOptions.JwtSecret`, used to

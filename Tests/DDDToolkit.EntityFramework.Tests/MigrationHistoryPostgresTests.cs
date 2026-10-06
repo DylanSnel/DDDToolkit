@@ -64,6 +64,60 @@ public sealed class MigrationHistoryPostgresTests(ExplicitCallersPostgres postgr
         await checkAgain.Should().NotThrowAsync();
     }
 
+    [Fact]
+    public async Task A_module_without_rules_or_an_outbox_lets_the_bookkeeping_role_read_its_history_under_a_login_that_owns_nothing()
+    {
+        // Supabase's defaults: the system caller that checks the migrations switches to ddd_system, which reaches a
+        // module's schema only where an access file let it in. The counter has no rule and none of the toolkit's
+        // tables, and gets that file all the same.
+        var connectionString = await postgres.CreateDatabaseAsync(Cancellation);
+        var directory = Path.Combine(Path.GetTempPath(), "ddd-counter-" + Guid.NewGuid().ToString("N"));
+        var login = $"counter_api_{Guid.NewGuid():N}"[..30];
+        try
+        {
+            using (var designTime = Counter())
+            {
+                SupabaseMigrations.Export(designTime, directory, new SupabaseMigrationOptions()).IsInSync.Should().BeTrue();
+            }
+
+            // Every file in the order the Supabase CLI applies them, as the owner; then a login role that owns nothing
+            // and may switch to the roles the files are written for, as the login role's file grants them.
+            foreach (var file in Directory.GetFiles(directory, "*.sql").Order(StringComparer.Ordinal))
+            {
+                await ExecuteAsync(connectionString, await File.ReadAllTextAsync(file, Cancellation));
+            }
+
+            await ExecuteAsync(connectionString, $"""
+                CREATE ROLE {login} LOGIN NOINHERIT PASSWORD '{login}';
+                GRANT anon, authenticated, ddd_system_in, ddd_system TO {login} WITH INHERIT FALSE;
+                """);
+
+            var asLogin = new NpgsqlConnectionStringBuilder(connectionString) { Username = login, Password = login, Pooling = false }.ConnectionString;
+            await using var host = new ServiceCollection()
+                .AddDDDToolkitEntityFramework()
+                .AddSupabaseRowLevelSecurity()
+                .AddDbContext<CounterContext>((provider, options) => options.UseNpgsql(asLogin).UseDDDToolkit(provider))
+                .AddSupabaseMigrations(SupabaseMigrationSource.For(Counter))
+                .BuildServiceProvider();
+
+            var check = () => host.EnsureSupabaseMigrationsAppliedAsync(Cancellation);
+
+            await check.Should().NotThrowAsync("the bookkeeping role reads the counter's history, which its access file gave it");
+        }
+        finally
+        {
+            await ExecuteAsync(connectionString, $"DROP OWNED BY {login}; DROP ROLE IF EXISTS {login};");
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The counter as a design-time factory makes it, on Postgres, with the toolkit's call.</summary>
+    private static CounterContext Counter()
+        => new(new DbContextOptionsBuilder<CounterContext>().UseNpgsql(Nowhere).UseDDDToolkitDesignTime().Options);
+
     /// <summary>A stockroom as a design-time factory makes it, on Postgres, with the toolkit's call or without it.</summary>
     private static Func<StockroomContext> FactoryWith(bool designTimeCall) => () =>
     {
@@ -94,6 +148,14 @@ public sealed class MigrationHistoryPostgresTests(ExplicitCallersPostgres postgr
             await using var command = new NpgsqlCommand(file.Sql, connection);
             await command.ExecuteNonQueryAsync(Cancellation);
         }
+    }
+
+    private static async Task ExecuteAsync(string connectionString, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(Cancellation);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(Cancellation);
     }
 
     private static async Task<object?> ScalarAsync(string connectionString, string sql)

@@ -1250,6 +1250,31 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
             .Should().Contain(message => message.Contains("was written from another catalogue", StringComparison.Ordinal), "the host gave up with {0}", Described(refused));
     }
 
+    [Fact]
+    public async Task A_host_whose_roles_drifted_from_the_exporters_does_not_start_and_names_both_fixes()
+    {
+        // The exporter maps the operators' token role in its project file, and the host, a project of its own, maps it
+        // in code. A host whose mapping drifted, and that runs its own work as the role it logs in as besides, would
+        // start, refuse every operator and fail on the outbox; the files record the roles they were written for, and
+        // the check reads them before anything switches to a role.
+        await using var sample = await SampleOnPostgres.CreateAsync(stack, Cancellation, services: services =>
+        {
+            var options = (PostgresRowLevelSecurityOptions)services.Last(descriptor => descriptor.ServiceType == typeof(PostgresRowLevelSecurityOptions)).ImplementationInstance!;
+            options.TokenRoles[SampleTokenRoles.Operator] = "tenancy_reader";
+            options.SystemRole = null;
+        });
+
+        var refused = sample.Host.RefusedStart();
+
+        refused.Where(failure => CheckOf(failure) == SupabaseRowAccessChecks.RolesMatchAccessFilesCheck).Select(failure => failure.Message)
+            .Should().ContainSingle("the check stops the start before the switch check would, on a role that is missing, and the host gave up with {0}", Described(refused))
+            .Which.Should().Contain(
+                "- the system caller: the files give the outbox, the inbox and the migration history to ddd_system, and this host's system caller runs as the role it logs in as. " +
+                "Fix: system=ddd_system in this host's SupabaseRowAccessRoles, or options.SystemRole = \"ddd_system\" in its code; or system=none in SupabaseRowAccessRoles of the project that exports.\n" +
+                $"- the token role '{SampleTokenRoles.Operator}': the policies are for {SampleTokenRoles.Operator}, and this host runs it as tenancy_reader. " +
+                $"Fix: token:{SampleTokenRoles.Operator}={SampleTokenRoles.Operator} in this host's SupabaseRowAccessRoles, or options.TokenRoles[\"{SampleTokenRoles.Operator}\"] = \"{SampleTokenRoles.Operator}\" in its code; or token:{SampleTokenRoles.Operator}=tenancy_reader in SupabaseRowAccessRoles of the project that exports.");
+    }
+
     /// <summary>The start-up check an exception stopped the start with, as the runner marks it; null for any other.</summary>
     private static string? CheckOf(Exception failure) => failure.Data[StartupChecks.FailedCheckKey] as string;
 

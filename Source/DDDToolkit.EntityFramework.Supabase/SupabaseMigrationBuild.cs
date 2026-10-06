@@ -41,11 +41,12 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// The roles the rules' symbolic roles become, from the <c>SupabaseRowAccessRoles</c> property:
-    /// <c>user=authenticated|anonymous=anon|system-in=ddd_system_in</c>, each pair optional, and a pair
-    /// <c>token:analyst=desk_analyst</c> for each token role the host mapped, which is what a rule for
-    /// <c>RowAccessRoles.Token("analyst")</c> is written for, and a pair <c>system=ddd_system</c> for the role
-    /// the application's own bookkeeping runs as, <c>RowAccessRoles.System</c>. Unset means
-    /// <see cref="RowAccessRoleNames.Default"/>, with no token role mapped and no bookkeeping role.
+    /// <c>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system</c>, each pair optional, and a
+    /// pair <c>token:analyst=desk_analyst</c> for each token role the host mapped, which is what a rule for
+    /// <c>RowAccessRoles.Token("analyst")</c> is written for. <c>system</c> is the role the application's own
+    /// bookkeeping runs as, <c>RowAccessRoles.System</c>; <c>none</c> there, or one of the platform's roles such as
+    /// <c>service_role</c>, leaves the files without a bookkeeping role. A pair left out is
+    /// <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>'s, with no token role mapped.
     /// </summary>
     public const string RolesVariable = "DDDTOOLKIT_SUPABASE_ROLES";
 
@@ -78,7 +79,7 @@ public static partial class SupabaseMigrationBuild
     public const string LoginRoleVariable = "DDDTOOLKIT_SUPABASE_LOGIN_ROLE";
 
     /// <summary>The project property <see cref="RolesVariable"/> comes from, as an error names it.</summary>
-    private const string RolesProperty = "SupabaseRowAccessRoles";
+    private const string RolesProperty = SupabaseCallerRoles.Property;
 
     /// <summary>The project property <see cref="CallerFunctionsVariable"/> comes from, as an error names it.</summary>
     private const string CallerFunctionsProperty = "SupabaseCallerFunctions";
@@ -91,9 +92,6 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>The project property <see cref="LoginRoleVariable"/> comes from, as an error names it.</summary>
     private const string LoginRoleProperty = "SupabaseLoginRole";
-
-    /// <summary>What the key of a pair that maps a token role starts with, before the token role: <c>token:analyst=desk_analyst</c>.</summary>
-    private const string TokenKey = "token:";
 
     /// <summary>
     /// Exports and ends the process when the build asked for it, and returns at once otherwise. Called
@@ -365,11 +363,16 @@ public static partial class SupabaseMigrationBuild
         }
 
         var options = new SupabaseMigrationOptions();
-        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var problem)
+        if (!TryConfigure(options, roles, callerFunctions, grants, force, out var callerRoles, out var problem)
             || !TryConfigureLoginRole(options, loginRole, out problem))
         {
             output.WriteLine($"error : {problem}");
             return 2;
+        }
+
+        if (BookkeepingRoleNobodyMakes(options, callerRoles) is { } unmade)
+        {
+            output.WriteLine($"warning : {unmade}");
         }
 
         if (sources.Count == 0)
@@ -433,13 +436,13 @@ public static partial class SupabaseMigrationBuild
 
     /// <summary>
     /// Sets <paramref name="options"/>' roles and caller functions, and whether the access files write
-    /// privileges and force row level security, from the build's properties, or says what is wrong with them.
+    /// privileges and force row level security, from the build's properties, or says what is wrong with them. The
+    /// roles are read as <c>AddSupabaseRowLevelSecurity</c> reads what the build recorded of them, so the export and
+    /// the application take the same defaults.
     /// </summary>
-    private static bool TryConfigure(SupabaseMigrationOptions options, string? roles, string? callerFunctions, string? grants, string? force, out string problem)
+    private static bool TryConfigure(SupabaseMigrationOptions options, string? roles, string? callerFunctions, string? grants, string? force, out SupabaseCallerRoles callerRoles, out string problem)
     {
-        problem = "";
-
-        if (!TryReadPairs(RolesProperty, roles, ["user", "anonymous", "system-in", "system"], "user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system", TokenKey, out var role, out var tokenRoles, out problem)
+        if (!SupabaseCallerRoles.TryParse(roles, out callerRoles, out problem)
             || !TryReadPairs(CallerFunctionsProperty, callerFunctions, ["uid", "role", "claims"], "uid=auth.uid()|role=auth.role()|claims=auth.jwt()", prefix: null, out var caller, out _, out problem))
         {
             return false;
@@ -477,83 +480,7 @@ public static partial class SupabaseMigrationBuild
                 return false;
         }
 
-        try
-        {
-            options.Roles = new RowAccessRoleNames(
-                role.GetValueOrDefault("user") ?? options.Roles.User,
-                role.GetValueOrDefault("anonymous") ?? options.Roles.Anonymous,
-                role.GetValueOrDefault("system-in") ?? options.Roles.SystemIn);
-        }
-        catch (ArgumentException exception)
-        {
-            // The parameter the exception names is the key the property set; where the property left that key
-            // out, its default clashes with a role the property did set, which is the one to name.
-            var key = exception.ParamName switch
-            {
-                nameof(RowAccessRoleNames.User) => "user",
-                nameof(RowAccessRoleNames.Anonymous) => "anonymous",
-                _ => "system-in",
-            };
-            if (!role.ContainsKey(key))
-            {
-                key = role.First(pair => !string.Equals(pair.Key, "system", StringComparison.OrdinalIgnoreCase) && string.Equals(pair.Value, options.Roles.SystemIn, StringComparison.Ordinal)).Key;
-            }
-
-            var example = key.ToLowerInvariant() switch
-            {
-                "user" => PostgresRowLevelSecurityOptions.AuthenticatedRole,
-                "anonymous" => PostgresRowLevelSecurityOptions.AnonRole,
-                _ => PostgresRowLevelSecurityOptions.DefaultSystemInRole,
-            };
-
-            problem = $"{RolesProperty} has '{key}={role[key]}'. {Reason(exception)} Use a role such as {example}.";
-            return false;
-        }
-
-        try
-        {
-            // Resolving a role checks the token roles against the others: none is mapped to the scoped system
-            // role or to the anonymous caller's.
-            options.Roles = options.Roles with { TokenRoles = tokenRoles };
-            options.Roles.Resolve(RowAccessRoles.User);
-        }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
-        {
-            problem = $"{RolesProperty} has a token role it cannot map. {(exception is ArgumentException argument ? Reason(argument) : exception.Message)}";
-            return false;
-        }
-
-        if (role.TryGetValue("system", out var system))
-        {
-            // The bookkeeping role is one of its own, which the other roles are known to tell by now.
-            try
-            {
-                options.Roles = options.Roles with { System = system };
-            }
-            catch (ArgumentException exception)
-            {
-                problem = $"{RolesProperty} has 'system={system}'. {Reason(exception)} Use a role such as ddd_system.";
-                return false;
-            }
-
-            try
-            {
-                options.Roles.Resolve(RowAccessRoles.System);
-            }
-            catch (ArgumentException exception)
-            {
-                problem = $"{RolesProperty} has 'system={system}'. {Reason(exception)}";
-                return false;
-            }
-
-            // Mirroring the options' SystemRole is the natural thing to write, and where that is service_role the
-            // files would fail only when they are applied: said here, when the project builds.
-            if (SupabaseMigrations.NotAnOwnBookkeepingRole(options) is { } platform)
-            {
-                problem = $"{RolesProperty} has 'system={system}'. {platform} Leave the pair out where the system caller runs as service_role, or name a role of the application's own, such as ddd_system.";
-                return false;
-            }
-        }
+        options.Roles = callerRoles.Names;
 
         foreach (var (key, function) in caller)
         {
@@ -571,6 +498,18 @@ public static partial class SupabaseMigrationBuild
 
         return true;
     }
+
+    /// <summary>
+    /// What the build says where the access files write no privileges and <c>SupabaseRowAccessRoles</c> leaves the
+    /// system caller its default, the bookkeeping role <c>ddd_system</c>: no access file then makes that role or gives
+    /// it the toolkit's tables, unless a rule is for it, so the application's system caller would switch to a role the
+    /// files never made. <see langword="null"/> where there is nothing to say.
+    /// </summary>
+    private static string? BookkeepingRoleNobodyMakes(SupabaseMigrationOptions options, SupabaseCallerRoles roles)
+        => options.WriteGrants || roles.SystemSaid || roles.Names.System is not { } system
+            ? null
+            : $"{GrantsProperty} is None, so no access file makes the bookkeeping role {system} or gives it the outbox, the inbox and the migration history, and the system caller switches to it unless {RolesProperty} says otherwise. " +
+              $"Add system={SupabaseCallerRoles.LoginRole} to {RolesProperty} where the system caller runs as the role the application logs in as, or system=<role> for a role a migration of your own makes and grants.";
 
     /// <summary>
     /// Sets <paramref name="options"/>' login role from the build's property, once the roles callers run as are
@@ -607,7 +546,7 @@ public static partial class SupabaseMigrationBuild
     /// The message of <paramref name="exception"/> without the name of the parameter .NET appends to it,
     /// which means nothing in a build's error line.
     /// </summary>
-    private static string Reason(ArgumentException exception)
+    internal static string Reason(ArgumentException exception)
     {
         // The suffix is whatever the runtime appends for that parameter, in whatever language it speaks.
         var suffix = new ArgumentException("", exception.ParamName).Message;
@@ -638,7 +577,7 @@ public static partial class SupabaseMigrationBuild
     /// <param name="pairs">The pairs of <paramref name="keys"/>.</param>
     /// <param name="prefixed">The pairs whose key starts with <paramref name="prefix"/>, by the name after it.</param>
     /// <param name="problem">What is wrong, when something is.</param>
-    private static bool TryReadPairs(
+    internal static bool TryReadPairs(
         string property,
         string? value,
         string[] keys,

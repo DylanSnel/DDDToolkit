@@ -429,7 +429,7 @@ public static partial class SupabaseMigrations
         if (NotAnOwnBookkeepingRole(options) is { } problem)
         {
             throw new InvalidOperationException(
-                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Leave it unset where the system caller runs as service_role, or name a role of the application's own, such as ddd_system.");
+                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Set it to null where the system caller runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.");
         }
     }
 
@@ -524,7 +524,8 @@ public static partial class SupabaseMigrations
     /// after everything else in the directory, so the Supabase CLI applies it last. Nothing for a module that
     /// has no rules, access functions or contributions and never had any, unless the file has something to say
     /// about it all the same: the guard of an event log, or, where the files write privileges, those of its
-    /// outbox, inbox or event log.
+    /// outbox, inbox or event log, and the bookkeeping role's right to read its migration history, which the system
+    /// caller reads as that role, <c>ddd_system</c> unless the project says otherwise.
     /// </summary>
     /// <param name="context">The context whose rules, access functions and contributions the file says; the access files whose first line names its type are its own.</param>
     /// <param name="module">The module the file is named after, <c>&lt;version&gt;_access.&lt;module&gt;.ddd.sql</c>.</param>
@@ -570,6 +571,11 @@ public static partial class SupabaseMigrations
             // With the line endings every exported file has, whatever the script was written with: a contribution's
             // SQL may carry the platform's, and a file is compared with what the next run writes.
             .Append(Normalize(script ?? PostgresRowAccess.Script(context, rules, functions, export)))
+            // Last, the roles the file was written for, which the application compares its own with when it starts.
+            // Every file says them, so roles that change write every module's file again, and the newest file
+            // applied records what the newest export said.
+            .Append('\n')
+            .Append(SupabaseCallerRoles.RecordStatement(options.Roles))
             .ToString();
 
         if (files.LastOrDefault() is { } newest)

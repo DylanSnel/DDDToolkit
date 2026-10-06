@@ -207,7 +207,7 @@ public sealed class SupabaseLoginRoleExportTests : IDisposable
         Build("Write", "desk_api", roles: "user=desk_user|anonymous=desk_guest").ExitCode.Should().Be(0);
         var sql = Read(LoginRoleFiles().Single());
 
-        Granted(sql, "desk_api").Should().Equal("desk_guest", "desk_user", "ddd_system_in");
+        Granted(sql, "desk_api").Should().Equal("desk_guest", "desk_user", "ddd_system_in", "ddd_system");
         sql.Should().Contain("    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'desk_user') THEN\n        RAISE EXCEPTION USING MESSAGE = 'The role desk_user, which a signed-in user runs as, does not exist. It is the project''s own to make, in a migration before this one.';\n");
         sql.Should().NotContain("CREATE ROLE desk_user").And.NotContain("CREATE ROLE desk_guest", "the toolkit makes the roles the access files make, and no others");
         SampleApi.Should().NotContain("RAISE EXCEPTION USING MESSAGE = 'The role anon", "Supabase's own roles are always there");

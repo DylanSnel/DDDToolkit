@@ -167,7 +167,8 @@ context you left without it on purpose moves to `UseDDDToolkitCore`, below, befo
 its queries run as the role of their caller instead of the role the application logged in as. Where the login
 role owns the tables or is a superuser, as it usually is, that takes rights away: the caller sees and changes
 what the policies let it. Where the login role was a restricted one, it can give more instead: background work
-runs as `SystemRole`, which on Supabase is often `service_role`, past every policy, and a request as
+runs as `SystemRole`, past every policy where that is `service_role`, as a Supabase project with
+`system=service_role` has it, and a request as
 `authenticated` or `anon`, with whatever those roles were granted. The line above names the context the first
 time its options are built, which without start-up checks is the first time something uses it;
 `builder.Services.RunStartupChecks()` builds every registered context before the first request, so every line is

@@ -36,13 +36,6 @@ public static class SampleStorage
     public const string PoolsSection = "Sample:Pools";
 
     /// <summary>
-    /// The database role the toolkit's own bookkeeping runs as: the outbox pollers, and the check that every
-    /// migration was applied. It reads and marks outbox rows and reads the migration history, and no row of a
-    /// tenant. The exported files make it and give it those privileges, under this name.
-    /// </summary>
-    public const string BookkeepingRole = "ddd_system";
-
-    /// <summary>
     /// How long one statement may run when it runs for a signed-in user, a seat or an operator: long enough for
     /// anything a route or a field of the sample asks, and short enough that a request shaped to be slow holds a
     /// connection of the request pool no longer than this.
@@ -75,17 +68,20 @@ public static class SampleStorage
             : throw new InvalidOperationException(NoConnectionString);
 
         // Every connection says who is calling, as a database role and its claims, before its first command. The
-        // roles are the ones the exported policies name: Supabase's own for a signed-in user and an anonymous
-        // caller, the scoped system role for work in a tenant, a role of its own for the toolkit's bookkeeping,
-        // since the role the host logs in as holds nothing, and one for the operators' token role, which the
-        // tokens and the database spell alike. A token with any other role is refused before it reaches a query.
+        // roles are the ones the exported policies name, and most are the defaults, which nothing here says:
+        // Supabase's own for a signed-in user and an anonymous caller, the scoped system role for work in a tenant,
+        // and ddd_system for the toolkit's bookkeeping, the outbox pollers and the check that every migration was
+        // applied, since the role the host logs in as holds nothing. What the sample adds is the operators' token
+        // role, which the tokens and the database spell alike. The exporter maps it in its SupabaseRowAccessRoles,
+        // and the exporter is a project of its own, so the host maps it here as well; the start-up check
+        // supabase.roles-match-access-files stops the host where the two differ, naming the line to change. A token
+        // with any other role is refused before it reaches a query.
         //
         // A statement that runs on a signed-in user's behalf is stopped when it takes longer than a request
         // should: a user's statements are the ones a client shapes. The application's own work, seeding and the
         // outbox's bookkeeping, keeps the login role's own timeout.
         builder.Services.AddSupabaseRowLevelSecurity(options =>
         {
-            options.SystemRole = BookkeepingRole;
             options.TokenRoles[SampleTokenRoles.Operator] = SampleTokenRoles.Operator;
             options.StatementTimeouts[CallerKind.User] = UserStatementTimeout;
         });

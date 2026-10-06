@@ -70,7 +70,9 @@ if (signedIn)
     });
 
     // Every module's context is wired with UseDDDToolkit, which brings this to each context on Postgres: nothing
-    // else to write for the modules' queries to run as their caller.
+    // else to write for the modules' queries to run as their caller. The roles are the defaults but one, which the
+    // project file says and the build records here: system=none, so the work outside a request runs as the role
+    // the host logged in as rather than as the bookkeeping role ddd_system.
     builder.Services.AddSupabaseRowLevelSecurity();
 
     // Row level security brings start-up checks of the role the host logs in as, and one is that it owns nothing.

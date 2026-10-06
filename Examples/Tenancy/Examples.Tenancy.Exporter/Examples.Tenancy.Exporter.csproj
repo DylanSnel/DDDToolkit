@@ -31,12 +31,15 @@
     <SupabaseMigrationsExport Condition="'$(ContinuousIntegrationBuild)' == 'true'">Check</SupabaseMigrationsExport>
 
     <!--
-      The database roles the policies are written for, which are the roles the host's row level security options
-      name: a signed-in user, an anonymous caller, system work in a tenant, the toolkit's own bookkeeping, and
-      the token role of the application's operators. The export runs before any configuration is read, so they
-      are said here; a host configured otherwise stops at start-up, where the database is compared with it.
+      The database roles the policies are written for. A signed-in user, an anonymous caller, system work in a
+      tenant and the toolkit's own bookkeeping run as the defaults, authenticated, anon, ddd_system_in and
+      ddd_system, so nothing says them. What the sample adds is the token role of the application's operators,
+      which runs as a role of its own, spelled as the tokens spell it. The export runs before any configuration is
+      read, so it is said here. The host is a project of its own and maps the same token role in code; every access
+      file records the roles it was written for, and the host stops at start-up where its own differ
+      (supabase.roles-match-access-files).
     -->
-    <SupabaseRowAccessRoles>user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system|token:tenancy_operator=tenancy_operator</SupabaseRowAccessRoles>
+    <SupabaseRowAccessRoles>token:tenancy_operator=tenancy_operator</SupabaseRowAccessRoles>
 
     <!--
       Nothing asks for the privileges or for forced policies, because the export writes both unless a project turns

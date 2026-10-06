@@ -12,7 +12,7 @@ public sealed class SupabaseMigrationOptions
 
     private ISet<string> _rowLevelSecuritySchemas = new HashSet<string>(StringComparer.Ordinal) { PublicSchema };
 
-    private RowAccessRoleNames _roles = RowAccessRoleNames.Default;
+    private RowAccessRoleNames _roles = SupabaseRowLevelSecurity.DefaultRoles;
 
     private PostgresCallerFunctions _callerFunctions = SupabaseRowLevelSecurity.CallerFunctions;
 
@@ -71,10 +71,17 @@ public sealed class SupabaseMigrationOptions
     /// The database roles the rules' symbolic roles are written as: <c>RowAccessRoles.User</c>,
     /// <c>Anonymous</c> and <c>SystemIn</c>, and <c>RowAccessRoles.Token(...)</c> for each token role in
     /// <see cref="RowAccessRoleNames.TokenRoles"/>, and <c>RowAccessRoles.System</c> for the bookkeeping role,
-    /// <see cref="RowAccessRoleNames.System"/>, where one is set. <see cref="RowAccessRoleNames.Default"/> by
-    /// default, Supabase's <c>authenticated</c> and <c>anon</c>, and <c>ddd_system_in</c>, with no token role
-    /// mapped and no bookkeeping role. The build takes them from the <c>SupabaseRowAccessRoles</c> property of
-    /// the project that runs the export.
+    /// <see cref="RowAccessRoleNames.System"/>, where one is set. <see cref="SupabaseRowLevelSecurity.DefaultRoles"/>
+    /// by default, Supabase's <c>authenticated</c> and <c>anon</c>, <c>ddd_system_in</c>, and <c>ddd_system</c> for the
+    /// bookkeeping, with no token role mapped: the roles <c>AddSupabaseRowLevelSecurity</c> switches to unless told
+    /// otherwise. Set <see cref="RowAccessRoleNames.System"/> to <see langword="null"/> where the system caller has no
+    /// bookkeeping role of the application's own, because it runs as the role the application logs in as or as
+    /// <c>service_role</c>. The build takes them from the <c>SupabaseRowAccessRoles</c> property of the project that
+    /// runs the export.
+    /// <para>
+    /// Every access file records them on the <c>ddd</c> schema, as its comment, and the application compares the
+    /// roles it switches to with that record when it starts (<see cref="SupabaseRowAccessChecks.RolesMatchAccessFilesCheck"/>).
+    /// </para>
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>
     public RowAccessRoleNames Roles

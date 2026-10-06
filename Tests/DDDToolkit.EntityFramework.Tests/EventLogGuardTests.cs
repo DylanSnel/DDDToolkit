@@ -272,6 +272,10 @@ public sealed class EventLogGuardTests(ExplicitCallersPostgres postgres)
         PostgresRowAccess.WritesFor(plain, new RowAccessExport { WriteGrants = true }).Should().BeTrue();
         using var desk = DeskContext.Create();
         PostgresRowAccess.WritesFor(desk, new RowAccessExport { WriteGrants = true }).Should().BeFalse("a context with none of the toolkit's tables has nothing to say without a rule");
+        PostgresRowAccess.WritesFor(desk, new RowAccessExport { WriteGrants = true, Roles = RowAccessRoleNames.Default with { System = "ddd_system" } })
+            .Should().BeTrue("a bookkeeping role reads every context's migration history, which only a script gives it");
+        PostgresRowAccess.WritesFor(desk, new RowAccessExport { Roles = RowAccessRoleNames.Default with { System = "ddd_system" } })
+            .Should().BeFalse("a script that writes no privileges gives the bookkeeping role nothing");
     }
 
     [Fact]

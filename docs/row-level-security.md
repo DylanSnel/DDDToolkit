@@ -93,7 +93,9 @@ which as the owner sees every row. For an application that should not be able to
 accident, log in as a role of its own that may do nothing but switch roles, and set `SystemRole` to a
 role with `BYPASSRLS`. A query outside a request that nobody meant to run as the system then fails
 instead of seeing every row. Stricter still is a `SystemRole` that holds the toolkit's own tables and
-nothing else: see [A login that owns nothing](#a-login-that-owns-nothing).
+nothing else: see [A login that owns nothing](#a-login-that-owns-nothing). On Supabase that is the default:
+`AddSupabaseRowLevelSecurity` runs background work as `ddd_system`, which the exported access files make, unless
+the project's `SupabaseRowAccessRoles` says otherwise ([Supabase](supabase.md#privileges-forced-policies-and-the-bookkeeping-role)).
 
 ### How the settings travel
 
@@ -244,8 +246,10 @@ connection, a pooler that does not reset it for one, would otherwise decide who 
 
 Outside a request and outside any caller, the answer is the system, which on most databases is the
 tables' owner, past every policy. That is what a 3.x host gets, and it means work that nobody said
-anything about runs with the application's whole power. A host that would rather have such work fail
-says so once:
+anything about runs with the application's whole power. On Supabase the system runs as `ddd_system`
+unless the project says otherwise, which reaches the toolkit's bookkeeping alone, so there such work is
+refused on a module's tables rather than let past them. A host that would rather have such work fail
+everywhere, before it reaches the database, says so once:
 
 ```csharp
 builder.Services.RequireExplicitCallers();
@@ -2140,6 +2144,10 @@ asks which migrations ran.
 builder.Services.AddPostgresRowLevelSecurity(options => options.SystemRole = "ddd_system");
 ```
 
+On Supabase nothing says it: `ddd_system` is the bookkeeping role `AddSupabaseRowLevelSecurity` and the export
+both take unless `SupabaseRowAccessRoles` names another
+([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)).
+
 `RowAccessRoleNames.Of(options)` carries that role as `System`, and a script written with it and
 `WriteGrants` makes sure of it, in its prelude and its privileges:
 
@@ -2156,7 +2164,8 @@ builder.Services.AddPostgresRowLevelSecurity(options => options.SystemRole = "dd
   `SELECT` on the columns that find them.
 
 The login role needs the grant too, in a migration after the script: `grant ddd_system to app;`, which
-the Supabase build writes into the login role's file once `SupabaseRowAccessRoles` has `system=ddd_system`.
+the Supabase build writes into the login role's file, with the bookkeeping role the project maps, `ddd_system`
+unless it names another.
 Where the [settings travel per transaction](#how-the-settings-travel), it needs the procedure that sets them
 as well: `grant usage on schema ddd to app;` and
 `grant execute on procedure ddd.use_caller(text, text, text[], text[]) to app;`, which no file of the build
@@ -2173,7 +2182,8 @@ configured is refused, naming it.
 > for one, has no bookkeeping role. Its scripts are what they were for as long as they write no
 > privileges and no rule is for `RowAccessRoles.System`, also where a rule or a grant spells that role's
 > name out. With `WriteGrants`, write them with `RowAccessRoleNames.Of(options) with { System = null }`:
-> a role that bypasses the policies is refused as a bookkeeping role when the script runs.
+> a role that bypasses the policies is refused as a bookkeeping role when the script runs. On Supabase,
+> `system=service_role` in `SupabaseRowAccessRoles` says it once, for the export and for the host.
 
 Three checks say at start-up, before the first request, whether the database and the context are as this
 relies on. `AddPostgresRowLevelSecurity`, and so `AddSupabaseRowLevelSecurity`, registers them, with the check of
@@ -2186,7 +2196,10 @@ builder.Services.RunStartupChecks();
 ```
 
 They are `postgres.login-role-may-switch-to-callers`, `postgres.login-role-owns-nothing` and
-`postgres.row-level-security-wired`, each named by a constant of `PostgresRowAccessChecks`. A host turns one off
+`postgres.row-level-security-wired`, each named by a constant of `PostgresRowAccessChecks`. On Supabase,
+`AddSupabaseRowLevelSecurity` brings one more before the switch, `supabase.roles-match-access-files`, which compares
+the roles the host switches to with the ones the exported access files record they were written for
+([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)). A host turns one off
 only by name and with a reason in its code, as [Turning a check off](startup-checks.md#turning-a-check-off) shows,
 and the login role's checks are the last it should want to. A host that runs them by hand, from a class of its own,
 calls the methods behind them, the switch first:

@@ -30,6 +30,14 @@
       policies are left on: the host logs in as postgres, which owns the tables and may bypass row level security.
     -->
     <SupabaseRowAccessGrants>None</SupabaseRowAccessGrants>
+
+    <!--
+      The host logs in as postgres, and its work outside a request, the outbox pollers, runs as that owner on
+      purpose rather than as the bookkeeping role ddd_system, which no access file of this host makes while the
+      privileges are granted by hand. Said here, once: the build records it in the host, and
+      AddSupabaseRowLevelSecurity in Program.cs reads it.
+    -->
+    <SupabaseRowAccessRoles>system=none</SupabaseRowAccessRoles>
   </PropertyGroup>
 
   <ItemGroup>

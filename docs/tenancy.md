@@ -2208,8 +2208,11 @@ whose ids C# infers from the arguments, or `TenancyWork.BeginSystemIn<TenantId, 
 where no seat is given.
 
 Neither is the toolkit's `Caller.System`, the application itself, which
-[row level security](row-level-security.md#the-scoped-system-role) lets past every policy: the scoped
-system caller runs as a role that cannot bypass them. The scope says whose work it is. Work that calls
+[row level security](row-level-security.md#the-scoped-system-role) runs as a role no policy is written for:
+past every policy as the login role or a role that bypasses them, or, on Supabase unless the project says
+otherwise, as `ddd_system`, which reaches the toolkit's bookkeeping and no module's rows. The scoped system
+caller runs as a role that cannot bypass the policies, and they decide what it reaches. The scope says
+whose work it is. Work that calls
 Tenancy's use cases keeps Tenancy's own; a module's own work in a tenant that only reads Tenancy's rows
 next to its own passes its module's name.
 
@@ -2218,7 +2221,7 @@ so one word says it wherever it comes up:
 
 | System work | Spelled |
 |---|---|
-| the application itself, past every policy | `Caller.System`, on the login role or the one `SystemRole` names, such as `ddd_system` |
+| the application itself, which no policy is written for | `Caller.System`, on the role `SystemRole` names: on Supabase `ddd_system` unless the project says otherwise, the toolkit's bookkeeping and nothing else; past every policy only on the login role (`system=none`) or a role that bypasses them |
 | the application at work in a scope, inside the policies | `Caller.SystemIn(scope)`, on `ddd_system_in` unless the host names another |
 | begun in Tenancy, outside any tenant or in one | `TenantsTenancy.BeginSystem()`, `TenantsTenancy.BeginSystemIn(tenant)`: `TenancyWork`'s, closed over your ids |
 | a request only it sends | `AccessRequirement.RequiresSystemWork()`, which lets through system work trusted code began and refuses every user with `access.system-only` |

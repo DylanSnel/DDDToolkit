@@ -236,7 +236,10 @@ public sealed class SupabaseMigrationTests : IDisposable
         Export();
         using (var ledger = SupabaseLedgerContext.Create())
         {
-            SupabaseMigrations.Export(ledger, _directory).Created.Should().ContainSingle();
+            // Its migration, and its access file, which lets the bookkeeping role read its migration history.
+            SupabaseMigrations.Export(ledger, _directory).Created.Select(entry => Path.GetFileName(entry.Path)).Should().HaveCount(2)
+                .And.Contain(FileOf(CreateLedger.Id, "supabaseledger"))
+                .And.ContainSingle(name => name.EndsWith("_access.supabaseledger.ddd.sql", StringComparison.Ordinal));
             SupabaseMigrations.Compare(ledger, _directory).IsInSync.Should().BeTrue();
         }
 

@@ -206,11 +206,14 @@ public sealed class PostgresRowLevelSecurityInterceptor : DbConnectionIntercepto
     private readonly ConcurrentDictionary<(int Settings, bool Local, bool Timed), string> _statements = new();
 
     /// <summary>
-    /// The roles this interceptor gives each kind of caller and how long the settings last, as they were when it
-    /// was built: what <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync"/> holds the
-    /// database to.
+    /// The roles this interceptor gives each kind of caller and how long the settings last: what
+    /// <see cref="PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync"/> holds the database to. Public so a
+    /// start-up check of another package, such as Supabase's check that these are the roles the access files were
+    /// written for, asks about the roles a context really runs with, found among its interceptors, and a host that
+    /// runs such a check by hand hands over the context alone. Read them; a change made here after the first
+    /// connection is not one the interceptor promises to follow.
     /// </summary>
-    internal PostgresRowLevelSecurityOptions Options => _options;
+    public PostgresRowLevelSecurityOptions Options => _options;
 
     /// <summary>An interceptor that asks <paramref name="callers"/> who is calling, and gives each kind of caller the role <paramref name="options"/> names.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="callers"/> or <paramref name="options"/> is null.</exception>

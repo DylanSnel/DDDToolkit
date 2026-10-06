@@ -21,7 +21,7 @@ them, so nothing in the host has to remember them.
 
 ```mermaid
 flowchart LR
-    Services["Services: how contexts and options are wired"] --> Login["Login: the login role may become every caller"]
+    Services["Services: how contexts and options are wired"] --> Login["Login: the callers' roles are the files', and the login role may become each"]
     Login --> Migrations["Migrations: every one applied"]
     Migrations --> Database["Database: roles, policies, functions, grants"]
     Database --> Started["the hosted services start, and the server binds its port"]
@@ -36,7 +36,7 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 
 builder.Services.AddSupabaseRowLevelSecurity();
 //   Services:   postgres.row-level-security-wired
-//   Login:      postgres.login-role-may-switch-to-callers
+//   Login:      supabase.roles-match-access-files, postgres.login-role-may-switch-to-callers
 //   Database:   postgres.login-role-owns-nothing, postgres.definer-owners-bypass
 
 // in a module: its context, and its migrations
@@ -59,8 +59,9 @@ effects:
 - **Services** reads the application's services and opens no connection: which options are registered, how
   each context is configured, and whether what asks a module's access checks is in the pipeline. A context wired
   wrong would fail every question put to the database through it, without saying why.
-- **Login** asks, as the role the host logs in as, whether it may switch to every role its callers run as. Every
-  stage after it asks as the system caller, and so switches to the system caller's role first.
+- **Login** asks, as the role the host logs in as, whether the roles its callers run as are the ones the
+  database's access files were written for, and whether it may switch to every one of them. Every stage after it
+  asks as the system caller, and so switches to the system caller's role first.
 - **Migrations** asks whether every migration is applied. A policy or a function a missing migration would have
   made is missing because of it, and this stage names the migration.
 - **Database** asks whether the database is set up as the application relies on: the login role holds nothing,
@@ -82,7 +83,8 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `access.behaviors-registered` | `AccessBehaviorChecks.BehaviorsRegisteredCheck` | `AddAccessChecks`, and so `AddAccessCheck`, a package's registration of its check and the generated `Add{Module}AccessBehavior`, for an interface the toolkit wrote a behavior for | Services | Every command and query the host handles, of an interface the toolkit wrote a behavior for, has that behavior in its pipeline, the one for streams for a stream query, in every module ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)) |
 | `entity-framework.toolkit-wired` | `EntityFrameworkChecks.ToolkitWiredCheck` | `AddDDDToolkitEntityFramework` | Services | Every context that maps the toolkit's classes is built with `UseDDDToolkit`, or `UseDDDToolkitCore` ([Checking the wiring](entity-framework.md#checking-the-wiring)), and every context has the parts its model requires, Tenancy's save check for rows kept to a tenant ([A part a model cannot do without](entity-framework.md#a-part-a-model-cannot-do-without)) |
 | `postgres.row-level-security-wired` | `PostgresRowAccessChecks.RowLevelSecurityWiredCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Services | Every context on Postgres runs its commands as the caller, but one given the toolkit's base alone with `UseDDDToolkitCore`, which runs as the login role on purpose ([Running queries as the caller](row-level-security.md#running-queries-as-the-caller)) |
-| `postgres.login-role-may-switch-to-callers` | `PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck` | the same | Login | The login role may become every caller of every such context, the scoped system role where it exists ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)) |
+| `supabase.roles-match-access-files` | `SupabaseRowAccessChecks.RolesMatchAccessFilesCheck` | `AddSupabaseRowLevelSecurity` | Login | The roles every such context switches to are the ones the newest access file the database applied records it was written for; it runs before the next ([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)) |
+| `postgres.login-role-may-switch-to-callers` | `PostgresRowAccessChecks.LoginRoleMaySwitchToCallersCheck` | `AddPostgresRowLevelSecurity`, `AddSupabaseRowLevelSecurity` | Login | The login role may become every caller of every such context, the scoped system role where it exists ([A login that owns nothing](row-level-security.md#a-login-that-owns-nothing)) |
 | `postgres.login-role-owns-nothing` | `PostgresRowAccessChecks.LoginRoleOwnsNothingCheck` | the same | Database | The login role owns and holds nothing in the contexts' schemas, and reaches no role that does |
 | `postgres.definer-owners-bypass` | `PostgresRowAccessChecks.DefinerOwnersBypassCheck` | the same | Database | Every function that runs as its owner is owned by a role the forced policies let through |
 | `supabase.migrations-applied` | `SupabaseMigrations.AppliedCheck` | `AddSupabaseMigrations` | Migrations | Every registered context has every migration applied ([Checking at start-up](supabase.md#checking-at-start-up)) |
@@ -203,7 +205,7 @@ services.AddHostedService<PostgresStartupCheck>();
 After, the registrations it already makes bring the checks, and the host asks for them:
 
 ```csharp
-builder.Services.AddSupabaseRowLevelSecurity(options => options.SystemRole = "ddd_system");
+builder.Services.AddSupabaseRowLevelSecurity();
 builder.Services.AddTenancyPostgres();
 builder.Services.AddMembershipPostgres();
 // the modules: contexts with AddSupabaseMigrations, Tenancy with AddTenancy, the membership
