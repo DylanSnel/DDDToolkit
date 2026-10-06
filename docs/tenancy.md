@@ -1567,7 +1567,7 @@ kinds from Tenancy's own seats, roles and units, and answers seats and units as 
 | Question | Answers |
 |---|---|
 | `WhoAmIAsync()` | the calling seat's `SeatOverview`: your seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it is placed at, the roles its grants name, and every key it holds now with the units it reaches |
-| `ListSeatsAsync()` | every seat of the tenant, your own class, whole, in the order of their ids |
+| `ListSeatsAsync()` | every seat of the tenant the caller reads, your own class, whole, in the order of their ids: by default every seat of the tenant, and on Postgres a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) may narrow that |
 | `ListRolesAsync()` | every role of the tenant, the active ones first, with whether each manages access |
 | `ListUnitsAsync()` | the units the caller is placed under, your own class, whole, each with its path from the root and its depth (`UnitInTree`) |
 | `SeatsByIdAsync(ids)` | the seats among the ids, as `ListSeatsAsync` answers them |
@@ -1584,7 +1584,9 @@ a project names its unit and the seats of its crew by id, and the screen asks wh
 roles a crew holds are the project's module's own, which it names itself (`GET /project-roles` in the sample).
 
 Whoever works in a tenant reads its names: a seat of it, or system work in it. No key is asked, for a list or
-for a question by id, and a question by id answers any seat, role or unit of the caller's tenant. That is
+for a question by id, and a question by id answers any seat, role or unit of the caller's tenant, of the seats
+those the caller reads, which is every seat unless a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace)
+says otherwise. That is
 wider than `ListUnitsAsync`, which lists where the caller is placed: someone on a project's team works at a
 unit they are not placed under, and still reads what that unit is called. An id of another tenant, or of
 nothing, is left out of the answer without a word, so the answer never says which of the two it was. A
@@ -4496,6 +4498,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | The host logs in as a role that owns nothing, every table forces its policies, the privileges are written from the policies, and the event log only grows | **Code:** `Examples/Tenancy/supabase/migrations/*_login_role.tenancy_api.ddd.sql`, which the exporter writes from its `SupabaseLoginRole`, [`Examples.Tenancy.Exporter.csproj`](../Examples/Tenancy/Examples.Tenancy.Exporter/Examples.Tenancy.Exporter.csproj), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), which runs the start-up checks the registrations bring<br/>**Try it:** [On the stack the Supabase CLI starts](../Examples/README.md#on-the-stack-the-supabase-cli-starts)<br/>**Test:** `SampleOnPostgresTests`, `SampleWithoutDatabaseTests`, `LoginRoleFileTests`, `LoginThatOwnsNothingTests`, `ForcedRowLevelSecurityTests`, `EventLogGuardTests` |
 | On Postgres the unique index on a tenant's root is required: the policies hold a seat, the index holds every role | **Code:** [`TenancyPostgresChecks.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Checks/TenancyPostgresChecks.cs), [`TenantsContext.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Persistence/TenantsContext.cs)<br/>**Try it:** The host starts only when the check passes<br/>**Test:** `RootIndexCheckTests` |
 | The policy for changing a project is coarser than the application on purpose. The unit a project is at, the seat that owns it and its crew decide who reaches it, so in the database those change only with the keys their commands ask: the unit with a trigger of the module's own, the owner and the crew with the lock the Membership package writes from the projects' rules. Its name, its planned days and its state change only with the keys renaming, planning and closing ask, by column rules. A save one of them refuses, from a handler whose caller lost a key after its check, is refused with `access.refused`, a 403, as a policy's refusal is | **Code:** [`UnitChangesWithItsKeys.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/UnitChangesWithItsKeys.cs), [`NameAndPlanChangeWithTheEditKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/NameAndPlanChangeWithTheEditKey.cs), [`StateChangesWithTheCloseKey.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/StateChangesWithTheCloseKey.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the projects' rules `[MembershipRules<CrewMember>]`, [`SeatsChangeTheProjectsTheyWorkOn.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/Access/SeatsChangeTheProjectsTheyWorkOn.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Exporter/Program.cs)<br/>**Try it:** Nothing to try through the application: the rule is about statements that go around it. [What stays in C#](#what-stays-in-c) says what the policy still lets through<br/>**Test:** `SampleOnPostgresTests`, `MovingScenarios`, `OwnerScenarios` |
+| What a member reads of the other seats, and who besides the seats managers reads an invitation, are defaults: a read rule on the application's own class takes the place of one, held to the tenant, beside what Tenancy's own work reads, which stays. The sample keeps both defaults | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`ContributedDefault.cs`](../Source/DDDToolkit.EntityFramework.Postgres/ContributedDefault.cs), [`TenancyRowAccess.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/RowAccess/TenancyRowAccess.cs)<br/>**Try it:** Nothing in the sample: it keeps the defaults ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace) says why)<br/>**Test:** `ReadRulesTests`, `RowAccessContributionTests`, `TenancyReadRuleGeneratorTests` |
 | Tenancy guards only its own columns of a seat: no seat changes its id, identity or tenant, whatever it manages, and its status changes only as the use cases change it. The columns the application adds are its own to guard: the sample holds a seat's name to the rule of its command with a column rule, and leaves the job title as writable as the row | **Code:** [`TenancySql.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Sql/TenancySql.cs), [`NameChangesByTheSeatOrWithTheSeatsKey.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs), [`RenameSeat.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/RenameSeat.cs)<br/>**Try it:** Nothing to try through the application: the rules are about statements that go around it ([What the database guards on a seat](#what-the-database-guards-on-a-seat))<br/>**Test:** `SeatColumnsTests`, `TenancyTriggerTests`, `SampleOnPostgresTests` |
 | A module's rule asks another module's projects by the project's id, through a contract of one line that Projects publishes, and names no SQL function: the export writes the policy with the function the Membership package says answers that set. Projects' own rules ask the same contracts. The functions keep the names the sample's database had, said in one place | **Code:** [`ProjectsISee.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsISee.cs), [`ProjectsWhereIHold.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Contracts/RowAccess/ProjectsWhereIHold.cs), [`SeatsRecordWhereTheyMay.cs`](../Examples/Tenancy/Modules/Inspections/Examples.Tenancy.Inspections.Infrastructure/Access/SeatsRecordWhereTheyMay.cs), [`ProjectMembership.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectMembership.cs), whose `Functions` keeps the names<br/>**Try it:** Read the newest `Examples/Tenancy/supabase/migrations/*_access.inspections.ddd.sql`: its policies ask `projects.project_ids_where_i_hold`, a name no rule of Inspections writes. [A resource's access, asked by its id](row-level-security.md#a-resources-access-asked-by-its-id) has the mechanism<br/>**Test:** `ProjectRowRulesTests`, `InspectionRowRulesTests`, `SampleOnPostgresTests` |
 | Every context is wired by one call. `UseDDDToolkit` adds the toolkit's interceptors, then what the host's registrations brought: the caller on every connection, which row level security brings, and Tenancy's save check, last. A module added later is wired by the same call, and a context that keeps rows to a tenant without the save check is refused at its first save | **Code:** [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs), [`SampleStorage.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Storage/SampleStorage.cs), [`DependencyInjection.cs`](../Source/DDDToolkit.EntityFramework/DependencyInjection.cs)<br/>**Try it:** Start the sample: the host's log names each context once, with what it was given<br/>**Test:** `StartupTests`, `UseDDDToolkitTests`, `OneCallTests`, `RequiredSaveCheckTests` |
@@ -4830,7 +4833,9 @@ else is asked of a function:
 - **A seat**, through Tenancy's use cases, reads its tenant with its tree, seats, placements and roles, and of
   what the seats hold its own: its grants and its rights. A seat that manages grants, seats or units at a unit
   reads the other seats' grants there and below it too, and one that manages roles for the whole tenant reads
-  them all. Nobody reads another seat's rights ([Who reads which grants](#who-reads-which-grants)).
+  them all. Nobody reads another seat's rights ([Who reads which grants](#who-reads-which-grants)). Which other
+  seats a member reads is a default, which a read rule on your seat class replaces
+  ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace)).
 - **What a use case has to know of other seats' rights**, three functions answer, as ids, keys and dates:
   who administers the tenant, what a move of a unit changes, and who holds a key at a unit.
 - **A module** reads none of the tables. Its context maps six functions that answer the rows the questions
@@ -4927,6 +4932,150 @@ $function$;
 
 </details>
 
+### Who reads the seats: a default you may replace
+
+Who may see whom is a choice of your application, not of Tenancy's. One application shows every member of a
+tenant everyone, another shows a person the people of their own team. So what a signed-in user reads of the seats
+is a default, and so is who besides the seats managers reads an invitation. You replace one with a read rule on
+your own class, written like any [row access rule](row-level-security.md#row-access-rules-written-in-c), and the
+export writes your rule where the default was.
+
+| Table | A signed-in user reads, by default | Replaced by a read rule on | Stays, whatever your rule says |
+|---|---|---|---|
+| Seats | the tenant's seats, and the person's own in every tenant | your seat class | a person's own seats, in every tenant; and every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant |
+| Invitations, where the context maps them | those at a unit where the seat manages seats | your invitation class | the same: listing and cancelling one load it, so your rule can only add readers |
+| Tenants, Organizations | the tenant, and the tenants the person has a seat in | no default | what the tenant picker needs; within a tenant there is nothing wider to give and nothing narrower to keep |
+| Roles | the tenant's | no default | Tenancy's questions read the roles as their caller, `RolesWithKey` and which keys of a grant's role manage access, so a narrower read would change their answers |
+| Units, the tree, placements, grants, rights, the revision, the history | as [What the policies check](#what-the-policies-check) says | no default | a rule is about an aggregate's own table, and these are the rows of an organization or a seat, or rows Tenancy writes itself |
+
+```mermaid
+flowchart LR
+    Read["A signed-in user<br/>reads the seats"] --> Rule{"a read rule of yours<br/>on your seat class?"}
+    Rule -- no --> Default(["Tenancy's default:<br/>the tenant's seats, and<br/>the person's own anywhere"])
+    Rule -- yes --> Either(["what Tenancy's own work reads,<br/>or what your rule allows<br/>in the calling seat's tenant"])
+```
+
+Without a rule nothing changes: the export writes the default as it always did. With one, it writes your rule in
+the default's place, and keeps two things of Tenancy's:
+
+- **Your rule is held to the calling seat's tenant**, as a rule on any table kept to a tenant is, so it never
+  repeats the tenant and never reaches another one. A rule that lets every seat through lets the tenant's seats
+  through. Reading across tenants is what [operators](#operators) do, and their policies are Tenancy's.
+- **What Tenancy's own work reads stays.** A person reads their own seats in every tenant, which the tenant picker
+  lists and the history's policy finds the person by. A seat that manages seats, grants or units anywhere, or roles
+  for the whole tenant, reads every seat of the tenant: the use cases load the seats it acts on, and the policies on
+  the placements and the grants read the seats as the caller, by the same keys that
+  [read the grants](#who-reads-which-grants). So a rule stricter than the default breaks none of Tenancy's own use
+  cases. The package's tests run every one of them under a rule that lets a member read itself alone.
+
+The export knows from the rules it writes for the context: a rule about your seat class that allows `Read` is on
+the table of a policy Tenancy marked a default for signed-in users, so it takes that policy's place
+([Policies a package ships](row-level-security.md#policies-a-package-ships)). Write it as you write any rule: one
+without `To` is for the signed-in users the default is for, the comment above the policy says so, and the table
+stays closed to anonymous callers. What else your rule changes, and what it does not:
+
+- **A direct read of the table, and what asks one.** A query of yours, the directory's lists and lookups of seats,
+  and `tenant_seats()`, which [modules read Tenancy through](#modules-read-through-functions) and which runs as its
+  caller, answer the seats your rule lets the caller read, and so does `ITenancyQuestions.Seats()`, which reads
+  it. Your own entities on the seat class are read with the seat, so your rule decides them as well. Whatever
+  admits a seat by asking there admits only seats the caller reads. [Membership](membership.md)'s admission, on a
+  member list joined to Tenancy, refuses a seat outside your rule with `member-not-active`, as it refuses a seat
+  that does not exist, so the refusal tells the caller nothing about a seat it may not see; a module's own rule
+  that reads `tenant_seats()` as the caller, such as the sample's check that a crew member is a seat of the
+  project's tenant, does the same. So a member puts on a list only the people it reads; a seat that manages
+  seats, grants or units anywhere, or roles for the whole tenant, reads every seat, and puts on whoever the list
+  takes.
+- **Not Tenancy's questions about the caller and about rights.** `caller_seat`, `units_where_i_hold`,
+  `seats_in_my_units`, `seats_holding_at`, `tenant_administrators`, `rights_a_move_changes` and the others run as
+  their owner and read no table as the caller: they answer what they answered, whatever your rule says.
+  `ITenancyQuestions.SeatsHoldingAt` asks the function on Postgres.
+- **Not a seat's placements and grants.** A rule on your seat class is about the seats' own table. The placements
+  and the grants keep Tenancy's policies: what a seat holds is read where it applies, and the policy that lets a
+  placement be withdrawn reads its grants. So your rule hides a seat's row, with its identity and every field of
+  yours on it, and not that the seat is there: every member still reads every seat's id and the units it is
+  placed at, through the placements and `tenant_placements()`.
+- **Not what anyone writes.** Who adds, changes or removes a seat stays Tenancy's: a rule on your seat class that
+  allows anything but `Read` is refused when the policies are written, and so is one whose `To` names a role the
+  default is not for, the anonymous caller's say. A [column rule](#what-the-database-guards-on-a-seat) still holds
+  a field of yours, as before.
+- **Not system work, nor operators.** Their policies are Tenancy's, and read as before.
+
+A read rule on your tenant, organization or role class is refused, naming the table: their reads are no default.
+
+<details>
+<summary>Show the code: a rule on the seat class, the building blocks, and what the export writes</summary>
+
+A member reads the people placed where it is placed, or below, beside what Tenancy keeps. Write it where your
+other rules are, in your infrastructure:
+
+```csharp
+[RowAccess<Seat>(RowOperations.Read)]
+public static partial class MembersReadThePeopleOfTheirUnits
+{
+    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+}
+```
+
+And a seat that gives roles at an invitation's unit reads it too, beside the seats managers there:
+
+```csharp
+[RowAccess<Invitation>(RowOperations.Read)]
+public static partial class GrantsManagersReadTheInvitationsAtTheirUnits
+{
+    public static bool Allows(Invitation invitation, Caller caller)
+        => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(TenancyKeys.GrantsManage).Contains(invitation.UnitId);
+}
+```
+
+The building blocks are Tenancy's questions as `TenancyRowAccess` offers them, and the columns of your class. Each
+question is asked once per statement, never once per row:
+
+| You mean | Your rule says | The policy asks |
+|---|---|---|
+| in the caller's tenant | `seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()` | `"TenantId" = (SELECT tenancy.caller_tenant())` |
+| the caller itself | `seat.Id == TenancyRowAccess.CallerSeat<SeatId>()` | `"Id" = (SELECT tenancy.caller_seat())` |
+| the person's own seats, in every tenant | `seat.Identity == caller.UserId` | `"Identity" IS NOT DISTINCT FROM (SELECT auth.uid())` |
+| the seats placed at or below a unit the caller is placed at; to a seat placed at the root, as every seat of a flat tenant is, every placed seat | `TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id)` | `"Id" = ANY (ARRAY(SELECT tenancy.seats_in_my_units()))` |
+| where the caller holds a key | `TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(key).Contains(invitation.UnitId)` | `"UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('...')))` |
+| a key held anywhere | `TenancyRowAccess.HoldsKey(key)` | `(SELECT tenancy.holds_key('...'))` |
+| a key held for the whole tenant | `TenancyRowAccess.HoldsTenantWide(key)` | `(SELECT tenancy.holds_tenant_wide('...'))` |
+
+Tenancy's own default is written with the same blocks, and so is what it keeps:
+
+```csharp
+// The default: the tenant's seats, and the person's own
+seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>() || seat.Identity == caller.UserId
+
+// What stays beside a rule of yours
+seat.Identity == caller.UserId
+    || (seat.TenantId == TenancyRowAccess.CallerTenant<TenantId>()
+        && (TenancyRowAccess.HoldsKey(TenancyKeys.SeatsManage) || TenancyRowAccess.HoldsKey(TenancyKeys.GrantsManage)
+            || TenancyRowAccess.HoldsKey(TenancyKeys.UnitsManage) || TenancyRowAccess.HoldsTenantWide(TenancyKeys.RolesManage)))
+```
+
+What the export writes for the first rule, under the sample's names, with the comment that says what it did:
+
+```sql
+-- Seats (select) for authenticated asks the rule 'Members read the people of their units' (which names no role, so
+-- it is for the roles of the default) in place of the default 'Members and the person read seats' of the row access
+-- contribution ..., held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one
+-- of them allows is allowed.
+CREATE POLICY "Seats (select) for authenticated" ON tenancy."Seats" FOR SELECT TO authenticated
+    USING (("Identity" = (SELECT auth.uid())
+            OR (("TenantId" = (SELECT tenancy.caller_tenant()))
+                AND ((SELECT tenancy.holds_key('tenancy.seats.manage')) OR (SELECT tenancy.holds_key('tenancy.grants.manage'))
+                     OR (SELECT tenancy.holds_key('tenancy.units.manage')) OR (SELECT tenancy.holds_tenant_wide('tenancy.roles.manage')))))
+           OR (("TenantId" = (SELECT tenancy.caller_tenant())) AND ("Id" = ANY (ARRAY(SELECT tenancy.seats_in_my_units())))));
+```
+
+</details>
+
+The [sample](#who-may-do-what-in-the-sample) keeps both defaults and writes no read rule: in its harbor people work
+across units, a crew lead puts on a project whoever the job needs, and every member sees everyone, which is the
+default; issuing and cancelling invitations is a seats manager's work there, which is the other. An application
+whose members should see only the people of their own part of the tree writes the rule above, and pins it with a
+test that reads the seats as a member, as the package's `ReadRulesTests` do.
+
 ### The functions
 
 The contribution writes the questions as functions, with your table names and the column types of your ids.
@@ -4945,6 +5094,7 @@ nothing, and the policies keep system work to its tenant with `system_tenant` in
 | `system_tenant()` | the tenant the setting names: the scoped system role's tenant, and the one a signed-in user's access revision is taken in and its [access history](#access-history) is added to | `TenancyWork.BeginSystemIn`'s tenant |
 | `units_where_i_hold(key)` | the units where the seat holds the key live, and every unit below them | `UnitsWhereIHold` |
 | `readable_units()` | the units of the seat's tenant where it is placed, and every unit below them | `ReadableUnits` |
+| `seats_in_my_units()` | the seats placed at one of those units, whatever their status: the people of the seat's own part of the tree, every placed seat to a seat placed at the root; for a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace) | |
 | `roles_with_key(key)` | the active roles of the seat's tenant that hold the key | `RolesWithKey` |
 | `holds_key(key)` | whether the seat holds the key live at any unit | |
 | `holds_tenant_wide(key)` | whether the seat holds the key live at the root | `HoldsTenantWideAsync` |
@@ -4985,7 +5135,7 @@ another database `AddTenancyReadModel` maps views over the tables:
 | `tenant_units()` | the tenant's units, without their names | `"Id"`, `"TenantId"`, `"ParentId"`, `"Status"` |
 | `tenant_roles()` | the tenant's roles, without their names, with their keys as an array of text | `"Id"`, `"TenantId"`, `"FromPack"`, `"Status"`, `"Keys"` |
 | `tenant_placements()` | where the tenant's seats are placed | `"SeatId"`, `"UnitId"`, `"IsPrimary"`, `"TenantId"` |
-| `tenant_seats()` | the tenant's seats, never their identity, nor a field your seat class adds such as a name | `"Id"`, `"TenantId"`, `"Status"` |
+| `tenant_seats()` | the tenant's seats the caller reads, every seat by default and those a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) lets it read where you write one; never their identity, nor a field your seat class adds such as a name | `"Id"`, `"TenantId"`, `"Status"` |
 
 These are the columns of the [read model's rows](#what-a-module-reads-of-tenancy), and no others: a function
 answers no name, so on Postgres a module has none to read either. `EnsurePoliciesAreInPlaceAsync` compares
@@ -5086,18 +5236,19 @@ tenant reads through the use cases, and writes where the use case asks the key:
 | Tenants, Organizations | the tenant; and the tenants where the person has a seat, which the tenant picker lists | the tenant with `tenancy.settings.manage` for the whole tenant, and never its status; the organization with that, or with `tenancy.units.manage` held |
 | OrganizationUnits | the tenant's | with `tenancy.units.manage` at the parent to add, at the unit or at its parent to rename or move, and at the new parent for a move; a unit that has a parent is never left without one, since a key held at a root is held for the whole tenant |
 | OrganizationUnitPaths | the tenant's | with `tenancy.units.manage` held; the trigger checks the rest |
-| Seats | the tenant's, and the person's own in any tenant | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage` held anywhere, or by the seat itself, since every save of a seat writes its version; its id, identity and tenant by no seat, and its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (triggers, below); your own columns as your column rules say ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
+| Seats | the tenant's, and the person's own in any tenant: a default, which a read rule on your seat class replaces ([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace)) | added with `tenancy.seats.manage` for the whole tenant; changed with `tenancy.seats.manage` or `tenancy.grants.manage` held anywhere, or by the seat itself, since every save of a seat writes its version; its id, identity and tenant by no seat, and its status only with `tenancy.seats.manage` for the whole tenant, by a seat that holds what the seat's roles that manage access give (triggers, below); your own columns as your column rules say ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
 | SeatPlacements | the tenant's | placed with `tenancy.seats.manage` at the unit, for a seat of the tenant; withdrawn with it there, or by the seat itself, once the placement holds no grant; changed with it held, and made primary only where it is held at the unit, since making one primary demotes the old one wherever that is |
 | SeatRoleGrants | the seat's own; another seat's where the caller manages grants, seats or units at the grant's unit or above it, or roles for the whole tenant ([who reads which grants](#who-reads-which-grants)) | with `tenancy.grants.manage` at the grant's unit, naming a role of the tenant that is active, given in the caller's own name; taken away there, or by the seat itself |
 | SeatRights | the seat's own | by no caller: the database writes them |
 | Roles | the tenant's | with `tenancy.roles.manage` for the whole tenant, which adds a role made by hand, naming no pack; a copy of one of your catalogue's packs, remembering exactly its keys, is added with that or with `tenancy.settings.manage`. What a role's pack gave it no seat changes (a trigger, below) |
 | TenancyAccessRevisions | the tenant's, for a person with a seat there of any status | by the same person: it is a counter every change of access takes, a seat's change of its own included |
 | The access history, where the context maps one | the tenant's, with `tenancy.history.view` for the whole tenant | added about the person's own seat, in the tenant the connection names; changed and removed by no caller ([Access history](#access-history)) |
-| Invitations and the digests of their tokens, where the context maps them | an invitation with `tenancy.seats.manage` at its unit; a digest by no caller | added by a seat that could add the seat and make the grant itself, and changed to cancelled and nothing else ([Invitations](#invitations)) |
+| Invitations and the digests of their tokens, where the context maps them | an invitation with `tenancy.seats.manage` at its unit, and by whoever a read rule on your invitation class adds; a digest by no caller | added by a seat that could add the seat and make the grant itself, and changed to cancelled and nothing else ([Invitations](#invitations)) |
 
 No signed-in user deletes a tenant, an organization, a unit, a seat or a role, and the use cases never do;
 Tenancy's own system work may. Every member reads the tree, the seats, where each seat is placed and the
-roles, as the use cases show them to every member. What a seat holds is its own to read: a seat reads its own
+roles, as the use cases show them to every member; which seats, a [read rule on your seat class](#who-reads-the-seats-a-default-you-may-replace)
+may narrow. What a seat holds is its own to read: a seat reads its own
 rights and no other seat's, whatever it manages, and its own grants. Another seat's grants it reads only where
 it manages grants, seats or units, or everywhere when it manages roles for the whole tenant
 ([Who reads which grants](#who-reads-which-grants)).
@@ -5170,7 +5321,9 @@ write the tenant into such a rule yourself.
 
 **Your own entities on Tenancy's classes**, such as a note on a tenant, are read with the row they belong
 to, in the caller's tenant, and written by whoever may change that row. Tenancy's tables, and these, are the
-contribution's alone: a rule or another contribution that would add a policy to one is refused. A
+contribution's alone: a rule or another contribution that would add a policy to one is refused, but for a read
+rule on your seat or invitation class, which takes the place of Tenancy's default read there
+([Who reads the seats](#who-reads-the-seats-a-default-you-may-replace)). A
 [column rule](row-level-security.md#column-rules) adds no policy, so one of yours may hold a column you added to
 one of Tenancy's classes; it cannot hold an entity's table, whose rows follow the row they belong to
 ([What the database guards on a seat](#what-the-database-guards-on-a-seat)).
@@ -5287,7 +5440,8 @@ flowchart LR
   [column rule](row-level-security.md#column-rules) of yours, written where your other rules are, beside your
   infrastructure. It adds no policy, so a table Tenancy keeps to itself takes it, and it holds the roles a caller's
   statement runs as, never your own work in a tenant. A column rule holds a change; reading follows the row, which
-  every member of the tenant reads, so a field you would show to fewer people belongs in a table of your own. An
+  every member of the tenant reads unless a [read rule](#who-reads-the-seats-a-default-you-may-replace) of yours
+  says otherwise, so a field you would show to fewer people than the row belongs in a table of your own. An
   entity your seat class holds, a collection, is no column: its table is written with the seat's row, by the same
   callers, Tenancy keeps it to itself, and no column rule holds it ([DDD00038](diagnostics.md#ddd00038)). Data
   that needs a narrower rule belongs in a table of your own with a rule of your own, or is held by a trigger in a

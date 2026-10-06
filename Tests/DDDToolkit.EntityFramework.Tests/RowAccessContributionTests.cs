@@ -100,6 +100,175 @@ public sealed class RowAccessContributionTests
     }
 
     [Fact]
+    public void A_contributed_default_read_is_written_as_it_is_while_no_rule_takes_its_place()
+    {
+        using var desk = DeskContext.Create();
+
+        var script = PostgresRowAccess.Script(desk, [], [], With(Keeper()));
+
+        script.Should().Contain(
+            "-- Members read the open tickets (select) for authenticated asks the policy 'Members read the open tickets' of the row access contribution " + SpotSource + ".\n" +
+            "CREATE POLICY \"Members read the open tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING (\"Status\" = 0);",
+            "a default is the contribution's policy, word for word, until the application says otherwise");
+        script.Should().NotContain("in place of");
+    }
+
+    [Fact]
+    public void A_read_rule_takes_the_place_of_a_default_held_to_what_it_holds_a_rule_to_beside_what_it_keeps()
+    {
+        using var desk = DeskContext.Create();
+
+        var script = PostgresRowAccess.Script(desk, [MembersReadPublicTickets], [], With(Keeper()));
+
+        script.Should().Contain(
+            "-- Tickets (select) for authenticated asks the rule 'Members read the public tickets' in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
+            ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"Owner\" = (SELECT ddd.caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));",
+            "the rule decides within what the default holds it to, and the owner keeps reading his own tickets whatever it says");
+        script.Should().NotContain("\"Status\" = 0", "the default itself is gone");
+        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"Tickets\" FOR SELECT TO authenticated$", RegexOptions.Multiline).Should().HaveCount(1);
+        script.Should().Contain(
+            "CREATE POLICY \"Keeper changes the tickets (update) for authenticated\" ON desk.\"Tickets\" FOR UPDATE TO authenticated",
+            "what a role writes stays the contribution's");
+
+        // The comments, their reactions and the watchers are the aggregate's entities, which the contribution keeps as
+        // well: the rule adds nothing to their tables, which keep the contribution's own policies, and no policy that
+        // reads with the ticket.
+        script.Should().Contain("CREATE POLICY \"Comments are read by everyone (select) for authenticated\" ON desk.\"TicketComment\" FOR SELECT TO authenticated\n    USING (TRUE);");
+        script.Should().NotContain("TicketComment belongs to the aggregate");
+        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"(CommentReaction|TicketWatcher)\" ", RegexOptions.Multiline).Should().BeEmpty();
+        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"TicketComment\" ", RegexOptions.Multiline).Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void A_default_that_keeps_nothing_and_holds_a_rule_to_nothing_leaves_the_rule_alone()
+    {
+        using var desk = DeskContext.Create();
+
+        var script = PostgresRowAccess.Script(desk, [MembersReadPublicTickets], [], With(Keeper(kept: null, within: null)));
+
+        script.Should().Contain(
+            "-- Tickets (select) for authenticated asks the rule 'Members read the public tickets' in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource + ".\n" +
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING (\"IsPublic\");");
+    }
+
+    [Fact]
+    public void A_rule_that_names_no_role_takes_the_place_of_a_default_for_the_roles_of_the_default_and_says_so()
+    {
+        using var desk = DeskContext.Create();
+
+        // Written in its usual form, without To: elsewhere that is for signed-in users and anonymous callers alike.
+        var script = PostgresRowAccess.Script(desk, [DeskRules.Public], [], With(Keeper()));
+
+        script.Should().Contain(
+            "-- Tickets (select) for authenticated asks the rule 'Public tickets are everyones' (which names no role, so it is for the roles of the default) in place of the default 'Members read the open tickets' of the row access contribution " + SpotSource +
+            ", held to what that default holds a rule to, beside what it keeps whatever a rule says: a row one of them allows is allowed.\n" +
+            "CREATE POLICY \"Tickets (select) for authenticated\" ON desk.\"Tickets\" FOR SELECT TO authenticated\n" +
+            "    USING ((\"Owner\" = (SELECT ddd.caller_id())) OR ((\"Team\" IS NOT NULL) AND (\"IsPublic\")));");
+        Regex.Matches(script, "^CREATE POLICY .* ON desk\\.\"Tickets\" .* TO anon$", RegexOptions.Multiline)
+            .Should().BeEmpty("the contribution has no default for anonymous callers, so the table stays closed to them");
+    }
+
+    [Fact]
+    public void A_rule_that_would_take_the_place_of_a_default_reads_and_does_nothing_else_for_the_roles_of_the_default()
+    {
+        using var desk = DeskContext.Create();
+        var changing = RowAccessRule.For<Ticket>("Members work on public tickets", RowOperations.Read | RowOperations.Change, PublicTicketsAreEveryones.RowAccessSql, RowAccessRoles.User);
+        var forAnonToo = RowAccessRule.For<Ticket>("Everyone reads public tickets", RowOperations.Read, PublicTicketsAreEveryones.RowAccessSql, RowAccessRoles.User, RowAccessRoles.Anonymous);
+
+        var forAnon = () => PostgresRowAccess.Script(desk, [forAnonToo], [], With(Keeper()));
+        var writes = () => PostgresRowAccess.Script(desk, [changing], [], With(Keeper()));
+        var noDefault = () => PostgresRowAccess.Script(desk, [MembersReadPublicTickets], [], With(new SpotContribution("keeper", context => new([], [], [], [SpotContribution.Of<Ticket>(context)]))));
+
+        forAnon.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Everyone reads public tickets' would add a policy to desk.Tickets, which the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution keeps to itself: only it writes that table's policies. " +
+            "It lets a rule of the application take the place of what it lets RowAccessRoles.User read there, and of nothing else, and the rule is for RowAccessRoles.Anonymous as well: " +
+            "leave To out, and the rule is for the roles of the default, or set To = [RowAccessRoles.User].",
+            "a rule that names anon itself asks for what the default is not for");
+        writes.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Members work on public tickets' would add a policy to desk.Tickets, *: a rule that allows Read alone. Who may add, change or remove its rows stays the contribution's.");
+        noDefault.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Members read the public tickets' would add a policy to desk.Tickets, * Leave the rule out, or ask the contribution for what the rule needs.",
+            "a table kept without a default takes no rule at all");
+    }
+
+    [Fact]
+    public void A_rule_whose_aggregate_has_a_table_of_entities_that_nobody_keeps_is_refused_where_it_takes_the_place_of_a_default()
+    {
+        using var desk = DeskContext.Create();
+
+        // The contribution keeps the tickets and marks their read a default, and leaves the comments to whoever writes them.
+        var rootOnly = new SpotContribution("keeper", context =>
+        {
+            var tickets = SpotContribution.Of<Ticket>(context);
+            return new(
+                [],
+                [new ContributedPolicy(tickets, "Members read the open tickets", "SELECT", RowAccessRoles.User, "\"Status\" = 0", null) { Default = new ContributedDefault(null, null) }],
+                [],
+                [tickets]);
+        });
+
+        var script = () => PostgresRowAccess.Script(desk, [MembersReadPublicTickets], [], With(rootOnly));
+
+        script.Should().Throw<InvalidOperationException>().WithMessage(
+            "The rule 'Members read the public tickets' would take the place of a default read on desk.Tickets, which the row access contribution DDDToolkit.EntityFramework.Tests.Infrastructure.SpotContribution keeps to itself, " +
+            "and add a policy to desk.TicketComment, a table of the aggregate's entities that no contribution keeps: there it would let the rule's roles read and nothing else, and no row of it could be written. " +
+            "Ask the contribution to keep desk.TicketComment as well, or leave the rule out.",
+            "a read rule takes the place of the read of the aggregate's own table alone, and would leave the comments readable and nothing else");
+    }
+
+    [Fact]
+    public void A_default_is_what_a_role_reads_and_a_contribution_that_marks_anything_else_is_refused()
+    {
+        using var desk = DeskContext.Create();
+
+        Problem(tickets => new ContributedPolicy(tickets, "Insert", "INSERT", RowAccessRoles.User, null, "TRUE") { Default = new ContributedDefault(null, null) })
+            .Should().EndWith("is a default and for INSERT: a default is what a role reads, a permissive policy for SELECT, which a rule of the application may take the place of.");
+        Problem(tickets => new ContributedPolicy(tickets, "Narrow", "SELECT", RowAccessRoles.User, "TRUE", null, Restrictive: true) { Default = new ContributedDefault(null, null) })
+            .Should().EndWith("is a default and restrictive: a default is what a role reads, a permissive policy for SELECT, which a rule of the application may take the place of.");
+        Problem(tickets => new ContributedPolicy(tickets, "Read", "SELECT", RowAccessRoles.User, "TRUE", null) { Default = new ContributedDefault(" ", null) })
+            .Should().EndWith("is a default that keeps an empty condition beside a rule: say null for nothing.");
+
+        string Problem(Func<Microsoft.EntityFrameworkCore.Metadata.IEntityType, ContributedPolicy> policy)
+        {
+            var script = () => PostgresRowAccess.Script(desk, [], [], With(new SpotContribution("x", context => new([], [policy(SpotContribution.Of<Ticket>(context))], []))));
+            return script.Should().Throw<InvalidOperationException>().Which.Message;
+        }
+    }
+
+    /// <summary>A rule of the application's that lets signed-in users read the public tickets, and does nothing else.</summary>
+    private static readonly RowAccessRule MembersReadPublicTickets =
+        RowAccessRule.For<Ticket>("Members read the public tickets", RowOperations.Read, PublicTicketsAreEveryones.RowAccessSql, RowAccessRoles.User);
+
+    /// <summary><see cref="SpotContribution"/>, its assembly and the assembly's version, as the comments of a script name it.</summary>
+    private static string SpotSource => DutyRowAccess.Source.Replace(typeof(DutyRowAccess).FullName!, typeof(SpotContribution).FullName!, StringComparison.Ordinal);
+
+    /// <summary>
+    /// A contribution that keeps the tickets and every table of their entities to itself: signed-in users read the
+    /// open tickets by default, a rule of the application's held to tickets of a team, the owner reading his own
+    /// whatever it says; and it alone lets them change a ticket, and read the comments. The comments' reactions and
+    /// the watchers it keeps closed.
+    /// </summary>
+    private static SpotContribution Keeper(string? kept = "\"Owner\" = {caller:uid}", string? within = "\"Team\" IS NOT NULL")
+        => new("keeper", context =>
+        {
+            var tickets = SpotContribution.Of<Ticket>(context);
+            var comments = SpotContribution.Of<TicketComment>(context);
+            return new(
+                [],
+                [
+                    new ContributedPolicy(tickets, "Members read the open tickets", "SELECT", RowAccessRoles.User, "\"Status\" = 0", null) { Default = new ContributedDefault(kept, within) },
+                    new ContributedPolicy(tickets, "Keeper changes the tickets", "UPDATE", RowAccessRoles.User, "TRUE", null),
+                    new ContributedPolicy(comments, "Comments are read by everyone", "SELECT", RowAccessRoles.User, "TRUE", null),
+                ],
+                [],
+                [tickets, comments, SpotContribution.Of<CommentReaction>(context), SpotContribution.Of<TicketWatcher>(context)]);
+        });
+
+    [Fact]
     public void A_contributed_function_is_resolved_by_its_owners_logical_name()
     {
         using var desk = DeskContext.Create();

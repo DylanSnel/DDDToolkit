@@ -21,7 +21,8 @@ namespace Examples.Tenancy.Projects.Infrastructure.Access;
 /// (<c>MemberAdmission.RequireMemberAsync</c>). A statement that went round the application could put a seat of
 /// another tenant on the crew, and that seat, acting in its own tenant, would then be answered the project by the
 /// projects' functions and could record on it. So a row is added only for a seat the caller reads in the project's
-/// own tenant, asked of Tenancy's function as the caller, under Tenancy's rules on its seats. A row's seat is fixed
+/// own tenant, asked of Tenancy's function as the caller, under the policy on the seats: Tenancy's default here,
+/// every seat of the tenant, which a read rule on the seat class would take the place of. A row's seat is fixed
 /// once it is there, so only adding one is asked. It is the seat's side of what the package holds of a role on a
 /// crew: a role the caller sees.
 /// <para>

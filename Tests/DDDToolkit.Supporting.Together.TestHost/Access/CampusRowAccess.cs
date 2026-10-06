@@ -67,3 +67,16 @@ public static partial class SeatsReadTheLabsTheySee
     /// <summary>Whether the caller sees <paramref name="lab"/>.</summary>
     public static bool Allows(Lab lab, Caller caller) => LabQuestions.Seen().Contains(lab.Id);
 }
+
+/// <summary>
+/// A member reads the people of its own part of the college: the seats placed at a unit it is placed at, or below
+/// one. A read rule on Tenancy's seats takes the place of Tenancy's default, which lets every member read every seat,
+/// so it names no role: it is for the signed-in users the default is for. The campus runs without it; the tests of
+/// a narrower read of the seats add it to the rules the access files are written with.
+/// </summary>
+[RowAccess<Seat>(RowOperations.Read)]
+public static partial class MembersReadThePeopleOfTheirUnits
+{
+    /// <summary>Whether <paramref name="seat"/> is placed where the calling seat is placed, or below.</summary>
+    public static bool Allows(Seat seat, Caller caller) => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(seat.Id);
+}

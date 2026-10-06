@@ -31,6 +31,14 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// the policies Tenancy writes keep system work to its tenant themselves, so a rule for it asks none of these.
 /// </para>
 /// <para>
+/// The same questions say who reads Tenancy's own seats and invitations, where the application replaces Tenancy's
+/// default with a read rule on its class: <c>seat.TenantId == CallerTenant&lt;TenantId&gt;()</c> for the caller's
+/// tenant, <c>seat.Id == CallerSeat&lt;SeatId&gt;()</c> for the caller itself,
+/// <c>UnitsWhereIHold&lt;OrganizationUnitId&gt;(key).Contains(invitation.UnitId)</c> for where it holds a key,
+/// <see cref="HoldsKey"/> and <see cref="HoldsTenantWide"/>, and <see cref="SeatsInMyUnits{TSeatId}"/> for the
+/// seats placed where it is placed, or below.
+/// </para>
+/// <para>
 /// The questions named <c>...InTenant</c> take the tenant as an argument, and read no setting of the
 /// connection: for a policy that runs where the application's connection is not the one asking, such as one on
 /// the path of a stored file or on a channel, whose tenant is in the path or the channel's name. They answer
@@ -64,6 +72,24 @@ public static partial class TenancyRowAccess
     [AccessSet("readable_units")]
     public static partial AccessSet<TUnitId> ReadableUnits<TUnitId>()
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>;
+
+    /// <summary>
+    /// The seats placed at one of <see cref="ReadableUnits{TUnitId}"/>: at a unit the calling seat is placed at, or at
+    /// a unit below one, whatever their status, and the calling seat itself once it is placed anywhere. So a seat
+    /// placed at a parent finds the people of every unit below it too, and one placed at the root, as every seat of
+    /// a flat tenant is, finds every placed seat of the tenant. For a read rule on the application's seat class,
+    /// which says who reads which seats:
+    /// <code>
+    /// [RowAccess&lt;Seat&gt;(RowOperations.Read)]
+    /// public static partial class MembersReadThePeopleOfTheirUnits
+    /// {
+    ///     public static bool Allows(Seat seat, Caller caller) =&gt; TenancyRowAccess.SeatsInMyUnits&lt;SeatId&gt;().Contains(seat.Id);
+    /// }
+    /// </code>
+    /// </summary>
+    [AccessSet("seats_in_my_units")]
+    public static partial AccessSet<TSeatId> SeatsInMyUnits<TSeatId>()
+        where TSeatId : struct, IEntityId, IEquatable<TSeatId>;
 
     /// <summary>
     /// The active roles of the caller's tenant that grant <paramref name="key"/>. As

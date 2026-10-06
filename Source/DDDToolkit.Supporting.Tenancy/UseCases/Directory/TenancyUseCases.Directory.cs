@@ -30,6 +30,11 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// by id takes at most <see cref="MostIds"/> ids.
     /// </para>
     /// <para>
+    /// The seats are those the caller reads: every seat of the tenant by default. On Postgres a read rule of the
+    /// application's on its seat class may narrow that, and the lists and the questions by id of seats then answer
+    /// the seats the rule lets the caller read, leaving the others out as they leave out an id of another tenant.
+    /// </para>
+    /// <para>
     /// Paths are written from the root down, joined with <c>" / "</c>, and come from the closure of the tree,
     /// so a unit's path names the units above it even where the caller is not placed under those.
     /// </para>

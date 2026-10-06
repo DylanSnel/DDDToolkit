@@ -34,4 +34,13 @@ public sealed record ContributedPolicy(
     string Role,
     string? Using,
     string? WithCheck,
-    bool Restrictive = false);
+    bool Restrictive = false)
+{
+    /// <summary>
+    /// Set when the policy is a default that a rule of the application may take the place of: what the role reads
+    /// of the table, until the application says otherwise with a <c>[RowAccess]</c> rule that allows it
+    /// <c>Read</c>. <see langword="null"/> for a policy no rule replaces, which is every policy a contribution does
+    /// not mark. See <see cref="ContributedDefault"/>.
+    /// </summary>
+    public ContributedDefault? Default { get; init; }
+}

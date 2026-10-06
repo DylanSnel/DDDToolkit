@@ -1264,7 +1264,9 @@ What the written class answers:
   `tenancy.not-seated`, `tenancy.seat-suspended`, `tenancy.tenant-required`. A suspended seat is nobody:
   the rows that name it still apply, and reach nothing.
 - **Somebody is made a member while their seat is active,** in the tenant the caller acts in:
-  `MemberAdmission` asks Tenancy. A seat of another tenant is no seat there.
+  `MemberAdmission` asks Tenancy. A seat of another tenant is no seat there. Tenancy answers from the seats the
+  caller reads, every seat of the tenant unless a [read rule on your seat class](tenancy.md#who-reads-the-seats-a-default-you-may-replace)
+  narrows that on Postgres; a seat the caller does not read is then refused as one that does not exist is.
 - **A key held in the organization reaches the resource from above:** held at the unit the resource sits at,
   or at one above it. `Via` says `Above`. Only a key of Tenancy's catalogue can be held there, so add the
   resource's keys to it: mark the module's list of them with `[TenancyPermissions]`, and the host adds it

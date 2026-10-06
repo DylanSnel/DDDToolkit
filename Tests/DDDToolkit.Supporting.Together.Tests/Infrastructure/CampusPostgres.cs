@@ -84,14 +84,14 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
 
     /// <summary>
     /// The access files of the application's two contexts, in the order to run them: written together, with
-    /// <paramref name="contributions"/>, or the three the host lists, so a function of the courses' finds
-    /// Tenancy's wherever Tenancy's context puts it.
+    /// <paramref name="contributions"/>, or the three the host lists, and with <paramref name="rules"/>, or the
+    /// application's own, so a function of the courses' finds Tenancy's wherever Tenancy's context puts it.
     /// </summary>
-    public static IReadOnlyList<string> AccessScripts(IReadOnlyList<IRowAccessContribution>? contributions = null)
+    public static IReadOnlyList<string> AccessScripts(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null)
     {
         using var tenancy = TenancyModel();
         using var campus = CampusModel();
-        return [.. PostgresRowAccess.Scripts([tenancy, campus], Rules, [], new RowAccessExport { Contributions = contributions ?? Contributions }).Select(each => each.Script)];
+        return [.. PostgresRowAccess.Scripts([tenancy, campus], rules ?? Rules, [], new RowAccessExport { Contributions = contributions ?? Contributions }).Select(each => each.Script)];
     }
 
     /// <inheritdoc />

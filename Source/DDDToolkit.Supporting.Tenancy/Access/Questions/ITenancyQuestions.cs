@@ -113,8 +113,15 @@ public interface ITenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>
     IQueryable<RoleRow<TTenantId, TRoleId>> Roles();
 
     /// <summary>
-    /// The tenant's seats, in any status, as access facts, without a name: whether each counts. What a seat is
-    /// shown by is the application's, selected from its own seat, which the directory answers whole, by id.
+    /// The tenant's seats the caller reads, in any status, as access facts, without a name: whether each counts.
+    /// What a seat is shown by is the application's, selected from its own seat, which the directory answers whole,
+    /// by id.
+    /// <para>
+    /// A read of the seats, unlike the questions about rights: by default every seat of the tenant, and on Postgres
+    /// the seats a read rule of the application's on its seat class lets the caller read, where it writes one
+    /// (<c>tenant_seats()</c> runs as its caller). A module that admits a seat by asking here, as Membership's
+    /// admission does, then admits only seats the caller reads.
+    /// </para>
     /// </summary>
     /// <exception cref="InvalidOperationException">The caller is system work outside any tenant.</exception>
     IQueryable<SeatRow<TTenantId, TSeatId>> Seats();

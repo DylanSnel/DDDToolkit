@@ -878,6 +878,10 @@ public static partial class PostgresRowAccess
         var roots = new HashSet<StoreObjectIdentifier>();
         var policyNames = new PolicyNames();
 
+        // The tables a contribution keeps to itself. A rule reaches one only where it takes the place of a default
+        // read on its aggregate's own table (Prepare refuses the rest), so it adds nothing to those of its entities.
+        var keptTables = prepared.Contributions.SelectMany(contributed => contributed.Result.ExclusiveTables ?? []).Select(TableOf).ToHashSet();
+
         // Aggregates that share a table, a hierarchy mapped to one, share its policies too, and those of the
         // tables of their entities, so a command and a role still get one policy on each.
         foreach (var onTable in aggregates.GroupBy(aggregate => TableOf(aggregate.Root)))
@@ -890,7 +894,7 @@ public static partial class PostgresRowAccess
             secured.Add(table);
             roots.Add(table);
             statements.Append(RootStatements(table, qualified, sharing, prepared.Roles, writing, permissive, policyNames, privileges));
-            statements.Append(EntityStatements(table, sharing, prepared.Roles, writing, permissive, secured, policyNames, privileges));
+            statements.Append(EntityStatements(table, sharing, prepared.Roles, writing, permissive, secured, keptTables, policyNames, privileges));
         }
 
         statements.Append(ContributedPolicyStatements(prepared, policies, permissive, secured, writing, policyNames, privileges));
@@ -1016,6 +1020,23 @@ public static partial class PostgresRowAccess
                     PolicyName(granting.Count + added.Count > 1 ? table.Name + of : granting.Count == 1 ? granting[0].Rule.Name + of : added[0].Declared.Name + of),
                     $"the permissive policy for {command} to {role}");
                 privileges?.Allow(table, command, role);
+
+                // A contributed default the rules take the place of: they are held to what it holds a rule to, and
+                // what it keeps stays beside them.
+                List<Policy> replaced = granting.Count > 0 ? [.. added.Where(policy => policy.Default is not null)] : [];
+                if (replaced.Count > 0)
+                {
+                    statements.Append('\n').Append(Replacing(name, granting.Select(each => each.Rule), replaced, [.. added.Except(replaced)], roles, writing.Roles)).Append('\n');
+                    var held = AllOf([.. replaced.Select(policy => policy.Default!.Within), AnyOf(granting.Select(each => each.Condition))])!;
+                    var reads = AnyOf([.. replaced.Select(policy => policy.Default!.Kept), held, .. added.Except(replaced).Select(policy => policy.Using)])!;
+                    statements
+                        .Append("CREATE POLICY ").Append(sql.DelimitIdentifier(name)).Append(" ON ").Append(qualified)
+                        .Append(" FOR ").Append(command).Append(" TO ").Append(sql.DelimitIdentifier(role)).Append('\n')
+                        .Append(Clauses(command, reads, null)).Append(";\n")
+                        .Append("COMMENT ON POLICY ").Append(sql.DelimitIdentifier(name)).Append(" ON ").Append(qualified)
+                        .Append(" IS ").Append(Literal(PolicyComment)).Append(";\n");
+                    continue;
+                }
 
                 statements.Append('\n');
                 if (added.Count > 0)
@@ -1246,6 +1267,11 @@ public static partial class PostgresRowAccess
     /// <param name="writing">What the policies are written with.</param>
     /// <param name="contributed">The contributions' permissive policies, which are merged with those of a table of entities they are on.</param>
     /// <param name="secured">The tables with row level security turned on so far, which this adds the entities' tables to.</param>
+    /// <param name="kept">
+    /// The tables a contribution keeps to itself, which get nothing here: a rule that reaches the aggregate's own
+    /// table where a contribution keeps it takes the place of a default read there, and leaves the tables of the
+    /// entities to the contribution's policies.
+    /// </param>
     /// <param name="policyNames">The names the script gave its policies so far, per table.</param>
     /// <param name="privileges">What the permissive policies allow, where the script writes privileges too.</param>
     private static string EntityStatements(
@@ -1255,6 +1281,7 @@ public static partial class PostgresRowAccess
         Writing writing,
         Dictionary<(StoreObjectIdentifier Table, string Command, string Role), List<Policy>> contributed,
         HashSet<StoreObjectIdentifier> secured,
+        IReadOnlySet<StoreObjectIdentifier> kept,
         PolicyNames policyNames,
         Privileges? privileges)
     {
@@ -1267,6 +1294,11 @@ public static partial class PostgresRowAccess
 
             foreach (var (entity, chain, _) in EntitiesOf(aggregate.Root, table, []))
             {
+                if (kept.Contains(entity))
+                {
+                    continue;
+                }
+
                 var known = entities.FindIndex(each => each.Table == entity);
                 if (known < 0)
                 {
@@ -1401,6 +1433,58 @@ public static partial class PostgresRowAccess
             1 => present[0],
             _ => "(" + string.Join(" OR ", present) + ")",
         };
+    }
+
+    /// <summary>The conditions AND-ed together, each in parentheses; <see langword="null"/> for none.</summary>
+    private static string? AllOf(IEnumerable<string?> conditions)
+    {
+        var present = conditions.OfType<string>().Select(Parenthesized).ToList();
+        return present.Count switch
+        {
+            0 => null,
+            1 => present[0],
+            _ => "(" + string.Join(" AND ", present) + ")",
+        };
+    }
+
+    /// <summary>
+    /// The comment above a policy whose <paramref name="rules"/> take the place of contributed defaults: which rules,
+    /// in place of which defaults, held to what and beside what, and the contributed policies asked with them. A
+    /// rule that names no role and was taken for the roles of the default alone says so, since its policy for the
+    /// anonymous caller is left out.
+    /// </summary>
+    private static string Replacing(
+        string name,
+        IEnumerable<RowAccessRule> rules,
+        IReadOnlyList<Policy> replaced,
+        IReadOnlyList<Policy> others,
+        IReadOnlyDictionary<RowAccessRule, IReadOnlyList<string>> roles,
+        RowAccessRoleNames names)
+    {
+        var one = replaced.Count == 1;
+        var kept = replaced.Count(policy => policy.Default!.Kept is not null);
+        var text = new StringBuilder("-- ").Append(Commented(name)).Append(" asks ")
+            .Append(Listed(rules.Select(rule => "the rule '" + Commented(rule.Name) + "'"
+                + (rule.Roles.Count == 0 && !roles[rule].Contains(names.Anonymous, StringComparer.Ordinal) ? " (which names no role, so it is for the roles of the default)" : ""))))
+            .Append(" in place of ")
+            .Append(Listed(replaced.Select(policy => $"the default '{Commented(policy.Declared.Name)}' of the row access contribution {Commented(policy.From.Source)}")));
+
+        if (replaced.Any(policy => policy.Default!.Within is not null))
+        {
+            text.Append(", held to what ").Append(one ? "that default holds" : "those defaults hold").Append(" a rule to");
+        }
+
+        if (kept > 0)
+        {
+            text.Append(", beside what ").Append(one ? "it keeps" : "they keep").Append(" whatever a rule says");
+        }
+
+        if (others.Count > 0)
+        {
+            text.Append(", and ").Append(Listed(others.Select(Described)));
+        }
+
+        return text.Append(1 + kept + others.Count > 1 ? ": a row one of them allows is allowed." : ".").ToString();
     }
 
     /// <summary>

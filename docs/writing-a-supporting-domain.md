@@ -387,7 +387,11 @@ added to a row, so a test of the application holds every module to it
 ([what a module reads of Tenancy](tenancy.md#what-a-module-reads-of-tenancy), and [its names](tenancy.md#names)).
 
 What such a contribution writes follows from what the package owns. Policies on its own tables, which it keeps
-to itself in `ExclusiveTables`, so no rule of the application's adds one next to them. Restrictive policies on
+to itself in `ExclusiveTables`, so no rule of the application's adds one next to them. Where who reads a table of
+the application's class is the application's choice, who reads the subscriptions say, the package marks its read a
+[default](row-level-security.md#policies-a-package-ships), with what its own work reads kept beside a rule of the
+application's and what that rule is held to, and the application replaces it with a read rule on its class, as
+[Tenancy's seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace) do. Restrictive policies on
 the application's tables that depend on it, a table kept to a subscription say, since a restrictive policy is
 never merged with the rules' and no rule can widen it. As statements, the triggers that keep what no policy can
 see, such as a rule about rows other than the one written, checked at commit. A contribution the application

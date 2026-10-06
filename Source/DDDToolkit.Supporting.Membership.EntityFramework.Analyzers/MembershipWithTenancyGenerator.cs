@@ -413,7 +413,11 @@ public sealed class MembershipWithTenancyGenerator : IIncrementalGenerator
             writer.Line("public void Require(" + Caller + " caller) => _tenancy.RequireTenant();");
 
             writer.Line();
-            writer.Line("/// <summary>Whether <paramref name=\"member\"/> is an active seat of the tenant the caller acts in.</summary>");
+            writer.Line("/// <summary>");
+            writer.Line("/// Whether <paramref name=\"member\"/> is an active seat of the tenant the caller acts in, among the seats the caller reads:");
+            writer.Line("/// every seat of the tenant by default, and on Postgres those a read rule of the application's on its seat class lets it read.");
+            writer.Line("/// A seat the caller does not read is refused as one that does not exist is, so the refusal says nothing about it.");
+            writer.Line("/// </summary>");
             writer.Line("public async global::System.Threading.Tasks.ValueTask<bool> IsActiveAsync(" + join.Seat + " member, " + CancellationTokenType + " cancellationToken)");
             writer.Line("    => await AskAsync(");
             writer.Line("        tenancy => " + Asynchronous + ".AnyAsync(");

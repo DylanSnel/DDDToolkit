@@ -38,12 +38,24 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres;
 /// <para>
 /// For the context that maps Tenancy's tables, in its default schema: the functions <c>caller_seat</c>,
 /// <c>caller_tenant</c>, <c>system_tenant</c>, <c>units_where_i_hold</c>, <c>readable_units</c>,
-/// <c>roles_with_key</c>, <c>holds_key</c>, <c>holds_tenant_wide</c>, <c>identity_tenants</c>, <c>unit_parent</c>,
+/// <c>seats_in_my_units</c>, <c>roles_with_key</c>, <c>holds_key</c>, <c>holds_tenant_wide</c>,
+/// <c>identity_tenants</c>, <c>unit_parent</c>,
 /// <c>manages_access</c>, <c>key_is_contained</c> and <c>pack_keys</c>, executable by signed-in users and by system
 /// work in a tenant; the
 /// policies on Tenancy's tables, which only this contribution writes; and the triggers that keep an administrator
 /// in every active or suspended tenant, every right backed by a grant, the closure of the tree exact, and fixed
 /// what a seat, a placement and a grant are about.
+/// </para>
+/// <para>
+/// Who reads the seats, and who besides the seats managers at its unit reads an invitation, are defaults
+/// (<see cref="ContributedDefault"/>), since what people may see of each other is the application's choice: a
+/// <c>[RowAccess]</c> rule of the application's on its seat class, or on its invitation class, that allows
+/// <c>Read</c> to signed-in users takes the place of the default, held to the calling seat's tenant. What
+/// Tenancy's own work reads stays whatever the rule says: a person's own seats, every seat of the tenant to a seat
+/// that manages seats, grants or units anywhere or roles for the whole tenant, and an invitation to the seats
+/// managers at its unit. The functions that answer about the caller and about rights run as their owner and are no
+/// read of a table, so a rule changes nothing they answer; <c>tenant_seats</c>, which runs as its caller, answers
+/// the seats the rule lets the caller read. Every other read, and every write, stays this contribution's.
 /// </para>
 /// <para>
 /// The database keeps the rights: a trigger on the grants, the seats and the roles writes each seat's rights as

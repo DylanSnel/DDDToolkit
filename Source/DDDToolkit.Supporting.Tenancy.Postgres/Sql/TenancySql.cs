@@ -51,6 +51,8 @@ internal static class TenancySql
 
     internal const string ReadableUnits = "readable_units";
 
+    internal const string SeatsInMyUnits = "seats_in_my_units";
+
     internal const string RolesWithKey = "roles_with_key";
 
     internal const string HoldsKey = "holds_key";
@@ -427,6 +429,22 @@ internal static class TenancySql
             SELECT DISTINCT p.{C(paths, "DescendantId")} FROM {Q(placements)} pl
             JOIN {Q(paths)} p ON p.{C(paths, "AncestorId")} = pl.{C(placements, "UnitId")} AND p.{C(paths, "TenantId")} = pl.{C(placements, "TenantId")}
             WHERE pl.{C(placements, "SeatId")} = {callerSeat} AND p.{C(paths, "TenantId")} = (SELECT {Fn(CallerTenant)}())
+            """,
+            SecurityDefiner: true,
+            GrantTo: callers);
+
+        // The seats placed at a unit the calling seat belongs to, as readable_units answers those: a unit it is placed
+        // at, or one below it. For a read rule of the application's on its seat class, which can say who reads which
+        // seats by where they are placed. Any seat placed there, whatever its status, and the calling seat itself once
+        // it is placed anywhere; to a seat placed at the root, every placed seat of the tenant.
+        yield return new ContributedFunction(
+            SeatsInMyUnits,
+            "",
+            "SETOF " + seatType,
+            $"""
+            SELECT DISTINCT pl.{C(placements, "SeatId")} FROM {Q(placements)} pl
+            WHERE pl.{C(placements, "TenantId")} = (SELECT {Fn(CallerTenant)}())
+              AND pl.{C(placements, "UnitId")} = ANY (ARRAY(SELECT {Fn(ReadableUnits)}()))
             """,
             SecurityDefiner: true,
             GrantTo: callers);
@@ -1147,6 +1165,11 @@ internal static class TenancySql
     /// also takes away its own grants and placements, as the use cases let it. System work reads its tenant, and
     /// writes it in Tenancy's own scope. Nobody writes the rights: the database keeps them itself. Every table is kept
     /// to its tenant for system work and closed to anonymous callers, and kept to this contribution.
+    /// <para>
+    /// What a signed-in user reads of the seats is a default (<see cref="ContributedDefault"/>): a read rule of the
+    /// application's on its seat class takes its place, held to the calling seat's tenant, beside what Tenancy's own
+    /// work reads, which no rule takes away. Every other read, and every write, stays this contribution's.
+    /// </para>
     /// </summary>
     private static void OwnTables(TenancyTables tenancy, List<ContributedPolicy> policies, List<IEntityType> exclusive)
     {
@@ -1216,7 +1239,20 @@ internal static class TenancySql
         // as the use cases change it. The application's own columns are its own to hold: Tenancy decides nothing of them.
         var seatTenant = T(C(seats, "TenantId"));
         var seat = Both(seatTenant, $"({K(SeatsKey)} OR {K(GrantsKey)} OR {C(seats, "Id")} = {callerSeat})");
-        Add(seats, "Members and the person read seats", "SELECT", $"({seatTenant} OR {C(seats, "Identity")} = {Uid})", null);
+
+        // Who reads the seats is the application's to say, so this is a default: a read rule of the application's on
+        // its seat class takes its place, held to the calling seat's tenant. What Tenancy's own work reads
+        // stays, whatever the rule says: a person's own seats, in every tenant, which the tenant picker lists and the
+        // history's policy finds the person by; and every seat of the tenant to a seat that manages seats, grants or
+        // units anywhere, or roles for the whole tenant, which the use cases load and which the policies on the
+        // placements and on the grants read in a subquery, as the caller, by the same keys that read the grants.
+        var personsOwn = $"{C(seats, "Identity")} = {Uid}";
+        policies.Add(new ContributedPolicy(seats, "Members and the person read seats", "SELECT", User, $"({seatTenant} OR {personsOwn})", null)
+        {
+            Default = new ContributedDefault(
+                Kept: $"({personsOwn} OR {Both(seatTenant, $"({K(SeatsKey)} OR {K(GrantsKey)} OR {K(UnitsKey)} OR {W(RolesKey)})")})",
+                Within: seatTenant),
+        });
         Add(seats, "Seat managers add seats", "INSERT", null, Both(seatTenant, W(SeatsKey)));
         Add(seats, "Managers and the seat change it", "UPDATE", seat, seat);
 
@@ -1308,7 +1344,8 @@ internal static class TenancySql
     /// <summary>
     /// The policies on the invitations and on the digests of their tokens, where the model maps them
     /// (<c>AddTenancyInvitations</c>). An invitation is read by the seats that manage seats at its unit, as the use
-    /// case lists it. It is added by a seat that could add the seat and make the grant itself: one that manages
+    /// case lists it, and by whoever else a read rule of the application's on its invitation class lets read it, in
+    /// the tenant: that read is a default. It is added by a seat that could add the seat and make the grant itself: one that manages
     /// seats for the whole tenant and grants at the unit, and for a role that manages access holds each of its keys
     /// that do there while containment is on, as the policy on the grants asks; open, as its own, and never as system work's, which the
     /// acceptance would trust. It is changed by a seat that manages seats at its unit, while it is open and to
@@ -1340,7 +1377,12 @@ internal static class TenancySql
             $"EXISTS (SELECT 1 FROM {Q(roles)} r WHERE r.{C(roles, "Id")} = {TenancyTables.Own(invitations, "RoleId")} AND {T("r." + C(roles, "TenantId"))} " +
             $"AND r.{C(roles, "Status")} = {TenancyTables.Stored(roles, "Status", RoleStatus.Active)})";
 
-        policies.Add(new ContributedPolicy(invitations, "Seat managers read invitations", "SELECT", User, Both(tenant, managesSeatsThere), null));
+        // A default as well: a read rule of the application's on its invitation class adds readers, within the tenant.
+        // The seats managers at its unit keep reading it whatever the rule says, since listing and cancelling one load it.
+        policies.Add(new ContributedPolicy(invitations, "Seat managers read invitations", "SELECT", User, Both(tenant, managesSeatsThere), null)
+        {
+            Default = new ContributedDefault(Kept: Both(tenant, managesSeatsThere), Within: tenant),
+        });
         policies.Add(new ContributedPolicy(
             invitations,
             "Seat managers issue invitations",

@@ -246,7 +246,18 @@ or tenant; its status only as the use cases do) and none of yours: a field you a
 as the row, by the seat itself and by a seat that manages seats or grants anywhere in the tenant, until a column
 rule of yours holds it to your command's rule, beside your infrastructure:
 `[RowAccess<Seat>(RowOperations.Change, To = [RowAccessRoles.User], Columns = [nameof(Seat.DisplayName)])]`.
-See `tenancy.md`, "On Postgres: the second lock", "Who reads which grants" and "What the database guards on a seat".
+Who reads the seats, and who besides the seats managers reads an invitation, are defaults: a read rule on your seat
+or invitation class, `[RowAccess<Seat>(RowOperations.Read)]` (without `To` it is for signed-in users, as the
+default is), takes the place of one, held to the tenant, beside what Tenancy's own work reads (a person's own seats;
+every seat of the tenant to a seat that manages seats, grants or units anywhere, or roles for the whole tenant),
+which no rule takes away. Write it with `TenancyRowAccess`'s questions (`CallerSeat`, `CallerTenant`,
+`UnitsWhereIHold`, `SeatsInMyUnits`: the seats placed at or below the caller's units). It changes what a read of the
+seats answers, a direct read, the directory, `tenant_seats()` and `ITenancyQuestions.Seats()`, so Membership's
+admission then takes only seats the caller reads (`member-not-active` otherwise); never Tenancy's questions about
+the caller and rights, the placements (every member still reads each seat's id and units), or who writes. A read
+rule on any other class of Tenancy's is refused.
+See `tenancy.md`, "On Postgres: the second lock", "Who reads the seats", "Who reads which grants" and "What the
+database guards on a seat".
 
 ## A module on Tenancy, as the sample lays it out
 

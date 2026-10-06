@@ -732,6 +732,22 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   tables it reads, with their indexes and the caller's policies. Only a function that runs as its caller, is
   `STABLE` or `IMMUTABLE` and is one `SELECT` may say so; anything else is refused. See
   [Policies a package ships](docs/row-level-security.md#policies-a-package-ships).
+- **A contributed policy may be a default, which a rule of the application takes the place of.** Who may see which
+  rows is often the application's choice rather than a package's, so a contribution marks what a role reads a
+  default: a permissive policy for `SELECT` with `Default = new ContributedDefault(Kept, Within)`. Without a rule
+  about it nothing changes, and the script writes the policy as it always did. A `[RowAccess]` rule about the
+  aggregate on that table that allows `Read` to the same role takes its place: the script writes the rule held to
+  `Within`, AND-ed, and beside `Kept`, OR-ed, the rows the package's own work reads whatever the rule says, under a
+  comment that names the rule, the default it replaced and the contribution. On a table the contribution keeps to
+  itself that is the one rule taken, and it replaces the read of the aggregate's own table alone: a rule that allows
+  anything but `Read`, or whose `To` names a role the default is not for, is refused, saying what the contribution
+  lets a rule replace. A rule there that names no role is taken for the roles of the default rather than for the
+  signed-in and the anonymous caller, so it is written in its usual form and a role the table is closed to stays
+  closed; the comment above its policy says so. The tables of the aggregate's entities keep the policies of the
+  contribution that keeps them, and a rule whose aggregate has an entity table that no contribution keeps is
+  refused, naming that table, since there it would allow reading and nothing else. A default for another command,
+  or a restrictive one, is refused. See
+  [Policies a package ships](docs/row-level-security.md#policies-a-package-ships).
 - `{caller:claims}` in a rule's or a contribution's SQL is the caller's claims, `(SELECT auth.jwt())` on
   Supabase.
 - **A resource's access, asked by its id.** `[ResourceAccessContract<TKey>(ResourceAccessSet.Seen)]` on an empty
@@ -1305,6 +1321,33 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   would let through or refuse. The next build writes the access file with the function; an application that
   leaves the setting alone applies it and changes nothing else. The sample keeps it on, writes nothing for it,
   and pins it with its marks in a test. See [Containment, on or off](docs/tenancy.md#containment-on-or-off).
+- **Tenancy on Postgres: who reads the seats is the application's to say.** What a member may see of the other
+  people in its tenant is a product choice, so Tenancy's read of the seats is now a default, and so is who besides
+  the seats managers at its unit reads an invitation. Without a rule nothing changes: the access files are what
+  they were. A read rule on the application's own seat or invitation class, written in the usual form,
+  `[RowAccess<Seat>(RowOperations.Read)]`, takes the place of the default for signed-in users, held to the calling
+  seat's tenant, beside what Tenancy's own work reads, which stays whatever the rule says: a person's own seats in
+  every tenant, which the tenant picker and the history's policy read, every seat of the tenant to a seat that
+  manages seats, grants or units anywhere or roles for the whole tenant, which the use cases load and the policies
+  on the placements and the grants read, and an invitation to the seats managers at its unit. So a rule stricter
+  than the default breaks none of Tenancy's own use cases, and a rule that lets every seat through stays in the
+  tenant. A rule changes what a read of the seats returns: a query of yours, the directory's lists and lookups of
+  seats, `tenant_seats()`, which modules read Tenancy through, and `ITenancyQuestions.Seats()`, which reads it. So
+  Membership's admission on a member list joined to Tenancy takes only a seat the caller reads, and refuses another
+  with `member-not-active`, as it refuses a seat that does not exist. It changes nothing Tenancy's questions about
+  the caller and about rights answer, since `caller_seat`, `units_where_i_hold`, `seats_holding_at`,
+  `tenant_administrators` and the others run as their owner, and it hides a seat's row, not that the seat is
+  there: the placements keep Tenancy's read, so every member still reads every seat's id and where it is placed.
+  Who writes a seat or an invitation stays Tenancy's, and so do the reads of its other tables: the tenants and the
+  organizations are read as the tenant picker needs, the roles are read by Tenancy's questions as their caller, and
+  the units, the tree, the placements, the grants and the rights are no aggregate's own table of the
+  application's. A read rule on the tenant, the organization or the role class is refused, naming the table. The
+  building blocks are `TenancyRowAccess`'s questions, the caller's tenant and seat, where it holds a key, and the
+  new `SeatsInMyUnits<TSeatId>()`, the seats placed at a unit the caller is placed at or at a unit below one, so
+  every placed seat to a seat placed at the root, which the new function `seats_in_my_units()` answers; Tenancy's
+  own default is written with them in the docs. The next build writes the access file with the function. The
+  sample keeps both defaults: its people work across units and see each other, which is the default. See
+  [Who reads the seats](docs/tenancy.md#who-reads-the-seats-a-default-you-may-replace).
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
   `DDDToolkit.Supporting.Tenancy` in `analyzers/dotnet/cs` and is no package of its own, writes

@@ -105,6 +105,7 @@ public sealed class ContributionTests(TenancyPostgres postgres)
             "seat_status_is_managed true search_path=\"\" false false false",
             "seated_in_tenant true search_path=\"\" true false false",
             "seats_holding_at true search_path=\"\" true false false",
+            "seats_in_my_units true search_path=\"\" true true false",
             "seats_of_identity true search_path=\"\" false true false",
             "system_tenant false search_path=\"\" true true false",
             "tenant_administrators true search_path=\"\" true false false",

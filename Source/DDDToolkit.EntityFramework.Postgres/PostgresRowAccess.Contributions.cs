@@ -44,9 +44,13 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// A contribution's policy as a script writes it: for one command, <c>ALL</c> spread over the four for a
-    /// permissive one, with its role resolved and its conditions filled in.
+    /// permissive one, with its role resolved and its conditions filled in, those of a default included.
     /// </summary>
-    private sealed record Policy(Contributed From, ContributedPolicy Declared, StoreObjectIdentifier Table, string Command, string Role, string? Using, string? Check, bool Restrictive);
+    private sealed record Policy(Contributed From, ContributedPolicy Declared, StoreObjectIdentifier Table, string Command, string Role, string? Using, string? Check, bool Restrictive)
+    {
+        /// <summary>What a rule that takes the place of this default is held to, and what stays beside it, filled in; null for a policy that is no default.</summary>
+        public ContributedDefault? Default { get; init; }
+    }
 
     /// <summary>
     /// A function a script writes, an access function or a contributed one: its names, how a grant names it,
@@ -156,8 +160,9 @@ public static partial class PostgresRowAccess
 
         var roles = rules.Distinct().ToDictionary(rule => rule, rule => RolesOf(rule, export.Roles));
 
-        // A column rule adds no policy, only a trigger, so it leaves a table a contribution keeps to itself alone.
-        EnsureKeptToThemselves(context, [.. rules.Where(rule => !rule.IsColumnRule)], contributions);
+        // A column rule adds no policy, only a trigger, so it leaves a table a contribution keeps to itself alone. A
+        // rule that takes the place of a default and names no role is for the roles of the default from here on.
+        EnsureKeptToThemselves(context, [.. rules.Where(rule => !rule.IsColumnRule)], contributions, roles, export.Roles);
 
         return new Prepared(context, rules, functions, contributions, names, roles, export.Roles);
     }
@@ -259,6 +264,20 @@ public static partial class PostgresRowAccess
                 throw new InvalidOperationException($"{what} {problem}");
             }
 
+            if (policy.Default is { } byDefault)
+            {
+                // What a role writes stays the contribution's: a rule of the application may take the place of what it reads.
+                var notADefault = policy.Restrictive || command != "SELECT"
+                    ? $"is a default and {(policy.Restrictive ? "restrictive" : "for " + command)}: a default is what a role reads, a permissive policy for SELECT, which a rule of the application may take the place of."
+                    : byDefault.Kept is { } kept && string.IsNullOrWhiteSpace(kept) ? "is a default that keeps an empty condition beside a rule: say null for nothing."
+                    : byDefault.Within is { } within && string.IsNullOrWhiteSpace(within) ? "is a default that holds a rule to an empty condition: say null for nothing."
+                    : null;
+                if (notADefault is not null)
+                {
+                    throw new InvalidOperationException($"{what} {notADefault}");
+                }
+            }
+
             ResolvedRoles([policy.Role], roles, what + " is for");
         }
 
@@ -343,10 +362,28 @@ public static partial class PostgresRowAccess
 
     /// <summary>
     /// Refuses a rule or a contribution that would add a policy to a table another contribution keeps to
-    /// itself, and two contributions that keep one table.
+    /// itself, and two contributions that keep one table. A rule about an aggregate whose own table a contribution
+    /// keeps is taken where it takes the place of what the contribution lets a role read there, which the
+    /// contribution marked a default (<see cref="ContributedDefault"/>): it allows <c>Read</c> alone, for roles the
+    /// contribution has such a default for, and one that names no role is taken for those roles, so it reaches no
+    /// role the contribution keeps the table closed to. It then adds nothing to the tables of the aggregate's
+    /// entities, which a contribution has to keep as well, and which keep its policies.
     /// </summary>
+    /// <param name="context">The context whose script is written.</param>
+    /// <param name="rules">Its rules about whole rows.</param>
+    /// <param name="contributions">What each contribution answered for it.</param>
+    /// <param name="roles">
+    /// The roles of each rule's policies, resolved: those of a rule that takes the place of a default and names no
+    /// role are set to the roles of the default here.
+    /// </param>
+    /// <param name="names">The roles of the script, which a contributed policy's role is resolved with.</param>
     /// <exception cref="InvalidOperationException">One does.</exception>
-    private static void EnsureKeptToThemselves(DbContext context, IReadOnlyList<RowAccessRule> rules, IReadOnlyList<Contributed> contributions)
+    private static void EnsureKeptToThemselves(
+        DbContext context,
+        IReadOnlyList<RowAccessRule> rules,
+        IReadOnlyList<Contributed> contributions,
+        Dictionary<RowAccessRule, IReadOnlyList<string>> roles,
+        RowAccessRoleNames names)
     {
         var keepers = new Dictionary<StoreObjectIdentifier, Contributed>();
         foreach (var contributed in contributions)
@@ -372,12 +409,31 @@ public static partial class PostgresRowAccess
         {
             var root = RootOf(context, rule.AggregateTypeName);
             var rootTable = TableOf(root);
-            foreach (var table in EntitiesOf(root, rootTable, []).Select(each => each.Table).Prepend(rootTable))
+            if (keepers.TryGetValue(rootTable, out var rootKeeper))
+            {
+                // The aggregate's own table: a rule may take the place of the keeper's default read there, and its
+                // entities' tables keep the policies of whoever keeps them (Emit writes nothing of the rule's on a
+                // kept table). One that nobody keeps would get the rule's read and nothing else: no row of it could
+                // be written any more, so the rule is refused there.
+                roles[rule] = EnsureReplacesADefault(rule, roles[rule], rootTable, rootKeeper, names);
+                List<StoreObjectIdentifier> unkeptTables = [.. EntitiesOf(root, rootTable, []).Select(each => each.Table).Where(table => !keepers.ContainsKey(table))];
+                if (unkeptTables.Count > 0)
+                {
+                    var unkept = unkeptTables[0];
+                    throw new InvalidOperationException(
+                        $"The rule '{rule.Name}' would take the place of a default read on {rootTable.DisplayName()}, which the row access contribution {rootKeeper.Name} keeps to itself, " +
+                        $"and add a policy to {unkept.DisplayName()}, a table of the aggregate's entities that no contribution keeps: there it would let the rule's roles read and nothing else, and no row of it could be written. " +
+                        $"Ask the contribution to keep {unkept.DisplayName()} as well, or leave the rule out.");
+                }
+
+                continue;
+            }
+
+            foreach (var table in EntitiesOf(root, rootTable, []).Select(each => each.Table))
             {
                 if (keepers.TryGetValue(table, out var keeper))
                 {
-                    throw new InvalidOperationException(
-                        $"The rule '{rule.Name}' would add a policy to {table.DisplayName()}, which the row access contribution {keeper.Name} keeps to itself: only it writes that table's policies. Leave the rule out, or ask the contribution for what the rule needs.");
+                    throw new InvalidOperationException(KeptToItself(rule, table, keeper) + " Leave the rule out, or ask the contribution for what the rule needs.");
                 }
             }
         }
@@ -394,6 +450,56 @@ public static partial class PostgresRowAccess
             }
         }
     }
+
+    /// <summary>
+    /// Refuses <paramref name="rule"/>, about the aggregate whose own table <paramref name="keeper"/> keeps, unless it
+    /// takes the place of what the keeper lets a role read there: the keeper marked that a default for each of the
+    /// rule's roles, and the rule allows <c>Read</c> and nothing else. A rule that names no role is taken for the
+    /// roles the keeper has a default for, rather than for the signed-in and the anonymous caller as elsewhere: the
+    /// developer writes the rule in its usual form, and a role the keeper keeps the table closed to stays closed.
+    /// </summary>
+    /// <returns>The roles the rule's policies are for: <paramref name="ruleRoles"/>, or the default's where it names none.</returns>
+    /// <exception cref="InvalidOperationException">It does not, naming what the keeper lets a rule replace.</exception>
+    private static IReadOnlyList<string> EnsureReplacesADefault(RowAccessRule rule, IReadOnlyList<string> ruleRoles, StoreObjectIdentifier table, Contributed keeper, RowAccessRoleNames names)
+    {
+        var readers = DefaultReadersOf(keeper, table, names);
+        if (readers.Count == 0)
+        {
+            throw new InvalidOperationException(KeptToItself(rule, table, keeper) + " Leave the rule out, or ask the contribution for what the rule needs.");
+        }
+
+        var replaceable = $" It lets a rule of the application take the place of what it lets {Listed(readers.Select(role => Symbolic(role, names)))} read there, and of nothing else";
+        if (rule.Operations != RowOperations.Read)
+        {
+            throw new InvalidOperationException(KeptToItself(rule, table, keeper) + replaceable + $": a rule that allows Read alone. Who may add, change or remove its rows stays the contribution's.");
+        }
+
+        if (rule.Roles.Count == 0)
+        {
+            return readers;
+        }
+
+        if (ruleRoles.FirstOrDefault(role => !readers.Contains(role, StringComparer.Ordinal)) is { } other)
+        {
+            throw new InvalidOperationException(
+                KeptToItself(rule, table, keeper) + replaceable + $", and the rule is for {Symbolic(other, names)} as well: " +
+                $"leave To out, and the rule is for the roles of the default, or set To = [{string.Join(", ", readers.Select(role => Symbolic(role, names)))}].");
+        }
+
+        return ruleRoles;
+    }
+
+    /// <summary>The roles <paramref name="contributed"/> lets read <paramref name="table"/> by a default, resolved, in order.</summary>
+    private static List<string> DefaultReadersOf(Contributed contributed, StoreObjectIdentifier table, RowAccessRoleNames names)
+        => [.. contributed.Result.Policies
+            .Where(policy => policy.Default is not null && TableOf(policy.Table) == table)
+            .SelectMany(policy => ResolvedRoles([policy.Role], names, $"the policy '{policy.Name}' is for"))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)];
+
+    /// <summary>The start of every refusal of a rule on a table a contribution keeps to itself.</summary>
+    private static string KeptToItself(RowAccessRule rule, StoreObjectIdentifier table, Contributed keeper)
+        => $"The rule '{rule.Name}' would add a policy to {table.DisplayName()}, which the row access contribution {keeper.Name} keeps to itself: only it writes that table's policies.";
 
     /// <summary>The functions <paramref name="prepared"/>'s script writes, access functions and contributed ones, with who may execute each.</summary>
     private static List<Definition> Definitions(Prepared prepared, Writing writing, Knowledge knowledge)
@@ -513,7 +619,15 @@ public static partial class PostgresRowAccess
                 }
                 else
                 {
-                    policies.Add(new Policy(contributed, policy, table, command, role, existing, command == "UPDATE" ? left ?? existing : left, Restrictive: false));
+                    // A default is what a role reads (Checked), so its two parts are conditions on existing rows, filled in the same way.
+                    policies.Add(new Policy(contributed, policy, table, command, role, existing, command == "UPDATE" ? left ?? existing : left, Restrictive: false)
+                    {
+                        Default = policy.Default is { } byDefault
+                            ? new ContributedDefault(
+                                byDefault.Kept is null ? null : FillContributed(what + ", what it keeps beside a rule", byDefault.Kept, writing),
+                                byDefault.Within is null ? null : FillContributed(what + ", what it holds a rule to", byDefault.Within, writing))
+                            : null,
+                    });
                 }
             }
         }
@@ -841,7 +955,7 @@ public static partial class PostgresRowAccess
                     Asked(
                         $"The policy '{policy.Name}' of the row access contribution {type}",
                         ResolvedRoles([policy.Role], roleNames, "the policy is for"),
-                        policy.Using + " " + policy.WithCheck,
+                        SqlOf(policy),
                         (_, granted) => $"Write the policy for a role it is granted to: {string.Join(", ", granted)}.");
                 }
 
@@ -972,8 +1086,12 @@ public static partial class PostgresRowAccess
             .Concat(prepared.Functions.Select(function => function.Sql))
             .Concat(prepared.Contributions.SelectMany(contributed =>
                 contributed.Result.Functions.Select(function => function.Body)
-                    .Concat(contributed.Result.Policies.Select(policy => policy.Using + " " + policy.WithCheck))
+                    .Concat(contributed.Result.Policies.Select(SqlOf))
                     .Concat(contributed.Result.Statements)));
+
+    /// <summary>Every condition of a contributed policy, a default's included, as one text to look for the functions it asks in.</summary>
+    private static string SqlOf(ContributedPolicy policy)
+        => string.Join(" ", new[] { policy.Using, policy.WithCheck, policy.Default?.Kept, policy.Default?.Within }.OfType<string>());
 
     /// <summary>The circle <paramref name="next"/> leads round from <paramref name="start"/>, its first step repeated at its end.</summary>
     private static List<T> Circle<T>(T start, Func<T, T> next) where T : notnull

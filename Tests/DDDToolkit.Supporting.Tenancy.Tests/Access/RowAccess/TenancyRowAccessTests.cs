@@ -17,6 +17,7 @@ public class TenancyRowAccessTests
         Asked(() => TenancyRowAccess.UnitsWhereIHold<OrganizationUnitId>(HostCatalogue.WidgetRead).Contains(OrganizationUnitId.CreateSequential()))
             .Should().Be("tenancy/units_where_i_hold");
         Asked(() => TenancyRowAccess.ReadableUnits<OrganizationUnitId>().Contains(OrganizationUnitId.CreateSequential())).Should().Be("tenancy/readable_units");
+        Asked(() => TenancyRowAccess.SeatsInMyUnits<SeatId>().Contains(SeatId.CreateSequential())).Should().Be("tenancy/seats_in_my_units");
         Asked(() => TenancyRowAccess.RolesWithKey<RoleId>(HostCatalogue.WidgetRead).Contains(RoleId.CreateSequential())).Should().Be("tenancy/roles_with_key");
         Asked(() => TenancyRowAccess.CallerSeat<SeatId>()).Should().Be("tenancy/caller_seat");
         Asked(() => TenancyRowAccess.CallerTenant<TenantId>()).Should().Be("tenancy/caller_tenant");

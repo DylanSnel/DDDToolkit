@@ -1585,7 +1585,9 @@ everywhere, rather than write such a policy.
 - **It holds a field of yours on a package's class as well.** A package that ships a class you derive from, Tenancy's
   seat say, writes the policies of its table itself and guards its own columns there, and nothing you add. Its
   table is one the package [keeps to itself](#policies-a-package-ships), where a rule that would add a policy is
-  refused; a column rule adds none, so it is taken there like anywhere else.
+  refused; a column rule adds none, so it is taken there like anywhere else. A read rule is taken there too where
+  the package made the read a [default](#policies-a-package-ships), as Tenancy did for who reads the seats
+  ([Who reads the seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace)).
 
 The policy on Tenancy's seats lets a seat change its own row, and a seat that manages seats or grants anywhere in
 the tenant change any seat's row, since every save of a seat writes its version. A job title you add to your seat
@@ -1861,9 +1863,23 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   one name on a table are refused, naming both. Every table a contributed policy names gets row level
   security.
 - **Tables a contribution keeps to itself**, its `ExclusiveTables`, get row level security and policies
-  from it alone: a rule, or another contribution, that would add one is refused, naming both. A
-  [column rule](#column-rules) adds no policy, and holds a column of such a table all the same: a field the
-  application added to the package's class, say.
+  from it alone: a rule, or another contribution, that would add one is refused, naming both, but for a rule
+  that takes the place of a default read, below. A [column rule](#column-rules) adds no policy, and holds a
+  column of such a table all the same: a field the application added to the package's class, say.
+- **A default read.** Who may see which rows is often your application's choice rather than the package's, so a
+  contribution may mark what a role reads a default: a permissive policy for `SELECT` with
+  `Default = new ContributedDefault(Kept, Within)`. Without a rule of yours about it, the script writes it as it
+  is. A `[RowAccess]` rule of yours about the aggregate on that table, that allows `Read` to the same role, takes
+  its place: the script writes your rule held to `Within`, what the package keeps every caller to, such as the
+  tenant, and beside `Kept`, the rows the package's own work reads whatever your rule says, and the comment above
+  the policy names the rule, the default it replaced and the contribution. On a table the contribution keeps to
+  itself that is the one rule taken: a rule that allows anything but `Read`, or whose `To` names a role the
+  default is not for, is refused, saying what the contribution lets a rule replace. A rule there without `To` is
+  for the roles of the default, rather than for signed-in users and anonymous callers as elsewhere, so you write
+  it in its usual form and a role the table is closed to stays closed. It replaces the read of the aggregate's own
+  table alone; the tables of its entities keep the policies of the contribution that keeps them, and a rule whose
+  aggregate has an entity table no contribution keeps is refused, naming it. Tenancy's seats are the example
+  ([Who reads the seats](tenancy.md#who-reads-the-seats-a-default-you-may-replace)).
 - **Statements** come last, one statement each, and can run again: triggers and the functions they run.
   A statement's function gets no grants from the script, so only a trigger's may be `SECURITY DEFINER`,
   since nobody can call a trigger function on its own, and it says `SET search_path = ''`, since the

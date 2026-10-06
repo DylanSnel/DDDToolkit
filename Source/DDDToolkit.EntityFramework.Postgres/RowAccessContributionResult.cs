@@ -17,7 +17,8 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// </param>
 /// <param name="ExclusiveTables">
 /// Tables whose policies only this contribution writes: a <c>[RowAccess]</c> rule or another contribution
-/// that would add one to them is refused. Each gets row level security, with or without a policy.
+/// that would add one to them is refused, but for a rule that takes the place of a read this contribution marked a
+/// default (<see cref="ContributedPolicy.Default"/>). Each gets row level security, with or without a policy.
 /// </param>
 public sealed record RowAccessContributionResult(
     IReadOnlyList<ContributedFunction> Functions,
