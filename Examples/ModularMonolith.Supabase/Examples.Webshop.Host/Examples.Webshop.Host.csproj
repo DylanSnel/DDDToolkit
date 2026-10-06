@@ -55,7 +55,7 @@
     <ProjectReference Include="..\..\Shared\Examples.ServiceDefaults\Examples.ServiceDefaults.csproj" />
     <!-- The shop's GraphQL schema: every module's part, and the fields that cross between them. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
-    <!-- The start-up check, EnsureSupabaseMigrationsAppliedAsync, in Program.cs. -->
+    <!-- Supabase: row level security, and the migrations' start-up check (supabase.migrations-applied, run by RunStartupChecks in Program.cs). -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
     <!-- Supabase Auth's tokens, and the modules' queries run as the user who sent one. -->
     <ProjectReference Include="..\..\..\Source\DDDToolkit.Auth.Supabase.AspNetCore\DDDToolkit.Auth.Supabase.AspNetCore.csproj" />
