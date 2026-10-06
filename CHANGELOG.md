@@ -2449,8 +2449,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     where it named the application's class with its project's version, so the next build writes each access file
     the contribution writes into once more, with nothing but that comment changed. After that a release of the
     application or of the package that writes the same SQL leaves the files as they are, and the project that
-    held the class needs no version of its own for them. The Tenancy sample's three are `20261006124503` to
-    `20261006124505`, and its catalogue's project keeps no version any more.
+    held the class needs no version of its own for them. The Tenancy sample's three are `20261006170417` to
+    `20261006170419`, which record the roles they were written for as well (see Added, Supabase and Auth), and its
+    catalogue's project keeps no version any more.
   - The start-up checks of both packages, and the export's refusal of a rule that asks a set nothing answers,
     say to mark the catalogue, the operators or the rules where they said to list a class; the check that finds
     Tenancy's functions written from another catalogue names `[TenancyCatalogue]` and where the export must see it.
@@ -2530,8 +2531,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     bookkeeping role and holds it to the policies, so such a role would fail every file where it was applied. The
     build's `system=service_role` says another thing since, below.
   - `Examples/ModularMonolith.Supabase` keeps its grants written by hand with `SupabaseRowAccessGrants` set to
-    `None`, since a guest reprices products in Catalog, which has no rules, and its new Ordering access file
-    forces the policies. `Examples.Tenancy.Exporter` drops both properties, and its files are what they were.
+    `None`, since a guest reprices products in Catalog, which has no rules, and its new Ordering access file,
+    `20261006170415`, forces the policies and records its roles (see Added, Supabase and Auth).
+    `Examples.Tenancy.Exporter` drops both properties, which changes none of its files.
 - **On Supabase every kind of caller has a default role, the system caller's included.** `SupabaseRowAccessRoles`
   takes `user=authenticated|anonymous=anon|system-in=ddd_system_in|system=ddd_system` for every pair it leaves out,
   and so do `SupabaseMigrationOptions.Roles` by hand, now `SupabaseRowLevelSecurity.DefaultRoles`, and
