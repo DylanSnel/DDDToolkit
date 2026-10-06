@@ -157,6 +157,73 @@ public sealed class InMemoryFusionGatewayTests
         map.Should().Throw<InvalidOperationException>().WithMessage("*No source schema*");
     }
 
+    [Fact]
+    public async Task A_schema_served_apart_is_left_out_of_the_composition_and_answers_on_its_own_endpoint()
+    {
+        await using var shop = await Infrastructure.GatewayHost.StartAsync(
+            builder =>
+            {
+                builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
+                builder.Services.AddGraphQLServer("inventory").AddSourceSchemaDefaults().AddQueryType<InventoryQuery>(q => q.Name("Query"));
+                builder.Services.AddGraphQLServer("admin").AddQueryType<AdminQuery>(q => q.Name("Query"));
+            },
+            pipeline: app => app.MapGraphQL("/admin/graphql", "admin"),
+            configure: options => options.ServedApart.Add("admin"));
+
+        shop.Schemas.SourceSchemaNames.Should().Equal("catalog", "inventory");
+        (await shop.Schemas.PrintGatewayAsync(Cancellation)).Should().Contain("productById").And.NotContain("stockValue", "the administration's field is no field of the gateway");
+
+        var refused = await shop.PostAsync("{ stockValue }");
+        refused.TryGetProperty("data", out _).Should().BeFalse("a document that names a field the gateway has not is not run");
+
+        using var response = await shop.Http.PostAsJsonAsync("/admin/graphql", new { query = "{ stockValue }" }, Cancellation);
+        var answer = await response.Content.ReadFromJsonAsync<JsonElement>(Cancellation);
+        answer.GetProperty("data").GetProperty("stockValue").GetInt32().Should().Be(144, "the schema served apart answers at its own endpoint");
+    }
+
+    [Fact]
+    public async Task A_name_served_apart_that_no_schema_has_fails_the_start_and_says_which_there_are()
+    {
+        // "Admin" against AddGraphQLServer("admin"): leaving out nothing, the gateway would compose the administration.
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
+        builder.Services.AddGraphQLServer("admin").AddQueryType<AdminQuery>(q => q.Name("Query"));
+        builder.Services.AddInMemoryFusionGateway(options => options.ServedApart.Add("Admin"));
+        await using var app = builder.Build();
+
+        var map = () => app.MapInMemoryFusionGateway();
+
+        map.Should().Throw<InvalidOperationException>()
+            .Which.Message.Should().Contain("ServedApart names 'Admin', which no schema of the application is registered under")
+            .And.Contain("The schemas registered are 'admin', 'catalog'").And.Contain("in the same case");
+    }
+
+    [Fact]
+    public async Task Every_schema_served_apart_leaves_the_gateway_nothing_to_compose_and_says_so()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Services.AddGraphQLServer("admin").AddQueryType<AdminQuery>(q => q.Name("Query"));
+        builder.Services.AddInMemoryFusionGateway(options => options.ServedApart.Add("admin"));
+        await using var app = builder.Build();
+
+        var map = () => app.MapInMemoryFusionGateway();
+
+        map.Should().Throw<InvalidOperationException>().WithMessage("Every schema of the application is served apart*");
+    }
+
+    [Fact]
+    public async Task Without_it_every_schema_of_the_application_is_composed()
+    {
+        await using var shop = await Infrastructure.GatewayHost.StartAsync(builder =>
+        {
+            builder.Services.AddGraphQLServer("catalog").AddSourceSchemaDefaults().AddQueryType<CatalogQuery>(q => q.Name("Query"));
+            builder.Services.AddGraphQLServer("admin").AddQueryType<AdminQuery>(q => q.Name("Query"));
+        });
+
+        shop.Schemas.SourceSchemaNames.Should().Equal("admin", "catalog");
+        (await shop.DataAsync("{ stockValue }")).GetProperty("stockValue").GetInt32().Should().Be(144, "a schema the gateway is not told to leave out is one of its source schemas");
+    }
+
     /// <summary>Two modules that would compose, one of which never finishes building its schema, until <paramref name="released"/> is cancelled.</summary>
     private static void NeverBuilt(WebApplicationBuilder builder, CancellationToken released)
     {
@@ -223,6 +290,12 @@ public sealed class InMemoryFusionGatewayTests
         [Lookup]
         [Internal]
         public InventoryProduct? GetProductById(int id) => new(id, 12);
+    }
+
+    /// <summary>What an administration schema offers that no client of the gateway is: the value of the stock.</summary>
+    public sealed class AdminQuery
+    {
+        public int GetStockValue() => 144;
     }
 
     [EntityKey("id")]

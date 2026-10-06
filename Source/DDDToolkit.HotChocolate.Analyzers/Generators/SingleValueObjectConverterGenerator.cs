@@ -28,6 +28,11 @@ namespace DDDToolkit.HotChocolate.Analyzers;
 /// <c>SingleValueCursorKeySerializer&lt;T, TValue&gt;</c>, so <c>OrderBy(x =&gt; x.Id)</c> works in front of
 /// <c>ToPageAsync</c> without a line per id in the application.
 /// </para>
+/// <para>
+/// In a project with classes marked <c>[GraphQLSchema]</c>, the same method registers each such class for the one
+/// schema it belongs to, by the name of the builder it is called on: see <see cref="GraphQLSchemaClasses"/>. Every
+/// schema calls the bindings already, so a class marked for one is in it without another call.
+/// </para>
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
@@ -74,17 +79,25 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         var registersCursorKeys = context.CompilationProvider.Select(static (compilation, _) =>
             compilation.GetTypeByMetadataName(ModuleSingleValues.CursorKeySerializerMetadataName) is not null);
 
+        // The classes marked [GraphQLSchema], which the bindings register for the schema of their name, and what is
+        // wrong with them: reported apart, so a refusal is said whether or not the bindings are written.
+        var schemaClasses = GraphQLSchemaClasses.Find(context).Collect()
+            .Select(static (classes, _) => GraphQLSchemaClasses.Registration(classes));
+
+        context.RegisterSourceOutput(schemaClasses, static (productionContext, classes) => classes.Diagnostics.ReportAll(productionContext));
+
         var registration = targets.Collect()
             .Combine(referenced)
             .Combine(registersCursorKeys)
             .Combine(context.RegistrationName())
             .Combine(context.AssemblyName())
-            .Combine(context.RegistrationsOfTheSameModule(ModuleSingleValues.RegistrationClass, ModuleSingleValues.RegistrationSuffix));
+            .Combine(context.RegistrationsOfTheSameModule(ModuleSingleValues.RegistrationClass, ModuleSingleValues.RegistrationSuffix))
+            .Combine(schemaClasses.Select(static (classes, _) => classes.Extensions));
 
         context.RegisterSourceOutput(registration, static (productionContext, data) =>
         {
-            var (((((targets, referenced), registersCursorKeys), moduleName), assemblyName), sameModule) = data;
-            EmitBindings(productionContext, targets, referenced, registersCursorKeys, moduleName, assemblyName, sameModule);
+            var ((((((targets, referenced), registersCursorKeys), moduleName), assemblyName), sameModule), schemaFields) = data;
+            EmitBindings(productionContext, targets, referenced, registersCursorKeys, moduleName, assemblyName, sameModule, schemaFields);
         });
     }
 
@@ -195,11 +208,13 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
         bool registersCursorKeys,
         string moduleName,
         string? assemblyName,
-        EquatableArray<string> sameModule)
+        EquatableArray<string> sameModule,
+        EquatableArray<SchemaExtension> schemaFields)
     {
         // A project with nothing of its own to bind gets no method, also when the module has bindings it could
-        // call: its schema calls theirs, which has the same name, and there is only one to import.
-        if (targets.Length == 0 && referenced.Count == 0)
+        // call: its schema calls theirs, which has the same name, and there is only one to import. A class of one
+        // schema is something of its own to register, so a project with one gets the method, which calls theirs.
+        if (targets.Length == 0 && referenced.Count == 0 && schemaFields.Count == 0)
         {
             return;
         }
@@ -222,6 +237,14 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
                 writer.Line("/// The ids and single value objects of this module's projects without DDDToolkit.HotChocolate, and the published");
                 writer.Line("/// ones of other modules, have no converter of their own and are bound here with <c>SingleValueChangeTypeProvider</c>.");
                 writer.Line("/// </summary>");
+            }
+
+            if (schemaFields.Count > 0)
+            {
+                writer.Line("/// <remarks>");
+                writer.Line("/// The classes of this assembly marked [GraphQLSchema] are registered here as well, each for the schema of the");
+                writer.Line("/// name it carries, and none of them for a builder of another name.");
+                writer.Line("/// </remarks>");
             }
 
             using (writer.Block("public static global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder Add" + moduleName + "GraphQlRuntimeBindings(this global::HotChocolate.Execution.Configuration.IRequestExecutorBuilder builder)"))
@@ -300,9 +323,16 @@ public sealed class SingleValueObjectConverterGenerator : IIncrementalGenerator
 
                     writer.Line();
                 }
+                else if (schemaFields.Count > 0 && (sameModule.Count > 0 || targets.Length > 0 || referenced.Count > 0))
+                {
+                    writer.Line();
+                }
 
+                GraphQLSchemaClasses.WriteRegistration(writer, schemaFields);
                 writer.Line("return builder;");
             }
+
+            GraphQLSchemaClasses.WriteExtensions(writer, schemaFields);
         }
 
         context.AddSource("BindingExtensions.g.cs", SourceText.From(writer.ToString(), Encoding.UTF8));

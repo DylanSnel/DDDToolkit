@@ -771,6 +771,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   serves it, `PrintSourceAsync(name)` one module's source schema with the directives the gateway composes
   by, and `SourceSchemaNames` the modules' names, so a test compares each with a committed file. See
   [Your schemas in a test](docs/graphql.md#your-schemas-in-a-test).
+- **A field for one schema only.** `[GraphQLSchema("admin", OperationType.Query)]`, new in
+  `DDDToolkit.HotChocolate.Attributes`, says that a class of fields belongs to the schema of that name and to no
+  other: an administration schema at `/admin/graphql` beside the one every user is offered at `/graphql`. Its public
+  static methods are fields of the operation type it names, bound as HotChocolate binds a `[Query]` method, data
+  loaders and `[Lookup]` included. The module's `Add{Module}GraphQlRuntimeBindings()`, which every schema calls
+  already, registers each marked class for the schema whose name the builder has (`IRequestExecutorBuilder.Name`),
+  with no reflection over the assembly, so marking a class asks nothing more of the host; a project with a marked
+  class gets the bindings even when it declares no id. A class without the attribute is in every schema, as before,
+  and a project without a marked class is generated exactly as before. HotChocolate's own generator finds nothing
+  in a marked class, which carries no `[Query]` and no `[QueryType]`, so it puts none of it into the schemas that
+  call its registration. DDD00062 (an error) reports a marked class that carries something that generator
+  registers, a blank schema name, a class generated code cannot name (generic, `file`, or private inside another),
+  and what would lose a field without a word: an instance method, a class with no field, two methods that are one
+  field, and an overload that takes a type another generator writes. See
+  [A field for one schema only](docs/graphql.md#a-field-for-one-schema-only).
+- **A schema served apart from the in-memory gateway.** `InMemoryFusionGatewayOptions.ServedApart` names the
+  schemas of the application the gateway leaves out of its composition, and `InMemoryFusionSchemas.SourceSchemaNames`
+  leaves them out with it: such a schema is served on its own, `MapGraphQL("/admin/graphql", "admin")`, where it
+  can require authorization as an endpoint. Empty by default, so the gateway still composes every schema. A name
+  no schema is registered under fails `MapInMemoryFusionGateway()` with the names there are, rather than leave the
+  schema it was meant for in the composition, and so does leaving every schema out. See
+  [A schema served apart](docs/graphql.md#a-schema-served-apart).
 
 #### Tenancy
 
@@ -1780,6 +1802,19 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   DDD00022 and DDD00023 as errors for all of them; the projects' `Module.cs` files are gone, and an API project's
   keeps only HotChocolate's attributes. `LayerReferenceTests` holds every project to the module of its folder,
   declared by the build and by no file of its own.
+- **The Tenancy sample serves the tenant's administration a schema of its own.** `/admin/graphql` offers all of
+  Tenancy that `/graphql` offers, and `seatGrants(seatId:)` besides: the roles another seat holds, where and for
+  when, which `SeatGrants` answers for `tenancy.seats.manage` held for the whole tenant, and
+  `GET /tenancy/seats/{seatId}/grants` answers over REST. Its class, `SeatsAdminQueries`, is marked
+  `[GraphQLSchema("admin", OperationType.Query)]`, and the gateway's lookups, `DirectoryQueries`, are marked for the
+  source schema, so the administration's schema has none of them. The Tenants module registers both schemas from the
+  same calls in `TenantsGraphQL.AddTenantsGraphQL`; the host leaves the administration's out of the gateway with
+  `ServedApart`, bounds its requests as the gateway bounds those to `/graphql` (`AddSampleRequestBounds` for a
+  schema), and maps it at an endpoint that requires a seat. The committed `Tenants.Api/GraphQL/admin.graphql` is the
+  schema, `GraphQLSchemaTests` holds it to what the gateway offers of Tenancy plus `seatGrants`,
+  `GraphQLSeatGateScenarios` asks every root field of it without a seat, and `AdministrationSchemaScenarios` shows
+  maud reading another person's roles there, leo refused, a seat of another tenant having none, the read refusing
+  leo past the mediator too, and `/graphql` refusing the field to everybody.
 
 #### Docs
 

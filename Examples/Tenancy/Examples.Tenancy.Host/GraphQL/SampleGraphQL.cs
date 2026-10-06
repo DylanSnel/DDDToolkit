@@ -12,7 +12,8 @@ namespace Examples.Tenancy.Host.GraphQL;
 /// <remarks>
 /// Each module registers a schema of its own from its API project, and the gateway composes them into the one
 /// schema <c>/graphql</c> serves. The modules know nothing of the host's choices: they are handed them through
-/// <c>ModuleHost.WithGraphQL</c>.
+/// <c>ModuleHost.WithGraphQL</c>, for every schema they register, Tenancy's administration's too, which the host
+/// serves on its own at <c>/admin/graphql</c>.
 /// </remarks>
 internal static class SampleGraphQL
 {
@@ -52,9 +53,10 @@ internal static class SampleGraphQL
     /// and refuses one over its limit. That is per module, and per operation the gateway sends it; and the gateway
     /// asks a field another module adds to a type once for every row. So a request that is wide, the list of
     /// projects twenty times under twenty names, each with the list of its inspections twenty times, can pass
-    /// every estimate and still ask for hundreds of thousands of rows. The whole request is seen only here, so
-    /// here is where it is bounded. The database stops a statement that runs long on a user's behalf as well
-    /// (<c>SampleStorage.UserStatementTimeout</c>).
+    /// every estimate and still ask for hundreds of thousands of rows. Of what reaches <c>/graphql</c>, the whole
+    /// request is seen only here, so here is where it is bounded. A schema the host serves on its own, beside the
+    /// gateway, sees the whole of its requests itself, and is bounded the same way by the overload below. The
+    /// database stops a statement that runs long on a user's behalf as well (<c>SampleStorage.UserStatementTimeout</c>).
     /// </remarks>
     /// <param name="gateway">The gateway over the modules' schemas.</param>
     public static IFusionGatewayBuilder AddSampleRequestBounds(this IFusionGatewayBuilder gateway)
@@ -62,6 +64,24 @@ internal static class SampleGraphQL
         ArgumentNullException.ThrowIfNull(gateway);
 
         return gateway
+            .AddMaxExecutionDepthRule(DeepestRequest)
+            .ModifyParserOptions(parser => parser.MaxAllowedFields = MostFields);
+    }
+
+    /// <summary>
+    /// Bounds a request at a schema the host serves on its own, beside the gateway, as the gateway bounds one: its
+    /// depth, and how many fields its document has. The gateway's options do not reach such a schema.
+    /// </summary>
+    /// <remarks>
+    /// Not for a module's source schema: the gateway has bounded the request before it sends that schema a part
+    /// of it.
+    /// </remarks>
+    /// <param name="schema">A schema the host maps at an endpoint of its own, such as Tenancy's administration's.</param>
+    public static IRequestExecutorBuilder AddSampleRequestBounds(this IRequestExecutorBuilder schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+
+        return schema
             .AddMaxExecutionDepthRule(DeepestRequest)
             .ModifyParserOptions(parser => parser.MaxAllowedFields = MostFields);
     }

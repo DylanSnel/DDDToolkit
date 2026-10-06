@@ -77,7 +77,7 @@ public static class InMemoryFusionGateway
         services.AddHostedService(_ => new CompositionCheck(gateway));
 
         // The schemas as text, for a test that compares each with a committed file.
-        services.AddSingleton(application => new InMemoryFusionSchemas(application, gateway.ComposedAsync));
+        services.AddSingleton(application => new InMemoryFusionSchemas(application, gateway.ComposedAsync, options.ServedApart));
 
         return services;
     }
@@ -85,7 +85,8 @@ public static class InMemoryFusionGateway
     /// <summary>Serves the composed schema at <paramref name="path"/>.</summary>
     /// <exception cref="ArgumentNullException"><paramref name="app"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
-    /// <see cref="AddInMemoryFusionGateway"/> was not called, or no source schema is registered.
+    /// <see cref="AddInMemoryFusionGateway"/> was not called, no source schema is registered, or
+    /// <see cref="InMemoryFusionGatewayOptions.ServedApart"/> names a schema the application does not register.
     /// </exception>
     public static WebApplication MapInMemoryFusionGateway(this WebApplication app, string path = "/graphql")
     {
@@ -94,13 +95,27 @@ public static class InMemoryFusionGateway
         var gateway = app.Services.GetService<GatewayRegistration>()
             ?? throw new InvalidOperationException("Call AddInMemoryFusionGateway() on the services first.");
 
-        // Every schema in the application's container is a source schema to compose.
+        // Every schema in the application's container is a source schema to compose, but those it serves apart. A
+        // name served apart that no schema has leaves out nothing: the schema it was meant for, renamed or spelled
+        // otherwise, would be composed, and its fields offered here. So it fails the start instead.
         var sourceSchemas = app.Services.GetService<IRequestExecutorProvider>();
-        var names = sourceSchemas?.SchemaNames.ToArray() ?? [];
-        if (sourceSchemas is null || names.Length == 0)
+        var registered = sourceSchemas?.SchemaNames ?? [];
+        var unknown = gateway.Options.ServedApart.Where(name => !registered.Contains(name, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToList();
+        if (unknown.Count > 0)
         {
             throw new InvalidOperationException(
-                "No source schema is registered. Register each module's with AddGraphQLServer(\"name\").AddSourceSchemaDefaults().");
+                "ServedApart names " + string.Join(", ", unknown.Select(name => "'" + name + "'"))
+                + ", which no schema of the application is registered under, so the gateway would leave out nothing it was meant to."
+                + " The schemas registered are " + (registered.Length == 0 ? "none" : string.Join(", ", registered.Order(StringComparer.Ordinal).Select(name => "'" + name + "'")))
+                + ": name each one as AddGraphQLServer(\"name\") does, in the same case.");
+        }
+
+        var names = SourceSchemaNames(sourceSchemas, gateway.Options.ServedApart);
+        if (sourceSchemas is null || names.Length == 0)
+        {
+            throw new InvalidOperationException(registered.Length > 0
+                ? "Every schema of the application is served apart, so the gateway has no source schema to compose. Register each module's with AddGraphQLServer(\"name\").AddSourceSchemaDefaults(), and leave it out of ServedApart."
+                : "No source schema is registered. Register each module's with AddGraphQLServer(\"name\").AddSourceSchemaDefaults().");
         }
 
         var sourceSchemaEvents = app.Services.GetRequiredService<IRequestExecutorEvents>();
@@ -122,7 +137,7 @@ public static class InMemoryFusionGateway
                 // that are built without waiting for anything would be composed, and refused, before anybody
                 // could subscribe. So the composer is handed no source schema until the listener is there.
                 var listening = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                var provider = new InMemoryConfigurationProvider(names, new OnceListening(sourceSchemas, listening.Task), sourceSchemaEvents, composition);
+                var provider = new InMemoryConfigurationProvider(names, new OnceListening(sourceSchemas, names, listening.Task), sourceSchemaEvents, composition);
 
                 try
                 {
@@ -159,6 +174,13 @@ public static class InMemoryFusionGateway
 
         return app;
     }
+
+    /// <summary>
+    /// The schemas the gateway composes: every schema of the application but those it serves apart, in the order
+    /// the application lists them.
+    /// </summary>
+    internal static string[] SourceSchemaNames(IRequestExecutorProvider? schemas, IEnumerable<string> servedApart)
+        => schemas is null ? [] : [.. schemas.SchemaNames.Except(servedApart, StringComparer.Ordinal)];
 
     /// <summary>What the two halves share: the options, and the gateway's container once it is built.</summary>
     private sealed class GatewayRegistration(InMemoryFusionGatewayOptions options)
@@ -270,11 +292,12 @@ public static class InMemoryFusionGateway
     /// <summary>
     /// The application's source schemas, held back until whoever keeps the composer's errors is listening:
     /// the composer asks for them from its constructor, and is answered once <paramref name="listening"/>
-    /// completes, however fast a schema is built. After that it is the application's provider and nothing more.
+    /// completes, however fast a schema is built. After that it is the application's provider and nothing more,
+    /// with the schemas it serves apart left out of its names.
     /// </summary>
-    private sealed class OnceListening(IRequestExecutorProvider sourceSchemas, Task listening) : IRequestExecutorProvider
+    private sealed class OnceListening(IRequestExecutorProvider sourceSchemas, string[] names, Task listening) : IRequestExecutorProvider
     {
-        public ImmutableArray<string> SchemaNames => sourceSchemas.SchemaNames;
+        public ImmutableArray<string> SchemaNames { get; } = [.. names];
 
         public ValueTask<IRequestExecutor> GetExecutorAsync(string? schemaName = null, CancellationToken cancellationToken = default)
             => listening.IsCompletedSuccessfully
@@ -323,4 +346,30 @@ public sealed class InMemoryFusionGatewayOptions
 
     /// <summary>Anything else for the gateway, such as <c>ModifyRequestOptions(...)</c>.</summary>
     public Action<IFusionGatewayBuilder>? ConfigureGateway { get; set; }
+
+    /// <summary>
+    /// The schemas of the application that the gateway leaves out, by name: each one the application serves on its
+    /// own, beside the gateway, at an endpoint of its own. Empty by default, and the gateway composes every schema
+    /// the application registers.
+    /// </summary>
+    /// <remarks>
+    /// For a schema with fields the gateway's clients must not be offered, such as an administration schema the
+    /// host maps with <c>MapGraphQL("/admin/graphql", "admin")</c>. Composed, its fields would be the gateway's too.
+    /// A name here that no schema is registered under fails <c>MapInMemoryFusionGateway()</c>: it would leave out
+    /// nothing, and the schema it was meant for would be composed. Names are compared as they are written. The
+    /// gateway's own options, <see cref="ConfigureGateway"/> among them, do not reach such a schema: it bounds a
+    /// request itself.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// const string Administration = "admin";   // one name, for the schema, the gateway and the endpoint
+    ///
+    /// builder.Services.AddGraphQLServer(Administration).AddTenantsGraphQlRuntimeBindings().AddTenantsTypes();
+    /// builder.Services.AddInMemoryFusionGateway(options => options.ServedApart.Add(Administration));
+    ///
+    /// app.MapInMemoryFusionGateway();                          // /graphql: every other schema, composed
+    /// app.MapGraphQL("/admin/graphql", Administration);        // the administration's, on its own
+    /// </code>
+    /// </example>
+    public ISet<string> ServedApart { get; } = new HashSet<string>(StringComparer.Ordinal);
 }

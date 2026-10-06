@@ -60,5 +60,6 @@ DDD00058 | DDDToolkit.Access | Error | A notification implements no request inte
 DDD00059 | DDDToolkit.Membership | Warning | The member list of a resource is written from what the resource declares
 DDD00060 | DDDToolkit.Membership | Warning | A member class names an aggregate root whose members it is
 DDD00061 | DDDToolkit.Access | Warning | A request that declares its access is sent, not handed to its handler
+DDD00062 | DDDToolkit.GraphQL | Error | A class of one GraphQL schema is one the toolkit alone registers
 DDD00063 | DDDToolkit.Tenancy | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read
 DDD00064 | DDDToolkit.Modules | Warning | Every project named after a module declares it

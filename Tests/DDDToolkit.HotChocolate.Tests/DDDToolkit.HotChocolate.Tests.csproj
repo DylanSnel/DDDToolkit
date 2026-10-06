@@ -46,6 +46,11 @@
       [Query] methods and a data loader. What the conventions do to a generated type class is checked against it.
     -->
     <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Gallery.Api\DDDToolkit.HotChocolate.Tests.Gallery.Api.csproj" />
+    <!--
+      A module's API project with a schema for its members and one for its staff: classes marked [GraphQLSchema] beside
+      what HotChocolate's generator registers. Which class reaches which schema is checked against it.
+    -->
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Library.Api\DDDToolkit.HotChocolate.Tests.Library.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

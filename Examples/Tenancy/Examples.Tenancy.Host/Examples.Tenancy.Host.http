@@ -437,6 +437,13 @@ DELETE {{api}}/tenancy/seats/{{junoSeat}}/grants/{{northCoast}}/{{crewLead}}
 Authorization: Bearer {{maud.response.body.access_token}}
 Tenant: harbor
 
+### Which roles juno holds now, where and for when: another person's access, which she reads with
+### tenancy.seats.manage for the whole tenant. Rhea, who holds it at North only, is answered 403. GraphQL has
+### the same as seatGrants, in the administration's schema at /admin/graphql only.
+GET {{api}}/tenancy/seats/{{junoSeat}}/grants
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
 ### She makes a project role of harbor's own: 201, with its id. It takes tenancy.roles.manage for the whole
 ### tenant, as every change to a project role does, and its keys are ones that act on a project.
 # @name rigger
@@ -1024,6 +1031,33 @@ Content-Type: application/json
 {
   "query": "query($tenant: UUID!) { tenantAccessHistory(tenant: $tenant, first: 5) { nodes { event occurredAt byKind bySeatId details } pageInfo { hasNextPage endCursor } totalCount } }",
   "variables": { "tenant": "{{harbor}}" }
+}
+
+### The tenant's administration has a schema of its own, at /admin/graphql: all of Tenancy that /graphql
+### offers, and another person's roles besides. Vic's, as maud reads them: Observer at North Inland, for four
+### weeks that ended yesterday, so appliesNow is false. Nothing above changes his roles in the organization. The
+### same field sent to /graphql is refused when the document is read, for maud as for everybody.
+POST {{api}}/admin/graphql
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "query($seat: UUID!) { seatGrants(seatId: $seat) { unitPath role startsAt endsAt appliesNow } }",
+  "variables": { "seat": "{{vicsSeat}}" }
+}
+
+### The same as leo: he has a seat, so the endpoint lets him ask, and the request refuses him, one error with
+### the code tenancy.not-permitted. It wants tenancy.seats.manage for the whole tenant, as
+### GET /tenancy/seats/{seatId}/grants does.
+POST {{api}}/admin/graphql
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "query($seat: UUID!) { seatGrants(seatId: $seat) { unitPath role } }",
+  "variables": { "seat": "{{vicsSeat}}" }
 }
 
 ### ------------------------------------------------------------------------------------------------

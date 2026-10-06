@@ -13,11 +13,26 @@ public static class SampleGraphQLCalls
     /// <summary>The selection that reads any of a mutation's typed errors: its type, its code and what kind of refusal it is.</summary>
     public const string Errors = "errors { __typename ... on CodedError { code message } ... on RefusalError { kind } }";
 
+    /// <summary>Where the tenant's administration schema is served, on its own and not through the gateway.</summary>
+    public const string Administration = "/admin/graphql";
+
     /// <summary>Posts a document and returns the whole answer, <c>data</c> and <c>errors</c> alike.</summary>
     public static async Task<JsonElement> GraphQLAsync(this HttpClient client, string document, object? variables = null)
+        => await client.GraphQLAsync("/graphql", document, variables);
+
+    /// <summary>Posts a document to the schema at <paramref name="path"/> and returns the whole answer.</summary>
+    public static async Task<JsonElement> GraphQLAsync(this HttpClient client, string path, string document, object? variables)
     {
-        using var response = await client.PostAsJsonAsync("/graphql", new { query = document, variables }, TestContext.Current.CancellationToken);
+        using var response = await client.PostAsJsonAsync(path, new { query = document, variables }, TestContext.Current.CancellationToken);
         return await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Posts a document to the administration's schema and returns its <c>data</c>, failing the test when the answer carries errors.</summary>
+    public static async Task<JsonElement> AdministrationDataAsync(this HttpClient client, string document, object? variables = null)
+    {
+        var answer = await client.GraphQLAsync(Administration, document, variables);
+        answer.TryGetProperty("errors", out _).Should().BeFalse("the administration's schema answered {0}", answer.GetRawText());
+        return answer.GetProperty("data");
     }
 
     /// <summary>Posts a document and returns its <c>data</c>, failing the test when the answer carries errors.</summary>

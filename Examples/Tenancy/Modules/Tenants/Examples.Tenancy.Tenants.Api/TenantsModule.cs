@@ -50,6 +50,14 @@ namespace Examples.Tenancy.Tenants.Api;
 public static class TenantsModule
 {
     /// <summary>
+    /// The name of the tenant's administration schema: all of Tenancy a seat is offered at the gateway, and another
+    /// person's roles besides. The host serves it on its own, with
+    /// <c>MapGraphQL("/admin/graphql", AdministrationSchema)</c>, and keeps it out of what the gateway composes, or a
+    /// client of the gateway would be offered its fields too.
+    /// </summary>
+    public static string AdministrationSchema => TenantsGraphQL.AdministrationSchemaName;
+
+    /// <summary>
     /// Registers Tenancy: how it is stored, and the check its commands and queries pass. The host says where its
     /// tables live and where what it publishes goes (see <see cref="ModuleHost"/>), and passes the application's
     /// catalogue. Register it before the modules that ask Tenancy who may do what.
@@ -61,8 +69,9 @@ public static class TenantsModule
     {
         services.AddTenantsInfrastructure(host, catalogue).AddTenantsApplication();
 
-        // The module's GraphQL source schema, when the host serves GraphQL. No context is registered with it: a
-        // field only sends, and every query that reads takes a context of its own from the pool.
+        // The module's GraphQL schemas, when the host serves GraphQL: its source schema, and the administration's,
+        // which the host serves on its own (AdministrationSchema). No context is registered with them: a field only
+        // sends, and every query that reads takes a context of its own from the pool.
         services.AddTenantsGraphQL(host);
         return services;
     }

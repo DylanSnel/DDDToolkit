@@ -54,6 +54,42 @@ public static class OrderQueries
   about errors: with the mutation conventions a `RefusalException` is a `RefusalError` in the payload, and
   a stale version a `ConcurrencyConflictError`. A client sends the version it read as `expectedVersion`.
 
+## A field for one schema only
+
+Two schemas that differ, a user's at `/graphql` and an administration's at `/admin/graphql`: mark the class of
+fields that belongs to one of them, and leave the rest unmarked, which is in every schema.
+
+```csharp
+[GraphQLSchema("admin", OperationType.Query)]       // DDDToolkit.HotChocolate.Attributes; HotChocolate.Language
+internal static class SeatsAdminQueries
+{
+    public static async Task<IReadOnlyList<SeatGrant>> GetSeatGrantsAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new SeatGrants(seatId), cancellationToken);   // no [Query]: the class says what it is
+}
+
+foreach (var name in new[] { "user", "admin" })
+{
+    builder.Services.AddGraphQLServer(name).AddDDDToolkitTypes()
+        .AddTenantsGraphQlRuntimeBindings()          // the ids, and the classes marked for this schema's name
+        .AddTenantsTypes();                          // HotChocolate's: every unmarked class, in every schema
+}
+
+app.MapGraphQL("/graphql", "user").RequireAuthorization();
+app.MapGraphQL("/admin/graphql", "admin").RequireAuthorization("Administrators");
+```
+
+- A marked class carries nothing HotChocolate's generator registers: no `[Query]` on its methods, no
+  `[QueryType]` or `[ExtendObjectType]` on it (DDD00062). Every public static method is a field; an instance method
+  is refused.
+- Nothing more to call: the bindings every schema already calls register the marked classes by `builder.Name`.
+- Only root fields can be marked. A field of one schema on a shared type is registered by hand in that schema.
+- A record only an administration field answers needs no `[ObjectType<T>]` class: a type class is in every schema.
+- The schema decides who is offered a field; the request's access check still decides who may read it.
+- With `DDDToolkit.HotChocolate.Fusion.InMemory`, keep the administration's schema out of the gateway:
+  `AddInMemoryFusionGateway(options => options.ServedApart.Add(Administration))`, with one constant for the name (a
+  name no schema has fails the start), map it with `MapGraphQL`, and bound its requests there: the gateway's
+  `ConfigureGateway` does not reach it.
+
 ## Types, loaders and paging
 
 ```csharp

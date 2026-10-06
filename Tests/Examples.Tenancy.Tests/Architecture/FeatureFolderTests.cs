@@ -137,10 +137,11 @@ public sealed class FeatureFolderTests
     /// under the feature's own name: its routes in <c>{Feature}/Rest</c>, in the one class
     /// <c>{Feature}Endpoints</c>, and its GraphQL in <c>{Feature}/GraphQL</c>, the fields in
     /// <c>{Feature}Queries</c>, <c>{Feature}PagedQueries</c> and <c>{Feature}Mutations</c> with the types they
-    /// answer beside them. What the features share is at the project's root, in <c>GraphQL</c> the registration of
-    /// the module's schema and another module's entities as this one names them, and in <c>Rest</c> what the
-    /// routes of several features read or write the same way. A request a feature's routes or fields send is one
-    /// of that same feature of the application project.
+    /// answer beside them. The fields of a schema the module serves beside its source schema are named after it as
+    /// well, <c>{Feature}{Schema}Queries</c>. What the features share is at the project's root, in <c>GraphQL</c> the
+    /// registration of the module's schemas and another module's entities as this one names them, and in
+    /// <c>Rest</c> what the routes of several features read or write the same way. A request a feature's routes or
+    /// fields send is one of that same feature of the application project.
     /// </summary>
     [Theory]
     [MemberData(nameof(Modules))]
@@ -159,6 +160,12 @@ public sealed class FeatureFolderTests
 
         served.Should().Contain(type => type.Namespace!.EndsWith("." + SampleLayout.Rest, StringComparison.Ordinal), "{0} serves routes", module)
             .And.Contain(type => type.Namespace!.EndsWith("." + SampleLayout.GraphQL, StringComparison.Ordinal), "and GraphQL");
+
+        // The module's own schema, the one the gateway composes, as the class that registers it names it.
+        var sourceSchema = served
+            .Where(type => type.Namespace == $"{api.Name}.{SampleLayout.GraphQL}")
+            .Select(type => type.GetField("SourceSchemaName", BindingFlags.Public | BindingFlags.Static)?.GetRawConstantValue() as string)
+            .Should().ContainSingle(name => name != null, "{0} registers one source schema", module).Subject;
 
         foreach (var type in served)
         {
@@ -192,9 +199,13 @@ public sealed class FeatureFolderTests
             else if (isFields)
             {
                 // The fields that page are in a class of their own, the one kind HotChocolate needs marked as a class.
+                // So are the fields of one schema only, and those of another schema than the module's source schema
+                // are named after it as well: SeatsAdminQueries. The lookups the gateway alone asks are the source
+                // schema's alone, and need no other name: DirectoryQueries.
+                var schema = SampleLayout.SchemasOf(type) is [var only] && only != sourceSchema ? char.ToUpperInvariant(only[0]) + only[1..] : string.Empty;
                 type.Name.Should().BeOneOf(
-                    [$"{feature}Queries", $"{feature}Mutations", $"{feature}PagedQueries"],
-                    "a feature's fields are in classes named after the feature and what they hold");
+                    [$"{feature}{schema}Queries", $"{feature}{schema}Mutations", $"{feature}{schema}PagedQueries"],
+                    "a feature's fields are in classes named after the feature, the one schema they belong to if they do, and what they hold");
                 (type.Name == $"{feature}PagedQueries").Should().Be(SampleLayout.IsAClassOfPagedFields(type), "{0} is named for whether its fields page", type.Name);
             }
 

@@ -114,9 +114,10 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
 
     /// <summary>
     /// The scenario above tries a few fields. This one tries them all, from the schemas themselves: every field of
-    /// the query type and of the mutation type of every module, the lookups only the gateway asks included, each
-    /// asked of its own schema by a caller without a seat. A field added tomorrow is tried the day it is added,
-    /// and one the gate does not stand in front of answers something else than the gate's refusal.
+    /// the query type and of the mutation type of every schema the host registers, the modules' source schemas with
+    /// the lookups only the gateway asks, and the administration's it serves apart, each asked of its own schema by
+    /// a caller without a seat. A field added tomorrow is tried the day it is added, at either endpoint, and one the
+    /// gate does not stand in front of answers something else than the gate's refusal.
     /// </summary>
     [Fact]
     public async Task Every_root_field_of_every_module_is_behind_the_gate_but_the_ones_the_host_names()
@@ -135,7 +136,11 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
         var operators = new List<string>();
         var seated = new List<string>();
 
-        foreach (var schema in host.Services.GetRequiredService<InMemoryFusionSchemas>().SourceSchemaNames)
+        // Every schema, not only those the gateway composes: the administration's is served on its own.
+        var schemas = executors.SchemaNames;
+        schemas.Should().BeEquivalentTo([.. host.Services.GetRequiredService<InMemoryFusionSchemas>().SourceSchemaNames, TenantsModule.AdministrationSchema]);
+
+        foreach (var schema in schemas)
         {
             var executor = await executors.GetExecutorAsync(schema, Cancellation);
             foreach (var (operation, root) in new[] { ("query", executor.Schema.QueryType), ("mutation", executor.Schema.MutationType) })
@@ -175,9 +180,10 @@ public sealed class GraphQLSeatGateScenarios(SampleHosts sample) : IClassFixture
 
         // The names the host gives the gate are fields that exist: a field renamed without its name here would be
         // a seat's field from then on, and no longer the open one or the operators' one it was meant to be.
-        open.Should().BeEquivalentTo(OpenFields);
-        operators.Should().BeEquivalentTo(OperatorFields);
-        seated.Should().HaveCountGreaterThan(40, "every other root field of the three modules asks for a seat").And.Contain(["projects", "node", "projectById", "inspectionRecord", "roleGrant"]);
+        // The administration's schema has Tenancy's fields too, so a name may come twice.
+        open.Distinct().Should().BeEquivalentTo(OpenFields);
+        operators.Distinct().Should().BeEquivalentTo(OperatorFields);
+        seated.Should().HaveCountGreaterThan(40, "every other root field of the three modules asks for a seat").And.Contain(["projects", "node", "projectById", "inspectionRecord", "roleGrant", "seatGrants"]);
     }
 
     [Fact]

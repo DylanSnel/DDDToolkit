@@ -33,20 +33,26 @@ public sealed class InMemoryFusionSchemas
 {
     private readonly IServiceProvider _application;
     private readonly Func<CancellationToken, Task<IRequestExecutor>> _gateway;
+    private readonly IEnumerable<string> _servedApart;
     private IReadOnlyList<string>? _sourceSchemaNames;
 
     /// <summary>Created by the gateway's registration, which alone knows where the gateway's own services are.</summary>
     /// <param name="application">The application's container, which holds the source schemas.</param>
     /// <param name="gateway">Waits for the composed schema and answers the gateway's executor.</param>
-    internal InMemoryFusionSchemas(IServiceProvider application, Func<CancellationToken, Task<IRequestExecutor>> gateway)
+    /// <param name="servedApart">The schemas the gateway leaves out, which are no source schemas of it.</param>
+    internal InMemoryFusionSchemas(IServiceProvider application, Func<CancellationToken, Task<IRequestExecutor>> gateway, IEnumerable<string> servedApart)
     {
         _application = application;
         _gateway = gateway;
+        _servedApart = servedApart;
     }
 
-    /// <summary>The names of the source schemas, in ordinal order: every schema registered in the application.</summary>
+    /// <summary>
+    /// The names of the source schemas, in ordinal order: every schema registered in the application, but those
+    /// <see cref="InMemoryFusionGatewayOptions.ServedApart"/> names.
+    /// </summary>
     public IReadOnlyList<string> SourceSchemaNames
-        => _sourceSchemaNames ??= [.. (_application.GetService<IRequestExecutorProvider>()?.SchemaNames ?? []).Order(StringComparer.Ordinal)];
+        => _sourceSchemaNames ??= [.. InMemoryFusionGateway.SourceSchemaNames(_application.GetService<IRequestExecutorProvider>(), _servedApart).Order(StringComparer.Ordinal)];
 
     /// <summary>
     /// The composed schema as a client of the gateway sees it: the text the gateway's endpoint serves for

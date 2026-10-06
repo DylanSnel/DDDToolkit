@@ -1,6 +1,7 @@
 using DDDToolkit.HotChocolate.Fusion.InMemory;
 using FluentAssertions;
 using HotChocolate.Execution;
+using HotChocolate.Language;
 using HotChocolate.Types;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -63,6 +64,46 @@ public sealed class GraphQLSchemaTests(SampleWithoutDatabase sample) : IClassFix
         schemas.SourceSchemaNames.Should().Equal(SourceSchemas.Select(row => row.Data), "every module registers a source schema, and no schema is registered that is not listed here");
         Compare(await schemas.PrintSourceAsync(name, Cancellation), SnapshotOf(name));
     }
+
+    [Fact]
+    public async Task The_administration_schema_is_the_committed_snapshot()
+    {
+        var printed = (await sample.Services.GetRequiredService<IRequestExecutorProvider>().GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema.ToString();
+
+        Compare(printed, Path.Combine(SampleLayout.DirectoryOf(SampleLayout.Project("Tenants", Layer.Api)), "GraphQL", "admin.graphql"));
+    }
+
+    [Fact]
+    public async Task The_administration_schema_offers_what_the_gateway_offers_of_Tenancy_and_another_persons_roles_besides()
+    {
+        var executors = sample.Services.GetRequiredService<IRequestExecutorProvider>();
+        var administration = (await executors.GetExecutorAsync(TenantsModule.AdministrationSchema, Cancellation)).Schema;
+        var tenancy = (await executors.GetExecutorAsync("tenants", Cancellation)).Schema;
+        var schemas = sample.Services.GetRequiredService<InMemoryFusionSchemas>();
+        var gateway = Utf8GraphQLParser.Parse(await schemas.PrintGatewayAsync(Cancellation));
+
+        // What a seat is offered of Tenancy at /graphql: its source schema's fields that the gateway has. Not the
+        // lookups, which are the gateway's alone, and whose class is marked for the source schema.
+        var offered = FieldsOf(tenancy.QueryType).Intersect(FieldsOf(gateway, "Query")).ToList();
+        FieldsOf(tenancy.QueryType).Except(offered).Should().BeEquivalentTo(["seat", "organizationUnit", "role"], "the lookups are all the gateway keeps to itself");
+
+        // The administration has all of that, and another person's roles besides: the one class marked for it.
+        FieldsOf(administration.QueryType).Should().BeEquivalentTo([.. offered, "seatGrants"], "the administration reads another person's roles, and that is all it adds");
+        FieldsOf(administration.MutationType!).Should().BeEquivalentTo(FieldsOf(tenancy.MutationType!), "the administration changes nothing a seat could not ask to change at /graphql");
+        FieldsOf(tenancy.MutationType!).Should().BeSubsetOf(FieldsOf(gateway, "Mutation"));
+        administration.ToString().Should().Contain("seatGrants(seatId: UUID!): [SeatGrant!]!").And.NotContain("@lookup").And.NotContain("@internal");
+
+        // And what a client of the gateway is offered has nothing of it: not the field, and not the type it answers.
+        gateway.ToString().Should().NotContain("seatGrants").And.NotContain("SeatGrant");
+        schemas.SourceSchemaNames.Should().NotContain(TenantsModule.AdministrationSchema, "the gateway leaves the administration's schema out");
+    }
+
+    private static IReadOnlyList<string> FieldsOf(IObjectTypeDefinition type)
+        => [.. type.Fields.Where(field => !field.IsIntrospectionField).Select(field => field.Name)];
+
+    /// <summary>The fields of a type of a printed schema, by its name.</summary>
+    private static IReadOnlyList<string> FieldsOf(DocumentNode schema, string type)
+        => [.. schema.Definitions.OfType<ObjectTypeDefinitionNode>().Where(definition => definition.Name.Value == type).SelectMany(definition => definition.Fields).Select(field => field.Name.Value)];
 
     [Fact]
     public async Task A_type_another_module_names_is_its_key_and_what_that_module_adds_and_requires_only_its_key_at_home()

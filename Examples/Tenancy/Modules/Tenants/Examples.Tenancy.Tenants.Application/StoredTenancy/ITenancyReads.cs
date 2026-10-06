@@ -1,5 +1,6 @@
 using DDDToolkit.Abstractions.Access;
 using Examples.Tenancy.Tenants.Application.History;
+using Examples.Tenancy.Tenants.Application.Seats.Queries;
 using GreenDonut.Data;
 
 namespace Examples.Tenancy.Tenants.Application.StoredTenancy;
@@ -26,7 +27,8 @@ namespace Examples.Tenancy.Tenants.Application.StoredTenancy;
 /// in a scope of its own as well; and <see cref="HistoryAsync"/> reads a page of one tenant's access history, on a
 /// context of that read's own.</item>
 /// <item><see cref="OpenInvitationsAsync"/> asks the package for the open invitations the caller may read, in a
-/// scope of its own too.</item>
+/// scope of its own too, and <see cref="GrantsOfAsync"/> reads one seat's roles through the package's store, the
+/// same way.</item>
 /// </list>
 /// The package's commands need no port of this module's: they load and save through the package's own store,
 /// <see cref="SampleTenancy.IStore"/>, one unit of work per request, and so does the command this module adds.
@@ -99,4 +101,14 @@ public interface ITenancyReads
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <exception cref="Exceptions.RefusalException">The package's own refusal.</exception>
     Task<IReadOnlyList<SampleTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The roles <paramref name="seat"/> holds, each where and for which period, by the unit's path and then the
+    /// role's name: read through the Tenancy package's store, in a scope of its own, as <see cref="AskDirectoryAsync"/>
+    /// is. A seat the caller's tenant does not have holds none. Whoever calls it has decided first that the caller
+    /// may read another seat's roles; the storage asks again, as the caller.
+    /// </summary>
+    /// <param name="seat">The seat whose roles are read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    Task<IReadOnlyList<SeatGrant>> GrantsOfAsync(SeatId seat, CancellationToken cancellationToken);
 }

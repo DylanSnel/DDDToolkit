@@ -44,6 +44,7 @@ public static class SeatedRoutes
         Send("POST /tenancy/units/{id}/archive", HttpMethod.Post, $"/tenancy/units/{NorthCoast.Value}/archive"),
         Send("POST /tenancy/shape", HttpMethod.Post, "/tenancy/shape", new { shape = "hierarchical" }),
         Get("GET /tenancy/seats", "/tenancy/seats"),
+        Get("GET /tenancy/seats/{seatId}/grants", $"/tenancy/seats/{Leo.Value}/grants"),
         Send("POST /tenancy/seats/{seatId}/placements", HttpMethod.Post, $"/tenancy/seats/{Leo.Value}/placements", new { unitId = North.Value, primary = false }),
         Send("DELETE /tenancy/seats/{seatId}/placements/{unitId}", HttpMethod.Delete, $"/tenancy/seats/{Leo.Value}/placements/{NorthCoast.Value}"),
         Send("POST /tenancy/seats/{seatId}/grants", HttpMethod.Post, $"/tenancy/seats/{Leo.Value}/grants", new { unitId = NorthCoast.Value, roleId = AccessAdmin.Value }),

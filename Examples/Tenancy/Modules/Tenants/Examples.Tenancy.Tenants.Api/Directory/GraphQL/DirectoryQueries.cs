@@ -1,7 +1,9 @@
+using DDDToolkit.HotChocolate.Attributes;
+using Examples.Tenancy.Tenants.Api.GraphQL;
 using Examples.Tenancy.Tenants.Application.Organization;
 using Examples.Tenancy.Tenants.Application.Roles;
-using HotChocolate;
 using HotChocolate.CostAnalysis.Types;
+using HotChocolate.Language;
 using HotChocolate.Types.Composite;
 
 namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
@@ -15,7 +17,14 @@ namespace Examples.Tenancy.Tenants.Api.Directory.GraphQL;
 /// reference, or through Tenancy's lists. Each goes through a data loader of <see cref="DirectoryDataLoaders"/>,
 /// so the seats of one batch, as a rule all a page of projects names, are asked in one question, and each
 /// answers nothing for an id of another tenant or of nothing at all, which a client cannot tell apart.
+/// <para>
+/// So they are fields of the source schema the gateway composes, and of no other: the class is marked for that
+/// schema, and its methods carry no <c>[Query]</c>, which would make them fields of the administration's schema
+/// too, where a client would be offered them. HotChocolate reads <c>[Lookup]</c>, <c>[Internal]</c> and
+/// <c>[Cost]</c> off a method of a marked class as it does off a <c>[Query]</c> method.
+/// </para>
 /// </remarks>
+[GraphQLSchema(TenantsGraphQL.SourceSchemaName, OperationType.Query)]
 internal static class DirectoryQueries
 {
     /// <summary>
@@ -27,7 +36,6 @@ internal static class DirectoryQueries
     internal const double LoadedForTheRequest = 1;
 
     /// <summary>A seat by its id, or nothing.</summary>
-    [Query]
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
@@ -35,7 +43,6 @@ internal static class DirectoryQueries
         => await seats.LoadAsync(id, cancellationToken);
 
     /// <summary>A unit by its id, or nothing.</summary>
-    [Query]
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]
@@ -43,7 +50,6 @@ internal static class DirectoryQueries
         => await units.LoadAsync(id, cancellationToken);
 
     /// <summary>A role by its id, or nothing.</summary>
-    [Query]
     [Lookup]
     [Internal]
     [Cost(LoadedForTheRequest)]

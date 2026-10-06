@@ -159,6 +159,7 @@
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Domain/DDDToolkit.HotChocolate.Tests.Harbor.Domain.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Harbor.Api/DDDToolkit.HotChocolate.Tests.Harbor.Api.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Gallery.Api/DDDToolkit.HotChocolate.Tests.Gallery.Api.csproj" />
+    <Project Path="Tests/DDDToolkit.HotChocolate.Tests.Library.Api/DDDToolkit.HotChocolate.Tests.Library.Api.csproj" />
     <Project Path="Tests/DDDToolkit.HotChocolate.Fusion.InMemory.Tests/DDDToolkit.HotChocolate.Fusion.InMemory.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Mediator.Tests/DDDToolkit.Mediator.Tests.csproj" />
     <Project Path="Tests/DDDToolkit.Messaging.Tests/DDDToolkit.Messaging.Tests.csproj" />

@@ -36,8 +36,9 @@ internal static class SeatsEndpoints
     }
 
     /// <summary>
-    /// Maps <c>GET /me</c>, <c>GET /tenancy/seats</c>, and <c>POST /tenancy/seats/{seatId}/suspend</c>,
-    /// <c>/reactivate</c> and <c>/deactivate</c>, each for a seat in the tenant the request selected.
+    /// Maps <c>GET /me</c>, <c>GET /tenancy/seats</c>, <c>GET /tenancy/seats/{seatId}/grants</c>, and
+    /// <c>POST /tenancy/seats/{seatId}/suspend</c>, <c>/reactivate</c> and <c>/deactivate</c>, each for a seat in the
+    /// tenant the request selected.
     /// </summary>
     public static IEndpointRouteBuilder MapSeatsEndpoints(this IEndpointRouteBuilder group)
     {
@@ -51,6 +52,19 @@ internal static class SeatsEndpoints
         // Every seat of the tenant, by name, for the pickers: id, name and status, never an identity.
         group.MapGet("/tenancy/seats", async (ISender sender, CancellationToken cancellationToken)
             => Results.Ok((await sender.Send(new TenantSeats(), cancellationToken)).Select(Describe)));
+
+        // Another seat's roles, where and for when: for whoever holds tenancy.seats.manage for the whole tenant.
+        group.MapGet("/tenancy/seats/{seatId}/grants", async (SeatId seatId, ISender sender, CancellationToken cancellationToken)
+            => Results.Ok((await sender.Send(new SeatGrants(seatId), cancellationToken)).Select(grant => new
+            {
+                grant.UnitId,
+                grant.UnitPath,
+                grant.RoleId,
+                grant.Role,
+                grant.StartsAt,
+                grant.EndsAt,
+                grant.AppliesNow,
+            })));
 
         group.MapPost("/tenancy/seats/{seatId}/suspend", async (SeatId seatId, ISender sender, CancellationToken cancellationToken) =>
         {

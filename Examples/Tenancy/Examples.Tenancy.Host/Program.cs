@@ -27,8 +27,16 @@ builder.AddServiceDefaults();
 //
 // The host serves GraphQL next to the routes: every module registers a source schema of its own, and gets from
 // the host what all of them share, the typed errors, the spelling of enum values and the check that the caller
-// has a seat.
-var host = builder.AddSampleStorage().WithGraphQL(graphql => graphql.AddSampleGraphQLConventions());
+// has a seat. Tenancy registers its administration's schema as well, which the host serves on its own, below:
+// the gateway bounds a request to /graphql, and that schema is bounded the same way here.
+var host = builder.AddSampleStorage().WithGraphQL(graphql =>
+{
+    graphql.AddSampleGraphQLConventions();
+    if (graphql.Name == TenantsModule.AdministrationSchema)
+    {
+        graphql.AddSampleRequestBounds();
+    }
+});
 
 // Who is calling: Supabase access tokens, and in Development the dev login that issues them for the
 // demonstration people. Registered before the modules, so the request's caller is the one Tenancy reads.
@@ -96,8 +104,14 @@ builder.Services.AddTenancyPermissionsOfModules();
 // process, and calls them in memory. A module names another's entity by its id, and the gateway asks the owner
 // for the rest. Source schemas that do not compose fail the start, with the composer's reason. The gateway bounds
 // a request as a whole, its depth and its number of fields: what a request may cost is estimated per module and
-// per operation the gateway sends, which a request that asks one list many times over stays under.
-builder.Services.AddInMemoryFusionGateway(options => options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds());
+// per operation the gateway sends, which a request that asks one list many times over stays under. Tenancy's
+// administration schema is left out: it is served on its own, below, and composed its fields would be offered at
+// /graphql too.
+builder.Services.AddInMemoryFusionGateway(options =>
+{
+    options.ConfigureGateway = gateway => gateway.AddSampleRequestBounds();
+    options.ServedApart.Add(TenantsModule.AdministrationSchema);
+});
 
 // Every refusal, broken rule and lost race as problem+json with a code.
 builder.Services.AddProblemDetails();
@@ -177,6 +191,12 @@ operators.MapInspectionsOperations();
 // Both come after tenant selection, so the caller it resolved is the one a resolver runs as.
 app.UseWhen(context => context.Request.Path.StartsWithSegments("/graphql"), branch => branch.UseSignedInOnly());
 app.MapInMemoryFusionGateway();
+
+// The tenant's administration at /admin/graphql: all of Tenancy a seat is offered at /graphql, and another
+// person's roles besides. A plain schema at an endpoint, not a branch, so it requires a seat as the routes do.
+// That decides who is offered the fields; who may read what one answers is its request's to say, as everywhere
+// else.
+app.MapGraphQL("/admin/graphql", TenantsModule.AdministrationSchema).RequireAuthorization(SamplePolicies.SeatRequired);
 
 app.MapDefaultEndpoints();
 

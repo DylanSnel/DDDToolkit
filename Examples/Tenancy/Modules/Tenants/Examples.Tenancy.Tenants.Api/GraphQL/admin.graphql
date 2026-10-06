@@ -41,9 +41,7 @@ type Query {
       requireOneSlicingArgument: false
     )
     @cost(weight: "10")
-  seat(id: UUID!): Seat @lookup @internal
-  organizationUnit(id: UUID!): OrganizationUnit @lookup @internal
-  role(id: UUID!): Role @lookup @internal
+  seatGrants(seatId: UUID!): [SeatGrant!]! @cost(weight: "10")
   unitsWhereIHold(key: String!): HeldUnits! @cost(weight: "10")
   catalogue: Catalogue! @cost(weight: "10")
   openInvitations: [Invitation!]! @cost(weight: "10")
@@ -96,7 +94,7 @@ type AccessHistoryEntry {
 }
 
 "A connection to a list of items."
-type AccessHistoryEntryConnection @shareable {
+type AccessHistoryEntryConnection {
   "A list of edges."
   edges: [AccessHistoryEntryEdge!]
   "A flattened list of the nodes"
@@ -107,7 +105,7 @@ type AccessHistoryEntryConnection @shareable {
   totalCount: Int! @cost(weight: "10")
 }
 
-type AccessHistoryEntryEdge @shareable {
+type AccessHistoryEntryEdge {
   "The item at the end of the edge."
   node: AccessHistoryEntry!
   "A cursor for use in pagination."
@@ -115,7 +113,7 @@ type AccessHistoryEntryEdge @shareable {
 }
 
 "An aggregate that would have broken its own rules: one error for the command, with every rule that was broken in its violations. Its code, message and arguments are those of the first."
-type BrokenRulesError implements CodedError @shareable {
+type BrokenRulesError implements CodedError {
   "The first rule that was broken, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "The code of the first rule that was broken."
@@ -129,10 +127,11 @@ type BrokenRulesError implements CodedError @shareable {
 type Catalogue {
   permissions: [Permission!]!
   packs: [RolePack!]!
+  unitKinds: [UnitKind!]!
 }
 
 "A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
-type ConcurrencyConflictError implements CodedError @shareable {
+type ConcurrencyConflictError implements CodedError {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "Always \"concurrency-conflict\"."
@@ -142,7 +141,7 @@ type ConcurrencyConflictError implements CodedError @shareable {
 }
 
 "One of the values a message was built from, such as MaxLength and 40: its name, and its value as text."
-type FailureArgument @shareable {
+type FailureArgument {
   "The value's name, as a translation's template spells it between braces."
   name: String!
   "The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none."
@@ -163,7 +162,7 @@ type HeldUnits {
 }
 
 "A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
-type InvalidValuesError implements CodedError @shareable {
+type InvalidValuesError implements CodedError {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "Always \"invalid-value\". Each of the failures has the code of its own rule."
@@ -213,7 +212,7 @@ type OrganizationUnit @key(fields: "id") {
   id: UUID!
   parentId: UUID
   name: String
-  kind: UnitKind
+  kind: String
   status: UnitStatus
   path: String
   depth: Int
@@ -235,7 +234,7 @@ type OrganizationUnitMovePayload {
 }
 
 "A cursor that points to a specific page."
-type PageCursor @shareable {
+type PageCursor {
   "The page number."
   page: Int!
   "The cursor."
@@ -243,7 +242,7 @@ type PageCursor @shareable {
 }
 
 "Information about pagination in a connection."
-type PageInfo @shareable {
+type PageInfo {
   "Indicates whether more edges exist following the set defined by the clients arguments."
   hasNextPage: Boolean!
   "Indicates whether more edges exist prior the set defined by the clients arguments."
@@ -284,7 +283,7 @@ type PlacementWithdrawPayload {
 }
 
 "A command that was refused before anything changed: the refusal's code, its kind, its message and the values the message was built from."
-type RefusalError implements CodedError @shareable {
+type RefusalError implements CodedError {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "The rule that refused, stable across releases and languages: what a client branches on."
@@ -350,7 +349,7 @@ type RoleRevokePayload {
 }
 
 "One broken rule, in a BrokenRulesError. A violation in a child entity says which child it was."
-type RuleViolation @shareable {
+type RuleViolation {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "The rule's code."
@@ -372,6 +371,16 @@ type Seat @key(fields: "id") {
 type SeatDeactivatePayload {
   seat: Seat
   errors: [SeatDeactivateError!]
+}
+
+type SeatGrant {
+  unitId: UUID!
+  unitPath: String!
+  roleId: UUID!
+  role: String!
+  startsAt: DateTime!
+  endsAt: DateTime
+  appliesNow: Boolean!
 }
 
 type SeatOfMine {
@@ -435,13 +444,18 @@ type TenantShapeChangePayload {
   errors: [TenantShapeChangeError!]
 }
 
+type UnitKind {
+  key: String!
+  name: String!
+}
+
 type UnitPath {
   id: UUID!
   path: String!
 }
 
 "One reason a value was refused, in an InvalidValuesError."
-type ValueFailure @shareable {
+type ValueFailure {
   "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
   message: String! @cost(weight: "10")
   "The rule's code, or \"Unspecified\" when the rule gave none."
@@ -586,7 +600,7 @@ input InvitationCancelInput {
 input OrganizationUnitAddInput {
   parentId: UUID!
   name: String!
-  kind: UnitKind
+  kind: String!
 }
 
 input OrganizationUnitArchiveInput {
@@ -695,15 +709,6 @@ enum RoleStatus {
   archived
 }
 
-enum ScalarSerializationType {
-  STRING
-  BOOLEAN
-  INT
-  FLOAT
-  OBJECT
-  LIST
-}
-
 """
 Whether a seat's grants count. Only an active seat holds rights; a suspended one can be reactivated,
 and a deactivated one is final.
@@ -743,13 +748,6 @@ enum TenantStatus {
   closed
 }
 
-enum UnitKind {
-  company
-  region
-  area
-  site
-}
-
 """
 Whether a unit is in use. A unit is archived, never deleted, so what still points at it keeps a unit to
 point at.
@@ -763,20 +761,12 @@ enum UnitStatus {
 
 "The `DateTime` scalar type represents a date and time with time zone offset information."
 scalar DateTime
-  @serializeAs(
-    type: STRING
-    pattern: "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:[Zz]|[+-]\\d{2}:\\d{2})$"
-  )
   @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
 
 scalar FieldSelectionSet
 
 "The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562."
 scalar UUID
-  @serializeAs(
-    type: STRING
-    pattern: "^[\\da-fA-F]{8}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{12}$"
-  )
   @specifiedBy(url: "https://scalars.graphql.org/chillicream/uuid.html")
 
 "The authorize directive."
@@ -801,8 +791,6 @@ directive @cost(
   | ENUM
   | INPUT_FIELD_DEFINITION
 
-directive @internal on OBJECT | FIELD_DEFINITION
-
 """
 The @key directive is used to designate an entity's unique key,
 which identifies how to uniquely reference an instance of
@@ -825,19 +813,3 @@ directive @listSize(
   "The `requireOneSlicingArgument` argument can be used to inform the static analysis that it should expect that exactly one of the defined slicing arguments is present in a query. If that is not the case (i.e., if none or multiple slicing arguments are present), the static analysis may throw an error."
   requireOneSlicingArgument: Boolean = true
 ) on FIELD_DEFINITION
-
-"""
-The @lookup directive is used within a source schema to specify output fields
-that can be used by the distributed GraphQL executor to resolve an entity by
-a stable key.
-"""
-directive @lookup on FIELD_DEFINITION
-
-directive @serializeAs(
-  "The primitive type a scalar is serialized to."
-  type: [ScalarSerializationType!]!
-  "The ECMA-262 regex pattern that the serialized scalar value conforms to."
-  pattern: String
-) on SCALAR
-
-directive @shareable repeatable on OBJECT | FIELD_DEFINITION

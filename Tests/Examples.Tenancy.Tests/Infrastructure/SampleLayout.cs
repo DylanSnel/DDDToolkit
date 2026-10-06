@@ -207,11 +207,11 @@ public static class SampleLayout
 
     /// <summary>
     /// Whether a generator wrote <paramref name="type"/> into an API project for its GraphQL schema: the
-    /// registration of the module's ids as scalars, which the toolkit's generator writes, or what HotChocolate's
-    /// own writes for the project's operations, the registration and the <c>Query</c> and <c>Mutation</c> types
-    /// that hold them as fields, the data loader it writes from a method marked <c>[DataLoader]</c>, with the
-    /// loader's interface, and the types of its connections. They are classes nobody of the sample wrote, so a
-    /// rule about what an API project declares leaves them out.
+    /// registration of the module's ids as scalars and of its classes of one schema, which the toolkit's generator
+    /// writes, or what HotChocolate's own writes for the project's operations, the registration and the
+    /// <c>Query</c> and <c>Mutation</c> types that hold them as fields, the data loader it writes from a method
+    /// marked <c>[DataLoader]</c>, with the loader's interface, and the types of its connections. They are classes
+    /// nobody of the sample wrote, so a rule about what an API project declares leaves them out.
     /// </summary>
     public static bool IsWrittenByAGraphQLGenerator(Type type)
     {
@@ -273,13 +273,23 @@ public static class SampleLayout
     /// <summary>
     /// Whether <paramref name="method"/> is a field of a schema's <c>Query</c>, <c>Mutation</c> or
     /// <c>Subscription</c> type: it says so itself, with HotChocolate's attribute, or it is a public method of a
-    /// class of paged fields (<see cref="IsAClassOfPagedFields"/>), whose every public method is a field.
+    /// class of paged fields (<see cref="IsAClassOfPagedFields"/>), whose every public method is a field, or a public
+    /// static method of a class of one schema (<see cref="SchemasOf"/>), whose every such method is one.
     /// </summary>
     public static bool IsOperation(MethodInfo method)
         => method.IsDefined(typeof(global::HotChocolate.QueryAttribute), inherit: false)
             || method.IsDefined(typeof(global::HotChocolate.MutationAttribute), inherit: false)
             || method.IsDefined(typeof(global::HotChocolate.SubscriptionAttribute), inherit: false)
-            || (method is { IsPublic: true, DeclaringType: { } declaring } && IsAClassOfPagedFields(declaring));
+            || (method is { IsPublic: true, DeclaringType: { } declaring } && IsAClassOfPagedFields(declaring))
+            || (method is { IsPublic: true, IsStatic: true, DeclaringType: { } ofOneSchema } && SchemasOf(ofOneSchema).Count > 0
+                && !method.IsDefined(typeof(global::HotChocolate.GraphQLIgnoreAttribute), inherit: false));
+
+    /// <summary>
+    /// The schemas a class of fields is marked for with <c>[GraphQLSchema]</c>, by name: the one it belongs to, and
+    /// none for a class every schema has.
+    /// </summary>
+    public static IReadOnlyList<string> SchemasOf(Type type)
+        => [.. type.GetCustomAttributes<global::DDDToolkit.HotChocolate.Attributes.GraphQLSchemaAttribute>(inherit: false).Select(schema => schema.Name).Distinct()];
 
     /// <summary>
     /// Whether <paramref name="type"/> is a class marked <c>[QueryType]</c> that holds a paged field: the one

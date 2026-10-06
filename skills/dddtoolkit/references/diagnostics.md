@@ -483,6 +483,19 @@ to `<DDD_Module>`, best in the `Directory.Build.props` that sets the name for th
 `<DDD_DeclareModule>false</DDD_DeclareModule>`. Do not silence it with `NoWarn`: the missing registrations are real.
 An `.editorconfig` `[*.cs]` severity does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 
+## DDD00062
+
+Error. A class marked `[GraphQLSchema("admin", OperationType.Query)]` also carries something HotChocolate's own
+generator registers, which would put its fields into every schema: `[QueryType]`, `[MutationType]`,
+`[SubscriptionType]`, `[ExtendObjectType]`, `[ObjectType]`, a base class such as `ObjectTypeExtension`, or a static
+method marked `[Query]`, `[Mutation]` or `[Subscription]`. Remove what the message names; the attribute on the class
+says what its public static methods are. Also reported when the attribute names no schema (use the name the schema
+is registered under, `AddGraphQLServer("admin")`), for a generic class, a `file` class or one that is private or
+protected inside another (make it a non-generic internal class), for an instance method (make it static), for a class
+with no field, for two methods that are one field (two overloads, or `GetX` beside `GetXAsync`: rename one or give it
+a `[GraphQLName]`), and for a method whose name another has and that takes a parameter of a type another generator
+writes, such as a data loader's interface (give the method a name of its own).
+
 ## Not a diagnostic: the owned type must carry the key part
 
 An exception when the Entity Framework model is built, not at compile time: an aggregate with a

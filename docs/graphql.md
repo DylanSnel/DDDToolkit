@@ -8,10 +8,11 @@ bookkeeping and the methods are gone, and every domain event shares one interfac
 
 This page starts with ids, which every schema needs first, then the conventions every schema gets,
 errors, in the response and in a mutation's payload, a permission key on a field, Relay, and paging by an
-id. After that come the parts for larger systems: one schema over several modules, and pushing events to
-subscribed clients. How the generated bindings work is at the end. For a whole schema to read beside this
-page, the [Tenancy sample](tenancy.md#graphql-in-the-sample) is the reference for GraphQL; the shop sample's
-schema is older, and still writes by hand what HotChocolate now generates.
+id. After that come the parts for larger systems: a field for one schema only, one schema over several
+modules, and pushing events to subscribed clients. How the generated bindings work is at the end. For a
+whole schema to read beside this page, the [Tenancy sample](tenancy.md#graphql-in-the-sample) is the
+reference for GraphQL; the shop sample's schema is older, and still writes by hand what HotChocolate now
+generates.
 
 ## Install
 
@@ -72,6 +73,11 @@ that binds the identifiers of the module's other projects: see
 
 The order of the two is not significant: the calls only record configuration, and the schema is built
 afterwards. The order above reads in the direction of the dependency, from conventions to your types.
+
+A project with a class of fields that belongs to one schema only, marked `[GraphQLSchema]`, has those classes
+registered by the same `Add{Module}GraphQlRuntimeBindings()`, for the schema the builder builds and for no other.
+The schema calls nothing more, and such a project gets the method even when it declares no identifier. See
+[A field for one schema only](#a-field-for-one-schema-only).
 
 `AddTypes()` is HotChocolate's, not the toolkit's. Its own generator writes it for a project that names it,
 and it registers the project's GraphQL types, its data loaders and its operations. An operation is a static
@@ -1110,6 +1116,124 @@ Be aware of what `eventType` currently returns. It resolves to the CLR type name
 building a client, not as the stable wire name; the stable name is
 [`DomainEventName.Of<T>()`](domain-events.md#stable-names).
 
+## A field for one schema only
+
+An application may serve two schemas that differ: the one every user is offered at `/graphql`, and one at
+`/admin/graphql` for the people who administer it, with fields that read other people's data. HotChocolate serves
+both: each schema is registered under a name, `AddGraphQLServer("admin")`, and each endpoint serves one,
+`MapGraphQL("/admin/graphql", "admin")`. What it does not do is put a field in one of them and not in the other.
+Its generator registers everything it finds in a project, every `[Query]` method and every `[ObjectType<T>]` class,
+in one method, and every schema that calls that method gets all of it.
+
+`[GraphQLSchema]`, on a class of fields in the API project, says which schema the class belongs to:
+
+```mermaid
+flowchart LR
+    subgraph api ["The module's API project"]
+        Own["SeatsQueries<br/>[Query] overviewOfMine"]
+        Type["SeatType<br/>[ObjectType]"]
+        Admin["SeatsAdminQueries<br/>[GraphQLSchema] admin<br/>seatGrants"]
+    end
+    Own --> Types["AddTenantsTypes()<br/>HotChocolate's, the same for every schema"]
+    Type --> Types
+    Admin --> Bindings["AddTenantsGraphQlRuntimeBindings()<br/>the toolkit's, by the schema's name"]
+    Types --> User["schema user"]
+    Types --> AdminSchema["schema admin"]
+    Bindings -->|ids| User
+    Bindings -->|ids and seatGrants| AdminSchema
+    User --> UserEndpoint["/graphql"]
+    AdminSchema --> AdminEndpoint["/admin/graphql"]
+```
+
+Both schemas are made of the same two calls, as every schema is. HotChocolate's `AddTenantsTypes()` registers what
+its generator found, in both. The toolkit's `AddTenantsGraphQlRuntimeBindings()` binds the module's ids as scalars,
+in both, and registers the classes marked for the schema whose name the builder has: for `"admin"` the fields of
+`SeatsAdminQueries`, for `"user"` nothing more. So `seatGrants` is a field of the admin schema, and a document that
+asks `/graphql` for it is refused when it is validated, before anything runs. Marking a class asks nothing of the
+host: there is no other method to call, and none to forget.
+
+- **A class without the attribute is in every schema**, as it always was. The types, and the fields every caller is
+  offered, need no mark; only what one schema has and the others have not is marked. A project that marks nothing
+  gets exactly the bindings it had.
+- **A marked class says what its methods are**: `[GraphQLSchema("admin", OperationType.Query)]`, and each public
+  static method is a field of that schema's `Query`, as a `[Query]` method is; `OperationType.Mutation` and
+  `OperationType.Subscription` make the others. HotChocolate binds such a method the way it binds a `[Query]` method its
+  generator found, so `[Service]` parameters, a data loader, a `CancellationToken` and the attributes it reads off a
+  method, `[Lookup]` and `[Cost]` among them, work as there. A method marked `[GraphQLIgnore]` or `[DataLoader]` is no
+  field, and neither is the stream a subscription names with `[Subscribe(With = ...)]`. A class of two schemas
+  carries the attribute twice.
+- **It carries nothing HotChocolate's generator registers**: no `[Query]` on its methods, no `[QueryType]` or
+  `[ExtendObjectType]` on the class. Any of those would put it into every schema after all, and
+  [DDD00062](diagnostics.md#ddd00062) refuses it. It refuses as well what would lose a field without a word: an
+  instance method, a class with no field, and two methods that would be one field, such as two overloads.
+- **A schema's name is one the classes and the host agree on**, as a Fusion source schema's is. Put it in a constant
+  both can read. HotChocolate's default schema, `AddGraphQLServer()`, is called `_Default`. To give one schema
+  something the other must not have, name both, and mark the classes of each.
+- **What is marked are root fields**, of `Query`, `Mutation` or `Subscription`. A field of one schema on a type
+  every schema shows, such as a seat's grants on `Seat`, is registered by hand in the schema that has it, as the
+  shop sample adds `product` to `OrderLine` for its gateway's schema alone
+  ([One schema over a modular monolith](#one-schema-over-a-modular-monolith), `AddOrderingProductStub`), or is
+  answered by a root field of its own, as `seatGrants(seatId:)` is.
+- **A type goes where a field takes it.** A record that only a marked field answers, with no type class of its own,
+  is in the schemas where such a field is, and nowhere else: HotChocolate infers it from the field. A type class,
+  `[ObjectType<T>]`, is HotChocolate's generator's to register, in every schema; a record only one schema shows needs
+  none, or is shown by every schema without a field that answers it.
+- **The schema decides who is offered a field, not who may use it.** A field sends its request, and the request's
+  access check refuses whoever does not hold what it requires, at either endpoint. An endpoint may ask more of its
+  callers, `MapGraphQL("/admin/graphql", "admin").RequireAuthorization(...)`: that keeps the administration's schema,
+  its introspection included, from callers who have no business with it.
+
+<details>
+<summary>Show the code: a class of the admin schema, and a host with two schemas</summary>
+
+```csharp title="Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs"
+[GraphQLSchema("admin", OperationType.Query)]
+internal static class SeatsAdminQueries
+{
+    // seatGrants(seatId: UUID!): [SeatGrant!]!, in the admin schema only
+    public static async Task<IReadOnlyList<SeatGrant>> GetSeatGrantsAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
+        => await sender.Send(new SeatGrants(seatId), cancellationToken);
+}
+```
+
+```csharp title="Program.cs"
+foreach (var name in new[] { "user", "admin" })
+{
+    builder.Services.AddGraphQLServer(name)
+        .AddDDDToolkitTypes()
+        .AddTenantsGraphQlRuntimeBindings()   // the toolkit's: the ids, and the classes marked for this name
+        .AddTenantsTypes();                   // HotChocolate's: what its generator found, in every schema
+}
+
+app.MapGraphQL("/graphql", "user").RequireAuthorization();
+app.MapGraphQL("/admin/graphql", "admin").RequireAuthorization("Administrators");
+```
+
+What the toolkit's generator writes into the bindings for it, shortened:
+
+```csharp title="AddTenantsGraphQlRuntimeBindings(), generated"
+public static IRequestExecutorBuilder AddTenantsGraphQlRuntimeBindings(this IRequestExecutorBuilder builder)
+{
+    builder.BindRuntimeType<SeatId, UuidType>();   // and the module's other ids, for every schema
+    // ...
+
+    switch (builder.Name)
+    {
+        case "admin":
+            builder.AddTypeExtension<QueryFieldsOfAdmin_0>();   // descriptor.Field(typeof(SeatsAdminQueries).GetMethod("GetSeatGrantsAsync", ...))
+            builder.ConfigureSchema(schema => schema.TryAddRootType(...Query...));
+            break;
+    }
+
+    return builder;
+}
+```
+
+</details>
+
+The [Tenancy sample](tenancy.md#graphql-in-the-sample) serves its administration schema this way, beside the gateway
+of the next section: [A schema served apart](#a-schema-served-apart).
+
 ## One schema over a modular monolith
 
 HotChocolate Fusion puts a gateway in front of several GraphQL services and composes their schemas,
@@ -1183,7 +1307,9 @@ public static class ProductStockQueries
 
 Ordering knows only the SKU on a line, and says that it is a `Product`. This part is for a schema a gateway
 composes and for no other, so a host asks for it, and it is described by hand: what HotChocolate's
-generator finds in a project, it registers in every schema the project is part of.
+generator finds in a project, it registers in every schema the project is part of. A root field of one schema
+only can be marked instead ([A field for one schema only](#a-field-for-one-schema-only)); a field on a type,
+as `product` is on `OrderLine`, is registered by hand like this.
 
 ```csharp
 public sealed record ProductStub(string Sku);
@@ -1504,6 +1630,38 @@ directives the gateway composes by (`@key`, `@lookup`, `@internal`, `@shareable`
 changed key or a type that stopped being shared shows. Source schemas print as soon as the application is
 built; the gateway's needs `MapInMemoryFusionGateway()` to have been called, and source schemas that
 compose, and says which of the two is missing otherwise.
+
+### A schema served apart
+
+The gateway composes every schema the application registers. A schema of
+[fields for one schema only](#a-field-for-one-schema-only), an administration's at `/admin/graphql`, would then be
+composed into `/graphql` as well, and its fields offered to every client of the gateway. Name it among the schemas
+the gateway leaves out, and serve it on its own:
+
+```csharp
+const string Administration = "admin";   // one name, for the schema, the classes, the gateway and the endpoint
+
+builder.Services.AddGraphQLServer(Administration)
+    .AddDDDToolkitTypes().AddTenantsGraphQlRuntimeBindings().AddTenantsTypes()
+    .AddMaxExecutionDepthRule(10)                                      // the gateway's bounds do not reach it
+    .ModifyParserOptions(parser => parser.MaxAllowedFields = 200);
+builder.Services.AddInMemoryFusionGateway(options => options.ServedApart.Add(Administration));
+
+app.MapInMemoryFusionGateway();                                               // /graphql: every other schema, composed
+app.MapGraphQL("/admin/graphql", Administration).RequireAuthorization(...);   // the administration's, on its own
+```
+
+A name in `ServedApart` that no schema is registered under fails `MapInMemoryFusionGateway()`, and the message lists
+the names there are. Left out of nothing, the schema it was meant for would be composed after all; `"Admin"` beside
+`AddGraphQLServer("admin")` is such a name, since names are compared as they are written.
+
+A schema served apart is a plain HotChocolate schema at an endpoint of its own: it is not a source schema, so it is
+not among `InMemoryFusionSchemas.SourceSchemaNames`, it calls no `AddSourceSchemaDefaults()`, and it is no branch of
+the pipeline, so `RequireAuthorization()` works on it where it cannot on the gateway. The gateway's own options,
+`ConfigureGateway` with the bounds it puts on a request among them, do not reach it either: it sees the whole of its
+requests itself, so it bounds them itself, as above. It answers from its own module only: a type another module
+owns is not fetched for it, as the gateway fetches it. One gateway per application is still what the package
+composes; a second composed schema, of several modules, is not something it offers.
 
 ## Value objects in a Fusion source schema
 

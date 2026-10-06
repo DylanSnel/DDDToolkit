@@ -75,6 +75,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new OverviewOfMine(), TenancyAccess.InTenant()),
         (new OrganizationUnits(), TenancyAccess.InTenant()),
         (new TenantSeats(), TenancyAccess.InTenant()),
+        (new SeatGrants(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
         (new TenantRoles(), TenancyAccess.InTenant()),
         (new SeatsById([SeatId.CreateSequential()]), TenancyAccess.InTenant()),
         (new OrganizationUnitsById([OrganizationUnitId.CreateSequential()]), TenancyAccess.InTenant()),

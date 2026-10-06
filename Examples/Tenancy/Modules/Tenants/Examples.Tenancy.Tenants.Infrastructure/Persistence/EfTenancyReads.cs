@@ -6,6 +6,7 @@ using DDDToolkit.Supporting.Tenancy.Access;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Examples.Tenancy.Shared.Infrastructure.Paging;
 using Examples.Tenancy.Tenants.Application.History;
+using Examples.Tenancy.Tenants.Application.Seats.Queries;
 using GreenDonut.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,6 +102,44 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     {
         await using var scope = scopes.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<SampleTenancy.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Three reads in one scope of this read's own, one after the other on its context: the seat with its
+    /// placements and grants, the tenant's roles for their names, and the paths of the units it is placed in from
+    /// the package's directory. Each is the caller's, under the policies: a seat of another tenant is not found.
+    /// </remarks>
+    public async Task<IReadOnlyList<SeatGrant>> GrantsOfAsync(SeatId seat, CancellationToken cancellationToken)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var store = scope.ServiceProvider.GetRequiredService<SampleTenancy.IStore>();
+
+        if (await store.FindSeatAsync(seat, cancellationToken) is not { } found)
+        {
+            return [];
+        }
+
+        var roles = (await store.ListRolesAsync(found.TenantId, cancellationToken)).ToDictionary(role => role.Id, role => role.Name);
+        var units = (await scope.ServiceProvider.GetRequiredService<SampleTenancy.TenancyDirectory>()
+                .UnitsByIdAsync([.. found.Placements.Select(placement => placement.UnitId).Distinct()], cancellationToken))
+            .ToDictionary(unit => unit.Id, unit => unit.Path);
+        var now = scope.ServiceProvider.GetRequiredService<TimeProvider>().GetUtcNow();
+
+        return
+        [
+            .. found.Placements
+                .SelectMany(placement => placement.Grants.Select(grant => new SeatGrant(
+                    placement.UnitId,
+                    units.GetValueOrDefault(placement.UnitId, string.Empty),
+                    grant.RoleId,
+                    roles.GetValueOrDefault(grant.RoleId, string.Empty),
+                    grant.StartsAt,
+                    grant.EndsAt,
+                    grant.AppliesAt(now))))
+                .OrderBy(grant => grant.UnitPath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(grant => grant.Role, StringComparer.OrdinalIgnoreCase),
+        ];
     }
 
     /// <summary>

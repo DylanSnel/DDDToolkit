@@ -60,6 +60,7 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00059](#ddd00059) | Warning | The member list of a resource is written from what the resource declares |
 | [DDD00060](#ddd00060) | Warning | A member class names an aggregate root whose members it is |
 | [DDD00061](#ddd00061) | Warning | A request that declares its access is sent, not handed to its handler |
+| [DDD00062](#ddd00062) | Error | A class of one GraphQL schema is one the toolkit alone registers |
 | [DDD00063](#ddd00063) | Error | A module's keys marked [TenancyPermissions] are a list the project that composes the modules can read |
 | [DDD00064](#ddd00064) | Warning | Every project named after a module declares it |
 
@@ -77,7 +78,9 @@ the one key-part mistake that can only be caught when the Entity Framework model
 [Supabase export](supabase.md), where the failure worth catching is a module whose migrations, or the
 policies a package offers, never reach Supabase, or whose files a rename writes a second time.
 [DDD00032](#ddd00032) is about
-[Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing.
+[Relay node ids](graphql.md#relay-node-ids), where it is a node id that silently carries nothing, and
+[DDD00062](#ddd00062) about [a field for one schema only](graphql.md#a-field-for-one-schema-only), where it is
+an administration field that every schema offers after all.
 [DDD00033](#ddd00033) is about the [generated integration event registration](integration-events.md#registered-when-the-module-compiles),
 where it is an outbound class or a handler that is never registered.
 [DDD00034](#ddd00034) to [DDD00037](#ddd00037) are about [event names](domain-events.md#stable-names), where
@@ -2086,6 +2089,46 @@ the call that hands it a handler: such a dispatcher sends through the sender, or
 module whose behavior is not in the pipeline is stopped when the host starts, by the
 [start-up check](startup-checks.md) `access.behaviors-registered`; see
 [When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
+
+## DDD00062
+
+**A class of one GraphQL schema is one the toolkit alone registers.**
+
+```csharp
+[GraphQLSchema("admin", OperationType.Query)]
+[QueryType]                                    // DDD00062
+internal static class SeatsAdminQueries
+{
+    [Query]                                    // DDD00062
+    public static Task<IReadOnlyList<SeatGrant>> GetSeatGrantsAsync(SeatId seat, [Service] ISender sender, CancellationToken cancellationToken) => ...;
+}
+```
+
+A class marked `[GraphQLSchema]` belongs to the schema it names and to no other: the toolkit's generator
+registers its public static methods in the module's `Add{Module}GraphQlRuntimeBindings()`, for a builder of that
+name only. HotChocolate's own generator registers everything it finds in a project in one method, which every
+schema the project is added to calls. A class it finds is therefore in every schema after all: the administration
+field above would be offered to every user as well. So the class carries nothing that generator registers. No
+`[QueryType]`, `[MutationType]`, `[SubscriptionType]`, `[ExtendObjectType]` or `[ObjectType]`, no base class such
+as `ObjectTypeExtension`, and no static method marked `[Query]`, `[Mutation]` or `[Subscription]`: the attribute
+on the class says what its methods are. Remove what the message names.
+
+It is reported as well for what would leave a field out without a word:
+
+- **An instance method.** Nothing makes an instance of the class, so a field of one schema is a public static
+  method. A former `[QueryType]` class often has instance methods: make them static.
+- **A class with no field**: no public static method that is not `[GraphQLIgnore]`.
+- **Two methods that are one field** of one schema and operation type, two overloads, or `GetLedger` beside
+  `GetLedgerAsync`. HotChocolate keeps one and drops the other. Give one another name, or another `[GraphQLName]`.
+- **A method whose name another public static method has, and that takes a parameter of a type another generator
+  writes**, such as the interface HotChocolate's generator writes for a data loader. A method is found by its name,
+  and only a shared name by the parameter types as well, which this generator cannot name when it does not see
+  the type. Give the method a name of its own.
+
+And when the attribute names no schema, and when the class is one the generated registration cannot name: a
+generic class, a `file` class, or a class that is private or protected inside another. It is an error because each
+of these puts a field where it was meant not to be, or leaves it out where it was meant to be, without another
+word. See [A field for one schema only](graphql.md#a-field-for-one-schema-only).
 
 ## DDD00063
 
