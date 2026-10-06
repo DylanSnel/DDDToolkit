@@ -848,7 +848,10 @@ written and every other file is what it was. By hand, it is `SupabaseMigrationOp
 `Export` and `Compare` of the sources write and compare after every module's files.
 
 **At start-up**, `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` says whether the role the
-application logged in as may switch to every role its options name, which is what the file grants. It comes
+application logged in as may switch to every role its options name, which is what the file grants. The scoped
+system role, `ddd_system_in`, is asked about where it exists: the access files make it only where a rule is for
+`RowAccessRoles.SystemIn` or the grants are written, and an application whose rules name it nowhere does no
+scoped system work, so it starts without one. It comes
 before [the migrations' check](#checking-at-start-up), which runs as the system caller and so switches to
 `SystemRole`: a login role that may not would fail there, on the switch, without saying why. Once per context
 the host registers, and in that order, is what the [start-up checks](startup-checks.md) do with one call:

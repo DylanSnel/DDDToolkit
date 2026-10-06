@@ -1996,7 +1996,9 @@ The first asks whether the role the application logged in as may switch to every
 interceptor switches to: the user's, the anonymous caller's, the scoped system role, `SystemRole`, and the
 role of every mapped token role. A role is switched to when a caller of its kind connects, not when the
 application starts, so a grant left out passes the start and fails the first request of that caller: a token
-role nobody holds while testing, or the background work. Where the settings travel per transaction, it also
+role nobody holds while testing, or the background work. The scoped system role is asked about where it exists:
+Supabase's access files make it only where a rule is for it or the grants are written, and no policy can be for
+a role that does not exist, so an application without one does no scoped system work and starts. Where the settings travel per transaction, it also
 asks whether the login role may call `ddd.use_caller`. It asks as the login role itself, on the context's
 connection opened past the interceptor, since the system caller's role is one of those it asks about; so it
 comes before every check that runs as the system caller, `EnsureSupabaseMigrationsAppliedAsync` among them, and

@@ -679,7 +679,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - `PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync` checks at start-up that the role the
   application logged in as may switch to every role the context's interceptor switches to: the user's, the
   anonymous caller's, the scoped system role, `SystemRole` and the role of every mapped token role, and, where the
-  settings last one transaction, that it may call `ddd.use_caller`. A role is switched to when a caller of its kind
+  settings last one transaction, that it may call `ddd.use_caller`. The scoped system role is asked about where it
+  exists: Supabase's access files make it only where a rule is for it or the grants are written, so an
+  application whose rules name it nowhere starts without one. A role is switched to when a caller of its kind
   connects, so without the check a grant left out passes the start and fails that caller's first request. It
   asks as the login role itself, on the context's connection opened past the interceptor, because the system
   caller's role is one of those it asks about, and names each role that is missing or not granted with the

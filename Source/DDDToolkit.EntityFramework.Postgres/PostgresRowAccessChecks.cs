@@ -322,6 +322,12 @@ public static class PostgresRowAccessChecks
     /// is half of the bargain; this is the other half.
     /// </para>
     /// <para>
+    /// The scoped system role is asked about where it exists. Supabase's exported access files make it only where a
+    /// policy is for it or the grants are written, so an application whose rules name it nowhere has no such role,
+    /// and could do no scoped system work with one: no policy can be for a role that does not exist. Such a role is
+    /// no finding. The scoped system role that is also another caller's role is asked about as that one.
+    /// </para>
+    /// <para>
     /// Unlike the other checks, this one asks as the login role itself, on the context's connection opened past the
     /// interceptor: the system caller's role is one of those it asks about, and switching to a role the login role
     /// may not switch to would fail the question before it was asked. The catalogs answer every role, and nothing
@@ -349,6 +355,11 @@ public static class PostgresRowAccessChecks
             SwitchFindings,
             [callers.Select(caller => caller.Role).ToArray(), options.Scope == RowLevelSecurityScope.Transaction],
             cancellationToken).ConfigureAwait(false);
+
+        // A scoped system role that does not exist is one no policy is for: the application does no scoped system
+        // work, and its migrations made no role for it.
+        var scopedOnly = ScopedSystemRoleAlone(options);
+        findings = [.. findings.Where(finding => !(finding[0] == scopedOnly && finding[2] == bool.TrueString))];
         if (findings.Count == 0)
         {
             return;
@@ -563,6 +574,19 @@ public static class PostgresRowAccessChecks
 
         return [.. roles.DistinctBy(role => role.Role, StringComparer.Ordinal)];
     }
+
+    /// <summary>
+    /// The scoped system role of <paramref name="options"/> where no other caller runs as it, or
+    /// <see langword="null"/>: only that role may be missing without a caller failing on it.
+    /// </summary>
+    private static string? ScopedSystemRoleAlone(PostgresRowLevelSecurityOptions options)
+        => options.SystemInRole is { } role
+           && !string.Equals(role, options.UserRole, StringComparison.Ordinal)
+           && !string.Equals(role, options.AnonymousRole, StringComparison.Ordinal)
+           && !string.Equals(role, options.SystemRole, StringComparison.Ordinal)
+           && !options.TokenRoles.Values.Contains(role, StringComparer.Ordinal)
+            ? role
+            : null;
 
     /// <summary>The schemas a check looks at: those of the tables and views of the context's model, its default schema, and the toolkit's own.</summary>
     private static string[] SchemasOf(DbContext context)

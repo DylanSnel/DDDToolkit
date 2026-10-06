@@ -664,6 +664,50 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
     }
 
     [Fact]
+    public async Task The_switch_check_asks_about_the_scoped_system_role_only_where_it_exists()
+    {
+        var database = await ApiaryDatabase.CreateAsync(postgres);
+        var login = NewRole("clerk");
+        var scoped = NewRole("scoped");
+        await database.RunAsOwnerAsync(
+            $"""
+            CREATE ROLE {login} LOGIN NOINHERIT PASSWORD '{login}';
+            GRANT anon, authenticated, ddd_system, {ApiaryRules.RangerRole} TO {login};
+            """,
+            Cancellation);
+
+        try
+        {
+            // Supabase's access files make the scoped system role only where a policy is for it, or the grants are
+            // written. An application whose rules name it nowhere has none, and no policy can be for a role that
+            // does not exist, so it does no scoped system work: the missing role is no finding, and the host starts.
+            var connectionString = new NpgsqlConnectionStringBuilder(database.OwnerConnectionString) { Username = login, Password = login }.ConnectionString;
+            await using var host = database.BuildHost(
+                services: services => services.AddPostgresRowLevelSecurity(roles => roles.SystemInRole = scoped),
+                connectionString: connectionString);
+            await using var scope = host.CreateAsyncScope();
+            var context = scope.ServiceProvider.GetRequiredService<ApiaryContext>();
+            var check = () => PostgresRowAccessChecks.EnsureLoginRoleMaySwitchToCallersAsync(context, Cancellation);
+
+            await check.Should().NotThrowAsync();
+
+            // Once the role is there, a policy may be for it, and a scoped system caller would switch to it.
+            await database.RunAsOwnerAsync($"CREATE ROLE {scoped} NOLOGIN NOINHERIT;", Cancellation);
+            (await check.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Be(
+                $"The role '{login}' that 'ApiaryContext' logs in as is meant to switch to every role its callers run as, and it cannot:\n" +
+                $"- it may not switch to {scoped}, the scoped system role. Fix: GRANT {scoped} TO {login}; {MappedOnSupabase($"system-in={scoped}")}\n" +
+                SwitchCheckCloses);
+
+            await database.RunAsOwnerAsync($"GRANT {scoped} TO {login};", Cancellation);
+            await check.Should().NotThrowAsync();
+        }
+        finally
+        {
+            await database.RunAsOwnerAsync($"DROP OWNED BY {login}; DROP ROLE {login}; DROP ROLE IF EXISTS {scoped};", Cancellation);
+        }
+    }
+
+    [Fact]
     public async Task The_switch_check_refuses_a_context_that_does_not_run_as_the_caller()
     {
         // Without the interceptor nothing switches to any role, and there is nothing to ask the database about.
