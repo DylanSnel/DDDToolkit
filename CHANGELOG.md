@@ -299,7 +299,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   as `[assembly: Module]` makes it one, so a `Directory.Build.props` that names the module of every project below
   a folder replaces a `Module.cs` in each project of a module in layers. The build writes the property into the
   project as `[assembly: AssemblyMetadata("DDD_Module", ...)]`, in `obj/<Project>.DDDToolkitModule.g.cs`, which
-  every generator of it reads, and the toolkit's generator writes `[assembly: Module("Ordering")]` from it, which
+  every generator of it reads (a name with a `"` or a `\` stops the build with the reason, on every platform), and the toolkit's generator writes `[assembly: Module("Ordering")]` from it, which
   the analyzers, the runtime and every project that references the assembly read: the referencing project's
   generators take it for one of the module's projects, and `modelBuilder.AddTenancy()` and the converters are
   written there. The attribute is written only where the project declares none, in a file of its own or through an

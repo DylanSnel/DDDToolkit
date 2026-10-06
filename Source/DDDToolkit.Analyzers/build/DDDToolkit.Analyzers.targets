@@ -54,10 +54,18 @@
           DependsOnTargets="PrepareForBuild"
           Condition="'$(Language)' == 'C#' and '$(DDD_Module.Trim())' != '' and '$(DDD_DeclareModule.Trim())' != 'false' and '$(IsTestProject)' != 'true' and '$(IsTestingPlatformApplication)' != 'true'">
 
+    <!--
+      A module's name names its code, its stored events and its functions, so a quote or a backslash in it is a
+      mistake. Refused here, the name needs no escape in the C# string below: an escape is a backslash, and MSBuild
+      on Linux and macOS turns every backslash in an item into a slash before the line is written.
+    -->
+    <Error Condition="$(DDD_Module.Contains('&quot;')) or $(DDD_Module.Contains('\'))"
+           Text="DDD_Module is '$(DDD_Module.Trim())', and a module's name holds no &quot; and no \: it names the module's code, its stored events and its functions. Give the module a name without them." />
+
     <PropertyGroup>
       <_DDDToolkitModuleFile>$(IntermediateOutputPath)$(MSBuildProjectName).DDDToolkitModule.g.cs</_DDDToolkitModuleFile>
-      <!-- The name as a C# string literal holds it, and as an item holds it: MSBuild reads ; * ? % @ $ in an item. -->
-      <_DDDToolkitModuleName>$([MSBuild]::Escape($(DDD_Module.Trim().Replace('\', '\\').Replace('"', '\"'))))</_DDDToolkitModuleName>
+      <!-- The name as an item holds it: MSBuild reads ; * ? % @ $ in an item. -->
+      <_DDDToolkitModuleName>$([MSBuild]::Escape($(DDD_Module.Trim())))</_DDDToolkitModuleName>
     </PropertyGroup>
 
     <ItemGroup>

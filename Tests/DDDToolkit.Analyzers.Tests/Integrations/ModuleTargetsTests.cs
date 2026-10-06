@@ -50,12 +50,24 @@ public sealed class ModuleTargetsTests : IDisposable
         => (await DeclarationAsync(new() { ["DDD_Module"] = value })).Should().BeNull();
 
     [Fact]
-    public async Task A_name_with_what_MSBuild_and_CSharp_read_in_it_reaches_the_compiler_as_it_is_written()
+    public async Task A_name_with_what_MSBuild_reads_in_it_reaches_the_compiler_as_it_is_written()
     {
-        // ; splits an item, % and $ are MSBuild's own, and " and \ end or escape a C# string.
-        var declaration = await DeclarationAsync(new() { ["DDD_Module"] = "order;\"management\" \\ 50% $x" });
+        // ; splits an item, and % $ @ are MSBuild's own.
+        var declaration = await DeclarationAsync(new() { ["DDD_Module"] = "order;management 50% $x @y" });
 
-        declaration.Should().Contain("AssemblyMetadata(\"DDD_Module\", \"order;\\\"management\\\" \\\\ 50% $x\")]");
+        declaration.Should().Contain("AssemblyMetadata(\"DDD_Module\", \"order;management 50% $x @y\")]");
+    }
+
+    [Theory]
+    [InlineData("order \"management\"")]
+    [InlineData("order\\management")]
+    public async Task A_name_with_a_quote_or_a_backslash_stops_the_build_with_the_reason(string module)
+    {
+        // Escaping either in the C# string would take a backslash, which MSBuild on Linux and macOS makes a slash.
+        var (exitCode, output) = await BuildAsync(new() { ["DDD_Module"] = module });
+
+        exitCode.Should().NotBe(0, output);
+        output.Should().Contain("a module's name holds no \" and no \\");
     }
 
     [Theory]
@@ -91,6 +103,21 @@ public sealed class ModuleTargetsTests : IDisposable
     /// </summary>
     private async Task<List<JsonElement>> ItemsAsync(Dictionary<string, string> properties, string itemType)
     {
+        var (exitCode, output) = await RunAsync("msbuild", WriteProject(properties), "-t:CoreCompile", "-getItem:" + itemType, "-nologo", "-nodeReuse:false", "-noAutoResponse");
+        exitCode.Should().Be(0, output);
+
+        return JsonDocument.Parse(output).RootElement.GetProperty("Items").TryGetProperty(itemType, out var items)
+            ? [.. items.EnumerateArray().Select(item => item.Clone())]
+            : [];
+    }
+
+    /// <summary>Runs the step in a project that sets <paramref name="properties"/>, and hands back how MSBuild ended and what it said.</summary>
+    private Task<(int ExitCode, string Output)> BuildAsync(Dictionary<string, string> properties)
+        => RunAsync("msbuild", WriteProject(properties), "-t:CoreCompile", "-nologo", "-nodeReuse:false", "-noAutoResponse");
+
+    /// <summary>Writes a project that sets <paramref name="properties"/> and imports the targets, and hands back its path.</summary>
+    private string WriteProject(Dictionary<string, string> properties)
+    {
         var targets = Path.Combine(RepositoryRoot(), "Source", "DDDToolkit.Analyzers", "build", "DDDToolkit.Analyzers.targets");
         var project = Path.Combine(_project, "Ordering.Domain.proj");
 
@@ -111,12 +138,7 @@ public sealed class ModuleTargetsTests : IDisposable
             </Project>
             """);
 
-        var (exitCode, output) = await RunAsync("msbuild", project, "-t:CoreCompile", "-getItem:" + itemType, "-nologo", "-nodeReuse:false", "-noAutoResponse");
-        exitCode.Should().Be(0, output);
-
-        return JsonDocument.Parse(output).RootElement.GetProperty("Items").TryGetProperty(itemType, out var items)
-            ? [.. items.EnumerateArray().Select(item => item.Clone())]
-            : [];
+        return project;
     }
 
     private async Task<(int ExitCode, string Output)> RunAsync(params string[] arguments)

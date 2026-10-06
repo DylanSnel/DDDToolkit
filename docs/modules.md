@@ -345,6 +345,9 @@ the `Directory.Build.props` of the module's folder says it once, for every proje
 <DDD_Module>Ordering</DDD_Module>
 ```
 
+The name names the module's code, its stored events and its functions, so it holds no `"` and no `\`: the build
+stops with the reason if it does.
+
 A project there is the module's exactly as if it declared `[assembly: Module("Ordering")]`: the analyzer holds it
 to the boundary, the generators take it together with the module's other projects, the runtime stores its events
 as `ordering.order-placed`, and a project that references it sees the module, because the compiled assembly
