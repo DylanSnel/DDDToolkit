@@ -200,7 +200,10 @@ public sealed partial class ShopSeat
 On Postgres, `services.AddTenancyPostgres()` with a class derived from `TenancyRowAccessContribution`
 puts the same rules in row level security under the application's checks, and brings the `TenancyPostgresChecks`
 as start-up checks, which `services.RunStartupChecks()` runs with the others. A module's rule asks through `TenancyRowAccess.UnitsWhereIHold<TUnitId>(key)`, which is
-set-shaped: once per statement, never per row. See `tenancy.md`, "On Postgres: the second lock".
+set-shaped: once per statement, never per row. There a seat reads its own rights and grants, and another seat's
+grants only at the units where it holds `tenancy.grants.manage`, `tenancy.seats.manage` or `tenancy.units.manage`,
+or all of them with `tenancy.roles.manage` for the whole tenant; `ITenancyQuestions.SeatsHoldingAt` answers by the
+same rule on every database. See `tenancy.md`, "On Postgres: the second lock" and "Who reads which grants".
 
 ## A module on Tenancy, as the sample lays it out
 

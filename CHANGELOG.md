@@ -27,7 +27,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   they get their base class, converters, registrations and the class the use cases are named through from the
   toolkit's generators that write those, in a project of one and in a module split by layer. A template of
   another package that names a written id as a later type argument is closed over it too: a Membership member
-  class over the `SeatId` Tenancy's switch writes gets its registrations and its member list. Generators that are
+  class over the `SeatId` Tenancy's switch writes gets its registrations and its member list, and a
+  `[ResourceAccessContract]` keyed by a written id, and a rule that asks it, are written over that id. Generators that are
   not the toolkit's, HotChocolate's say, see what a switch wrote from the project above only, and code outside the
   root namespace imports it with a `global using`. DDD00066 reports, once, on the switch, a class or an id it
   cannot write: a type or a namespace of the class's name (a class of the project's own becomes the package's
@@ -912,8 +913,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `DDDToolkit.Supporting.Tenancy.EntityFramework` holds `AddTenancy()` for a context of the application's own,
   the organization tree as a closure table and the access questions as Entity Framework queries, on every
   provider; and `DDDToolkit.Supporting.Tenancy.Postgres` holds the same questions as SQL functions and row level
-  security policies. An application declares its own ids and a class of its own for each of the package's
-  aggregates, the tenant, the organization, the seat and the role, and may add to the catalogue: the role packs
+  security policies. An application has its own ids and a class of its own for each of the package's aggregates,
+  the tenant, the organization, the seat and the role: declared where it adds something, and written by the
+  generator from one line where it adds nothing (above). It may add to the catalogue: the role packs
   a tenant starts with, keys of its own and marks on keys that manage access. The use cases provision a tenant, place
   seats, give roles and change them, each held to who may give a role, and a tenant keeps an administrator.
   `TenantSelection` finds the seat a request's verified identity has in the tenant the request names,
