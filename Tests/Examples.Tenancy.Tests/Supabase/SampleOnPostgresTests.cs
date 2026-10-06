@@ -759,8 +759,16 @@ public sealed class SampleOnPostgresTests(SampleSupabaseStack stack)
         error.GetProperty("kind").GetString().Should().Be("not_permitted");
 
         // It was the lock that refused, each time, and whoever runs the application is told so: the caller is not.
+        // Asked again, her request's check refuses as well, so the line says that her rights changed in between, not
+        // that C# and the guards disagree: they agreed, each when it was asked.
         logs.Entries.Where(entry => entry.Category == typeof(DatabaseRefusalInterceptor).FullName).Should().HaveCount(2)
-            .And.AllSatisfy(entry => entry.Message.Should().Be($"The database refused a save the application allowed: the guard {OwnerLock}. C# and the guards disagree."));
+            .And.AllSatisfy(entry =>
+            {
+                entry.Level.Should().Be(LogLevel.Information, "a change of rights is no disagreement");
+                entry.Message.Should().Be(
+                    $"The guard {OwnerLock} refused a save after the access check of ChangeProjectOwner (MemberAccess<ProjectId>.On) let the caller through. Asked again, the check refuses as well: "
+                    + "the caller's rights changed between the check and the save, and the caller is refused.");
+            });
 
         // Neither got through: Leo owns Pier 7 still, and its crew holds the roles it held.
         (await ScalarAsync<Guid>(owner, $"SELECT \"OwnerSeatId\" FROM projects.\"Projects\" WHERE \"Id\" = '{pier.Id.Value}'")).Should().Be(Harbor.SeatOf(DemoPeople.Leo).Value);

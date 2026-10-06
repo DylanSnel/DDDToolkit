@@ -1641,7 +1641,7 @@ well, since the application allowed what the database does not.
 ```mermaid
 flowchart LR
     Failed["A save fails"] --> Code{"What did<br/>Postgres say?"}
-    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the warning names it"]
+    Code -->|"42501, hint<br/>ddd:access.refused"| Guard["An access guard: access.refused,<br/>the log line names it"]
     Code -->|"42501 from<br/>ExecWithCheckOptions"| Policy["A policy: access.refused"]
     Code -->|"23505 on an index<br/>with RefusesAs"| Index["The index's own refusal"]
     Code -->|"anything else"| Other["The failure as it was: a 500"]
@@ -1683,9 +1683,10 @@ somebody else changed it first. That case is told apart by reading the row again
   answer it with `access.refused` too.
 - **The caller is told `access.refused`, and no more.** Not which guard refused, nor its message. The check in
   C# is where a refusal is specific, with the key that is missing, in the reader's language. When the database
-  refuses what that check let through, the two disagree, and the fix is in the check or in the rule. The warning
-  names the guard for whoever runs the application, and the refusal keeps the database's error as its inner
-  exception. A guard's name belongs to the schema: it changes when a table or a rule does, and has no text in any
+  refuses what that check let through, the two disagree, and the fix is in the check or in the rule, unless the
+  caller's rights changed in between, which the toolkit tells by asking the request's check again
+  ([When the policies refuse what C# allowed](#when-the-policies-refuse-what-c-allowed)). The log line names the
+  guard for whoever runs the application, and the refusal keeps the database's error as its inner exception. A guard's name belongs to the schema: it changes when a table or a rule does, and has no text in any
   language, so it would make a poor code for a client to branch on.
 - **Your own trigger refuses the same way.** From C#, in a [contribution](#policies-a-package-ships),
   `RowAccessModel.Refusal(guard, message)` writes the statement. By hand it is one line. A trigger that should not
@@ -2072,9 +2073,15 @@ through: the policies and C# disagree. Where nothing passed a check in that flow
 work outside any request, or a request that requires nothing (`AccessRequirement.Open`), there is nothing to ask,
 and the application let through what the policies do not without asking anything: that is a warning too.
 
+A [guard](#when-the-database-refuses) that refuses a statement, a trigger that raises `42501` with the toolkit's
+hint, is told apart the same way, and each line names it: `The guard projects_owner_stays refused a save after
+the access check of ChangeProjectOwner (MemberAccess<ProjectId>.On) let the caller through.`, or, as a warning,
+`... the guard projects_owner_stays on projects.Projects. C# and the guards disagree.` The table goes with it
+where the database named one or the save wrote one.
+
 ```mermaid
 flowchart LR
-    Refused["the policies<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
+    Refused["the policies or a guard<br/>refuse a save"] --> Passed{"did the request<br/>pass an access<br/>check?"}
     Passed -- "no" --> Warning["warning:<br/>C# and the policies<br/>disagree"]
     Passed -- "yes" --> Again{"asked again,<br/>now"}
     Again -- "refuses" --> Information["information:<br/>the caller's rights<br/>changed meanwhile"]

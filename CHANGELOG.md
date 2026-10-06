@@ -494,8 +494,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   hint `ddd:access.refused` (`DatabaseRefusal.GuardHint`) is an access guard's refusal: through `UseDDDToolkit`
   a save it refuses throws a `RefusalException` with the code `access.refused` and the kind `NotPermitted`, a
   403 from a route and a `RefusalError` from a mutation, with what the save threw as its inner exception, where
-  it ended as a `DbUpdateException`, a 500. The warning names the guard by the constraint it raised with, and the table
-  where it is known: "the guard projects_owner_stays". `RowAccessModel.Refusal(guard, message)` writes the
+  it ended as a `DbUpdateException`, a 500. The log line names the guard by the constraint it raised with, and the
+  table where it is known: "the guard projects_owner_stays"; like a policy's refusal, it is an information line when
+  the request's access check, asked again, refuses as well (`PassedAccessCheck`), and a warning otherwise. `RowAccessModel.Refusal(guard, message)` writes the
   statement for a trigger written in a contribution, `RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege',
   CONSTRAINT = ..., HINT = 'ddd:access.refused', MESSAGE = ...;`, and a trigger written by hand says the same;
   one that raises `42501` without the hint fails as before. Every access guard the toolkit writes raises it: the
