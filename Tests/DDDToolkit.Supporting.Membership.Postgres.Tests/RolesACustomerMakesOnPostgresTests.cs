@@ -67,8 +67,8 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
 
         // Each resource's functions read its own role table, and each cuts by its own rules.
         using var context = PostgresGarden.Model();
-        var sheds = new ShedMembershipFunctions().Contribute(context, Export)!.Functions[1].Body;
-        var plots = new PlotMembershipFunctions().Contribute(context, Export)!.Functions[1].Body;
+        var sheds = new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules).Contribute(context, Export)!.Functions[1].Body;
+        var plots = new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(context, Export)!.Functions[1].Body;
         sheds.Should().Contain("\n  AND $1 NOT IN ('sheds.sell')\n").And.Contain("JOIN \"gardens\".\"ShedRoles\" k ON k.\"Id\" = h.\"RoleId\"").And.NotContain("PlotRoles");
         plots.Should().Contain("JOIN \"gardens\".\"PlotRoles\" k ON k.\"Id\" = h.\"RoleId\"").And.NotContain("ShedRoles");
     }
@@ -436,7 +436,7 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     {
         using var context = PostgresGarden.Model();
 
-        var plots = new PlotMembershipFunctions().Contribute(context, Export)!;
+        var plots = new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(context, Export)!;
 
         // Nothing is allowed by the package, and no policy is written for the role table: the lock the plots'
         // rules name keys for is on the gardeners' two tables and on the plot's owner. On the role table there
@@ -557,19 +557,19 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
     {
         // No role class is mapped for the plots.
         using var bare = new PlotsWithoutRoles(new DbContextOptionsBuilder<PlotsWithoutRoles>().UseNpgsql("Host=model-only").Options);
-        FluentActions.Invoking(() => new PlotMembershipFunctions().Contribute(bare, Export))
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(bare, Export))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("The rules 'plots' say the roles of Plot are kept, and the model maps no role class for it.*[KeptRole<TRoleId, Plot>]*modelBuilder.Entity<PlotRole>().IsKeptRole().");
 
         // The keys are kept as something the functions do not read.
         using var documents = new PlotsWithKeysAsJson(new DbContextOptionsBuilder<PlotsWithKeysAsJson>().UseNpgsql("Host=model-only").Options);
-        FluentActions.Invoking(() => new PlotMembershipFunctions().Contribute(documents, Export))
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(documents, Export))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("PlotRole.Keys is stored as jsonb, and the functions read a role's keys from an array, such as text[]. Leave the column as IsKeptRole maps it.");
 
         // A role class known by another id than the gardeners hold their roles by: nothing to join the two on.
         using var stray = new PlotsWithStrayRoles(new DbContextOptionsBuilder<PlotsWithStrayRoles>().UseNpgsql("Host=model-only").Options);
-        FluentActions.Invoking(() => new PlotMembershipFunctions().Contribute(stray, Export))
+        FluentActions.Invoking(() => new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules).Contribute(stray, Export))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("The members of Plot hold roles known by PlotRoleId, and its role class *StrayRole is known by GardenId.*declare the member class with GardenId as its role.");
 
@@ -597,12 +597,12 @@ public sealed partial class RolesACustomerMakesOnPostgresTests(FilingPostgres po
             .And.Contain("[MembershipRules<PlotGardener>]");
 
         // Written from rules that let a member's role give another key: the database would answer otherwise than the application.
-        await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(memberKeys: MemberKeys.AllBut())), new ShedMembershipFunctions(), new GardenOwnFunctions()]));
+        await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(memberKeys: MemberKeys.AllBut())), new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules), new GardenOwnFunctions()]));
         (await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(plain.Services.Provider, Cancellation)).Should().ThrowAsync<InvalidOperationException>())
             .Which.Message.Should().Contain("gardens.plots_as_member_with (it was written from other rules)");
 
         // Written from rules that differ in their starter roles alone: the functions are the same, and it starts.
-        await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(starters: [new("weeder", [PlotKeys.See])])), new ShedMembershipFunctions(), new GardenOwnFunctions()]));
+        await plain.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(Plots(starters: [new("weeder", [PlotKeys.See])])), new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules), new GardenOwnFunctions()]));
         await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(plain.Services.Provider, Cancellation);
     }
 

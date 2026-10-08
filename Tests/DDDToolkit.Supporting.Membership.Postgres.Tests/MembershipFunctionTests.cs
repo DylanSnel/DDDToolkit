@@ -255,7 +255,7 @@ public sealed class MembershipFunctionTests(FilingPostgres postgres)
             changeMembersKey: registered.ChangeMembersKey,
             changeOwnerKey: registered.ChangeOwnerKey,
             systemScopes: registered.SystemScopes);
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new DocumentMembershipFunctions(), new MembershipRowAccessContribution<FolderMember>(asked)], rules: []));
+        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(asked)], rules: []));
 
         static string Scoped(string scope) => $$"""{"role":"ddd_system_in","scope":"{{scope}}"}""";
         long[] every = [data.Cabinet.Value, data.Annex.Value];

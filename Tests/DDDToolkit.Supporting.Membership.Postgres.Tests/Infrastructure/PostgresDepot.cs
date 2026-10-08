@@ -5,12 +5,6 @@ using DDDToolkit.Supporting.Membership.TestHost.Access;
 
 namespace DDDToolkit.Supporting.Membership.Postgres.Tests.Infrastructure;
 
-/// <summary>The row access contribution of the pallets: the application's class, closed over its member class, with its rules.</summary>
-public sealed class PalletMembershipFunctions() : MembershipRowAccessContribution<PalletPorter>(PalletMembership.Rules);
-
-/// <summary>The row access contribution of the crates.</summary>
-public sealed class CrateMembershipFunctions() : MembershipRowAccessContribution<CratePorter>(CrateMembership.Rules);
-
 /// <summary>
 /// The depot's own functions in the database, written by the depot and by nobody else: who the calling porter
 /// is, which of its roles give a key, and the bays a porter's hold of a key reaches. They are defined under the
@@ -101,8 +95,17 @@ public sealed class PostgresDepot : IDisposable
         RowAccessRule.For<Crate>("Porters read the crates they see", RowOperations.Read, PortersReadTheCratesTheySee.RowAccessSql, RowAccessRoles.User),
     ];
 
-    /// <summary>The contributions the host lists: one for each kind of resource, and the depot's own.</summary>
-    public static IReadOnlyList<IRowAccessContribution> Contributions => [new PalletMembershipFunctions(), new CrateMembershipFunctions(), new DepotOwnFunctions()];
+    /// <summary>
+    /// The contributions the access file is written with: the package's own class once for each kind of resource,
+    /// as the Supabase build makes it from the rules an application marks <c>[MembershipRules&lt;TMember&gt;]</c>, and
+    /// the depot's own, which the host lists with <c>UseRowAccessContribution</c>.
+    /// </summary>
+    public static IReadOnlyList<IRowAccessContribution> Contributions =>
+    [
+        new MembershipRowAccessContribution<PalletPorter>(PalletMembership.Rules),
+        new MembershipRowAccessContribution<CratePorter>(CrateMembership.Rules),
+        new DepotOwnFunctions(),
+    ];
 
     /// <summary>The test's database.</summary>
     public FilingDatabase Database { get; }
@@ -117,8 +120,8 @@ public sealed class PostgresDepot : IDisposable
     public static DepotContext Model() => new(new DbContextOptionsBuilder<DepotContext>().UseNpgsql("Host=model-only").Options);
 
     /// <summary>
-    /// The access file of the depot's context, written with <paramref name="contributions"/>, or the three the
-    /// host lists, and the depot's <paramref name="rules"/>, or its own.
+    /// The access file of the depot's context, written with <paramref name="contributions"/>, or
+    /// <see cref="Contributions"/>, and the depot's <paramref name="rules"/>, or its own.
     /// </summary>
     public static string AccessScript(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null)
     {

@@ -73,8 +73,9 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Plain, seed: false);
 
-        // The host listed the documents' contribution and forgot the folders'.
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new DocumentMembershipFunctions()], rules: []));
+        // Written with the documents' contribution and not the folders', as for an application that marked the
+        // documents' rules and forgot the folders'.
+        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules)], rules: []));
 
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
 
@@ -124,7 +125,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
             changeMembersKey: difference == "another key changes the members" ? FolderKeys.File : registered.ChangeMembersKey,
             changeOwnerKey: difference == "no key changes the owner" ? null : registered.ChangeOwnerKey,
             systemScopes: difference == "another scope is the host's own work" ? ["archive"] : registered.SystemScopes);
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new DocumentMembershipFunctions(), new MembershipRowAccessContribution<FolderMember>(exported)], rules: []));
+        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(exported)], rules: []));
 
         var refused = await FluentActions.Awaiting(() => CheckAsync(filing)).Should().ThrowAsync<InvalidOperationException>();
 
@@ -155,7 +156,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
             changeMembersKey: registered.ChangeMembersKey,
             changeOwnerKey: registered.ChangeOwnerKey,
             systemScopes: [.. registered.SystemScopes]);
-        await filing.ExecuteAsync(FilingPostgres.AccessScript([new DocumentMembershipFunctions(), new MembershipRowAccessContribution<FolderMember>(again)], rules: []));
+        await filing.ExecuteAsync(FilingPostgres.AccessScript([new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules), new MembershipRowAccessContribution<FolderMember>(again)], rules: []));
 
         await CheckAsync(filing);
     }
@@ -421,7 +422,7 @@ public sealed class StartUpCheckTests(FilingPostgres postgres)
         async Task<IReadOnlyList<string>> RemarksForAsync(MembershipRules sheds)
         {
             using var host = await PostgresGarden.CreateAsync(postgres, secured: false, seed: false, sheds: sheds);
-            await host.ExecuteAsync(PostgresGarden.AccessScript([new PlotMembershipFunctions(), new MembershipRowAccessContribution<ShedHand>(sheds), new GardenOwnFunctions()]));
+            await host.ExecuteAsync(PostgresGarden.AccessScript([new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules), new MembershipRowAccessContribution<ShedHand>(sheds), new GardenOwnFunctions()]));
             return await MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(host.Services.Provider, Cancellation);
         }
 

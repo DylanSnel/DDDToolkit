@@ -8,12 +8,6 @@ using Testcontainers.PostgreSql;
 
 namespace DDDToolkit.Supporting.Membership.Postgres.Tests.Infrastructure;
 
-/// <summary>The row access contribution of the documents: the application's class, closed over its member class, with its rules.</summary>
-public sealed class DocumentMembershipFunctions() : MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules);
-
-/// <summary>The row access contribution of the folders, next to the documents': one for each kind of resource.</summary>
-public sealed class FolderMembershipFunctions() : MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules);
-
 /// <summary>
 /// One Postgres for every test of this run that needs one, started the first time a test asks for a database, so
 /// the tests that need none start no container, and stopped with the run. Each test gets a database of its own,
@@ -78,8 +72,17 @@ public sealed class FilingPostgres : IAsyncLifetime
         RowAccessRule.For<Folder>("Staff read the folders they are on", RowOperations.Read, StaffReadTheFoldersTheyAreOn.RowAccessSql, RowAccessRoles.User),
     ];
 
-    /// <summary>The contributions the host lists: one for each kind of resource.</summary>
-    public static IReadOnlyList<IRowAccessContribution> Contributions => [new DocumentMembershipFunctions(), new FolderMembershipFunctions()];
+    /// <summary>
+    /// The contributions the access file is written with: the package's own class once for each kind of resource,
+    /// closed over its member class, with its rules. An application lists none of them: the Supabase build makes each
+    /// one in the project that runs the export, from the rules it marks <c>[MembershipRules&lt;TMember&gt;]</c>. This
+    /// suite runs no export, so it makes the package's class itself, from the rules an application would mark.
+    /// </summary>
+    public static IReadOnlyList<IRowAccessContribution> Contributions =>
+    [
+        new MembershipRowAccessContribution<DocumentShare>(DocumentMembership.Rules),
+        new MembershipRowAccessContribution<FolderMember>(FolderMembership.Rules),
+    ];
 
     /// <inheritdoc />
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
@@ -97,8 +100,8 @@ public sealed class FilingPostgres : IAsyncLifetime
     public static void Roles(PostgresRowLevelSecurityOptions options) => options.TokenRoles[ArchivistTokenRole] = ArchivistRole;
 
     /// <summary>
-    /// The access file of the application's context, written with <paramref name="contributions"/>, or the two the
-    /// host lists, and the application's <paramref name="rules"/>, or its own. With <paramref name="writeGrants"/>
+    /// The access file of the application's context, written with <paramref name="contributions"/>, or
+    /// <see cref="Contributions"/>, and the application's <paramref name="rules"/>, or its own. With <paramref name="writeGrants"/>
     /// it writes the tables' privileges from the policies as well, and with <paramref name="force"/> it holds
     /// the tables' owner to their policies too.
     /// </summary>

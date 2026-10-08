@@ -53,11 +53,14 @@ public sealed class PackageReferenceTests
         assembly.GetExportedTypes().Select(type => type.Name).Should().BeEquivalentTo(
             "MembershipPostgresChecks", "MembershipRowAccessContribution`1", "MembershipPostgresServiceCollectionExtensions");
 
-        // Offered open, so the class an application closes over its own member class, with its rules, counts as using it.
+        // Offered open: the Supabase build closes it once for every member class an application marks
+        // [MembershipRules<TMember>], and makes it with the rules so marked. The application writes no class of its own.
         assembly.GetCustomAttributes<DDDToolkit.Abstractions.Attributes.RowAccessContributionAttribute>().Select(offer => offer.Contribution)
             .Should().Equal(typeof(MembershipRowAccessContribution<>));
-        typeof(DocumentMembershipFunctions).BaseType.Should().Be(typeof(MembershipRowAccessContribution<DocumentShare>));
-        typeof(DocumentMembershipFunctions).GetConstructor(Type.EmptyTypes).Should().NotBeNull("the export makes the class with new, before the application starts");
+        typeof(MembershipRowAccessContribution<>).GetConstructors().Should().ContainSingle()
+            .Which.GetParameters().Should().ContainSingle()
+            .Which.GetCustomAttribute<DDDToolkit.Abstractions.Attributes.FromApplicationAttribute>()!.Marker
+            .Should().Be(typeof(DDDToolkit.Supporting.Membership.Access.MembershipRulesAttribute<>), "the export makes the class from the marked rules, before the application starts");
     }
 
     private static string RepositoryRoot()

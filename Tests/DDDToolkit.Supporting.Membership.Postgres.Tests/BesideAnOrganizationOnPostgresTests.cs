@@ -334,13 +334,13 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
     [Fact]
     public void A_function_the_rules_name_that_nothing_defines_is_refused_when_the_file_is_written()
     {
-        // The host listed the contributions of its two resources and forgot the depot's own: the names the rules
-        // give are defined nowhere in what the file is written with.
-        FluentActions.Invoking(() => PostgresDepot.AccessScript([new PalletMembershipFunctions()], rules: []))
+        // Written with a resource's contribution and without the depot's own, which the host forgot to list: the
+        // names the rules give are defined nowhere in what the file is written with.
+        FluentActions.Invoking(() => PostgresDepot.AccessScript([new MembershipRowAccessContribution<PalletPorter>(PalletMembership.Rules)], rules: []))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*pallets/pallets_as_member*asks the function depot/caller_porter, and none of the functions this is written with is called that*");
 
-        FluentActions.Invoking(() => PostgresDepot.AccessScript([new CrateMembershipFunctions()], rules: []))
+        FluentActions.Invoking(() => PostgresDepot.AccessScript([new MembershipRowAccessContribution<CratePorter>(CrateMembership.Rules)], rules: []))
             .Should().Throw<InvalidOperationException>().WithMessage("*asks the function depot/*");
 
         // A name the depot does not define, for one of the three: said for that one.
@@ -390,7 +390,7 @@ public sealed class BesideAnOrganizationOnPostgresTests(FilingPostgres postgres)
         {
             using var depot = await PostgresDepot.CreateAsync(postgres, secured: false, seed: false);
             await depot.ExecuteAsync(PostgresDepot.AccessScript(
-                [new PalletMembershipFunctions(), new MembershipRowAccessContribution<CratePorter>(rules), new DepotOwnFunctions(), new SpareFunction()],
+                [new MembershipRowAccessContribution<PalletPorter>(PalletMembership.Rules), new MembershipRowAccessContribution<CratePorter>(rules), new DepotOwnFunctions(), new SpareFunction()],
                 rules: []));
 
             var refused = await FluentActions.Awaiting(() => MembershipPostgresChecks.EnsureFunctionsAreInPlaceAsync(depot.Services.Provider, Cancellation))

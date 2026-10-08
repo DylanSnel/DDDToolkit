@@ -9,15 +9,6 @@ using Testcontainers.PostgreSql;
 
 namespace DDDToolkit.Supporting.Together.Tests.Infrastructure;
 
-/// <summary>Tenancy's row level security for the campus: the application's class, with the catalogue it runs with.</summary>
-public sealed class CampusTenancyRowAccess() : TenancyRowAccessContribution(CampusCatalogue.Built);
-
-/// <summary>The row access contribution of the courses: the application's class, closed over its member class, with its rules.</summary>
-public sealed class CourseMembershipFunctions() : MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules);
-
-/// <summary>The row access contribution of the labs.</summary>
-public sealed class LabMembershipFunctions() : MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules);
-
 /// <summary>
 /// One Postgres for every test of this run that asks for one, started the first time a test does, so the tests
 /// on SQLite start no container; stopped with the run. Each test gets a database of its own, copied from a
@@ -61,8 +52,19 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
         RowAccessRule.For<Lab>("Seats read the labs they see", RowOperations.Read, SeatsReadTheLabsTheySee.RowAccessSql, RowAccessRoles.User),
     ];
 
-    /// <summary>The contributions the host lists: Tenancy's, and one for each kind of resource with members.</summary>
-    public static IReadOnlyList<IRowAccessContribution> Contributions => [new CampusTenancyRowAccess(), new CourseMembershipFunctions(), new LabMembershipFunctions()];
+    /// <summary>
+    /// The contributions the access files are written with: the packages' own classes, Tenancy's with the catalogue
+    /// the campus runs with, and Membership's once for each kind of resource with members, closed over its member
+    /// class, with its rules. An application lists none of them: the Supabase build makes each one in the project
+    /// that runs the export, from what it marks, <c>[TenancyCatalogue]</c> and <c>[MembershipRules&lt;TMember&gt;]</c>.
+    /// This suite runs no export, so it makes the packages' classes itself, from what an application would mark.
+    /// </summary>
+    public static IReadOnlyList<IRowAccessContribution> Contributions =>
+    [
+        new TenancyRowAccessContribution(CampusCatalogue.Built),
+        new MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules),
+        new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules),
+    ];
 
     /// <inheritdoc />
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
@@ -84,7 +86,7 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
 
     /// <summary>
     /// The access files of the application's two contexts, in the order to run them: written together, with
-    /// <paramref name="contributions"/>, or the three the host lists, and with <paramref name="rules"/>, or the
+    /// <paramref name="contributions"/>, or <see cref="Contributions"/>, and with <paramref name="rules"/>, or the
     /// application's own, so a function of the courses' finds Tenancy's wherever Tenancy's context puts it.
     /// </summary>
     public static IReadOnlyList<string> AccessScripts(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null)

@@ -175,9 +175,10 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
         scripts[0].Should().Contain("FUNCTION tenancy.caller_seat()").And.Contain("FUNCTION tenancy.units_where_i_hold(key text)").And.NotContain("courses_i_see");
         scripts[1].Should().Contain("FUNCTION campus.courses_i_see()").And.Contain("FUNCTION campus.labs_where_i_hold(text)").And.NotContain("FUNCTION tenancy.");
 
-        // A host that lists the resources' contributions and forgets Tenancy's writes nothing: the names the rules
-        // give are defined nowhere in what the files are written with.
-        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new CourseMembershipFunctions(), new LabMembershipFunctions()]))
+        // Written with the resources' contributions and without Tenancy's, as for an application that leaves
+        // Tenancy's out, nothing is written: the names the rules give are defined nowhere in what the files are
+        // written with.
+        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)]))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*asks the function tenancy/*, and none of the functions this is written with is called that*");
 
@@ -189,7 +190,7 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
             seeKey: CourseKeys.See,
             memberKeys: MemberKeys.Only(CourseKeys.See),
             rolesKept: true);
-        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new CampusTenancyRowAccess(), new MembershipRowAccessContribution<CourseTutor>(misnamed), new LabMembershipFunctions()]))
+        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new TenancyRowAccessContribution(CampusCatalogue.Built), new MembershipRowAccessContribution<CourseTutor>(misnamed), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)]))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*asks the function tenancy/calling_seat, and none of the functions this is written with is called that*");
     }

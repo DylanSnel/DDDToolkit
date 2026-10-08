@@ -6,12 +6,6 @@ using Npgsql;
 
 namespace DDDToolkit.Supporting.Membership.Postgres.Tests.Infrastructure;
 
-/// <summary>The row access contribution of the plots: the application's class, closed over its member class, with its rules.</summary>
-public sealed class PlotMembershipFunctions() : MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules);
-
-/// <summary>The row access contribution of the sheds, next to the plots': one for each kind of resource.</summary>
-public sealed class ShedMembershipFunctions() : MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules);
-
 /// <summary>
 /// The gardens' own function in the database, written by the host and by nobody else: the garden the caller's
 /// token says its requests are in, which the host's rule on the roles of plots asks. It reads the caller's
@@ -73,10 +67,17 @@ public sealed class PostgresGarden : IDisposable
     ];
 
     /// <summary>
-    /// The contributions the host lists: one for each kind of resource, and the host's own function its rule on
-    /// the roles of plots asks. The roles need none of the package's: they are read where they are kept.
+    /// The contributions the access file is written with: the package's own class once for each kind of resource,
+    /// as the Supabase build makes it from the rules an application marks <c>[MembershipRules&lt;TMember&gt;]</c>, and
+    /// the host's own function its rule on the roles of plots asks, which the host lists. The roles need none of the
+    /// package's: they are read where they are kept.
     /// </summary>
-    public static IReadOnlyList<IRowAccessContribution> Contributions => [new PlotMembershipFunctions(), new ShedMembershipFunctions(), new GardenOwnFunctions()];
+    public static IReadOnlyList<IRowAccessContribution> Contributions =>
+    [
+        new MembershipRowAccessContribution<PlotGardener>(PlotMembership.Rules),
+        new MembershipRowAccessContribution<ShedHand>(ShedMembership.Rules),
+        new GardenOwnFunctions(),
+    ];
 
     /// <summary>The test's database.</summary>
     public FilingDatabase Database { get; }
@@ -91,8 +92,8 @@ public sealed class PostgresGarden : IDisposable
     public static GardenContext Model() => new(new DbContextOptionsBuilder<GardenContext>().UseNpgsql("Host=model-only").Options);
 
     /// <summary>
-    /// The access file of the gardens' context, written with <paramref name="contributions"/>, or the two the
-    /// host lists, and the gardens' <paramref name="rules"/>, or its own.
+    /// The access file of the gardens' context, written with <paramref name="contributions"/>, or
+    /// <see cref="Contributions"/>, and the gardens' <paramref name="rules"/>, or its own.
     /// </summary>
     public static string AccessScript(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null)
     {
