@@ -13,5 +13,11 @@ public abstract partial record TenancyRequirement
     /// tenant it reads. It is the toolkit's own caller that is asked, never the Tenancy caller, which is nobody
     /// for an operator in every tenant. For queries only; an operator changes nothing itself.
     /// </remarks>
-    public sealed record Operator : TenancyRequirement;
+    public sealed record Operator : TenancyRequirement
+    {
+        /// <summary>Made by <see cref="TenancyAccess.RequiresOperator"/>, the one spelling a request writes.</summary>
+        internal Operator()
+        {
+        }
+    }
 }

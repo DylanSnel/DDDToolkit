@@ -21,14 +21,21 @@ public sealed class MemberAccessCheckTests
     // ---------------------------------------------------------------- the requirements
 
     [Fact]
+    public void The_cases_are_made_by_MemberAccess_alone_the_one_spelling_a_request_writes()
+    {
+        typeof(MemberAccess<DocumentId>.On).GetConstructors().Should().BeEmpty("MemberAccess.On makes it");
+        typeof(MemberAccess<DocumentId>.SeenWith).GetConstructors().Should().BeEmpty("MemberAccess.SeenWith makes it");
+    }
+
+    [Fact]
     public void Requirements_that_say_the_same_are_equal_and_others_are_not()
     {
-        MemberAccess.On(DocumentKeys.Share, Minutes, 3).Should().Be(new MemberAccess<DocumentId>.On(DocumentKeys.Share, Minutes, 3));
+        MemberAccess.On(DocumentKeys.Share, Minutes, 3).Should().Be(MemberAccess.On(DocumentKeys.Share, Minutes, 3));
         MemberAccess.On(DocumentKeys.Share, Minutes).Should().Be(MemberAccess.On(DocumentKeys.Share, Minutes, expectedVersion: null));
         MemberAccess.On(DocumentKeys.Share, Minutes, 3).Should().NotBe(MemberAccess.On(DocumentKeys.Share, Minutes, 4));
         MemberAccess.On(DocumentKeys.Share, Minutes).Should().NotBe(MemberAccess.On(DocumentKeys.Edit, Minutes));
         MemberAccess.On(DocumentKeys.Share, Minutes).Should().NotBe(MemberAccess.On(DocumentKeys.Share, DocumentId.CreateSequential()));
-        MemberAccess.SeenWith<DocumentId>(DocumentKeys.View).Should().Be(new MemberAccess<DocumentId>.SeenWith(DocumentKeys.View));
+        MemberAccess.SeenWith<DocumentId>(DocumentKeys.View).Should().Be(MemberAccess.SeenWith<DocumentId>(DocumentKeys.View));
 
         // The same key about another kind of resource is another requirement.
         ((AccessRequirement)MemberAccess.SeenWith<DocumentId>(DocumentKeys.View)).Should().NotBe(MemberAccess.SeenWith<FolderId>(DocumentKeys.View));

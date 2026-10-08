@@ -12,10 +12,13 @@ public abstract partial record MemberAccess<TResourceId>
     /// </summary>
     public sealed record SeenWith : MemberAccess<TResourceId>
     {
-        /// <summary>The requirement that what is shown is what <paramref name="key"/> is held on.</summary>
+        /// <summary>
+        /// The requirement that what is shown is what <paramref name="key"/> is held on. Made by
+        /// <see cref="MemberAccess.SeenWith{TResourceId}"/>, the one spelling a request writes.
+        /// </summary>
         /// <param name="key">The key that decides what the query shows.</param>
         /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
-        public SeenWith(string key)
+        internal SeenWith(string key)
             : base(key)
         {
         }

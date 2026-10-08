@@ -15,10 +15,13 @@ public abstract partial record TenancyRequirement
     /// </remarks>
     public sealed record ForTheWholeTenant : TenancyRequirement
     {
-        /// <summary>The requirement that <paramref name="key"/> is held for the whole tenant.</summary>
+        /// <summary>
+        /// The requirement that <paramref name="key"/> is held for the whole tenant. Made by
+        /// <see cref="TenancyAccess.ForTheWholeTenant"/>, the one spelling a request writes.
+        /// </summary>
         /// <param name="key">The key the request needs for the whole tenant: one of the catalogue's.</param>
         /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
-        public ForTheWholeTenant(string key)
+        internal ForTheWholeTenant(string key)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
             Key = key;

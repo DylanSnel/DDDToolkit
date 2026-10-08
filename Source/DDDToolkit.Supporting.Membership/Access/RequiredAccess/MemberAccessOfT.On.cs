@@ -9,12 +9,15 @@ public abstract partial record MemberAccess<TResourceId>
     /// </summary>
     public sealed record On : MemberAccess<TResourceId>
     {
-        /// <summary>The requirement that <paramref name="key"/> is held on <paramref name="resource"/>.</summary>
+        /// <summary>
+        /// The requirement that <paramref name="key"/> is held on <paramref name="resource"/>. Made by
+        /// <see cref="MemberAccess.On{TResourceId}"/>, the one spelling a request writes.
+        /// </summary>
         /// <param name="key">The key the request needs on the resource.</param>
         /// <param name="resource">The resource, from the request.</param>
         /// <param name="expectedVersion">The version of the resource the caller last read, or <see langword="null"/>.</param>
         /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
-        public On(string key, TResourceId resource, long? expectedVersion = null)
+        internal On(string key, TResourceId resource, long? expectedVersion = null)
             : base(key)
         {
             Resource = resource;

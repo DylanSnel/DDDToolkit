@@ -15,8 +15,9 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <c>services.AddTenancyAccess&lt;TRequests, TContext&gt;()</c> adds holds the caller to.
 /// </summary>
 /// <remarks>
-/// Methods rather than constructors, so a case closed over the application's unit id takes it from the
-/// argument: <c>AtUnit(key, unit)</c>, not <c>new TenancyRequirement.AtUnit&lt;OrganizationUnitId&gt;(key, unit)</c>.
+/// They are the one spelling: the cases' constructors are internal, as the core's are, and these methods make
+/// them. Methods rather than constructors, so a case closed over the application's unit id takes it from the
+/// argument: <c>AtUnit(key, unit)</c>.
 /// </remarks>
 public static class TenancyAccess
 {

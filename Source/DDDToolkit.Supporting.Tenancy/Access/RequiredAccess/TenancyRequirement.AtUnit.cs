@@ -29,11 +29,14 @@ public abstract partial record TenancyRequirement
     public sealed record AtUnit<TUnitId> : TenancyRequirement
         where TUnitId : struct, IEntityId, IEquatable<TUnitId>
     {
-        /// <summary>The requirement that <paramref name="key"/> is held at <paramref name="unit"/>, there or above it.</summary>
+        /// <summary>
+        /// The requirement that <paramref name="key"/> is held at <paramref name="unit"/>, there or above it. Made by
+        /// <see cref="TenancyAccess.AtUnit{TUnitId}"/>, the one spelling a request writes.
+        /// </summary>
         /// <param name="key">The key the request needs at the unit: one of the catalogue's.</param>
         /// <param name="unit">The unit, from the request.</param>
         /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
-        public AtUnit(string key, TUnitId unit)
+        internal AtUnit(string key, TUnitId unit)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key);
             Key = key;

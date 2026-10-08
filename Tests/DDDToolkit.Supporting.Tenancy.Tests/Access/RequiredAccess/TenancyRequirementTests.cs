@@ -43,9 +43,23 @@ public class TenancyRequirementTests
 
         TenancyAccess.InTenant().Should().BeOfType<TenancyRequirement.InTenant>();
         TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage).Should().BeOfType<TenancyRequirement.ForTheWholeTenant>();
-        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>()
-            .And.Be(new TenancyRequirement.AtUnit<OrganizationUnitId>(TenancyKeys.UnitsManage, north), "the unit's type is taken from the argument");
+        TenancyAccess.AtUnit(TenancyKeys.UnitsManage, north).Should().BeOfType<TenancyRequirement.AtUnit<OrganizationUnitId>>("the unit's type is taken from the argument")
+            .Which.Unit.Should().Be(north);
         TenancyAccess.RequiresOperator().Should().BeOfType<TenancyRequirement.Operator>();
+    }
+
+    [Fact]
+    public void The_cases_are_made_by_TenancyAccess_alone_the_one_spelling_a_request_writes()
+    {
+        Type[] cases =
+        [
+            typeof(TenancyRequirement.InTenant),
+            typeof(TenancyRequirement.ForTheWholeTenant),
+            typeof(TenancyRequirement.AtUnit<OrganizationUnitId>),
+            typeof(TenancyRequirement.Operator),
+        ];
+
+        cases.Should().AllSatisfy(type => type.GetConstructors().Should().BeEmpty("{0} is made by TenancyAccess, as the core's cases are made by AccessRequirement", type.Name));
     }
 
     [Theory]

@@ -17,7 +17,7 @@ namespace DDDToolkit.Supporting.Tenancy.Postgres.Tests;
 /// </summary>
 public abstract class TenancyAccessCheckTests(TenancyPostgres postgres, TenancyNaming names)
 {
-    private static readonly TenancyRequirement.ForTheWholeTenant ManagesSeats = new(TenancyKeys.SeatsManage);
+    private static readonly TenancyRequirement.ForTheWholeTenant ManagesSeats = TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
