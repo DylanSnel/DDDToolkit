@@ -3498,17 +3498,21 @@ flowchart LR
         Leo["leo, the owner<br/>for good"]
         Vic["vic<br/>until 1 December"]
         Maud["maud<br/>for good"]
+        Juno["juno<br/>for good"]
     end
     LeoLead(["Crew lead<br/>for good"])
     VicObserver(["Observer<br/>for good"])
     VicSurveyor(["Surveyor<br/>until 1 November"])
+    JunoSurveyor(["Surveyor<br/>for good"])
     None(["no role:<br/>sees the project"])
     Project --> Leo
     Project --> Vic
     Project --> Maud
+    Project --> Juno
     Leo -- "holds" --> LeoLead
     Vic -- "holds" --> VicObserver
     Vic -- "holds" --> VicSurveyor
+    Juno -- "holds" --> JunoSurveyor
     Maud -.- None
 ```
 
