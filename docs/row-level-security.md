@@ -1686,11 +1686,11 @@ catalogue or a resource's rules, the package takes in its class's constructor, a
 declare the value anyway, and the build finds it in the exporting project and every project it references:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Reference["the exporting project<br/>references the package"] --> Declared["[assembly: RowAccessContribution]<br/>in the package"]
     Declared --> Constructor["its constructor:<br/>[FromApplication(typeof(Plans))]"]
     Constructor --> Marked["your member<br/>marked [Plans]"]
-    Marked --> Written["a class written into<br/>RowAccessContributionsOfPackages.g.cs"]
+    Marked --> Written["a class written into<br/>DDDToolkit.RowAccessContributionsOfPackages.g.cs"]
     Written --> Export["the export asks it<br/>for every context"]
 ```
 

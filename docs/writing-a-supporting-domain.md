@@ -292,7 +292,7 @@ flowchart LR
     Package["the package<br/>[assembly: RowAccessContribution]"] --> Constructor["its constructor<br/>[FromApplication(typeof(SubscriptionPlans))]"]
     Application["the application<br/>[SubscriptionPlans] on its plans"] --> Build["the build, where<br/>the export runs"]
     Constructor --> Build
-    Build --> Class["a class in<br/>RowAccessContributionsOfPackages.g.cs"]
+    Build --> Class["a class in<br/>DDDToolkit.RowAccessContributionsOfPackages.g.cs"]
 ```
 
 The build makes the class in the project that runs the export, before any host exists, from the static

@@ -375,7 +375,7 @@ One line in the project your classes belong to:
 ```
 
 ```mermaid
-flowchart LR
+flowchart TB
     Switch["[assembly:<br/>GenerateTenancyClasses]"] --> Class{"a class of the template,<br/>in this project or<br/>a project of its module?"}
     Class -- "yes" --> Yours["yours,<br/>as you wrote it"]
     Class -- "no" --> Written["written: Tenant,<br/>Organization, Role ..."]
@@ -536,7 +536,7 @@ that works.
 ### How a new id is made
 
 ```mermaid
-flowchart LR
+flowchart TB
     Command["a use case makes<br/>a tenant, unit, seat,<br/>role or invitation"] --> Given{"given an id?<br/>an import,<br/>seed data"}
     Given -- "yes" --> That(["that one"])
     Given -- "no" --> Create["SeatId.Create(),<br/>in code, before<br/>the save"]
@@ -975,7 +975,7 @@ writes the ids again to call them:
 | Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which answers the caller without its ids | Every project: it names no id |
 
 ```mermaid
-flowchart LR
+flowchart TB
     Call["a call of Tenancy's,<br/>generic over your ids"] --> Kind{"what is<br/>called?"}
     Kind -- "system work,<br/>the current caller" --> Sees{"does the project<br/>see your classes?"}
     Kind -- "a registration" --> Own{"is it a project<br/>of their module?"}
@@ -1906,7 +1906,7 @@ none of her grants, so no role and no key: her grant is above North. The overvie
 his grant there. System work in harbor reads every grant of every seat.
 
 ```mermaid
-flowchart LR
+flowchart TB
     Request["your request:<br/>RequiredAccess"] --> Ask{"may the<br/>caller ask?"}
     Ask -- no --> Refused(["refused at the door"])
     Ask -- yes --> Overview["SeatOverviewAsync(seat):<br/>no key of its own"]
@@ -2236,7 +2236,7 @@ a grant runs, a change of such a key in a role, and moves are asked by the use c
 ([What stays in C#](#what-stays-in-c)). With it off, a grants manager there hands out every role.
 
 ```mermaid
-flowchart LR
+flowchart TB
     Seat(["a seat hands on<br/>a key that<br/>manages access"]) --> Setting{"Contain<br/>AccessManagingKeys"}
     Setting -- "on, the default" --> Holds{"holds it there,<br/>for as long,<br/>not to itself?"}
     Holds -- no --> Refused["tenancy.grant-exceeds-own<br/>tenancy.self-appointment"]
@@ -5583,7 +5583,7 @@ rules. Holding it to the units would decide for you which of your fields a grant
 policy, Tenancy holds its own columns one by one, and leaves yours to you:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Update["An UPDATE<br/>of a seat"] --> Policy{"may the caller<br/>change the row?"}
     Policy -- no --> Skipped(["the statement<br/>skips the row"])
     Policy -- "yes: itself, or seats<br/>or grants managed<br/>anywhere" --> Column{"which column<br/>changes?"}
