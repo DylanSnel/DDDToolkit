@@ -1306,7 +1306,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   well, and refuses as an access guard, `42501` with the toolkit's hint, where it raised `check_violation`, so a
   save that changes one of them behind the aggregate's back is `access.refused`. No use case of Tenancy changes
   them; only Tenancy's system work in the seat's tenant passes, so that a one-off of yours inside
-  `TenancyWork.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
+  `TenantsTenancy.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
   person, and the policies keep that to Tenancy's scope and its tenant. Background work under `Caller.System`, a
   migration and the SQL editor change none of them. The status stays held by `tenancy_seat_status_is_managed`, and
   the version is the row's. Tenancy decides nothing about the columns your seat class adds, a job title say: each
@@ -1330,11 +1330,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administers what it reaches. Either way roles that manage no access go as before, a move gives the mover
   nothing, a tenant keeps its last administrator, a seat keeps its identity and tenant, which keys are marked
   stays as marked, and system work in a tenant is never held to it: a handler that checked something of the
-  application's own, a quiz passed say, gives the role inside `TenancyWork.BeginSystemIn` with containment on,
-  for the calling seat and with a role the application chose, never one the request named. On Postgres the
-  database holds a seat to the part a statement shows (which roles that manage access it gives, changes and takes
-  away where, never to itself, such invitations, and stopping a seat that holds one); how long, role key changes
-  and moves stay with the use cases, as before. The export writes the setting into the access files: on
+  application's own, a quiz passed say, gives the role inside `TenantsTenancy.BeginSystemIn(tenant, seat)` with
+  containment on, for the calling seat and with a role the application chose, never one the request named. On
+  Postgres the database holds a seat to the part a statement shows (which roles that manage access it gives,
+  changes and takes away where, never to itself, such invitations, and stopping a seat that holds one); how long,
+  role key changes and moves stay with the use cases, as before. The export reads the setting where it reads the
+  rest of the catalogue, on the part marked `[TenancyCatalogue]`, and writes it into the access files: on
   Postgres the policies on the grants and the invitations, and the trigger on a seat's status, ask the new
   function `key_is_contained(key)`, which answers the keys that manage access while it is on and none once it is
   off, where they asked `manages_access`. `EnsurePoliciesAreInPlaceAsync`, the start-up check

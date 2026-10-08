@@ -208,10 +208,11 @@ public sealed partial class ShopSeat
   manages access goes as one that manages none, so a seat with a key that manages access hands out every key it
   reaches, in C# and in the exported SQL alike (a seat's grant to itself still ends when its grants key does).
   Leave it on when the database can be reached without the handlers (Supabase's Data API). A handler that gives a
-  role after a check of its own (a quiz) keeps it on and grants inside `TenancyWork.BeginSystemIn`, which
-  containment never holds: the seat comes from the caller and the role from the application, never from the
-  request. On Postgres export and apply the access files after changing it: `tenancy.policies-in-place` refuses a
-  database written the other way round.
+  role after a check of its own (a quiz) keeps it on and grants inside `TenantsTenancy.BeginSystemIn(tenant, seat)`,
+  which containment never holds: the seat comes from `TenantsTenancy.CurrentCaller()` and the role from the
+  application, never from the request. The setting is on the part marked `[TenancyCatalogue]`, so the host and the
+  export read one value. On Postgres export and apply the access files after changing it:
+  `tenancy.policies-in-place` refuses a database written the other way round.
 - **Packs after provisioning.** A tenant's roles start as copies of the catalogue's packs, and are the
   tenant's own to rename and re-key. `builder.Services.SyncRolePacks()` in the host, beside
   `RunStartupChecks()` and not a check, since it changes roles, makes every role made from a pack follow it

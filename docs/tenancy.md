@@ -2182,7 +2182,7 @@ flowchart LR
 Containment is about a seat handing keys on, never about your application. System work in a tenant holds every
 key there and is not held to it, on or off. So an application that lets a manager earn a role that manages
 access, by passing a quiz say, keeps containment on: its own handler checks the quiz, which Tenancy knows nothing
-of, and then gives the role inside `TenancyWork.BeginSystemIn`, for the seat that passed. The grant records no
+of, and then gives the role inside `TenantsTenancy.BeginSystemIn(tenant, seat)`, for the seat that passed. The grant records no
 seat as its giver, and its event records the system, acting for that seat.
 
 System work gives whatever it is told, so what it is told comes from your application, never from the request.
@@ -2191,8 +2191,10 @@ role and the unit from the quiz's own record: the request names the quiz and car
 A handler that took a role or a seat from its request would give whoever passed the quiz whatever they named,
 the administrators' role at the root included.
 
-The setting is one line of your part of the catalogue, and leaving the line out keeps it on. The export writes it
-into the access files with the rest of the catalogue: on Postgres the policies on the grants and the
+The setting is one line of your part of the catalogue, and leaving the line out keeps it on. The host reads it
+from `TenancyOptions.Catalogue`, and the export from the same part, which you mark `[TenancyCatalogue]`
+([Setting it up](#setting-it-up)), so the two cannot disagree. The export writes it into the access files with the
+rest of the catalogue: on Postgres the policies on the grants and the
 invitations, and the trigger on a seat's status, ask `key_is_contained(key)`, which answers the keys that manage
 access while containment is on and none once it is off. The start-up check `tenancy.policies-in-place` compares
 that function with the catalogue the host runs with, and refuses a database written with containment the other
@@ -2204,25 +2206,26 @@ role is given or taken away, and nothing checks the grants that exist.
 <summary>Show the code: turning containment off, and a quiz handler that keeps it on</summary>
 
 ```csharp
-// Your part of the catalogue, with containment off. Leave the last line out to keep it on.
-public static ApplicationCatalogue Application { get; } = new(
-    Packs: [/* ... */],
-    AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew],
-    ContainAccessManagingKeys: false);
+// Your part of the catalogue, with containment off: the host hands it to TenancyOptions.Catalogue, and the export
+// writes the policies from it because it is marked. Leave the last line out to keep containment on.
+public static class ShopCatalogue
+{
+    [TenancyCatalogue]
+    public static ApplicationCatalogue Application { get; } = new(
+        Packs: [/* ... */],
+        AccessManagingKeys: [ProjectKeys.ChangeOwner, ProjectKeys.ManageCrew],
+        ContainAccessManagingKeys: false);
+}
 ```
 
 ```csharp
 // Your own handler, with containment on. The request names the quiz and carries the answers. Who passed is the
 // caller, and what passing gives is the quiz's: system work gives whatever it is told, so a client chooses neither.
-public sealed class QuizDesk(
-    TenantsTenancy.SeatCommands seats,
-    ITenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId> tenancy,
-    IQuizzes quizzes)
+public sealed class QuizDesk(TenantsTenancy.SeatCommands seats, IQuizzes quizzes)
 {
     public async Task PassAsync(QuizId quizId, QuizAnswers answers, CancellationToken cancellationToken)
     {
-        var caller = tenancy.RequireTenant();
-        if (caller.BySystem || caller.Seat is not { } seat)
+        if (TenantsTenancy.CurrentCaller() is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
         {
             throw QuizRefusals.Of(QuizRefusals.SeatsOnly);
         }
@@ -2234,7 +2237,7 @@ public sealed class QuizDesk(
         }
 
         // The role and the unit are the quiz's own, which an administrator set when making it.
-        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(caller.Tenant, seat))
+        using (TenantsTenancy.BeginSystemIn(tenant, seat))
         {
             await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);
         }
@@ -5537,7 +5540,7 @@ flowchart LR
   toolkit's hint, so a save that tries is `access.refused`. No use case of Tenancy changes them once the seat is
   made: provisioning, adding a seat, accepting an invitation and an import write all three as they make the seat,
   an insert. Only Tenancy's system work in the seat's tenant passes, the scoped system role that
-  `TenancyWork.BeginSystemIn` begins, so that a one-off of yours can link a seat to the identity another sign-in
+  `TenantsTenancy.BeginSystemIn(tenant)` begins, so that a one-off of yours can link a seat to the identity another sign-in
   provider gives the same person, with an `ExecuteUpdate` of the seat inside it (the code is below). The policies
   keep that work to Tenancy's scope and to its tenant, so it moves no seat to another tenant. Anything else changes
   none of them: background work under `Caller.System`, and a migration or the SQL editor running as the tables'
@@ -5606,7 +5609,7 @@ A one-off of yours that links a seat to the identity another sign-in provider ga
 Tenancy's system work in the seat's tenant, which the trigger lets through:
 
 ```csharp
-using (TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant))
+using (TenantsTenancy.BeginSystemIn(tenant))
 {
     await context.Set<Seat>()
         .Where(seat => seat.Id == seatId)
