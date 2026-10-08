@@ -7,9 +7,9 @@
   </PropertyGroup>
 
   <!--
-    What the other modules may know of Tenancy: its four ids, what a tenant uses a role for, with the one
-    question about it, and who changed a row as every module answers it (ChangedBy, a value object declared once
-    for all of them). Projects and Inspections store a tenant, a unit, a seat and a role, and the project of each
+    What the other modules may know of Tenancy: its five ids (tenant, unit, seat, role and invitation), the
+    operators' token role (SampleTokenRoles), and who changed a row as every module answers it (ChangedBy, a value
+    object declared once for all of them). Projects and Inspections store a tenant, a unit, a seat and a role, and the project of each
     module that holds its context registers a converter for them: the generated Add{Module}Converters() also
     registers the published ids of other modules. So this project references neither Entity Framework nor the
     Tenancy packages; a module that reads these ids does not thereby depend on how Tenancy works, nor on how

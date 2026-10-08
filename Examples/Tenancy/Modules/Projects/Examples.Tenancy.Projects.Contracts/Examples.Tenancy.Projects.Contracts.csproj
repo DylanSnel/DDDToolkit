@@ -8,7 +8,8 @@
 
   <!--
     What the other modules may know of Projects: a project's id, the permission keys Projects asks for, and the
-    one question another module may put to it, whether the caller may do something to a project. Inspections
+    two kinds of question another module may put to it: in C#, whether the caller may do something to a project
+    (IProjectGate), and in a row access rule, which projects the caller sees or holds a key on (RowAccess). Inspections
     stores a ProjectId on every inspection, and the project of Inspections that holds its context registers a
     converter for it: the generated Add{Module}Converters() also registers the published ids of other modules. So
     this project references neither Entity Framework nor the Tenancy packages: a module that asks Projects a

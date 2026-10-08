@@ -9,9 +9,9 @@
   <!--
     Inspections' domain: an inspection, its id, its domain event and its refusals. It references neither Entity
     Framework nor ASP.NET Core. The infrastructure project maps the inspection, stores its id through the converter
-    generated there, and registers the domain event under its name, because it declares the same module. Unlike
-    Projects' domain it needs no Tenancy package: an inspection stores a tenant, a project and a seat, and those are
-    ids the other modules publish, nothing more.
+    generated there, and registers the domain event under its name, because it declares the same module. Like
+    Projects' domain it needs no Tenancy package, and unlike it no Membership package either: an inspection stores
+    a tenant, a project and a seat, and those are ids the other modules publish, nothing more.
   -->
   <ItemGroup>
     <!-- What the modules share and none owns: the range of days an inspection covers. -->

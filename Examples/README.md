@@ -585,7 +585,7 @@ Tenancy/
       Examples.Tenancy.Tenants.Infrastructure      the context, marked [SupabaseMigrations], its migrations, EfTenancyReads, the column rule on the seat's name in Access/, AddTenantsInfrastructure
       Examples.Tenancy.Tenants.Api                 the module's entry, TenantsModule, and per feature the routes (Rest) and the GraphQL fields and types (GraphQL)
     Projects/
-      Examples.Tenancy.Projects.Contracts          ProjectId, the keys and IProjectGate: all Inspections may name
+      Examples.Tenancy.Projects.Contracts          ProjectId, the keys, IProjectGate, and the row access contracts ProjectsISee and ProjectsWhereIHold: all Inspections may name
       Examples.Tenancy.Projects.Domain             a project and its crew, and a tenant's project roles, on the Membership package's templates; their rules, events and refusals
         Aggregates/Projects/                                Project.cs and ProjectRefusals.cs, with Entities/, Events/, Invariants/ and ValueObjects/ beside them
         Aggregates/ProjectRoles/                            ProjectRole.cs, with Events/ and ValueObjects/
