@@ -20,8 +20,8 @@ namespace Examples.Tenancy.Inspections.Api;
 /// project's registration and the application project's. It is the only type in this project that names the
 /// infrastructure project, and it only composes: it holds nothing, decides nothing, and no route is written here.
 /// <para>
-/// The routes are written per feature, in a folder named as the feature is in the application project; there is
-/// one, <c>Recording</c>, with its routes in <c>Rest</c>. It lives in the module, so every host that runs the
+/// The routes are written per feature, in a folder named as the feature is in the application project; there are
+/// two, <c>Recording</c> and <c>Operators</c>, each with its routes in <c>Rest</c>. It lives in the module, so every host that runs the
 /// module serves the same API. A route decides nothing, and takes nothing but the sender: it makes a command or a
 /// query of its arguments and sends it. On its way to its handler the request passes the module's access check,
 /// which asks Projects' gate and Tenancy who is calling and refuses with a coded

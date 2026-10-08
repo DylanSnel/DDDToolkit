@@ -603,7 +603,7 @@ Tenancy/
         Access/Rest/, Crew/Rest/, Lifecycle/Rest/, ...      a feature's routes, under the name the application project gives the feature
     Inspections/                                            no contracts, since no module names its types
       Examples.Tenancy.Inspections.Domain          an inspection, its id, event and refusals
-      Examples.Tenancy.Inspections.Application     a command and its queries in the one feature Recording, with the ports IInspectionStore and IInspectionReads beside them; the access check that asks Projects' gate
+      Examples.Tenancy.Inspections.Application     a command and its queries in the feature Recording, with the ports IInspectionStore and IInspectionReads beside them, and the operators' query in Operators; the access check that asks Projects' gate
       Examples.Tenancy.Inspections.Infrastructure  the context, marked [SupabaseMigrations], its migrations, EfInspectionStore, EfInspectionReads, the row rules in Access/, AddInspectionsInfrastructure
       Examples.Tenancy.Inspections.Api             the module's entry, InspectionsModule, the routes and the GraphQL schema
   Shared/
