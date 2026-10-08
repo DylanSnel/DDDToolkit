@@ -704,7 +704,10 @@ echo "    SupportingDomains/Host: the access file names the packages' classes, w
 
 # The host names the role it logs in as with SupabaseLoginRole, which the packaged build step hands the export
 # among its variables: the export wrote the migration that makes the role, after every other file, granting it
-# the roles callers run as and nothing else.
+# the roles callers run as and nothing else. The host maps no role in SupabaseRowAccessRoles, so they are the
+# defaults: anon for a caller without a token, authenticated for a signed-in user, ddd_system_in for the
+# application's own work inside the policies, and ddd_system, the bookkeeping role, for the outbox, the inbox and
+# which migrations ran.
 login_role_file="$(find "$supabase_migrations" -name '*_login_role.press_api.ddd.sql')"
 if [ -z "$login_role_file" ] || [ "$(wc -l <<< "$login_role_file" | tr -d ' ')" != 1 ]; then
   echo "FAILED: the export did not write the login role's file into $supabase_migrations, so SupabaseLoginRole did not reach it." >&2
@@ -718,7 +721,7 @@ fi
 
 # Each role in a statement of its own, in the order the file grants them.
 granted="$(tr -d '\r' < "$login_role_file" | sed -n 's/^ *GRANT \(.*\) TO press_api;$/\1/p' | paste -sd ' ' -)"
-if [ "$granted" != "anon authenticated ddd_system_in" ]; then
+if [ "$granted" != "anon authenticated ddd_system_in ddd_system" ]; then
   echo "FAILED: the login role's file grants press_api '$granted', not the roles callers run as:" >&2
   cat "$login_role_file" >&2
   exit 1
