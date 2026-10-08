@@ -13,6 +13,17 @@ namespace DDDToolkit.Supporting.Tenancy;
 // nobody named. It is why an event about a tenant alone still names the seat id's type.
 
 /// <summary>A tenant was provisioned: it exists, and is not active yet.</summary>
+/// <param name="TenantId">The tenant provisioned.</param>
+/// <param name="Slug">The slug it is known by.</param>
+/// <param name="Shape">
+/// Its shape: <see cref="TenantShape.Flat"/>, the root alone, or <see cref="TenantShape.Hierarchical"/>, a tree of
+/// units below it.
+/// </param>
+/// <param name="By">
+/// Who made the change: the actor of the caller whose command raised it, a seat as itself, or the system, an
+/// operator or a token the work was begun for (<see cref="TenancyActor{TSeatId}"/>). <see langword="null"/> only
+/// where the aggregate was changed outside the package's use cases, with no actor handed to it.
+/// </param>
 [DomainEventName("tenancy.tenant-provisioned")]
 public sealed record TenantProvisioned<TTenantId, TSeatId>(TTenantId TenantId, string Slug, TenantShape Shape, TenancyActor<TSeatId>? By) : DomainEvent
     where TTenantId : struct, IEntityId, IEquatable<TTenantId>
