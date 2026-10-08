@@ -2670,6 +2670,15 @@ references both, the host and your tests first, where the first line that names 
 compiler's CS0433, with no word of what to do. So such a project is told, at its project file, since no line of its
 code is wrong.
 
+What happens depends on where the two classes meet. In every case DDD00075 is a warning, which stops no build
+unless warnings are errors there; what stops the build is the compiler's error on the first line that names the class:
+
+| Where the two classes meet | What the generator writes there | Where DDD00075 is reported | What your code gets while the warning stands |
+|---|---|---|---|
+| a project that references both modules' projects, such as the host or a test project | nothing: the classes are the modules' | at the project file, since no line of it is wrong | code that names neither class builds and runs; the first line that names `TenancyUseCases` is CS0433, an error |
+| a project that declares one module's classes and references another module's project, which has a class of that name | its own class all the same | on the project's first Tenancy class, and not at the project file as well | its own code builds and names its own module's classes: the compiler takes the class of its own source and says so with CS0436, a warning. Every project above it sees both classes, is told at its project file, and gets CS0433 on the first line that names the class |
+| a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another of its classes has | neither class, since neither can be told from the other | on the project's first class | code that names neither builds; a line that names the class is the compiler's error that no such type exists |
+
 Give one of them a name of its own, with the line the message writes out, in the project it names: the one that
 declares that module's classes. Where you named that class already, the message names the line that names it, to
 give another name there: a second line for one class would change nothing.
@@ -2685,20 +2694,16 @@ Every project above it then names Customers' use cases `CustomersTenancyUseCases
 `TenancyUseCases`. Any name a class can have will do, `CustomersTenancy` as well, as long as no namespace or type of
 yours in the global namespace has it; the message only suggests one.
 
-| Where it is reported | Why |
-|---|---|
-| at the project file of a project that sees two such classes the projects it references have | the host or a test project: the classes meet there |
-| on the first class of a project that declares a module's classes and references another module's project with a class of that name | it gets its own class all the same, which the compiler binds its own code to, CS0436, so nothing there is closed over the other module's classes; every project above it sees both, is told at its project file and cannot name either |
-| on the first class of a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another class has | neither can be told from the other, so neither is written |
-
 Where two packages' classes share a name in one project, the line names the one meant with its namespace,
 `[assembly: TemplateFacadeName("Acme.Billing.UseCases", "BillingUseCases")]`. A type, a namespace or an alias of
 the name you keep in the global namespace yourself is your own way of naming the classes, and is not this.
 
-It is a warning rather than an error: a host that names neither class builds and runs, and the compiler stops the
-first line that does. Reported at the project file, it is outside every source file, so its severity is set with
-`<NoWarn>` or `<WarningsAsErrors>`, or in a `.globalconfig` file with `is_global = true`, and not in an
-`.editorconfig` section for `*.cs` files.
+It is a warning rather than an error in all three cases: a host that names neither class builds and runs, and the
+compiler stops the first line that does. A project that builds with `TreatWarningsAsErrors` stops at DDD00075 itself,
+and in the second case at CS0436 as well. To make it an error everywhere, add it to `<WarningsAsErrors>`. Reported
+at the project file, it is outside every source file, so there its severity is set with `<NoWarn>` or
+`<WarningsAsErrors>`, or in a `.globalconfig` file with `is_global = true`, and not in an `.editorconfig` section for
+`*.cs` files; reported on a class, an `.editorconfig` section reaches it as well.
 
 ## DDD00076
 
