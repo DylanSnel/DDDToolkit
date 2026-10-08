@@ -6,8 +6,9 @@ using DDDToolkit.Access;
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
 /// <summary>
-/// The only ways to system power in Tenancy. Nothing becomes system work in Tenancy by itself, whatever the
-/// toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here, on purpose.
+/// The ways system power in Tenancy is meant to be begun. Nothing becomes system work in Tenancy by itself,
+/// whatever the toolkit's own caller says: a person reaches Tenancy through a seat, and system work is begun here,
+/// on purpose, each method beginning Tenancy's caller together with the toolkit's scoped system caller.
 /// <code>
 /// using (TenancyWork.BeginSystemIn(tenant, actingSeat))
 /// {
@@ -38,6 +39,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// past every policy, while system work in a tenant must stay inside that tenant. On Postgres the scoped
 /// caller runs as a role that cannot bypass the policies, and the tenant reaches them next to it; Tenancy's
 /// own policies come with <c>DDDToolkit.Supporting.Tenancy.Postgres</c>.
+/// </para>
+/// <para>
+/// They are not the only way. <see cref="TenancyCallers.Begin"/> with a caller made by
+/// <see cref="TenancyCaller{TTenantId, TSeatId}.System"/>, <c>SystemIn</c> or <c>SystemBy</c> begins Tenancy's
+/// caller alone, a handle for tests and for code that begins the toolkit's caller itself: it leaves the toolkit's
+/// caller, and so the role the database runs as, as it is.
 /// </para>
 /// <para>
 /// Each also says who the work is recorded as (<see cref="TenancyCaller{TTenantId, TSeatId}.Actor"/>): the system
