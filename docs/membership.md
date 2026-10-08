@@ -172,7 +172,7 @@ public sealed class DocumentHandlers(
         await admission.RequireRoleAsync(role, cancellationToken);                   // one of the roles the rules declare
 
         var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == command.Document, cancellationToken)
-            ?? throw Document.Codes.Of(MembershipRefusals.NotFound);                 // gone since the check
+            ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);             // gone since the check
         db.ExpectVersion(document, command.ExpectedVersion);                         // If-Match: a stale version is a 409
 
         var now = clock.GetUtcNow();
@@ -347,12 +347,12 @@ flowchart TB
 ```csharp
 // The handler, with the context: two lines for the load
 var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == command.Document, cancellationToken)
-    ?? throw Document.Codes.Of(MembershipRefusals.NotFound);
+    ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);
 db.ExpectVersion(document, command.ExpectedVersion);       // none named: nothing to compare
 
 // Or behind a store of yours, which the handler calls in one line:
 // var document = await store.LoadAsync(command.Document, command.ExpectedVersion, cancellationToken)
-//     ?? throw Document.Codes.Of(MembershipRefusals.NotFound);
+//     ?? throw Document.Codes.Refuse(MembershipRefusals.NotFound);
 public async Task<Document?> LoadAsync(DocumentId id, long? expectedVersion, CancellationToken cancellationToken)
 {
     var document = await db.Documents.SingleOrDefaultAsync(row => row.Id == id, cancellationToken);
@@ -460,8 +460,9 @@ folder.Admit(command.Staff, command.Role, MemberPeriod.Between(now, command.Unti
   `If-Match` on the resource covers its members. Your own guard runs in front of every change, and you
   raise your own events from what the member list answers: the package raises none.
 - **Refusals carry your codes.** `MembershipCodes.Under("documents")` gives `documents.not-found`,
-  `documents.already-member` and so on; `With` renames one, and `WithMemberArgument("Staff")` names the
-  argument a refusal carries the member in.
+  `documents.already-member` and so on, and its `Refuse` makes the refusal under them:
+  `throw Document.Codes.Refuse(MembershipRefusals.NotFound)` is `documents.not-found`. `With` renames one, and
+  `WithMemberArgument("Staff")` names the argument a refusal carries the member in.
 - **The texts come with the registration.** English and Dutch, under your codes: registering a resource
   offers them to your [failure localizer](localization.md#texts-a-packages-registration-offers), so an
   application that calls `AddDDDToolkitLocalization()` adds no line for them, and one that does not is given
@@ -489,7 +490,7 @@ public sealed class OwnerKeepsAPlace : IInvariant<Document>
 }
 ```
 
-For a screen that lists the members of a resource, `MemberOverviews.Of(document.Shares, document.OwnerId, now)`
+For a screen that lists the members of a resource, `MemberOverviews.From(document.Shares, document.OwnerId, now)`
 puts them in the one order every answer lists members in: the owner first, then by when each membership
 starts, each with its roles and whether they count now. It reads nothing.
 

@@ -51,7 +51,7 @@ public sealed class ChangeProjectOwnerHandler(
     public async ValueTask<Unit> Handle(ChangeProjectOwner command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         await admission.RequireMemberAsync(command.Seat, cancellationToken);
         var leadRole = await admission.OwnerRoleAsync(cancellationToken);

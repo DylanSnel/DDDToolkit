@@ -41,7 +41,7 @@ public sealed class SeatsOfMineHandler(ICallerAccessor callers, ITenancyReads re
         var caller = callers.Current;
         if (caller is not { Kind: CallerKind.User, UserId: not null })
         {
-            throw ToolkitRefusals.Of(ToolkitRefusals.NotSignedIn);
+            throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
         }
 
         var mine = await reads.SeatsOfAsync(caller, cancellationToken);

@@ -348,7 +348,7 @@ public static partial class AnalystsReadEveryTicket
 
 An attribute takes constants, which is what `TokenPrefix` is for; `RowAccessRoles.Token("analyst")` gives the
 same name where a call will do, in a contribution for one. A script resolves it through the roles it is
-written with, `RowAccessExport.Roles`, and `RowAccessRoleNames.Of(options)` carries the map. A rule for a
+written with, `RowAccessExport.Roles`, and `RowAccessRoleNames.From(options)` carries the map. A rule for a
 token role those roles do not map is refused when the script is written, naming the rule: its policy
 would be for a role no query runs as. The Supabase export takes the map from a
 [build property](supabase.md#roles-and-caller-functions-of-your-own).
@@ -888,13 +888,13 @@ about priority orders says nothing about the other orders in the table.
 `Anonymous` for a caller without one, and `SystemIn` for the [scoped system role](#the-scoped-system-role).
 A rule compiles with the symbols, and a script writes the roles they stand for, so a module's rules suit
 every host whatever it calls its roles. `RowAccessRoleNames.Default` is `authenticated`, `anon` and
-`ddd_system_in`; `RowAccessRoleNames.Of(options)` takes the roles the interceptor switches to with those
+`ddd_system_in`; `RowAccessRoleNames.From(options)` takes the roles the interceptor switches to with those
 options:
 
 ```csharp
 var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAccessExport
 {
-    Roles = RowAccessRoleNames.Of(rowLevelSecurityOptions),
+    Roles = RowAccessRoleNames.From(rowLevelSecurityOptions),
     CallerFunctions = PostgresCallerFunctions.Toolkit,
 });
 ```
@@ -951,7 +951,7 @@ A login role other than the one that runs the migrations needs a grant of its ow
 refuse, and grants it to the login role. `PostgresRowLevelSecurityOptions.SystemInRole` names it; `null`
 leaves it out of the setup, and a scoped system caller then fails before its query connects, rather than
 running as another role. A rule for `RowAccessRoles.SystemIn` still gets its policies then:
-`RowAccessRoleNames.Of(options)` writes them for `ddd_system_in`, and the script makes that role where it is
+`RowAccessRoleNames.From(options)` writes them for `ddd_system_in`, and the script makes that role where it is
 missing. Leave such rules out where the application has no scoped system role.
 
 ### The aggregate's entities
@@ -2019,7 +2019,7 @@ try
 }
 catch (PostgresException failure) when (DatabaseRefusal.From(failure)?.Kind == DatabaseRefusalKind.GuardRefused)
 {
-    throw ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
+    throw ToolkitRefusals.Refuse(ToolkitRefusals.Refused, failure);
 }
 ```
 
@@ -2077,7 +2077,7 @@ answer, and a privilege short of them turns a rule that allows into `permission 
 ```csharp
 var sql = PostgresRowAccess.Script(context, rules, accessFunctions, new RowAccessExport
 {
-    Roles = RowAccessRoleNames.Of(options),
+    Roles = RowAccessRoleNames.From(options),
     WriteGrants = true,
 });
 ```
@@ -2188,7 +2188,7 @@ On Supabase nothing says it: `ddd_system` is the bookkeeping role `AddSupabaseRo
 both take unless `SupabaseRowAccessRoles` names another
 ([Roles and caller functions of your own](supabase.md#roles-and-caller-functions-of-your-own)).
 
-`RowAccessRoleNames.Of(options)` carries that role as `System`, and a script written with it and
+`RowAccessRoleNames.From(options)` carries that role as `System`, and a script written with it and
 `WriteGrants` makes sure of it, in its prelude and its privileges:
 
 - it makes the role, `NOLOGIN NOINHERIT` and without `BYPASSRLS`, where the database does not have it, and
@@ -2221,7 +2221,7 @@ configured is refused, naming it.
 > A host whose system caller runs as a role that bypasses row level security, Supabase's `service_role`
 > for one, has no bookkeeping role. Its scripts are what they were for as long as they write no
 > privileges and no rule is for `RowAccessRoles.System`, also where a rule or a grant spells that role's
-> name out. With `WriteGrants`, write them with `RowAccessRoleNames.Of(options) with { System = null }`:
+> name out. With `WriteGrants`, write them with `RowAccessRoleNames.From(options) with { System = null }`:
 > a role that bypasses the policies is refused as a bookkeeping role when the script runs. On Supabase,
 > `system=service_role` in `SupabaseRowAccessRoles` says it once, for the export and for the host.
 

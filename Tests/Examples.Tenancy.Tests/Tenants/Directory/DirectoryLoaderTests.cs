@@ -41,6 +41,6 @@ public sealed class DirectoryLoaderTests(SampleHosts sample) : IClassFixture<Sam
             found.OfType<SeatListing>().Select(seat => seat.Id).Should().BeEquivalentTo(Harbor.Seats.Select(seat => seat.Id));
         }
 
-        sent.Of<SeatsById>().Select(asked => asked.Ids.Count).Should().Equal([most, Harbor.Seats.Count], "one batch of the loader is as many questions as it takes");
+        sent.OfType<SeatsById>().Select(asked => asked.Ids.Count).Should().Equal([most, Harbor.Seats.Count], "one batch of the loader is as many questions as it takes");
     }
 }

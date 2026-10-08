@@ -843,7 +843,7 @@ and it and every project above it name the use cases and their records through i
 ```csharp
 public sealed class Reminders(SubscriptionUseCases.Dunning dunning)
 {
-    public SubscriptionUseCases.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
+    public SubscriptionUseCases.InvoiceDue DueFor(ShopInvoice invoice) => dunning.Due(invoice);
 }
 ```
 

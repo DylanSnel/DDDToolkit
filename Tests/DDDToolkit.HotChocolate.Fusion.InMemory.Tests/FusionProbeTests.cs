@@ -521,12 +521,12 @@ public sealed class FusionProbeTests
         // quiet, which on a busy machine is before the third lookup got to it. What is pinned is that the three
         // lookups share one loader and so can be one batch; lookups that each had a loader of their own would
         // never fill one, and would leave as three.
-        var whole = new WholeBatches();
-        whole.Of(3);
+        var dispatcher = new WholeBatches();
+        dispatcher.WholeAt(3);
         await using var shop = await GatewayHost.StartAsync(builder =>
         {
             builder.AddShop();
-            whole.AddTo(builder.Services);
+            dispatcher.AddTo(builder.Services);
         });
 
         // Catalog names three products, and Inventory is asked for the stock of each.
@@ -539,7 +539,7 @@ public sealed class FusionProbeTests
         var batches = shop.Services.GetRequiredService<BatchLog>().Batches.ToArray();
         Record("Batches the data loader was asked for: " + string.Join(" | ", batches.Select(batch => string.Join(",", batch))));
 
-        whole.Sent.Should().Equal([3], "the three lookups waited on one batch, sent whole");
+        dispatcher.Sent.Should().Equal([3], "the three lookups waited on one batch, sent whole");
         batches.Should().ContainSingle().Which.Should().BeEquivalentTo([1, 2, 3]);
         shop.Services.GetRequiredService<SourceCalls>().Of(ShopModules.Inventory).Should().Be(1);
     }

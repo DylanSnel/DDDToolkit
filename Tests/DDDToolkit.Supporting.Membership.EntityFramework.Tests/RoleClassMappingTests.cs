@@ -57,7 +57,7 @@ public sealed class RoleClassMappingTests
         // The resource is the one the role class's template names: nothing is said where the context maps it.
         role.FindAnnotation(MembershipModel.RoleOfAnnotation)!.Value.Should().Be(typeof(Plot).FullName);
         MembershipModel.MembersOf(plot)!.RoleClass.Should().BeSameAs(role);
-        MembershipModel.Of(model, typeof(PlotGardener))!.RoleClass.Should().BeSameAs(role);
+        MembershipModel.For(model, typeof(PlotGardener))!.RoleClass.Should().BeSameAs(role);
 
         // A gardener holds a role by the role class's id, stored as the host's converter stores it.
         MembershipModel.MembersOf(plot)!.Roles.FindProperty("RoleId")!.ClrType.Should().Be(typeof(PlotRoleId));

@@ -22,7 +22,7 @@ public static class TenancyActorKinds
 
     /// <summary>The kind as a record keeps it.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is none of the four.</exception>
-    public static string Of(TenancyActorKind kind) => kind switch
+    public static string From(TenancyActorKind kind) => kind switch
     {
         TenancyActorKind.Seat => Seat,
         TenancyActorKind.Operator => Operator,

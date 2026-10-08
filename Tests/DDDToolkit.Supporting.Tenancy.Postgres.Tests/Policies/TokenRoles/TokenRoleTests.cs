@@ -312,7 +312,7 @@ public sealed class TokenRoleTests(TenancyPostgres postgres)
         Map(options);
 
         await TenancyPostgres.ExecuteAsync(database.SuperuserConnectionString, PostgresRowAccess.SetupScript(options, TenancyPostgres.LoginRole), Cancellation);
-        foreach (var script in TenancyPostgres.AccessScripts(rules: [.. WidgetRules.All, AnalystsDoAnythingWithWidgets], roles: RowAccessRoleNames.Of(options)))
+        foreach (var script in TenancyPostgres.AccessScripts(rules: [.. WidgetRules.All, AnalystsDoAnythingWithWidgets], roles: RowAccessRoleNames.From(options)))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, Cancellation);
         }

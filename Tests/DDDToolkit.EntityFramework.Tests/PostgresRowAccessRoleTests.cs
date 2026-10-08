@@ -27,7 +27,7 @@ public sealed class PostgresRowAccessRoleTests
         Renamed.Resolve(RowAccessRoles.Anonymous).Should().Be("desk_guest");
         Renamed.Resolve(RowAccessRoles.SystemIn).Should().Be("desk_scoped");
         RowAccessRoleNames.Default.Should().Be(new RowAccessRoleNames("authenticated", "anon", "ddd_system_in"));
-        RowAccessRoleNames.Of(new PostgresRowLevelSecurityOptions { UserRole = "members", AnonymousRole = "visitors", SystemInRole = null })
+        RowAccessRoleNames.From(new PostgresRowLevelSecurityOptions { UserRole = "members", AnonymousRole = "visitors", SystemInRole = null })
             .Should().Be(new RowAccessRoleNames("members", "visitors", "ddd_system_in"), "the policies are for the roles the options configure, and a rule for the scoped role still has one");
 
         var script = ScriptFor(Renamed, DeskRules.Owners, ScopedWork);

@@ -136,7 +136,7 @@ public class FailureLocalizerTests
     [Fact]
     public void The_toolkits_own_refusals_come_in_English_and_Dutch()
     {
-        var refused = ToolkitRefusals.Of(ToolkitRefusals.Refused);
+        var refused = ToolkitRefusals.Refuse(ToolkitRefusals.Refused);
 
         using (new Culture("en-US"))
         {
@@ -148,7 +148,7 @@ public class FailureLocalizerTests
             FailureLocalizer.Default.Localize(refused).Should().Be("De database heeft deze wijziging geweigerd.");
         }
 
-        var notAllowed = ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Role", "intern"));
+        var notAllowed = ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", "intern"));
 
         using (new Culture("en-US"))
         {
@@ -158,8 +158,8 @@ public class FailureLocalizerTests
         using (new Culture("nl-NL"))
         {
             FailureLocalizer.Default.Localize(notAllowed).Should().Be("De rol van deze aanmelding geeft hier geen toegang: intern.", "the translation is filled from the refusal's arguments");
-            FailureLocalizer.Default.Localize(ToolkitRefusals.Of(ToolkitRefusals.NotSignedIn)).Should().Be("Dit kan alleen een aangemelde gebruiker.");
-            FailureLocalizer.Default.Localize(ToolkitRefusals.Of(ToolkitRefusals.SystemOnly)).Should().Be("Dit kan alleen de applicatie zelf.");
+            FailureLocalizer.Default.Localize(ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn)).Should().Be("Dit kan alleen een aangemelde gebruiker.");
+            FailureLocalizer.Default.Localize(ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly)).Should().Be("Dit kan alleen de applicatie zelf.");
         }
 
         // Every code the toolkit refuses with has both texts, and the neutral one is the one it throws.
@@ -167,12 +167,12 @@ public class FailureLocalizerTests
         {
             using (new Culture("en-US"))
             {
-                FailureLocalizer.Default.Localize(ToolkitRefusals.Of(code)).Should().Be(ToolkitRefusals.TemplateOf(code), code);
+                FailureLocalizer.Default.Localize(ToolkitRefusals.Refuse(code)).Should().Be(ToolkitRefusals.TemplateOf(code), code);
             }
 
             using (new Culture("nl-NL"))
             {
-                FailureLocalizer.Default.Localize(ToolkitRefusals.Of(code)).Should().NotBe(ToolkitRefusals.TemplateOf(code), code + " has a Dutch text of its own");
+                FailureLocalizer.Default.Localize(ToolkitRefusals.Refuse(code)).Should().NotBe(ToolkitRefusals.TemplateOf(code), code + " has a Dutch text of its own");
             }
         }
     }

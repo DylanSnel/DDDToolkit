@@ -89,7 +89,7 @@ public readonly record struct TenancyActor<TSeatId>(
     /// </summary>
     public ActedBy ToActedBy() => Kind switch
     {
-        TenancyActorKind.Seat or TenancyActorKind.Token => new(TenancyActorKinds.Of(Kind), Seat is { } seat ? EntityIdText.Of(seat) : null),
+        TenancyActorKind.Seat or TenancyActorKind.Token => new(TenancyActorKinds.From(Kind), Seat is { } seat ? EntityIdText.Of(seat) : null),
         TenancyActorKind.Operator => new(TenancyActorKinds.Operator, Operator?.ToString("D", CultureInfo.InvariantCulture)),
         _ => new(TenancyActorKinds.System, Scope),
     };

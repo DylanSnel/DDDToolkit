@@ -122,7 +122,7 @@ public sealed class FilingPostgres : IAsyncLifetime
         {
             var options = new PostgresRowLevelSecurityOptions();
             Roles(options);
-            return RowAccessRoleNames.Of(options);
+            return RowAccessRoleNames.From(options);
         }
     }
 

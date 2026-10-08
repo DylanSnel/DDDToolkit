@@ -270,7 +270,7 @@
                 action.PathFor(_input),
                 action.BodyFor(_input),
                 _input.NoToken ? CallAs.Anonymous : CallAs.Session,
-                TenantChoice.Of(_input.Tenant));
+                TenantChoice.From(_input.Tenant));
             _freeAnswer = outcome;
             Session.Remember(new TryItEntry(Clock.GetUtcNow(), action.Text, outcome));
         }

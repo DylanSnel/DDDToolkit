@@ -55,7 +55,7 @@ internal static class TenancyNames
     {
         var trimmed = value?.Trim() ?? string.Empty;
         return trimmed.Length == 0 || trimmed.Length > max
-            ? throw TenancyRefusals.Of(TenancyRefusals.NameInvalid, Arguments(what, 1, max))
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.NameInvalid, Arguments(what, 1, max))
             : trimmed;
     }
 
@@ -67,7 +67,7 @@ internal static class TenancyNames
     {
         var trimmed = value?.Trim() ?? string.Empty;
         return trimmed.Length > max
-            ? throw TenancyRefusals.Of(TenancyRefusals.NameInvalid, Arguments(what, 0, max))
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.NameInvalid, Arguments(what, 0, max))
             : trimmed;
     }
 

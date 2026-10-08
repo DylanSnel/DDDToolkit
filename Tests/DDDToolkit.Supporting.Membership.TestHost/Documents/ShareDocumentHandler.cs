@@ -43,7 +43,7 @@ public sealed class ShareDocumentHandler(
 
         // The document the request names, which its check read, at the version the caller named, if it named one.
         var document = await context.Documents.AsTracking().SingleOrDefaultAsync(candidate => candidate.Id == command.Document, cancellationToken)
-            ?? throw DocumentRefusals.Membership.Of(MembershipRefusals.NotFound);
+            ?? throw DocumentRefusals.Membership.Refuse(MembershipRefusals.NotFound);
         context.ExpectVersion(document, command.ExpectedVersion);
 
         var now = clock.GetUtcNow();

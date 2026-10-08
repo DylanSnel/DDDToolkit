@@ -262,8 +262,8 @@ public sealed class MemberMappingTests
     {
         var model = Model();
 
-        var shares = MembershipModel.Of(model, typeof(DocumentShare))!;
-        var staff = MembershipModel.Of(model, typeof(FolderMember))!;
+        var shares = MembershipModel.For(model, typeof(DocumentShare))!;
+        var staff = MembershipModel.For(model, typeof(FolderMember))!;
 
         shares.Resource.ClrType.Should().Be(typeof(Document));
         staff.Resource.ClrType.Should().Be(typeof(Folder));
@@ -273,8 +273,8 @@ public sealed class MemberMappingTests
             .Should().OnlyHaveUniqueItems("two kinds of resource share no table");
 
         // A class no resource of this model has members of: none of its business.
-        MembershipModel.Of(model, typeof(Document)).Should().BeNull();
-        MembershipModel.Of(model, typeof(string)).Should().BeNull();
+        MembershipModel.For(model, typeof(Document)).Should().BeNull();
+        MembershipModel.For(model, typeof(string)).Should().BeNull();
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public sealed class MemberMappingTests
         (crates.At!.Name, crates.At.ClrType, crates.At.DeclaringType).Should().Be((nameof(Crate.BayId), typeof(BayId), crate));
         (crates.Navigation.Name, crates.Owner.Name).Should().Be((nameof(Crate.Porters), nameof(Crate.OwnerId)));
         MembershipModel.MembersOf(pallet)!.At.Should().BeNull();
-        MembershipModel.Of(model, typeof(CratePorter))!.At.Should().BeSameAs(crates.At, "found by the member class, a resource is the same one");
+        MembershipModel.For(model, typeof(CratePorter))!.At.Should().BeSameAs(crates.At, "found by the member class, a resource is the same one");
 
         // The place is a column of the resource, and of nothing else: the member tables are what they are without it.
         Columns(crates.Members).Should().Equal("AddedBy", "CrateId", "EndsAt", "Id", "MemberId", "StartsAt");

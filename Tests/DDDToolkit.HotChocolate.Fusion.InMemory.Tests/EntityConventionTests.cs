@@ -76,7 +76,7 @@ public sealed class EntityConventionTests
         // their dispatcher from the application's services. Its batch leaves when it holds the three exhibits,
         // and not when HotChocolate's own dispatcher finds it quiet: what is counted is what a batch costs.
         var batches = new WholeBatches();
-        batches.Of(3);
+        batches.WholeAt(3);
         await using var museum = await GatewayHost.StartAsync(builder =>
         {
             builder.Services.AddGallery();

@@ -193,7 +193,7 @@ public sealed partial class Project
     {
         if (State != ProjectState.Closed)
         {
-            throw ProjectRefusals.Of(ProjectRefusals.NotClosed);
+            throw ProjectRefusals.Refuse(ProjectRefusals.NotClosed);
         }
 
         State = ProjectState.Open;
@@ -339,22 +339,22 @@ public sealed partial class Project
     {
         if (State == ProjectState.Closed)
         {
-            throw ProjectRefusals.Of(ProjectRefusals.Closed);
+            throw ProjectRefusals.Refuse(ProjectRefusals.Closed);
         }
     }
 
     private static string CheckedNumber(string number)
         => number?.Trim() is { Length: > 0 and <= LongestNumber } trimmed
             ? trimmed
-            : throw ProjectRefusals.Of(ProjectRefusals.NumberInvalid, ("Max", LongestNumber));
+            : throw ProjectRefusals.Refuse(ProjectRefusals.NumberInvalid, ("Max", LongestNumber));
 
     private static string CheckedName(string name)
         => name?.Trim() is { Length: > 0 and <= LongestName } trimmed
             ? trimmed
-            : throw ProjectRefusals.Of(ProjectRefusals.NameInvalid, ("Max", LongestName));
+            : throw ProjectRefusals.Refuse(ProjectRefusals.NameInvalid, ("Max", LongestName));
 
     private static DateRange? CheckedPlanned(DateRange? planned)
         => planned is null || planned.IsValid
             ? planned
-            : throw ProjectRefusals.Of(ProjectRefusals.PlannedRangeInvalid);
+            : throw ProjectRefusals.Refuse(ProjectRefusals.PlannedRangeInvalid);
 }

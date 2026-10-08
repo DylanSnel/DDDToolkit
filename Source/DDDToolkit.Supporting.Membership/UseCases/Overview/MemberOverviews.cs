@@ -24,7 +24,7 @@ public static class MemberOverviews
     /// <typeparam name="TId">The member class's own id.</typeparam>
     /// <typeparam name="TMemberId">What a member is known by.</typeparam>
     /// <typeparam name="TRoleId">What a role is known by.</typeparam>
-    public static IReadOnlyList<MemberOverview<TMemberId, TRoleId>> Of<TId, TMemberId, TRoleId>(
+    public static IReadOnlyList<MemberOverview<TMemberId, TRoleId>> From<TId, TMemberId, TRoleId>(
         IEnumerable<MemberEntity<TId, TMemberId, TRoleId>> members,
         TMemberId owner,
         DateTimeOffset now)

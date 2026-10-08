@@ -16,14 +16,14 @@ public class ActedByTests
     [Fact]
     public void Each_kind_of_caller_is_kept_as_a_kind_and_an_id()
     {
-        ActedBy.Of(Caller.User(Ada)).Should().Be(new ActedBy(ActedByKinds.User, "ada00000-0000-4000-8000-000000000001"));
-        ActedBy.Of(Callers.FromClaims("""{"sub":"auth0|ada","role":"authenticated"}""")).Should().Be(new ActedBy("user", "auth0|ada"), "a user whose id is no uuid is kept by the token's sub");
-        ActedBy.Of(Caller.User(userId: null)).Should().Be(new ActedBy("user", null), "a user nobody can name is still a user");
-        ActedBy.Of(Caller.SystemIn("projects")).Should().Be(new ActedBy(ActedByKinds.System, "projects"), "scoped system work is the system, in its scope");
-        ActedBy.Of(Caller.System).Should().Be(new ActedBy("system", null));
-        ActedBy.Of(Caller.Anonymous).Should().Be(new ActedBy(ActedByKinds.Anonymous, null));
+        ActedBy.From(Caller.User(Ada)).Should().Be(new ActedBy(ActedByKinds.User, "ada00000-0000-4000-8000-000000000001"));
+        ActedBy.From(Callers.FromClaims("""{"sub":"auth0|ada","role":"authenticated"}""")).Should().Be(new ActedBy("user", "auth0|ada"), "a user whose id is no uuid is kept by the token's sub");
+        ActedBy.From(Caller.User(userId: null)).Should().Be(new ActedBy("user", null), "a user nobody can name is still a user");
+        ActedBy.From(Caller.SystemIn("projects")).Should().Be(new ActedBy(ActedByKinds.System, "projects"), "scoped system work is the system, in its scope");
+        ActedBy.From(Caller.System).Should().Be(new ActedBy("system", null));
+        ActedBy.From(Caller.Anonymous).Should().Be(new ActedBy(ActedByKinds.Anonymous, null));
 
-        FluentActions.Invoking(() => ActedBy.Of(null!)).Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => ActedBy.From(null!)).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

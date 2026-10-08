@@ -102,7 +102,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
 
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var moved = organization.FindUnit(unit) ?? throw TenancyRefusals.Of(TenancyRefusals.UnitNotFound);
+            var moved = organization.FindUnit(unit) ?? throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotFound);
             await gate.RequireAtAsync(TenancyKeys.UnitsManage, moved.ParentId ?? unit, cancellationToken).ConfigureAwait(false);
             await gate.RequireAtAsync(TenancyKeys.UnitsManage, newParent, cancellationToken).ConfigureAwait(false);
 
@@ -130,7 +130,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
 
             var organization = await gate.LoadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
-            var archived = organization.FindUnit(unit) ?? throw TenancyRefusals.Of(TenancyRefusals.UnitNotFound);
+            var archived = organization.FindUnit(unit) ?? throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotFound);
             await gate.RequireAtAsync(TenancyKeys.UnitsManage, archived.ParentId ?? unit, cancellationToken).ConfigureAwait(false);
 
             organization.ArchiveUnit(unit, gate.By);

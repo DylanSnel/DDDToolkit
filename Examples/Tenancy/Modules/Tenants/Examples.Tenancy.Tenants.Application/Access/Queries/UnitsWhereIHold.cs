@@ -56,7 +56,7 @@ public sealed class UnitsWhereIHoldHandler(ITenancyReads reads, TenancyCatalogue
         // The questions treat an unknown key as a bug in the code that asks. Here it is only a wrong request.
         if (!catalogue.Knows(query.Key))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnknownPermission, ("Keys", query.Key));
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnknownPermission, ("Keys", query.Key));
         }
 
         await using var reading = reads.Open();

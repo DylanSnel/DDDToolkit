@@ -69,7 +69,7 @@ public sealed class CrewsOfProjectsHandler(IProjectReads reads, ProjectAccess ac
         return crews.ToDictionary(
             crew => crew.Project,
             crew => new ProjectCrew(
-                CrewOverviews.Of(crew, see.Now),
+                CrewOverviews.From(crew, see.Now),
                 mine is { } seat ? CrewOverviews.RolesHeldNow(crew, seat, see.Now) : []));
     }
 }

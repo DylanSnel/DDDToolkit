@@ -299,11 +299,11 @@ internal static class DatabaseRefusals
         {
             case DatabaseRefusalKind.PolicyDenied:
                 denied = Denial.ByPolicy(DeniedTable(context, refused, failure) ?? "a table it did not name");
-                return ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
+                return ToolkitRefusals.Refuse(ToolkitRefusals.Refused, failure);
 
             case DatabaseRefusalKind.GuardRefused:
                 denied = Denial.ByGuard(refused.Constraint ?? "that gave no name", DeniedTable(context, refused, failure));
-                return ToolkitRefusals.Of(ToolkitRefusals.Refused, failure);
+                return ToolkitRefusals.Refuse(ToolkitRefusals.Refused, failure);
 
             case DatabaseRefusalKind.DuplicateKey:
                 return FindIndex(context.Model, refused) is { } index && IndexRefusal.Of(index) is { } declared
@@ -529,13 +529,13 @@ internal static class DatabaseRefusals
         }
 
         await ReportAsync(context, Denial.ByPolicy(TablesOf(rows)), conflict, cancellationToken).ConfigureAwait(false);
-        return ToolkitRefusals.Of(ToolkitRefusals.Refused, conflict);
+        return ToolkitRefusals.Refuse(ToolkitRefusals.Refused, conflict);
     }
 
     private static RefusalException Denied(DbContext context, IReadOnlyList<EntityEntry> rows, Exception conflict)
     {
         Report(context, Denial.ByPolicy(TablesOf(rows)), conflict);
-        return ToolkitRefusals.Of(ToolkitRefusals.Refused, conflict);
+        return ToolkitRefusals.Refuse(ToolkitRefusals.Refused, conflict);
     }
 
     /// <summary>The tables of <paramref name="rows"/>, each once, for the log line.</summary>

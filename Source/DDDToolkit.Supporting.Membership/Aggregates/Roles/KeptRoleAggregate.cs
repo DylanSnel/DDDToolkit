@@ -185,7 +185,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
 
         if (MadeFrom is not null && string.Equals(MadeFrom, rules.OwnerRole, StringComparison.Ordinal))
         {
-            throw codes.Of(MembershipRefusals.OwnerRoleStays);
+            throw codes.Refuse(MembershipRefusals.OwnerRoleStays);
         }
 
         Status = KeptRoleStatus.Archived;
@@ -208,7 +208,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     {
         if (Status == KeptRoleStatus.Archived)
         {
-            throw codes.Of(MembershipRefusals.RoleIsArchived);
+            throw codes.Refuse(MembershipRefusals.RoleIsArchived);
         }
     }
 
@@ -217,7 +217,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     {
         var trimmed = name?.Trim() ?? string.Empty;
         return trimmed.Length is 0 or > MaxNameLength
-            ? throw codes.Of(MembershipRefusals.RoleNameInvalid, ("Min", 1), ("Max", MaxNameLength))
+            ? throw codes.Refuse(MembershipRefusals.RoleNameInvalid, ("Min", 1), ("Max", MaxNameLength))
             : trimmed;
     }
 
@@ -226,7 +226,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
     {
         var trimmed = description?.Trim() ?? string.Empty;
         return trimmed.Length > MaxDescriptionLength
-            ? throw codes.Of(MembershipRefusals.RoleNameInvalid, ("Min", 0), ("Max", MaxDescriptionLength), (RefusalException.FieldArgument, "description"))
+            ? throw codes.Refuse(MembershipRefusals.RoleNameInvalid, ("Min", 0), ("Max", MaxDescriptionLength), (RefusalException.FieldArgument, "description"))
             : trimmed;
     }
 
@@ -240,7 +240,7 @@ public abstract partial class KeptRoleAggregate<TRoleId>
         string[] refused = [.. asked.Where(key => key.Length == 0 || !rules.MemberKeys.Allows(key))];
 
         return refused.Length > 0
-            ? throw rules.Codes.Of(MembershipRefusals.KeyNotForMembers, ("Keys", string.Join(", ", refused)))
+            ? throw rules.Codes.Refuse(MembershipRefusals.KeyNotForMembers, ("Keys", string.Join(", ", refused)))
             : asked;
     }
 

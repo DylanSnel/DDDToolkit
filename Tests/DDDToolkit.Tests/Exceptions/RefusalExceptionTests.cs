@@ -19,15 +19,15 @@ public class RefusalExceptionTests
         ToolkitRefusals.TemplateOf(ToolkitRefusals.Refused).Should().Be("The database refused this change.");
 
         var cause = new InvalidOperationException("What the database said.");
-        var refusal = ToolkitRefusals.Of(ToolkitRefusals.Refused, cause);
+        var refusal = ToolkitRefusals.Refuse(ToolkitRefusals.Refused, cause);
         refusal.Code.Should().Be(ToolkitRefusals.Refused);
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
         refusal.Message.Should().Be("The database refused this change.");
         refusal.Arguments.Should().BeEmpty("the caller is told no more than that");
         refusal.InnerException.Should().BeSameAs(cause, "what it was made of is kept, for a log to show");
-        ToolkitRefusals.Of(ToolkitRefusals.Refused).InnerException.Should().BeNull();
+        ToolkitRefusals.Refuse(ToolkitRefusals.Refused).InnerException.Should().BeNull();
 
-        FluentActions.Invoking(() => ToolkitRefusals.Of("access.unheard-of")).Should().Throw<ArgumentException>().WithMessage("*not one of the toolkit's refusal codes*");
+        FluentActions.Invoking(() => ToolkitRefusals.Refuse("access.unheard-of")).Should().Throw<ArgumentException>().WithMessage("*not one of the toolkit's refusal codes*");
         FluentActions.Invoking(() => ToolkitRefusals.KindOf(null!)).Should().Throw<ArgumentNullException>();
     }
 
@@ -42,7 +42,7 @@ public class RefusalExceptionTests
         ToolkitRefusals.KindOf(ToolkitRefusals.SystemOnly).Should().Be(RefusalKind.NotPermitted, "no key or role gives it");
         ToolkitRefusals.TemplateOf(ToolkitRefusals.SystemOnly).Should().Be("Only the application itself can do this.");
 
-        ToolkitRefusals.Of(ToolkitRefusals.SystemOnly).Arguments.Should().BeEmpty("it says nothing of the caller, whatever they hold");
+        ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly).Arguments.Should().BeEmpty("it says nothing of the caller, whatever they hold");
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class RefusalExceptionTests
         ToolkitRefusals.KindOf(ToolkitRefusals.RoleNotAllowed).Should().Be(RefusalKind.NotPermitted, "the same sign-in gets the same answer until the host lists its role");
         ToolkitRefusals.TemplateOf(ToolkitRefusals.RoleNotAllowed).Should().Be("The role this sign-in carries gives no access here: {Role}.");
 
-        var refusal = ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Role", "intern"));
+        var refusal = ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", "intern"));
         refusal.Code.Should().Be(ToolkitRefusals.RoleNotAllowed);
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
         refusal.Message.Should().Be("The role this sign-in carries gives no access here: intern.", "the English text is filled from the arguments");
@@ -65,19 +65,19 @@ public class RefusalExceptionTests
         try
         {
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("nl-NL");
-            ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Role", 1.5m)).Message.Should().EndWith(": 1.5.");
+            ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", 1.5m)).Message.Should().EndWith(": 1.5.");
         }
         finally
         {
             CultureInfo.CurrentCulture = culture;
         }
 
-        ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Role", null)).Message.Should().EndWith("here: .");
-        ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Other", "x")).Message.Should().EndWith("here: {Role}.");
-        ToolkitRefusals.Of(ToolkitRefusals.Refused, ("Role", "intern")).Message.Should().Be("The database refused this change.", "a text without placeholders is as it is");
+        ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", null)).Message.Should().EndWith("here: .");
+        ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Other", "x")).Message.Should().EndWith("here: {Role}.");
+        ToolkitRefusals.Refuse(ToolkitRefusals.Refused, ("Role", "intern")).Message.Should().Be("The database refused this change.", "a text without placeholders is as it is");
 
-        FluentActions.Invoking(() => ToolkitRefusals.Of("access.unheard-of", ("Role", "intern"))).Should().Throw<ArgumentException>();
-        FluentActions.Invoking(() => ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ((string, object?)[])null!)).Should().Throw<ArgumentNullException>();
+        FluentActions.Invoking(() => ToolkitRefusals.Refuse("access.unheard-of", ("Role", "intern"))).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ((string, object?)[])null!)).Should().Throw<ArgumentNullException>();
     }
 
     [Fact]

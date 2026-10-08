@@ -27,7 +27,7 @@ public sealed class CloseProjectHandler(IProjectStore store) : ICommandHandler<C
     public async ValueTask<Unit> Handle(CloseProject command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.Close();
         await store.SaveAsync(cancellationToken);

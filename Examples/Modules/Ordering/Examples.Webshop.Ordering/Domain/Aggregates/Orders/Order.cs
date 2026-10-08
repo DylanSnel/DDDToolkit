@@ -45,7 +45,7 @@ public partial class Order
     /// <param name="lines">Priced lines. <c>Domain/Services/OrderPricer.cs</c> is what prices them.</param>
     /// <param name="placedBy">
     /// The customer who placed it, or <see langword="null"/> for a guest. The handler takes it from the
-    /// caller, <c>CustomerId.Of(caller)</c>; the rules in <c>Access/</c> say who may see the order after.
+    /// caller, <c>CustomerId.From(caller)</c>; the rules in <c>Access/</c> say who may see the order after.
     /// </param>
     public Order(OrderId id, ValidAddress shipTo, IEnumerable<OrderLine> lines, CustomerId? placedBy) : base(id)
     {

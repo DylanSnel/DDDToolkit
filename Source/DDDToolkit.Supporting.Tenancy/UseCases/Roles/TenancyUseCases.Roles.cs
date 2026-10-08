@@ -249,7 +249,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var trimmed = name?.Trim() ?? string.Empty;
             if (trimmed.Length > 0 && await store.RoleNameTakenAsync(tenant, trimmed, except, cancellationToken).ConfigureAwait(false))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", trimmed));
+                throw TenancyRefusals.Refuse(TenancyRefusals.RoleNameTaken, ("Name", trimmed));
             }
         }
     }

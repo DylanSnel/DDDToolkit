@@ -53,15 +53,15 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             if (!options.IsOperator(callers.Current))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.OperatorsOnly);
+                throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
             }
 
             if (size is < 1 or > MostPerPage)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.PageSizeInvalid, ("Max", MostPerPage));
+                throw TenancyRefusals.Refuse(TenancyRefusals.PageSizeInvalid, ("Max", MostPerPage));
             }
 
-            var afterSlug = after is null ? null : PageMarker.Read(after) ?? throw TenancyRefusals.Of(TenancyRefusals.CursorInvalid);
+            var afterSlug = after is null ? null : PageMarker.Read(after) ?? throw TenancyRefusals.Refuse(TenancyRefusals.CursorInvalid);
 
             // One more than the page holds: whether there is a page after this one is known without counting.
             var found = await store.ListTenantsAsync(afterSlug, size + 1, cancellationToken).ConfigureAwait(false);

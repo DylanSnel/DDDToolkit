@@ -85,7 +85,7 @@ public static class InspectionRefusals
     /// <param name="code">One of the codes above.</param>
     /// <param name="arguments">The values the text shows, by name.</param>
     /// <exception cref="ArgumentException"><paramref name="code"/> is not one of the codes above.</exception>
-    public static RefusalException Of(string code, params (string Name, object? Value)[] arguments)
+    public static RefusalException Refuse(string code, params (string Name, object? Value)[] arguments)
     {
         var (kind, text) = TextOf(code);
         var named = Named(arguments);

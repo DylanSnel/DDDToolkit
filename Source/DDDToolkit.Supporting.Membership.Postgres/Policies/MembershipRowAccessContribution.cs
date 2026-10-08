@@ -178,7 +178,7 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(export);
 
-        if (MembershipModel.Of(context.Model, typeof(TMember)) is not { } mapping)
+        if (MembershipModel.For(context.Model, typeof(TMember)) is not { } mapping)
         {
             return null;
         }

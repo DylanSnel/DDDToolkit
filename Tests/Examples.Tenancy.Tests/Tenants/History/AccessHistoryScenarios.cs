@@ -129,7 +129,7 @@ public sealed class AccessHistoryScenarios(SampleHosts sample) : IClassFixture<S
         using var orla = await sample.ClientAsync("orla", tenant: null);
         var next = (await maud.GetFromJsonAsync<JsonElement>("/tenancy/history?size=1", Cancellation)).Text("next")!;
         var ofProjects = (await ada.ProjectPageAsync("?size=1")).Text("next")!;
-        ofProjects.Should().Be(Markers.Of("{}P-001"), "a cursor is the head and what the list is ordered by");
+        ofProjects.Should().Be(Markers.From("{}P-001"), "a cursor is the head and what the list is ordered by");
 
         foreach (var marker in new[] { Markers.PlainText, Markers.HeadAlone, ofProjects, next[..^4], Markers.UnreadableHead, Markers.WithHead(next, "3|0|99") })
         {

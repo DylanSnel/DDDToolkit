@@ -51,7 +51,7 @@ public sealed class TakeCrewRoleHandler(
     public async ValueTask<Unit> Handle(TakeCrewRole command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         var leadRole = command.Seat == project.OwnerSeatId ? await admission.FindOwnerRoleAsync(cancellationToken) : null;
         project.TakeCrewRole(command.Seat, command.Role, leadRole);

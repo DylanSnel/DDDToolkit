@@ -19,7 +19,7 @@ public sealed class TenantChoice
     /// The tenant <paramref name="slug"/> names, trimmed, as the try-it form overrides it. A blank slug sends no
     /// header, so leaving the field empty is how to see the API ask for one.
     /// </summary>
-    public static TenantChoice Of(string? slug)
+    public static TenantChoice From(string? slug)
         => string.IsNullOrWhiteSpace(slug) ? None : new(fromSession: false, slug.Trim());
 
     /// <summary>Whether the session's tenant is sent.</summary>

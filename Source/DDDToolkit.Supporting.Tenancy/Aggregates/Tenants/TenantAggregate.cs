@@ -165,7 +165,7 @@ public abstract partial class TenantAggregate<TTenantId>
 
         if (Shape != TenantShape.Flat || to != TenantShape.Hierarchical)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.ShapeChange);
+            throw TenancyRefusals.Refuse(TenancyRefusals.ShapeChange);
         }
     }
 
@@ -183,14 +183,14 @@ public abstract partial class TenantAggregate<TTenantId>
     }
 
     private RefusalException StateRefusal(string action)
-        => TenancyRefusals.Of(TenancyRefusals.TenantState, ("Status", Status.ToString().ToLowerInvariant()), ("Action", action));
+        => TenancyRefusals.Refuse(TenancyRefusals.TenantState, ("Status", Status.ToString().ToLowerInvariant()), ("Action", action));
 
     private static string Reason(string? reason)
     {
         var why = reason?.Trim() ?? string.Empty;
         if (why.Length == 0)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.ReasonRequired);
+            throw TenancyRefusals.Refuse(TenancyRefusals.ReasonRequired);
         }
 
         return TenancyNames.Optional(why, TenancyNames.ReasonToken, MaxReasonLength);

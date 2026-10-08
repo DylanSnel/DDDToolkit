@@ -142,7 +142,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
         {
             if (!before.EndedBy(now))
             {
-                throw _codes.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, member));
+                throw _codes.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, member));
             }
 
             // Its time ran out, so this is a new membership and not the old one going on: nothing the member
@@ -195,10 +195,10 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
         RequireNotEmpty(period);
         var found = Find(member) is { } on && !on.EndedBy(now)
             ? on
-            : throw _codes.Of(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
+            : throw _codes.Refuse(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
         if (found.Find(role) is { } held && (held.EndsAt is null || held.EndsAt > now))
         {
-            throw _codes.Of(MembershipRefusals.RoleHeld, (MembershipCodes.DefaultMemberArgument, member), ("Role", role));
+            throw _codes.Refuse(MembershipRefusals.RoleHeld, (MembershipCodes.DefaultMemberArgument, member), ("Role", role));
         }
 
         return found.Give(role, period, by);
@@ -219,16 +219,16 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// <exception cref="RefusalException"><c>member-not-found</c>, <c>role-not-held</c>, <c>owner-protected</c>, under the resource's codes.</exception>
     public MemberRole<TMemberId, TRoleId> TakeRole(TMemberId member, TRoleId role, TRoleId? ownerRole)
     {
-        var found = Find(member) ?? throw _codes.Of(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
+        var found = Find(member) ?? throw _codes.Refuse(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
         if (found.Find(role) is null)
         {
-            throw _codes.Of(MembershipRefusals.RoleNotHeld, (MembershipCodes.DefaultMemberArgument, member), ("Role", role));
+            throw _codes.Refuse(MembershipRefusals.RoleNotHeld, (MembershipCodes.DefaultMemberArgument, member), ("Role", role));
         }
 
         if (member.Equals(_owner)
             && ((ownerRole is { } owners && role.Equals(owners)) || !found.Roles.Any(other => !other.RoleId.Equals(role) && other.EndsAt is null)))
         {
-            throw _codes.Of(MembershipRefusals.OwnerProtected);
+            throw _codes.Refuse(MembershipRefusals.OwnerProtected);
         }
 
         return found.Take(role)!;
@@ -240,10 +240,10 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     /// <exception cref="RefusalException"><c>member-not-found</c>, <c>owner-protected</c>, under the resource's codes.</exception>
     public TMember Remove(TMemberId member)
     {
-        var found = Find(member) ?? throw _codes.Of(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
+        var found = Find(member) ?? throw _codes.Refuse(MembershipRefusals.MemberNotFound, (MembershipCodes.DefaultMemberArgument, member));
         if (member.Equals(_owner))
         {
-            throw _codes.Of(MembershipRefusals.OwnerProtected);
+            throw _codes.Refuse(MembershipRefusals.OwnerProtected);
         }
 
         _collection.Remove(found);
@@ -276,7 +276,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     {
         if (member.Equals(_owner))
         {
-            throw _codes.Of(MembershipRefusals.AlreadyOwner);
+            throw _codes.Refuse(MembershipRefusals.AlreadyOwner);
         }
 
         var named = Find(member);
@@ -335,7 +335,7 @@ public sealed class MemberList<TMember, TId, TMemberId, TRoleId>
     {
         if (period.IsEmpty)
         {
-            throw _codes.Of(MembershipRefusals.InvalidPeriod);
+            throw _codes.Refuse(MembershipRefusals.InvalidPeriod);
         }
     }
 }

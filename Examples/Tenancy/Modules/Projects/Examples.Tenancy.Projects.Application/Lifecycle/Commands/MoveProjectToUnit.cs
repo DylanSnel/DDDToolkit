@@ -53,7 +53,7 @@ public sealed class MoveProjectToUnitHandler(
     public async ValueTask<Unit> Handle(MoveProjectToUnit command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         // The second key, at the destination, and only then whether the destination takes anything new: both
         // asked on one reading, of this command's own.

@@ -129,18 +129,18 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
     {
         if (shape == TenantShape.Flat)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.FlatTenant);
+            throw TenancyRefusals.Refuse(TenancyRefusals.FlatTenant);
         }
 
         var parent = RequireUnit(parentId);
         if (parent.Status != UnitStatus.Active)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitNotActive, ("Unit", parentId));
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotActive, ("Unit", parentId));
         }
 
         if (DepthOf(parentId) + 1 > MaxDepth)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.DepthExceeded, ("Max", MaxDepth));
+            throw TenancyRefusals.Refuse(TenancyRefusals.DepthExceeded, ("Max", MaxDepth));
         }
 
         if (FindUnit(id) is not null)
@@ -174,7 +174,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
         var unit = RequireUnit(id);
         if (unit.Status == UnitStatus.Archived)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitArchived);
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitArchived);
         }
 
         var validName = TenancyNames.Required(name, TenancyNames.UnitNameToken, OrganizationUnitEntity<TUnitId>.MaxNameLength);
@@ -221,33 +221,33 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
         var unit = RequireUnit(id);
         if (unit.ParentId is not { } from)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.RootImmovable);
+            throw TenancyRefusals.Refuse(TenancyRefusals.RootImmovable);
         }
 
         if (unit.Status == UnitStatus.Archived)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitArchived);
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitArchived);
         }
 
         var newParent = RequireUnit(newParentId);
         if (newParent.Status != UnitStatus.Active)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitNotActive, ("Unit", newParentId));
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotActive, ("Unit", newParentId));
         }
 
         if (SubtreeOf(id).Contains(newParentId))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.Cycle);
+            throw TenancyRefusals.Refuse(TenancyRefusals.Cycle);
         }
 
         if (from.Equals(newParentId))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.SameParent);
+            throw TenancyRefusals.Refuse(TenancyRefusals.SameParent);
         }
 
         if (DepthOf(newParentId) + HeightOf(id) > MaxDepth)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.DepthExceeded, ("Max", MaxDepth));
+            throw TenancyRefusals.Refuse(TenancyRefusals.DepthExceeded, ("Max", MaxDepth));
         }
 
         return unit;
@@ -271,17 +271,17 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
         var unit = RequireUnit(id);
         if (unit.IsRoot)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.RootNotArchivable);
+            throw TenancyRefusals.Refuse(TenancyRefusals.RootNotArchivable);
         }
 
         if (unit.Status == UnitStatus.Archived)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitArchived);
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitArchived);
         }
 
         if (_units.Any(child => child.Status == UnitStatus.Active && child.ParentId is { } parent && parent.Equals(id)))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitHasActiveChildren);
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitHasActiveChildren);
         }
 
         unit.Archive();
@@ -388,7 +388,7 @@ public abstract partial class OrganizationAggregate<TTenantId, TUnit, TUnitId>
     }
 
     private TUnit RequireUnit(TUnitId id)
-        => FindUnit(id) ?? throw TenancyRefusals.Of(TenancyRefusals.UnitNotFound);
+        => FindUnit(id) ?? throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotFound);
 
     private Dictionary<TUnitId, TUnit> ById()
     {

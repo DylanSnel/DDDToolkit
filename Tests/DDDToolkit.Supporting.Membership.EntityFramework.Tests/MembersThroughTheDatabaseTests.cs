@@ -23,8 +23,8 @@ public sealed class MembersThroughTheDatabaseTests
             var read = await filing.Services.ReadAsync(written.Id);
 
             read.OwnerId.Should().Be(written.OwnerId);
-            MemberOverviews.Of(read.Shares, read.OwnerId, data.Now).Should().BeEquivalentTo(
-                MemberOverviews.Of(written.Shares, written.OwnerId, data.Now),
+            MemberOverviews.From(read.Shares, read.OwnerId, data.Now).Should().BeEquivalentTo(
+                MemberOverviews.From(written.Shares, written.OwnerId, data.Now),
                 options => options.WithStrictOrdering(),
                 "every member, period and role comes back as the member list left it");
             read.Shares.Select(share => (share.Id, share.MemberId, share.AddedBy)).Should().BeEquivalentTo(written.Shares.Select(share => (share.Id, share.MemberId, share.AddedBy)));
@@ -52,7 +52,7 @@ public sealed class MembersThroughTheDatabaseTests
         var written = data.Folders.Single(folder => folder.Id == data.Cabinet);
 
         read.Keeper.Should().Be(data.Keeper);
-        MemberOverviews.Of(read.Staff, read.Keeper, data.Now).Should().BeEquivalentTo(MemberOverviews.Of(written.Staff, written.Keeper, data.Now), options => options.WithStrictOrdering());
+        MemberOverviews.From(read.Staff, read.Keeper, data.Now).Should().BeEquivalentTo(MemberOverviews.From(written.Staff, written.Keeper, data.Now), options => options.WithStrictOrdering());
         read.Staff.Single(member => member.MemberId == data.Clerk).Note.Should().Be("Covers for the keeper");
         read.Staff.Single(member => member.MemberId == data.Temp).Roles.Should().BeEmpty("a role that was taken is gone from the database");
 
@@ -171,7 +171,7 @@ public sealed class MembersThroughTheDatabaseTests
 
         var after = await filing.Services.ReadAsync(data.Minutes);
         after.Version.Should().Be(before.Version);
-        MemberOverviews.Of(after.Shares, after.OwnerId, data.Now).Should().BeEquivalentTo(MemberOverviews.Of(before.Shares, before.OwnerId, data.Now), options => options.WithStrictOrdering());
+        MemberOverviews.From(after.Shares, after.OwnerId, data.Now).Should().BeEquivalentTo(MemberOverviews.From(before.Shares, before.OwnerId, data.Now), options => options.WithStrictOrdering());
     }
 
     [Fact]

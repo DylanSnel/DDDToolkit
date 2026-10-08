@@ -38,13 +38,13 @@ public sealed class PostgresRowLevelSecurityOptions
     /// that stays inside the policies. <c>ddd_system_in</c> by default, a role that can neither log in nor
     /// bypass row level security. Its claims are <c>{"role":"ddd_system_in","scope":"…"}</c>, so a policy
     /// may ask the scope. <see cref="PostgresRowAccess.SetupScript"/> makes it, and a script written with
-    /// <see cref="RowAccessRoleNames.Of"/> these options writes the policies of a rule for
+    /// <see cref="RowAccessRoleNames.From"/> these options writes the policies of a rule for
     /// <c>RowAccessRoles.SystemIn</c> for it.
     /// <para>
     /// <see langword="null"/> leaves it out of <see cref="PostgresRowAccess.SetupScript"/>, and a scoped
     /// system caller then fails when a context opens a connection for it, rather than running as another
     /// role. It does not take the rules for <c>RowAccessRoles.SystemIn</c> out of a script:
-    /// <see cref="RowAccessRoleNames.Of"/> writes those for <c>ddd_system_in</c>, and the script makes that
+    /// <see cref="RowAccessRoleNames.From"/> writes those for <c>ddd_system_in</c>, and the script makes that
     /// role where it is missing.
     /// </para>
     /// </summary>
@@ -63,7 +63,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// <b>Recommended where the login role holds nothing:</b> a role of the toolkit's own bookkeeping,
     /// <c>ddd_system</c> say, that can neither log in nor bypass row level security and holds only the outbox,
     /// the inbox, the migration history and the rows of an event log that may go. A script written with
-    /// <see cref="RowAccessRoleNames.Of"/> these options and <see cref="RowAccessExport.WriteGrants"/> makes
+    /// <see cref="RowAccessRoleNames.From"/> these options and <see cref="RowAccessExport.WriteGrants"/> makes
     /// that role and gives it exactly those privileges; grant the role to the login role, and the system caller
     /// can do the toolkit's bookkeeping and nothing else. System work that reads a module's own tables then
     /// fails, which is the point: it runs as a scoped system caller, inside the policies, instead.
@@ -78,7 +78,7 @@ public sealed class PostgresRowLevelSecurityOptions
     /// <para>
     /// <see cref="PostgresRowAccess.SetupScript"/> makes each mapped role as it makes the others, without a login
     /// and without <c>BYPASSRLS</c>, and a rule names one as <c>RowAccessRoles.Token("analyst")</c>, which a script
-    /// written with <see cref="RowAccessRoleNames.Of"/> these options writes as the mapped role. A mapped role is
+    /// written with <see cref="RowAccessRoleNames.From"/> these options writes as the mapped role. A mapped role is
     /// never <see cref="SystemRole"/>, the scoped system role or <see cref="AnonymousRole"/>: a token would then
     /// hold what only the application's own work, or nobody in particular, may do.
     /// </para>
@@ -198,7 +198,7 @@ public sealed class PostgresRowLevelSecurityOptions
             return AnonymousRole;
         }
 
-        throw ToolkitRefusals.Of(ToolkitRefusals.RoleNotAllowed, ("Role", claimed));
+        throw ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", claimed));
     }
 
     /// <summary>

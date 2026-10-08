@@ -51,7 +51,7 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
         between.Ran.Should().BeTrue("the second project passed the check and met the index");
         var refused = await second.ShouldBeRefusedAsync(HttpStatusCode.Conflict, ProjectRefusals.NumberTaken);
         refused.Argument("Number").Should().Be("P-777");
-        refused.Title.Should().Be(ProjectRefusals.Of(ProjectRefusals.NumberTaken, ("Number", "P-777")).Message, "the index gives the text the command gives");
+        refused.Title.Should().Be(ProjectRefusals.Refuse(ProjectRefusals.NumberTaken, ("Number", "P-777")).Message, "the index gives the text the command gives");
 
         // And the command's own check gives the same answer to whoever comes after.
         using var third = await ada.PostAsJsonAsync("/projects", new { number = "P-777", name = "Much later", unitId = north }, Cancellation);
@@ -76,7 +76,7 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
         between.Ran.Should().BeTrue("the second tenant passed the check and met the index");
         refusal.Code.Should().Be(TenancyRefusals.SlugTaken);
         refusal.Kind.Should().Be(RefusalKind.Conflict);
-        refusal.Message.Should().Be(TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", "quarry")).Message);
+        refusal.Message.Should().Be(TenancyRefusals.Refuse(TenancyRefusals.SlugTaken, ("Slug", "quarry")).Message);
         refusal.Arguments.Should().BeEquivalentTo(new Dictionary<string, object?> { ["Slug"] = "quarry" });
         refusal.InnerException.Should().BeOfType<DbUpdateException>().Which.InnerException.Should().BeAssignableTo<DbException>("the database's index refused it");
 

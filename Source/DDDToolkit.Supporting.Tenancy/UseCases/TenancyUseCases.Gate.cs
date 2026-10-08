@@ -114,7 +114,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 case TenancyCallerKind.System:
                     return;
                 case TenancyCallerKind.Seat:
-                    throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly);
+                    throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
                 case TenancyCallerKind.SystemInTenant:
                     throw new InvalidOperationException(
                         "A tenant is provisioned by system work outside any tenant. Begin TenancyWork.BeginSystem() for it.");
@@ -134,7 +134,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             => Caller.Kind switch
             {
                 TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
-                TenancyCallerKind.Seat => throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly),
+                TenancyCallerKind.Seat => throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly),
                 TenancyCallerKind.System => throw new InvalidOperationException(
                     $"{work} by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it."),
                 _ => throw Refusal(),
@@ -215,7 +215,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var self = to is { } target && target.Equals(Caller.Seat!.Value);
             if (managing.Count > 0 && self)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.SelfAppointment, ("Role", role.Id));
+                throw TenancyRefusals.Refuse(TenancyRefusals.SelfAppointment, ("Role", role.Id));
             }
 
             if (managing.Count == 0 && !self)
@@ -407,7 +407,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .ToArray();
             if (missing.Length > 0)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.GrantExceedsOwn, ("Role", (TRoleId?)null), ("Missing", string.Join(", ", missing)));
+                throw TenancyRefusals.Refuse(TenancyRefusals.GrantExceedsOwn, ("Role", (TRoleId?)null), ("Missing", string.Join(", ", missing)));
             }
         }
 
@@ -445,7 +445,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var pairs = await _store.AdministratorsAsync(tenant, Now, cancellationToken).ConfigureAwait(false);
             if (pairs.Count > 0 && pairs.All(pair => loss.Takes(pair.Seat, pair.Role)))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.LastAdmin);
+                throw TenancyRefusals.Refuse(TenancyRefusals.LastAdmin);
             }
         }
 
@@ -476,12 +476,12 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         /// <summary>A seat of the caller's tenant.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.seat-not-found</c>, for a seat of another tenant too.</exception>
         public async Task<TSeat> LoadSeatAsync(TSeatId id, CancellationToken cancellationToken)
-            => await _store.FindSeatAsync(id, cancellationToken).ConfigureAwait(false) ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
+            => await _store.FindSeatAsync(id, cancellationToken).ConfigureAwait(false) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
 
         /// <summary>A role of the caller's tenant.</summary>
         /// <exception cref="Exceptions.RefusalException"><c>tenancy.role-not-found</c>, for a role of another tenant too.</exception>
         public async Task<TRole> LoadRoleAsync(TRoleId id, CancellationToken cancellationToken)
-            => await _store.FindRoleAsync(id, cancellationToken).ConfigureAwait(false) ?? throw TenancyRefusals.Of(TenancyRefusals.RoleNotFound);
+            => await _store.FindRoleAsync(id, cancellationToken).ConfigureAwait(false) ?? throw TenancyRefusals.Refuse(TenancyRefusals.RoleNotFound);
 
         /// <summary>The tenant's root, or <see langword="null"/> when it has no units to read.</summary>
         private Task<TUnitId?> RootAsync(TTenantId tenant, CancellationToken cancellationToken)
@@ -547,7 +547,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 .ToArray();
             if (missing.Length > 0)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.GrantExceedsOwn, ("Role", role), ("Missing", string.Join(", ", missing)));
+                throw TenancyRefusals.Refuse(TenancyRefusals.GrantExceedsOwn, ("Role", role), ("Missing", string.Join(", ", missing)));
             }
         }
 
@@ -558,14 +558,14 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         private static bool HeldLongEnough(IReadOnlyDictionary<string, DateTimeOffset?> held, string key, DateTimeOffset? until)
             => held.TryGetValue(key, out var end) && (end is not { } ends || (until is { } needed && ends >= needed));
 
-        private Exceptions.RefusalException Refusal() => TenancyRefusals.Of(Caller.Refusal ?? TenancyRefusals.NotSeated);
+        private Exceptions.RefusalException Refusal() => TenancyRefusals.Refuse(Caller.Refusal ?? TenancyRefusals.NotSeated);
 
         /// <summary>
         /// <c>tenancy.not-permitted</c>, with the key and the unit as values. The unit is not written into the
         /// message: an argument that carried a piece of formatting would be text, not a value.
         /// </summary>
         private static Exceptions.RefusalException NotPermitted(string key, TUnitId? unit)
-            => TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", key), ("Unit", unit));
+            => TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", key), ("Unit", unit));
 
         private static InvalidOperationException Missing(string what, TTenantId id)
             => new("The " + what + " " + id + " of the current caller is not found. A seat's tenant always is, so the caller was begun with a tenant that does not exist.");

@@ -81,7 +81,7 @@ public sealed class RefusalShapeTests
     public async Task A_save_the_database_refused_is_403_access_refused()
     {
         // What a save answers when a policy denied its row: a refusal like any other, and no conflict to retry.
-        var refused = ToolkitRefusals.Of(ToolkitRefusals.Refused, new ConcurrencyConflictException(typeof(Seat), DemoData.Harbor.Administrator.Id));
+        var refused = ToolkitRefusals.Refuse(ToolkitRefusals.Refused, new ConcurrencyConflictException(typeof(Seat), DemoData.Harbor.Administrator.Id));
 
         var (handled, response) = await HandleAsync(refused);
 

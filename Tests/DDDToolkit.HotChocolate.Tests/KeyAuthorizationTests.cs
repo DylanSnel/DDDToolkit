@@ -220,7 +220,7 @@ public class KeyAuthorizationTests
         // HotChocolate's own dispatcher sends a batch once it has been quiet for a moment, which on a busy
         // machine makes two of this one: what is counted here is what a batch costs, and not the machine.
         var batches = new WholeBatches();
-        batches.Of(3);
+        batches.WholeAt(3);
         batches.AddTo(schema.Services);
         var executor = await schema.BuildRequestExecutorAsync(cancellationToken: Cancellation);
 

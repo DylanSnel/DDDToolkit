@@ -46,7 +46,7 @@ public sealed class RowAccessSystemRoleTests(ExplicitCallersPostgres postgres)
     [Fact]
     public void The_roles_of_a_script_take_the_system_role_from_the_options_and_name_it_by_its_symbol()
     {
-        var names = RowAccessRoleNames.Of(new PostgresRowLevelSecurityOptions { SystemRole = "ddd_system" });
+        var names = RowAccessRoleNames.From(new PostgresRowLevelSecurityOptions { SystemRole = "ddd_system" });
 
         names.System.Should().Be("ddd_system");
         names.Resolve(RowAccessRoles.System).Should().Be("ddd_system");

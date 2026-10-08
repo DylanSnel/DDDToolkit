@@ -56,7 +56,7 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
         // A language is the request's own: the next one, asking for English, is answered in English.
         using var again = await SendAsync(seth, HttpMethod.Get, "/me", "en");
         (await again.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.SeatSuspended)).Title
-            .Should().Be(TenancyRefusals.Of(TenancyRefusals.SeatSuspended).Message);
+            .Should().Be(TenancyRefusals.Refuse(TenancyRefusals.SeatSuspended).Message);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class LanguageScenarios(SampleHosts sample) : IClassFixture<Sample
         // The same request in English reads the package's own English.
         using var english = await sample.ClientAsync("rhea", DemoData.Meadow.Slug);
         (await english.GraphQLAsync("{ projects { nodes { id } } }")).SingleError().GetProperty("message").GetString()
-            .Should().Be(TenancyRefusals.Of(TenancyRefusals.NotSeated).Message);
+            .Should().Be(TenancyRefusals.Refuse(TenancyRefusals.NotSeated).Message);
     }
 
     private static async Task<Problem> RenameAsync(HttpClient client, string? acceptLanguage)

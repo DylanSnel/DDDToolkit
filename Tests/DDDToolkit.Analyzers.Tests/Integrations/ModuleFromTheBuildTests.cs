@@ -165,7 +165,7 @@ public class ModuleFromTheBuildTests
 
         var emitted = result.Emit();
         emitted.Assembly.GetCustomAttributes<ModuleAttribute>().Should().BeEmpty();
-        DomainEventName.Of(emitted.Type("Acme.Ordering.Domain.OrderPlaced")).Should().Be("order-placed");
+        DomainEventName.For(emitted.Type("Acme.Ordering.Domain.OrderPlaced")).Should().Be("order-placed");
     }
 
     [Fact]
@@ -193,7 +193,7 @@ public class ModuleFromTheBuildTests
 
         var emitted = result.Emit();
         var constant = (string)emitted.Type("Acme.Ordering.Domain.OrderingEventNames").GetField("OrderPlaced")!.GetRawConstantValue()!;
-        constant.Should().Be(DomainEventName.Of(emitted.Type("Acme.Ordering.Domain.OrderPlaced")));
+        constant.Should().Be(DomainEventName.For(emitted.Type("Acme.Ordering.Domain.OrderPlaced")));
     }
 
     [Fact]

@@ -73,7 +73,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers) : IAccessCheck
             case AccessRequirement.SignedInUser:
                 if (!callers.Current.IsSignedIn)
                 {
-                    throw ToolkitRefusals.Of(ToolkitRefusals.NotSignedIn);
+                    throw ToolkitRefusals.Refuse(ToolkitRefusals.NotSignedIn);
                 }
 
                 return;
@@ -86,7 +86,7 @@ public sealed class CallerAccessCheck(ICallerAccessor callers) : IAccessCheck
                 // The host is asked first, so a host that does require them still fails such work instead.
                 if (!IsSystemWork(callers.Current) || !IsSystemWork(Callers.Ambient))
                 {
-                    throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly);
+                    throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
                 }
 
                 return;

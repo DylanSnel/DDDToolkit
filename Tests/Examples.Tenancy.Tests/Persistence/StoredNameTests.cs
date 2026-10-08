@@ -40,7 +40,7 @@ public sealed class StoredNameTests
     [MemberData(nameof(DomainEvents))]
     public void A_domain_event_is_stored_under_its_module_and_its_class_whatever_its_namespace(Type type, string name)
     {
-        DomainEventName.Of(type).Should().Be(name, "a row an older build wrote under this name is still read as {0}", type.Name);
+        DomainEventName.For(type).Should().Be(name, "a row an older build wrote under this name is still read as {0}", type.Name);
         type.Namespace.Should().EndWith(".Events", "the event is in its aggregate's Events folder, and its stored name says nothing of that");
     }
 

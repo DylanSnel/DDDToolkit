@@ -29,10 +29,10 @@ public sealed class EventLog
     }
 
     /// <summary>The stable names of the events handled, in the order the handlers saw them.</summary>
-    public IReadOnlyList<string> Names => [.. Entries.Select(entry => DomainEventName.Of(entry.Event))];
+    public IReadOnlyList<string> Names => [.. Entries.Select(entry => DomainEventName.For(entry.Event))];
 
     /// <summary>The handler names that ran, in order, as "handler:event".</summary>
-    public IReadOnlyList<string> Handled => [.. Entries.Select(entry => $"{entry.Handler}:{DomainEventName.Of(entry.Event)}")];
+    public IReadOnlyList<string> Handled => [.. Entries.Select(entry => $"{entry.Handler}:{DomainEventName.For(entry.Event)}")];
 
     /// <summary>Records that <paramref name="handler"/> handled <paramref name="domainEvent"/>, then fails if the test asked it to.</summary>
     public void Record(string handler, IDomainEvent domainEvent)

@@ -15,10 +15,10 @@ public static class Markers
     public const string HeadAlone = "e30=";
 
     /// <summary>A head that is neither empty nor three numbers, with a value after it.</summary>
-    public static string UnreadableHead { get; } = Of("{x|y}P");
+    public static string UnreadableHead { get; } = From("{x|y}P");
 
     /// <summary>The cursor whose text is <paramref name="text"/>.</summary>
-    public static string Of(string text) => Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
+    public static string From(string text) => Convert.ToBase64String(Encoding.UTF8.GetBytes(text));
 
     /// <summary>
     /// <paramref name="cursor"/>, a cursor a list gave, with <paramref name="head"/> written into its head: the
@@ -27,6 +27,6 @@ public static class Markers
     public static string WithHead(string cursor, string head)
     {
         var text = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
-        return Of("{" + head + text[text.IndexOf('}', StringComparison.Ordinal)..]);
+        return From("{" + head + text[text.IndexOf('}', StringComparison.Ordinal)..]);
     }
 }

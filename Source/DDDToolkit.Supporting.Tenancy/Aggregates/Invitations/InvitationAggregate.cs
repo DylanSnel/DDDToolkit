@@ -143,10 +143,10 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
             throw new ArgumentException("An invitation ends after it was issued.", nameof(expiresAt));
         }
 
-        var sentTo = ValidAddress(address) ?? throw TenancyRefusals.Of(TenancyRefusals.AddressInvalid, ("Max", MaxAddressLength));
+        var sentTo = ValidAddress(address) ?? throw TenancyRefusals.Refuse(TenancyRefusals.AddressInvalid, ("Max", MaxAddressLength));
         if (grantUntil is { } until && until <= expiresAt)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.InvitationGrantEndsFirst);
+            throw TenancyRefusals.Refuse(TenancyRefusals.InvitationGrantEndsFirst);
         }
 
         Id = id;
@@ -207,7 +207,7 @@ public abstract partial class InvitationAggregate<TInvitationId, TTenantId, TUni
     {
         if (State != InvitationState.Open)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.InvitationState, ("State", State.ToString().ToLowerInvariant()), ("Action", action));
+            throw TenancyRefusals.Refuse(TenancyRefusals.InvitationState, ("State", State.ToString().ToLowerInvariant()), ("Action", action));
         }
     }
 

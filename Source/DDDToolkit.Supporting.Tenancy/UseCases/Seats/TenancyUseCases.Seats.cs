@@ -65,7 +65,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             if (await store.IdentityHasSeatAsync(tenantId, identity, cancellationToken).ConfigureAwait(false))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.IdentityHasSeat);
+                throw TenancyRefusals.Refuse(TenancyRefusals.IdentityHasSeat);
             }
 
             var seat = TenancyInstances.NewSeat<TSeat, TSeatId, TTenantId, TUnitId, TRoleId>(
@@ -123,7 +123,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             var withdrawn = await gate.LoadSeatAsync(seat, cancellationToken).ConfigureAwait(false);
             var placement = withdrawn.Placements.FirstOrDefault(candidate => candidate.UnitId.Equals(unit))
-                ?? throw TenancyRefusals.Of(TenancyRefusals.PlacementNotFound);
+                ?? throw TenancyRefusals.Refuse(TenancyRefusals.PlacementNotFound);
 
             if (placement.Grants.Count > 0)
             {
@@ -203,7 +203,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var tenantId = gate.RequireTenant();
             if (from is not null && !gate.BySystem)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.StartSystemOnly);
+                throw TenancyRefusals.Refuse(TenancyRefusals.StartSystemOnly);
             }
 
             await gate.SerializeAsync(tenantId, cancellationToken).ConfigureAwait(false);
@@ -319,10 +319,10 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     private static async Task RequireActiveUnitAsync(Gate gate, TTenantId tenant, TUnitId unit, CancellationToken cancellationToken)
     {
         var organization = await gate.LoadOrganizationAsync(tenant, cancellationToken).ConfigureAwait(false);
-        var target = organization.FindUnit(unit) ?? throw TenancyRefusals.Of(TenancyRefusals.UnitNotFound);
+        var target = organization.FindUnit(unit) ?? throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotFound);
         if (target.Status != UnitStatus.Active)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnitNotActive, ("Unit", unit));
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnitNotActive, ("Unit", unit));
         }
     }
 }

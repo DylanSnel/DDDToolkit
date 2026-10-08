@@ -27,7 +27,7 @@ public sealed class ReopenProjectHandler(IProjectStore store) : ICommandHandler<
     public async ValueTask<Unit> Handle(ReopenProject command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.Reopen();
         await store.SaveAsync(cancellationToken);

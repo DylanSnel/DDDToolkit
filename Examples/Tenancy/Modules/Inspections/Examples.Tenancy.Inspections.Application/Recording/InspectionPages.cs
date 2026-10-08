@@ -28,6 +28,6 @@ internal static class InspectionPages
             paging,
             defaultSize,
             ProjectInspections.LargestPage,
-            sizeOutOfRange: () => InspectionRefusals.Of(InspectionRefusals.PageSizeInvalid, ("Max", ProjectInspections.LargestPage)),
-            fromBothEnds: () => InspectionRefusals.Of(InspectionRefusals.PageFromBothEnds));
+            sizeOutOfRange: () => InspectionRefusals.Refuse(InspectionRefusals.PageSizeInvalid, ("Max", ProjectInspections.LargestPage)),
+            fromBothEnds: () => InspectionRefusals.Refuse(InspectionRefusals.PageFromBothEnds));
 }

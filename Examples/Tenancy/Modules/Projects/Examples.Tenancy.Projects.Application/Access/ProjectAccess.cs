@@ -148,7 +148,7 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
 
         if (!await Questions(reading).HoldsAtAsync(key, unit, cancellationToken))
         {
-            throw ProjectRefusals.Of(ProjectRefusals.NotPermitted, ("Key", key), ("Unit", unit));
+            throw ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Key", key), ("Unit", unit));
         }
     }
 

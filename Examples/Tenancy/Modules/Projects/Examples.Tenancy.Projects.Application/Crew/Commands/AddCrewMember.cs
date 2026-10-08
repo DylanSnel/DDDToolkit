@@ -56,7 +56,7 @@ public sealed class AddCrewMemberHandler(
     public async ValueTask<Unit> Handle(AddCrewMember command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         await admission.RequireMemberAsync(command.Seat, cancellationToken);
         if (command.Role is { } asked)

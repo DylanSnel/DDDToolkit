@@ -43,7 +43,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
             var refusal = await Refused.WithCodeAsync(TenancyRefusals.SlugTaken, () => scope.ServiceProvider.Tenants().ProvisionAsync(
                 new HostTenancy.TenantToProvision("orchard", "Second Orchard", TenantShape.Flat, "Orchard", Guid.NewGuid()),
                 Cancellation));
-            Same(refusal, TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", "orchard")));
+            Same(refusal, TenancyRefusals.Refuse(TenancyRefusals.SlugTaken, ("Slug", "orchard")));
             refusal.InnerException.Should().BeOfType<DbUpdateException>("the refusal keeps the failure it stands for, so a log of it names the index");
         }
 
@@ -57,7 +57,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
 
             Same(
                 await Refused.WithCodeAsync(TenancyRefusals.IdentityHasSeat, () => services.Seats().AddSeatAsync(bert, Cancellation)),
-                TenancyRefusals.Of(TenancyRefusals.IdentityHasSeat));
+                TenancyRefusals.Refuse(TenancyRefusals.IdentityHasSeat));
         });
 
         // A role's name in a tenant, ignoring case: the index is on the normalized name, and the refusal names the
@@ -69,7 +69,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
 
             Same(
                 await Refused.WithCodeAsync(TenancyRefusals.RoleNameTaken, () => services.Roles().CreateAsync(" élan ", "Shouts", [HostCatalogue.WidgetRead], Cancellation)),
-                TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", "élan")));
+                TenancyRefusals.Refuse(TenancyRefusals.RoleNameTaken, ("Name", "élan")));
         });
 
         // The other two rules the aggregates keep themselves, so only a write that goes past them meets the index:
@@ -82,7 +82,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
 
             Same(
                 await Refused.WithCodeAsync(TenancyRefusals.OneRoot, () => past.SaveChangesAsync(Cancellation)),
-                TenancyRefusals.Of(TenancyRefusals.OneRoot));
+                TenancyRefusals.Refuse(TenancyRefusals.OneRoot));
         }
 
         await using (var past = PastTheAggregates())
@@ -93,7 +93,7 @@ public abstract class IndexRefusalTests(TestDatabases databases) : IAsyncLifetim
 
             Same(
                 await Refused.WithCodeAsync(TenancyRefusals.SecondPrimary, () => past.SaveChangesAsync(Cancellation)),
-                TenancyRefusals.Of(TenancyRefusals.SecondPrimary));
+                TenancyRefusals.Refuse(TenancyRefusals.SecondPrimary));
         }
 
         // Nothing of the refused saves was written.

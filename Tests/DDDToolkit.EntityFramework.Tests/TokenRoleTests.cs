@@ -266,7 +266,7 @@ public sealed class TokenRoleTests
                 }),
                 () => _ = new PostgresRowLevelSecurityInterceptor(new CallerOfTheTest(), Options()),
                 () => PostgresRowAccess.SetupScript(Options()),
-                () => RowAccessRoleNames.Of(Options()),
+                () => RowAccessRoleNames.From(Options()),
             ])
         {
             taken.Should().Throw<ArgumentException>().WithMessage(says).Which.ParamName.Should().Be(nameof(PostgresRowLevelSecurityOptions.TokenRoles));
@@ -318,7 +318,7 @@ public sealed class TokenRoleTests
         FluentActions.Invoking(() => RowAccessRoles.Token(" ")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => RowAccessRoles.Token(null!)).Should().Throw<ArgumentException>();
 
-        var roles = RowAccessRoleNames.Of(new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } });
+        var roles = RowAccessRoleNames.From(new PostgresRowLevelSecurityOptions { TokenRoles = { [Analyst] = AnalystRole } });
         roles.Resolve(RowAccessRoles.Token(Analyst)).Should().Be(AnalystRole);
         roles.TokenRoles.Should().Equal(new Dictionary<string, string> { [Analyst] = AnalystRole });
 
@@ -402,7 +402,7 @@ public sealed class TokenRoleTests
         var unmapped = () => ScriptFor(RowAccessRoleNames.Default, DeskRules.Owners, AnalystsReadEveryTicket);
         unmapped.Should().Throw<InvalidOperationException>().WithMessage(
             "The rule 'Analysts read every ticket' is for '@token:analyst', which no policy can be for. '@token:analyst' is the token role 'analyst', which is mapped to no database role, so no query ever runs as it. " +
-            "Map it in PostgresRowLevelSecurityOptions.TokenRoles and write the script with RowAccessRoleNames.Of those options, or, for the Supabase export, add 'token:analyst=<role>' to SupabaseRowAccessRoles.");
+            "Map it in PostgresRowLevelSecurityOptions.TokenRoles and write the script with RowAccessRoleNames.From(options), or, for the Supabase export, add 'token:analyst=<role>' to SupabaseRowAccessRoles.");
 
         // A token role is matched as the token spells it.
         var otherCase = () => ScriptFor(RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { ["Analysts"] = AnalystRole } }, AnalystsReadEveryTicket);
@@ -462,7 +462,7 @@ public sealed class TokenRoleTests
     public void Role_names_are_compared_by_the_roles_they_name()
     {
         var one = RowAccessRoleNames.Default with { TokenRoles = new Dictionary<string, string> { [Analyst] = AnalystRole, ["examiner"] = "desk_examiner" } };
-        var other = RowAccessRoleNames.Of(new PostgresRowLevelSecurityOptions { TokenRoles = { ["examiner"] = "desk_examiner", [Analyst] = AnalystRole } });
+        var other = RowAccessRoleNames.From(new PostgresRowLevelSecurityOptions { TokenRoles = { ["examiner"] = "desk_examiner", [Analyst] = AnalystRole } });
 
         one.Should().Be(other, "the same mappings, in whatever order they were added");
         one.GetHashCode().Should().Be(other.GetHashCode());
@@ -521,7 +521,7 @@ public sealed class TokenRoleTests
         using var supabase = new ServiceCollection()
             .AddSupabaseRowLevelSecurity(options => options.TokenRoles[Analyst] = AnalystRole)
             .BuildServiceProvider();
-        RowAccessRoleNames.Of(supabase.GetRequiredService<PostgresRowLevelSecurityOptions>()).Resolve(RowAccessRoles.Token(Analyst)).Should().Be(AnalystRole);
+        RowAccessRoleNames.From(supabase.GetRequiredService<PostgresRowLevelSecurityOptions>()).Resolve(RowAccessRoles.Token(Analyst)).Should().Be(AnalystRole);
     }
 
     /// <summary>The role and the claims the interceptor sets on a connection it opened for <paramref name="caller"/>.</summary>

@@ -168,7 +168,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **`ToolkitRefusals`**, the refusals the toolkit makes itself: `ToolkitRefusals.Refused`, `access.refused`,
   of the kind `NotPermitted`. `DDDToolkit.Localization` carries its text in English and Dutch.
 - `ToolkitRefusals.RoleNotAllowed`, `access.role-not-allowed`, of the kind `NotPermitted`, with the argument
-  `Role`, in English and Dutch; and `ToolkitRefusals.Of(code, arguments)`, which fills a text from its
+  `Role`, in English and Dutch; and `ToolkitRefusals.Refuse(code, arguments)`, which fills a text from its
   arguments.
 - **Texts outside a request.** `CultureScope.Use(culture)`, in the core package, makes a culture the current
   culture and UI culture of a flow of work until it is disposed, and puts back the two before, also after an
@@ -542,8 +542,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Row access rules name roles by what they are for.** `RowAccessRoles.User`, `Anonymous` and `SystemIn` in a
   rule's `To` stand for the roles the host configures for those callers, and a script writes the roles a
   `RowAccessRoleNames` gives them: `authenticated`, `anon` and `ddd_system_in` by default, or with
-  `RowAccessRoleNames.Of(options)` the roles `PostgresRowLevelSecurityOptions` configures.
-  `RowAccessRoleNames.Of(options)` validates the options as the registration does, and throws
+  `RowAccessRoleNames.From(options)` the roles `PostgresRowLevelSecurityOptions` configures.
+  `RowAccessRoleNames.From(options)` validates the options as the registration does, and throws
   `ArgumentException` for a role they would refuse. A role's own name keeps working. `PostgresRowAccess.Script`
   and `CreateStatements` take a `RowAccessExport` with the roles and the caller functions, and
   `PostgresRowAccess.Scripts` writes several contexts' scripts in the order to run them. See
@@ -553,7 +553,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `options.TokenRoles["analyst"] = "desk_analyst"`, and a rule names such a role by the token role,
   `RowAccessRoles.Token("analyst")`, or `RowAccessRoles.TokenPrefix + "analyst"` in an attribute, so no role name
   is compiled into a module. `RowAccessRoleNames.TokenRoles` carries the map to a script,
-  `RowAccessRoleNames.Of(options)` fills it in, and the Supabase export takes it from
+  `RowAccessRoleNames.From(options)` fills it in, and the Supabase export takes it from
   `token:<role>=<database role>` pairs of `SupabaseRowAccessRoles`; a rule or a contribution for a token role
   nobody mapped is refused when the script is written. `PostgresRowAccess.SetupScript(options)` makes each
   mapped role `NOLOGIN NOINHERIT` and grants it to the login role, and a script whose policies name one
@@ -786,7 +786,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and a module without a rule then gets an access file for its outbox. See
   [Privileges from the policies](docs/row-level-security.md#privileges-from-the-policies).
 - **A login that owns nothing.** `RowAccessRoles.System`, `@system`, is the role the application's own
-  bookkeeping runs as, `RowAccessRoleNames.System`, which `RowAccessRoleNames.Of(options)` takes from
+  bookkeeping runs as, `RowAccessRoleNames.System`, which `RowAccessRoleNames.From(options)` takes from
   `SystemRole` and the Supabase build from `system=<role>` in `SupabaseRowAccessRoles`. A script that names it
   makes the role, without a login and without `BYPASSRLS`, refuses one that is another caller's role, and with
   `WriteGrants` gives it the outbox, the inbox, the migration history and the rows of an event log that may go,
@@ -794,7 +794,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   script writes changes while no rule or contribution is for `RowAccessRoles.System` and `WriteGrants` is off,
   also where a rule or a grant spells that role's name out. A host whose `SystemRole` bypasses row level
   security and that turns `WriteGrants` on writes its scripts with
-  `RowAccessRoleNames.Of(options) with { System = null }`, because such a role is refused as a bookkeeping role.
+  `RowAccessRoleNames.From(options) with { System = null }`, because such a role is refused as a bookkeeping role.
   `PostgresRowAccessChecks.EnsureLoginRoleOwnsNothingAsync` checks at start-up that the role the application
   logged in as owns and holds nothing, may create nothing in the schemas, may neither create roles nor
   replicate, and may switch to no role that is a superuser, bypasses row level security or owns something
@@ -1763,7 +1763,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   an application that localizes its failures adds no line for them. The package needs no dispatcher and no
   Tenancy: members are users, known by their id or by a claim only the server can change (one in
   `user_metadata` is refused), unless the application says who else they are. For a screen that lists the
-  members of a resource, `MemberOverviews.Of(members, owner, now)` puts them in one order, the owner first,
+  members of a resource, `MemberOverviews.From(members, owner, now)` puts them in one order, the owner first,
   each with its roles and whether they count now, and reads nothing. It comes in three
   packages. See [Membership](docs/membership.md).
 - **Membership stored with Entity Framework.** `DDDToolkit.Supporting.Membership.EntityFramework` maps a
@@ -2549,6 +2549,34 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   references. A library that sets it and references Tenancy no longer gets `TenancyPermissionsOfModules`; an
   application, such as a host, still does. A test project is not declared, and a project meant to be no module
   sets `<DDD_DeclareModule>false</DDD_DeclareModule>` beside the property.
+- **Methods named `Of` are named after what they do.** `Of` told a reader nothing: `throw TenancyRefusals.Of(code)`
+  made a refusal, `ActedBy.Of(caller)` turned a caller into who did something, and `DomainEventName.Of(type)`
+  looked a name up. A method that makes a refusal is now `Refuse`, one that turns a value into another `From`,
+  and one that looks something up `For`, so a handler reads
+  `throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound)`. The old names are gone, with no alias left behind;
+  only the names change, not what the methods do. See [Refusals](docs/localization.md#refusals).
+  - **Breaking, for code that calls `DomainEventName.Of`,** which 3.0.0 to 3.1.0 have: `DomainEventName.Of(type)`,
+    `DomainEventName.Of<TEvent>()` and `DomainEventName.Of(domainEvent)` are `DomainEventName.For(...)`. Replace
+    the name where you call it; the names events are stored and published under stay the same. Upgrade every
+    `Temp.DDDToolkit.*` package together: a package of 3.1.0 or before still calls `DomainEventName.Of`
+    (`Temp.DDDToolkit.EntityFramework` does when it delivers domain events and when it registers an event type),
+    and next to this release's `Temp.DDDToolkit` that call fails with a `MissingMethodException`.
+  - From 3.2.0-preview.1 to 3.2.0-preview.3: `ToolkitRefusals.Of(code, ...)` is `ToolkitRefusals.Refuse(code, ...)`,
+    `TenancyRefusals.Of` is `TenancyRefusals.Refuse`, `MembershipCodes.Of` is `MembershipCodes.Refuse`
+    (`throw Document.Codes.Refuse(MembershipRefusals.NotFound)`), `ActedBy.Of(caller)` is `ActedBy.From(caller)`,
+    `RowAccessRoleNames.Of(options)` is `RowAccessRoleNames.From(options)`, `TenancyActorKinds.Of(kind)` is
+    `TenancyActorKinds.From(kind)`, `MemberOverviews.Of(members, owner, now)` is `MemberOverviews.From(members,
+    owner, now)`, and `MembershipModel.Of(model, memberClass)` is `MembershipModel.For(model, memberClass)`.
+  - The samples follow, so code copied from them reads the same. A module's own refusal class makes its refusal
+    with `Refuse`: `ProjectRefusals.Refuse(ProjectRefusals.NotFound)`, `InspectionRefusals.Refuse(...)`. The
+    Webshop's `CustomerId.Of(caller)` is `CustomerId.From(caller)`. The Tenancy sample's `DateRange.Of(day)` is
+    `DateRange.OneDay(day)` and `DateRange.Of(from, until)` is `DateRange.FromOptional(from, until)`, since `From`
+    is a range's first day; `CrewOverviews.Of`, `RoleListing.Of` and `ActingSeat.Of` are `From`; and its UI's
+    `UiTexts.Of(key, language)` is `UiTexts.For(key, language)`, `TenantChoice.Of(slug)` is
+    `TenantChoice.From(slug)` and `ApiProblem.Of(code, title)` is `ApiProblem.WithoutArguments(code, title)`.
+    The sample's tests, which the docs send a reader to, follow as well: `TypeScan.Of` and `Markers.Of` are
+    `From`, `SentRequests.Of<TRequest>()` is `OfType<TRequest>()`, as LINQ calls that filter, and
+    `WholeBatches.Of(keys)` is `WholeAt(keys)`.
 - **For the 3.2.0 previews: the keys that manage grants, seats or units read the grants only where they
   apply.** On Postgres a seat that held `tenancy.grants.manage`, `tenancy.seats.manage` or
   `tenancy.units.manage` anywhere read every grant of the tenant, so a seat that manages units at one unit read

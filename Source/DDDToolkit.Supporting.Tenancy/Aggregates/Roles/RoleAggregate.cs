@@ -336,7 +336,7 @@ public abstract partial class RoleAggregate<TRoleId, TTenantId>
     {
         if (Status == RoleStatus.Archived)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.RoleArchived);
+            throw TenancyRefusals.Refuse(TenancyRefusals.RoleArchived);
         }
     }
 }

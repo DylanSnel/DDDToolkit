@@ -76,12 +76,12 @@ public partial class RefusalTableTests
             TenancyRefusals.TemplateOf(code).Should().NotBeNullOrWhiteSpace().And.EndWith(".");
             english[code].Should().Be(TenancyRefusals.TemplateOf(code), "the resx's English is the table's, for " + code);
 
-            var refusal = TenancyRefusals.Of(code);
+            var refusal = TenancyRefusals.Refuse(code);
             refusal.Code.Should().Be(code);
             refusal.Kind.Should().Be(TenancyRefusals.KindOf(code));
         }
 
-        FluentActions.Invoking(() => TenancyRefusals.Of("tenancy.nothing-like-it")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => TenancyRefusals.Refuse("tenancy.nothing-like-it")).Should().Throw<ArgumentException>();
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public partial class RefusalTableTests
     public void The_tenant_required_text_names_no_header()
     {
         var localizer = Localizer();
-        var refusal = TenancyRefusals.Of(TenancyRefusals.TenantRequired);
+        var refusal = TenancyRefusals.Refuse(TenancyRefusals.TenantRequired);
 
         // How a request names its tenant is the host's: a header, a part of the address, a host name.
         refusal.Message.Should().Be("This request names no tenant.");
@@ -175,7 +175,7 @@ public partial class RefusalTableTests
     public void A_refusal_is_phrased_in_the_language_named_whatever_the_current_culture()
     {
         var localizer = Localizer();
-        var refusal = TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", TenancyKeys.SeatsManage), ("Unit", null));
+        var refusal = TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", TenancyKeys.SeatsManage), ("Unit", null));
 
         using (CultureScope.Use("en-GB"))
         {
@@ -272,7 +272,7 @@ public partial class RefusalTableTests
 
         foreach (var code in AboutNoOneInput)
         {
-            TenancyRefusals.Of(code).Arguments.Should().NotContainKey(RefusalException.FieldArgument, code + " is about no input of a command");
+            TenancyRefusals.Refuse(code).Arguments.Should().NotContainKey(RefusalException.FieldArgument, code + " is about no input of a command");
         }
     }
 
@@ -280,10 +280,10 @@ public partial class RefusalTableTests
     public void A_field_given_where_a_refusal_is_made_is_kept()
     {
         // An application that throws one of the package's codes for an input of its own says so.
-        TenancyRefusals.Of(TenancyRefusals.InvalidPeriod).Arguments[RefusalException.FieldArgument].Should().Be("until");
-        TenancyRefusals.Of(TenancyRefusals.InvalidPeriod, (RefusalException.FieldArgument, "endsOn"))
+        TenancyRefusals.Refuse(TenancyRefusals.InvalidPeriod).Arguments[RefusalException.FieldArgument].Should().Be("until");
+        TenancyRefusals.Refuse(TenancyRefusals.InvalidPeriod, (RefusalException.FieldArgument, "endsOn"))
             .Arguments[RefusalException.FieldArgument].Should().Be("endsOn");
-        TenancyRefusals.Of(TenancyRefusals.RoleArchived).Arguments.Should().NotContainKey(RefusalException.FieldArgument, "a conflict is about the state, not about an input");
+        TenancyRefusals.Refuse(TenancyRefusals.RoleArchived).Arguments.Should().NotContainKey(RefusalException.FieldArgument, "a conflict is about the state, not about an input");
     }
 
     [Fact]

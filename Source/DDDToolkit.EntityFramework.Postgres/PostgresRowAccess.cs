@@ -323,7 +323,7 @@ public static partial class PostgresRowAccess
         }
 
         // The roles of the mapped token roles, without the user's own: a token role mapped to that is that role.
-        var tokenRoles = RowAccessRoleNames.Of(options).TokenDatabaseRoles;
+        var tokenRoles = RowAccessRoleNames.From(options).TokenDatabaseRoles;
         roles.AddRange(tokenRoles);
         roles = [.. roles.Distinct(StringComparer.Ordinal)];
         var quoted = string.Join(", ", roles.Select(Quote));

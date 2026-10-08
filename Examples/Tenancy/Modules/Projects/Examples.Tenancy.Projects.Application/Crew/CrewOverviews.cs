@@ -14,7 +14,7 @@ internal static class CrewOverviews
     /// </summary>
     /// <param name="project">The project's crew, as the reading returned it.</param>
     /// <param name="now">The moment a membership, and a role held in it, must apply at to count now.</param>
-    public static IReadOnlyList<CrewOverview> Of(ProjectCrewData project, DateTimeOffset now)
+    public static IReadOnlyList<CrewOverview> From(ProjectCrewData project, DateTimeOffset now)
     {
         // An order of the module's own facts, the same every time: the module has no names to order by, and a
         // screen that shows names orders by them itself.

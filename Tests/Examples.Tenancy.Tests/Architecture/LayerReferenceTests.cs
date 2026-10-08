@@ -653,7 +653,7 @@ public sealed class LayerReferenceTests
     [Fact]
     public void What_a_route_asks_the_container_for_is_found()
     {
-        var scan = TypeScan.Of(TypeScan.WithNested(typeof(AskingTheContainer)));
+        var scan = TypeScan.From(TypeScan.WithNested(typeof(AskingTheContainer)));
 
         scan.NotResolved.Should().BeEmpty();
         scan.Uses.Where(use => use.Seen is Seen.Signature or Seen.Field).Where(use => SampleLayout.IsPort(use.Type) || IsOfAStorageProject(use.Type))
@@ -668,7 +668,7 @@ public sealed class LayerReferenceTests
     [Fact]
     public void What_a_type_derives_from_is_constrained_to_carries_and_returns_is_read()
     {
-        var uses = TypeScan.Of([typeof(NamedInDeclarations<>)]).Uses;
+        var uses = TypeScan.From([typeof(NamedInDeclarations<>)]).Uses;
 
         uses.Should().Contain(use => use.Type == typeof(IProjectStore) && use.Seen == Seen.Declaration, "a type argument of the base type");
         uses.Should().Contain(use => use.Type == typeof(ITenancyReading) && use.Seen == Seen.Declaration, "an interface");
@@ -680,7 +680,7 @@ public sealed class LayerReferenceTests
     [Fact]
     public void What_a_catch_names_is_read()
     {
-        var scan = TypeScan.Of(TypeScan.WithNested(typeof(CatchingWhatItNames)));
+        var scan = TypeScan.From(TypeScan.WithNested(typeof(CatchingWhatItNames)));
 
         scan.NotResolved.Should().BeEmpty();
         scan.Uses.Should().Contain(
@@ -745,7 +745,7 @@ public sealed class LayerReferenceTests
     /// </summary>
     private static TypeScan ScanOf(Assembly assembly)
     {
-        var scan = Scans.GetOrAdd(assembly, TypeScan.Of);
+        var scan = Scans.GetOrAdd(assembly, TypeScan.From);
         scan.NotResolved.Should().BeEmpty("every token in the code of {0} is read", assembly.GetName().Name);
         return scan;
     }

@@ -38,7 +38,7 @@ public sealed record MakeProjectRole(string Name, string? Description, IReadOnly
         var asked = keys ?? [];
         var unknown = asked.Where(key => !catalogue.Knows(key)).Distinct(StringComparer.Ordinal).ToList();
         return unknown.Count > 0
-            ? throw TenancyRefusals.Of(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", unknown)))
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", unknown)))
             : asked;
     }
 }

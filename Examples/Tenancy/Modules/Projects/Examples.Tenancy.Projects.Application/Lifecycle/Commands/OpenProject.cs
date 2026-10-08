@@ -106,7 +106,7 @@ public sealed class OpenProjectHandler(
         var number = command.Number?.Trim() ?? string.Empty;
         if (await store.NumberTakenAsync(number, cancellationToken))
         {
-            throw ProjectRefusals.Of(ProjectRefusals.NumberTaken, ("Number", number));
+            throw ProjectRefusals.Refuse(ProjectRefusals.NumberTaken, ("Number", number));
         }
 
         var opened = new Project(command.Id ?? ProjectId.Create(), scope.Tenant, number, command.Name, unit, owner, leadRole, clock.GetUtcNow(), command.Planned);

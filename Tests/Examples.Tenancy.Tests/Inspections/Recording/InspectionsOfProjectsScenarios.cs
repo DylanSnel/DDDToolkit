@@ -59,7 +59,7 @@ public sealed class InspectionsOfProjectsScenarios(SampleHosts sample) : IClassF
         // A batch leaves when it holds the four projects of Ada's page, however far apart their fields are
         // resolved: what is counted below is what one batch costs, and not how busy this machine is.
         var batches = new WholeBatches();
-        batches.Of(4);
+        batches.WholeAt(4);
         await using var host = await sample.StartAsync(services =>
         {
             batches.AddTo(services);

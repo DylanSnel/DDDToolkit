@@ -45,7 +45,7 @@ public sealed class KeyOnProjectHandler(ProjectAccess access, TenancyCatalogue c
         // The questions treat an unknown key as a bug in the code that asks. Here it is only a wrong request.
         if (!catalogue.Knows(query.Key))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.UnknownPermission, ("Keys", query.Key));
+            throw TenancyRefusals.Refuse(TenancyRefusals.UnknownPermission, ("Keys", query.Key));
         }
 
         var via = await access.ViaAsync(query.Project, query.Key, cancellationToken);

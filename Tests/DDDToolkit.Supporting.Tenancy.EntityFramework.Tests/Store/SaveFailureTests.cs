@@ -122,7 +122,7 @@ public sealed class SaveFailureTests
     private sealed class KeptAtCommit : ITenancySaveFailures
     {
         public RefusalException? Translate(Exception failure, DbContext context)
-            => failure is CommitRefused ? TenancyRefusals.Of(TenancyRefusals.LastAdmin) : null;
+            => failure is CommitRefused ? TenancyRefusals.Refuse(TenancyRefusals.LastAdmin) : null;
     }
 
     /// <summary>A translator with a fault of its own.</summary>
@@ -135,6 +135,6 @@ public sealed class SaveFailureTests
     private sealed class RefusesEverything : ITenancySaveFailures
     {
         public RefusalException? Translate(Exception failure, DbContext context)
-            => failure is DbUpdateException or RefusalException or CommitRefused ? TenancyRefusals.Of(TenancyRefusals.OtherTenant) : null;
+            => failure is DbUpdateException or RefusalException or CommitRefused ? TenancyRefusals.Refuse(TenancyRefusals.OtherTenant) : null;
     }
 }

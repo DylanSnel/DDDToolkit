@@ -226,7 +226,9 @@ public sealed partial class ShopSeat
   that syncs from a deployment step runs `IRolePackSync` instead; one tenant is `RoleCommands.FollowPacksAsync`.
 - **A refusal is a `RefusalException` with a code**: `tenancy.not-permitted`, `tenancy.not-seated`,
   `tenancy.grant-exceeds-own`, `tenancy.last-admin`. Branch on `Code`, never on the message. A refusal
-  about one input names it in its `Field` argument.
+  about one input names it in its `Field` argument. A class of codes makes its refusal with `Refuse`,
+  `throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound)`, and a module's own does the same,
+  `throw ProjectRefusals.Refuse(ProjectRefusals.NotFound)`; a method that converts is `From`, one that looks up `For`.
 - **Operators** are the application's own staff: a token role listed in `TenancyOptions.OperatorTokenRoles`.
   They hold no seat and only read. What one asks for is carried out by system work that names them,
   `TenancyUseCases.BeginOperatorIn(tenant, identity)`.

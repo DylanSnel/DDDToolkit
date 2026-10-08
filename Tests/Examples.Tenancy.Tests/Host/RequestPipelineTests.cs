@@ -1242,7 +1242,7 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         // its own (RefusalProblems); a caller that went away gets no answer; the last is a bug.
         (Exception Thrown, string? Tag, ActivityStatusCode Status)[] thrown =
         [
-            (ProjectRefusals.Of(ProjectRefusals.Closed), ProjectRefusals.Closed, ActivityStatusCode.Unset),
+            (ProjectRefusals.Refuse(ProjectRefusals.Closed), ProjectRefusals.Closed, ActivityStatusCode.Unset),
             (new ConcurrencyConflictException(typeof(Project), ProjectId.CreateSequential()), RefusalProblems.ConcurrencyConflict, ActivityStatusCode.Unset),
             (new InvalidValueObjectException(typeof(ProjectId)), RefusalProblems.InvalidValue, ActivityStatusCode.Unset),
             (new InvariantViolationException(typeof(Project), null, "A project keeps its owner on its crew."), DDDToolkit.Invariants.InvariantViolation.SeamCode, ActivityStatusCode.Unset),

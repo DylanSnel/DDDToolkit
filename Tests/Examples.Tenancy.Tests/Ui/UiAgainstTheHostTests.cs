@@ -366,7 +366,7 @@ public sealed class UiAgainstTheHostTests(SampleHosts sample) : IClassFixture<Sa
             Reason = "trying it",
         };
 
-        var outcome = await api.SendAsync<JsonElement?>(action.Method, action.PathFor(input), action.BodyFor(input), CallAs.Session, TenantChoice.Of(input.Tenant), Cancellation);
+        var outcome = await api.SendAsync<JsonElement?>(action.Method, action.PathFor(input), action.BodyFor(input), CallAs.Session, TenantChoice.From(input.Tenant), Cancellation);
 
         if (action.Reads)
         {

@@ -1115,7 +1115,7 @@ Be aware of what `eventType` currently returns. It resolves to the CLR type name
 `TicketIssued` returns `"TicketIssued"`, not its stored name `ordering.ticket-issued`, and
 `[DomainEventName]` does not change it. If you rename the class, the value changes with it. Treat `eventType` as a hint for
 building a client, not as the stable wire name; the stable name is
-[`DomainEventName.Of<T>()`](domain-events.md#stable-names).
+[`DomainEventName.For<T>()`](domain-events.md#stable-names).
 
 ## A field for one schema only
 

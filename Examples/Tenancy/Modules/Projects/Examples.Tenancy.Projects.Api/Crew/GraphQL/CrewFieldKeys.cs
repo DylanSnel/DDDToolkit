@@ -33,5 +33,5 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
     public async ValueTask<RefusalException?> RefusedAsync(CrewOverview parent, string key, IResolverContext context, CancellationToken cancellationToken)
         => await context.DataLoader<IHeldKeysByProjectIdDataLoader>().LoadAsync(parent.ProjectId, cancellationToken) is { } held && held.Keys.Contains(key, StringComparer.Ordinal)
             ? null
-            : ProjectRefusals.Of(ProjectRefusals.NotPermitted, ("Key", key));
+            : ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Key", key));
 }

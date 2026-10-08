@@ -80,7 +80,7 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
                 var scope = answers.RequireTenant();
                 if (required.BySeat)
                 {
-                    _ = ActingSeat.Of(scope);
+                    _ = ActingSeat.From(scope);
                 }
 
                 var answer = await projects.AskAsync(required.Project, required.Key, cancellationToken);
@@ -119,18 +119,18 @@ public sealed class InspectionsAccessCheck(IProjectGate projects, SampleAnswers 
     {
         if (!answer.Visible)
         {
-            throw InspectionRefusals.Of(InspectionRefusals.ProjectNotFound);
+            throw InspectionRefusals.Refuse(InspectionRefusals.ProjectNotFound);
         }
 
         // Closed before not permitted: a closed project refuses every addition, whoever asks.
         if (open && answer.Closed)
         {
-            throw InspectionRefusals.Of(InspectionRefusals.ProjectClosed);
+            throw InspectionRefusals.Refuse(InspectionRefusals.ProjectClosed);
         }
 
         if (!answer.Allowed)
         {
-            throw InspectionRefusals.Of(InspectionRefusals.ProjectNotPermitted, ("Key", key));
+            throw InspectionRefusals.Refuse(InspectionRefusals.ProjectNotPermitted, ("Key", key));
         }
     }
 }

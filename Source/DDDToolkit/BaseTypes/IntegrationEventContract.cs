@@ -30,7 +30,7 @@ public static class IntegrationEventContract
             return name;
         }
 
-        return DomainEventName.Of(contractType);
+        return DomainEventName.For(contractType);
     }
 
     /// <summary>The published name of <typeparamref name="TContract"/>.</summary>

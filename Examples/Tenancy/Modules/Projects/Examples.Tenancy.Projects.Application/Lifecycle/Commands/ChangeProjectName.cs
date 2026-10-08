@@ -28,7 +28,7 @@ public sealed class ChangeProjectNameHandler(IProjectStore store) : ICommandHand
     public async ValueTask<Unit> Handle(ChangeProjectName command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.Rename(command.Name);
         await store.SaveAsync(cancellationToken);

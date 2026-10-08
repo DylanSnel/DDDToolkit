@@ -80,9 +80,9 @@ public sealed class RecordInspectionHandler(IInspectionStore store, IProjectGate
             scope.Tenant,
             command.Project,
             command.Title,
-            command.Days ?? DateRange.Of(DateOnly.FromDateTime(now.UtcDateTime)),
+            command.Days ?? DateRange.OneDay(DateOnly.FromDateTime(now.UtcDateTime)),
             project.Planned,
-            ActingSeat.Of(scope),
+            ActingSeat.From(scope),
             now);
 
         store.Add(inspection);

@@ -209,8 +209,8 @@ public class ActorTests
 
         // The system's kind is the toolkit's own; the other three are Tenancy's.
         TenancyActorKinds.System.Should().Be(ActedByKinds.System);
-        Enum.GetValues<TenancyActorKind>().Select(TenancyActorKinds.Of).Should().Equal("seat", "operator", "system", "token");
-        TenancyActor<SeatId>.OfSystem("tenancy").ToActedBy().Should().Be(ActedBy.Of(Caller.SystemIn("tenancy")), "system work is recorded as the toolkit records it");
+        Enum.GetValues<TenancyActorKind>().Select(TenancyActorKinds.From).Should().Equal("seat", "operator", "system", "token");
+        TenancyActor<SeatId>.OfSystem("tenancy").ToActedBy().Should().Be(ActedBy.From(Caller.SystemIn("tenancy")), "system work is recorded as the toolkit records it");
     }
 
     [Fact]

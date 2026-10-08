@@ -211,6 +211,13 @@ The value is the domain's word for the input. An edge whose input is called othe
 `Prefixed("shipTo")` does for a value object's failures. It stays an argument and is no property of the
 refusal, because a refusal about a command as a whole has no field to name.
 
+The toolkit and its packages keep their codes in a class, each code with its kind and its English text, and
+make the refusal with `Refuse`: `throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound)`, or with the values
+its text names, `ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", role))`, which fills in
+`{Role}`. A module can keep its own codes the same way, so a handler reads
+`throw ProjectRefusals.Refuse(ProjectRefusals.NotFound)` and nobody writes a kind or a text twice. The Tenancy
+sample's `ProjectRefusals` is such a class, with its English and Dutch texts in the resource files beside it.
+
 ## GraphQL
 
 `DDDToolkit.HotChocolate` has an error filter that does all of the above for you: every failure the

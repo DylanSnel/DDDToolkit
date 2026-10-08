@@ -49,7 +49,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
     {
         using var context = FilingPostgres.Model();
         var staff = context.Model.FindEntityType(typeof(FolderMember))!;
-        var held = MembershipModel.Of(context.Model, typeof(FolderMember))!.Roles;
+        var held = MembershipModel.For(context.Model, typeof(FolderMember))!.Roles;
 
         var written = new FolderMembershipFunctions().Contribute(context, Export)!.Policies;
 
@@ -152,7 +152,7 @@ public sealed class ContributionTests(FilingPostgres postgres)
     public void Where_the_roles_are_kept_the_lock_holds_a_role_given_to_one_the_caller_sees_and_a_trigger_keeps_the_owners_role_in_use()
     {
         using var gardens = PostgresGarden.Model();
-        var held = MembershipModel.Of(gardens.Model, typeof(PlotGardener))!.Roles.GetTableName();
+        var held = MembershipModel.For(gardens.Model, typeof(PlotGardener))!.Roles.GetTableName();
         var plots = new PlotMembershipFunctions().Contribute(gardens, Export)!;
 
         // The plots' rules name the key that changes the gardeners. On the table of the roles a gardener holds a

@@ -25,6 +25,6 @@ internal sealed class ProjectRoleFieldKeys : IFieldKeys<ProjectRoleListing>
         return ValueTask.FromResult(
             string.Equals(key, ProjectRoleListing.KeysKey, StringComparison.Ordinal) && parent.Keys is not null
                 ? null
-                : TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", key)));
+                : TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", key)));
     }
 }

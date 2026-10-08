@@ -166,7 +166,7 @@ public abstract class TenancySaveInterceptor : SaveChangesInterceptor
             return;
         }
 
-        var kind = TenancyActorKinds.Of(actor.Kind);
+        var kind = TenancyActorKinds.From(actor.Kind);
         var seat = actor.Kind == TenancyActorKind.Seat ? actor.SeatId : null;
         var identity = actor.Kind == TenancyActorKind.Operator ? actor.Operator : null;
 

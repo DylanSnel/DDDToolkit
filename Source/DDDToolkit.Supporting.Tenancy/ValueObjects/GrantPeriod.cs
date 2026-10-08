@@ -31,7 +31,7 @@ public readonly record struct GrantPeriod
     /// <exception cref="DDDToolkit.Exceptions.RefusalException"><c>tenancy.invalid-period</c>: it ends at or before it starts.</exception>
     public static GrantPeriod Between(DateTimeOffset starts, DateTimeOffset? ends)
         => ends is { } end && end <= starts
-            ? throw TenancyRefusals.Of(TenancyRefusals.InvalidPeriod)
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.InvalidPeriod)
             : new GrantPeriod(starts, ends);
 
     /// <summary>Whether the period covers <paramref name="moment"/>: it has started, and has not ended.</summary>

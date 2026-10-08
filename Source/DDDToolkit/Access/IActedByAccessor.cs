@@ -28,7 +28,7 @@ public interface IActedByAccessor
 /// <summary>
 /// Who is acting, read from the toolkit's own caller: a signed-in user by its id, scoped system work as the
 /// system with its scope, the system as the system, and an anonymous caller as anonymous
-/// (<see cref="ActedBy.Of"/>). The caller is whoever the host's <see cref="ICallerAccessor"/> names, and
+/// (<see cref="ActedBy.From"/>). The caller is whoever the host's <see cref="ICallerAccessor"/> names, and
 /// without one the caller <see cref="Callers.Begin"/> made current, or the system outside any.
 /// </summary>
 public sealed class CallerActedByAccessor : IActedByAccessor
@@ -40,5 +40,5 @@ public sealed class CallerActedByAccessor : IActedByAccessor
     public CallerActedByAccessor(ICallerAccessor? callers = null) => _callers = callers;
 
     /// <inheritdoc />
-    public ActedBy Current => ActedBy.Of(_callers?.Current ?? Callers.Ambient ?? Caller.System);
+    public ActedBy Current => ActedBy.From(_callers?.Current ?? Callers.Ambient ?? Caller.System);
 }

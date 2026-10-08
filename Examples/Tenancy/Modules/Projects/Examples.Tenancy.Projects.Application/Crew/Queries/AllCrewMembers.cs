@@ -48,6 +48,6 @@ public sealed class AllCrewMembersHandler(IProjectReads reads, ProjectAccess acc
         await using var reading = reads.Open();
         var crews = await reading.CrewsOfAsync([query.Project], see, manage, cancellationToken);
 
-        return crews.Count == 1 ? CrewOverviews.Of(crews[0], see.Now) : throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+        return crews.Count == 1 ? CrewOverviews.From(crews[0], see.Now) : throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
     }
 }

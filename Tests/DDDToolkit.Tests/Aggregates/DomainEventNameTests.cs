@@ -7,7 +7,7 @@ using FluentAssertions;
 namespace DDDToolkit.Tests.Aggregates;
 
 /// <summary>
-/// <c>DomainEventName.Of</c> is the piece that lets an event survive a class rename once it has been
+/// <c>DomainEventName.For</c> is the piece that lets an event survive a class rename once it has been
 /// written to a queue or a table. These pin the convention, the override and the deliberate lack of
 /// inheritance.
 /// </summary>
@@ -16,25 +16,25 @@ public class DomainEventNameTests
     [Fact]
     public void AttributedEventsUseTheirStableName()
     {
-        DomainEventName.Of(typeof(BasketOpened)).Should().Be("test.basket-opened");
-        DomainEventName.Of<BasketOpened>().Should().Be("test.basket-opened");
-        DomainEventName.Of(new BasketOpened(BasketId.CreateUnique())).Should().Be("test.basket-opened");
+        DomainEventName.For(typeof(BasketOpened)).Should().Be("test.basket-opened");
+        DomainEventName.For<BasketOpened>().Should().Be("test.basket-opened");
+        DomainEventName.For(new BasketOpened(BasketId.CreateUnique())).Should().Be("test.basket-opened");
     }
 
     [Fact]
     public void UnattributedEventsAreNamedByConvention()
     {
         // This assembly declares no [assembly: Module], so the name is the class name in kebab case alone.
-        DomainEventName.Of(typeof(LineAdded)).Should().Be("line-added");
-        DomainEventName.Of<LineAdded>().Should().Be("line-added");
-        DomainEventName.Of(new LineAdded(BasketId.CreateUnique(), BasketLineId.Create(1)))
+        DomainEventName.For(typeof(LineAdded)).Should().Be("line-added");
+        DomainEventName.For<LineAdded>().Should().Be("line-added");
+        DomainEventName.For(new LineAdded(BasketId.CreateUnique(), BasketLineId.Create(1)))
             .Should().Be("line-added");
     }
 
     [Fact]
     public void ThePinnedNameWinsOverTheConvention()
     {
-        DomainEventName.Of<BasketOpened>().Should().Be("test.basket-opened");
+        DomainEventName.For<BasketOpened>().Should().Be("test.basket-opened");
         DomainEventName.ConventionalNameOf(typeof(BasketOpened)).Should().Be("basket-opened", "the convention is still there to ask for");
     }
 
@@ -104,24 +104,24 @@ public class DomainEventNameTests
     {
         IDomainEvent raised = new BasketOpened(BasketId.CreateUnique());
 
-        DomainEventName.Of(raised).Should().Be("test.basket-opened");
+        DomainEventName.For(raised).Should().Be("test.basket-opened");
     }
 
     [Fact]
     public void TheNameIsNotInherited()
     {
-        // DECISION (pinned): Of() reads the attribute with inherit:false. A derived event is a
+        // DECISION (pinned): For() reads the attribute with inherit:false. A derived event is a
         // different contract on the wire, so it must be named deliberately rather than silently
         // inheriting its base's name.
-        DomainEventName.Of<NamedBaseEvent>().Should().Be("test.named-base");
-        DomainEventName.Of<DerivedFromNamedEvent>().Should().Be("derived-from-named-event");
+        DomainEventName.For<NamedBaseEvent>().Should().Be("test.named-base");
+        DomainEventName.For<DerivedFromNamedEvent>().Should().Be("derived-from-named-event");
     }
 
     [Fact]
     public void NullArgumentsAreRejected()
     {
-        var fromType = () => DomainEventName.Of((Type)null!);
-        var fromInstance = () => DomainEventName.Of((IDomainEvent)null!);
+        var fromType = () => DomainEventName.For((Type)null!);
+        var fromInstance = () => DomainEventName.For((IDomainEvent)null!);
 
         fromType.Should().Throw<ArgumentNullException>();
         fromInstance.Should().Throw<ArgumentNullException>();

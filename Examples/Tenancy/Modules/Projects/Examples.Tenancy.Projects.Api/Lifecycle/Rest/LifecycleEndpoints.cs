@@ -34,7 +34,7 @@ internal static class LifecycleEndpoints
         group.MapPost("/projects", async (ProjectToOpen body, ISender sender, CancellationToken cancellationToken) =>
         {
             var id = await sender.Send(
-                new OpenProject(body.Number ?? string.Empty, body.Name ?? string.Empty, body.UnitId, body.OwnerSeat, Planned: DateRange.Of(body.PlannedFrom, body.PlannedUntil)),
+                new OpenProject(body.Number ?? string.Empty, body.Name ?? string.Empty, body.UnitId, body.OwnerSeat, Planned: DateRange.FromOptional(body.PlannedFrom, body.PlannedUntil)),
                 cancellationToken);
             return Results.Created($"/projects/{id.Value}", new { id });
         });
@@ -50,7 +50,7 @@ internal static class LifecycleEndpoints
         // Two ISO dates plan the project; both left out, or null, take its planned range away.
         group.MapPut("/projects/{id}/planned-range", async (ProjectId id, NewPlannedRange body, HttpRequest request, ISender sender, CancellationToken cancellationToken) =>
         {
-            await sender.Send(new PlanProject(id, DateRange.Of(body.From, body.Until), ProjectVersions.Expected(request)), cancellationToken);
+            await sender.Send(new PlanProject(id, DateRange.FromOptional(body.From, body.Until), ProjectVersions.Expected(request)), cancellationToken);
             return Results.NoContent();
         });
 

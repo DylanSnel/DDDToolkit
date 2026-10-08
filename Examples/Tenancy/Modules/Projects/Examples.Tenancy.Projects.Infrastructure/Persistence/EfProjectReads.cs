@@ -91,7 +91,7 @@ internal sealed class EfProjectReads(IDbContextFactory<ProjectsContext> contexts
         {
             var page = await RowsOf(Listed(reach, filter), reach)
                 .OrderBy(row => row.Number)
-                .TakingOnlyItsOwnCursors(paging, () => ProjectRefusals.Of(ProjectRefusals.CursorInvalid))
+                .TakingOnlyItsOwnCursors(paging, () => ProjectRefusals.Refuse(ProjectRefusals.CursorInvalid))
                 .ToPageAsync(paging, cancellationToken);
 
             return Page<ProjectOverview>.Create(

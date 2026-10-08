@@ -80,7 +80,7 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
             .Where(entry => EF.Property<TenantId>(entry, TenancyEventLogTable.TenantId) == tenant)
             .OrderByDescending(entry => entry.RecordedAt)
             .ThenByDescending(entry => entry.Id)
-            .TakingOnlyItsOwnCursors(paging, () => TenancyRefusals.Of(TenancyRefusals.CursorInvalid))
+            .TakingOnlyItsOwnCursors(paging, () => TenancyRefusals.Refuse(TenancyRefusals.CursorInvalid))
             .ToPageAsync(paging, cancellationToken);
 
         return Page<AccessHistoryEntry>.Create(

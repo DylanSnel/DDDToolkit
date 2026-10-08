@@ -35,7 +35,7 @@ namespace DDDToolkit.HotChocolate.Tests.Infrastructure;
 /// var batches = new WholeBatches();
 /// var schema = services.AddGraphQL().AddQueryType&lt;Query&gt;();   // or AddGraphQLServer("name"), for each schema
 /// batches.AddTo(services);                                      // after the last of them
-/// batches.Of(4);                                                // the list that is asked for next has four items
+/// batches.WholeAt(4);                                           // the list that is asked for next has four items
 /// </code>
 /// </remarks>
 public sealed class WholeBatches : IBatchDispatcher
@@ -70,7 +70,7 @@ public sealed class WholeBatches : IBatchDispatcher
     /// From now on a batch is whole, and sent, when it holds <paramref name="keys"/> keys. Until a test says
     /// otherwise that is one: a batch leaves with its first key.
     /// </summary>
-    public void Of(int keys)
+    public void WholeAt(int keys)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(keys, 1);
         _keys = keys;
@@ -78,14 +78,14 @@ public sealed class WholeBatches : IBatchDispatcher
 
     /// <summary>
     /// From now on a batch of a loader whose keys are <typeparamref name="TKey"/> is whole when it holds
-    /// <paramref name="keys"/> keys, whatever <see cref="Of(int)"/> says for the others: for an answer whose
+    /// <paramref name="keys"/> keys, whatever <see cref="WholeAt(int)"/> says for the others: for an answer whose
     /// loaders are each asked about another number of things, the seats and the roles of a list of crews for one.
     /// </summary>
     /// <remarks>
     /// A batch says nothing of its loader but the type of its keys, so two loaders with keys of one type share the
     /// number.
     /// </remarks>
-    public void Of<TKey>(int keys)
+    public void WholeAt<TKey>(int keys)
         where TKey : notnull
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(keys, 1);
@@ -130,7 +130,7 @@ public sealed class WholeBatches : IBatchDispatcher
     private async Task SendWhenWholeAsync(Batch batch)
     {
         var waited = Stopwatch.StartNew();
-        while (batch.Size < WholeAt(batch) && waited.Elapsed < Patience)
+        while (batch.Size < KeysToBeWhole(batch) && waited.Elapsed < Patience)
         {
             await Task.Delay(1);
         }
@@ -149,7 +149,7 @@ public sealed class WholeBatches : IBatchDispatcher
     }
 
     /// <summary>The number of keys <paramref name="batch"/> is whole at: the one named for its kind of key, or the one for every batch.</summary>
-    private int WholeAt(Batch batch)
+    private int KeysToBeWhole(Batch batch)
         => KindOf(batch) is { } kind && _keysByKind.TryGetValue(kind, out var keys) ? keys : _keys;
 
     /// <summary>

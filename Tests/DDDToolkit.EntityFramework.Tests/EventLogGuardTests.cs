@@ -252,7 +252,7 @@ public sealed class EventLogGuardTests(ExplicitCallersPostgres postgres)
     {
         using var logged = LoggedApiaryContext.ForScripts();
         using var plain = ApiaryContext.ForScripts();
-        var export = new RowAccessExport { Roles = RowAccessRoleNames.Of(ApiaryDatabase.Roles()) };
+        var export = new RowAccessExport { Roles = RowAccessRoleNames.From(ApiaryDatabase.Roles()) };
 
         var script = PostgresRowAccess.Script(logged, ApiaryRules.All, [], export);
 

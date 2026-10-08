@@ -26,7 +26,7 @@ public sealed class DateRangeTests
     [Fact]
     public void A_range_holds_when_its_last_day_is_not_before_its_first()
     {
-        DateRange.Of(Monday).IsValid.Should().BeTrue("one day is a range from that day to itself");
+        DateRange.OneDay(Monday).IsValid.Should().BeTrue("one day is a range from that day to itself");
         Week.IsValid.Should().BeTrue();
 
         var backwards = new DateRange(Monday, Monday.AddDays(-1));
@@ -42,7 +42,7 @@ public sealed class DateRangeTests
         Week.Contains(new DateRange(Monday.AddDays(2), Monday.AddDays(3))).Should().BeTrue();
         Week.Contains(new DateRange(Monday.AddDays(5), Monday.AddDays(7))).Should().BeFalse("one day past the end is outside");
         Week.Contains(new DateRange(Monday.AddDays(-1), Monday)).Should().BeFalse("one day before the start is outside");
-        DateRange.Of(Monday).Contains(Week).Should().BeFalse();
+        DateRange.OneDay(Monday).Contains(Week).Should().BeFalse();
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public sealed class DateRangeTests
         Week.Overlaps(around).Should().BeTrue("they share the Sunday");
         around.Overlaps(Week).Should().BeTrue();
         around.Overlaps(next).Should().BeTrue();
-        Week.Overlaps(DateRange.Of(Monday.AddDays(3))).Should().BeTrue("a range within another overlaps it");
+        Week.Overlaps(DateRange.OneDay(Monday.AddDays(3))).Should().BeTrue("a range within another overlaps it");
     }
 
     [Fact]
@@ -70,9 +70,9 @@ public sealed class DateRangeTests
     [Fact]
     public void Two_optional_days_say_a_range_none_or_one_that_does_not_hold()
     {
-        DateRange.Of(Monday, Monday.AddDays(6)).Should().Be(Week);
-        DateRange.Of(null, null).Should().BeNull("both left out is no range");
-        DateRange.Of(Monday, null)!.IsValid.Should().BeFalse("half a range is not a range, and whoever is handed it refuses it");
-        DateRange.Of(null, Monday)!.IsValid.Should().BeFalse();
+        DateRange.FromOptional(Monday, Monday.AddDays(6)).Should().Be(Week);
+        DateRange.FromOptional(null, null).Should().BeNull("both left out is no range");
+        DateRange.FromOptional(Monday, null)!.IsValid.Should().BeFalse("half a range is not a range, and whoever is handed it refuses it");
+        DateRange.FromOptional(null, Monday)!.IsValid.Should().BeFalse();
     }
 }

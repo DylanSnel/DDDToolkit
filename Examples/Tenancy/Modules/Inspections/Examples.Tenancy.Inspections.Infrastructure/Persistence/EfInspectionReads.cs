@@ -97,7 +97,7 @@ internal sealed class EfInspectionReads(IDbContextFactory<InspectionsContext> co
     }
 
     /// <summary>The refusal of a marker that is not a cursor a list of inspections gave.</summary>
-    private static Exception NotThisLists() => InspectionRefusals.Of(InspectionRefusals.CursorInvalid);
+    private static Exception NotThisLists() => InspectionRefusals.Refuse(InspectionRefusals.CursorInvalid);
 
     /// <summary>
     /// The order every list of inspections has: newest first, and those recorded at the same instant by their ids,

@@ -50,7 +50,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
         // What the token says, as the routes' policy and the modules' own checks ask it.
         if (!SampleTokenRoles.IsOperator(Callers.Ambient))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.OperatorsOnly);
+            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }
 
         return next(context);

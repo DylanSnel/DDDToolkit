@@ -1509,7 +1509,7 @@ public sealed class RegisterOrganizationHandler(TenancyUseCases.TenantCommands t
         if (caller.UserId is not { } administrator
             || string.Equals(caller.Claim("is_anonymous"), "true", StringComparison.OrdinalIgnoreCase))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.IdentityRequired);
+            throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
         }
 
         // What it runs with: system work outside any tenant, begun here, which is what provisions a tenant.
@@ -1828,7 +1828,7 @@ var mine = (await selection.SeatsOfAsync<Seat>(callers.Current, cancellationToke
     .Select(found => (found.Slug, found.OrganizationName, Seat: new SeatListing(found.Seat.Id, found.Seat.DisplayName, found.Seat.Status)));
 
 // Renamed by a command of yours: a seat renames itself; another seat takes seats.manage for the whole tenant.
-var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
+var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
 seat.Rename(command.DisplayName);
 await store.SaveAsync(cancellationToken);
 ```
@@ -2280,13 +2280,13 @@ public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizze
     {
         if (TenancyUseCases.CurrentCaller() is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
         {
-            throw QuizRefusals.Of(QuizRefusals.SeatsOnly);
+            throw QuizRefusals.Refuse(QuizRefusals.SeatsOnly);
         }
 
-        var quiz = await quizzes.FindAsync(quizId, cancellationToken) ?? throw QuizRefusals.Of(QuizRefusals.NotFound);
+        var quiz = await quizzes.FindAsync(quizId, cancellationToken) ?? throw QuizRefusals.Refuse(QuizRefusals.NotFound);
         if (!quiz.Passes(answers))
         {
-            throw QuizRefusals.Of(QuizRefusals.NotPassed);
+            throw QuizRefusals.Refuse(QuizRefusals.NotPassed);
         }
 
         // The role and the unit are the quiz's own, which an administrator set when making it.
@@ -3195,7 +3195,7 @@ public sealed class CloseProjectHandler(IProjectStore store) : ICommandHandler<C
     public async ValueTask<Unit> Handle(CloseProject command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)   // If-Match held at the load
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.Close();
         await store.SaveAsync(cancellationToken);
@@ -3743,7 +3743,7 @@ var page = await db.Set<EventLogEntry>().AsNoTracking()
     .Where(entry => EF.Property<TenantId>(entry, TenancyEventLogTable.TenantId) == tenant)
     .OrderByDescending(entry => entry.RecordedAt)
     .ThenByDescending(entry => entry.Id)
-    .TakingOnlyItsOwnCursors(paging, () => TenancyRefusals.Of(TenancyRefusals.CursorInvalid))
+    .TakingOnlyItsOwnCursors(paging, () => TenancyRefusals.Refuse(TenancyRefusals.CursorInvalid))
     .ToPageAsync(paging, cancellationToken);
 
 // Tenants.Api/History/Rest/HistoryEndpoints.cs: the route maps size and after to the same arguments
@@ -4233,7 +4233,7 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
     public async ValueTask<RefusalException?> RefusedAsync(CrewOverview parent, string key, IResolverContext context, CancellationToken cancellationToken)
         => await context.DataLoader<IHeldKeysByProjectIdDataLoader>().LoadAsync(parent.ProjectId, cancellationToken) is { } held && held.Keys.Contains(key, StringComparer.Ordinal)
             ? null
-            : ProjectRefusals.Of(ProjectRefusals.NotPermitted, ("Key", key));
+            : ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Key", key));
 }
 ```
 

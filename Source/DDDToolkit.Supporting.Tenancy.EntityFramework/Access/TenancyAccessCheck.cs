@@ -63,7 +63,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
                 answers.RequireTenant();
                 if (!await HoldsForTheWholeTenantAsync(required.Key, cancellationToken).ConfigureAwait(false))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", required.Key));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key));
                 }
 
                 break;
@@ -73,7 +73,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
                 answers.RequireTenant();
                 if (!await HoldsAtAsync(required.Key, required.Unit, cancellationToken).ConfigureAwait(false))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", required.Key), ("Unit", required.Unit));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", required.Key), ("Unit", required.Unit));
                 }
 
                 break;
@@ -82,7 +82,7 @@ internal sealed class TenancyAccessCheck<TTenantId, TSeatId, TUnitId, TRoleId, T
                 // The token's own role, never the Tenancy caller: an operator is nobody in every tenant.
                 if (!options.IsOperator(callers.Current))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.OperatorsOnly);
+                    throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
                 }
 
                 break;

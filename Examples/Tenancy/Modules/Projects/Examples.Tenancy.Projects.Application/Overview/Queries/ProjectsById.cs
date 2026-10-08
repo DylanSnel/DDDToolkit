@@ -34,7 +34,7 @@ public sealed record ProjectsById(IReadOnlyList<ProjectId> Ids) : IQuery<IReadOn
 
         var asked = ids.Distinct().ToList();
         return asked.Count > MostProjects
-            ? throw ProjectRefusals.Of(ProjectRefusals.TooManyIds, ("Max", MostProjects))
+            ? throw ProjectRefusals.Refuse(ProjectRefusals.TooManyIds, ("Max", MostProjects))
             : asked;
     }
 }

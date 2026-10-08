@@ -32,7 +32,7 @@ public sealed record KeysHeldAtRoot(IReadOnlyCollection<string> Keys) : IQuery<I
         var unknown = asked.Where(key => !catalogue.Knows(key)).ToList();
 
         return unknown.Count > 0
-            ? throw TenancyRefusals.Of(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", unknown)))
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", unknown)))
             : [.. asked.Where(catalogue.IsLive)];
     }
 }

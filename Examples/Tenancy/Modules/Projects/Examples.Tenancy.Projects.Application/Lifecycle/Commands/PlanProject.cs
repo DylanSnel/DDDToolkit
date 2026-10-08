@@ -33,7 +33,7 @@ public sealed class PlanProjectHandler(IProjectStore store) : ICommandHandler<Pl
     public async ValueTask<Unit> Handle(PlanProject command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Id, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.Plan(command.Planned);
         await store.SaveAsync(cancellationToken);

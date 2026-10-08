@@ -285,7 +285,7 @@ public abstract class StoreTests(TestDatabases databases) : IAsyncLifetime
             .AddDDDToolkitEntityFramework(options => options.UseOutbox<TestTenancyContext>(outbox => outbox
                 .SendTo(sink)
                 .PublishAs<OrganizationRoleGranted<TenantId, SeatId, OrganizationUnitId, RoleId>, RoleGiven>(granted => new RoleGiven(
-                    granted.SeatId.Value, TenancyActorKinds.Of(granted.By!.Value.Kind), granted.By.Value.Seat?.Value, granted.By.Value.Operator, granted.By.Value.Scope))
+                    granted.SeatId.Value, TenancyActorKinds.From(granted.By!.Value.Kind), granted.By.Value.Seat?.Value, granted.By.Value.Operator, granted.By.Value.Scope))
                 .PublishAs<RoleKeysChanged<TenantId, RoleId, SeatId>, RoleKeysSet>(changed => new RoleKeysSet(
                     changed.RoleId.Value, string.Join(" ", changed.Added), string.Join(" ", changed.Removed), changed.By!.Value.Seat?.Value)))));
 

@@ -26,7 +26,7 @@ public sealed class SeatRefusalResults : IAuthorizationMiddlewareResultHandler
         if (authorizeResult.Forbidden
             && authorizeResult.AuthorizationFailure?.FailureReasons.Any(reason => reason.Handler is OperatorRequirementHandler) == true)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.OperatorsOnly);
+            throw TenancyRefusals.Refuse(TenancyRefusals.OperatorsOnly);
         }
 
         var forWantOfASeat = authorizeResult.Forbidden

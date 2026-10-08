@@ -61,7 +61,7 @@ public sealed class KeysOnProjectsHandler(IProjectReads reads, ProjectAccess acc
         var projects = query.Projects.Distinct().ToList();
         if (projects.Count > KeysOnProjects.MostProjects)
         {
-            throw ProjectRefusals.Of(ProjectRefusals.TooManyIds, ("Max", KeysOnProjects.MostProjects));
+            throw ProjectRefusals.Refuse(ProjectRefusals.TooManyIds, ("Max", KeysOnProjects.MostProjects));
         }
 
         var keys = KeysHeldAtRoot.Known(query.Keys, catalogue);

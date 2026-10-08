@@ -31,7 +31,7 @@ public sealed class RemoveCrewMemberHandler(IProjectStore store, SampleAnswers a
     public async ValueTask<Unit> Handle(RemoveCrewMember command, CancellationToken cancellationToken)
     {
         var project = await store.LoadAsync(command.Project, command.ExpectedVersion, cancellationToken)
-            ?? throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+            ?? throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
 
         project.RemoveFromCrew(command.Seat);
 

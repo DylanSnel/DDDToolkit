@@ -208,7 +208,7 @@ public class CultureScopeTests
             .BuildServiceProvider();
         var localizer = provider.GetRequiredService<IFailureLocalizer>();
 
-        var refusal = ToolkitRefusals.Of(ToolkitRefusals.Refused);
+        var refusal = ToolkitRefusals.Refuse(ToolkitRefusals.Refused);
         var error = new Mystery().ValidationErrors.Single();
         var till = new Till(TillId.CreateUnique(), limit: 100m);
         till.Deposit(150m);

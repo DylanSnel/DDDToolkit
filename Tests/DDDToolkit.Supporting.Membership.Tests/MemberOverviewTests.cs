@@ -27,13 +27,13 @@ public sealed class MemberOverviewTests
         document.ShareWith(Second, MemberPeriod.Open(Now), Now, by: Fourth);
         document.ShareWith(First, MemberPeriod.Open(Now.AddDays(1)), Now, by: Fourth);
 
-        var overview = MemberOverviews.Of(document.Shares, document.OwnerId, Now.AddDays(10));
+        var overview = MemberOverviews.From(document.Shares, document.OwnerId, Now.AddDays(10));
 
         overview.Select(member => member.Member).Should().Equal(Fourth, Second, First, Third);
         overview.Select(member => member.IsOwner).Should().Equal(true, false, false, false);
 
         // The same members in any order they were read in are listed in the same order.
-        MemberOverviews.Of(document.Shares.Reverse(), document.OwnerId, Now.AddDays(10)).Select(member => member.Member)
+        MemberOverviews.From(document.Shares.Reverse(), document.OwnerId, Now.AddDays(10)).Select(member => member.Member)
             .Should().Equal(Fourth, Second, First, Third);
     }
 
@@ -44,7 +44,7 @@ public sealed class MemberOverviewTests
         document.GiveRole(First, DocumentMembership.Onlooker, MemberPeriod.Open(Now), Now, by: First);
         document.GiveRole(First, DocumentMembership.Contributor, MemberPeriod.Between(Now.AddDays(-3), Now.AddDays(3)), Now, by: First);
 
-        var owner = MemberOverviews.Of(document.Shares, document.OwnerId, Now).Should().ContainSingle().Which;
+        var owner = MemberOverviews.From(document.Shares, document.OwnerId, Now).Should().ContainSingle().Which;
 
         // The contributor's role started first; the owner's and the onlooker's started together, and are told apart by role.
         owner.Roles.Select(held => held.Role.Value).Should().Equal("contributor", "onlooker", "owner");
@@ -64,7 +64,7 @@ public sealed class MemberOverviewTests
         document.ShareWith(Third, DocumentMembership.Onlooker, MemberPeriod.Open(Now.AddDays(20)), Now, by: First);
 
         MemberOverview<UserId, NamedRole> Of(UserId member, DateTimeOffset moment)
-            => MemberOverviews.Of(document.Shares, document.OwnerId, moment).Single(shown => shown.Member == member);
+            => MemberOverviews.From(document.Shares, document.OwnerId, moment).Single(shown => shown.Member == member);
 
         // On day 10 the membership counts, the contributor's role has run out and the onlooker's goes on.
         var midway = Of(Second, Now.AddDays(10));
@@ -111,7 +111,7 @@ public sealed class MemberOverviewTests
         IReadOnlyList<MemberOverview<StaffCode, NamedRole>> overview;
         using (CultureScope.Use(language))
         {
-            overview = MemberOverviews.Of(folder.Staff, folder.Keeper, Now);
+            overview = MemberOverviews.From(folder.Staff, folder.Keeper, Now);
         }
 
         overview.Select(member => member.Member.Value).Should().Equal(["K-001", "B-1", "a-2", "aa-1", "z-1"], "the owner first, then the members by the characters of their codes");
@@ -126,11 +126,11 @@ public sealed class MemberOverviewTests
         folder.Admit(new StaffCode("C-014"), FolderMembership.Clerk, MemberPeriod.Open(Now), Now, by: keeper);
         folder.Admit(new StaffCode("A-200"), FolderMembership.Visitor, MemberPeriod.Open(Now), Now, by: keeper);
 
-        var overview = MemberOverviews.Of(folder.Staff, folder.Keeper, Now);
+        var overview = MemberOverviews.From(folder.Staff, folder.Keeper, Now);
 
         overview.Select(member => member.Member.Value).Should().Equal("K-001", "A-200", "C-014");
         overview[0].Roles.Single().Role.Should().Be(FolderMembership.Keeper);
-        MemberOverviews.Of(Array.Empty<FolderMember>(), keeper, Now).Should().BeEmpty();
-        FluentActions.Invoking(() => MemberOverviews.Of<FolderMemberId, StaffCode, NamedRole>(null!, keeper, Now)).Should().Throw<ArgumentNullException>();
+        MemberOverviews.From(Array.Empty<FolderMember>(), keeper, Now).Should().BeEmpty();
+        FluentActions.Invoking(() => MemberOverviews.From<FolderMemberId, StaffCode, NamedRole>(null!, keeper, Now)).Should().Throw<ArgumentNullException>();
     }
 }

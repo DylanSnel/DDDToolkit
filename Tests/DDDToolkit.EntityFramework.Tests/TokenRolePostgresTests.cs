@@ -401,7 +401,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
             // it takes privileges back from the role, and would leave it those of the caller's role.
             using (var model = PalletDepotDatabase.Model())
             {
-                var granting = PostgresRowAccess.Script(model, PalletDepotDatabase.Rules, [], new RowAccessExport { Roles = RowAccessRoleNames.Of(options), WriteGrants = true });
+                var granting = PostgresRowAccess.Script(model, PalletDepotDatabase.Rules, [], new RowAccessExport { Roles = RowAccessRoleNames.From(options), WriteGrants = true });
                 var unnamed = () => database.RunAsOwnerAsync(granting, Cancellation);
                 (await unnamed.Should().ThrowAsync<PostgresException>()).Which.MessageText.Should().Be(HasTheirPrivileges(role));
             }
@@ -468,7 +468,7 @@ public sealed class TokenRolePostgresTests(PalletDepotDatabase database) : IAsyn
     private static string ScriptWith(PostgresRowLevelSecurityOptions options, params RowAccessRule[] rules)
     {
         using var model = PalletDepotDatabase.Model();
-        return PostgresRowAccess.Script(model, [.. PalletDepotDatabase.Rules, .. rules], [], new RowAccessExport { Roles = RowAccessRoleNames.Of(options) });
+        return PostgresRowAccess.Script(model, [.. PalletDepotDatabase.Rules, .. rules], [], new RowAccessExport { Roles = RowAccessRoleNames.From(options) });
     }
 
     /// <summary>What a script says of the mapped role <paramref name="role"/> that has the privileges of the user's or the anonymous caller's role.</summary>

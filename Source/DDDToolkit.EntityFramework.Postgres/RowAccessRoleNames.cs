@@ -109,7 +109,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
     /// It is a role of its own: never the user's, the anonymous caller's or the scoped system role, and never
     /// a role a token role is mapped to, which is checked where a script names it. A host whose system caller
     /// runs as a role that bypasses row level security, Supabase's <c>service_role</c> for one, leaves this
-    /// <see langword="null"/>: <c>RowAccessRoleNames.Of(options) with { System = null }</c>.
+    /// <see langword="null"/>: <c>RowAccessRoleNames.From(options) with { System = null }</c>.
     /// </para>
     /// </summary>
     /// <exception cref="ArgumentException">
@@ -135,7 +135,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
     /// <exception cref="ArgumentException">A role of <paramref name="options"/> cannot be a policy's.</exception>
-    public static RowAccessRoleNames Of(PostgresRowLevelSecurityOptions options)
+    public static RowAccessRoleNames From(PostgresRowLevelSecurityOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
@@ -187,7 +187,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
 
             resolved = role;
             problem = $"'{role}' is the token role '{tokenRole}', which is mapped to no database role, so no query ever runs as it. " +
-                      $"Map it in PostgresRowLevelSecurityOptions.TokenRoles and write the script with RowAccessRoleNames.Of those options, or, for the Supabase export, add 'token:{tokenRole}=<role>' to SupabaseRowAccessRoles.";
+                      $"Map it in PostgresRowLevelSecurityOptions.TokenRoles and write the script with RowAccessRoleNames.From(options), or, for the Supabase export, add 'token:{tokenRole}=<role>' to SupabaseRowAccessRoles.";
             return false;
         }
 
@@ -196,7 +196,7 @@ public sealed record RowAccessRoleNames(string User, string Anonymous, string Sy
             resolved = _system ?? role;
             problem = _system is null
                 ? $"'{role}' is the role the application's own bookkeeping runs as, and none is configured. " +
-                  "Set PostgresRowLevelSecurityOptions.SystemRole and write the script with RowAccessRoleNames.Of those options, or set RowAccessRoleNames.System; for the Supabase export, add 'system=<role>' to SupabaseRowAccessRoles."
+                  "Set PostgresRowLevelSecurityOptions.SystemRole and write the script with RowAccessRoleNames.From(options), or set RowAccessRoleNames.System; for the Supabase export, add 'system=<role>' to SupabaseRowAccessRoles."
                 : NotABookkeepingRole() ?? "";
             return problem.Length == 0;
         }

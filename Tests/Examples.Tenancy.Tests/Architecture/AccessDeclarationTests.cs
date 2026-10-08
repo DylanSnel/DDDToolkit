@@ -53,7 +53,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new KeysHeldAtRoot([ProjectKeys.Open]), TenancyAccess.InTenant()),
         (new OpenProject("P-900", "Quay wall", TheUnit, SeatId.CreateSequential(), ProjectId.CreateSequential()), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit)),
         (new ChangeProjectName(TheProject, "Quay wall, east", ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
-        (new PlanProject(TheProject, DateRange.Of(new DateOnly(2026, 10, 5)), ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
+        (new PlanProject(TheProject, DateRange.OneDay(new DateOnly(2026, 10, 5)), ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
         (new MoveProjectToUnit(TheProject, OrganizationUnitId.CreateSequential()), MemberAccess.On(ProjectKeys.Edit, TheProject)),
         (new CloseProject(TheProject), MemberAccess.On(ProjectKeys.Close, TheProject)),
         (new ReopenProject(TheProject), MemberAccess.On(ProjectKeys.Close, TheProject)),
@@ -379,7 +379,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // contract instead.
         foreach (var project in SampleLayout.Projects.Where(project => project.Layer == Layer.Application))
         {
-            var scan = TypeScan.Of(project.Anchor.Assembly);
+            var scan = TypeScan.From(project.Anchor.Assembly);
 
             scan.NotResolved.Should().BeEmpty("every token in the code of {0} is read", project.Name);
             scan.Uses.Where(use => use.Type == typeof(ISender) || use.Type == typeof(IMediator) || use.Type == typeof(IPublisher))
@@ -396,7 +396,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         queries.Should().NotBeEmpty();
         foreach (var query in queries)
         {
-            TypeScan.Of(TypeScan.WithNested(query.Handler)).Uses
+            TypeScan.From(TypeScan.WithNested(query.Handler)).Uses
                 .Where(use => IsWritePort(use.Type) || IsPackageCommands(use.Type))
                 .Select(use => use.ToString())
                 .Should().BeEmpty("{0} reads: it names nothing that loads to change, or saves", query.Handler.Name);
@@ -458,7 +458,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // identity of the caller's own token, which one handler checks before it asks. Nothing else calls it: not
         // another handler, not a route, not the host.
         var named = SampleLayout.Projects.Select(project => project.Anchor.Assembly).Append(typeof(Program).Assembly)
-            .SelectMany(assembly => TypeScan.Of(assembly).MembersNamed)
+            .SelectMany(assembly => TypeScan.From(assembly).MembersNamed)
             .ToList();
 
         named.Where(use => use.Member.DeclaringType == typeof(ITenancyReads) && use.Member.Name == nameof(ITenancyReads.SeatsOfAsync))

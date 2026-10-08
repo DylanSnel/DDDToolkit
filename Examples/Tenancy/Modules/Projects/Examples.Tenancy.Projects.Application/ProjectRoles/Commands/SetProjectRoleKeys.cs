@@ -48,7 +48,7 @@ public sealed class SetProjectRoleKeysHandler(IProjectStore store, ProjectMember
         await checks.RequireAsync(command, cancellationToken);
 
         var keys = MakeProjectRole.Known(command.Keys, catalogue);
-        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Of(ProjectRefusals.RoleNotFound);
+        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Refuse(ProjectRefusals.RoleNotFound);
 
         role.SetRoleKeys(keys, membership.Rules);
         await store.SaveAsync(cancellationToken);

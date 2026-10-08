@@ -30,7 +30,7 @@ internal sealed class TenancyPostgresFailures : ITenancySaveFailures
         ArgumentNullException.ThrowIfNull(context);
 
         return PostgresFailureOf(failure) is { SqlState: PostgresErrorCodes.CheckViolation, ConstraintName: TenancySql.AdministratorRemainsConstraint }
-            ? TenancyRefusals.Of(TenancyRefusals.LastAdmin)
+            ? TenancyRefusals.Refuse(TenancyRefusals.LastAdmin)
             : null;
     }
 

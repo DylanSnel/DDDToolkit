@@ -62,7 +62,7 @@ public sealed class AdmitStaffHandler(
 
         // The folder the request names, which its check read, at the version the caller named, if it named one.
         var folder = await context.Folders.AsTracking().SingleOrDefaultAsync(candidate => candidate.Id == command.Folder, cancellationToken)
-            ?? throw FolderRefusals.Membership.Of(MembershipRefusals.NotFound);
+            ?? throw FolderRefusals.Membership.Refuse(MembershipRefusals.NotFound);
         context.ExpectVersion(folder, command.ExpectedVersion);
 
         StaffCode? by = callers.Current.Claim("app_metadata.staff") is { } code ? new StaffCode(code) : null;

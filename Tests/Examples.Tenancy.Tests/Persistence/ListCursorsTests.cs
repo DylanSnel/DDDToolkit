@@ -25,13 +25,13 @@ public sealed class ListCursorsTests
         { "plain text", Markers.PlainText },
         { "nothing", string.Empty },
         { "a head and no value", Markers.HeadAlone },
-        { "a head that does not close", Markers.Of("{P-001") },
+        { "a head that does not close", Markers.From("{P-001") },
         { "a head that is not three numbers", Markers.UnreadableHead },
-        { "a head that says where the list is", Markers.Of("{3|0|99}P-001") },
-        { "two values for one key", Markers.Of("{}P-001:P-002") },
-        { "Base64 cut short", Markers.Of("{}P-001")[..^3] },
+        { "a head that says where the list is", Markers.From("{3|0|99}P-001") },
+        { "two values for one key", Markers.From("{}P-001:P-002") },
+        { "Base64 cut short", Markers.From("{}P-001")[..^3] },
         { "a letter that is not ASCII", "e31QLTAwMQ" + (char)0xE9 + "=" },
-        { "a text longer than any cursor", Markers.Of("{}" + new string('P', 600)) },
+        { "a text longer than any cursor", Markers.From("{}" + new string('P', 600)) },
     };
 
     [Fact]
@@ -40,7 +40,7 @@ public sealed class ListCursorsTests
         var number = CursorOf(ByNumber, new Numbered("P-001"));
         var moment = CursorOf(ByMoment, SomeRow);
 
-        number.Should().Be(Markers.Of("{}P-001"), "the head is empty and the value follows it");
+        number.Should().Be(Markers.From("{}P-001"), "the head is empty and the value follows it");
         ListCursors.IsACursorOf(ByNumber, number).Should().BeTrue();
         ListCursors.IsACursorOf(ByMoment, moment).Should().BeTrue();
 
@@ -53,7 +53,7 @@ public sealed class ListCursorsTests
     {
         ListCursors.IsACursorOf(ByMoment, CursorOf(ByNumber, new Numbered("P-001"))).Should().BeFalse("one value where the list is ordered by two");
         ListCursors.IsACursorOf(ByNumber, CursorOf(ByMoment, SomeRow)).Should().BeFalse("two values where the list is ordered by one");
-        ListCursors.IsACursorOf(ByMoment, Markers.Of("{}P-001:P-002")).Should().BeFalse("two values, neither a moment nor an id");
+        ListCursors.IsACursorOf(ByMoment, Markers.From("{}P-001:P-002")).Should().BeFalse("two values, neither a moment nor an id");
         ListCursors.IsACursorOf(ByMoment, CursorOf(ByMoment, SomeRow)[..^4]).Should().BeFalse("the id is cut short");
     }
 
@@ -69,7 +69,7 @@ public sealed class ListCursorsTests
 
         ListCursors.IsACursorOf(ByNumber, crafted).Should().BeFalse("the lists of the sample write an empty head");
         ListCursors.IsACursorOf(ByNumber, crafted, relative: true).Should().BeTrue("a list with relative cursors writes three numbers");
-        ListCursors.IsACursorOf(ByNumber, Markers.Of("{3|0}P-001"), relative: true).Should().BeFalse("and there are three");
+        ListCursors.IsACursorOf(ByNumber, Markers.From("{3|0}P-001"), relative: true).Should().BeFalse("and there are three");
     }
 
     [Fact]
@@ -96,13 +96,13 @@ public sealed class ListCursorsTests
     [Fact]
     public void A_text_the_library_reads_leniently_is_the_place_it_names()
     {
-        ListCursors.IsACursorOf(ByNumber, Markers.Of("P-001")).Should().BeTrue("a value with no head in front of it is read as that value");
-        ListCursors.IsACursorOf(ByNumber, Markers.Of("{}P-001:")).Should().BeTrue("a separator after the last value is read as its end");
-        ListCursors.IsACursorOf(ByNumber, Markers.Of("{3x|0|99}P-001"), relative: true).Should().BeTrue("a number in the head is read as far as it is one");
+        ListCursors.IsACursorOf(ByNumber, Markers.From("P-001")).Should().BeTrue("a value with no head in front of it is read as that value");
+        ListCursors.IsACursorOf(ByNumber, Markers.From("{}P-001:")).Should().BeTrue("a separator after the last value is read as its end");
+        ListCursors.IsACursorOf(ByNumber, Markers.From("{3x|0|99}P-001"), relative: true).Should().BeTrue("a number in the head is read as far as it is one");
 
         // None of them is a way past what the check is for: a head that says where the list is stays refused for
         // a list that writes none, however it is spelled.
-        ListCursors.IsACursorOf(ByNumber, Markers.Of("{3x|0|99}P-001")).Should().BeFalse();
+        ListCursors.IsACursorOf(ByNumber, Markers.From("{3x|0|99}P-001")).Should().BeFalse();
     }
 
     /// <summary>

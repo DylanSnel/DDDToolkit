@@ -67,7 +67,7 @@ public sealed class MemberAdmission<TResourceId, TMemberId, TRoleId>
     {
         if (_directory is not null && !await _directory.IsActiveAsync(member, cancellationToken).ConfigureAwait(false))
         {
-            throw _codes.Of(MembershipRefusals.MemberNotActive, (MembershipCodes.DefaultMemberArgument, member));
+            throw _codes.Refuse(MembershipRefusals.MemberNotActive, (MembershipCodes.DefaultMemberArgument, member));
         }
     }
 
@@ -85,7 +85,7 @@ public sealed class MemberAdmission<TResourceId, TMemberId, TRoleId>
         if (!await _roles.ExistsAsync(role, cancellationToken).ConfigureAwait(false)
             || (_policy is not null && !await _policy.MayHoldAsync(role, cancellationToken).ConfigureAwait(false)))
         {
-            throw _codes.Of(MembershipRefusals.RoleNotForMembers, ("Role", role));
+            throw _codes.Refuse(MembershipRefusals.RoleNotForMembers, ("Role", role));
         }
     }
 
@@ -97,7 +97,7 @@ public sealed class MemberAdmission<TResourceId, TMemberId, TRoleId>
     /// <param name="cancellationToken">Cancels the lookup.</param>
     /// <exception cref="Exceptions.RefusalException"><c>no-owner-role</c> when there is none in use, under the resource's codes.</exception>
     public async ValueTask<TRoleId> OwnerRoleAsync(CancellationToken cancellationToken)
-        => await _roles.FindOwnerRoleAsync(cancellationToken).ConfigureAwait(false) ?? throw _codes.Of(MembershipRefusals.NoOwnerRole);
+        => await _roles.FindOwnerRoleAsync(cancellationToken).ConfigureAwait(false) ?? throw _codes.Refuse(MembershipRefusals.NoOwnerRole);
 
     /// <summary>
     /// The role every owner holds, or <see langword="null"/> when there is none in use: for a use case that

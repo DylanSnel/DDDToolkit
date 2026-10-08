@@ -29,7 +29,7 @@ public sealed class ProjectTenancy(ProjectAccess access)
         var active = access.Questions(reading).Units().Where(row => row.Id == unit && row.Status == UnitStatus.Active);
         if (!await reading.Queries.AnyAsync(active, cancellationToken))
         {
-            throw ProjectRefusals.Of(ProjectRefusals.UnitNotActive, ("Unit", unit));
+            throw ProjectRefusals.Refuse(ProjectRefusals.UnitNotActive, ("Unit", unit));
         }
     }
 }

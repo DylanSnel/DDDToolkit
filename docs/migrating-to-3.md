@@ -229,8 +229,8 @@ You can still implement `IDomainEvent` directly. You then write the two properti
 `[DomainEventName]` is new and optional. Without it, an event is named by convention: its module and its
 class name in kebab case, `ordering.order-placed`. Add the attribute when you rename a class whose name
 is already stored or published, to keep the old name; see [Stable names](domain-events.md#stable-names).
-The outbox uses the name as the message name, and `DomainEventName.Of` resolves it. (Early 3.0 builds used
-the bare class name instead; rows they wrote are still read.)
+The outbox uses the name as the message name, and `DomainEventName.For` resolves it (`DomainEventName.Of` up to
+3.1). Early 3.0 builds used the bare class name instead; rows they wrote are still read.
 
 ### Making the timestamp deterministic in tests
 

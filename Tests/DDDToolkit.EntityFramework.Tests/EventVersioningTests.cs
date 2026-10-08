@@ -321,7 +321,7 @@ public sealed class EventVersioningTests : IDisposable
         context.Outbox.Add(new OutboxMessage
         {
             Id = domainEvent.EventId,
-            EventName = name ?? DomainEventName.Of(domainEvent),
+            EventName = name ?? DomainEventName.For(domainEvent),
             Version = version,
             Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), new OutboxOptions().JsonOptions),
             OccurredAt = domainEvent.OccurredAt,

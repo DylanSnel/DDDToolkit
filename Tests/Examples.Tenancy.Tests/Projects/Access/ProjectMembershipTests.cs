@@ -71,7 +71,7 @@ public sealed class ProjectMembershipTests
             var code = ProjectRefusals.Membership[rule];
 
             ProjectRefusals.Codes.Should().Contain(code, "a crew's refusal has a text of the module's, in both languages: {0}", rule);
-            ProjectRefusals.Of(code).Kind.Should().Be(MembershipRefusals.KindOf(rule), "the module says of {0} what the package refuses it as", code);
+            ProjectRefusals.Refuse(code).Kind.Should().Be(MembershipRefusals.KindOf(rule), "the module says of {0} what the package refuses it as", code);
         }
 
         // The ones a crew had before the package keep the codes they had, and name the seat.

@@ -84,7 +84,7 @@ public static class ToolkitRefusals
     /// <param name="code">One of the codes above.</param>
     /// <param name="innerException">What the refusal was made of, such as the database's own error, for a log to show.</param>
     /// <exception cref="ArgumentException">The code is not one of the toolkit's: a refusal nobody can look up is a bug.</exception>
-    public static RefusalException Of(string code, Exception? innerException = null)
+    public static RefusalException Refuse(string code, Exception? innerException = null)
     {
         var (kind, template) = Row(code);
         return new RefusalException(code, kind, template, arguments: null, innerException);
@@ -98,7 +98,7 @@ public static class ToolkitRefusals
     /// <param name="arguments">The values the text names, by name; a placeholder without one is left as written.</param>
     /// <exception cref="ArgumentException">The code is not one of the toolkit's: a refusal nobody can look up is a bug.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="arguments"/> is null.</exception>
-    public static RefusalException Of(string code, params (string Name, object? Value)[] arguments)
+    public static RefusalException Refuse(string code, params (string Name, object? Value)[] arguments)
     {
         ArgumentNullException.ThrowIfNull(arguments);
 

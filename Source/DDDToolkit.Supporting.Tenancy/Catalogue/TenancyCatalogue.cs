@@ -200,7 +200,7 @@ public sealed partial class TenancyCatalogue
 
         var expanded = Expand(keys, _byKey, out var offenders);
         return offenders.Count > 0
-            ? throw TenancyRefusals.Of(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", offenders)))
+            ? throw TenancyRefusals.Refuse(TenancyRefusals.UnknownPermission, ("Keys", string.Join(", ", offenders)))
             : expanded;
     }
 

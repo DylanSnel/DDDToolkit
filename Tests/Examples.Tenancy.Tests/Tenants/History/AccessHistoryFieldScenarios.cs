@@ -86,8 +86,8 @@ public sealed class AccessHistoryFieldScenarios(SampleHosts sample) : IClassFixt
         rows[2].GetProperty("bySeat").ValueKind.Should().Be(JsonValueKind.Null);
 
         // One query for the page, and one question to the directory for the seats its rows name.
-        sent.Of<AccessHistory>().Should().ContainSingle();
-        sent.Of<SeatsById>().Should().ContainSingle().Which.Ids.Should().Equal(Harbor.SeatOf(DemoPeople.Hana));
+        sent.OfType<AccessHistory>().Should().ContainSingle();
+        sent.OfType<SeatsById>().Should().ContainSingle().Which.Ids.Should().Equal(Harbor.SeatOf(DemoPeople.Hana));
 
         // The page's end is the route's marker, and the page after it the route's next page.
         var info = first.GetProperty("pageInfo");

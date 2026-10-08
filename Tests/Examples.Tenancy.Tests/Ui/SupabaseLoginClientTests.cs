@@ -63,7 +63,7 @@ public sealed class SupabaseLoginClientTests
         // In the language the session reads, as every text of the page it is shown on.
         session.SelectLanguage("nl");
         (await login.SignInAsync("rhea@example.test", "wrong", Cancellation))
-            .Should().Be(PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.refused", "nl")))
+            .Should().Be(PasswordSignIn.RefusedBecause(UiTexts.For("login.password.refused", "nl")))
             .And.NotBe(signedIn, "the Dutch text is not the English one");
     }
 
@@ -91,10 +91,10 @@ public sealed class SupabaseLoginClientTests
 
         // A link without a sign-in, one whose sign-in no header can carry, and a password with no sign-in to
         // send it with: Auth is asked nothing.
-        var refused = PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", "en"));
+        var refused = PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", "en"));
         (await login.SignInWithLinkAsync(AuthLink.Read(Page + "#a-token"), Cancellation)).Should().Be(refused);
         (await login.SignInWithLinkAsync(AuthLink.Read(Page + "#access_token=header%0Apayload&expires_at=1790000000"), Cancellation)).Should().Be(refused);
-        (await login.ChoosePasswordAsync(null, "a password", Cancellation)).Should().Be(UiTexts.Of("login.password.session-over", "en"));
+        (await login.ChoosePasswordAsync(null, "a password", Cancellation)).Should().Be(UiTexts.For("login.password.session-over", "en"));
         stub.Requests.Should().HaveCount(2);
     }
 

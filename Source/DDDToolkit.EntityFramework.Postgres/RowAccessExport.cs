@@ -7,7 +7,7 @@ namespace DDDToolkit.EntityFramework.Postgres;
 /// <code>
 /// var sql = PostgresRowAccess.Script(context, rules, functions, new RowAccessExport
 /// {
-///     Roles = RowAccessRoleNames.Of(rowLevelSecurityOptions),
+///     Roles = RowAccessRoleNames.From(rowLevelSecurityOptions),
 /// });
 /// </code>
 /// </summary>
@@ -31,7 +31,7 @@ public sealed class RowAccessExport
     /// <summary>
     /// The database roles the rules' symbolic roles are written as. <see cref="RowAccessRoleNames.Default"/>
     /// by default: <c>authenticated</c>, <c>anon</c> and <c>ddd_system_in</c>, with no token role mapped. A host
-    /// that maps token roles hands over <see cref="RowAccessRoleNames.Of"/> its options, so a rule for
+    /// that maps token roles hands over <see cref="RowAccessRoleNames.From"/> its options, so a rule for
     /// <c>RowAccessRoles.Token(...)</c> is written for the role the queries run as.
     /// </summary>
     /// <exception cref="ArgumentNullException">Set to null.</exception>

@@ -33,7 +33,7 @@ public sealed class AttemptRunner(SampleApi api, ILoginClient login)
             caller = CallAs.Person(attempt.Person, token.AccessToken);
         }
 
-        var tenant = attempt.SendTenant ? TenantChoice.Of(attempt.Tenant) : TenantChoice.None;
+        var tenant = attempt.SendTenant ? TenantChoice.From(attempt.Tenant) : TenantChoice.None;
         var outcome = await api.SendAsync<JsonElement?>(new HttpMethod(attempt.Method), attempt.Path, attempt.Body, caller, tenant, cancellationToken);
         return new AttemptRun(attempt, outcome);
     }

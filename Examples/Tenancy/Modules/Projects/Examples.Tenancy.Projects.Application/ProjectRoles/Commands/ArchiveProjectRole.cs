@@ -41,7 +41,7 @@ public sealed class ArchiveProjectRoleHandler(IProjectStore store, ProjectMember
     {
         await checks.RequireAsync(command, cancellationToken);
 
-        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Of(ProjectRefusals.RoleNotFound);
+        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Refuse(ProjectRefusals.RoleNotFound);
 
         role.TakeOutOfUse(membership.Rules);
         await store.SaveAsync(cancellationToken);

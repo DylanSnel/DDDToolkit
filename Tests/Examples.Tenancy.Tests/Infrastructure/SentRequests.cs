@@ -18,7 +18,7 @@ public sealed class SentRequests
     private readonly ConcurrentQueue<object> _sent = new();
 
     /// <summary>Every request of type <typeparamref name="TRequest"/> sent since the last <see cref="Clear"/>.</summary>
-    public IReadOnlyList<TRequest> Of<TRequest>() => [.. _sent.OfType<TRequest>()];
+    public IReadOnlyList<TRequest> OfType<TRequest>() => [.. _sent.OfType<TRequest>()];
 
     /// <summary>Forgets what was sent so far.</summary>
     public void Clear() => _sent.Clear();

@@ -53,11 +53,11 @@ public sealed class RenameSeatHandler(TenancyUseCases.IStore store, SampleAnswer
         var own = caller.Kind == TenancyCallerKind.Seat && caller.Seat is { } mine && mine.Equals(command.Seat);
         if (!own && !await TenantWideKey.IsHeldAsync(answers, reads, RenameSeat.RequiredKey, cancellationToken))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.NotPermitted, ("Key", RenameSeat.RequiredKey), ("Unit", null));
+            throw TenancyRefusals.Refuse(TenancyRefusals.NotPermitted, ("Key", RenameSeat.RequiredKey), ("Unit", null));
         }
 
         // The store keeps to the caller's tenant: a seat of another tenant is not found, as one of nobody is not.
-        var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
+        var seat = await store.FindSeatAsync(command.Seat, cancellationToken) ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
         seat.Rename(command.DisplayName);
         await store.SaveAsync(cancellationToken);
         return Unit.Value;

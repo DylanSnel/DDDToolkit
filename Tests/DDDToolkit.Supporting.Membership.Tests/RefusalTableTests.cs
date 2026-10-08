@@ -124,7 +124,7 @@ public partial class RefusalTableTests
 
         foreach (var rule in MembershipRefusals.Codes)
         {
-            var refusal = codes.Of(rule);
+            var refusal = codes.Refuse(rule);
             refusal.Code.Should().Be(codes[rule]);
             refusal.Kind.Should().Be(MembershipRefusals.KindOf(rule), "the kind is the rule's, whatever a resource calls it");
         }
@@ -134,7 +134,7 @@ public partial class RefusalTableTests
         MembershipCodes.Under("sales.documents")[MembershipRefusals.NotFound].Should().Be("sales.documents.not-found");
 
         FluentActions.Invoking(() => codes["documents.already-member"]).Should().Throw<ArgumentException>("a rule is named by the package's constant");
-        FluentActions.Invoking(() => codes.Of("documents.already-member")).Should().Throw<ArgumentException>();
+        FluentActions.Invoking(() => codes.Refuse("documents.already-member")).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => codes[null!]).Should().Throw<ArgumentNullException>();
     }
 
@@ -163,7 +163,7 @@ public partial class RefusalTableTests
         own[MembershipRefusals.MemberNotActive].Should().Be("projects.seat-not-active");
         own[MembershipRefusals.OwnerProtected].Should().Be("projects.owner-protected", "a rule nobody renamed keeps the package's name");
         own.All.Should().HaveCount(17).And.OnlyHaveUniqueItems();
-        own.Of(MembershipRefusals.AlreadyMember).Code.Should().Be("projects.already-on-crew");
+        own.Refuse(MembershipRefusals.AlreadyMember).Code.Should().Be("projects.already-on-crew");
 
         // A map never changes: renaming answers another one.
         plain[MembershipRefusals.AlreadyMember].Should().Be("projects.already-member");
@@ -200,25 +200,25 @@ public partial class RefusalTableTests
         MembershipCodes.DefaultMemberArgument.Should().Be("Member");
 
         // Whoever refuses names the member in the package's word, and the resource's map carries it in its own.
-        var refusal = own.Of(MembershipRefusals.RoleHeld, (MembershipCodes.DefaultMemberArgument, seat), ("Role", new NamedRole("contributor")));
+        var refusal = own.Refuse(MembershipRefusals.RoleHeld, (MembershipCodes.DefaultMemberArgument, seat), ("Role", new NamedRole("contributor")));
         refusal.Arguments.Keys.Should().BeEquivalentTo("Seat", "Role");
         refusal.Arguments["Seat"].Should().Be(seat);
-        refusal.Message.Should().Be(plain.Of(MembershipRefusals.RoleHeld).Message, "the text is the rule's, whatever the member is called");
+        refusal.Message.Should().Be(plain.Refuse(MembershipRefusals.RoleHeld).Message, "the text is the rule's, whatever the member is called");
 
         // Nothing else is renamed, and a refusal that names no member carries none.
-        own.Of(MembershipRefusals.NotPermitted, ("Key", "projects.edit")).Arguments.Keys.Should().Equal("Key");
-        own.Of(MembershipRefusals.OwnerProtected).Arguments.Should().BeEmpty();
-        own.Of(MembershipRefusals.InvalidPeriod).Arguments.Keys.Should().Equal(RefusalException.FieldArgument);
+        own.Refuse(MembershipRefusals.NotPermitted, ("Key", "projects.edit")).Arguments.Keys.Should().Equal("Key");
+        own.Refuse(MembershipRefusals.OwnerProtected).Arguments.Should().BeEmpty();
+        own.Refuse(MembershipRefusals.InvalidPeriod).Arguments.Keys.Should().Equal(RefusalException.FieldArgument);
         own.All.Should().Equal(plain.All, "the codes are the same: only the argument is called otherwise");
 
         // A map never changes, and the word stays through a rule renamed afterwards.
-        plain.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat)).Arguments.Keys.Should().Equal("Member");
+        plain.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat)).Arguments.Keys.Should().Equal("Member");
         var both = own.With(MembershipRefusals.AlreadyMember, "already-on-crew");
         both.MemberArgument.Should().Be("Seat");
-        both.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat)).Arguments.Keys.Should().Equal("Seat");
+        both.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat)).Arguments.Keys.Should().Equal("Seat");
 
         // Called by the package's word in another case, it is still the one argument.
-        MembershipCodes.Under("projects").WithMemberArgument("member").Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat))
+        MembershipCodes.Under("projects").WithMemberArgument("member").Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, seat))
             .Arguments.Keys.Should().Equal("member");
     }
 
@@ -348,26 +348,26 @@ public partial class RefusalTableTests
         }
 
         // A field given where a refusal is made is kept: an application that refuses with a rule for an input of its own says so.
-        codes.Of(MembershipRefusals.InvalidPeriod, (RefusalException.FieldArgument, "endsOn")).Arguments[RefusalException.FieldArgument].Should().Be("endsOn");
+        codes.Refuse(MembershipRefusals.InvalidPeriod, (RefusalException.FieldArgument, "endsOn")).Arguments[RefusalException.FieldArgument].Should().Be("endsOn");
 
         // And no other kind of refusal names one: a conflict is about the state, not about an input.
         foreach (var rule in MembershipRefusals.Codes.Except(invalid))
         {
-            codes.Of(rule).Arguments.Should().NotContainKey(RefusalException.FieldArgument, rule + " is about no one input");
+            codes.Refuse(rule).Arguments.Should().NotContainKey(RefusalException.FieldArgument, rule + " is about no one input");
         }
     }
 
     [Fact]
     public void A_refusal_carries_its_arguments_and_an_english_text_filled_from_them()
     {
-        var refusal = DocumentRefusals.Membership.Of(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
+        var refusal = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
 
         refusal.Message.Should().Be("Doing this needs the key documents.share.");
         refusal.Arguments.Should().Contain("Key", DocumentKeys.Share);
         refusal.Arguments.Should().ContainKey("key", "names are matched without regard to case, like the arguments of every failure");
 
         // An argument nobody gave is left as written, rather than shown as nothing.
-        DocumentRefusals.Membership.Of(MembershipRefusals.NotPermitted).Message.Should().Be("Doing this needs the key {Key}.");
+        DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted).Message.Should().Be("Doing this needs the key {Key}.");
     }
 
     // ---------------------------------------------------------------- read in the onlooker's language
@@ -376,8 +376,8 @@ public partial class RefusalTableTests
     public void A_refusal_reads_in_the_readers_language_under_the_resources_own_code()
     {
         var localizer = Localizer(DocumentRefusals.Membership, FolderRefusals.Membership);
-        var shared = DocumentRefusals.Membership.Of(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
-        var staffed = FolderRefusals.Membership.Of(MembershipRefusals.AlreadyMember, ("Member", new StaffCode("C-014")));
+        var shared = DocumentRefusals.Membership.Refuse(MembershipRefusals.NotPermitted, ("Key", DocumentKeys.Share));
+        var staffed = FolderRefusals.Membership.Refuse(MembershipRefusals.AlreadyMember, ("Member", new StaffCode("C-014")));
 
         localizer.Localize(shared, CultureInfo.GetCultureInfo("nl-NL")).Should().Be("Hiervoor is het recht documents.share nodig.");
         localizer.Localize(shared, CultureInfo.GetCultureInfo("en-GB")).Should().Be(shared.Message).And.Be("Doing this needs the key documents.share.");
@@ -398,10 +398,10 @@ public partial class RefusalTableTests
     {
         // Only the documents' texts were added: a folder's refusal is nobody's to translate, and says so in English.
         var localizer = Localizer(DocumentRefusals.Membership);
-        var staffed = FolderRefusals.Membership.Of(MembershipRefusals.OwnerProtected);
+        var staffed = FolderRefusals.Membership.Refuse(MembershipRefusals.OwnerProtected);
 
         localizer.Localize(staffed, CultureInfo.GetCultureInfo("nl")).Should().Be(staffed.Message);
-        localizer.Localize(DocumentRefusals.Membership.Of(MembershipRefusals.OwnerProtected), CultureInfo.GetCultureInfo("nl"))
+        localizer.Localize(DocumentRefusals.Membership.Refuse(MembershipRefusals.OwnerProtected), CultureInfo.GetCultureInfo("nl"))
             .Should().Be("De eigenaar blijft lid, in de rol van eigenaar, tot iemand anders eigenaar is.");
     }
 
@@ -474,9 +474,9 @@ public partial class RefusalTableTests
         localizer.Localize(refused, CultureInfo.GetCultureInfo("nl-NL")).Should().Be("Deze rechten kan een rol hier niet geven: plots.sell.");
         localizer.Localize(refused, CultureInfo.GetCultureInfo("en-GB")).Should().Be(refused.Message).And.Be("A role cannot give these keys here: plots.sell.");
 
-        var archived = PlotMembership.Codes.Of(MembershipRefusals.RoleIsArchived);
+        var archived = PlotMembership.Codes.Refuse(MembershipRefusals.RoleIsArchived);
         localizer.Localize(archived, CultureInfo.GetCultureInfo("nl")).Should().Be("Die rol is gearchiveerd.");
-        localizer.Localize(PlotMembership.Codes.Of(MembershipRefusals.OwnerRoleStays), CultureInfo.GetCultureInfo("nl")).Should().Be("De rol die elke eigenaar heeft, kan niet worden gearchiveerd.");
+        localizer.Localize(PlotMembership.Codes.Refuse(MembershipRefusals.OwnerRoleStays), CultureInfo.GetCultureInfo("nl")).Should().Be("De rol die elke eigenaar heeft, kan niet worden gearchiveerd.");
 
         // What a role checks by itself it reports under the package's name for the rule, and that reads in the reader's language too.
         var role = new PlotRole(PlotRoleId.CreateSequential(), meadow, new KeptRoleDraft("Fencer", null, [PlotKeys.See]));

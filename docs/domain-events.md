@@ -181,8 +181,8 @@ public sealed record HTTPCallbackReceived(string Url) : DomainEvent;            
 ```
 
 ```csharp
-DomainEventName.Of<OrderPlaced>();   // "ordering.order-placed"
-DomainEventName.Of(someEvent);       // same, from an instance
+DomainEventName.For<OrderPlaced>();   // "ordering.order-placed"
+DomainEventName.For(someEvent);       // same, from an instance
 ```
 
 An assembly that declares no module leaves the module out: `order-placed`. The namespace plays no

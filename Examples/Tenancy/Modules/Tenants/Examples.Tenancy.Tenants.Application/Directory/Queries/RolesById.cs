@@ -39,6 +39,6 @@ public sealed class RolesByIdHandler(ITenancyReads reads, SampleAnswers answers)
         var roles = await reads.AskDirectoryAsync(directory => directory.RolesByIdAsync(query.Ids, cancellationToken));
         return roles.Count == 0
             ? []
-            : RoleListing.Of(roles, withKeys: await TenantWideKey.IsHeldAsync(answers, reads, RoleListing.KeysKey, cancellationToken));
+            : RoleListing.From(roles, withKeys: await TenantWideKey.IsHeldAsync(answers, reads, RoleListing.KeysKey, cancellationToken));
     }
 }

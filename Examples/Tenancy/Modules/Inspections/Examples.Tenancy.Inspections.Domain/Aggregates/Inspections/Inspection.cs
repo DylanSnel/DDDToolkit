@@ -92,19 +92,19 @@ public sealed partial class Inspection
     private static string CheckedTitle(string title)
         => title?.Trim() is { Length: > 0 and <= LongestTitle } trimmed
             ? trimmed
-            : throw InspectionRefusals.Of(InspectionRefusals.TitleInvalid, ("Max", LongestTitle));
+            : throw InspectionRefusals.Refuse(InspectionRefusals.TitleInvalid, ("Max", LongestTitle));
 
     private static DateRange CheckedDays(DateRange days, DateRange? planned)
     {
         if (days is not { IsValid: true })
         {
-            throw InspectionRefusals.Of(InspectionRefusals.DaysInvalid);
+            throw InspectionRefusals.Refuse(InspectionRefusals.DaysInvalid);
         }
 
         // The planned range is said as two ISO dates: an argument is a value a translation can place.
         return planned is null || planned.Contains(days)
             ? days
-            : throw InspectionRefusals.Of(
+            : throw InspectionRefusals.Refuse(
                 InspectionRefusals.OutsidePlannedRange,
                 ("From", planned.From.ToString("O", System.Globalization.CultureInfo.InvariantCulture)),
                 ("Until", planned.Until.ToString("O", System.Globalization.CultureInfo.InvariantCulture)));

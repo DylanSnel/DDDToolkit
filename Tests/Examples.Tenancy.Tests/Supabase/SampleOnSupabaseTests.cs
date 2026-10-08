@@ -77,7 +77,7 @@ public sealed class SampleOnSupabaseTests(SampleSupabaseStack stack)
         await using var sample = await StartedAsync(withAuth: true);
         using var http = new HttpClient { BaseAddress = sample.Auth!.Url };
         var login = new SupabaseLoginClient(http, new UiSession());
-        var refused = PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.refused", UiSession.Languages[0]));
+        var refused = PasswordSignIn.RefusedBecause(UiTexts.For("login.password.refused", UiSession.Languages[0]));
         var rhea = DemoPeople.Rhea;
 
         // A wrong password and an address nobody has are told the same, and neither gets a token.

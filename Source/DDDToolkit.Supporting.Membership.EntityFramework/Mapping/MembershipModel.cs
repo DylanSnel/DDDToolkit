@@ -138,7 +138,7 @@ public static class MembershipModel
     /// <param name="model">The model of a context.</param>
     /// <param name="memberClass">The application's member class, declared with the member template.</param>
     /// <exception cref="ArgumentNullException"><paramref name="model"/> or <paramref name="memberClass"/> is null.</exception>
-    public static MemberMapping? Of(IModel model, Type memberClass)
+    public static MemberMapping? For(IModel model, Type memberClass)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(memberClass);

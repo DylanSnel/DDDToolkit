@@ -45,9 +45,9 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
 
         // Two projects at two units, with five people and three roles between them: Leo, Juno and Vic on Pier 7,
         // Ada and Tove on the bridge.
-        batches.Of<OrganizationUnitId>(2);
-        batches.Of<SeatId>(5);
-        batches.Of<ProjectRoleId>(3);
+        batches.WholeAt<OrganizationUnitId>(2);
+        batches.WholeAt<SeatId>(5);
+        batches.WholeAt<ProjectRoleId>(3);
         sent.Clear();
         var data = await BothAsync("unit { path } crew { seat { displayName status } roles { role { name } } }");
 
@@ -62,11 +62,11 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
             .Should().BeEquivalentTo(["Crew lead", "Surveyor"]);
 
         // And each field that names something was one question, with every id of both projects in it once.
-        sent.Of<SeatsById>().Should().ContainSingle("the seats of both crews are asked together")
+        sent.OfType<SeatsById>().Should().ContainSingle("the seats of both crews are asked together")
             .Which.Ids.Should().BeEquivalentTo(Seats(DemoPeople.Leo, DemoPeople.Juno, DemoPeople.Vic, DemoPeople.Ada, DemoPeople.Tove));
-        sent.Of<OrganizationUnitsById>().Should().ContainSingle("the units of both projects are asked together")
+        sent.OfType<OrganizationUnitsById>().Should().ContainSingle("the units of both projects are asked together")
             .Which.Ids.Should().BeEquivalentTo([Harbor.UnitNamed("North Coast"), Harbor.UnitNamed("South Bay")]);
-        sent.Of<ProjectRolesById>().Should().ContainSingle("the roles of both crews are asked together")
+        sent.OfType<ProjectRolesById>().Should().ContainSingle("the roles of both crews are asked together")
             .Which.Ids.Should().BeEquivalentTo([Harbor.ProjectRoles[SampleCatalogue.CrewLead], Harbor.ProjectRoles[SampleCatalogue.Surveyor], Harbor.ProjectRoles[SampleCatalogue.Observer]]);
 
         // Each of them left as one batch, whole: the host's requests take their dispatcher from the test, so
@@ -79,13 +79,13 @@ public sealed class DirectoryLookupScenarios(SampleHosts sample) : IClassFixture
         // question of their own although each of them is on a crew as well: one question for the two, never one
         // each. Here they are asked in a request of their own, because a batch says nothing of the field it is
         // for: two seats make the owners' batch whole, where five make the crews'.
-        batches.Of<SeatId>(2);
+        batches.WholeAt<SeatId>(2);
         sent.Clear();
         var owned = await BothAsync("owner { displayName }");
 
         owned.GetProperty("pier").GetProperty("owner").GetProperty("displayName").GetString().Should().Be(DemoPeople.Leo.Name);
         owned.GetProperty("bridge").GetProperty("owner").GetProperty("displayName").GetString().Should().Be(DemoPeople.Ada.Name);
-        sent.Of<SeatsById>().Should().ContainSingle("the owners of both projects are asked together")
+        sent.OfType<SeatsById>().Should().ContainSingle("the owners of both projects are asked together")
             .Which.Ids.Should().BeEquivalentTo(Seats(DemoPeople.Leo, DemoPeople.Ada));
         batches.SentOf<SeatId>().Should().Equal([5, 2], "the owners waited on one batch of their own");
 

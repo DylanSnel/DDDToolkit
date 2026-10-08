@@ -91,7 +91,7 @@ public class OrderTests
     public void AddingALineRecordsIt()
     {
         AggregateScenario.Given(Draft())
-            .When(order => order.AddLine(Sku.Of("SKU-1"), 3))
+            .When(order => order.AddLine(Sku.From("SKU-1"), 3))
             .RaisedExactly<LineAdded>();
     }
 
@@ -101,8 +101,8 @@ public class OrderTests
         var order = Draft();
 
         AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 3))
-            .Raised(new LineAdded(order.Id, Sku.Of("SKU-1"), 3));
+            .When(o => o.AddLine(Sku.From("SKU-1"), 3))
+            .Raised(new LineAdded(order.Id, Sku.From("SKU-1"), 3));
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class OrderTests
     public void AnEmptyQuantityIsRefusedBeforeAnythingHappens()
     {
         AggregateScenario.Given(Draft())
-            .WhenThrows<ArgumentOutOfRangeException>(order => order.AddLine(Sku.Of("SKU-1"), 0));
+            .WhenThrows<ArgumentOutOfRangeException>(order => order.AddLine(Sku.From("SKU-1"), 0));
     }
 }
 ```
@@ -170,7 +170,7 @@ raised.Select(e => e.OccurredAt).Should().BeInAscendingOrder();
 `Raised(expected)` compares the payload and nothing else:
 
 ```csharp
-.Raised(new LineAdded(order.Id, Sku.Of("SKU-1"), 3));
+.Raised(new LineAdded(order.Id, Sku.From("SKU-1"), 3));
 ```
 
 That comparison exists because record equality cannot do the job. Two events with identical payloads
@@ -223,7 +223,7 @@ var scenario = AggregateScenario.Given(Draft());
 
 scenario.PendingEvents.RaisedExactly<OrderPlaced>();
 
-scenario.When(o => o.AddLine(Sku.Of("SKU-1"), 2)).RaisedExactly<LineAdded>();
+scenario.When(o => o.AddLine(Sku.From("SKU-1"), 2)).RaisedExactly<LineAdded>();
 scenario.When(o => o.Confirm()).RaisedExactly<OrderConfirmed>();
 scenario.When(o => o.Ship("TRACK-1")).RaisedExactly<OrderShipped>();
 
@@ -281,7 +281,7 @@ subject. The violation names the child that reported it, which is what the asser
 
 ```csharp
 var order = Draft();
-order.AddLine(Sku.Of(""), 1);
+order.AddLine(Sku.From(""), 1);
 
 order.GetInvariantViolations().Should().ContainSingle(v =>
     v.Code == OrderLine.MustNameASku.ViolationCode && v.EntityId!.Equals(order.Lines[0].Id));

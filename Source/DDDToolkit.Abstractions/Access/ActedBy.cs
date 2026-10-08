@@ -22,7 +22,7 @@ public readonly record struct ActedBy(string Kind, string? Id)
     /// token names somebody by something else than a <see cref="Guid"/> is kept by the token's <c>sub</c> claim.
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="caller"/> is null.</exception>
-    public static ActedBy Of(Caller caller)
+    public static ActedBy From(Caller caller)
     {
         if (caller is null)
         {

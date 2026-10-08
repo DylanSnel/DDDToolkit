@@ -28,7 +28,7 @@ public sealed class RefusalTextsTests
         var localizer = provider.GetRequiredService<IFailureLocalizer>();
         var user = UserId.CreateUnique();
 
-        var shared = DocumentRefusals.Membership.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, user));
+        var shared = DocumentRefusals.Membership.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, user));
         shared.Code.Should().Be("documents.already-member");
 
         using (CultureScope.Use("nl-NL"))
@@ -54,7 +54,7 @@ public sealed class RefusalTextsTests
         var localizer = provider.GetRequiredService<IFailureLocalizer>();
 
         // A folder has a code of its own for the rule, and a document's code for it is not a folder's.
-        var onFolder = FolderRefusals.Membership.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, new StaffCode("S-1")));
+        var onFolder = FolderRefusals.Membership.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, new StaffCode("S-1")));
         onFolder.Code.Should().NotBe("folders.already-member", "the host's folders call the rule otherwise");
 
         using (CultureScope.Use("nl-NL"))
@@ -72,11 +72,11 @@ public sealed class RefusalTextsTests
         using var provider = Host(services => services.AddDDDToolkitLocalization(texts => texts.AddLocalizer(new OwnWords())));
         var localizer = provider.GetRequiredService<IFailureLocalizer>();
 
-        localizer.Localize(DocumentRefusals.Membership.Of(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, UserId.CreateUnique())))
+        localizer.Localize(DocumentRefusals.Membership.Refuse(MembershipRefusals.AlreadyMember, (MembershipCodes.DefaultMemberArgument, UserId.CreateUnique())))
             .Should().Be("Already shared with them.");
         using (CultureScope.Use("en-GB"))
         {
-            localizer.Localize(DocumentRefusals.Membership.Of(MembershipRefusals.OwnerProtected)).Should().NotBe("Already shared with them.").And.NotBeEmpty();
+            localizer.Localize(DocumentRefusals.Membership.Refuse(MembershipRefusals.OwnerProtected)).Should().NotBe("Already shared with them.").And.NotBeEmpty();
         }
     }
 

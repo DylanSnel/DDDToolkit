@@ -95,7 +95,7 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
                 access.RequireCaller();
                 if (callers.Current.Kind == CallerKind.Anonymous)
                 {
-                    throw access.Rules.Codes.Of(MembershipRefusals.NotPermitted, ("Key", required.Key));
+                    throw access.Rules.Codes.Refuse(MembershipRefusals.NotPermitted, ("Key", required.Key));
                 }
 
                 break;

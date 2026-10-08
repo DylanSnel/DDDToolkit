@@ -102,7 +102,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             if (await store.SlugTakenAsync(slug.Value, cancellationToken).ConfigureAwait(false))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.SlugTaken, ("Slug", slug.Value));
+                throw TenancyRefusals.Refuse(TenancyRefusals.SlugTaken, ("Slug", slug.Value));
             }
 
             var rootId = command.RootId ?? TUnitId.Create();
@@ -119,7 +119,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 var role = NewRoleFrom(DraftOf(pack, command.Language), tenantId, command.RoleIds, catalogue, by);
                 if (!names.Add(role.Name))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", role.Name));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.RoleNameTaken, ("Name", role.Name));
                 }
 
                 roles[pack.Key] = role;
@@ -212,7 +212,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 if (name.Length > 0
                     && (!names.Add(name) || await store.RoleNameTakenAsync(tenantId, name, null, cancellationToken).ConfigureAwait(false)))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.RoleNameTaken, ("Name", name));
+                    throw TenancyRefusals.Refuse(TenancyRefusals.RoleNameTaken, ("Name", name));
                 }
 
                 added.Add(NewRoleFrom(draft, tenantId, roleIds, catalogue, gate.By));

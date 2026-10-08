@@ -353,7 +353,7 @@ public static class TenancyRefusals
 
     /// <summary>
     /// The input each code is about, where a code is always about the same one, in the word the use cases call
-    /// it by. <see cref="Of"/> and <see cref="Failure"/> add it as the argument
+    /// it by. <see cref="Refuse"/> and <see cref="Failure"/> add it as the argument
     /// <see cref="RefusalException.FieldArgument"/>, so the place that refuses does not have to remember to.
     /// <para>
     /// <see cref="NameInvalid"/> is not here: which input it is about depends on which name it refuses, so
@@ -403,7 +403,7 @@ public static class TenancyRefusals
     /// <param name="code">One of the codes above.</param>
     /// <param name="arguments">The values the message names, by name.</param>
     /// <exception cref="ArgumentException">The code is not one of Tenancy's: a refusal nobody can look up is a bug.</exception>
-    public static RefusalException Of(string code, params (string Name, object? Value)[] arguments)
+    public static RefusalException Refuse(string code, params (string Name, object? Value)[] arguments)
     {
         var (kind, template) = Row(code);
         var named = Named(code, arguments);

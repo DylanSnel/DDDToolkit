@@ -69,8 +69,8 @@ public sealed class VisibleProjectsHandler(IProjectReads reads, ProjectAccess ac
             query.Paging,
             VisibleProjects.DefaultPage,
             VisibleProjects.LargestPage,
-            sizeOutOfRange: () => ProjectRefusals.Of(ProjectRefusals.PageSizeInvalid, ("Max", VisibleProjects.LargestPage)),
-            fromBothEnds: () => ProjectRefusals.Of(ProjectRefusals.PageFromBothEnds));
+            sizeOutOfRange: () => ProjectRefusals.Refuse(ProjectRefusals.PageSizeInvalid, ("Max", VisibleProjects.LargestPage)),
+            fromBothEnds: () => ProjectRefusals.Refuse(ProjectRefusals.PageFromBothEnds));
 
         await using var reading = reads.Open();
 

@@ -92,7 +92,7 @@ public sealed class SampleApiTests
         var api = new SampleApi(stub.Client(), session);
 
         // A preset's person being refused, and an anonymous call being refused, are the answers being demonstrated.
-        await api.SendAsync<JsonElement?>(HttpMethod.Get, "/me", null, CallAs.Person("vic", "vics-token"), TenantChoice.Of("harbor"), Cancellation);
+        await api.SendAsync<JsonElement?>(HttpMethod.Get, "/me", null, CallAs.Person("vic", "vics-token"), TenantChoice.From("harbor"), Cancellation);
         await api.SendAsync<JsonElement?>(HttpMethod.Get, "/me", null, CallAs.Anonymous, TenantChoice.Session, Cancellation);
 
         // And the session's own token being refused anything but a 401 says nothing about the token.
@@ -148,7 +148,7 @@ public sealed class SampleApiTests
         using var stub = StubApi.Answering(HttpStatusCode.OK, "[]");
         var api = new SampleApi(stub.Client(), SignedIn());
 
-        await api.SendAsync<JsonElement?>(HttpMethod.Get, "/projects", null, CallAs.Anonymous, TenantChoice.Of("   "), Cancellation);
+        await api.SendAsync<JsonElement?>(HttpMethod.Get, "/projects", null, CallAs.Anonymous, TenantChoice.From("   "), Cancellation);
         await api.VisibleProjectsAsync(cancellationToken: Cancellation);
 
         var bare = stub.Requests[0];
@@ -347,7 +347,7 @@ public sealed class SampleApiTests
         (await WholeTenantAsync("/at-a-unit")).Should().BeFalse("the key was needed at that unit, which the arguments show by name");
         (await WholeTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a key that is not held says where the key was needed");
         (await WholeTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
-        ApiProblem.Of(null, "Unauthorized").KeyNeededForTheWholeTenant.Should().BeFalse();
+        ApiProblem.WithoutArguments(null, "Unauthorized").KeyNeededForTheWholeTenant.Should().BeFalse();
     }
 
     [Fact]

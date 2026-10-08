@@ -192,7 +192,7 @@ public static class TallyDatabase
         return TenancyPostgres.AccessScripts(
             rules: [.. WidgetRules.All, TallyRules.Kept, .. operators ? new[] { TallyRules.Shared } : []],
             names: names,
-            roles: RowAccessRoleNames.Of(options),
+            roles: RowAccessRoleNames.From(options),
             operators: operators ? [TallyRules.OperatorTokenRole] : null,
             more: [tallies],
             export: export);

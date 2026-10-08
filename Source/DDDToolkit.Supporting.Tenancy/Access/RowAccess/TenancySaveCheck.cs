@@ -30,18 +30,18 @@ public static class TenancySaveCheck
         {
             case TenancyCallerKind.System:
                 // It acts in no tenant; provisioning saves as system work in the tenant it makes.
-                throw TenancyRefusals.Of(TenancyRefusals.OtherTenant);
+                throw TenancyRefusals.Refuse(TenancyRefusals.OtherTenant);
 
             case TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant:
                 if (!Equals(caller.TenantId, entryTenant))
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.OtherTenant);
+                    throw TenancyRefusals.Refuse(TenancyRefusals.OtherTenant);
                 }
 
                 return;
 
             default:
-                throw TenancyRefusals.Of(TenancyRefusals.NotSeated);
+                throw TenancyRefusals.Refuse(TenancyRefusals.NotSeated);
         }
     }
 }

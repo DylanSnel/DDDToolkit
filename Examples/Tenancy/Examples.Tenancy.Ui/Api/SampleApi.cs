@@ -355,7 +355,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
             {
                 // Signing out forgets the session's answers, so the answer that ended it is recorded after, and is
                 // what the login page shows.
-                session.SignOut(UiTexts.Of("api.token-refused", session.Language));
+                session.SignOut(UiTexts.For("api.token-refused", session.Language));
                 session.Record(outcome);
                 return outcome;
             }
@@ -369,7 +369,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
                 slug,
                 0,
                 default,
-                ApiProblem.Of(null, UiTexts.Of("api.no-answer", session.Language), exception.Message),
+                ApiProblem.WithoutArguments(null, UiTexts.For("api.no-answer", session.Language), exception.Message),
                 string.Empty,
                 clock.Elapsed);
         }
@@ -469,7 +469,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
         catch (JsonException exception)
         {
             // The API answered, but not in the shape this UI reads: say so rather than show an empty screen.
-            return new ApiOutcome<T>(method, path, who, tenant, status, default, ApiProblem.Of(null, UiTexts.Of("api.unreadable", language), exception.Message), raw, elapsed);
+            return new ApiOutcome<T>(method, path, who, tenant, status, default, ApiProblem.WithoutArguments(null, UiTexts.For("api.unreadable", language), exception.Message), raw, elapsed);
         }
     }
 
@@ -481,7 +481,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return ApiProblem.Of(null, null);
+            return ApiProblem.WithoutArguments(null, null);
         }
 
         try
@@ -490,7 +490,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
             var root = document.RootElement;
             if (root.ValueKind is not JsonValueKind.Object)
             {
-                return ApiProblem.Of(null, null);
+                return ApiProblem.WithoutArguments(null, null);
             }
 
             var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -506,7 +506,7 @@ public sealed class SampleApi(HttpClient http, UiSession session)
         }
         catch (JsonException)
         {
-            return ApiProblem.Of(null, null);
+            return ApiProblem.WithoutArguments(null, null);
         }
     }
 

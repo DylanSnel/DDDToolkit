@@ -42,7 +42,7 @@ public sealed class RenameProjectRoleHandler(IProjectStore store, ProjectMembers
     {
         await checks.RequireAsync(command, cancellationToken);
 
-        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Of(ProjectRefusals.RoleNotFound);
+        var role = await store.LoadRoleAsync(command.Id, cancellationToken) ?? throw ProjectRefusals.Refuse(ProjectRefusals.RoleNotFound);
 
         role.RenameRole(command.Name, command.Description, membership.Rules);
         await store.SaveAsync(cancellationToken);

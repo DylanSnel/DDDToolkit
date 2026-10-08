@@ -210,7 +210,7 @@ public static class MembershipPostgresChecks
                         registration.Context.Name + ", which keeps the members of " + registration.Resource.Name + ", is not a context the services make, so there is nothing to check. "
                         + "Register it with AddDbContext, or with a context pool and services.AddScopedFromPool<TContext>().");
 
-                if (MembershipModel.Of(context.Model, registration.Member) is not { } mapping)
+                if (MembershipModel.For(context.Model, registration.Member) is not { } mapping)
                 {
                     throw new InvalidOperationException(
                         registration.Context.Name + " does not map the members of " + registration.Resource.Name + ", so there is nothing to check. Map them where the context builds its model: "
@@ -234,7 +234,7 @@ public static class MembershipPostgresChecks
                         + registration.Resource.Name + "Role>().IsKeptRole().");
                 }
 
-                var names = services.GetService<PostgresRowLevelSecurityOptions>() is { } options ? RowAccessRoleNames.Of(options) : RowAccessRoleNames.Default;
+                var names = services.GetService<PostgresRowLevelSecurityOptions>() is { } options ? RowAccessRoleNames.From(options) : RowAccessRoleNames.Default;
                 var roles = RolesOf(names, registration);
                 var marker = MembershipSql.Marker(rules, names.SystemIn);
                 var schema = context.Model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema;

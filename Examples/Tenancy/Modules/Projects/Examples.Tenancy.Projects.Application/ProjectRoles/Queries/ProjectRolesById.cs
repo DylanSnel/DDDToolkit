@@ -38,7 +38,7 @@ public sealed class ProjectRolesByIdHandler(IProjectReads reads, ProjectAccess a
         var ids = query.Ids.Distinct().ToList();
         if (ids.Count > ProjectRolesById.MostRoles)
         {
-            throw ProjectRefusals.Of(ProjectRefusals.TooManyIds, ("Max", ProjectRolesById.MostRoles));
+            throw ProjectRefusals.Refuse(ProjectRefusals.TooManyIds, ("Max", ProjectRolesById.MostRoles));
         }
 
         if (ids.Count == 0)

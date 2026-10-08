@@ -28,7 +28,7 @@ namespace Examples.Tenancy.Shared.Domain.ValueObjects;
 public partial record DateRange(DateOnly From, DateOnly Until)
 {
     /// <summary>The range of one day.</summary>
-    public static DateRange Of(DateOnly day) => new(day, day);
+    public static DateRange OneDay(DateOnly day) => new(day, day);
 
     /// <summary>
     /// The range two optional days say, as a request or a row carries them: none when both are left out, and a
@@ -36,7 +36,7 @@ public partial record DateRange(DateOnly From, DateOnly Until)
     /// </summary>
     /// <param name="from">The first day, or <see langword="null"/>.</param>
     /// <param name="until">The last day, or <see langword="null"/>.</param>
-    public static DateRange? Of(DateOnly? from, DateOnly? until)
+    public static DateRange? FromOptional(DateOnly? from, DateOnly? until)
         => from is null && until is null ? null : new DateRange(from ?? DateOnly.MaxValue, until ?? DateOnly.MinValue);
 
     /// <summary>Whether <paramref name="day"/> is one of the range's days.</summary>

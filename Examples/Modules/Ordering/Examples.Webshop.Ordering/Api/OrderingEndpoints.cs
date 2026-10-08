@@ -58,7 +58,7 @@ public static class OrderingEndpoints
 
             // Placed in the name of whoever is asking, or as a guest's when nobody signed in. The rules in
             // Domain/Aggregates/Orders/Access say who sees it afterwards; this only says whose it is.
-            var order = new Order(OrderId.Create(), shipTo!, priced.Lines, CustomerId.Of(callers.Current));
+            var order = new Order(OrderId.Create(), shipTo!, priced.Lines, CustomerId.From(callers.Current));
 
             // Nothing here validated a blank SKU, and OrderLine has a rule of its own about it. Ask the
             // order and it answers for its lines as well, before the order has been handed to a

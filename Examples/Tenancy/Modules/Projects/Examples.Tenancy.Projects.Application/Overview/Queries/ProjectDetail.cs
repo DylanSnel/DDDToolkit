@@ -29,6 +29,6 @@ public sealed class ProjectDetailHandler(IProjectReads reads, ProjectAccess acce
         await using var reading = reads.Open();
 
         var found = await reading.ByIdsAsync([query.Id], access.ReachFor(ProjectDetail.RequiredKey), cancellationToken);
-        return found.Count == 1 ? found[0] : throw ProjectRefusals.Of(ProjectRefusals.NotFound);
+        return found.Count == 1 ? found[0] : throw ProjectRefusals.Refuse(ProjectRefusals.NotFound);
     }
 }

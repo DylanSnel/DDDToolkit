@@ -104,7 +104,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var open = lifetime ?? settings.DefaultLifetime;
             if (open < settings.MinLifetime || open > settings.MaxLifetime)
             {
-                throw TenancyRefusals.Of(
+                throw TenancyRefusals.Refuse(
                     TenancyRefusals.InvitationLifetime,
                     ("Min", (long)settings.MinLifetime.TotalMinutes),
                     ("Max", (long)settings.MaxLifetime.TotalMinutes));
@@ -114,7 +114,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
             if (!tenant.IsActive)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.TenantInactive);
+                throw TenancyRefusals.Refuse(TenancyRefusals.TenantInactive);
             }
 
             var offered = await gate.LoadRoleAsync(role, cancellationToken).ConfigureAwait(false);
@@ -122,7 +122,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             await RequireActiveUnitAsync(gate, tenantId, unit, cancellationToken).ConfigureAwait(false);
             if (!offered.Facts.IsActive)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.RoleNotActive);
+                throw TenancyRefusals.Refuse(TenancyRefusals.RoleNotActive);
             }
 
             var token = BearerTokens.New();
@@ -197,7 +197,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             if (cancelled is null
                 || (!gate.BySystem && !await gate.Questions.HoldsAtAsync(TenancyKeys.SeatsManage, cancelled.UnitId, cancellationToken).ConfigureAwait(false)))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.InvitationNotFound);
+                throw TenancyRefusals.Refuse(TenancyRefusals.InvitationNotFound);
             }
 
             cancelled.Cancel(gate.Now, gate.By);
@@ -265,7 +265,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             if (!BearerTokens.TryDigest(token, out var digest)
                 || await invitations.FindByDigestAsync(digest, cancellationToken).ConfigureAwait(false) is not { } found)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.InvitationNotFound);
+                throw TenancyRefusals.Refuse(TenancyRefusals.InvitationNotFound);
             }
 
             // From here on the work acts in the invitation's tenant and in no other, for the seat that issued it.
@@ -288,13 +288,13 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var tenantId = gate.RequireTenant();
 
             var invitation = await invitations.FindAsync(id, cancellationToken).ConfigureAwait(false)
-                ?? throw TenancyRefusals.Of(TenancyRefusals.InvitationNotFound);
+                ?? throw TenancyRefusals.Refuse(TenancyRefusals.InvitationNotFound);
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
 
             switch (invitation.State)
             {
                 case InvitationState.Cancelled:
-                    throw TenancyRefusals.Of(TenancyRefusals.InvitationCancelled);
+                    throw TenancyRefusals.Refuse(TenancyRefusals.InvitationCancelled);
 
                 case InvitationState.Accepted:
                     // The same person, sending it again: the answer they were given, or did not get, the first time.
@@ -302,19 +302,19 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                            && await store.FindSeatAsync(made, cancellationToken).ConfigureAwait(false) is { } theirs
                            && theirs.Identity == identity
                         ? new AcceptedInvitation(tenant.Id, tenant.Slug.Value, made)
-                        : throw TenancyRefusals.Of(TenancyRefusals.InvitationUsed);
+                        : throw TenancyRefusals.Refuse(TenancyRefusals.InvitationUsed);
             }
 
             // Decided now, from the clock: nothing has to have marked the invitation as run out. The grant it
             // offers ends after the invitation does, so while the invitation is open the grant is not over.
             if (!invitation.IsOpenAt(gate.Now))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.InvitationLapsed);
+                throw TenancyRefusals.Refuse(TenancyRefusals.InvitationLapsed);
             }
 
             if (verifiedAddress is not null && !invitation.IsFor(verifiedAddress))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.AddressMismatch);
+                throw TenancyRefusals.Refuse(TenancyRefusals.AddressMismatch);
             }
 
             // It changes who holds what: taken before anything about rights is read.
@@ -322,19 +322,19 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             if (!tenant.IsActive)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.TenantInactive);
+                throw TenancyRefusals.Refuse(TenancyRefusals.TenantInactive);
             }
 
             if (await store.IdentityHasSeatAsync(tenantId, identity, cancellationToken).ConfigureAwait(false))
             {
-                throw TenancyRefusals.Of(TenancyRefusals.IdentityHasSeat);
+                throw TenancyRefusals.Refuse(TenancyRefusals.IdentityHasSeat);
             }
 
             await RequireActiveUnitAsync(gate, tenantId, invitation.UnitId, cancellationToken).ConfigureAwait(false);
             var role = await gate.LoadRoleAsync(invitation.RoleId, cancellationToken).ConfigureAwait(false);
             if (!role.Facts.IsActive)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.RoleNotActive);
+                throw TenancyRefusals.Refuse(TenancyRefusals.RoleNotActive);
             }
 
             if (!invitation.IssuedAsSystem)
@@ -376,7 +376,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             if (invitation.IssuedBy is not { } issuer
                 || await store.FindSeatAsync(issuer, cancellationToken).ConfigureAwait(false) is not { Status: SeatStatus.Active })
             {
-                throw TenancyRefusals.Of(TenancyRefusals.InvitationUnbacked);
+                throw TenancyRefusals.Refuse(TenancyRefusals.InvitationUnbacked);
             }
 
             // The toolkit's caller stays the system work this runs as: only who Tenancy asks about changes.
@@ -391,7 +391,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 }
                 catch (RefusalException refusal) when (refusal.Code is TenancyRefusals.NotPermitted or TenancyRefusals.GrantExceedsOwn)
                 {
-                    throw TenancyRefusals.Of(TenancyRefusals.InvitationUnbacked);
+                    throw TenancyRefusals.Refuse(TenancyRefusals.InvitationUnbacked);
                 }
             }
         }
@@ -407,6 +407,6 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                && options.TenantSelection.Seats(caller.Role)
                && !string.Equals(caller.Claim(AnonymousClaim), "true", StringComparison.OrdinalIgnoreCase)
                 ? identity
-                : throw TenancyRefusals.Of(TenancyRefusals.IdentityRequired);
+                : throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
     }
 }

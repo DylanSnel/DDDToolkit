@@ -41,7 +41,7 @@ internal static class RecordingEndpoints
         // so the answer names the new one without a Location.
         group.MapPost("/projects/{id}/inspections", async (ProjectId id, InspectionToRecord body, ISender sender, CancellationToken cancellationToken) =>
         {
-            var recorded = await sender.Send(new RecordInspection(id, body.Title ?? string.Empty, DateRange.Of(body.From, body.Until)), cancellationToken);
+            var recorded = await sender.Send(new RecordInspection(id, body.Title ?? string.Empty, DateRange.FromOptional(body.From, body.Until)), cancellationToken);
             return Results.Created((string?)null, new { id = recorded });
         });
 

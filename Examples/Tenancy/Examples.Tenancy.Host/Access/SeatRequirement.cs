@@ -44,7 +44,7 @@ public sealed class SeatRequirement : IAuthorizationRequirement
 
         // A request is never system work: tenant selection replaces any caller it finds. So anything but a seat is
         // nobody here, and nobody says why.
-        var refusal = TenancyRefusals.Of(caller.Refusal ?? TenancyRefusals.NotSeated);
+        var refusal = TenancyRefusals.Refuse(caller.Refusal ?? TenancyRefusals.NotSeated);
         return refusal.Code == TenancyRefusals.TenantRequired
             ? refusal
             : new RefusalException(refusal.Code, RefusalKind.NotPermitted, refusal.Message, refusal.Arguments);

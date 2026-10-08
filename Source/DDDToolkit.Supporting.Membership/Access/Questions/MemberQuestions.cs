@@ -47,10 +47,10 @@ public static class MemberQuestions
 
         var codes = access.Rules.Codes;
         var hold = await access.HoldAsync(resource, key, cancellationToken).ConfigureAwait(false)
-                   ?? throw codes.Of(MembershipRefusals.NotFound);
+                   ?? throw codes.Refuse(MembershipRefusals.NotFound);
 
         return hold.Via is null
-            ? throw codes.Of(MembershipRefusals.NotPermitted, ("Key", key))
+            ? throw codes.Refuse(MembershipRefusals.NotPermitted, ("Key", key))
             : hold;
     }
 
@@ -81,7 +81,7 @@ public static class MemberQuestions
         access.RequireCaller();
 
         var hold = await access.HoldAsync(resource, key, cancellationToken).ConfigureAwait(false)
-                   ?? throw access.Rules.Codes.Of(MembershipRefusals.NotFound);
+                   ?? throw access.Rules.Codes.Refuse(MembershipRefusals.NotFound);
 
         return hold.Via;
     }

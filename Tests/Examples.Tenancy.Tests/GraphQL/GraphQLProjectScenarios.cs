@@ -107,7 +107,7 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
         // and one for the abilities, whether the page holds four projects or one.
         foreach (var size in new[] { 4, 1 })
         {
-            batches.Of(size);
+            batches.WholeAt(size);
             counter.WatchThisFlow();
             var full = await ada.GraphQLDataAsync("query($first: Int) { projects(first: $first) { nodes { number crew { isOwner } myRoles { id } can { rename move } } } }", new { first = size });
 
@@ -119,7 +119,7 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
         // The lookup hands its id to a loader: several projects by id, and the same one twice, are one statement.
         var pier = await ada.ProjectNodeIdAsync(Harbor.ProjectNamed("Pier 7"));
         var depot = await ada.ProjectNodeIdAsync(Harbor.ProjectNamed("Inland depot"));
-        batches.Of(2);
+        batches.WholeAt(2);
         counter.WatchThisFlow();
         var found = await ada.GraphQLDataAsync(
             "query($pier: ID!, $depot: ID!) { one: project(id: $pier) { name } other: project(id: $depot) { name } again: project(id: $pier) { number } }",
@@ -302,7 +302,7 @@ public sealed class GraphQLProjectScenarios(SampleHosts sample) : IClassFixture<
         var costs = new List<int>();
         foreach (var size in new[] { 1, 4 })
         {
-            batches.Of(size);
+            batches.WholeAt(size);
             counter.WatchThisFlow();
             var nodes = (await ada.GraphQLDataAsync(WithRoles, new { first = size })).GetProperty("projects").GetProperty("nodes").EnumerateArray().ToList();
 

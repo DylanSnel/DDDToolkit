@@ -17,7 +17,7 @@ internal static class ActingSeat
     /// <exception cref="InvalidOperationException">
     /// System work acting for no seat: a mistake in the calling code, not a refusal a client could act on.
     /// </exception>
-    public static SeatId Of(TenantInScope<TenantId, SeatId> scope)
+    public static SeatId From(TenantInScope<TenantId, SeatId> scope)
         => scope.Seat
             ?? throw new InvalidOperationException(
                 "System work records an inspection for the seat it acts for: begin it with TenancyWork.BeginSystemIn(tenant, actingSeat).");

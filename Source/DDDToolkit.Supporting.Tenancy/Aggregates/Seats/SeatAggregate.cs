@@ -71,7 +71,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
     {
         if (identity == Guid.Empty)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.IdentityRequired);
+            throw TenancyRefusals.Refuse(TenancyRefusals.IdentityRequired);
         }
 
         Id = id;
@@ -134,17 +134,17 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
 
         if (placedBy is { } placing && placing.Equals(Id))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.SelfAssignment);
+            throw TenancyRefusals.Refuse(TenancyRefusals.SelfAssignment);
         }
 
         if (FindPlacement(unit) is not null)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.DuplicatePlacement);
+            throw TenancyRefusals.Refuse(TenancyRefusals.DuplicatePlacement);
         }
 
         if (primary && _placements.Any(placement => placement.IsPrimary))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.SecondPrimary);
+            throw TenancyRefusals.Refuse(TenancyRefusals.SecondPrimary);
         }
 
         var added = new Placement<TSeatId, TUnitId, TRoleId>(unit, primary, at, placedBy);
@@ -225,12 +225,12 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
         var placement = RequirePlacement(unit);
         if (!facts.IsActive)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.RoleNotActive);
+            throw TenancyRefusals.Refuse(TenancyRefusals.RoleNotActive);
         }
 
         if (placement.FindGrant(role) is not null)
         {
-            throw TenancyRefusals.Of(TenancyRefusals.DuplicateGrant);
+            throw TenancyRefusals.Refuse(TenancyRefusals.DuplicateGrant);
         }
 
         var why = TenancyNames.Optional(reason, TenancyNames.ReasonToken, MaxReasonLength);
@@ -250,7 +250,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
         var placement = FindPlacement(unit);
         if (placement is null || !placement.RemoveGrant(role))
         {
-            throw TenancyRefusals.Of(TenancyRefusals.GrantNotFound);
+            throw TenancyRefusals.Refuse(TenancyRefusals.GrantNotFound);
         }
 
         RaiseDomainEvent(new OrganizationRoleRevoked<TTenantId, TSeatId, TUnitId, TRoleId>(TenantId, Id, unit, role, by));
@@ -292,7 +292,7 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
         => _placements.FirstOrDefault(placement => placement.UnitId.Equals(unit));
 
     private Placement<TSeatId, TUnitId, TRoleId> RequirePlacement(TUnitId unit)
-        => FindPlacement(unit) ?? throw TenancyRefusals.Of(TenancyRefusals.PlacementNotFound);
+        => FindPlacement(unit) ?? throw TenancyRefusals.Refuse(TenancyRefusals.PlacementNotFound);
 
     private void RequireStatus(string action, params ReadOnlySpan<SeatStatus> allowed)
     {
@@ -304,6 +304,6 @@ public abstract partial class SeatAggregate<TSeatId, TTenantId, TUnitId, TRoleId
             }
         }
 
-        throw TenancyRefusals.Of(TenancyRefusals.SeatState, ("Status", Status.ToString().ToLowerInvariant()), ("Action", action));
+        throw TenancyRefusals.Refuse(TenancyRefusals.SeatState, ("Status", Status.ToString().ToLowerInvariant()), ("Action", action));
     }
 }

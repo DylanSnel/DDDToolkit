@@ -29,7 +29,7 @@ public sealed class TenancyAnswers<TTenantId, TSeatId, TUnitId, TRoleId>(Tenancy
             TenancyCallerKind.SystemInTenant => new TenantInScope<TTenantId, TSeatId>(caller.Tenant!.Value, caller.Seat, BySystem: true),
             TenancyCallerKind.System => throw new InvalidOperationException(
                 "System work outside any tenant has no tenant. Begin TenancyWork.BeginSystemIn(tenant) for work inside one."),
-            _ => throw TenancyRefusals.Of(caller.Refusal ?? TenancyRefusals.NotSeated),
+            _ => throw TenancyRefusals.Refuse(caller.Refusal ?? TenancyRefusals.NotSeated),
         };
     }
 

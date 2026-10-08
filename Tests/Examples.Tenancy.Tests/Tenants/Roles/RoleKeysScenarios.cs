@@ -39,7 +39,7 @@ public sealed class RoleKeysScenarios(SampleHosts sample) : IClassFixture<Sample
             .GetProperty("keys").EnumerateArray().Select(key => key.GetString()).Should().Contain(ProjectKeys.View);
 
         // Every role of the list asked whether she holds the key, and the question was put once.
-        sent.Of<UnitsWhereIHold>().Should().ContainSingle().Which.Key.Should().Be(TenancyKeys.RolesManage);
+        sent.OfType<UnitsWhereIHold>().Should().ContainSingle().Which.Key.Should().Be(TenancyKeys.RolesManage);
     }
 
     [Theory]

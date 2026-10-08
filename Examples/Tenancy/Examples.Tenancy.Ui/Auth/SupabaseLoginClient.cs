@@ -79,12 +79,12 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
     {
         if (!IsOffered)
         {
-            return PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.not-offered", session.Language));
+            return PasswordSignIn.RefusedBecause(UiTexts.For("login.password.not-offered", session.Language));
         }
 
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrEmpty(password))
         {
-            return PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.incomplete", session.Language));
+            return PasswordSignIn.RefusedBecause(UiTexts.For("login.password.incomplete", session.Language));
         }
 
         try
@@ -92,18 +92,18 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
             using var response = await http.PostAsJsonAsync("token?grant_type=password", new { email = email.Trim(), password }, cancellationToken);
             if ((int)response.StatusCode is 400 or 401 or 422)
             {
-                return PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.refused", session.Language));
+                return PasswordSignIn.RefusedBecause(UiTexts.For("login.password.refused", session.Language));
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                return PasswordSignIn.RefusedBecause(string.Format(CultureInfo.InvariantCulture, UiTexts.Of("login.password.answered", session.Language), (int)response.StatusCode));
+                return PasswordSignIn.RefusedBecause(string.Format(CultureInfo.InvariantCulture, UiTexts.For("login.password.answered", session.Language), (int)response.StatusCode));
             }
 
             var answer = await response.Content.ReadFromJsonAsync<TokenAnswer>(JsonSerializerOptions.Web, cancellationToken);
             return answer is { AccessToken.Length: > 0 }
                 ? new PasswordSignIn(answer, null)
-                : PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.no-token", session.Language));
+                : PasswordSignIn.RefusedBecause(UiTexts.For("login.password.no-token", session.Language));
         }
         catch (Exception exception) when (IsNoAnswer(exception, cancellationToken))
         {
@@ -125,12 +125,12 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
 
         if (!IsOffered)
         {
-            return PasswordSignIn.RefusedBecause(UiTexts.Of("login.password.not-offered", session.Language));
+            return PasswordSignIn.RefusedBecause(UiTexts.For("login.password.not-offered", session.Language));
         }
 
         if (link is not { AccessToken: { } accessToken, Expires: { } expires } || Bearer(accessToken) is not { } bearer)
         {
-            return PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", session.Language));
+            return PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", session.Language));
         }
 
         try
@@ -140,18 +140,18 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
             using var response = await http.SendAsync(request, cancellationToken);
             if ((int)response.StatusCode is 400 or 401 or 403)
             {
-                return PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", session.Language));
+                return PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", session.Language));
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                return PasswordSignIn.RefusedBecause(string.Format(CultureInfo.InvariantCulture, UiTexts.Of("login.password.answered", session.Language), (int)response.StatusCode));
+                return PasswordSignIn.RefusedBecause(string.Format(CultureInfo.InvariantCulture, UiTexts.For("login.password.answered", session.Language), (int)response.StatusCode));
             }
 
             var user = await response.Content.ReadFromJsonAsync<TokenUser>(JsonSerializerOptions.Web, cancellationToken);
             return user is { Email.Length: > 0 }
                 ? new PasswordSignIn(new TokenAnswer(accessToken, expires.ToUnixTimeSeconds(), user), null)
-                : PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", session.Language));
+                : PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", session.Language));
         }
         catch (Exception exception) when (IsNoAnswer(exception, cancellationToken))
         {
@@ -172,17 +172,17 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
     {
         if (!IsOffered)
         {
-            return UiTexts.Of("login.password.not-offered", session.Language);
+            return UiTexts.For("login.password.not-offered", session.Language);
         }
 
         if (string.IsNullOrEmpty(password))
         {
-            return UiTexts.Of("login.password.not-taken", session.Language);
+            return UiTexts.For("login.password.not-taken", session.Language);
         }
 
         if (Bearer(accessToken) is not { } bearer)
         {
-            return UiTexts.Of("login.password.session-over", session.Language);
+            return UiTexts.For("login.password.session-over", session.Language);
         }
 
         try
@@ -193,9 +193,9 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
             return (int)response.StatusCode switch
             {
                 >= 200 and <= 299 => null,
-                401 or 403 => UiTexts.Of("login.password.session-over", session.Language),
-                400 or 422 => UiTexts.Of("login.password.not-taken", session.Language),
-                var status => string.Format(CultureInfo.InvariantCulture, UiTexts.Of("login.password.answered", session.Language), status),
+                401 or 403 => UiTexts.For("login.password.session-over", session.Language),
+                400 or 422 => UiTexts.For("login.password.not-taken", session.Language),
+                var status => string.Format(CultureInfo.InvariantCulture, UiTexts.For("login.password.answered", session.Language), status),
             };
         }
         catch (Exception exception) when (IsNoAnswer(exception, cancellationToken))
@@ -221,5 +221,5 @@ public sealed class SupabaseLoginClient(HttpClient http, UiSession session)
         => exception is HttpRequestException or JsonException || (exception is TaskCanceledException && !cancellationToken.IsCancellationRequested);
 
     private string NoAnswer()
-        => string.Format(CultureInfo.InvariantCulture, UiTexts.Of("login.password.no-answer", session.Language), AuthUrlSetting);
+        => string.Format(CultureInfo.InvariantCulture, UiTexts.For("login.password.no-answer", session.Language), AuthUrlSetting);
 }

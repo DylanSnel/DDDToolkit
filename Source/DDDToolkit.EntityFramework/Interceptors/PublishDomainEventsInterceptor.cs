@@ -139,7 +139,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
 
             if (round > _options.MaxDispatchRounds)
             {
-                var pending = string.Join(", ", batch.SelectMany(item => item.Events).Select(DomainEventName.Of).Distinct(StringComparer.Ordinal));
+                var pending = string.Join(", ", batch.SelectMany(item => item.Events).Select(DomainEventName.For).Distinct(StringComparer.Ordinal));
                 throw new InvalidOperationException(
                     $"Domain events were still being raised after {_options.MaxDispatchRounds} dispatch rounds; a handler probably raises an event that triggers itself. " +
                     $"Events still pending: {pending}. Raise {nameof(DDDEntityFrameworkOptions)}.{nameof(DDDEntityFrameworkOptions.MaxDispatchRounds)} if the chain is intentional.");
@@ -308,7 +308,7 @@ public sealed class PublishDomainEventsInterceptor : SaveChangesInterceptor
                 // wrote down at compile time. Only an event nobody registered is asked for its attributes.
                 if (!outbox.EventTypes.TryDescribe(domainEvent.GetType(), out var eventName, out var version))
                 {
-                    eventName = DomainEventName.Of(domainEvent);
+                    eventName = DomainEventName.For(domainEvent);
                     version = IntegrationEventContract.VersionOf(domainEvent.GetType());
                 }
 

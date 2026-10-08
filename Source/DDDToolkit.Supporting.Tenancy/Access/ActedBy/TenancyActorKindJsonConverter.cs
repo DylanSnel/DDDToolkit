@@ -29,5 +29,5 @@ public sealed class TenancyActorKindJsonConverter : JsonConverter<TenancyActorKi
 
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, TenancyActorKind value, JsonSerializerOptions options)
-        => writer.WriteStringValue(TenancyActorKinds.Of(value));
+        => writer.WriteStringValue(TenancyActorKinds.From(value));
 }

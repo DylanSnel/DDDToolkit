@@ -50,7 +50,7 @@ public sealed class EventNameTests
     [MemberData(nameof(DomainEvents))]
     public void Every_domain_event_is_stored_under_the_name_it_always_had(Type type, string name, int version, string constant)
     {
-        DomainEventName.Of(type).Should().Be(name);
+        DomainEventName.For(type).Should().Be(name);
         IntegrationEventContract.VersionOf(type).Should().Be(version);
         constant.Should().Be(name, "the generator and the runtime spell it alike");
     }

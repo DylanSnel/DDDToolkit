@@ -71,7 +71,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             var gate = new Gate(store, catalogue, clock);
             if (gate.Caller.Kind != TenancyCallerKind.Seat)
             {
-                throw TenancyRefusals.Of(TenancyRefusals.NotSeated);
+                throw TenancyRefusals.Refuse(TenancyRefusals.NotSeated);
             }
 
             return await OverviewAsync(gate, gate.Caller.Tenant!.Value, gate.Caller.Seat!.Value, cancellationToken).ConfigureAwait(false);
@@ -134,7 +134,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
 
             // The seat first: a seat the caller does not read is refused before anything else is read.
             var seat = (await store.ListSeatsAsync(tenantId, [seatId], cancellationToken).ConfigureAwait(false)).FirstOrDefault()
-                       ?? throw TenancyRefusals.Of(TenancyRefusals.SeatNotFound);
+                       ?? throw TenancyRefusals.Refuse(TenancyRefusals.SeatNotFound);
             var tenant = await gate.LoadTenantAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var organization = await gate.ReadOrganizationAsync(tenantId, cancellationToken).ConfigureAwait(false);
             var roles = (await store.ListRolesAsync(tenantId, cancellationToken).ConfigureAwait(false)).ToDictionary(role => role.Id);
@@ -348,7 +348,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
         {
             var asked = new HashSet<TId>(ids);
             return asked.Count > MostIds
-                ? throw TenancyRefusals.Of(TenancyRefusals.TooManyIds, ("Max", MostIds))
+                ? throw TenancyRefusals.Refuse(TenancyRefusals.TooManyIds, ("Max", MostIds))
                 : asked;
         }
 

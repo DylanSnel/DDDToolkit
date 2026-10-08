@@ -42,7 +42,7 @@ public sealed class MarkTenantAsDemoHandler(TenancyUseCases.IStore store, Sample
         var scope = answers.RequireTenant();
         if (!scope.BySystem)
         {
-            throw ToolkitRefusals.Of(ToolkitRefusals.SystemOnly);
+            throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
         }
 
         var tenant = scope.Tenant;

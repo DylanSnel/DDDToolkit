@@ -30,6 +30,6 @@ public sealed record ApiProblem(string? Code, string? Title, string? Detail, IRe
            && (!Arguments.TryGetValue(UnitArgument, out var unit) || unit.ValueKind == JsonValueKind.Null);
 
     /// <summary>A problem with no arguments.</summary>
-    public static ApiProblem Of(string? code, string? title, string? detail = null)
+    public static ApiProblem WithoutArguments(string? code, string? title, string? detail = null)
         => new(code, title, detail, new Dictionary<string, JsonElement>());
 }

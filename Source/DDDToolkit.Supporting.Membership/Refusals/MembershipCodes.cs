@@ -224,7 +224,7 @@ public sealed class MembershipCodes
     /// <param name="code">One of the constants of <see cref="MembershipRefusals"/>.</param>
     /// <param name="arguments">The values the message names, by name.</param>
     /// <exception cref="ArgumentException"><paramref name="code"/> is not one of Membership's: a refusal nobody can look up is a bug.</exception>
-    public RefusalException Of(string code, params (string Name, object? Value)[] arguments)
+    public RefusalException Refuse(string code, params (string Name, object? Value)[] arguments)
     {
         var own = this[code];
         var (kind, template) = MembershipRefusals.Row(code);

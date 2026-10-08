@@ -14,7 +14,7 @@ namespace Examples.Webshop.Ordering.Domain.ValueObjects;
 public readonly partial record struct CustomerId
 {
     /// <summary>The customer <paramref name="caller"/> is, or <see langword="null"/> for a guest: nobody signed in.</summary>
-    public static CustomerId? Of(Caller caller)
+    public static CustomerId? From(Caller caller)
     {
         ArgumentNullException.ThrowIfNull(caller);
         return caller.UserId is { } user ? new CustomerId(user) : null;

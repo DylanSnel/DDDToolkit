@@ -71,7 +71,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         (link.Token, link.Kind, link.Refusal).Should().Be((token, AuthLink.Invitation, null));
         var (api, session, login) = Ui(sample, auth);
         (await login.SignInWithLinkAsync(link with { AccessToken = link.AccessToken + "x" }, Cancellation))
-            .Should().Be(PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", "en")), "a sign-in Auth did not sign is nobody's");
+            .Should().Be(PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", "en")), "a sign-in Auth did not sign is nobody's");
         var arrived = (await login.SignInWithLinkAsync(link, Cancellation)).Answer!;
         arrived.User!.Email.Should().Be(address);
         (await api.SeatsOfMineAsync(CallAs.Person(address, arrived.AccessToken), Cancellation)).Value.Should().BeEmpty("the API takes the token, and the person has no seat yet");
@@ -80,7 +80,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         // No password yet, so the login page would not let the person back in. They choose one; one Auth finds
         // too short is not taken, and is told in the UI's words.
         (await login.SignInAsync(address, password, Cancellation)).Answer.Should().BeNull();
-        (await login.ChoosePasswordAsync(session.AccessToken, "abc", Cancellation)).Should().Be(UiTexts.Of("login.password.not-taken", "en"));
+        (await login.ChoosePasswordAsync(session.AccessToken, "abc", Cancellation)).Should().Be(UiTexts.For("login.password.not-taken", "en"));
         (await login.ChoosePasswordAsync(session.AccessToken, password, Cancellation)).Should().BeNull();
 
         // Then the invitation, with the token the link brought and the name she is shown by there: a seat in meadow.
@@ -104,7 +104,7 @@ public sealed class InvitedByMailTests(SampleSupabaseStack stack)
         var second = AuthLink.Read(await auth.LandingOfAsync(mail, Cancellation));
         (second.Token, second.AccessToken).Should().Be((null, null));
         second.Refusal.Should().NotBeNull();
-        (await login.SignInWithLinkAsync(second, Cancellation)).Should().Be(PasswordSignIn.RefusedBecause(UiTexts.Of("login.link.refused", "en")));
+        (await login.SignInWithLinkAsync(second, Cancellation)).Should().Be(PasswordSignIn.RefusedBecause(UiTexts.For("login.link.refused", "en")));
     }
 
     /// <summary>

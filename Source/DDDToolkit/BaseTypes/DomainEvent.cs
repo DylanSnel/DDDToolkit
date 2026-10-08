@@ -148,7 +148,7 @@ public static class DomainEventName
     private static readonly ConcurrentDictionary<Type, string> Names = new();
 
     /// <summary>The name declared by <see cref="DomainEventNameAttribute"/>, otherwise the conventional one (<see cref="ConventionalNameOf"/>).</summary>
-    public static string Of(Type eventType)
+    public static string For(Type eventType)
     {
         ArgumentNullException.ThrowIfNull(eventType);
 
@@ -184,12 +184,12 @@ public static class DomainEventName
     }
 
     /// <summary>The stable name of <typeparamref name="TEvent"/>.</summary>
-    public static string Of<TEvent>() where TEvent : IDomainEvent => Of(typeof(TEvent));
+    public static string For<TEvent>() where TEvent : IDomainEvent => For(typeof(TEvent));
 
     /// <summary>The stable name of the runtime type of <paramref name="domainEvent"/>.</summary>
-    public static string Of(IDomainEvent domainEvent)
+    public static string For(IDomainEvent domainEvent)
     {
         ArgumentNullException.ThrowIfNull(domainEvent);
-        return Of(domainEvent.GetType());
+        return For(domainEvent.GetType());
     }
 }

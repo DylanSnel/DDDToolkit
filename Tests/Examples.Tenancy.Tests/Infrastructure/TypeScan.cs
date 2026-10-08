@@ -95,14 +95,14 @@ public sealed class TypeScan
     /// Scans every type of <paramref name="assembly"/>, the compiler's own included. A type that could not be
     /// loaded was not read, and is reported in <see cref="NotResolved"/>.
     /// </summary>
-    public static TypeScan Of(Assembly assembly)
+    public static TypeScan From(Assembly assembly)
     {
         var scan = new TypeScan();
         return scan.Reading(TypesOf(assembly, scan._notResolved));
     }
 
     /// <summary>Scans <paramref name="types"/>.</summary>
-    public static TypeScan Of(IEnumerable<Type> types) => new TypeScan().Reading(types);
+    public static TypeScan From(IEnumerable<Type> types) => new TypeScan().Reading(types);
 
     /// <summary>
     /// Every type of an assembly that could be loaded, nested and compiler-made ones included. For a list of types

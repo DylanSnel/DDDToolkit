@@ -31,7 +31,7 @@ public sealed class UiTexts(UiSession session)
 
     /// <summary>The text <paramref name="key"/> names, in the session's language.</summary>
     /// <param name="key">The text's name in the resource files, such as <c>login.title</c>.</param>
-    public string this[string key] => Of(key, session.Language);
+    public string this[string key] => For(key, session.Language);
 
     /// <summary>The text <paramref name="key"/> names, with <paramref name="values"/> in its numbered places.</summary>
     /// <param name="key">The text's name in the resource files.</param>
@@ -59,6 +59,6 @@ public sealed class UiTexts(UiSession session)
     /// </summary>
     /// <param name="key">The text's name in the resource files.</param>
     /// <param name="language">One of <see cref="UiSession.Languages"/>.</param>
-    public static string Of(string key, string language)
+    public static string For(string key, string language)
         => Resources.GetString(key, CultureInfo.GetCultureInfo(language)) ?? key;
 }

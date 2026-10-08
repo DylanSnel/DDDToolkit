@@ -173,7 +173,7 @@ public sealed partial class TranslationTests(SampleWithoutDatabase sample) : ICl
     [GeneratedRegex(@"\p{L}+")]
     private static partial Regex Word();
 
-    /// <summary>A text named in the UI: <c>T["name"</c>, <c>T.Html("name"</c> or <c>UiTexts.Of("name"</c>.</summary>
-    [GeneratedRegex(@"\bT(?:\[|\.Html\()""(?<name>[a-z0-9.-]+)""|UiTexts\.Of\(""(?<name>[a-z0-9.-]+)""")]
+    /// <summary>A text named in the UI: <c>T["name"</c>, <c>T.Html("name"</c> or <c>UiTexts.For("name"</c>.</summary>
+    [GeneratedRegex(@"\bT(?:\[|\.Html\()""(?<name>[a-z0-9.-]+)""|UiTexts\.For\(""(?<name>[a-z0-9.-]+)""")]
     private static partial Regex NamedText();
 }

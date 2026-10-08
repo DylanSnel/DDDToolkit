@@ -54,9 +54,9 @@ public class OrderAccessTests
     [Fact]
     public void The_customer_of_a_caller_is_their_user_and_a_guest_has_none()
     {
-        CustomerId.Of(Caller.User(Alice)).Should().Be(new CustomerId(Alice));
-        CustomerId.Of(Caller.Anonymous).Should().BeNull();
-        CustomerId.Of(Caller.System).Should().BeNull();
+        CustomerId.From(Caller.User(Alice)).Should().Be(new CustomerId(Alice));
+        CustomerId.From(Caller.Anonymous).Should().BeNull();
+        CustomerId.From(Caller.System).Should().BeNull();
     }
 
     [Fact]

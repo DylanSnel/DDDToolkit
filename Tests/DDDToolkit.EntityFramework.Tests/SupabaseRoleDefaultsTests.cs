@@ -43,7 +43,7 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
         (options.UserRole, options.AnonymousRole, options.SystemInRole, options.SystemRole)
             .Should().Be(("authenticated", "anon", "ddd_system_in", SupabaseRowLevelSecurity.DefaultSystemRole), "the system caller does the toolkit's bookkeeping as ddd_system, which the access files make");
         options.TokenRoles.Should().BeEmpty();
-        RowAccessRoleNames.Of(options).Should().Be(SupabaseRowLevelSecurity.DefaultRoles, "the host and the export take the same defaults");
+        RowAccessRoleNames.From(options).Should().Be(SupabaseRowLevelSecurity.DefaultRoles, "the host and the export take the same defaults");
         new SupabaseMigrationOptions().Roles.Should().Be(SupabaseRowLevelSecurity.DefaultRoles, "and so does an export by hand");
 
         Registered(services => services.AddSupabaseRowLevelSecurity<CallerOfTheTest>()).SystemRole.Should().Be("ddd_system", "the registration with an accessor of its own takes them too");
@@ -73,7 +73,7 @@ public sealed class SupabaseRoleDefaultsTests : IDisposable
 
         var platform = RegisteredFrom("system=service_role");
         platform.SystemRole.Should().Be(SupabaseRowLevelSecurity.ServiceRole, "the system caller runs as the platform's role the project named");
-        RowAccessRoleNames.Of(platform).System.Should().Be(SupabaseRowLevelSecurity.ServiceRole);
+        RowAccessRoleNames.From(platform).System.Should().Be(SupabaseRowLevelSecurity.ServiceRole);
 
         var overridden = RegisteredFrom("system=none|token:analyst=desk_analyst", options =>
         {

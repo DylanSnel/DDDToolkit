@@ -134,7 +134,7 @@ public sealed class ApiaryDatabase
         var owner = await postgres.CreateDatabaseAsync(cancellation);
         await ServerRoles.GetOrAdd(new NpgsqlConnectionStringBuilder(owner) { Database = null }.ConnectionString, _ => MakeServerRolesAsync(owner));
 
-        var export = new RowAccessExport { Roles = RowAccessRoleNames.Of(Roles()), WriteGrants = true };
+        var export = new RowAccessExport { Roles = RowAccessRoleNames.From(Roles()), WriteGrants = true };
         var database = new ApiaryDatabase(owner, logged, configure?.Invoke(export) ?? export);
 
         await database.RunAsOwnerAsync(PostgresRowAccess.SetupScript(Roles(), LoginRole), cancellation);
