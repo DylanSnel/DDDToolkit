@@ -4,7 +4,6 @@ using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
 using Examples.Webshop.Inventory.Converters;
-using Examples.Webshop.Ordering.Contracts.Converters;
 using Microsoft.EntityFrameworkCore;
 
 namespace Examples.Webshop.Inventory.Infrastructure.Persistence;
@@ -40,7 +39,6 @@ public sealed class InventoryContext(DbContextOptions<InventoryContext> options)
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddInventoryConverters();
     }
 }

@@ -1,7 +1,6 @@
 using DDDToolkit.EntityFramework;
 using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
-using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Shipping.Converters;
 using DDDToolkit.EntityFramework.Supabase;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +15,8 @@ namespace Examples.Webshop.Shipping.Infrastructure.Persistence;
 /// is at-least-once, so this module will be handed the same message twice eventually, and the row keyed
 /// on (message id, consumer name) is how it knows.
 /// <para>
-/// Two calls register converters because two assemblies declare identifiers this context stores:
-/// <c>ShipmentId</c> here, and <c>OrderId</c> in Ordering's contracts.
+/// One call registers the converters of every identifier this context stores: <c>ShipmentId</c> here, and
+/// <c>OrderId</c>, which Ordering's contracts publish.
 /// </para>
 /// <para>
 /// <c>[SupabaseMigrations]</c> puts its migrations in <c>supabase/migrations</c> and has the build write its design-time
@@ -47,7 +46,6 @@ public sealed class ShippingContext(DbContextOptions<ShippingContext> options) :
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.AddDDDToolkitConventions();
-        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddShippingConverters();
     }
 }

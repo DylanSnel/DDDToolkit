@@ -510,8 +510,7 @@ calls the contracts' method by that name:
 // Ordering's context: its own identifiers, and OrderId from the contracts
 configurationBuilder.AddOrderingConverters();
 
-// Shipping's context: OrderId from Ordering's contracts, then its own
-configurationBuilder.AddOrderingConverters();
+// Shipping's context: its own identifiers, and OrderId from Ordering's contracts
 configurationBuilder.AddShippingConverters();
 ```
 

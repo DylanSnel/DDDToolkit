@@ -3,7 +3,6 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.EntityFramework.Inbox;
 using DDDToolkit.EntityFramework.Outbox;
 using DDDToolkit.EntityFramework.Supabase;
-using Examples.Webshop.Ordering.Contracts.Converters;
 using Examples.Webshop.Payments.Converters;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,7 +38,6 @@ public sealed class PaymentsContext(DbContextOptions<PaymentsContext> options) :
         // Amounts of money: two decimals, up to a trillion. Without a precision SQL Server guesses
         // (18,2) and warns, and Postgres stores numbers of any length.
         configurationBuilder.Properties<decimal>().HavePrecision(18, 2);
-        configurationBuilder.AddOrderingConverters();
         configurationBuilder.AddPaymentsConverters();
     }
 }
