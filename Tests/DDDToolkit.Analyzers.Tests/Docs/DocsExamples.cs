@@ -5,7 +5,8 @@ namespace DDDToolkit.Analyzers.Tests.Docs;
 /// <summary>
 /// The code of a docs page, read from the page itself, so a test compiles what a reader copies and not a copy of
 /// it kept somewhere else. An example is a <c>csharp</c> block with nothing after the language: a block with a
-/// title shows what a generator writes, or code shortened to its point, and is read, not compiled.
+/// title shows what a generator writes, and one marked <c>shortened</c> code shortened to its point, the packages'
+/// own say; both are read, not compiled.
 /// </summary>
 internal static partial class DocsExamples
 {

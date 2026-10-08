@@ -262,7 +262,7 @@ flowchart LR
 <details>
 <summary>Show the code: what asks the checks</summary>
 
-```csharp
+```csharp shortened
 // AccessChecks<TRequests>.RequireAsync, the package's, shortened
 // The first check that decides a requirement holds the caller to it
 var requirement = request.RequiredAccess

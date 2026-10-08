@@ -206,7 +206,7 @@ flowchart LR
 <details>
 <summary>Show the code: what the check does</summary>
 
-```csharp
+```csharp shortened
 // MemberAccessCheck<Document, DocumentId>.RequireAsync, the package's, shortened
 case MemberAccess<DocumentId>.On required:
 {
@@ -1376,7 +1376,7 @@ sequenceDiagram
 <details>
 <summary>Show the code: what the save asks</summary>
 
-```csharp
+```csharp shortened
 // MemberHoldInterceptor, the package's, shortened
 foreach (var root in ChangedRoots(context))                // changed or deleted, or a member or a role beneath it
 {
