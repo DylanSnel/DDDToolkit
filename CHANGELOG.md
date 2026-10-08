@@ -1258,11 +1258,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   in the order of their ids (by the id's own comparison, so ids that are numbers come as numbers do). Renaming is
   the application's own use case. See
   [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
-  - Drop the first administrator's name from `TenantToProvision` (the sixth argument, `AdminDisplayName`), the
-    name from `AddSeatAsync(identity, displayName, ...)`, `AcceptAsync(token, displayName, ...)` and
-    `TenancyInstances.NewSeat`, and the suggested name from `IssueAsync(..., displayName, ...)` and
-    `TenancyInstances.NewInvitation`. To keep a name, add it to your seat class and set it with
-    `ConfigureFirstSeat: seat => seat.Rename(...)` and `configure: seat => seat.Rename(...)`.
+  - Drop the first administrator's name from `TenantToProvision` (the seventh argument, `AdminDisplayName`,
+    after `AdminIdentity`), the name from `AddSeatAsync(identity, displayName, ...)`,
+    `AcceptAsync(token, displayName, ...)` and `TenancyInstances.NewSeat`, and the suggested name from
+    `IssueAsync(..., displayName, ...)` and `TenancyInstances.NewInvitation`. To keep a name, add it to your seat
+    class and set it with `ConfigureFirstSeat: seat => seat.Rename(...)` and `configure: seat => seat.Rename(...)`.
   - `SeatAggregate.DisplayName`, `MaxDisplayNameLength`, `Rename` and its rule `DisplayNameIsValid`,
     `SeatCommands.RenameAsync`, the event `SeatRenamed` (`tenancy.seat-renamed`), the invitation's
     `DisplayName`, `MaxDisplayNameLength` and rule, `OpenInvitation.DisplayName`, `SeatSummary.DisplayName` and
@@ -2686,7 +2686,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned
   (DDD00054) about one it did not list. Tenancy on Postgres and Membership on Postgres now write their SQL into
   every application that references them, from what it marks, so the class and its line go:
-  - `public sealed class ShopTenancyRowAccess() : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, TenancyPermissionsOfModules.All), ["operator"])`
+  - `public sealed class ShopTenancyRowAccess() : TenancyRowAccessContribution(TenancyCatalogue.Build(ShopCatalogue.Application, ShopModules.Permissions), ["operator"])`
     and its `[assembly: UseRowAccessContribution(...)]`: mark the application's part `[TenancyCatalogue]`, a static
     `ApplicationCatalogue`, and the operators' token roles `[TenancyOperators]`, a static list of strings; the
     modules' keys are found where they are marked `[TenancyPermissions]`. With nothing marked the policies are
