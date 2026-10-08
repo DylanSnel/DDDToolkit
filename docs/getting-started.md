@@ -21,8 +21,8 @@ For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is
 which these pages do not describe. The namespaces are `DDDToolkit` either way. See
 [Packages](../README.md#packages).
 
-These pages describe 3.2.0, which is in preview: 3.2.0-preview.4 as they are written. Until 3.2.0 is
-released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with `--version 3.2.0-preview.4`,
+These pages describe 3.2.0, which is in preview: 3.2.0-preview.3 as they are written. Until 3.2.0 is
+released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with `--version 3.2.0-preview.3`,
 and keep them all at the same version. A package of this release next to 3.1.0 of another fails restore with
 NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
 

@@ -115,9 +115,9 @@ front of its name. The nuget.org account that owns the `DDDToolkit.*` ids cannot
 so `DDDToolkit` there is still 2.0.22. Only the package id is different. The assemblies and namespaces
 are the ones this page names, so `using DDDToolkit;` stays as it is.
 
-**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.4 as they are written. Until
+**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.3 as they are written. Until
 3.2.0 is released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with
-`--version 3.2.0-preview.4`, and keep them all at the same version. A package of this release next to 3.1.0
+`--version 3.2.0-preview.3`, and keep them all at the same version. A package of this release next to 3.1.0
 of another fails restore with NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
 
 | Package | Use it for |

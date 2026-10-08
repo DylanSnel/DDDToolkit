@@ -1257,8 +1257,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   under Changed), so a screen shows what the application chose with a plain `Select` and no read more. Seats come
   in the order of their ids (by the id's own comparison, so ids that are numbers come as numbers do). Renaming is
   the application's own use case. See
-  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1, 3.2.0-preview.2 or
-  3.2.0-preview.3:
+  [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Drop the first administrator's name from `TenantToProvision` (the sixth argument, `AdminDisplayName`), the
     name from `AddSeatAsync(identity, displayName, ...)`, `AcceptAsync(token, displayName, ...)` and
     `TenancyInstances.NewSeat`, and the suggested name from `IssueAsync(..., displayName, ...)` and
@@ -2561,7 +2560,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     `Temp.DDDToolkit.*` package together: a package of 3.1.0 or before still calls `DomainEventName.Of`
     (`Temp.DDDToolkit.EntityFramework` does when it delivers domain events and when it registers an event type),
     and next to this release's `Temp.DDDToolkit` that call fails with a `MissingMethodException`.
-  - From 3.2.0-preview.1 to 3.2.0-preview.3: `ToolkitRefusals.Of(code, ...)` is `ToolkitRefusals.Refuse(code, ...)`,
+  - From 3.2.0-preview.1 or 3.2.0-preview.2: `ToolkitRefusals.Of(code, ...)` is `ToolkitRefusals.Refuse(code, ...)`,
     `TenancyRefusals.Of` is `TenancyRefusals.Refuse`, `MembershipCodes.Of` is `MembershipCodes.Refuse`
     (`throw Document.Codes.Refuse(MembershipRefusals.NotFound)`), `ActedBy.Of(caller)` is `ActedBy.From(caller)`,
     `RowAccessRoleNames.Of(options)` is `RowAccessRoleNames.From(options)`, `TenancyActorKinds.Of(kind)` is
@@ -2618,11 +2617,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   (now a record of the application layer, so the Tenants schema has no record of its own) and
   `SeatOverviewListing`, and its routes and both GraphQL schemas answer as before. See
   [Names](docs/tenancy.md#names) and [How a seat is shown](docs/tenancy.md#how-a-seat-is-shown). From
-  3.2.0-preview.1, 3.2.0-preview.2 or 3.2.0-preview.3:
-  - `SeatSummary`, `UnitSummary`, `PlacementSummary`, `GrantSummary` and `SeatOverview<TView>` are gone, and so
-    are the questions that take a view. Read the seat's own fields where you read a seat summary's, and a unit's
-    own fields where you read a unit summary's `Name`, `ParentId` or `Status`, with `Path` and `Depth` beside it as
-    before: `(await directory.ListSeatsAsync(ct)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`.
+  3.2.0-preview.1 or 3.2.0-preview.2:
+  - `SeatSummary`, `UnitSummary`, `PlacementSummary` and `GrantSummary` are gone. Read the seat's own fields
+    where you read a seat summary's, and a unit's own fields where you read a unit summary's `Name`, `ParentId`
+    or `Status`, with `Path` and `Depth` beside it as before:
+    `(await directory.ListSeatsAsync(ct)).Select(seat => new SeatListing(seat.Id, seat.DisplayName, seat.Status))`.
   - `SeatOverview.Placements` is gone: read `overview.Seat.Placements`, a unit's path with
     `overview.UnitOf(placement.UnitId).Path`, a role's name with `overview.RoleOf(grant.RoleId)?.Name` (`null` for a
     role a filter of your own on the role class hides, whose name a grant summary gave as empty), and whether a
@@ -2683,7 +2682,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     accepting an invitation `tenancy.identity-required`. And in a host that requires explicit callers, a
     request that requires system work and runs as nobody fails with `NoCallerException`.
 - **For the 3.2.0 previews: a package's row access contribution is written because the application references
-  the package.** `3.2.0-preview.1` to `3.2.0-preview.3` wrote one only when the project that runs the export
+  the package.** `3.2.0-preview.1` and `3.2.0-preview.2` wrote one only when the project that runs the export
   listed it, through a class of the application's that handed it the catalogue or a resource's rules, and warned
   (DDD00054) about one it did not list. Tenancy on Postgres and Membership on Postgres now write their SQL into
   every application that references them, from what it marks, so the class and its line go:
@@ -2726,7 +2725,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `RolePack.seededFor` in GraphQL, where both answered `shape`. See
   [The administrators' pack](docs/tenancy.md#the-administrators-pack).
 - **For the 3.2.0 previews: `AddSupabaseAuthAdmin` takes the project's URL**, as `AddSupabaseJwtBearer` does,
-  and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` to `3.2.0-preview.3` took Auth's own address
+  and calls Auth at `{projectUrl}/auth/v1`. `3.2.0-preview.1` and `3.2.0-preview.2` took Auth's own address
   there. A call that passes a project's `https://<ref>.supabase.co/auth/v1` works as before, because a URL that
   already ends in `/auth/v1` is taken as it is. A call that passes a bare Auth server's address still compiles,
   but its calls then go to `{address}/auth/v1/...`, where that server has nothing, and every one of them fails
@@ -2749,35 +2748,6 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   already; one over a `long`, an `int` or a `string` declares it in its partial declaration, or the class over it is
   DDD00067, whose code fix adds a `Create()` for you to write. See
   [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
-- **For the 3.2.0 previews: `InMemoryFusionGatewayOptions.ServedApart` is gone.** `3.2.0-preview.3` left a schema
-  out of the in-memory gateway with it and served that schema with `MapGraphQL`. Give it a gateway of its own
-  instead, `AddInMemoryFusionGateway("admin", ["admin", ...])` with the source schemas it composes with, mapped as
-  an endpoint, `MapInMemoryFusionGateway("/admin/graphql", "admin").RequireAuthorization(...)`, and name the
-  user's gateway too, since `AddInMemoryFusionGateway()` beside named ones composes their schemas as well. A schema
-  a gateway lists is a source schema, `AddSourceSchemaDefaults()`; one you keep serving with `MapGraphQL`, outside
-  every gateway, stays out of them once each gateway lists its schemas by name. See
-  [Several gateways](docs/graphql.md#several-gateways).
-- **For the 3.2.0 previews: the class Tenancy's use cases are named through is `TenancyUseCases`.**
-  `3.2.0-preview.3` named it after the module, `{Module}Tenancy`: `TenantsTenancy` for the module Tenants, and
-  `TenancyTenancy` for a module called Tenancy. It is now named as the package's class is, without its type
-  parameters, `TenancyUseCases`, whatever the module is called, and so is every class a package asks for with
-  `[assembly: TemplateFacade]`: the package's own class's name is the one its documentation uses. No other package of
-  the toolkit asks for one; Membership's use cases need none. See
-  [Calling a use case](docs/tenancy.md#calling-a-use-case).
-  - Write `TenancyUseCases` where you wrote `TenantsTenancy`, your `{Module}Tenancy`: `TenancyUseCases.SeatCommands`,
-    `TenancyUseCases.BeginSystem()`. A file that imports `DDDToolkit.Supporting.Tenancy.UseCases` compiles as before,
-    since C# tells the generated class and the package's generic one apart by their type parameters. Or keep the
-    old name with one line in the project that declares the classes,
-    `[assembly: TemplateFacadeName("TenancyUseCases", "TenantsTenancy")]`.
-  - A name of your own, `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`, is
-    `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]`, in the same project. `TemplateFacadeAttribute`
-    takes the package's class alone, its `Name` is gone, and a name holds no `{Module}` any more; a package's own
-    `[assembly: TemplateFacade(typeof(X<,>), "...")]` drops its name too.
-  - Two modules that both declare Tenancy's classes got a class each, named after each module; they now get two
-    classes of one name, and a project that sees both, the host first, is told so, DDD00075, with the line that
-    gives one of them a name of its own.
-  - The Tenancy sample names its use cases `TenancyUseCases` throughout, and so do its tests, the docs and the agent
-    skill; Tenancy's own test host keeps `HostTenancy` with that one line.
 - **The pgmq check is one of the start-up checks, and runs once the host asks for them.** `AddPgmqSink` and
   `AddPgmqConsumer` register it with the others, where they registered a hosted service of its own that ran in
   every host with a sink or a consumer. It now runs, in `StartingAsync` as before, in a host that calls
