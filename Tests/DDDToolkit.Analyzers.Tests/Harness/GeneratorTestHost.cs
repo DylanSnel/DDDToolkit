@@ -76,6 +76,10 @@ public sealed class GeneratorTestHost
 
     private readonly List<(string Path, string Text)> _sources = [];
     private readonly List<PortableExecutableReference> _extraReferences = [];
+
+    /// <summary>The references that are projects this host compiled, rather than packages: what <see cref="WithReferencedProjectBeside"/> leaves out.</summary>
+    private readonly HashSet<PortableExecutableReference> _projects = [];
+
     /// <summary>
     /// What the DDDToolkit.Analyzers package's props file gives every project: each property a generator or an
     /// analyzer reads, declared, and empty until the project sets it. And what its targets file gives:
@@ -341,6 +345,22 @@ public sealed class GeneratorTestHost
     }
 
     /// <summary>
+    /// As <see cref="WithReferencedProject"/>, for a project that does not see the projects this host references
+    /// already, only the packages: a second module beside the first, which neither references, as a host references
+    /// two modules that know nothing of each other.
+    /// </summary>
+    /// <param name="assemblyName">The referenced assembly's name.</param>
+    /// <param name="configure">Adds the project's sources, references and build properties.</param>
+    public GeneratorTestHost WithReferencedProjectBeside(string assemblyName, Func<GeneratorTestHost, GeneratorTestHost> configure)
+    {
+        var other = new GeneratorTestHost().WithAssemblyName(assemblyName);
+        other._extraReferences.AddRange(_extraReferences.Where(reference => !_projects.Contains(reference)));
+        other = configure(other);
+
+        return Referencing(assemblyName, other.RunCore());
+    }
+
+    /// <summary>
     /// Compiles a snippet into an assembly of its own without running a generator, and references it: an assembly
     /// as a project left it that this toolkit's generators did not build, one for another framework or of an older
     /// version, with what its generators wrote there written out in <paramref name="source"/>.
@@ -366,7 +386,9 @@ public sealed class GeneratorTestHost
                 + string.Join("\n", emit.Diagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)));
         }
 
-        _extraReferences.Add(MetadataReference.CreateFromImage(stream.ToArray()));
+        var reference = MetadataReference.CreateFromImage(stream.ToArray());
+        _projects.Add(reference);
+        _extraReferences.Add(reference);
         return this;
     }
 

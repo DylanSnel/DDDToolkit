@@ -19,7 +19,7 @@ public sealed record ChangeTenantShape(TenantShape Shape) : ICommand, ITenantsRe
 
 /// <summary>Handles <see cref="ChangeTenantShape"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="tenants">The package's use cases that change a tenant.</param>
-public sealed class ChangeTenantShapeHandler(TenantsTenancy.TenantCommands tenants) : ICommandHandler<ChangeTenantShape>
+public sealed class ChangeTenantShapeHandler(TenancyUseCases.TenantCommands tenants) : ICommandHandler<ChangeTenantShape>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

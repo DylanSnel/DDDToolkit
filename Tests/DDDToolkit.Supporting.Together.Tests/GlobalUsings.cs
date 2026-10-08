@@ -22,6 +22,6 @@ global using Microsoft.EntityFrameworkCore;
 global using Microsoft.Extensions.DependencyInjection;
 global using Xunit;
 
-// The caller closed over the application's ids, once, as an application does. The use cases are CampusTenancy,
-// which the toolkit's generator writes into the test host that declares the classes, named after its DDD_Module.
+// The caller closed over the application's ids, once, as an application does. The use cases are TenancyUseCases,
+// which the toolkit's generator writes into the test host that declares the classes, under the package's name.
 global using CampusCaller = DDDToolkit.Supporting.Tenancy.Access.TenancyCaller<Campus.Tenants.TenantId, Campus.Tenants.SeatId>;

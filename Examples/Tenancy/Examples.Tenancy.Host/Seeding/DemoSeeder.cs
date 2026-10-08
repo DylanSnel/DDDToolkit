@@ -62,7 +62,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         }
 
         // System work, closed over the Tenants module's ids like its use cases, so the host names neither of them.
-        using (TenantsTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
             foreach (var tenant in DemoData.Tenants)
             {
@@ -77,7 +77,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
 
         foreach (var tenant in DemoData.Tenants)
         {
-            using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await SeedAsync(tenant, cancellationToken);
             }
@@ -100,8 +100,8 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
     {
         try
         {
-            await RunAsync<TenantsTenancy.TenantCommands>(tenants => tenants.ProvisionAsync(
-                new TenantsTenancy.TenantToProvision(
+            await RunAsync<TenancyUseCases.TenantCommands>(tenants => tenants.ProvisionAsync(
+                new TenancyUseCases.TenantToProvision(
                     tenant.Slug,
                     tenant.Name,
                     tenant.Shape,
@@ -134,7 +134,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         {
             // System work in a tenant reads all of it: every seat, role and project role, and every project.
             IReadOnlyList<string> lacking;
-            using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+            using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();
@@ -179,27 +179,27 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         // Each with its kind, set on the new unit in the save that adds it, as the module's command sets it.
         foreach (var unit in tenant.Units)
         {
-            await RunAsync<TenantsTenancy.OrganizationCommands>(organization
+            await RunAsync<TenancyUseCases.OrganizationCommands>(organization
                 => organization.AddUnitAsync(unit.Parent, unit.Name, cancellationToken, unit.Id, added => added.SetKind(unit.Kind)));
         }
 
         // Each with the name the person is shown by in this tenant, the seat class's own field, set in the save that adds it.
         foreach (var seat in tenant.Seats)
         {
-            await RunAsync<TenantsTenancy.SeatCommands>(seats
+            await RunAsync<TenancyUseCases.SeatCommands>(seats
                 => seats.AddSeatAsync(seat.Person.Id, cancellationToken, seat.Id, added => added.Rename(seat.Person.Name)));
         }
 
         foreach (var seat in tenant.Seats)
         {
-            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.PlaceAsync(seat.Id, seat.PlacedIn, primary: true, cancellationToken));
+            await RunAsync<TenancyUseCases.SeatCommands>(seats => seats.PlaceAsync(seat.Id, seat.PlacedIn, primary: true, cancellationToken));
         }
 
         // A start in the past is system work's to choose, which this is: a grant that has expired had to begin.
         var now = clock.GetUtcNow();
         foreach (var grant in tenant.Grants)
         {
-            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.GrantAsync(
+            await RunAsync<TenancyUseCases.SeatCommands>(seats => seats.GrantAsync(
                 tenant.SeatOf(grant.Person),
                 grant.Unit,
                 tenant.Roles[grant.Pack],
@@ -212,7 +212,7 @@ public sealed class DemoSeeder(IServiceScopeFactory scopes, IConfiguration confi
         // A suspended seat keeps its placements and grants, which simply count for nothing while it is.
         foreach (var person in tenant.Suspended)
         {
-            await RunAsync<TenantsTenancy.SeatCommands>(seats => seats.SuspendAsync(tenant.SeatOf(person), cancellationToken));
+            await RunAsync<TenancyUseCases.SeatCommands>(seats => seats.SuspendAsync(tenant.SeatOf(person), cancellationToken));
         }
 
         // Last, the projects. Each owner goes on the crew holding the tenant's crew lead's project role, the rest of

@@ -73,6 +73,8 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00072](#ddd00072) | Error | A row access contribution a package writes is not listed again |
 | [DDD00073](#ddd00073) | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context |
 | [DDD00074](#ddd00074) | Warning | A design-time factory keeps the migration history where the application does |
+| [DDD00075](#ddd00075) | Warning | Every class a package's use cases are named through has a name of its own where a project sees it |
+| [DDD00076](#ddd00076) | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -110,6 +112,9 @@ the Membership package could not tell, and which member class names the wrong re
 is a module whose keys never reach the catalogue the host runs with.
 [DDD00074](#ddd00074) is about [the migration history](entity-framework.md#the-migration-history), where it is a
 `dotnet ef database update` or an exported file that records the migrations in a table the application never reads.
+[DDD00075](#ddd00075) is about [two modules with Tenancy's classes](tenancy.md#two-modules-with-the-classes), where it is a name that
+compiles in each module and is two classes in the host, and [DDD00076](#ddd00076) about the same class, where it is a
+naming line that reads as if it named it and changes nothing.
 
 That split is what the numbering is for. DDD00001 to DDD00019 are reserved for "the generator could
 not do what you asked", and DDD00020 upwards for rules about the model, with one exception:
@@ -2280,7 +2285,7 @@ severity in an `.editorconfig` section for `*.cs` files does not reach it: set i
 
 ```csharp
 // Shop.Tenants.Domain, [assembly: Module("Tenants")], with no class declared with [SeatAggregate]
-[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'TenantsTenancy' is not written, ...
+[TenantAggregate<TenantId>] public sealed partial class Tenant;   // DDD00065: 'TenancyUseCases' is not written, ...
 [OrganizationAggregate<TenantId>] public sealed partial class Organization;
 [OrganizationUnit<OrganizationUnitId>] public sealed partial class OrganizationUnit;
 [RoleAggregate<RoleId>] public sealed partial class Role;
@@ -2290,11 +2295,11 @@ severity in an `.editorconfig` section for `*.cs` files does not reach it: set i
 // The same project, with all five classes, and a type of the class's name in a namespace of its own
 namespace Shop.Tenants.Settings;
 
-public static class TenantsTenancy;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
+public static class TenancyUseCases;   // DDD00065, on this type: the class would hide it where Shop.Tenants.Settings is imported
 ```
 
 Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares
-your classes, named after the module: `TenantsTenancy.SeatCommands`
+your classes, named as the package's class is: `TenancyUseCases.SeatCommands`
 ([Calling a use case](tenancy.md#calling-a-use-case)). Each of its type parameters is one of your classes or
 ids, so it is written when every template it takes from has one class, in that project or in a project of the
 same module it references. When it is not, the projects above that name a use case only hear that the name does
@@ -2306,7 +2311,7 @@ and does not build once that fails. So the project that declares the classes say
 | no class is declared with one of the templates | declare it, next to the others |
 | several classes are declared with one template | keep one |
 | a class does not meet what the package's class asks of it | give it what the message names |
-| the project declares a type of that name in a namespace, which the class would hide wherever that namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` |
+| the project declares a type of that name in a namespace, which the class would hide wherever that namespace is imported | rename that type, or name the class otherwise: `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]` |
 
 It is information, not a warning. A module whose classes are split over two projects hears it in the first of
 them, where nothing is wrong, and gets the class in the second, where the classes are complete. A template whose
@@ -2644,6 +2649,84 @@ Framework keeps it, names the table in the factory's options and the host's alik
 A context marked `[SupabaseMigrations]` needs no factory written by hand: the build writes one beside it that calls
 `UseDDDToolkitDesignTime()` wherever the project references `DDDToolkit.EntityFramework`, and the analyzer does not
 read generated code. See [Supabase](supabase.md#exporting-as-part-of-the-build).
+
+## DDD00075
+
+**Every class a package's use cases are named through has a name of its own where a project sees it.**
+
+```
+Shop.Host.csproj: warning DDD00075: 'TenancyUseCases' is the name of more than one class in this project: it sees
+the one 'Shop.Customers.Domain' has for the module Customers and the one 'Shop.Partners.Domain' has for the module
+Partners. Give one of them a name of its own, with [assembly: TemplateFacadeName("TenancyUseCases",
+"CustomersTenancyUseCases")] in 'Shop.Customers.Domain'.
+```
+
+Tenancy's use cases are named through a class the toolkit's generator writes into the project that declares your
+Tenancy classes, `TenancyUseCases`, after the package's own class
+([Two modules with the classes](tenancy.md#two-modules-with-the-classes)). An application with two modules that
+each declare Tenancy's classes gets two classes of that name, one in each module's domain project. While neither
+module references the other, neither sees the other's, so neither is told; they meet in every project that
+references both, the host and your tests first, where the first line that names `TenancyUseCases` would be the
+compiler's CS0433, with no word of what to do. So such a project is told, at its project file, since no line of its
+code is wrong.
+
+Give one of them a name of its own, with the line the message writes out, in the project it names: the one that
+declares that module's classes. Where you named that class already, the message names the line that names it, to
+give another name there: a second line for one class would change nothing.
+
+```csharp
+// Shop.Customers.Domain, beside [assembly: Module("Customers")] or Tenancy's switch
+using DDDToolkit.Abstractions.Attributes;
+
+[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]
+```
+
+Every project above it then names Customers' use cases `CustomersTenancyUseCases.SeatCommands`, and Partners keeps
+`TenancyUseCases`. Any name a class can have will do, `CustomersTenancy` as well, as long as no namespace or type of
+yours in the global namespace has it; the message only suggests one.
+
+| Where it is reported | Why |
+|---|---|
+| at the project file of a project that sees two such classes the projects it references have | the host or a test project: the classes meet there |
+| on the first class of a project that declares a module's classes and references another module's project with a class of that name | it gets its own class all the same, which the compiler binds its own code to, CS0436, so nothing there is closed over the other module's classes; every project above it sees both, is told at its project file and cannot name either |
+| on the first class of a project that would get two classes of one name itself: two packages' classes of one name, or a name you gave that another class has | neither can be told from the other, so neither is written |
+
+Where two packages' classes share a name in one project, the line names the one meant with its namespace,
+`[assembly: TemplateFacadeName("Acme.Billing.UseCases", "BillingUseCases")]`. A type, a namespace or an alias of
+the name you keep in the global namespace yourself is your own way of naming the classes, and is not this.
+
+It is a warning rather than an error: a host that names neither class builds and runs, and the compiler stops the
+first line that does. Reported at the project file, it is outside every source file, so its severity is set with
+`<NoWarn>` or `<WarningsAsErrors>`, or in a `.globalconfig` file with `is_global = true`, and not in an
+`.editorconfig` section for `*.cs` files.
+
+## DDD00076
+
+**`[assembly: TemplateFacadeName]` names, once, a class this project gets.**
+
+```csharp
+[assembly: TemplateFacadeName("TenancyUsecases", "ShopTenancy")]   // DDD00076: ... changes nothing: no package this project
+                                                                   // references asks for a class of that name; it can name 'TenancyUseCases'
+```
+
+The line gives the class a package's use cases are named through a name of your own, in the project where the
+generator writes it: the one that declares the classes. A module whose classes are split over two projects may give
+it beside the module in either: the project that writes the class reads it in the projects of its module it takes
+classes from. A line that does not change it reads as if it did, so it is reported at the line, and the class keeps
+its name:
+
+| The line | What to do |
+|---|---|
+| names no class a package this project references asks for | write the class as the message lists it, the package's class's name without its type parameters |
+| names two classes, two packages' classes of one name | name the one meant with its namespace, `"DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases"` |
+| is in a project that declares none of the classes, such as an application project above the domain project | move it into the project that declares them: the class is written, and named, there |
+| names a class a line before it names already, in this project or in a project of its module it takes classes from | keep one; this project's line stands, then the first other project's by name |
+| gives a name no class can have, a keyword or one with a space | give a name a class can have |
+| gives a name a namespace or a type in the global namespace has, such as the module's root namespace, `Customers` for `Customers.Domain` | give another name: the class cannot have it as well, and the projects above would only hear CS0234 |
+
+A line in another project of the module is reported in the project that writes the class, on the line that stands
+there or on its first class, with the project the line is in. An alias of the name at the top of one of the
+project's own files is your own way of naming the classes, and the class stands back for it without a word.
 
 ## Building the model fails: the owned type must carry the key part
 

@@ -16,7 +16,7 @@ global using Examples.Tenancy.Catalogue;
 // ids every module shares. The commands and queries the seeder sends, and the keys and packs the catalogue is
 // made of, are named where they are used, each with a using of the feature it comes from. The host references
 // the API projects alone, and names nothing of a module's infrastructure project: no context, no store. Tenancy's
-// use cases, which the seeder provisions with, are TenantsTenancy, the class the toolkit's generator wrote into the
+// use cases, which the seeder provisions with, are TenancyUseCases, the class the toolkit's generator wrote into the
 // Tenants module's domain project, which the host sees through the API project. So are the system work the seeder
 // begins and the caller the host's gates ask about, closed over the module's ids: no call of Tenancy's here names
 // an id type.

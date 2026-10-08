@@ -95,7 +95,7 @@ public sealed class PeopleOfficeScenarios(SampleHosts sample) : IClassFixture<Sa
         // The history, read as the application's own work in harbor. The seeding gave every role as system work,
         // so the one grant a seat made is hers.
         List<(TenantId Tenant, string? By, string Payload)> grantsBySeats;
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var rows = await scope.ServiceProvider.GetRequiredService<TenantsContext>().Set<EventLogEntry>()

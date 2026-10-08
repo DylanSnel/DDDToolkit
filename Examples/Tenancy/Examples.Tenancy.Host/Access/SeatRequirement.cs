@@ -30,7 +30,7 @@ public sealed class SeatRequirement : IAuthorizationRequirement
     /// <remarks>
     /// One function, so whatever else guards an entrance of the host asks the same question. It reads what kind of
     /// caller it is and why nobody is nobody, which a caller says without its ids, so it takes one as
-    /// <see cref="ITenancyCaller"/>: the guards pass <c>TenantsTenancy.CurrentCaller()</c>.
+    /// <see cref="ITenancyCaller"/>: the guards pass <c>TenancyUseCases.CurrentCaller()</c>.
     /// </remarks>
     /// <param name="caller">The request's Tenancy caller.</param>
     public static RefusalException? RefusalFor(ITenancyCaller caller)

@@ -21,7 +21,7 @@ public sealed record MakePlacement(SeatId Seat, OrganizationUnitId Unit, bool Pr
 
 /// <summary>Handles <see cref="MakePlacement"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class MakePlacementHandler(TenantsTenancy.SeatCommands seats) : ICommandHandler<MakePlacement>
+public sealed class MakePlacementHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MakePlacement>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

@@ -19,7 +19,7 @@ public sealed record ArchiveTenantRole(RoleId Role) : ICommand, ITenantsRequest
 
 /// <summary>Handles <see cref="ArchiveTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
-public sealed class ArchiveTenantRoleHandler(TenantsTenancy.RoleCommands roles) : ICommandHandler<ArchiveTenantRole>
+public sealed class ArchiveTenantRoleHandler(TenancyUseCases.RoleCommands roles) : ICommandHandler<ArchiveTenantRole>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

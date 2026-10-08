@@ -353,11 +353,11 @@ public class TemplateDefaultsTests
                 }
             }
 
-            public sealed class Handler(ShopTenancy.SeatCommands seats)
+            public sealed class Handler(TenancyUseCases.SeatCommands seats)
             {
-                public ShopTenancy.SeatCommands Seats => seats;
+                public TenancyUseCases.SeatCommands Seats => seats;
 
-                public ShopTenancy.SeatOverview? Last { get; set; }
+                public TenancyUseCases.SeatOverview? Last { get; set; }
             }
             """;
 
@@ -374,7 +374,7 @@ public class TemplateDefaultsTests
         }
 
         result.ShouldContain("TenancyModelBuilderExtensions.AddTenancy.Registration", "AddTenancy<global::DDDToolkit.Sample.Tenant, global::DDDToolkit.Sample.TenantId, global::DDDToolkit.Sample.Organization");
-        result.ShouldContain("ShopTenancy.TemplateFacade", "public abstract class ShopTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<global::DDDToolkit.Sample.Tenant,");
+        result.ShouldContain("TenancyUseCases.TemplateFacade", "public abstract class TenancyUseCases : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<global::DDDToolkit.Sample.Tenant,");
         result.ShouldContain("OrganizationUnit.EntityFramework", "[global::Microsoft.EntityFrameworkCore.Owned]");
     }
 
@@ -465,7 +465,7 @@ public class TemplateDefaultsTests
         using DDDToolkit.Abstractions.Interfaces;
 
         [assembly: TemplateRegistrations(typeof(Acme.Pins.NoteRegistrations))]
-        [assembly: TemplateFacade(typeof(Acme.Pins.NoteUseCases<,,>), "{Module}Notes")]
+        [assembly: TemplateFacade(typeof(Acme.Pins.NoteUseCases<,,>))]
 
         namespace Acme.Pins;
 
@@ -556,7 +556,7 @@ public class TemplateDefaultsTests
             {
                 public static string Register() => "pinned by ".AddNotes();
 
-                public static BoardNotes.Pinned Pinned(Note note) => new(note.Id, note.Pin);
+                public static NoteUseCases.Pinned Pinned(Note note) => new(note.Id, note.Pin);
             }
             """;
 
@@ -566,7 +566,7 @@ public class TemplateDefaultsTests
         result.ReportedDiagnostics.Should().BeEmpty();
         result.ShouldHaveGenerated(Written("Pin")).ShouldHaveGenerated(Written("PinId"));
         result.ShouldContain("Note.", ": global::Acme.Pins.NoteAggregate<global::Shop.Notes.NoteId, global::Shop.PinId>");
-        result.ShouldContain("BoardNotes.TemplateFacade", "global::Acme.Pins.NoteUseCases<global::Shop.Notes.Note, global::Shop.Notes.NoteId, global::Shop.PinId>");
+        result.ShouldContain("NoteUseCases.TemplateFacade", "global::Acme.Pins.NoteUseCases<global::Shop.Notes.Note, global::Shop.Notes.NoteId, global::Shop.PinId>");
         result.ShouldContain("NoteRegistrations.AddNotes.Registration", "AddNotes<global::Shop.Notes.Note, global::Shop.Notes.NoteId, global::Shop.PinId>(prefix)");
     }
 
@@ -618,7 +618,7 @@ public class TemplateDefaultsTests
         }
 
         ParentOf(result, "Shop.Domain.Tenant").Should().Be("DDDToolkit.Supporting.Tenancy.TenantAggregate<Shop.Contracts.TenantId>");
-        result.ShouldHaveGenerated("TenantsTenancy.TemplateFacade");
+        result.ShouldHaveGenerated("TenancyUseCases.TemplateFacade");
     }
 
     [Fact]
@@ -639,9 +639,9 @@ public class TemplateDefaultsTests
                 protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder) => configurationBuilder.AddDDDToolkitConventions();
             }
 
-            public sealed class Handler(TenantsTenancy.SeatCommands seats, Shop.Domain.Seat? seat)
+            public sealed class Handler(TenancyUseCases.SeatCommands seats, Shop.Domain.Seat? seat)
             {
-                public TenantsTenancy.SeatCommands Seats => seats;
+                public TenancyUseCases.SeatCommands Seats => seats;
 
                 public Shop.Domain.Seat? Seat => seat;
             }

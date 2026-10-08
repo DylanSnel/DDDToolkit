@@ -21,7 +21,7 @@ public sealed record CreateTenantRole(string Name, string Description, IReadOnly
 
 /// <summary>Handles <see cref="CreateTenantRole"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="roles">The package's use cases that change a role.</param>
-public sealed class CreateTenantRoleHandler(TenantsTenancy.RoleCommands roles) : ICommandHandler<CreateTenantRole, RoleId>
+public sealed class CreateTenantRoleHandler(TenancyUseCases.RoleCommands roles) : ICommandHandler<CreateTenantRole, RoleId>
 {
     /// <inheritdoc />
     /// <returns>The new role's id.</returns>

@@ -14,7 +14,7 @@ public sealed class SeatRequirementHandler : AuthorizationHandler<SeatRequiremen
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (SeatRequirement.RefusalFor(TenantsTenancy.CurrentCaller()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal)
         {
             context.Fail(new AuthorizationFailureReason(this, refusal.Code));
         }

@@ -22,7 +22,7 @@ internal static class InvitationsMutations
     /// invitation's token, and it says nothing of whether the address had an account.
     /// </summary>
     [Mutation]
-    public static async Task<TenantsTenancy.IssuedInvitation<InvitationId>> PersonInviteAsync(
+    public static async Task<TenancyUseCases.IssuedInvitation<InvitationId>> PersonInviteAsync(
         string address,
         OrganizationUnitId unitId,
         RoleId roleId,

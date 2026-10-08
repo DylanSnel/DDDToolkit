@@ -37,7 +37,7 @@ public sealed class SeatGate(IEnumerable<string> openFields, IEnumerable<string>
     private static readonly FieldMiddlewareConfiguration Seated = new(next => context =>
     {
         // The caller the request's flow carries: the gateway calls a module's schema in that flow.
-        if (SeatRequirement.RefusalFor(TenantsTenancy.CurrentCaller()) is { } refusal)
+        if (SeatRequirement.RefusalFor(TenancyUseCases.CurrentCaller()) is { } refusal)
         {
             throw refusal;
         }

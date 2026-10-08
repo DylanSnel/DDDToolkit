@@ -17,8 +17,8 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// <para>
 /// Every method is generic over the application's tenant and seat ids. C# infers both where both are arguments, as
 /// above. Where one is not, as for <see cref="BeginSystem"/> or system work in a tenant for no seat, a project that
-/// sees the application's classes calls the same method closed over them, through the class named after the module
-/// that declares them: <c>TenantsTenancy.BeginSystem()</c>, <c>TenantsTenancy.BeginSystemIn(tenant)</c>. Only a
+/// sees the application's classes calls the same method closed over them, through the class the use cases are named
+/// through: <c>TenancyUseCases.BeginSystem()</c>, <c>TenancyUseCases.BeginSystemIn(tenant)</c>. Only a
 /// project that sees nothing but the ids, another module's, writes them:
 /// <c>TenancyWork.BeginSystemIn&lt;TenantId, SeatId&gt;(tenant)</c>.
 /// </para>
@@ -93,7 +93,7 @@ public static class TenancyWork
     /// <para>
     /// It yields to that one wherever both apply, which is wherever the type arguments are written: there a bare
     /// <c>default</c> for the seat would otherwise make an empty id the seat the work is recorded for, where it has
-    /// always meant no seat, as it does for <c>TenantsTenancy.BeginSystemIn(tenant, default)</c>. Where they are
+    /// always meant no seat, as it does for <c>TenancyUseCases.BeginSystemIn(tenant, default)</c>. Where they are
     /// inferred, this is the only one that applies.
     /// </para>
     /// </summary>

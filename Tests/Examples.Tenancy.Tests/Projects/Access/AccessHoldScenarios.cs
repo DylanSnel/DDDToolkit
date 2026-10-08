@@ -211,7 +211,7 @@ public sealed class AccessHoldScenarios(SampleHosts sample) : IClassFixture<Samp
     {
         await using var onPostgres = await sample.StartOnPostgresAsync(services => services.HoldProjectSaves());
 
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = onPostgres.Host.Services.CreateAsyncScope();
             await new ChangeProjectNameHandler(scope.ServiceProvider.GetRequiredService<IProjectStore>())

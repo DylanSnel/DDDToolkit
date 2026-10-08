@@ -136,7 +136,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
 
         // System work in the tenant reaches all of it, by neither way: the filter is left out of the statement,
         // and the tenant filter keeps it to that tenant.
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {
             var (reach, projects) = await ListedAsync(sample, counter);
 
@@ -206,7 +206,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         }
 
         // System work in the tenant: one statement too, and it holds every key by neither way.
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {
             await using var scope = sample.Services.CreateAsyncScope();
             counter.WatchThisFlow();
@@ -506,7 +506,7 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
         // Juno holds no role in the organization: whoever works in the tenant reads its names.
         using (AsSeatOf(DemoPeople.Juno))
         {
-            foreach (var padding in new[] { 0, TenantsTenancy.TenancyDirectory.MostIds - Harbor.Seats.Count - 1 })
+            foreach (var padding in new[] { 0, TenancyUseCases.TenancyDirectory.MostIds - Harbor.Seats.Count - 1 })
             {
                 await using var scope = sample.Services.CreateAsyncScope();
                 var sender = scope.ServiceProvider.GetRequiredService<ISender>();

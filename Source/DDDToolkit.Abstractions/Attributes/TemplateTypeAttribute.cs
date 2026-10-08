@@ -21,9 +21,9 @@ namespace DDDToolkit.Abstractions.Attributes;
 /// </para>
 /// <para>
 /// A type parameter of a generic class is filled the same way, for a class the package names with
-/// <see cref="TemplateFacadeAttribute"/>: the project that declares the classes gets a class of its own, named
-/// after its module, that derives from it closed over them, so no project writes its type arguments. There every
-/// type parameter carries one, since that class leaves none open.
+/// <see cref="TemplateFacadeAttribute"/>: the project that declares the classes gets a class of its own, named as
+/// the package's class is without its type parameters, that derives from it closed over them, so no project writes
+/// its type arguments. There every type parameter carries one, since that class leaves none open.
 /// </para>
 /// </summary>
 /// <param name="template">The open generic template attribute, such as <c>typeof(SubscriptionAttribute&lt;&gt;)</c>.</param>

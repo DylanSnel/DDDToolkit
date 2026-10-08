@@ -2,7 +2,7 @@ namespace DDDToolkit.Analyzers.Tests.Generation;
 
 /// <summary>
 /// What an application calls of Tenancy, rather than names, is closed over its ids wherever its classes are seen: the
-/// system work and the current caller through the class the use cases are named through, <c>ShopTenancy.BeginSystem()</c>,
+/// system work and the current caller through the class the use cases are named through, <c>TenancyUseCases.BeginSystem()</c>,
 /// and the registrations through the wrappers the generator writes, <c>outbox.AddTenancyDomainEvents()</c>. These use
 /// the real Tenancy package, seen through metadata, and compile projects that call every one of them without naming an
 /// id: one of a single project whose classes the switch writes, where the class is a generator's output that no other
@@ -131,7 +131,7 @@ public class TenancyClosedOverTheIdsTests
         // The hardest place: the classes, the ids and the class the work is named through are all generators' output,
         // which no other generator sees. A call is bound by the compiler, which sees them all.
         var result = GeneratorTestHost.Create("[assembly: DDDToolkit.Supporting.Tenancy.GenerateTenancyClasses]", "Switch.cs")
-            .WithSource(Work("ShopTenancy", "Shop.Work"), "Work.cs")
+            .WithSource(Work("TenancyUseCases", "Shop.Work"), "Work.cs")
             .WithSource(Registrations("Shop.Persistence"), "Registrations.cs")
             .WithBuildProperty("RootNamespace", "Shop")
             .WithTenancyOnEntityFramework()
@@ -190,7 +190,7 @@ public class TenancyClosedOverTheIdsTests
 
         const string usings = "using Shop.Contracts;";
         var infrastructure = GeneratorTestHost.Create(Registrations("Shop.Tenants.Infrastructure", usings), "Registrations.cs")
-            .WithSource(Work("TenantsTenancy", "Shop.Tenants.Infrastructure", usings), "Work.cs")
+            .WithSource(Work("TenancyUseCases", "Shop.Tenants.Infrastructure", usings), "Work.cs")
             .WithSource(ModuleAttribute("Tenants"), "Module.cs")
             .WithTenancy()
             .WithReferencedProject("Shop.Tenants.Domain", Domain)
@@ -221,14 +221,14 @@ public class TenancyClosedOverTheIdsTests
                     var seat = await selection.ResolveAsync(caller, slug, CancellationToken.None);
                     using (TenancyCallers.Begin(seat))
                     {
-                        return TenantsTenancy.CurrentCaller();
+                        return TenancyUseCases.CurrentCaller();
                     }
                 }
             }
             """;
 
         var above = GeneratorTestHost.Create(host, "Middleware.cs")
-            .WithSource(Work("TenantsTenancy", "Shop.Host", usings), "Work.cs")
+            .WithSource(Work("TenancyUseCases", "Shop.Host", usings), "Work.cs")
             .WithTenancy()
             .WithReferencedProject("Shop.Tenants.Domain", Domain)
             .RunCore();

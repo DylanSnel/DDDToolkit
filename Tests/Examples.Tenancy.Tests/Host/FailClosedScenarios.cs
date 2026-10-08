@@ -66,7 +66,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         TenancyCallers.Ambient.Should().BeNull("nothing in this test began a Tenancy caller");
 
         await using var scope = host.Services.CreateAsyncScope();
-        var seats = scope.ServiceProvider.GetRequiredService<TenantsTenancy.SeatCommands>();
+        var seats = scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>();
 
         var suspend = () => seats.SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
 
@@ -97,13 +97,13 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             (await RefusedAsync(() => tenancy.Seats.IgnoreQueryFilters().CountAsync(Cancellation))).Should().Be(PostgresErrorCodes.InsufficientPrivilege);
 
             // A Tenancy command refuses it, and so does the save check under a module's own write.
-            var suspend = () => scope.ServiceProvider.GetRequiredService<TenantsTenancy.SeatCommands>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
+            var suspend = () => scope.ServiceProvider.GetRequiredService<TenancyUseCases.SeatCommands>().SuspendAsync(Harbor.SeatOf(DemoPeople.Leo), Cancellation);
             (await suspend.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
 
             // It finds no project to change, so one is put before it: loaded as harbor's own work, which reads
             // harbor's rows, and changed and saved once that work has ended and the system caller is all there is.
             Project pier;
-            using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+            using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 pier = await projects.Projects.AsTracking().SingleAsync(project => project.Id == pierSeven.Id, Cancellation);
             }
@@ -124,7 +124,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         var host = onPostgres.Host;
         var gardenShed = Meadow.ProjectNamed("Garden shed");
 
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             // It reads all of harbor, and nothing of meadow.
             await using (var scope = host.Services.CreateAsyncScope())
@@ -145,7 +145,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
             {
                 var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();
                 Project shed;
-                using (TenantsTenancy.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
+                using (TenancyUseCases.BeginSystemIn(Meadow.Id, Meadow.Administrator.Id))
                 {
                     shed = await projects.Projects.AsTracking().SingleAsync(project => project.Id == gardenShed.Id, Cancellation);
                 }
@@ -202,7 +202,7 @@ public sealed class FailClosedScenarios(SampleHosts sample) : IClassFixture<Samp
         IReadOnlyList<string> answered;
         JsonElement me;
         JsonElement seats;
-        using (TenantsTenancy.BeginSystemIn(Meadow.Id))
+        using (TenancyUseCases.BeginSystemIn(Meadow.Id))
         {
             answered = [.. (await rhea.VisibleProjectsAsync()).Names()];
             me = await rhea.GetFromJsonAsync<JsonElement>("/me", Cancellation);

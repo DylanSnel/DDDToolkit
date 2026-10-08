@@ -39,7 +39,7 @@ public sealed record RenameSeat(SeatId Seat, string? DisplayName) : ICommand, IT
 /// <param name="store">The unit of work Tenancy's aggregates are loaded and saved in.</param>
 /// <param name="answers">Tenancy's answers about the current caller.</param>
 /// <param name="reads">Where the key is asked about: Tenancy's rows, on a context of the question's own.</param>
-public sealed class RenameSeatHandler(TenantsTenancy.IStore store, SampleAnswers answers, ITenancyReads reads) : ICommandHandler<RenameSeat>
+public sealed class RenameSeatHandler(TenancyUseCases.IStore store, SampleAnswers answers, ITenancyReads reads) : ICommandHandler<RenameSeat>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">

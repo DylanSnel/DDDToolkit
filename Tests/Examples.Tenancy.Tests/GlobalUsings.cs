@@ -92,5 +92,5 @@ global using Examples.Tenancy.Host.Storage;
 global using Examples.Tenancy.Catalogue;
 global using Examples.Tenancy.Tests.Infrastructure;
 
-// Tenancy's use cases are TenantsTenancy here as in the sample: the class the toolkit's generator wrote into the
+// Tenancy's use cases are TenancyUseCases here as in the sample: the class the toolkit's generator wrote into the
 // Tenants module's domain project, which these tests see through the projects they test.

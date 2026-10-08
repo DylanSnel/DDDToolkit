@@ -7,8 +7,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// record the seat's own overview answers. It is no <c>Role</c>: that is an entity other modules refer to, with
 /// a rule on its keys, and what a seat holds itself it may always read.
 /// </summary>
-[ObjectType<TenantsTenancy.RoleSummary>]
+[ObjectType<TenancyUseCases.RoleSummary>]
 internal static partial class RoleOfMineType
 {
-    static partial void Configure(IObjectTypeDescriptor<TenantsTenancy.RoleSummary> descriptor) => descriptor.Name("RoleOfMine");
+    static partial void Configure(IObjectTypeDescriptor<TenancyUseCases.RoleSummary> descriptor) => descriptor.Name("RoleOfMine");
 }

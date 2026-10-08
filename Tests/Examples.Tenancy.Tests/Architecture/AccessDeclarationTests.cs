@@ -402,7 +402,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
                 .Should().BeEmpty("{0} reads: it names nothing that loads to change, or saves", query.Handler.Name);
         }
 
-        IsWritePort(typeof(TenantsTenancy.IStore)).Should().BeTrue("the package's store saves");
+        IsWritePort(typeof(TenancyUseCases.IStore)).Should().BeTrue("the package's store saves");
         IsWritePort(typeof(IProjectStore)).Should().BeTrue("Projects' store saves");
         IsWritePort(typeof(ITenancyReads)).Should().BeFalse("a read port does not");
         IsWritePort(typeof(IProjectReads)).Should().BeFalse("nor does Projects'");
@@ -441,7 +441,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // to ask about with a query. It hands back no entity, and nothing it read on the way. One answers more:
         // inviting answers the invitation's token, which is kept nowhere, so no query could answer it afterwards.
         var commands = Requests.Where(request => !request.IsQuery && request.Type != typeof(InvitePerson)).ToList();
-        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(TenantsTenancy.IssuedInvitation<InvitationId>));
+        Requests.Single(request => request.Type == typeof(InvitePerson)).Response.Should().Be(typeof(TenancyUseCases.IssuedInvitation<InvitationId>));
 
         commands.Where(command => command.Response != typeof(Unit) && !typeof(IEntityId).IsAssignableFrom(command.Response))
             .Select(command => $"{command.Type.Name} answers with {command.Response}")

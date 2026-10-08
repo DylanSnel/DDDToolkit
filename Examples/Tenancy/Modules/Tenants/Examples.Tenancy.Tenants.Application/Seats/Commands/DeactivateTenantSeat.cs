@@ -19,7 +19,7 @@ public sealed record DeactivateTenantSeat(SeatId Seat) : ICommand, ITenantsReque
 
 /// <summary>Handles <see cref="DeactivateTenantSeat"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="seats">The package's use cases that change a seat.</param>
-public sealed class DeactivateTenantSeatHandler(TenantsTenancy.SeatCommands seats) : ICommandHandler<DeactivateTenantSeat>
+public sealed class DeactivateTenantSeatHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<DeactivateTenantSeat>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

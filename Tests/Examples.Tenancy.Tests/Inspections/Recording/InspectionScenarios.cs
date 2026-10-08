@@ -212,7 +212,7 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
         var leo = Harbor.SeatOf(DemoPeople.Leo);
 
         // With no seat to act for there is nobody to record it: that is a mistake in the calling code.
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var sender = scope.ServiceProvider.GetRequiredService<ISender>();
@@ -223,7 +223,7 @@ public sealed class InspectionScenarios(SampleHosts sample) : IClassFixture<Samp
         }
 
         InspectionId recorded;
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, leo))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, leo))
         {
             await using var scope = host.Services.CreateAsyncScope();
             recorded = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordInspection(PierSeven.Id, "Recorded for the lead"), Cancellation);

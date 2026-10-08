@@ -32,7 +32,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var seats = new Dictionary<SeatId, SeatListing>();
-        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
         {
             foreach (var seat in await sender.Send(new SeatsById(part), cancellationToken))
             {
@@ -51,7 +51,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var units = new Dictionary<OrganizationUnitId, UnitListing>();
-        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
         {
             foreach (var unit in await sender.Send(new OrganizationUnitsById(part), cancellationToken))
             {
@@ -70,7 +70,7 @@ internal static class DirectoryDataLoaders
         CancellationToken cancellationToken)
     {
         var roles = new Dictionary<RoleId, RoleListing>();
-        foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
+        foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
         {
             foreach (var listed in await sender.Send(new RolesById(part), cancellationToken))
             {

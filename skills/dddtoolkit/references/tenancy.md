@@ -89,31 +89,35 @@ public sealed partial class ShopSeat
    every tenant gets Tenancy's own; declare one (`Administers: true`) and declare one for every shape, a single
    one without `SeededFor` or one seeded for each shape.
 
-4. Name the use cases through `{Module}Tenancy`, and write no alias. They are nested in one generic class,
+4. Name the use cases through `TenancyUseCases`, and write no alias. They are nested in one generic class,
    `TenancyUseCases<...>`, and the toolkit's generator closes it over your classes in the project that declares
-   them, as a class named after its module: the module Tenants, declared by its folder (`DDD_Module` in
-   `Modules/Directory.Build.props`) or by `[assembly: Module("Tenants")]`, gives `TenantsTenancy`, which every project above sees. `TenantsTenancy.SeatCommands` is the package's own type, which `AddTenancy` registered.
-   A hand-written `global using TenantsTenancy = ...` above it is CS0576: delete it. For another name (a module
-   called Tenancy would get `TenancyTenancy`), add one line in the project that declares the classes:
-   `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. CS0246 for the name above:
-   read DDD00065 in that project. Only a module of one project with HotChocolate types over the records keeps
-   one alias of exactly the class's name there, since another generator does not see a generated class.
-   The same class closes over your ids what is called: system work, `TenantsTenancy.BeginSystem()`,
+   them, as a class of the same name without the type parameters, `TenancyUseCases`, whatever the module is
+   called, which every project above sees. `TenancyUseCases.SeatCommands` is the package's own type, which
+   `AddTenancy` registered; the global class and the package's generic one never clash.
+   A hand-written `global using TenancyUseCases = ...` above it is CS0576: delete it. Two modules that each declare
+   Tenancy's classes get two classes of that name, and the host is warned (DDD00075): copy the line the message
+   writes out into one module's domain project, beside `[assembly: Module]` or the switch,
+   `[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]` (in
+   `DDDToolkit.Abstractions.Attributes`; another name works too, but not one a namespace has), and name that
+   module's use cases `CustomersTenancyUseCases.SeatCommands` above. CS0246 for the name above: read DDD00065 in that project. Only a module of
+   one project with HotChocolate types over the records keeps one alias of exactly the class's name there, since
+   another generator does not see a generated class.
+   The same class closes over your ids what is called: system work, `TenancyUseCases.BeginSystem()`,
    `BeginSystemIn(tenant, actingSeat)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn`, and
-   `TenantsTenancy.CurrentCaller()`. Write no `TenancyWork.BeginSystem<TenantId, SeatId>()` where the class is
+   `TenancyUseCases.CurrentCaller()`. Write no `TenancyWork.BeginSystem<TenantId, SeatId>()` where the class is
    seen; a module that sees only the ids calls `TenancyWork`'s, which infers both from a tenant and a seat.
 
    ```csharp
-   // TenantsTenancy.TenantCommands, OrganizationCommands, SeatCommands, RoleCommands, TenancyDirectory,
+   // TenancyUseCases.TenantCommands, OrganizationCommands, SeatCommands, RoleCommands, TenancyDirectory,
    // InvitationCommands<ShopInvitation, InvitationId>, and the records: TenantToProvision, SeatOverview, ...
-   public sealed class FirstTenant(TenantsTenancy.TenantCommands tenants)
+   public sealed class FirstTenant(TenancyUseCases.TenantCommands tenants)
    {
        public async Task SetUpAsync(Guid identity, CancellationToken cancellationToken)
        {
-           using (TenantsTenancy.BeginSystem())                  // provisioning is system work outside any tenant
+           using (TenancyUseCases.BeginSystem())                  // provisioning is system work outside any tenant
            {
                await tenants.ProvisionAsync(
-                   new TenantsTenancy.TenantToProvision(
+                   new TenancyUseCases.TenantToProvision(
                        "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity,
                        ConfigureFirstSeat: seat => seat.Rename("Ada")),   // a seat's name is a field of yours
                    cancellationToken);
@@ -150,7 +154,7 @@ public sealed partial class ShopSeat
    list: the catalogue refuses it twice (DDD00063 is a marked list that is not public, static and a sequence of
    `Permission`; DDD00070 a `[TenancyCatalogue]` or `[TenancyOperators]` that a library keeps internal).
 7. Provisioning, seeding and jobs are system work, begun on purpose:
-   `using (TenantsTenancy.BeginSystemIn(tenant, actingSeat)) { ... }`. A request is never
+   `using (TenancyUseCases.BeginSystemIn(tenant, actingSeat)) { ... }`. A request is never
    system work. With `services.RequireExplicitCallers()` work that named no caller fails instead of running
    as the application.
 
@@ -208,8 +212,8 @@ public sealed partial class ShopSeat
   manages access goes as one that manages none, so a seat with a key that manages access hands out every key it
   reaches, in C# and in the exported SQL alike (a seat's grant to itself still ends when its grants key does).
   Leave it on when the database can be reached without the handlers (Supabase's Data API). A handler that gives a
-  role after a check of its own (a quiz) keeps it on and grants inside `TenantsTenancy.BeginSystemIn(tenant, seat)`,
-  which containment never holds: the seat comes from `TenantsTenancy.CurrentCaller()` and the role from the
+  role after a check of its own (a quiz) keeps it on and grants inside `TenancyUseCases.BeginSystemIn(tenant, seat)`,
+  which containment never holds: the seat comes from `TenancyUseCases.CurrentCaller()` and the role from the
   application, never from the request. The setting is on the part marked `[TenancyCatalogue]`, so the host and the
   export read one value. On Postgres export and apply the access files after changing it:
   `tenancy.policies-in-place` refuses a database written the other way round.
@@ -225,7 +229,7 @@ public sealed partial class ShopSeat
   about one input names it in its `Field` argument.
 - **Operators** are the application's own staff: a token role listed in `TenancyOptions.OperatorTokenRoles`.
   They hold no seat and only read. What one asks for is carried out by system work that names them,
-  `TenantsTenancy.BeginOperatorIn(tenant, identity)`.
+  `TenancyUseCases.BeginOperatorIn(tenant, identity)`.
 - **Who acted** is a seat, an operator, the system or a token, on every event of Tenancy's (`By`) and on a
   row that `RecordsWhoChanged()`. Never put whoever work acts for into the toolkit's `Caller`.
 - **Invitations** are optional (`AddTenancyInvitations`). The token is a bearer credential: show it once,

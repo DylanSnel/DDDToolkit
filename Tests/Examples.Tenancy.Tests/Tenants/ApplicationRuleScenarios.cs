@@ -116,7 +116,7 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
     /// <summary>Makes a change in a unit of work of its own, as system work in harbor, and saves it.</summary>
     private static async Task ChangeAsync(SampleFactory host, Func<TenantsContext, Task> change)
     {
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var tenancy = scope.ServiceProvider.GetRequiredService<TenantsContext>();
@@ -128,7 +128,7 @@ public sealed class ApplicationRuleScenarios(SampleHosts sample) : IClassFixture
     /// <summary>Reads something back in a unit of work of its own, as system work in harbor.</summary>
     private static async Task<T> ReadAsync<T>(SampleFactory host, Func<TenantsContext, Task<T>> read)
     {
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await read(scope.ServiceProvider.GetRequiredService<TenantsContext>());

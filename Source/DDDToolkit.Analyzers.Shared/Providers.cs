@@ -121,21 +121,25 @@ internal static class Providers
 
     /// <summary>
     /// The classes a package asks with <c>[assembly: TemplateFacade]</c>, closed over the classes this project
-    /// declares with its templates and named after its module, as <see cref="DDDOptionsProvider.RegistrationName"/> names
-    /// it, or what is said of one that cannot be written. A project that declares no template class pays for the
-    /// lookup of its declarations only, as for a registration; one that does reads the attributes of its
-    /// references, once per reference.
+    /// declares with its templates and named as the package's class is, or as <c>[assembly: TemplateFacadeName]</c>
+    /// names them, and what is said of one that cannot be written or whose name another class has where this project
+    /// sees it. Every project reads the attributes of its references for it, once per reference, since two modules'
+    /// classes of one name meet in a project that declares none, the host; the module's name is what the name the
+    /// message suggests for this project's class starts with, as <see cref="DDDOptionsProvider.RegistrationName"/>
+    /// names it, and the project file is where two classes its references have are said.
     /// </summary>
     public static IncrementalValuesProvider<FacadeOutcome> TemplateFacadeFiles(this IncrementalGeneratorInitializationContext context)
         => context.TemplateDefaultsPlan()
             .Combine(context.CompilationProvider)
             .Combine(context.RegistrationName())
+            .Combine(context.ProjectFile())
             .SelectMany(static (all, cancellationToken) => TemplateFacades.Resolve(
-                ImmutableArray.CreateRange(all.Left.Left.Entities),
+                ImmutableArray.CreateRange(all.Left.Left.Left.Entities),
+                all.Left.Left.Right,
                 all.Left.Right,
                 all.Right,
                 cancellationToken,
-                standingBack: all.Left.Left.Blocked));
+                standingBack: all.Left.Left.Left.Blocked));
 
     /// <summary>
     /// Every class declared with a template attribute, before any is resolved: what <see cref="TemplateEntities"/>

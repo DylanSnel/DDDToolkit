@@ -90,11 +90,11 @@ public sealed class DatabaseRefusalScenarios(SampleHosts sample) : IClassFixture
     /// <summary>Provisions a flat tenant as system work, the way the seeder and an operator's command do.</summary>
     private static async Task ProvisionAsync(SampleFactory host, string slug, string name)
     {
-        using (TenantsTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
-                new TenantsTenancy.TenantToProvision(
+            await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
+                new TenancyUseCases.TenantToProvision(
                     slug,
                     name,
                     TenantShape.Flat,

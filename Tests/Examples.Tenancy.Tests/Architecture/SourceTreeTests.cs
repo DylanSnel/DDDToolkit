@@ -389,7 +389,7 @@ public sealed partial class SourceTreeTests
 
     /// <summary>
     /// Tenancy's use cases are nested in one class generic over the Tenants module's five classes and four ids. The
-    /// toolkit's generator closes it over them in the domain project that declares them, as <c>TenantsTenancy</c>,
+    /// toolkit's generator closes it over them in the domain project that declares them, as <c>TenancyUseCases</c>,
     /// which every project above it sees, so no file of the sample, nor of these tests, closes it again: an alias
     /// written by hand is the nine types once more, in every project that names a use case.
     /// </summary>
@@ -404,7 +404,7 @@ public sealed partial class SourceTreeTests
             .Where(file => !file.Contains("/bin/", StringComparison.Ordinal) && !file.Contains("/obj/", StringComparison.Ordinal))
             .ToDictionary(file => file, file => File.ReadAllText(Path.Combine(root, file)));
 
-        files.Where(file => file.Value.Contains("TenantsTenancy.", StringComparison.Ordinal)).Select(file => file.Key)
+        files.Where(file => file.Value.Contains("TenancyUseCases.", StringComparison.Ordinal)).Select(file => file.Key)
             .Should().Contain(
                 [
                     "Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Commands/SuspendTenantSeat.cs",
@@ -414,28 +414,28 @@ public sealed partial class SourceTreeTests
                 ],
                 "the scan reads the projects that name the use cases: the application's, the API's, the host's and these tests'");
         files.Where(file => ClosesTenancysUseCases().IsMatch(file.Value)).Select(file => file.Key)
-            .Should().BeEmpty("every project that sees the module's classes sees TenantsTenancy, and names the use cases through it");
+            .Should().BeEmpty("every project that sees the module's classes sees TenancyUseCases, and names the use cases through it");
 
         // What a name nested in it stands for is the package's own type, closed over the module's classes and ids:
         // the type the container registered. The class itself is the domain project's, and is only that name.
-        typeof(TenantsTenancy).Assembly.Should().BeSameAs(typeof(Tenant).Assembly);
-        (typeof(TenantsTenancy).IsAbstract && typeof(TenantsTenancy).Namespace is null).Should().BeTrue();
+        typeof(TenancyUseCases).Assembly.Should().BeSameAs(typeof(Tenant).Assembly);
+        (typeof(TenancyUseCases).IsAbstract && typeof(TenancyUseCases).Namespace is null).Should().BeTrue();
         Type[] module =
         [
             typeof(Tenant), typeof(TenantId), typeof(Examples.Tenancy.Tenants.Domain.Organization), typeof(OrganizationUnit),
             typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Examples.Tenancy.Tenants.Domain.Role), typeof(RoleId),
         ];
-        typeof(TenantsTenancy).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
-        typeof(TenantsTenancy).BaseType!.GetGenericArguments().Should().Equal(module);
+        typeof(TenancyUseCases).BaseType!.GetGenericTypeDefinition().Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
+        typeof(TenancyUseCases).BaseType!.GetGenericArguments().Should().Equal(module);
 
         // Reflection writes a type nested in a generic class with the outer class's type arguments as its own.
-        typeof(TenantsTenancy.SeatCommands).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
-        typeof(TenantsTenancy.SeatCommands).GetGenericArguments().Should().Equal(module);
+        typeof(TenancyUseCases.SeatCommands).DeclaringType.Should().Be(typeof(DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<,,,,,,,,>));
+        typeof(TenancyUseCases.SeatCommands).GetGenericArguments().Should().Equal(module);
     }
 
     /// <summary>
     /// What is called rather than named is closed over the Tenants module's ids: the system work and the current
-    /// caller wherever its classes are seen, through <c>TenantsTenancy</c>, and the registrations in the module's
+    /// caller wherever its classes are seen, through <c>TenancyUseCases</c>, and the registrations in the module's
     /// infrastructure project, where they are generated. So no file of a project that sees those classes names
     /// Tenancy's ids where a closed form exists: the Tenants module's own, the host, the export and these tests. A type
     /// generic over the ids keeps them, as the Tenants module's reads name the selection and the read source. Projects
@@ -464,7 +464,7 @@ public sealed partial class SourceTreeTests
 
         FilesUnder(seeing)
             .SelectMany(file => NamesTenancysIdsInACall().Matches(file.Value).Select(found => file.Key + ": " + found.Value))
-            .Should().BeEmpty("TenantsTenancy.BeginSystem(), TenantsTenancy.CurrentCaller() and outbox.AddTenancyDomainEvents() name no id");
+            .Should().BeEmpty("TenancyUseCases.BeginSystem(), TenancyUseCases.CurrentCaller() and outbox.AddTenancyDomainEvents() name no id");
 
         // The scan would see it: the modules that see only the ids name them where they register.
         FilesUnder(Path.Combine(sample, "Modules", "Projects"), Path.Combine(sample, "Modules", "Inspections"))

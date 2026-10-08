@@ -250,7 +250,7 @@ public sealed class CampusScenario
         var cancellation = TestContext.Current.CancellationToken;
 
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new CampusTenancy.TenantToProvision(
+            new TenancyUseCases.TenantToProvision(
                 InAlder, "Alder College", TenantShape.Hierarchical, "Alder College", Ada.Identity,
                 TenantId: Alder,
                 RootId: AlderRoot,
@@ -263,7 +263,7 @@ public sealed class CampusScenario
                 }),
             cancellation));
         await services.BySystemAsync(provider => provider.Tenants().ProvisionAsync(
-            new CampusTenancy.TenantToProvision(
+            new TenancyUseCases.TenantToProvision(
                 InBirch, "Birch College", TenantShape.Flat, "Birch College", Bea.Identity,
                 TenantId: Birch,
                 RootId: BirchRoot,

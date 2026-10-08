@@ -122,22 +122,29 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   and two classes of one name, and the message says what to do about each. See
   [A template declared more than once](docs/writing-a-supporting-domain.md#a-template-declared-more-than-once).
 - **Use cases closed over the application's classes.** A package marks a generic class whose type parameters
-  all carry `[TemplateType]` with `[assembly: TemplateFacade(typeof(X<,>), "{Module}X")]`, and the project that
-  declares the classes with its templates gets a class of its own in the global namespace, named after its
-  module as every generated name is, that derives from the package's class closed over them:
-  `public abstract class BillingSubscriptions : SubscriptionUseCases<ShopSubscription, SubscriptionId, ...>`. C#
-  finds a nested type through a derived class, so that project and every project that references it name
-  `BillingSubscriptions.Dunning`, the package's own nested type, and write no type argument. Written once and
-  read through the reference, the class is seen by the other generators of those projects too, which a
-  generated `using` alias would not be; in the project that declares the classes they do not see it, and a
-  module of one project that needs them to keeps an alias of exactly that name, which the generator stands back
-  for. The project that declares the classes may name the class itself with an `[assembly: TemplateFacade]` of
-  its own for the same type. A template with no class or several, or a class that does not meet the class's
-  constraints, leaves it out, and the new DDD00065, information, says so where the classes are declared, unless
-  a class or a registration of that project reports it as an error already; so does a type of that name the
-  project declares in a namespace, which the class would hide wherever that namespace is imported. A name the
-  project keeps in the global namespace, a type, a namespace or an alias, stays its own without a word. The
-  generic class is abstract rather than static, with a protected constructor. See
+  all carry `[TemplateType]` with `[assembly: TemplateFacade(typeof(SubscriptionUseCases<,,,,,>))]`, and the
+  project that declares the classes with its templates gets a class of its own in the global namespace, named as
+  the package's class is without its type parameters, that derives from the package's class closed over them:
+  `public abstract class SubscriptionUseCases : Acme.Subscriptions.SubscriptionUseCases<ShopSubscription, SubscriptionId, ...>`.
+  C# tells the two apart by their type parameters, and finds a nested type through a derived class, so that
+  project and every project that references it name `SubscriptionUseCases.Dunning`, the package's own nested type,
+  and write no type argument. Written once and read through the reference, the class is seen by the other
+  generators of those projects too, which a generated `using` alias would not be; in the project that declares the
+  classes they do not see it, and a module of one project that needs them to keeps an alias of exactly that name,
+  which the generator stands back for. The project that declares the classes may give the class a name of its own
+  with the new `[assembly: TemplateFacadeName("SubscriptionUseCases", "ShopBilling")]`, beside `[assembly: Module]`;
+  a line that changes nothing, in a project that declares none of the classes or naming a class no package asks
+  for, is the new DDD00076, a warning, as is one that gives a name a namespace or a type in the global namespace
+  has; a module split over two projects may give it in either. Two modules that each declare the classes get two
+  classes of one name, which meet in the projects that see both: the new DDD00075, a warning, says so there, at
+  the host's project file, or on the classes of a module whose project references the other module's, which still
+  gets its own so that its code is never closed over the other module's classes, and writes out the line that
+  names one of them. A template with no class or several, or a class that does not meet the class's constraints,
+  leaves it out, and the new DDD00065, information, says so where the classes are declared, unless a class or a
+  registration of that project reports it as an error already; so does a type of that name the project declares in
+  a namespace, which the class would hide wherever that namespace is imported. A type, a namespace or an alias the
+  project keeps in the global namespace under the package's name stays its own without a word. The generic class
+  is abstract rather than static, with a protected constructor. See
   [Use cases closed over your classes](docs/writing-a-supporting-domain.md#use-cases-closed-over-your-classes).
 - A code fix for DDD00044 and DDD00049 declares the missing class, named after the class the error is on
   and declared with the id named after the parent's id parameter, or, when no id has that name, after the
@@ -1067,7 +1074,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 - **Tenancy's ids are named once.** What an application calls of Tenancy, rather than names, is closed over its ids
   as far as each kind reaches: the system work and the current caller wherever its classes are seen, the
   registrations in the module's own projects, where Tenancy is registered. The class the use cases are named through
-  carries the system work and the current caller as static members: `TenantsTenancy.BeginSystem()`,
+  carries the system work and the current caller as static members: `TenancyUseCases.BeginSystem()`,
   `BeginSystemIn(tenant, actingSeat, scope)`, `BeginOperator(identity)`, `BeginOperatorIn(tenant, identity, scope)`,
   `BeginTokenIn(tenant, seat, scope)` and `CurrentCaller()`. C# finds a static member through a derived class, so they
   reach every project that sees that class, the host and the tests, and the one that declares the classes too, since
@@ -1306,7 +1313,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   well, and refuses as an access guard, `42501` with the toolkit's hint, where it raised `check_violation`, so a
   save that changes one of them behind the aggregate's back is `access.refused`. No use case of Tenancy changes
   them; only Tenancy's system work in the seat's tenant passes, so that a one-off of yours inside
-  `TenantsTenancy.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
+  `TenancyUseCases.BeginSystemIn(tenant)` can link a seat to the identity another sign-in provider gives the same
   person, and the policies keep that to Tenancy's scope and its tenant. Background work under `Caller.System`, a
   migration and the SQL editor change none of them. The status stays held by `tenancy_seat_status_is_managed`, and
   the version is the row's. Tenancy decides nothing about the columns your seat class adds, a job title say: each
@@ -1330,7 +1337,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   administers what it reaches. Either way roles that manage no access go as before, a move gives the mover
   nothing, a tenant keeps its last administrator, a seat keeps its identity and tenant, which keys are marked
   stays as marked, and system work in a tenant is never held to it: a handler that checked something of the
-  application's own, a quiz passed say, gives the role inside `TenantsTenancy.BeginSystemIn(tenant, seat)` with
+  application's own, a quiz passed say, gives the role inside `TenancyUseCases.BeginSystemIn(tenant, seat)` with
   containment on, for the calling seat and with a role the application chose, never one the request named. On
   Postgres the database holds a seat to the part a statement shows (which roles that manage access it gives,
   changes and takes away where, never to itself, such invitations, and stopping a seat that holds one); how long,
@@ -1402,21 +1409,23 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     in a top-level `Program.cs`. The export lists no keys either: it finds the marked lists itself, and the
     application marks its own part of the catalogue `[TenancyCatalogue]` (see Changed).
 - **Tenancy: no project writes the nine types.** The project that declares a module's Tenancy classes gets
-  `{Module}Tenancy` from the toolkit's generator, `TenantsTenancy` for the module Tenants: a class that derives
-  from `TenancyUseCases<...>` closed over them, through which every project that sees it names the use cases and
-  their records, `TenantsTenancy.SeatCommands` and `TenantsTenancy.SeatOverview`, the package's own types that
-  `AddTenancy` registers. HotChocolate's generator reads it in an API project as any type, so
-  `[ObjectType<TenantsTenancy.KeyReach>]` works there; `SeatOverview` carries the application's seat, identity and
+  `TenancyUseCases` from the toolkit's generator, whatever the module is called: a class of the package's class's
+  name that derives from `TenancyUseCases<...>` closed over them, through which every project that sees it names
+  the use cases and their records, `TenancyUseCases.SeatCommands` and `TenancyUseCases.SeatOverview`, the package's
+  own types that `AddTenancy` registers. HotChocolate's generator reads it in an API project as any type, so
+  `[ObjectType<TenancyUseCases.KeyReach>]` works there; `SeatOverview` carries the application's seat, identity and
   all, so it is selected into a record of the application's rather than answered itself (see Changed, the
   directory's own entry). `TenancyUseCases<...>` is abstract instead of static
-  for it. Membership's use cases are generic over ids alone and need nothing of the kind. See
+  for it. An application whose two modules both declare Tenancy's classes names one module's class with
+  `[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]` in that module's domain project,
+  as DDD00075 in the host says. Membership's use cases are generic over ids alone and need nothing of the kind. See
   [Calling a use case](docs/tenancy.md#calling-a-use-case). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Delete every `global using X = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, and name the
-    use cases through `{Module}Tenancy`, the invitations' as `{Module}Tenancy.InvitationCommands<TInvitation,
+    use cases through `TenancyUseCases`, the invitations' as `TenancyUseCases.InvitationCommands<TInvitation,
     TInvitationId>`. An alias of that very name above the project that declares the classes is now the compiler's
     error CS0576; one of another name still compiles, beside the class.
-  - A module called Tenancy gets `TenancyTenancy`. To keep the name you had, say it once in the project that
-    declares the classes: `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "SampleTenancy")]`.
+  - To keep the name you had, say it once in the project that declares the classes:
+    `[assembly: TemplateFacadeName("TenancyUseCases", "SampleTenancy")]`.
   - A module of one project with GraphQL types over Tenancy's records keeps its one alias, of exactly the name
     the class would have: HotChocolate's generator does not see a class another generator writes into the same
     project. Every other project drops it.
@@ -1928,11 +1937,11 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `KeysFromPack`, and the exported files follow. The host without a database leaves the sync out with the other
   hosted services that ask the database something.
 - **The Tenancy sample names Tenancy's ids only where nothing else can.** The host seeds in
-  `TenantsTenancy.BeginSystem()` and `BeginSystemIn(tenant, seat)`, its gates ask `TenantsTenancy.CurrentCaller()`
+  `TenancyUseCases.BeginSystem()` and `BeginSystemIn(tenant, seat)`, its gates ask `TenancyUseCases.CurrentCaller()`
   and take the caller as an `ITenancyCaller`, and its tenant header asks `ITenantSelection` and begins nobody with
   `TenancyCallers.BeginNone()` where the lookup fails, so it names no id. The Tenants module registers its domain
   events and its access history with `AddTenancyDomainEvents()`, `AddTenancyInvitationEvents<InvitationId>()` and
-  `AddTenancyEventLog()`, and the tests begin their system work through `TenantsTenancy`. Projects and Inspections,
+  `AddTenancyEventLog()`, and the tests begin their system work through `TenancyUseCases`. Projects and Inspections,
   which see the ids alone, write them where they register, and Projects' own place on a crew infers them. A source
   test holds every project that sees the Tenants module's classes to naming no id where it begins system work,
   asks the current caller or registers Tenancy. The Tenants module's reads still name them where they are a type's:
@@ -2441,14 +2450,14 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   mediator too, and `/graphql` refusing the field to everybody.
 - **The Tenancy sample writes no alias of Tenancy's use cases.** The Tenants module's application, infrastructure
   and API projects, the host and the sample's tests named `SampleTenancy`, an alias over nine types each of them
-  declared again, and the application project `SampleInvitations` besides. They name `TenantsTenancy`, the class
-  the generator writes into the Tenants domain project, and `TenantsTenancy.InvitationCommands<Invitation,
+  declared again, and the application project `SampleInvitations` besides. They name `TenancyUseCases`, the class
+  the generator writes into the Tenants domain project, and `TenancyUseCases.InvitationCommands<Invitation,
   InvitationId>`; the GraphQL types of the API project name its records as before. The aliases over four ids,
   `SampleAnswers` in the Tenants, Projects and Inspections application projects and `SampleQuestions` in the
   Projects one, stay: `ITenancyAnswers` and `ITenancyQuestions` are interfaces of their own, not nested in
   `TenancyUseCases`, so the generated class cannot name them, and Projects and Inspections see only Tenants'
   ids anyway. `SourceTreeTests` holds every file of the sample and of its tests to closing Tenancy's use cases
-  nowhere. Tenancy's own test host names its class `HostTenancy` with one `[assembly: TemplateFacade]`, so its
+  nowhere. Tenancy's own test host names its class `HostTenancy` with one `[assembly: TemplateFacadeName]`, so its
   three test projects drop their nine-type aliases too.
 
 #### Docs
@@ -2720,6 +2729,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   a gateway lists is a source schema, `AddSourceSchemaDefaults()`; one you keep serving with `MapGraphQL`, outside
   every gateway, stays out of them once each gateway lists its schemas by name. See
   [Several gateways](docs/graphql.md#several-gateways).
+- **For the 3.2.0 previews: the class Tenancy's use cases are named through is `TenancyUseCases`.**
+  `3.2.0-preview.3` named it after the module, `{Module}Tenancy`: `TenantsTenancy` for the module Tenants, and
+  `TenancyTenancy` for a module called Tenancy. It is now named as the package's class is, without its type
+  parameters, `TenancyUseCases`, whatever the module is called, and so is every class a package asks for with
+  `[assembly: TemplateFacade]`: the package's own class's name is the one its documentation uses. No other package of
+  the toolkit asks for one; Membership's use cases need none. See
+  [Calling a use case](docs/tenancy.md#calling-a-use-case).
+  - Write `TenancyUseCases` where you wrote `TenantsTenancy`, your `{Module}Tenancy`: `TenancyUseCases.SeatCommands`,
+    `TenancyUseCases.BeginSystem()`. A file that imports `DDDToolkit.Supporting.Tenancy.UseCases` compiles as before,
+    since C# tells the generated class and the package's generic one apart by their type parameters. Or keep the
+    old name with one line in the project that declares the classes,
+    `[assembly: TemplateFacadeName("TenancyUseCases", "TenantsTenancy")]`.
+  - A name of your own, `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`, is
+    `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]`, in the same project. `TemplateFacadeAttribute`
+    takes the package's class alone, its `Name` is gone, and a name holds no `{Module}` any more; a package's own
+    `[assembly: TemplateFacade(typeof(X<,>), "...")]` drops its name too.
+  - Two modules that both declare Tenancy's classes got a class each, named after each module; they now get two
+    classes of one name, and a project that sees both, the host first, is told so, DDD00075, with the line that
+    gives one of them a name of its own.
+  - The Tenancy sample names its use cases `TenancyUseCases` throughout, and so do its tests, the docs and the agent
+    skill; Tenancy's own test host keeps `HostTenancy` with that one line.
 - **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
   others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
   and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up

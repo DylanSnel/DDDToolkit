@@ -18,7 +18,7 @@ public sealed record ArchiveOrganizationUnit(OrganizationUnitId Unit) : ICommand
 
 /// <summary>Handles <see cref="ArchiveOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="organization">The package's use cases that change the organization.</param>
-public sealed class ArchiveOrganizationUnitHandler(TenantsTenancy.OrganizationCommands organization) : ICommandHandler<ArchiveOrganizationUnit>
+public sealed class ArchiveOrganizationUnitHandler(TenancyUseCases.OrganizationCommands organization) : ICommandHandler<ArchiveOrganizationUnit>
 {
     /// <inheritdoc />
     /// <exception cref="Exceptions.RefusalException">What the package's use case refuses, with its code.</exception>

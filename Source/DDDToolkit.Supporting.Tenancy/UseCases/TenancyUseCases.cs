@@ -13,25 +13,28 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 /// that a tenant always keeps an administrator.
 /// <para>
 /// An application does not close the class itself. The toolkit's generator closes it over the classes a module
-/// declares with Tenancy's templates, in the project that declares them, as a class named after the module:
+/// declares with Tenancy's templates, in the project that declares them, as a class of this one's name without its
+/// type parameters:
 /// <code>
-/// public abstract class ShopTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases&lt;
+/// public abstract class TenancyUseCases : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases&lt;
 ///     global::Shop.Domain.ShopTenant, global::Shop.Contracts.TenantId, ..., global::Shop.Contracts.RoleId&gt;
 /// {
-///     private ShopTenancy() { }
+///     private TenancyUseCases() { }
 /// }
 /// </code>
-/// for <c>[assembly: Module("Shop")]</c>. A type nested in a class is found through every class derived from it, so
-/// every project that sees that one, the module's application and API projects and the host among them, takes a
-/// <c>ShopTenancy.SeatCommands</c> and answers a <c>ShopTenancy.SeatOverview</c>: the types nested here, closed over
-/// the module's classes, which the container registered and whose documentation shows. Each type parameter's
-/// <c>[TemplateType]</c> says which class fills it, as <c>AddTenancy</c>'s do, and the package's
-/// <c>[assembly: TemplateFacade]</c> asks for the class. That is why this class is abstract rather than static.
+/// whatever the module is called; C# tells the two apart by their type parameters. A type nested in a class is found
+/// through every class derived from it, so every project that sees that one, the module's application and API projects
+/// and the host among them, takes a <c>TenancyUseCases.SeatCommands</c> and answers a <c>TenancyUseCases.SeatOverview</c>:
+/// the types nested here, closed over the module's classes, which the container registered and whose documentation
+/// shows. Each type parameter's <c>[TemplateType]</c> says which class fills it, as <c>AddTenancy</c>'s do, and the
+/// package's <c>[assembly: TemplateFacade]</c> asks for the class. That is why this class is abstract rather than
+/// static. An application whose two modules both declare Tenancy's classes names one of the two with
+/// <c>[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancy")]</c> in that module's project.
 /// </para>
 /// <para>
 /// A static member is found through a derived class as a nested type is, so the same class closes over the ids what
-/// is called rather than named: system work, <c>ShopTenancy.BeginSystem()</c> and <c>ShopTenancy.BeginSystemIn(tenant)</c>,
-/// and the current caller, <c>ShopTenancy.CurrentCaller()</c>. <see cref="Access.TenancyWork"/> and
+/// is called rather than named: system work, <c>TenancyUseCases.BeginSystem()</c> and <c>TenancyUseCases.BeginSystemIn(tenant)</c>,
+/// and the current caller, <c>TenancyUseCases.CurrentCaller()</c>. <see cref="Access.TenancyWork"/> and
 /// <see cref="Access.TenancyCallers"/> keep them generic over the ids, for code that sees only those.
 /// </para>
 /// <para>

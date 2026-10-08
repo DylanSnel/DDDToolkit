@@ -24,7 +24,7 @@ public sealed record AddOrganizationUnit(OrganizationUnitId Parent, string Name,
 
 /// <summary>Handles <see cref="AddOrganizationUnit"/> with the Tenancy package's use case, which checks the caller, decides and saves.</summary>
 /// <param name="organization">The package's use cases that change the organization.</param>
-public sealed class AddOrganizationUnitHandler(TenantsTenancy.OrganizationCommands organization) : ICommandHandler<AddOrganizationUnit, OrganizationUnitId>
+public sealed class AddOrganizationUnitHandler(TenancyUseCases.OrganizationCommands organization) : ICommandHandler<AddOrganizationUnit, OrganizationUnitId>
 {
     /// <inheritdoc />
     /// <returns>The new unit's id.</returns>

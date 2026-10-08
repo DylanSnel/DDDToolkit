@@ -6,8 +6,9 @@
     rest while this project builds, the way they do in any application, so the tests here prove the shortest start
     compiles and provisions a tenant through the package's use cases, on a database.
 
-    Its root namespace is the application's, Shop, which is where the classes and ids are written. DDD_Module names
-    the class the use cases are named through, ShopTenancy; a test project declares no module.
+    Its root namespace is the application's, Shop, which is where the classes and ids are written, beside the class
+    the use cases are named through, TenancyUseCases. DDD_Module names the registrations; a test project declares no
+    module.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>

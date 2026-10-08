@@ -42,12 +42,12 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     public ITenancyReading Open() => new Reading(contexts.CreateDbContext());
 
     /// <inheritdoc />
-    public async Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<TenantsTenancy.TenancyDirectory, Task<TAnswer>> ask)
+    public async Task<TAnswer> AskDirectoryAsync<TAnswer>(Func<TenancyUseCases.TenancyDirectory, Task<TAnswer>> ask)
     {
         ArgumentNullException.ThrowIfNull(ask);
 
         await using var scope = scopes.CreateAsyncScope();
-        return await ask(scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenancyDirectory>());
+        return await ask(scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenancyDirectory>());
     }
 
     /// <inheritdoc />
@@ -58,10 +58,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     }
 
     /// <inheritdoc />
-    public async Task<TenantsTenancy.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
+    public async Task<TenancyUseCases.TenantDirectoryPage> TenantsAsync(string? after, int size, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantDirectory>().ListAsync(after, size, cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantDirectory>().ListAsync(after, size, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -97,10 +97,10 @@ internal sealed class EfTenancyReads(IDbContextFactory<TenantsContext> contexts,
     /// The package lists invitations with the use cases that issue and cancel them. Asked here for the list
     /// alone, over the context of a scope of this read's own, never the request's unit of work.
     /// </remarks>
-    public async Task<IReadOnlyList<TenantsTenancy.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>> OpenInvitationsAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
+        return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.InvitationCommands<Invitation, InvitationId>>().ListOpenAsync(cancellationToken);
     }
 
     /// <summary>

@@ -359,7 +359,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
             // and never saved. The policies show it to no statement of hers, so it is loaded as harbor's own work,
             // which ends before she is the caller.
             Project leftover;
-            using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+            using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
             {
                 leftover = await db.Projects.AsTracking().SingleAsync(project => project.Id == bridge.Id, Cancellation);
             }
@@ -641,7 +641,7 @@ public sealed class CrewRoleScenarios(SampleHosts sample) : IClassFixture<Sample
 
         // Written as system work in harbor, since no command puts a membership that ended already on a crew:
         // Juno's ended yesterday, Leo's ends tomorrow.
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id, Harbor.Administrator.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var projects = scope.ServiceProvider.GetRequiredService<ProjectsContext>();

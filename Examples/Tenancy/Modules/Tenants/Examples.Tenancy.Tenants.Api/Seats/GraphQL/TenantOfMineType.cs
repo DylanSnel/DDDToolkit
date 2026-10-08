@@ -6,8 +6,8 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 /// The tenant the calling seat is in, as the schema shows it: declared over the record the seat's own overview
 /// answers, under the name a client knows it by.
 /// </summary>
-[ObjectType<TenantsTenancy.TenantSummary>]
+[ObjectType<TenancyUseCases.TenantSummary>]
 internal static partial class TenantOfMineType
 {
-    static partial void Configure(IObjectTypeDescriptor<TenantsTenancy.TenantSummary> descriptor) => descriptor.Name("TenantOfMine");
+    static partial void Configure(IObjectTypeDescriptor<TenancyUseCases.TenantSummary> descriptor) => descriptor.Name("TenantOfMine");
 }

@@ -120,7 +120,7 @@ public sealed class DirectoryNamesTests
 
         await names.EnsureAsync(seats: seats, cancellationToken: Cancellation);
 
-        DirectoryNames.MostIdsPerQuestion.Should().Be(TenantsTenancy.TenancyDirectory.MostIds, "the UI asks for as many at a time as the API takes");
+        DirectoryNames.MostIdsPerQuestion.Should().Be(TenancyUseCases.TenancyDirectory.MostIds, "the UI asks for as many at a time as the API takes");
         stub.Requests.Should().HaveCount(3).And.OnlyContain(request => request.PathAndQuery == "/tenancy/directory/seats");
         stub.Requests.Select(request => IdsOf(request).Count).Should().BeEquivalentTo([200, 200, 50]);
         stub.Requests.SelectMany(IdsOf).Should().BeEquivalentTo(seats, "every id is asked about, each in one part");

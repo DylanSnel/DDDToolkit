@@ -12,6 +12,6 @@ internal static class InvitationsQueries
     /// to end first: whom each is for and what it offers. A list, which may be empty, and never a token.
     /// </summary>
     [Query]
-    public static async Task<IReadOnlyList<TenantsTenancy.OpenInvitation<InvitationId>>> GetOpenInvitationsAsync([Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<TenancyUseCases.OpenInvitation<InvitationId>>> GetOpenInvitationsAsync([Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new OpenInvitations(), cancellationToken);
 }

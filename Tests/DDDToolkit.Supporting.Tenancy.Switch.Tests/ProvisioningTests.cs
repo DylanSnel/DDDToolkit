@@ -40,17 +40,17 @@ public sealed class ProvisioningTests : IDisposable
     [Fact]
     public async Task A_tenant_is_provisioned_through_the_classes_and_ids_the_switch_wrote()
     {
-        ShopTenancy.ProvisionedTenant provisioned;
+        TenancyUseCases.ProvisionedTenant provisioned;
         await using (var scope = _services.CreateAsyncScope())
-        using (ShopTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
-            provisioned = await scope.ServiceProvider.GetRequiredService<ShopTenancy.TenantCommands>().ProvisionAsync(
-                new ShopTenancy.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid()),
+            provisioned = await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
+                new TenancyUseCases.TenantToProvision("acme", "Acme Works", TenantShape.Flat, "Acme", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
         await using var read = _services.CreateAsyncScope();
-        using var inTheTenant = ShopTenancy.BeginSystemIn(provisioned.Tenant);
+        using var inTheTenant = TenancyUseCases.BeginSystemIn(provisioned.Tenant);
         var context = read.ServiceProvider.GetRequiredService<ShopContext>();
 
         var tenant = await context.Set<Tenant>().SingleAsync(TestContext.Current.CancellationToken);
@@ -82,7 +82,7 @@ public sealed class ProvisioningTests : IDisposable
         typeof(Tenant).Assembly.GetType("Shop.OrganizationId").Should().BeNull("an organization shares its tenant's id");
         typeof(Tenant).Assembly.GetType("Shop.Invitation").Should().BeNull("the invitation is the class an application may leave out, and the switch leaves it out");
 
-        typeof(ShopTenancy).BaseType!.GetGenericArguments().Should().Equal(
+        typeof(TenancyUseCases).BaseType!.GetGenericArguments().Should().Equal(
             typeof(Tenant), typeof(TenantId), typeof(Organization), typeof(OrganizationUnit), typeof(OrganizationUnitId), typeof(Seat), typeof(SeatId), typeof(Role), typeof(RoleId));
     }
 }

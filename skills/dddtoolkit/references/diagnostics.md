@@ -518,13 +518,13 @@ does not reach it; a `.globalconfig` or `<WarningsAsErrors>` does.
 ## DDD00065
 
 Info, in the project that declares Tenancy's classes (or another package's that asks with
-`[assembly: TemplateFacade]`): the class named after the module that the use cases are named through,
-`{Module}Tenancy`, is not written, so every project above that names `TenantsTenancy.SeatCommands` fails with
-CS0246. Read the message for why. A template with no class: declare that class next to the others, once
+`[assembly: TemplateFacade]`): the class the use cases are named through, `TenancyUseCases` (the package's class's
+name without its type parameters), is not written, so every project above that names `TenancyUseCases.SeatCommands`
+fails with CS0246. Read the message for why. A template with no class: declare that class next to the others, once
 (a module split over two projects hears this in the first and gets the class in the second; nothing to do).
 Several classes of one template: keep one. A class that does not meet a constraint: give it what the message
 names. A type of that name in a namespace of the project: rename it, or name the class otherwise with
-`[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]` in that project. Never
+`[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]` in that project. Never
 answer it by writing the nine-type alias in the projects above.
 
 ## DDD00066
@@ -636,6 +636,30 @@ for a context the host does not wire with the toolkit, name the history in both 
 options instead, `MigrationsHistoryTable(HistoryRepository.DefaultTableName)`. Never answer it by writing
 `MigrationsHistoryTable(..., schema)` in the factory alone. A context marked `[SupabaseMigrations]` needs no factory
 written by hand: the build writes one beside it that makes the call, so delete a hand-written one that adds nothing.
+
+## DDD00075
+
+Warning: two classes the use cases of one package are named through have one name where this project sees them,
+`TenancyUseCases` twice: two modules each declare Tenancy's classes. At the project file of a project that references
+both modules' domain projects (the host, a test project), where naming it is CS0433; on the first Tenancy class of a
+module's project that references the other module's domain project (it still gets its own, which its own code binds
+to with CS0436, and every project above sees both); or on the first class of a project whose own two classes come to
+one name. Copy the line the message writes out into the project it names, the one that declares that module's
+classes, beside `[assembly: Module]` or the switch, with `using DDDToolkit.Abstractions.Attributes;`:
+`[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancyUseCases")]`, or any other name a class can have
+that no namespace or type in the global namespace has (not the module's root namespace), and name that module's use
+cases by it above. Where the message names an existing line, give another name in that line instead of adding one.
+Never answer it with a `using` alias in the host, or by renaming a module.
+
+## DDD00076
+
+Warning, at an `[assembly: TemplateFacadeName("...", "...")]` line that changes nothing. Read the message: it names
+no class a package asks for (write the package's class's name without type parameters, as the message lists it), it
+names two (write the one meant with its namespace), it is in a project that declares none of the classes (move it into
+the domain project that does), a line before it names the class already, here or in a project of the module it takes
+classes from (keep one), the name is no name a class can have, or a namespace or a type in the global namespace has it,
+such as the module's root namespace (give another). In a module split over two projects the line may sit beside the
+module in either.
 
 ## Not a diagnostic: the owned type must carry the key part
 

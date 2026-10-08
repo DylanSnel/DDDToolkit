@@ -164,7 +164,7 @@ public class IdCreationTests
 
         // The classes are generated; what Tenancy closes over the id stands back rather than fail in code nobody wrote.
         result.CompilationErrors.Should().BeEmpty();
-        result.HintNames.Should().NotContain("ShopTenancy").And.NotContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration");
+        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade").And.NotContain("TenancyEntityFrameworkServiceCollectionExtensions.AddTenancy.Registration");
         result.HintNames.Should().Contain("Tenant.", "the tenant itself is generated: only what makes its new ids needs the Create()");
     }
 
@@ -175,7 +175,7 @@ public class IdCreationTests
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.ShouldContain("ShopTenancy.TemplateFacade", "global::Shop.TenantId");
+        result.ShouldContain("TenancyUseCases.TemplateFacade", "global::Shop.TenantId");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class IdCreationTests
             + "interfaces it implements.");
         diagnostic.Properties.Should().Contain("IdFix", "CreateAndInterface");
         result.CompilationErrors.Should().BeEmpty("nothing closed over the id is written, so there is no CS0315 in code nobody wrote");
-        result.HintNames.Should().NotContain("ShopTenancy");
+        result.HintNames.Should().NotContain("TenancyUseCases.TemplateFacade");
     }
 
     [Fact]
@@ -332,7 +332,7 @@ public class IdCreationTests
              using DDDToolkit.Abstractions.Attributes;
              using DDDToolkit.Abstractions.Interfaces;
 
-             [assembly: TemplateFacade(typeof(Acme.Ledgers.LedgerUseCases<,>), "{Module}Ledgers")]
+             [assembly: TemplateFacade(typeof(Acme.Ledgers.LedgerUseCases<,>))]
              [assembly: TemplateRegistrations(typeof(Acme.Ledgers.LedgerRegistrations))]
              [assembly: Module("Shop")]
 
@@ -396,7 +396,7 @@ public class IdCreationTests
         result.ShouldHaveExactlyDiagnostics("DDD00067");
         result.ShouldHaveDiagnostic("DDD00067", at: "LedgerNumber").GetMessage().Should().Contain("'Ledger' is declared with [Ledger], whose package makes each new LedgerNumber");
         result.CompilationErrors.Should().BeEmpty();
-        result.HintNames.Should().NotContain("ShopLedgers").And.NotContain("AddLedgers", "both stand back behind the one error, on the class");
+        result.HintNames.Should().NotContain("LedgerUseCases.TemplateFacade").And.NotContain("AddLedgers", "both stand back behind the one error, on the class");
     }
 
     [Fact]
@@ -410,7 +410,7 @@ public class IdCreationTests
         // it is not written, each where it would be, rather than fail in code nobody wrote.
         result.ShouldHaveExactlyDiagnostics("DDD00065", "DDD00050");
         result.ShouldHaveDiagnostic("DDD00065", at: "Ledger").GetMessage().Should().Be(
-            "'ShopLedgers' is not written, so no project can name the types nested in LedgerUseCases through it: it takes 'LedgerNumber' as 'TLedgerId', "
+            "'LedgerUseCases' is not written, so no project can name the types nested in LedgerUseCases through it: it takes 'LedgerNumber' as 'TLedgerId', "
             + "which requires ICreatableEntityId<LedgerNumber>, an id that makes a new one with Create(); 'LedgerNumber' has no public static Create()");
         result.ReportedDiagnostics.Single(diagnostic => diagnostic.Id == "DDD00050").GetMessage().Should().Be(
             "'LedgerRegistrations.AddLedgers' takes 'LedgerNumber' as 'TLedgerId', which requires an id with a public static Create() that makes a new one; "
@@ -425,11 +425,11 @@ public class IdCreationTests
     {
         var result = GeneratorTestHost.Create(Ledgers(", CreatesIds = true"), "Package.cs")
             .WithSource(Ledger(id), "Ledger.cs")
-            .WithSource("namespace Shop;\n\npublic static class Uses\n{\n    public static LedgerNumber Next() => ShopLedgers.NewLedgerId();\n}\n", "Uses.cs")
+            .WithSource("namespace Shop;\n\npublic static class Uses\n{\n    public static LedgerNumber Next() => LedgerUseCases.NewLedgerId();\n}\n", "Uses.cs")
             .RunCore();
 
         result.ShouldCompile();
         result.ReportedDiagnostics.Should().BeEmpty();
-        result.HintNames.Should().Contain("ShopLedgers").And.Contain("LedgerRegistrations.AddLedgers.Registration");
+        result.HintNames.Should().Contain("LedgerUseCases.TemplateFacade").And.Contain("LedgerRegistrations.AddLedgers.Registration");
     }
 }

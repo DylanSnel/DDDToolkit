@@ -21,6 +21,6 @@ internal static class OperatorsQueries
     /// its own, so this is no connection, and the field is a method marked <c>[Query]</c> like any other.
     /// </summary>
     [Query]
-    public static async Task<TenantsTenancy.TenantDirectoryPage> GetTenantsAsync(string? after, int? size, [Service] ISender sender, CancellationToken cancellationToken)
+    public static async Task<TenancyUseCases.TenantDirectoryPage> GetTenantsAsync(string? after, int? size, [Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new AllTenants(after, size ?? AllTenants.DefaultPage), cancellationToken);
 }

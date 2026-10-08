@@ -9,8 +9,8 @@
 //
 // Those use cases are not closed here either. The package nests every use case, its store and its records in one
 // class generic over the module's five classes and four ids, and the toolkit's generator closes it over the classes
-// in the domain project that declares them, as TenantsTenancy, named after the module. So a handler takes a
-// TenantsTenancy.SeatCommands, and the invitation use cases are TenantsTenancy.InvitationCommands<Invitation,
+// in the domain project that declares them, as TenancyUseCases, the package's class's own name. So a handler takes a
+// TenancyUseCases.SeatCommands, and the invitation use cases are TenancyUseCases.InvitationCommands<Invitation,
 // InvitationId>, closed over the module's invitation class as well.
 global using DDDToolkit.Access;
 global using DDDToolkit.Supporting.Tenancy.Access;

@@ -234,7 +234,7 @@ if (!report.Succeeded)
 // One tenant, for an operator, whom the events then name
 using (TenancyWork.BeginOperatorIn<TenantId, SeatId>(tenant, operatorIdentity))
 {
-    var followed = await roles.FollowPacksAsync(cancellationToken);   // roles: TenantsTenancy.RoleCommands
+    var followed = await roles.FollowPacksAsync(cancellationToken);   // roles: TenancyUseCases.RoleCommands
     // followed.Changed, followed.KeptForAnAdministrator, followed.WithoutTheirPack
 }
 ```
@@ -368,7 +368,7 @@ flowchart LR
     Written --> Id{"a type of<br/>the id's name?"}
     Id -- "yes" --> Taken["taken"]
     Id -- "no" --> WrittenId["written: TenantId,<br/>RoleId ..."]
-    Yours & Taken & WrittenId --> Generators{{"every generator: base class,<br/>converters, AddTenancy(),<br/>TenantsTenancy"}}
+    Yours & Taken & WrittenId --> Generators{{"every generator: base class,<br/>converters, AddTenancy(),<br/>TenancyUseCases"}}
 ```
 
 The switch has the generator write each of Tenancy's classes the project leaves out, as the package ships it:
@@ -788,35 +788,35 @@ a host whose policies were written from another catalogue ([Setting it up](#sett
 Tenancy's use cases, and the records they take and answer, are nested in one generic class,
 `TenancyUseCases<TTenant, TTenantId, TOrganization, TUnit, TUnitId, TSeat, TSeatId, TRole, TRoleId>`, so
 your classes and ids are named once for all of them. You do not name them yourself. The toolkit's generator
-closes the class over your classes in the project that declares them, as a class named after its module:
-the module Tenants gives `TenantsTenancy`, whether [its folder](modules.md#a-module-named-by-its-folder)
-declares it with `DDD_Module` or `[assembly: Module("Tenants")]` does. Every project that references that project, the
-module's application, infrastructure and API projects, the host and your tests, names everything through it,
+closes the class over your classes in the project that declares them, as a class of the same name without the
+type parameters: `TenancyUseCases`, whatever your module is called. Every project that references that project,
+the module's application, infrastructure and API projects, the host and your tests, names everything through it,
 and none of them writes the nine types.
 
 ```mermaid
 flowchart LR
-    Classes["Shop.Tenants<br/>your five classes,<br/>in the module Tenants"] --> Generator{{"the toolkit's<br/>generator"}}
-    Generator --> Name(["TenantsTenancy,<br/>written there"])
-    Name --> Application["application project<br/>TenantsTenancy.SeatCommands"]
-    Name --> Api["API project<br/>TenantsTenancy.KeyReach,<br/>in GraphQL types too"]
-    Name --> Host["host and tests<br/>TenantsTenancy.TenantCommands"]
+    Classes["Shop.Tenants<br/>your five classes"] --> Generator{{"the toolkit's<br/>generator"}}
+    Generator --> Name(["TenancyUseCases,<br/>written there"])
+    Name --> Application["application project<br/>TenancyUseCases.SeatCommands"]
+    Name --> Api["API project<br/>TenancyUseCases.KeyReach,<br/>in GraphQL types too"]
+    Name --> Host["host and tests<br/>TenancyUseCases.TenantCommands"]
 ```
 
 <details>
 <summary>Show the code: what the generator writes into the project that declares the classes</summary>
 
-```csharp title="TenantsTenancy.TemplateFacade.g.cs, shortened"
+```csharp title="TenancyUseCases.TemplateFacade.g.cs, shortened"
 /// <summary>
 /// TenancyUseCases, closed over the classes of the module Tenants: ShopTenant, TenantId, ShopOrganization,
 /// ShopUnit, OrganizationUnitId, ShopSeat, SeatId, ShopRole and RoleId.
+/// Named as the package's class is; [assembly: TemplateFacadeName("TenancyUseCases", "...")] in this project names it otherwise.
 /// </summary>
-public abstract class TenantsTenancy : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
+public abstract class TenancyUseCases : global::DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<
     global::Shop.Tenants.ShopTenant, global::Shop.Tenants.Contracts.TenantId, global::Shop.Tenants.ShopOrganization,
     global::Shop.Tenants.ShopUnit, global::Shop.Tenants.Contracts.OrganizationUnitId, global::Shop.Tenants.ShopSeat,
     global::Shop.Tenants.Contracts.SeatId, global::Shop.Tenants.ShopRole, global::Shop.Tenants.Contracts.RoleId>
 {
-    private TenantsTenancy()
+    private TenancyUseCases()
     {
     }
 }
@@ -824,21 +824,21 @@ public abstract class TenantsTenancy : global::DDDToolkit.Supporting.Tenancy.Use
 
 </details>
 
-`TenantsTenancy.TenantCommands`, `TenantsTenancy.OrganizationCommands`, `TenantsTenancy.SeatCommands`,
-`TenantsTenancy.RoleCommands` and `TenantsTenancy.TenancyDirectory` are services, registered by `AddTenancy`
-and taken in a constructor, and `TenantsTenancy.TenantToProvision` or `TenantsTenancy.SeatOverview` is a record
+`TenancyUseCases.TenantCommands`, `TenancyUseCases.OrganizationCommands`, `TenancyUseCases.SeatCommands`,
+`TenancyUseCases.RoleCommands` and `TenancyUseCases.TenancyDirectory` are services, registered by `AddTenancy`
+and taken in a constructor, and `TenancyUseCases.TenantToProvision` or `TenancyUseCases.SeatOverview` is a record
 to name. The first call most applications write provisions a tenant:
 
 ```csharp
-public sealed class FirstTenant(TenantsTenancy.TenantCommands tenants)
+public sealed class FirstTenant(TenancyUseCases.TenantCommands tenants)
 {
     public async Task SetUpAsync(Guid identity, CancellationToken cancellationToken)
     {
         // Nobody holds a seat yet, so this is system work, begun on purpose: closed over your ids as well.
-        using (TenantsTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
             await tenants.ProvisionAsync(
-                new TenantsTenancy.TenantToProvision(
+                new TenancyUseCases.TenantToProvision(
                     "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity),
                 cancellationToken);
         }
@@ -846,38 +846,46 @@ public sealed class FirstTenant(TenantsTenancy.TenantCommands tenants)
 }
 ```
 
-`TenantsTenancy` is a class in the global namespace that derives from the package's class, closed over your
+`TenancyUseCases` is a class in the global namespace that derives from the package's class, closed over your
 classes, and does nothing else: nothing makes one. C# finds a type nested in a class through every class
-derived from it, so `TenantsTenancy.SeatCommands` is the package's own `SeatCommands`, closed over your
+derived from it, so `TenancyUseCases.SeatCommands` is the package's own `SeatCommands`, closed over your
 classes: the type `AddTenancy` registered, which the container hands out and whose documentation your editor
 shows. The invitation use cases take your invitation class and its id as well:
-`TenantsTenancy.InvitationCommands<ShopInvitation, InvitationId>` ([Invitations](#invitations)).
+`TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId>` ([Invitations](#invitations)).
 
 - **Why a class, and not an alias.** A global `using` alias holds in the project that declares it and no
   further, so every project would declare its own. A class is written once and reaches every project that
   references it, and the generators there read it as any type: HotChocolate's, reading
-  `[ObjectType<TenantsTenancy.KeyReach>]` in an API project, sees the package's record. A generator's alias
+  `[ObjectType<TenancyUseCases.KeyReach>]` in an API project, sees the package's record. A generator's alias
   would be the compiler's to see and not theirs.
-- **The module names it**, as it names everything the generators write in that project: `[assembly: Module]`, otherwise
-  `DDD_Module`, otherwise the assembly's name without the dots,
-  so `order-management` gives `OrderManagementTenancy`. A host that sees the classes of two modules names each by
-  its module.
-- **Or you name it, in one line.** A module called Tenancy would give `TenancyTenancy`. The project that declares
-  the classes names the class itself, in one line of its own, and every project above uses that name:
-  `[assembly: TemplateFacade(typeof(TenancyUseCases<,,,,,,,,>), "ShopTenancy")]`. `{Module}` works in it as in
-  the package's own name, `"{Module}UseCases"`.
+- **Named as the package's class is.** The name is the one this page and the package's documentation use,
+  whatever your module is called, so a module called Tenancy reads as well as one called Tenants. It does not
+  clash with the package's generic class, even in a file that imports `DDDToolkit.Supporting.Tenancy.UseCases`: C#
+  tells the two apart by their type parameters.
+- **Or you name it, in one line.** The project that declares the classes gives it a name of your own, beside
+  `[assembly: Module]` or Tenancy's switch, and every project above uses that name:
+  `[assembly: TemplateFacadeName("TenancyUseCases", "ShopTenancy")]`, from `DDDToolkit.Abstractions.Attributes`
+  as `[assembly: Module]` is. (A template facade is the toolkit's word for this class: the one a package asks, with
+  `[assembly: TemplateFacade]`, to have written over your classes.) You need it when two of your modules
+  declare Tenancy's classes ([below](#two-modules-with-the-classes)); otherwise only when you prefer another name.
+  Any name a class can have will do, as long as no namespace or type of yours in the global namespace has it:
+  `Shop`, for a module whose namespaces start with `Shop.`, is the namespace's. A line that changes nothing, in a
+  project that declares none of the classes, naming a class no package asks for or giving a name a namespace has,
+  is a warning at the line, [DDD00076](diagnostics.md#ddd00076).
 - **Only the project that declares the classes gets it.** Classes split over two projects of one module get it
-  in the project where they are complete, and the projects above see that one; a name of your own goes in that
-  project too.
+  in the project where they are complete, and the projects above see that one. A name of your own goes beside
+  the module in either of them: the project that writes the class reads it in the projects of its module it
+  takes classes from.
 - **What leaves it out is said where the classes are.** A template with no class or several, or a class that does
   not meet what the use cases ask of it: the projects above would only hear that the name does not exist, CS0246,
   so the project that declares the classes says why, [DDD00065](diagnostics.md#ddd00065), as information on the
   first of them. Where one of your classes or `AddTenancy` in that project already reports it as an error, that
   error is what you see.
 - **What you wrote stays.** A project that has a type or a namespace of that name in the global namespace, or
-  an alias of that name at the top of one of its files, gets no class. A project above it that keeps an alias
-  of that very name is told by the compiler, CS0576: take the alias out. One of another name still works next
-  to the class, and names the same types. A type of that name the project declares in a namespace of its own
+  an alias of that name at the top of one of its files, gets no class. A name you give yourself is told instead,
+  DDD00076, when a type or a namespace has it, since the line would only take the class away; your own alias of
+  it still stands. A project above it that keeps an alias of that very name is told by the compiler, CS0576: take
+  the alias out. One of another name still works next to the class, and names the same types. A type of that name the project declares in a namespace of its own
   keeps the class out too, with DDD00065 on that type: in the global namespace the class would win over it in
   every file that imports its namespace, since C# looks there before it looks at a file's usings. A project above
   is not looked at: there a type of that name imported with a using is hidden by the class, so qualify it, or
@@ -885,13 +893,58 @@ shows. The invitation use cases take your invitation class and its id as well:
 - **In the project that declares the classes, other generators do not see it.** It is one generator's output,
   and the others of that project read the code as written: Mediator's writes the name as it is spelled, which
   compiles, but HotChocolate's does not know the type, in its attributes and in a resolver's parameters and
-  return type, and writes `typeof(TenantsTenancy.RoleSummary?)` for a lookup that may answer nothing, which does
+  return type, and writes `typeof(TenancyUseCases.RoleSummary?)` for a lookup that may answer nothing, which does
   not compile. A module split by layer has its GraphQL types in its API project, above, where all is well. A
   module of one project with GraphQL types over Tenancy's records keeps one alias of exactly that name there,
-  `global using TenantsTenancy = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, which every
+  `global using TenancyUseCases = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, which every
   generator of the project reads. The generator stands back for it, and nothing else changes.
 
-The rest of this page writes `TenantsTenancy.`, the sample's name as well: its module is called Tenants too.
+#### Two modules with the classes
+
+Most applications have one module with Tenancy's classes. One with two, a module for customers' tenants and one
+for partners', gets a `TenancyUseCases` in each module's domain project. While neither module references the
+other, each module's own projects see only their own, so nothing is wrong there. The two meet in every project that
+references both, the host and your tests, where the first line that names `TenancyUseCases` would be the compiler's
+CS0433. So such a project is told before that, [DDD00075](diagnostics.md#ddd00075), with the line that gives one
+of them a name of its own written out, and the project it goes in.
+
+```mermaid
+flowchart LR
+    Customers["Shop.Customers.Domain<br/>Tenancy's classes"] --> One(["TenancyUseCases"])
+    Partners["Shop.Partners.Domain<br/>Tenancy's classes"] --> Two(["TenancyUseCases"])
+    One & Two --> Host{{"the host sees both:<br/>DDD00075"}}
+    Host -- "one line in<br/>Shop.Customers.Domain" --> Named(["CustomersTenancy and<br/>TenancyUseCases"])
+```
+
+The line goes where the module declares its classes, and the module's projects above it, the host and the tests
+name its use cases by the new name; the other module keeps `TenancyUseCases`. A module whose domain project
+references the other's still gets its own class, and is told on its own first Tenancy class as well: in that
+project the compiler binds the name to its own class and says so, CS0436, and every project above it sees both,
+is told at its project file and cannot name either, CS0433. Nothing names the other module's classes without a
+word.
+
+<details>
+<summary>Show the code: the one line, and the host naming each</summary>
+
+```csharp title="Shop.Customers.Domain/Module.cs"
+using DDDToolkit.Abstractions.Attributes;
+using DDDToolkit.Supporting.Tenancy;
+
+[assembly: Module("Customers")]
+[assembly: GenerateTenancyClasses]
+[assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancy")]
+```
+
+```csharp title="Shop.Host/Provisioning.cs"
+public sealed class Provisioning(CustomersTenancy.TenantCommands customers, TenancyUseCases.TenantCommands partners)
+{
+    // Customers' tenants through the name given, partners' through the package's.
+}
+```
+
+</details>
+
+The rest of this page writes `TenancyUseCases.`, as the sample does.
 
 ### Your ids, named once
 
@@ -902,8 +955,8 @@ writes the ids again to call them:
 
 | What | Generic over your ids | Closed over them | Where |
 |---|---|---|---|
-| System work | `TenancyWork.BeginSystem<TenantId, SeatId>()` and the rest | `TenantsTenancy.BeginSystem()`, `BeginSystemIn(tenant)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn` | Every project that sees your classes: their module, the host, your tests |
-| The current caller | `TenancyCallers.Current<TenantId, SeatId>()` | `TenantsTenancy.CurrentCaller()` | The same |
+| System work | `TenancyWork.BeginSystem<TenantId, SeatId>()` and the rest | `TenancyUseCases.BeginSystem()`, `BeginSystemIn(tenant)`, `BeginOperator`, `BeginOperatorIn`, `BeginTokenIn` | Every project that sees your classes: their module, the host, your tests |
+| The current caller | `TenancyCallers.Current<TenantId, SeatId>()` | `TenancyUseCases.CurrentCaller()` | The same |
 | Registrations | `outbox.AddTenancyDomainEvents<TenantId, SeatId, OrganizationUnitId, RoleId>()` and the rest | `outbox.AddTenancyDomainEvents()`, `log.AddTenancyEventLog()`, `outbox.AddTenancyInvitationEvents<InvitationId>()`, `modelBuilder.AddTenancyReadModel()` and `AddTenancyReadFunctions()`, beside `AddTenancy`, `AddTenancyAccess` and `AddTenancyInvitations` | The project that declares your classes, and a project of their module that registers Tenancy, where the context is; not the host or a test project above them |
 | Tenant selection, for a host's middleware | `TenantSelection<TenantId, SeatId>` | `ITenantSelection`, which answers the caller without its ids | Every project: it names no id |
 
@@ -912,7 +965,7 @@ flowchart LR
     Call["a call of Tenancy's,<br/>generic over your ids"] --> Kind{"what is<br/>called?"}
     Kind -- "system work,<br/>the current caller" --> Sees{"does the project<br/>see your classes?"}
     Kind -- "a registration" --> Own{"is it a project<br/>of their module?"}
-    Sees -- "yes: their module,<br/>the host, your tests" --> Static(["closed:<br/>TenantsTenancy.BeginSystem()"])
+    Sees -- "yes: their module,<br/>the host, your tests" --> Static(["closed:<br/>TenancyUseCases.BeginSystem()"])
     Sees -- "no: another<br/>module" --> Arguments{"are the ids<br/>arguments?"}
     Own -- "no: another module,<br/>the host, a test" --> Arguments
     Own -- "yes: the classes'<br/>or the context's" --> Generated(["closed:<br/>outbox.AddTenancyDomainEvents()"])
@@ -924,7 +977,7 @@ What "seen" means differs for each kind:
 
 - **System work and the current caller** are static members of the class the use cases are named through. C#
   finds a static member through a derived class as it finds a nested type, so they reach exactly as far as
-  `TenantsTenancy` does: the project that declares your classes and every project above it, your host and your
+  `TenancyUseCases` does: the project that declares your classes and every project above it, your host and your
   tests among them. In the project that declares the classes too, where the class is the generator's output: a
   call is bound by the compiler, which sees what every generator wrote. Only another generator does not, reading a
   signature or an attribute, and a call is neither.
@@ -973,13 +1026,13 @@ options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .AddTenancyInvitationEvents<InvitationId>()       // the invitation's id: an application may have none
     .KeepEventLog(log => log.AddTenancyEventLog()));
 
-// The host, a test, or any project that sees TenantsTenancy: system work and the current caller
-using (TenantsTenancy.BeginSystemIn(tenant, administrator))
+// The host, a test, or any project that sees TenancyUseCases: system work and the current caller
+using (TenancyUseCases.BeginSystemIn(tenant, administrator))
 {
     await seeder.SeedAsync(cancellationToken);
 }
 
-var caller = TenantsTenancy.CurrentCaller();          // a TenancyCaller<TenantId, SeatId>, nobody outside any scope
+var caller = TenancyUseCases.CurrentCaller();          // a TenancyCaller<TenantId, SeatId>, nobody outside any scope
 
 // The host's middleware: the selection without its ids
 var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
@@ -1051,7 +1104,7 @@ tenant is provisioned, through three callbacks on the command:
 
 ```csharp
 await tenants.ProvisionAsync(
-    new TenantsTenancy.TenantToProvision(
+    new TenancyUseCases.TenantToProvision(
         "harbor", "Harbor Works", TenantShape.Hierarchical, "Harbor Works", identity,
         ConfigureTenant: tenant => tenant.MarkAsDemo(),
         ConfigureRoot: root => root.SetCostCentre("HW-001"),
@@ -1119,7 +1172,7 @@ public async ValueTask<OrganizationUnitId> Handle(AddOrganizationUnit command, C
     => await organization.AddUnitAsync(command.Parent, command.Name, cancellationToken, configure: unit => unit.SetKind(command.Kind));
 
 // The root's, when the tenant is provisioned
-new TenantsTenancy.TenantToProvision(slug, name, shape, name, identity, ConfigureRoot: root => root.SetKind(UnitKind.Company));
+new TenancyUseCases.TenantToProvision(slug, name, shape, name, identity, ConfigureRoot: root => root.SetKind(UnitKind.Company));
 
 // The query's handler: the directory decides which units the caller reads and answers your own units, whole, each
 // with its path and depth beside it; a plain select shows the kind
@@ -1385,7 +1438,7 @@ public sealed record MakeGrant(SeatId Seat, OrganizationUnitId Unit, RoleId Role
     AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.AtUnit(TenancyKeys.GrantsManage, Unit);
 }
 
-public sealed class MakeGrantHandler(TenantsTenancy.SeatCommands seats) : ICommandHandler<MakeGrant>
+public sealed class MakeGrantHandler(TenancyUseCases.SeatCommands seats) : ICommandHandler<MakeGrant>
 {
     public async ValueTask<Unit> Handle(MakeGrant command, CancellationToken cancellationToken)
     {
@@ -1405,7 +1458,7 @@ who may send the request that provisions one is one decision, and what the work 
 handler begins the system work itself, in trusted code, whichever requirement its request declares.
 
 The request's requirement says who gets as far as the handler. Every handler below begins
-`TenantsTenancy.BeginSystem()` and provisions as that, whoever sent the request, and the caller gets nothing more by
+`TenancyUseCases.BeginSystem()` and provisions as that, whoever sent the request, and the caller gets nothing more by
 it: what the system work does is the handler's to say, and the database's policies hold it to the tenant it
 makes. What changes with the requirement is where the handler finds what system work cannot tell it, the
 first administrator:
@@ -1418,7 +1471,7 @@ first administrator:
 
 An operator's screen is none of these. An operator is a signed-in user, whom `RequiresSystemWork()` refuses
 like any other, and what an operator asks for is carried out by system work that names the operator,
-`TenantsTenancy.BeginOperator(identity)` ([Operators](#operators)).
+`TenancyUseCases.BeginOperator(identity)` ([Operators](#operators)).
 
 ```mermaid
 sequenceDiagram
@@ -1444,7 +1497,7 @@ public sealed record RegisterOrganization(string Slug, string Name, string Admin
     AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.SignedIn();
 }
 
-public sealed class RegisterOrganizationHandler(TenantsTenancy.TenantCommands tenants, ICallerAccessor callers)
+public sealed class RegisterOrganizationHandler(TenancyUseCases.TenantCommands tenants, ICallerAccessor callers)
     : ICommandHandler<RegisterOrganization, TenantId>
 {
     public async ValueTask<TenantId> Handle(RegisterOrganization command, CancellationToken cancellationToken)
@@ -1460,10 +1513,10 @@ public sealed class RegisterOrganizationHandler(TenantsTenancy.TenantCommands te
         }
 
         // What it runs with: system work outside any tenant, begun here, which is what provisions a tenant.
-        using (TenantsTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
             var made = await tenants.ProvisionAsync(
-                new TenantsTenancy.TenantToProvision(
+                new TenancyUseCases.TenantToProvision(
                     command.Slug, command.Name, TenantShape.Flat, command.Name, administrator,
                     ConfigureFirstSeat: seat => seat.Rename(command.AdministratorName)),
                 cancellationToken);
@@ -1484,10 +1537,10 @@ if (made is not IdentityAccountOutcome.Created(var administrator))
     return;                                          // the address has an account: answer as if it had none
 }
 
-using (TenantsTenancy.BeginSystem())
+using (TenancyUseCases.BeginSystem())
 {
     await tenants.ProvisionAsync(
-        new TenantsTenancy.TenantToProvision(
+        new TenancyUseCases.TenantToProvision(
             command.Slug, command.Name, TenantShape.Flat, command.Name, administrator,
             ConfigureFirstSeat: seat => seat.Rename(command.AdministratorName)),
         cancellationToken);
@@ -1631,7 +1684,7 @@ sequenceDiagram
 ```csharp
 // The directory is registered with Tenancy. It checks the caller itself, as every use case does. The seats are
 // your own class, so the name is the one it keeps.
-public sealed class ProjectScreen(TenantsTenancy.TenancyDirectory directory)
+public sealed class ProjectScreen(TenancyUseCases.TenancyDirectory directory)
 {
     public async Task<IReadOnlyDictionary<SeatId, string>> NamesOfAsync(IReadOnlyCollection<SeatId> seats, CancellationToken cancellationToken)
         => (await directory.SeatsByIdAsync(seats, cancellationToken)).ToDictionary(seat => seat.Id, seat => seat.DisplayName);
@@ -1750,7 +1803,7 @@ public sealed partial class Seat
 }
 
 // Named where it is made: provisioned, added, or accepted with the name the person gives.
-new TenantsTenancy.TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: seat => seat.Rename("Ada"));
+new TenancyUseCases.TenantToProvision(slug, name, shape, name, identity, ConfigureFirstSeat: seat => seat.Rename("Ada"));
 await seats.AddSeatAsync(identity, cancellationToken, configure: seat => seat.Rename("Bert"));
 await invitations.AcceptAsync(command.Token, verifiedAddress, cancellationToken, configure: seat => seat.Rename(command.DisplayName));
 
@@ -1961,7 +2014,7 @@ flowchart TD
 ```csharp
 // SeatCommands is registered with Tenancy. It finds the calling seat itself,
 // and decides as above before it saves.
-public sealed class RoleDesk(TenantsTenancy.SeatCommands seats)
+public sealed class RoleDesk(TenancyUseCases.SeatCommands seats)
 {
     public Task GiveAsync(SeatId seat, OrganizationUnitId unit, RoleId role, DateTimeOffset? until, CancellationToken cancellationToken)
         => seats.GrantAsync(seat, unit, role, until, reason: null, cancellationToken);
@@ -2182,7 +2235,7 @@ flowchart LR
 Containment is about a seat handing keys on, never about your application. System work in a tenant holds every
 key there and is not held to it, on or off. So an application that lets a manager earn a role that manages
 access, by passing a quiz say, keeps containment on: its own handler checks the quiz, which Tenancy knows nothing
-of, and then gives the role inside `TenantsTenancy.BeginSystemIn(tenant, seat)`, for the seat that passed. The grant records no
+of, and then gives the role inside `TenancyUseCases.BeginSystemIn(tenant, seat)`, for the seat that passed. The grant records no
 seat as its giver, and its event records the system, acting for that seat.
 
 System work gives whatever it is told, so what it is told comes from your application, never from the request.
@@ -2221,11 +2274,11 @@ public static class ShopCatalogue
 ```csharp
 // Your own handler, with containment on. The request names the quiz and carries the answers. Who passed is the
 // caller, and what passing gives is the quiz's: system work gives whatever it is told, so a client chooses neither.
-public sealed class QuizDesk(TenantsTenancy.SeatCommands seats, IQuizzes quizzes)
+public sealed class QuizDesk(TenancyUseCases.SeatCommands seats, IQuizzes quizzes)
 {
     public async Task PassAsync(QuizId quizId, QuizAnswers answers, CancellationToken cancellationToken)
     {
-        if (TenantsTenancy.CurrentCaller() is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
+        if (TenancyUseCases.CurrentCaller() is not { Kind: TenancyCallerKind.Seat, Tenant: { } tenant, Seat: { } seat })
         {
             throw QuizRefusals.Of(QuizRefusals.SeatsOnly);
         }
@@ -2237,7 +2290,7 @@ public sealed class QuizDesk(TenantsTenancy.SeatCommands seats, IQuizzes quizzes
         }
 
         // The role and the unit are the quiz's own, which an administrator set when making it.
-        using (TenantsTenancy.BeginSystemIn(tenant, seat))
+        using (TenancyUseCases.BeginSystemIn(tenant, seat))
         {
             await seats.GrantAsync(seat, quiz.Unit, quiz.Role, until: null, reason: "passed " + quiz.Name, cancellationToken);
         }
@@ -2303,7 +2356,7 @@ sequenceDiagram
 <summary>Show the code: issuing an invitation and mailing it, and the route that accepts one</summary>
 
 ```csharp
-public sealed class InviteColleague(TenantsTenancy.InvitationCommands<ShopInvitation, InvitationId> invitations, IShopMail mail)
+public sealed class InviteColleague(TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId> invitations, IShopMail mail)
 {
     public async Task HandleAsync(string address, OrganizationUnitId unit, RoleId role, CancellationToken cancellationToken)
     {
@@ -2319,7 +2372,7 @@ public sealed class InviteColleague(TenantsTenancy.InvitationCommands<ShopInvita
 // person gives is a field of your seat class, set in the callback before anything is saved.
 app.MapPost("/invitations/accept", async (
     AcceptInvitation request,
-    TenantsTenancy.InvitationCommands<ShopInvitation, InvitationId> invitations,
+    TenancyUseCases.InvitationCommands<ShopInvitation, InvitationId> invitations,
     CancellationToken cancellationToken) =>
 {
     var accepted = await invitations.AcceptAsync(request.Token, verifiedAddress: null, cancellationToken,
@@ -2618,11 +2671,11 @@ your use cases are named through, and names neither ([Your ids, named once](#you
 
 | | Tenancy's caller | The toolkit's caller |
 |---|---|---|
-| `TenantsTenancy.BeginSystem()` | system work outside any tenant, which provisions tenants, and reads and writes no tenant's rows | `Caller.SystemIn("tenancy")` |
-| `TenantsTenancy.BeginSystemIn(tenant, actingSeat, scope)` | system work in that tenant, holding every key there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
-| `TenantsTenancy.BeginOperator(identity)` | as `BeginSystem`, recorded as the operator a tenant is provisioned for | `Caller.SystemIn("tenancy")` |
-| `TenantsTenancy.BeginOperatorIn(tenant, identity, scope)` | as `BeginSystemIn`, recorded as the operator the work is carried out for | `Caller.SystemIn(scope)` |
-| `TenantsTenancy.BeginTokenIn(tenant, seat, scope)` | as `BeginSystemIn`, recorded as a link's token and the seat it stands for | `Caller.SystemIn(scope)`, the module's name |
+| `TenancyUseCases.BeginSystem()` | system work outside any tenant, which provisions tenants, and reads and writes no tenant's rows | `Caller.SystemIn("tenancy")` |
+| `TenancyUseCases.BeginSystemIn(tenant, actingSeat, scope)` | system work in that tenant, holding every key there and nothing anywhere else | `Caller.SystemIn(scope)`, `"tenancy"` unless you pass another |
+| `TenancyUseCases.BeginOperator(identity)` | as `BeginSystem`, recorded as the operator a tenant is provisioned for | `Caller.SystemIn("tenancy")` |
+| `TenancyUseCases.BeginOperatorIn(tenant, identity, scope)` | as `BeginSystemIn`, recorded as the operator the work is carried out for | `Caller.SystemIn(scope)` |
+| `TenancyUseCases.BeginTokenIn(tenant, seat, scope)` | as `BeginSystemIn`, recorded as a link's token and the seat it stands for | `Caller.SystemIn(scope)`, the module's name |
 
 A module that sees only your ids calls `TenancyWork`'s own: `TenancyWork.BeginSystemIn(tenant, seat, "billing")`,
 whose ids C# infers from the arguments, or `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant, scope: "billing")`
@@ -2644,7 +2697,7 @@ so one word says it wherever it comes up:
 |---|---|
 | the application itself, which no policy is written for | `Caller.System`, on the role `SystemRole` names: on Supabase `ddd_system` unless the project says otherwise, the toolkit's bookkeeping and nothing else; past every policy only on the login role (`system=none`) or a role that bypasses them |
 | the application at work in a scope, inside the policies | `Caller.SystemIn(scope)`, on `ddd_system_in` unless the host names another |
-| begun in Tenancy, outside any tenant or in one | `TenantsTenancy.BeginSystem()`, `TenantsTenancy.BeginSystemIn(tenant)`: `TenancyWork`'s, closed over your ids |
+| begun in Tenancy, outside any tenant or in one | `TenancyUseCases.BeginSystem()`, `TenancyUseCases.BeginSystemIn(tenant)`: `TenancyWork`'s, closed over your ids |
 | a request only it sends | `AccessRequirement.RequiresSystemWork()`, which lets through system work trusted code began and refuses every user with `access.system-only` |
 
 `RequiresSystemWork()` takes system work that was begun on purpose, with `TenancyWork` or with
@@ -2659,7 +2712,7 @@ provisioning a tenant and suspending, reactivating or closing one, refuse a seat
 them.
 
 ```csharp
-using (TenantsTenancy.BeginSystemIn(tenant, actingSeat))
+using (TenancyUseCases.BeginSystemIn(tenant, actingSeat))
 {
     await seats.PlaceAsync(seat, unit, primary: true, cancellationToken);
 }
@@ -2696,7 +2749,7 @@ does for the toolkit's caller, so the tenant of the work around it does not trav
 // A round of a module's own: the tenants to visit, then its system work in each, under its own scope
 foreach (var tenant in await TenancySystemReads.TenantsToSweepAsync<ShopTenant, TenantId>(tenancy, "ordering", cancellationToken))
 {
-    using (TenantsTenancy.BeginSystemIn(tenant, scope: "ordering"))
+    using (TenancyUseCases.BeginSystemIn(tenant, scope: "ordering"))
     {
         await orders.EndWhatHasRunOutAsync(cancellationToken);
     }
@@ -2727,8 +2780,8 @@ tenants. An operator is not an administrator of every tenant. It **holds no seat
   (`tenancy.page-size-invalid`), and the next one is asked with the marker the page before gave
   (`tenancy.cursor-invalid` for anything else). The read runs as the operator, never as the system.
 - **How it writes.** It does not. What an operator asks for is carried out by system work that names the
-  operator: `TenantsTenancy.BeginOperator(identity)` to provision a tenant, and
-  `TenantsTenancy.BeginOperatorIn(tenant, identity)` for work in one. The work holds what system work holds; the
+  operator: `TenancyUseCases.BeginOperator(identity)` to provision a tenant, and
+  `TenancyUseCases.BeginOperatorIn(tenant, identity)` for work in one. The work holds what system work holds; the
   operator is only who it is [recorded as](#who-changed-a-row). The identity is the verified `sub` of the
   request that asked, taken from the token or from a record that request wrote, never from what a caller sends.
 
@@ -2761,7 +2814,7 @@ services.AddTenancy<TenancyContext>(options =>
 var page = await tenants.ListAsync(after, size: 50, cancellationToken);
 
 // Carrying out what an operator asked for: system work in the tenant, which names the operator
-using (TenantsTenancy.BeginOperatorIn(tenant, operatorIdentity))
+using (TenancyUseCases.BeginOperatorIn(tenant, operatorIdentity))
 {
     await tenantCommands.SuspendAsync("Asked for by the owner", cancellationToken);
 }
@@ -3956,7 +4009,7 @@ public static async Task<IReadOnlyDictionary<SeatId, SeatListing>> GetSeatByIdAs
     IReadOnlyList<SeatId> ids, ISender sender, CancellationToken cancellationToken)
 {
     var seats = new Dictionary<SeatId, SeatListing>();
-    foreach (var part in ids.Chunk(TenantsTenancy.TenancyDirectory.MostIds))
+    foreach (var part in ids.Chunk(TenancyUseCases.TenancyDirectory.MostIds))
     {
         foreach (var seat in await sender.Send(new SeatsById(part), cancellationToken))
         {
@@ -4580,7 +4633,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 |---|---|
 | A module is a project per layer, with ports between the application and its storage. Its entry is in its API project, and the host references that project alone | **Code:** [`Modules`](../Examples/Tenancy/Modules), [`ProjectsModule.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Api/ProjectsModule.cs), [`IProjectStore.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/StoredProjects/IProjectStore.cs)<br/>**Try it:** `dotnet run --project Examples/Tenancy/Examples.Tenancy.AppHost`<br/>**Test:** `LayerReferenceTests` |
 | A module states its permission keys once, on the list it marks with `[TenancyPermissions]`. The host gets every module's list from Tenancy's generator and registers the keys with one call; the program that exports finds the same marked lists itself and builds Tenancy's policies from them and the part of the catalogue marked `[TenancyCatalogue]` | **Code:** [`ProjectCatalogue.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/ProjectCatalogue.cs), [`Program.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Program.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), [`TenancyPermissionsGenerator.cs`](../Source/DDDToolkit.Supporting.Tenancy.Analyzers/TenancyPermissionsGenerator.cs)<br/>**Try it:** Nothing to run: build the host and the exporter with `-p:EmitCompilerGeneratedFiles=true`: `TenancyPermissionsOfModules.g.cs` is under the host's `obj` folder, `DDDToolkit.RowAccessContributionsOfPackages.g.cs` under the exporter's<br/>**Test:** `ModuleKeysTests`, `TenancyPermissionsGeneratorTests`, `PackageContributionsGeneratorTests`, `StartupTests` |
-| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, named after the module, which every project above sees, the generators there included | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`KeyOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenantsTenancy.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
+| No project writes Tenancy's nine types: the use cases are named through a class the toolkit's generator writes where the module's classes are declared, `TenancyUseCases` after the package's own class, which every project above sees, the generators there included; a second module with the classes names its own in one line | **Code:** [`TemplateFacades.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateFacades.cs), [`AssemblyInfo.cs`](../Source/DDDToolkit.Supporting.Tenancy/AssemblyInfo.cs), [`KeyOfMineType.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Api/Seats/GraphQL/KeyOfMineType.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `TenancyUseCases.TemplateFacade.g.cs` is under the obj folder of the Tenants domain project<br/>**Test:** `TemplateFacadeTests`, `SourceTreeTests` |
 | No project that sees the Tenants module's classes names Tenancy's ids to begin system work, ask the current caller, register Tenancy or select the tenant: the first two are static members of the class the use cases are named through, the registrations are generated like `AddTenancy` into the module's own projects, and tenant selection is asked without its id types. Types generic over the ids keep them. Projects and Inspections see the ids alone, and write them where they register | **Code:** [`TenancyUseCases.Callers.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Callers.cs), [`ITenantSelection.cs`](../Source/DDDToolkit.Supporting.Tenancy/Access/Selection/ITenantSelection.cs), [`DemoSeeder.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Seeding/DemoSeeder.cs), [`TenantHeader.cs`](../Examples/Tenancy/Examples.Tenancy.Host/Access/TenantHeader.cs), [`TenantsInfrastructure.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Infrastructure/TenantsInfrastructure.cs), [`ProjectsInfrastructure.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Infrastructure/ProjectsInfrastructure.cs)<br/>**Try it:** Nothing to run: the seeding begins its system work this way each time the sample starts with its demonstration<br/>**Test:** `SourceTreeTests`, `TenancyClosedOverTheIdsTests`, `ClosedOverTheIdsTests` |
 | No class the application adds nothing to is written by hand: Tenancy's switch in the Tenants domain project has the generator write the organization and the role as the package ships them, and the tenant, the unit, the seat and the invitation are declared, because each adds something, and win. The ids are the contracts project's own, printed with their prefixes, and the switch takes them | **Code:** [`Module.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Domain/Module.cs), [`GenerateTenancyClassesAttribute.cs`](../Source/DDDToolkit.Supporting.Tenancy/Aggregates/GenerateTenancyClassesAttribute.cs), [`TemplateDefaults.cs`](../Source/DDDToolkit.Analyzers.Shared/TemplateDefaults.cs)<br/>**Try it:** Nothing to run: build with `-p:EmitCompilerGeneratedFiles=true`, and `Organization.TemplateDefault.*.g.cs` and `Role.TemplateDefault.*.g.cs` are under the obj folder of the Tenants domain project<br/>**Test:** `SourceTreeTests`, `MigrationTests`, `TemplateDefaultsTests`, `ProvisioningTests` |
 | A use case is one command or query, sent through the mediator, and what it requires of its caller is checked on its way to its handler, by a behavior the toolkit generates from the module's request interface | **Code:** [`CloseProject.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Lifecycle/Commands/CloseProject.cs), [`IProjectsRequest.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Access/IProjectsRequest.cs), [`MemberAccessCheck.cs`](../Source/DDDToolkit.Supporting.Membership/Access/RequiredAccess/MemberAccessCheck.cs)<br/>**Try it:** Any route. Preset `close-as-observer` is refused by the check<br/>**Test:** `AccessDeclarationTests`, `RequestPipelineTests` |
@@ -5540,7 +5593,7 @@ flowchart LR
   toolkit's hint, so a save that tries is `access.refused`. No use case of Tenancy changes them once the seat is
   made: provisioning, adding a seat, accepting an invitation and an import write all three as they make the seat,
   an insert. Only Tenancy's system work in the seat's tenant passes, the scoped system role that
-  `TenantsTenancy.BeginSystemIn(tenant)` begins, so that a one-off of yours can link a seat to the identity another sign-in
+  `TenancyUseCases.BeginSystemIn(tenant)` begins, so that a one-off of yours can link a seat to the identity another sign-in
   provider gives the same person, with an `ExecuteUpdate` of the seat inside it (the code is below). The policies
   keep that work to Tenancy's scope and to its tenant, so it moves no seat to another tenant. Anything else changes
   none of them: background work under `Caller.System`, and a migration or the SQL editor running as the tables'
@@ -5609,7 +5662,7 @@ A one-off of yours that links a seat to the identity another sign-in provider ga
 Tenancy's system work in the seat's tenant, which the trigger lets through:
 
 ```csharp
-using (TenantsTenancy.BeginSystemIn(tenant))
+using (TenancyUseCases.BeginSystemIn(tenant))
 {
     await context.Set<Seat>()
         .Where(seat => seat.Id == seatId)

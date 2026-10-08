@@ -137,7 +137,7 @@ public sealed class KeySetScenarios(SampleHosts sample) : IClassFixture<SampleHo
         }
 
         // System work in the tenant holds every key on every project of it, and asks Tenancy nothing.
-        using (TenantsTenancy.BeginSystemIn(Harbor.Id))
+        using (TenancyUseCases.BeginSystemIn(Harbor.Id))
         {
             await using var scope = host.Services.CreateAsyncScope();
             var access = scope.ServiceProvider.GetRequiredService<ProjectAccess>();

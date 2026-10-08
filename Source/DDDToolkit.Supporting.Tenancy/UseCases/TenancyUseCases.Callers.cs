@@ -4,8 +4,8 @@ namespace DDDToolkit.Supporting.Tenancy.UseCases;
 
 // System work and the current caller, closed over the application's ids. TenancyWork and TenancyCallers are generic
 // over the ids, and C# infers no id that is not an argument: the system work that provisions a tenant takes none.
-// Here they are once more, closed over the ids the use cases are, and so reached through the class named after the
-// module as the use cases are: TenantsTenancy.BeginSystem(). C# finds a static member through every class derived
+// Here they are once more, closed over the ids the use cases are, and so reached through the class the generator
+// writes for the use cases: TenancyUseCases.BeginSystem(). C# finds a static member through every class derived
 // from the one that declares it, as it finds a nested type, so every project that sees that class calls these
 // without naming an id. The project that declares the classes does too: a call is bound by the compiler, which sees
 // every generator's output; only another generator, reading a signature or an attribute, would not see the class.

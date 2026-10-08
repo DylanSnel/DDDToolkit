@@ -6,7 +6,7 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 /// <summary>
 /// System work and the current caller are reached through the class the use cases are named through, closed over the
 /// application's ids, so no project that sees the classes names an id to begin either: <c>HostTenancy.BeginSystem()</c>
-/// here, <c>TenantsTenancy.BeginSystem()</c> in the sample. Where a seat is given, C# infers both ids of
+/// here, <c>TenancyUseCases.BeginSystem()</c> in the sample. Where a seat is given, C# infers both ids of
 /// <see cref="TenancyWork"/>'s own method, for a module that sees the ids alone. Each begins exactly what the method
 /// generic over the ids begins, and ends it.
 /// </summary>

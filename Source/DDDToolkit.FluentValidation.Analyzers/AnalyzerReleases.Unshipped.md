@@ -73,3 +73,5 @@ DDD00071 | DDDToolkit.Supabase | Error | What a package's row access contributio
 DDD00072 | DDDToolkit.Supabase | Error | A row access contribution a package writes is not listed again
 DDD00073 | DDDToolkit.Supabase | Warning | What [assembly: LeaveOutRowAccessContribution] names is a contribution a package writes, and a context
 DDD00074 | DDDToolkit.EntityFramework | Warning | A design-time factory keeps the migration history where the application does
+DDD00075 | DDDToolkit.Entities | Warning | Every class a package's use cases are named through has a name of its own where a project sees it
+DDD00076 | DDDToolkit.Entities | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets

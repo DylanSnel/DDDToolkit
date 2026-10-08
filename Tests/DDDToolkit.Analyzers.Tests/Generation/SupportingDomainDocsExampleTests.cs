@@ -218,7 +218,7 @@ public class SupportingDomainDocsExampleTests
 
     /// <summary>
     /// The package's use cases and a record they answer, nested in one class generic over the application's classes,
-    /// which the project that declares the classes gets closed over them, as a class named after its module.
+    /// which the project that declares the classes gets closed over them, as a class named as the package's is without its type parameters.
     /// </summary>
     internal const string UseCases =
         """
@@ -227,7 +227,7 @@ public class SupportingDomainDocsExampleTests
         using DDDToolkit.Abstractions.Attributes;
         using DDDToolkit.Abstractions.Interfaces;
 
-        [assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>), "{Module}Subscriptions")]
+        [assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>))]
 
         namespace Acme.Subscriptions;
 
@@ -259,16 +259,16 @@ public class SupportingDomainDocsExampleTests
         }
         """;
 
-    /// <summary>A class of a project above the one that declares the classes, which names the use cases through the module's class.</summary>
+    /// <summary>A class of a project above the one that declares the classes, which names the use cases through the class the project that declares the classes gets.</summary>
     internal const string Reminders =
         """
         using Shop.Billing;
 
         namespace Shop.Billing.Application;
 
-        public sealed class Reminders(BillingSubscriptions.Dunning dunning)
+        public sealed class Reminders(SubscriptionUseCases.Dunning dunning)
         {
-            public BillingSubscriptions.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
+            public SubscriptionUseCases.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
         }
         """;
 
@@ -605,7 +605,7 @@ public class SupportingDomainDocsExampleTests
     }
 
     [Fact]
-    public void The_use_cases_are_named_after_the_module_where_the_classes_are_and_in_every_project_above()
+    public void The_use_cases_are_named_as_the_packages_class_where_the_classes_are_and_in_every_project_above()
     {
         static GeneratorTestHost Billing(GeneratorTestHost project)
             => project
@@ -618,8 +618,8 @@ public class SupportingDomainDocsExampleTests
         var declaring = Billing(GeneratorTestHost.Create(Reminders, "Reminders.cs")).RunCore();
         declaring.ShouldCompile();
         declaring.ShouldContain(
-            "BillingSubscriptions.TemplateFacade",
-            "public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId, global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId, global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>");
+            "SubscriptionUseCases.TemplateFacade",
+            "public abstract class SubscriptionUseCases : global::Acme.Subscriptions.SubscriptionUseCases<global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId, global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId, global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>");
 
         var above = GeneratorTestHost.Create(Reminders, "Reminders.cs")
             .WithReferencedProject("Shop.Billing", Billing)

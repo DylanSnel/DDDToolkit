@@ -25,7 +25,7 @@ public sealed class DirectoryLoaderTests(SampleHosts sample) : IClassFixture<Sam
         // The loader as the schema registered it. It is the module's own, so it is found by its name, and used
         // through the interface every data loader has.
         var registered = typeof(TenantsModule).Assembly.GetType("Examples.Tenancy.Tenants.Api.Directory.GraphQL.ISeatByIdDataLoader", throwOnError: true)!;
-        var most = TenantsTenancy.TenancyDirectory.MostIds;
+        var most = TenancyUseCases.TenancyDirectory.MostIds;
         SeatId[] ids = [.. Enumerable.Range(0, most).Select(_ => SeatId.CreateSequential()), .. Harbor.Seats.Select(seat => seat.Id)];
 
         using (SampleCallers.BeginSeatOf(DemoPeople.Juno, Harbor))

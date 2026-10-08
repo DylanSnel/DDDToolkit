@@ -12,7 +12,7 @@ namespace DDDToolkit.Supporting.Tenancy;
 /// <c>Seat</c>, each declared with its template, and a <c>TenantId</c>, an <c>OrganizationUnitId</c>, a <c>RoleId</c>
 /// and a <c>SeatId</c>, each an <c>[EntityId&lt;Guid&gt;]</c>: public, in the project's root namespace, with everything
 /// the toolkit's generators write for a class and an id declared by hand, <c>modelBuilder.AddTenancy()</c> and the
-/// class named after the module that the use cases are named through among them, and Membership's member list over a
+/// class the use cases are named through, <c>TenancyUseCases</c>, among them, and Membership's member list over a
 /// written <c>SeatId</c>. An organization shares its tenant's id, so there is no <c>OrganizationId</c>.
 /// <para>
 /// <b>Seen from the next project up.</b> Other generators of this project, HotChocolate's for one, do not see what the

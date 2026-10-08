@@ -391,7 +391,7 @@ public sealed class SampleOnPostgres : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(tenant);
         ArgumentNullException.ThrowIfNull(work);
 
-        using (TenantsTenancy.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
+        using (TenancyUseCases.BeginSystemIn(tenant.Id, tenant.Administrator.Id))
         {
             await using var scope = Host.Services.CreateAsyncScope();
             return await work(scope.ServiceProvider);

@@ -18,8 +18,8 @@ namespace Examples.Tenancy.Tenants.Application.Seats;
 /// <param name="Roles">The roles it holds anywhere, by name.</param>
 /// <param name="Keys">Every key it holds now, where it is granted and every unit it reaches.</param>
 public sealed record SeatOverviewListing(
-    TenantsTenancy.TenantSummary Tenant,
+    TenancyUseCases.TenantSummary Tenant,
     SeatListing Seat,
     IReadOnlyList<PlacementListing> Placements,
-    IReadOnlyList<TenantsTenancy.RoleSummary> Roles,
-    IReadOnlyList<TenantsTenancy.KeyReach> Keys);
+    IReadOnlyList<TenancyUseCases.RoleSummary> Roles,
+    IReadOnlyList<TenancyUseCases.KeyReach> Keys);

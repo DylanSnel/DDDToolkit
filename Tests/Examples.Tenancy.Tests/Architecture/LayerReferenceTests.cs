@@ -643,7 +643,7 @@ public sealed class LayerReferenceTests
         TypeScan.PartsOf(typeof(ITenancyReads)).Should().Contain(part => SampleLayout.IsPort(part));
         TypeScan.PartsOf(typeof(IInspectionStore[])).Should().Contain(part => SampleLayout.IsPort(part));
         TypeScan.PartsOf(typeof(IReadOnlyList<Lazy<IProjectStore>>)).Should().Contain(part => SampleLayout.IsPort(part), "a port inside a type argument of a type argument is still a port");
-        TypeScan.PartsOf(typeof(Func<TenantsTenancy.IStore, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "the Tenancy package's store is the port of Tenancy's use cases");
+        TypeScan.PartsOf(typeof(Func<TenancyUseCases.IStore, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "the Tenancy package's store is the port of Tenancy's use cases");
         TypeScan.PartsOf(typeof(Func<IProjectReading, Task>)).Should().Contain(part => SampleLayout.IsPort(part), "what a read port opens is a port too: it reads");
         TypeScan.PartsOf(typeof(Task<IInspectionReads>)).Should().Contain(part => SampleLayout.IsPort(part), "a read port that hands out no reading is a port all the same");
         TypeScan.PartsOf(typeof(Func<TenantSeats, Task>)).Should().NotContain(part => SampleLayout.IsPort(part));
@@ -674,7 +674,7 @@ public sealed class LayerReferenceTests
         uses.Should().Contain(use => use.Type == typeof(ITenancyReading) && use.Seen == Seen.Declaration, "an interface");
         uses.Should().Contain(use => use.Type == typeof(ITenancyReads) && use.Seen == Seen.Declaration, "a generic constraint");
         uses.Should().Contain(use => use.Type == typeof(TenantsContext) && use.Seen == Seen.Declaration, "a typeof in an attribute");
-        uses.Should().Contain(use => use.Type == typeof(TenantsTenancy.IStore) && use.Seen == Seen.Signature, "what a method returns");
+        uses.Should().Contain(use => use.Type == typeof(TenancyUseCases.IStore) && use.Seen == Seen.Signature, "what a method returns");
     }
 
     [Fact]
@@ -725,7 +725,7 @@ public sealed class LayerReferenceTests
 
         public abstract ValueTask DisposeAsync();
 
-        public abstract TenantsTenancy.IStore Store();
+        public abstract TenancyUseCases.IStore Store();
     }
 
     [AttributeUsage(AttributeTargets.Class)]

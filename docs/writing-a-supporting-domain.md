@@ -806,11 +806,10 @@ records they take and answer, in one class generic over the classes, and the cla
 of them. The application would still write that class's type arguments wherever it names a use case, in every
 project that does. So it does not: mark each type parameter **`[TemplateType]`**, as a registration's, make the
 class abstract rather than static, with a protected constructor, and name it in an assembly attribute,
-**`[assembly: TemplateFacade]`**, with what the application's class is called, `{Module}` standing for its
-module:
+**`[assembly: TemplateFacade]`**:
 
 ```csharp
-[assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>), "{Module}Subscriptions")]
+[assembly: TemplateFacade(typeof(Acme.Subscriptions.SubscriptionUseCases<,,,,,>))]
 
 public abstract partial class SubscriptionUseCases<
     [TemplateType(typeof(SubscriptionAttribute<>), Take = TemplateArgumentKind.Type)] TSubscription,
@@ -838,41 +837,42 @@ public abstract partial class SubscriptionUseCases<
 }
 ```
 
-The project that declares the classes, of the module Billing, gets `BillingSubscriptions`, and it and
-every project above it name the use cases and their records through it, without a type argument:
+The project that declares the classes gets `SubscriptionUseCases`, your class's name without its type parameters,
+and it and every project above it name the use cases and their records through it, without a type argument:
 
 ```csharp
-public sealed class Reminders(BillingSubscriptions.Dunning dunning)
+public sealed class Reminders(SubscriptionUseCases.Dunning dunning)
 {
-    public BillingSubscriptions.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
+    public SubscriptionUseCases.InvoiceDue Of(ShopInvoice invoice) => dunning.Due(invoice);
 }
 ```
 
 ```mermaid
 flowchart TB
     Package["Acme.Subscriptions<br/>SubscriptionUseCases,<br/>generic"]
-    Domain["Shop.Billing.Domain<br/>your classes"] --> Class(["BillingSubscriptions,<br/>generated there"])
+    Domain["Shop.Billing.Domain<br/>your classes"] --> Class(["SubscriptionUseCases,<br/>generated there"])
     Class -- "derives from,<br/>closed over them" --> Package
-    Application["Shop.Billing.Application<br/>its API project, the host"] -- "BillingSubscriptions.Dunning" --> Class
+    Application["Shop.Billing.Application<br/>its API project, the host"] -- "SubscriptionUseCases.Dunning" --> Class
 ```
 
 <details>
 <summary>Show the code: what the generator writes</summary>
 
-```csharp title="BillingSubscriptions.TemplateFacade.g.cs"
+```csharp title="SubscriptionUseCases.TemplateFacade.g.cs"
 /// <summary>
 /// SubscriptionUseCases, closed over the classes of the module Billing: ShopSubscription, SubscriptionId,
 /// ShopInvoice, InvoiceId, ShopInvoiceLine and InvoiceLineId.
 /// Every type nested in it, and every static member, is named through this class and is the package's own: the type
 /// its registration added, the method it declares.
 /// The class is only that name. Nothing makes one, and nothing derives from it.
+/// Named as the package's class is; [assembly: TemplateFacadeName("SubscriptionUseCases", "...")] in this project names it otherwise.
 /// </summary>
-public abstract class BillingSubscriptions : global::Acme.Subscriptions.SubscriptionUseCases<
+public abstract class SubscriptionUseCases : global::Acme.Subscriptions.SubscriptionUseCases<
     global::Shop.Billing.ShopSubscription, global::Shop.Contracts.SubscriptionId,
     global::Shop.Billing.ShopInvoice, global::Shop.Contracts.InvoiceId,
     global::Shop.Billing.ShopInvoiceLine, global::Shop.Contracts.InvoiceLineId>
 {
-    private BillingSubscriptions()
+    private SubscriptionUseCases()
     {
     }
 }
@@ -881,15 +881,15 @@ public abstract class BillingSubscriptions : global::Acme.Subscriptions.Subscrip
 </details>
 
 - **A name, and no second type.** C# finds a type nested in a class through every class derived from it, so
-  `BillingSubscriptions.Dunning` is the package's own `Dunning`, closed over the application's classes: what the
+  `SubscriptionUseCases.Dunning` is the package's own `Dunning`, closed over the application's classes: what the
   package's registration adds to the container, with the package's documentation. The class itself is abstract,
   with a private constructor, and is never made.
 - **Calls as well as names.** C# finds a static member through a derived class as it finds a nested type, so what
   is generic over the classes and is called rather than named goes on the same class, and the application calls it
   without a type argument: `public static IDisposable BeginRun() => DunningRuns.Begin<TSubscriptionId>();` on
-  `SubscriptionUseCases` is `BillingSubscriptions.BeginRun()`. Tenancy puts its system work and the current caller
-  there, `TenantsTenancy.BeginSystem()`. A call is bound by the compiler, which sees every generator's output, so it
-  works in the project the class is written into as well, where another generator would not see the class.
+  `SubscriptionUseCases<...>` is `SubscriptionUseCases.BeginRun()`. Tenancy puts its system work and the current
+  caller there, `TenancyUseCases.BeginSystem()`. A call is bound by the compiler, which sees every generator's output,
+  so it works in the project the class is written into as well, where another generator would not see the class.
 - **Written once, where the classes are.** A project gets the class when it declares a class with one of the
   type's templates, and fills each type parameter as a registration's is filled: from its own classes, or, for a
   template it declares none of, from the projects of its module it references. Every project above sees it
@@ -898,12 +898,19 @@ public abstract class BillingSubscriptions : global::Acme.Subscriptions.Subscrip
   others. The same holds for the class in the project it is written into: another generator there does not see
   it, so a module of one project that names the records in such a generator's attributes or resolvers keeps an
   alias of exactly that name there, and gets no class.
-- **Named after the module,** as every generated name is: `[assembly: Module]`, otherwise `DDD_Module`,
-  otherwise the assembly's name without the dots. Two modules with the classes are two classes, each named
-  after its module, side by side in a host that sees both. The project that declares the classes may name it
-  itself, with an `[assembly: TemplateFacade]` of its own for the same type, which stands instead of yours:
-  `[assembly: TemplateFacade(typeof(SubscriptionUseCases<,,,,,>), "ShopBilling")]`. Your package asks for its
-  own types only, so that line in one project asks nothing of the projects above it.
+- **Named as your class is.** The application's class has your class's name, without the type parameters: the
+  name your documentation uses, whatever the module is called, and no clash with your class, which C# tells apart
+  by its type parameters, even in a file that imports your namespace. So name the generic class for what it holds,
+  `SubscriptionUseCases` rather than `UseCases`: two packages' classes of one name would meet in an application
+  that uses both. Your package asks for its own types only; a `[assembly: TemplateFacade]` another assembly
+  declares for them asks nothing.
+- **Two modules, two names.** An application with two modules that each declare your classes gets two classes of
+  that name, which meet in the projects that see both, the host first. The toolkit tells such a project,
+  [DDD00075](diagnostics.md#ddd00075), with the line that gives one of them a name of its own, which the
+  application writes in the project that declares that module's classes:
+  `[assembly: TemplateFacadeName("SubscriptionUseCases", "ShopBilling")]`. Every project above it then names that
+  module's use cases `ShopBilling.Dunning`. Nothing of yours changes for it, and an application may give the name
+  without a second module too. A line that changes nothing is [DDD00076](diagnostics.md#ddd00076).
 - **What leaves it out is said where the classes are,** [DDD00065](diagnostics.md#ddd00065), as information: a
   template with no class or several, or a class that does not meet the class's constraints. The projects above
   would otherwise only hear that the name does not exist. What one of the classes or one of your registrations
@@ -916,9 +923,10 @@ public abstract class BillingSubscriptions : global::Acme.Subscriptions.Subscrip
   since the application's class leaves none open. One that is not is passed over without a word, so prove it in
   the package's own tests, with a project that names the class.
 
-[Tenancy](tenancy.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and the
-sample names them `TenantsTenancy.SeatCommands`. [Membership](membership.md)'s are small classes generic over
-the ids alone, which read where they are taken, so it asks for none.
+[Tenancy](tenancy.md#calling-a-use-case) is written this way: its use cases are `TenancyUseCases<...>`, and an
+application, the sample among them, names them `TenancyUseCases.SeatCommands`. [Membership](membership.md)'s are
+small classes generic over the ids alone, which read where they are taken, so it asks for none, and no other
+package of the toolkit asks for one either.
 
 ## A domain that works alone, and beside another
 

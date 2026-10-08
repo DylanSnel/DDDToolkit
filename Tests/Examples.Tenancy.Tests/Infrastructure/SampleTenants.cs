@@ -19,14 +19,14 @@ public static class SampleTenants
     /// <param name="host">The host, started.</param>
     /// <param name="slug">The new tenant's slug.</param>
     /// <param name="name">Its name, and its root's.</param>
-    public static async Task<TenantsTenancy.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
+    public static async Task<TenancyUseCases.ProvisionedTenant> ProvisionAsync(SampleFactory host, string slug, string name)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenantsTenancy.BeginSystem())
+        using (TenancyUseCases.BeginSystem())
         {
             await using var scope = host.Services.CreateAsyncScope();
-            return await scope.ServiceProvider.GetRequiredService<TenantsTenancy.TenantCommands>().ProvisionAsync(
-                new TenantsTenancy.TenantToProvision(
+            return await scope.ServiceProvider.GetRequiredService<TenancyUseCases.TenantCommands>().ProvisionAsync(
+                new TenancyUseCases.TenantToProvision(
                     slug,
                     name,
                     TenantShape.Flat,
@@ -42,7 +42,7 @@ public static class SampleTenants
     public static async Task<TResponse> SendAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, ICommand<TResponse> command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenantsTenancy.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -53,7 +53,7 @@ public static class SampleTenants
     public static async Task SendAsSystemAsync(SampleFactory host, TenantId tenant, ICommand command)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenantsTenancy.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             await scope.ServiceProvider.GetRequiredService<ISender>().Send(command, Cancellation);
@@ -64,7 +64,7 @@ public static class SampleTenants
     public static async Task<TResponse> AskAsSystemAsync<TResponse>(SampleFactory host, TenantId tenant, IQuery<TResponse> query)
     {
         ArgumentNullException.ThrowIfNull(host);
-        using (TenantsTenancy.BeginSystemIn(tenant))
+        using (TenancyUseCases.BeginSystemIn(tenant))
         {
             await using var scope = host.Services.CreateAsyncScope();
             return await scope.ServiceProvider.GetRequiredService<ISender>().Send(query, Cancellation);
