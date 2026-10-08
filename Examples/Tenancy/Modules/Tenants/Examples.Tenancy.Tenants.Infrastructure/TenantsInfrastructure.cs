@@ -1,4 +1,3 @@
-using DDDToolkit.Access;
 using DDDToolkit.EntityFramework;
 using Examples.Tenancy.Tenants.Application.Access;
 using Examples.Tenancy.Tenants.Application.Roles;
@@ -8,7 +7,6 @@ using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Examples.Tenancy.Tenants.Infrastructure;
 
@@ -109,10 +107,6 @@ public static class TenantsInfrastructure
         // The application's port: where its queries read, each on a context of its own from the pool. What the
         // Tenancy package answers itself it answers in a scope of its own, whose context is one of the pool's too.
         services.AddScoped<ITenancyReads, EfTenancyReads>();
-
-        // Who is asking. The host registers the accessor that reads the request's bearer token before this, and
-        // TryAdd lets it win; without one, as in a test that begins its callers by hand, the ambient caller answers.
-        services.TryAddSingleton<ICallerAccessor, AmbientCallerAccessor>();
 
         // Tenancy's domain events are stored with the change that raised them, and none of them leaves: they are
         // the package's, not a contract, so each is kept off the sinks. An integration event mapped before
