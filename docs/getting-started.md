@@ -502,9 +502,9 @@ public readonly partial record struct OrderId;
 *[`Ordering.Contracts/OrderingContracts.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering.Contracts/OrderingContracts.cs)*
 
 `[ModuleContract]` is what publishes it. The contracts project gets converters of its own, under the
-same name, because it declares `[assembly: Module("Ordering")]` too. Ordering's method calls the
-contracts' one, so its context still makes one call. Shipping, which references only the contracts,
-calls the contracts' method by that name:
+same name, because it declares `[assembly: Module("Ordering")]` too, and Ordering's method calls the
+contracts' one, so its context still makes one call. Shipping, which references only the contracts, makes
+one call as well: its own method also registers the ids the modules it references publish.
 
 ```csharp
 // Ordering's context: its own identifiers, and OrderId from the contracts
