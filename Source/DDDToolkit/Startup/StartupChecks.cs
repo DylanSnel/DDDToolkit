@@ -30,7 +30,7 @@ public sealed class StartupChecks
 
     /// <summary>
     /// Whether the host asked for its checks (<see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>).
-    /// Without that, only the checks that are <see cref="StartupCheck.OnByDefault"/> run.
+    /// Without that, none of them runs.
     /// </summary>
     public bool RunsAll { get; private set; }
 

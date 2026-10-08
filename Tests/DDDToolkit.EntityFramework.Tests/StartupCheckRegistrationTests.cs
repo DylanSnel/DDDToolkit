@@ -47,7 +47,7 @@ public sealed class StartupCheckRegistrationTests : IDisposable
             (PostgresRowAccessChecks.DefinerOwnersBypassCheck, StartupCheckStage.Database));
 
         services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService),
-            "none of them runs until the host asks for its checks: an application that upgrades keeps the start-up it had");
+            "none of them runs until the host's own code asks for its checks");
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class StartupCheckRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void A_pgmq_sink_or_consumer_brings_its_check_on_by_default_as_it_was()
+    public void A_pgmq_sink_or_consumer_brings_its_check_which_runs_once_the_host_asks_like_any()
     {
         var services = new ServiceCollection();
         var queues = NpgsqlDataSource.Create("Host=localhost;Database=shop");
@@ -78,9 +78,14 @@ public sealed class StartupCheckRegistrationTests : IDisposable
         services.AddPgmqConsumer(queues, "storefront");
 
         services.GetStartupChecks().Registered.Should().ContainSingle().Which.Should().Match<StartupCheck>(check =>
-            check.Name == PgmqQueue.ExtensionInstalledCheck && check.OnByDefault && check.Stage == StartupCheckStage.Database);
-        services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType?.Name == "StartupCheckRunner")
-            .Should().ContainSingle("the check ran in every host with a sink or a consumer before the checks were run together, and still does");
+            check.Name == PgmqQueue.ExtensionInstalledCheck && check.Stage == StartupCheckStage.Database);
+        Runners(services).Should().BeEmpty("the check runs once the host asks for its checks, as every other does");
+
+        services.RunStartupChecks();
+        Runners(services).Should().ContainSingle();
+
+        static IEnumerable<ServiceDescriptor> Runners(IServiceCollection services)
+            => services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType?.Name == "StartupCheckRunner");
     }
 
     [Fact]

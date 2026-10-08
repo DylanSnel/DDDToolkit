@@ -123,6 +123,17 @@ public sealed class PgmqVersionTests(PgmqVersionTests.Servers servers) : IClassF
     }
 
     [Fact]
+    public async Task A_host_that_does_not_ask_for_its_checks_does_not_read_the_extension()
+    {
+        var queues = NpgsqlDataSource.Create(await servers.WithoutPgmqAsync(Cancellation));
+
+        using var host = await StartAsync(services => services.AddPgmqSink(queues, pgmq => pgmq.UseQueue("anything")), runChecks: false);
+
+        host.Services.GetServices<IHostedService>().Should().BeEmpty("the sink brings its check, and only RunStartupChecks() in the host's own code runs it");
+        await host.StopAsync(Cancellation);
+    }
+
+    [Fact]
     public async Task A_sink_on_a_context_is_checked_on_the_context_connection()
     {
         var database = Supabase;
@@ -148,6 +159,7 @@ public sealed class PgmqVersionTests(PgmqVersionTests.Servers servers) : IClassF
 
         services.GetStartupChecks().Registered.Where(check => check.Name == PgmqQueue.ExtensionInstalledCheck)
             .Should().ContainSingle("the check groups its requirements by database and reads each one once");
+        services.RunStartupChecks();
         services.Where(service => service.ServiceType == typeof(IHostedService) && service.ImplementationType?.Name == "StartupCheckRunner")
             .Should().ContainSingle("the host's one runner runs it, before any hosted service starts, the consumers included");
     }
@@ -171,11 +183,18 @@ public sealed class PgmqVersionTests(PgmqVersionTests.Servers servers) : IClassF
 
     // ------------------------------------------------------------------ the process under test
 
-    /// <summary>Builds a host with nothing in it but <paramref name="configure"/> and starts it.</summary>
-    private static async Task<IHost> StartAsync(Action<IServiceCollection> configure)
+    /// <summary>
+    /// Builds a host with nothing in it but <paramref name="configure"/>, and, unless <paramref name="runChecks"/> is
+    /// false, the call that runs its start-up checks, and starts it.
+    /// </summary>
+    private static async Task<IHost> StartAsync(Action<IServiceCollection> configure, bool runChecks = true)
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());
         configure(builder.Services);
+        if (runChecks)
+        {
+            builder.Services.RunStartupChecks();
+        }
 
         var host = builder.Build();
         try

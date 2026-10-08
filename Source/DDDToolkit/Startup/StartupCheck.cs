@@ -76,15 +76,6 @@ public sealed class StartupCheck
     /// </summary>
     public IReadOnlyList<string> RunsBefore { get; init; } = [];
 
-    /// <summary>
-    /// Whether it runs in a host that never called
-    /// <see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>: for a check its package ran by
-    /// itself before the runner existed, which an application upgrading keeps as it had it. Every other check
-    /// runs once the host asks for them. A check that is on by default is still turned off by name, or with the
-    /// others, like any.
-    /// </summary>
-    public bool OnByDefault { get; init; }
-
     /// <inheritdoc />
     public override string ToString() => Name + " (" + Stage + ")";
 }

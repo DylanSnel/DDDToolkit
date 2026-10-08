@@ -15,8 +15,8 @@ public sealed class StartupCheckRegistrationTests
     {
         var services = new ServiceCollection().AddMembershipPostgres().AddMembershipPostgres();
 
-        services.GetStartupChecks().Registered.Select(check => (check.Name, check.Stage, check.OnByDefault))
-            .Should().Equal((MembershipPostgresChecks.FunctionsInPlaceCheck, StartupCheckStage.Database, false));
+        services.GetStartupChecks().Registered.Select(check => (check.Name, check.Stage))
+            .Should().Equal((MembershipPostgresChecks.FunctionsInPlaceCheck, StartupCheckStage.Database));
         services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService), "it runs once the host asks for its checks");
     }
 }

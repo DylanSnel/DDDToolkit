@@ -131,7 +131,7 @@ public sealed class StartupCheckRunnerTests
     }
 
     [Fact]
-    public async Task Every_check_is_turned_off_with_one_reason_those_on_by_default_included()
+    public async Task Every_check_is_turned_off_with_one_reason()
     {
         var ran = new ConcurrentQueue<string>();
         var logs = new RecordedLogs();
@@ -139,7 +139,7 @@ public sealed class StartupCheckRunnerTests
             services => services
                 .RunStartupChecks()
                 .AddStartupCheck(Recorded("tests.policies", StartupCheckStage.Database, ran))
-                .AddStartupCheck(Recorded("tests.extension", StartupCheckStage.Database, ran, onByDefault: true))
+                .AddStartupCheck(Recorded("tests.extension", StartupCheckStage.Database, ran))
                 .SkipStartupChecks(reason: "the host is composed to read its registrations, with no database behind it"),
             logs);
 
@@ -153,37 +153,33 @@ public sealed class StartupCheckRunnerTests
     }
 
     [Fact]
-    public async Task A_host_that_does_not_ask_for_its_checks_runs_only_those_on_by_default()
+    public async Task A_host_that_does_not_ask_for_its_checks_runs_none_of_them_and_has_no_runner()
     {
-        // What an application that upgrades has: its registrations bring checks it never ran, and they stay unrun.
+        // Its registrations bring checks, a pgmq sink's among them, and none runs until the host's own code asks.
         var ran = new ConcurrentQueue<string>();
         using var host = Build(services => services
             .AddStartupCheck(Recorded("tests.policies", StartupCheckStage.Database, ran))
-            .AddStartupCheck(Recorded("tests.extension", StartupCheckStage.Database, ran, onByDefault: true)));
+            .AddStartupCheck(Recorded("tests.extension", StartupCheckStage.Database, ran)));
 
         await host.StartAsync(Cancellation);
 
-        ran.Should().Equal(["tests.extension"], "a check its package ran by itself before keeps running; the rest wait for the host to ask");
+        ran.Should().BeEmpty("whether a host runs its checks is a line in its own code");
+        host.Services.GetServices<IHostedService>().Should().BeEmpty("a registration that brings a check registers no runner");
         await host.StopAsync(Cancellation);
-
-        // With no check on by default, nothing of the runner is there at all.
-        var services = new ServiceCollection().AddStartupCheck(Recorded("tests.policies", StartupCheckStage.Database, ran));
-        services.Should().NotContain(descriptor => descriptor.ServiceType == typeof(IHostedService), "a host that does not ask gets the start-up it had");
     }
 
     [Fact]
     public async Task A_host_that_does_not_ask_starts_whatever_the_checks_it_did_not_ask_for_say_of_one_another()
     {
-        // Two checks the host never asked for contradict each other; it starts as it did, with the one on by default.
+        // Two checks the host never asked for contradict each other; it starts, since it runs neither.
         var ran = new ConcurrentQueue<string>();
         using var host = Build(services => services
             .AddStartupCheck(Recorded("tests.wired", StartupCheckStage.Services, ran))
-            .AddStartupCheck(Recorded("tests.policies", StartupCheckStage.Database, ran, runsBefore: ["tests.wired"]))
-            .AddStartupCheck(Recorded("tests.extension", StartupCheckStage.Database, ran, onByDefault: true)));
+            .AddStartupCheck(Recorded("tests.policies", StartupCheckStage.Database, ran, runsBefore: ["tests.wired"])));
 
         await host.StartAsync(Cancellation);
 
-        ran.Should().Equal(["tests.extension"]);
+        ran.Should().BeEmpty();
         await host.StopAsync(Cancellation);
     }
 
@@ -248,14 +244,14 @@ public sealed class StartupCheckRunnerTests
     }
 
     [Fact]
-    public async Task A_lifecycle_service_registered_before_the_host_asks_for_its_checks_starts_before_them_though_a_check_on_by_default_came_first()
+    public async Task A_lifecycle_service_registered_before_the_host_asks_for_its_checks_again_starts_before_them()
     {
-        // A check on by default registers the runner where it is registered, as a pgmq sink does. The host's own
-        // migration, registered after it and before the host asks for its checks, still runs before them: asking
-        // puts the runner where the host asked.
+        // The host asked for its checks once, early, and again after its own migration: the runner sits where it
+        // asked last, so the migration still runs before the checks.
         var migrated = false;
         using var host = Build(services => services
-            .AddStartupCheck(new StartupCheck("tests.extension", StartupCheckStage.Database, (_, _) => Task.CompletedTask) { OnByDefault = true })
+            .AddStartupCheck(new StartupCheck("tests.extension", StartupCheckStage.Database, (_, _) => Task.CompletedTask))
+            .RunStartupChecks()
             .AddSingleton<IHostedService>(new Migrates(() => migrated = true))
             .AddStartupCheck(new StartupCheck("tests.migrations-applied", StartupCheckStage.Migrations, (_, _) =>
                 migrated ? Task.CompletedTask : throw new InvalidOperationException("The database is missing migrations.")))
@@ -409,7 +405,7 @@ public sealed class StartupCheckRunnerTests
     }
 
     /// <summary>A check that writes its name to <paramref name="ran"/> when it runs.</summary>
-    private static StartupCheck Recorded(string name, StartupCheckStage stage, ConcurrentQueue<string> ran, string[]? runsBefore = null, bool onByDefault = false)
+    private static StartupCheck Recorded(string name, StartupCheckStage stage, ConcurrentQueue<string> ran, string[]? runsBefore = null)
         => new(name, stage, (_, _) =>
         {
             ran.Enqueue(name);
@@ -417,7 +413,6 @@ public sealed class StartupCheckRunnerTests
         })
         {
             RunsBefore = runsBefore ?? [],
-            OnByDefault = onByDefault,
         };
 
     /// <summary>A port of this machine nothing listens on, a moment ago.</summary>

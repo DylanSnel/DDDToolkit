@@ -280,9 +280,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `AddPgmqConsumer`). The methods behind them
   stay, for a host that calls them by hand; one that keeps its own class and asks for the runner too runs those
   checks twice, which reads the catalogs twice and changes nothing. The checks are off until the host asks for
-  them: an application upgrading within 3.x would otherwise stop at a check it never ran, the login role that
-  owns its tables for one. pgmq's check, which ran by itself since 3.0.0, stays on by default
-  (`StartupCheck.OnByDefault`). The core package now depends on `Microsoft.Extensions.Hosting.Abstractions` and
+  them, pgmq's included: a registration brings its checks and runs none, so whether a host runs them is one line
+  in its own code. The core package now depends on `Microsoft.Extensions.Hosting.Abstractions` and
   `Microsoft.Extensions.Logging.Abstractions` for it. See [Start-up checks](docs/startup-checks.md).
 - **A request that goes round its access behavior no longer goes unnoticed.** Nothing noticed a module whose checks
   were registered and whose generated behavior was not, nor a handler called in code instead of sent: the request
@@ -2778,10 +2777,12 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     gives one of them a name of its own.
   - The Tenancy sample names its use cases `TenancyUseCases` throughout, and so do its tests, the docs and the agent
     skill; Tenancy's own test host keeps `HostTenancy` with that one line.
-- **The pgmq check is one of the start-up checks.** `AddPgmqSink` and `AddPgmqConsumer` register it with the
-  others, on by default, where they registered a hosted service of its own; it runs as before, in `StartingAsync`,
-  and also turns off by its name, `pgmq.extension-installed`. It now runs as `Caller.System`, as every start-up
-  check does.
+- **The pgmq check is one of the start-up checks, and runs once the host asks for them.** `AddPgmqSink` and
+  `AddPgmqConsumer` register it with the others, where they registered a hosted service of its own that ran in
+  every host with a sink or a consumer. It now runs, in `StartingAsync` as before, in a host that calls
+  `RunStartupChecks()`, and not in one that does not: a host that relied on it calls that once. It turns off by its
+  name, `pgmq.extension-installed`, and `CheckExtensionOnStart = false` leaves one sink's or consumer's database out
+  of it. It runs as `Caller.System`, as every start-up check does.
 - **The drop at the start of every script of policies takes the triggers of column rules away too,** found by
   the comment each carries, `PostgresRowAccess.ColumnRuleComment`, as the policies are found by theirs, so a
   column rule taken out loses its trigger with the next script, and a migration of a module with rules may

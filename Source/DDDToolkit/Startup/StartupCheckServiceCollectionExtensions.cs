@@ -18,11 +18,10 @@ public static class StartupCheckServiceCollectionExtensions
 {
     /// <summary>
     /// Registers <paramref name="check"/>, which runs once the host asks for its checks
-    /// (<see cref="RunStartupChecks"/>), or in any host where it is <see cref="StartupCheck.OnByDefault"/>; the first
-    /// check on by default registers the runner here, until the host asks for its checks and so moves it. A
-    /// package calls it from the registration that brings what the check is about, so a host that uses the
-    /// package gets the check without naming it. Registering a check under a name already taken registers nothing,
-    /// so a registration a host calls more than once brings its checks once.
+    /// (<see cref="RunStartupChecks"/>), and not in a host that never does. A package calls it from the
+    /// registration that brings what the check is about, so a host that uses the package gets the check without
+    /// naming it. Registering a check under a name already taken registers nothing, so a registration a host calls
+    /// more than once brings its checks once.
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="check">The check.</param>
@@ -33,11 +32,6 @@ public static class StartupCheckServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(check);
 
         ChecksOf(services).Add(check);
-        if (check.OnByDefault)
-        {
-            AddRunner(services);
-        }
-
         return services;
     }
 
@@ -53,11 +47,10 @@ public static class StartupCheckServiceCollectionExtensions
     /// port is bound, no queue is read, no seeding has begun.
     /// </para>
     /// <para>
-    /// Among the lifecycle services, the runner sits where this call is: one that a check on by default registered
-    /// earlier, as a pgmq sink does, is moved here, and a second call moves it again. The host calls their
-    /// <c>StartingAsync</c> in the order they were registered, so something a host must do to its database before it
-    /// is checked, it does before <c>app.Run()</c>, or in the <c>StartingAsync</c> of a lifecycle service of its own
-    /// registered before this call. A host that starts its services concurrently
+    /// Among the lifecycle services, the runner sits where this call is, and a second call moves it there again. The
+    /// host calls their <c>StartingAsync</c> in the order they were registered, so something a host must do to its
+    /// database before it is checked, it does before <c>app.Run()</c>, or in the <c>StartingAsync</c> of a lifecycle
+    /// service of its own registered before this call. A host that starts its services concurrently
     /// (<c>HostOptions.ServicesStartConcurrently</c>) calls them all at once, so there it does that before
     /// <c>app.Run()</c>.
     /// </para>
@@ -67,8 +60,9 @@ public static class StartupCheckServiceCollectionExtensions
     /// costs a few queries at start-up and nothing else.
     /// </para>
     /// <para>
-    /// Without this call only the checks that are <see cref="StartupCheck.OnByDefault"/> run: an application that
-    /// upgrades keeps the start-up it had. Calling it more than once is harmless.
+    /// Without this call no check runs: a check opens connections and can refuse the start, so whether a host runs
+    /// them is a line in its own code, not something a registration does out of sight. Calling it more than once
+    /// is harmless.
     /// </para>
     /// </summary>
     /// <param name="services">The application's services.</param>
@@ -79,8 +73,8 @@ public static class StartupCheckServiceCollectionExtensions
 
         ChecksOf(services).RunAll();
 
-        // Where the host asked: a runner a check on by default registered earlier would run the checks before a
-        // lifecycle service the host registered in between, its own migration say, and refuse the start.
+        // Where the host asked, the last time it did: a runner left where an earlier call put it would run the checks
+        // before a lifecycle service the host registered in between, its own migration say, and refuse the start.
         for (var i = services.Count - 1; i >= 0; i--)
         {
             if (IsRunner(services[i]))
@@ -121,7 +115,7 @@ public static class StartupCheckServiceCollectionExtensions
     /// <summary>
     /// Turns every start-up check off, for <paramref name="reason"/>, which the log repeats when the host starts:
     /// for a host composed for something other than serving, a test that reads what the host registers with no
-    /// database behind it, say. The checks that are on by default are turned off as well.
+    /// database behind it, say.
     /// </summary>
     /// <param name="services">The application's services.</param>
     /// <param name="reason">Why the host does without them.</param>
@@ -164,7 +158,7 @@ public static class StartupCheckServiceCollectionExtensions
         return checks;
     }
 
-    /// <summary>The runner, once however many times it is asked for, where it was first asked for.</summary>
+    /// <summary>The runner, once however many times it is asked for.</summary>
     private static void AddRunner(IServiceCollection services)
         => services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, StartupCheckRunner>());
 

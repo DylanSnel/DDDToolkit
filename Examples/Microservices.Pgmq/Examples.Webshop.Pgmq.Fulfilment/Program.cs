@@ -2,6 +2,7 @@ using DDDToolkit.EntityFramework;
 using DDDToolkit.HotChocolate;
 using DDDToolkit.Mediator;
 using DDDToolkit.Messaging.Postgres;
+using DDDToolkit.Startup;
 using Examples.Hosting;
 using Examples.Webshop.Inventory;
 using Examples.Webshop.Inventory.Api;
@@ -28,8 +29,8 @@ builder.Services.AddMediator(options => options.ServiceLifetime = ServiceLifetim
 builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMediator());
 
 // pgmq is an extension, installed once by whoever deploys the database: the AppHost here, Supabase on a
-// project with Queues. The sink and the consumer below check for it before anything starts, so a database
-// without it, or with a pgmq too old for topics, fails the start by name.
+// project with Queues. The sink and the consumer below bring a start-up check for it, which RunStartupChecks()
+// runs before anything starts, so a database without it, or with a pgmq too old for topics, fails the start by name.
 var queues = NpgsqlDataSource.Create(connectionString);
 
 // Sending: by topic, pgmq's own publish and subscribe. Each message goes out under its contract's
@@ -64,6 +65,10 @@ builder.Services
     .AddDDDToolkitErrors()
     .AddInventoryGraphQL()
     .AddShippingGraphQL();
+
+// Before the server binds its port, every check the registrations above brought: the modules' contexts are wired
+// through the toolkit, and the database has pgmq, in a version with topics.
+builder.Services.RunStartupChecks();
 
 var app = builder.Build();
 

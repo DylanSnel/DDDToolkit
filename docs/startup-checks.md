@@ -100,7 +100,7 @@ made otherwise. They read the catalogs of the database and change nothing.
 | `tenancy.policies-in-place` | `TenancyPostgresChecks.PoliciesInPlaceCheck` | `AddTenancyPostgres` | Database | The policies, functions and the index on a tenant's root are the ones the catalogue writes ([Setting it up](tenancy.md#setting-it-up)) |
 | `tenancy.unknown-stored-keys` | `TenancyChecks.UnknownStoredKeysCheck` | `AddTenancy` | Database | Logs a key a role holds that the catalogue has lost, and refuses nothing |
 | `membership.functions-in-place` | `MembershipPostgresChecks.FunctionsInPlaceCheck` | `AddMembershipPostgres` | Database | The functions and the lock of every resource's membership are written from its rules ([On Postgres](membership.md#on-postgres-the-second-lock)) |
-| `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used; on by default ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
+| `pgmq.extension-installed` | `PgmqQueue.ExtensionInstalledCheck` | `AddPgmqSink`, `AddPgmqConsumer` | Database | Every database a sink or a consumer uses has pgmq, with topics where they are used ([Transports](transports.md#queues-creation-and-the-missing-extension)) |
 
 Each name is a public constant, the one in the table, so a host turns a check off by the constant rather than by a
 string it could spell wrong. The method behind each check, such as
@@ -135,14 +135,11 @@ logged as a warning when the host starts, since a name spelled wrong turns nothi
 
 ## Off until the host asks
 
-The checks run once the host calls `RunStartupChecks()`, and not before. An application that upgrades within 3.x
-has registrations that bring checks it never ran: a host that logs in as the role that owns its tables, as many do
-while they start out, would stop at `postgres.login-role-owns-nothing` after a minor update it did not ask for. So
-it keeps the start-up it had until it asks for its checks, and one line does that.
-
-The exception is the check of the pgmq extension. `AddPgmqSink` and `AddPgmqConsumer` ran it by themselves before
-the checks were run together, so it stays on by default (`StartupCheck.OnByDefault`), and the runner runs it in
-every host that has a sink or a consumer. `CheckExtensionOnStart = false` still turns it off, and so does its name.
+The checks run once the host calls `RunStartupChecks()`, and not before, the pgmq check included. A registration
+brings its checks and runs none of them: a check opens connections and can refuse the start, so whether a host
+runs them is one line in the host's own code, where whoever reads `Program.cs` sees it. A host composed for
+something other than serving, a tool that reads the host's services or a test that builds them, does not call it
+and so runs none.
 
 ## Before the server binds its port
 
@@ -157,9 +154,7 @@ that applies its migrations as it starts, in development say, does so before `ap
 `supabase.migrations-applied` off, with that reason.
 
 The host calls the lifecycle services' `StartingAsync` in the order they were registered, and the runner sits
-where `RunStartupChecks()` was called, even where a check on by default registered it earlier, as a pgmq sink
-does: the call moves it. In a host that never calls it, the runner stays where the first such check put it, so
-there a lifecycle service that has to come first is registered before the first sink or consumer. A host that
+where `RunStartupChecks()` was called; a host that calls it twice has it where it called it last. A host that
 starts its services concurrently, with `HostOptions.ServicesStartConcurrently`, calls every `StartingAsync` at
 once, so registering first means nothing there: it does what has to come first before `app.Run()`. The checks
 still run before any `StartAsync`, the server's included.
@@ -240,8 +235,8 @@ public static IServiceCollection AddLedger(this IServiceCollection services)
 The check is handed the application's root services: what it needs of a scope, a context say, it takes in a scope
 of its own. It throws to refuse the start, and what it throws is what the host's operator reads, so it names what
 is wrong and what puts it right. Registering a check under a name already taken registers nothing, so a
-registration that is called twice brings its check once. Name it with a prefix of your own, a dot and what holds,
-and keep `OnByDefault` for a check your package ran by itself before, as pgmq's did.
+registration that is called twice brings its check once. Name it with a prefix of your own, a dot and what holds.
+It runs, as every check does, once the host calls `RunStartupChecks()`.
 
 A check reads and changes nothing. Work that changes data at start-up is not a check, and has a call of its own
 beside `RunStartupChecks()`: Tenancy's `SyncRolePacks()`, which brings every tenant's roles up to the packs they

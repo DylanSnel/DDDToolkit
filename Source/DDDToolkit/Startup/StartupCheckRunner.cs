@@ -13,8 +13,8 @@ namespace DDDToolkit.Startup;
 /// before it calls any hosted service's <c>StartAsync</c>.
 /// </summary>
 /// <remarks>
-/// One runner per host, registered by the first check that is on by default, and moved to where the host asks for
-/// its checks by <see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>. It runs the checks one after
+/// One runner per host, registered where the host asks for its checks, by
+/// <see cref="StartupCheckServiceCollectionExtensions.RunStartupChecks"/>. It runs the checks one after
 /// the other, each as the application itself (<see cref="Caller.System"/>), begun for that check alone: a host that
 /// requires explicit callers would otherwise refuse the first connection a check makes, and a check is the
 /// application's own bookkeeping. What a check throws stops the start as it was thrown; the log names the check,
@@ -42,9 +42,8 @@ internal sealed class StartupCheckRunner(StartupChecks checks, IServiceProvider 
         }
 
         // The checks that run, ordered before the first of them runs, so a contradiction among them stops the start
-        // before anything was asked. A host that never asked for its checks runs the ones on by default alone, and
-        // has the start-up it had before the runner, whatever the others say of one another.
-        var ordered = checks.Order(checks.RunsAll ? checks.Registered : [.. checks.Registered.Where(check => check.OnByDefault)]);
+        // before anything was asked.
+        var ordered = checks.Order(checks.Registered);
 
         var passed = new List<string>();
         var clock = Stopwatch.StartNew();

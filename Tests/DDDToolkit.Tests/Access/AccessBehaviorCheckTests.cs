@@ -187,14 +187,14 @@ public sealed class AccessBehaviorCheckTests
             .AddAccessChecks<IPondRequest>()
             .AddGardenAccessBehavior();
 
-        services.GetStartupChecks().Registered.Select(check => (check.Name, check.Stage, check.OnByDefault))
-            .Should().Equal((AccessBehaviorChecks.BehaviorsRegisteredCheck, StartupCheckStage.Services, false));
+        services.GetStartupChecks().Registered.Select(check => (check.Name, check.Stage))
+            .Should().Equal((AccessBehaviorChecks.BehaviorsRegisteredCheck, StartupCheckStage.Services));
     }
 
     [Fact]
-    public async Task A_host_that_does_not_ask_for_its_checks_starts_as_it_did()
+    public async Task A_host_that_does_not_ask_for_its_checks_starts_without_them()
     {
-        // An application upgrading within 3.x keeps the start-up it had until it calls RunStartupChecks().
+        // The check runs once the host's own code calls RunStartupChecks(), and not before.
         using var host = Build(services => services.Handles<PlantTree>().AddAccessCheck<IGardenRequest, Gardener>());
 
         await host.StartAsync(Cancellation);
