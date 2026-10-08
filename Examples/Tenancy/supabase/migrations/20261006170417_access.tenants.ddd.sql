@@ -202,7 +202,7 @@ BEGIN
         JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
         JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.classoid = 'pg_catalog.pg_proc'::regclass
         WHERE d.description = 'DDDToolkit access function of TenantsContext'
-          AND (n.nspname, p.proname) NOT IN (('tenancy', 'caller_rights'), ('tenancy', 'caller_seat'), ('tenancy', 'caller_tenant'), ('tenancy', 'holds_key'), ('tenancy', 'holds_key_in_tenant'), ('tenancy', 'holds_tenant_wide'), ('tenancy', 'identity_tenants'), ('tenancy', 'invitation_of_digest'), ('tenancy', 'key_is_live'), ('tenancy', 'manages_access'), ('tenancy', 'pack_keys'), ('tenancy', 'readable_units'), ('tenancy', 'rewrite_tenant_rights'), ('tenancy', 'rights_a_move_changes'), ('tenancy', 'role_keys_in_use'), ('tenancy', 'roles_with_key'), ('tenancy', 'roles_with_key_in_tenant'), ('tenancy', 'seat_in_tenant'), ('tenancy', 'seated_in_tenant'), ('tenancy', 'seats_holding_at'), ('tenancy', 'seats_of_identity'), ('tenancy', 'system_tenant'), ('tenancy', 'tenant_administrators'), ('tenancy', 'tenant_placements'), ('tenancy', 'tenant_roles'), ('tenancy', 'tenant_seats'), ('tenancy', 'tenant_unit_paths'), ('tenancy', 'tenant_units'), ('tenancy', 'tenants_to_sweep'), ('tenancy', 'unit_parent'), ('tenancy', 'units_where_i_hold'), ('tenancy', 'units_where_i_hold_in_tenant'))
+          AND (n.nspname, p.proname) NOT IN (('tenancy', 'caller_rights'), ('tenancy', 'caller_seat'), ('tenancy', 'caller_tenant'), ('tenancy', 'holds_key'), ('tenancy', 'holds_key_in_tenant'), ('tenancy', 'holds_tenant_wide'), ('tenancy', 'identity_tenants'), ('tenancy', 'invitation_of_digest'), ('tenancy', 'key_is_contained'), ('tenancy', 'key_is_live'), ('tenancy', 'manages_access'), ('tenancy', 'pack_keys'), ('tenancy', 'readable_units'), ('tenancy', 'rewrite_tenant_rights'), ('tenancy', 'rights_a_move_changes'), ('tenancy', 'role_keys_in_use'), ('tenancy', 'roles_with_key'), ('tenancy', 'roles_with_key_in_tenant'), ('tenancy', 'seat_in_tenant'), ('tenancy', 'seated_in_tenant'), ('tenancy', 'seats_displayname_column_rule'), ('tenancy', 'seats_holding_at'), ('tenancy', 'seats_in_my_units'), ('tenancy', 'seats_of_identity'), ('tenancy', 'system_tenant'), ('tenancy', 'tenant_administrators'), ('tenancy', 'tenant_placements'), ('tenancy', 'tenant_roles'), ('tenancy', 'tenant_seats'), ('tenancy', 'tenant_unit_paths'), ('tenancy', 'tenant_units'), ('tenancy', 'tenants_to_sweep'), ('tenancy', 'unit_parent'), ('tenancy', 'units_where_i_hold'), ('tenancy', 'units_where_i_hold_in_tenant'))
           -- A function a policy still asks, of a module whose file comes after this one, stays until the next file.
           AND NOT EXISTS (SELECT FROM pg_catalog.pg_depend dependent
                           WHERE dependent.refclassid = 'pg_catalog.pg_proc'::regclass AND dependent.refobjid = p.oid AND dependent.deptype = 'n')
@@ -238,6 +238,14 @@ WHERE d."Digest" = $1 AND (SELECT auth.jwt() ->> 'scope') = 'tenancy'
 $function$;
 COMMENT ON FUNCTION tenancy.invitation_of_digest(digest bytea) IS 'DDDToolkit access function of TenantsContext';
 REVOKE ALL ON FUNCTION tenancy.invitation_of_digest(digest bytea) FROM PUBLIC;
+
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
+CREATE OR REPLACE FUNCTION tenancy.key_is_contained(key text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE SET search_path = '' AS $function$
+SELECT $1 IN ('projects.crew.manage', 'projects.owner.change', 'tenancy.grants.manage', 'tenancy.roles.manage', 'tenancy.seats.manage', 'tenancy.settings.manage', 'tenancy.units.manage')
+$function$;
+COMMENT ON FUNCTION tenancy.key_is_contained(key text) IS 'DDDToolkit access function of TenantsContext';
+REVOKE ALL ON FUNCTION tenancy.key_is_contained(key text) FROM PUBLIC;
 
 -- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.key_is_live(key text) RETURNS boolean
@@ -423,6 +431,16 @@ COMMENT ON FUNCTION tenancy.roles_with_key(key text) IS 'DDDToolkit access funct
 REVOKE ALL ON FUNCTION tenancy.roles_with_key(key text) FROM PUBLIC;
 
 -- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
+CREATE OR REPLACE FUNCTION tenancy.seats_in_my_units() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $function$
+SELECT DISTINCT pl."SeatId" FROM "tenancy"."SeatPlacements" pl
+WHERE pl."TenantId" = (SELECT tenancy.caller_tenant())
+  AND pl."UnitId" = ANY (ARRAY(SELECT tenancy.readable_units()))
+$function$;
+COMMENT ON FUNCTION tenancy.seats_in_my_units() IS 'DDDToolkit access function of TenantsContext';
+REVOKE ALL ON FUNCTION tenancy.seats_in_my_units() FROM PUBLIC;
+
+-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE OR REPLACE FUNCTION tenancy.tenant_placements() RETURNS TABLE ("SeatId" uuid, "UnitId" uuid, "IsPrimary" boolean, "TenantId" uuid)
     LANGUAGE sql STABLE AS $function$
 SELECT t."SeatId", t."UnitId", t."IsPrimary", t."TenantId"
@@ -562,7 +580,7 @@ BEGIN
         JOIN pg_catalog.pg_description d ON d.objoid = p.oid AND d.classoid = 'pg_catalog.pg_proc'::regclass
         CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) acl
         WHERE d.description = 'DDDToolkit access function of TenantsContext'
-          AND (n.nspname, p.proname) IN (('tenancy', 'caller_rights'), ('tenancy', 'caller_seat'), ('tenancy', 'caller_tenant'), ('tenancy', 'holds_key'), ('tenancy', 'holds_key_in_tenant'), ('tenancy', 'holds_tenant_wide'), ('tenancy', 'identity_tenants'), ('tenancy', 'invitation_of_digest'), ('tenancy', 'key_is_live'), ('tenancy', 'manages_access'), ('tenancy', 'pack_keys'), ('tenancy', 'readable_units'), ('tenancy', 'rewrite_tenant_rights'), ('tenancy', 'rights_a_move_changes'), ('tenancy', 'role_keys_in_use'), ('tenancy', 'roles_with_key'), ('tenancy', 'roles_with_key_in_tenant'), ('tenancy', 'seat_in_tenant'), ('tenancy', 'seated_in_tenant'), ('tenancy', 'seats_holding_at'), ('tenancy', 'seats_of_identity'), ('tenancy', 'system_tenant'), ('tenancy', 'tenant_administrators'), ('tenancy', 'tenant_placements'), ('tenancy', 'tenant_roles'), ('tenancy', 'tenant_seats'), ('tenancy', 'tenant_unit_paths'), ('tenancy', 'tenant_units'), ('tenancy', 'tenants_to_sweep'), ('tenancy', 'unit_parent'), ('tenancy', 'units_where_i_hold'), ('tenancy', 'units_where_i_hold_in_tenant'))
+          AND (n.nspname, p.proname) IN (('tenancy', 'caller_rights'), ('tenancy', 'caller_seat'), ('tenancy', 'caller_tenant'), ('tenancy', 'holds_key'), ('tenancy', 'holds_key_in_tenant'), ('tenancy', 'holds_tenant_wide'), ('tenancy', 'identity_tenants'), ('tenancy', 'invitation_of_digest'), ('tenancy', 'key_is_contained'), ('tenancy', 'key_is_live'), ('tenancy', 'manages_access'), ('tenancy', 'pack_keys'), ('tenancy', 'readable_units'), ('tenancy', 'rewrite_tenant_rights'), ('tenancy', 'rights_a_move_changes'), ('tenancy', 'role_keys_in_use'), ('tenancy', 'roles_with_key'), ('tenancy', 'roles_with_key_in_tenant'), ('tenancy', 'seat_in_tenant'), ('tenancy', 'seated_in_tenant'), ('tenancy', 'seats_displayname_column_rule'), ('tenancy', 'seats_holding_at'), ('tenancy', 'seats_in_my_units'), ('tenancy', 'seats_of_identity'), ('tenancy', 'system_tenant'), ('tenancy', 'tenant_administrators'), ('tenancy', 'tenant_placements'), ('tenancy', 'tenant_roles'), ('tenancy', 'tenant_seats'), ('tenancy', 'tenant_unit_paths'), ('tenancy', 'tenant_units'), ('tenancy', 'tenants_to_sweep'), ('tenancy', 'unit_parent'), ('tenancy', 'units_where_i_hold'), ('tenancy', 'units_where_i_hold_in_tenant'))
           AND acl.grantee <> 0 AND acl.grantee <> p.proowner
     LOOP
         EXECUTE pg_catalog.format('REVOKE ALL ON FUNCTION %s FROM %s', granted.function::pg_catalog.regprocedure, granted.grantee::pg_catalog.regrole);
@@ -572,6 +590,7 @@ $ddd$;
 GRANT EXECUTE ON FUNCTION tenancy.caller_rights() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.identity_tenants() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.invitation_of_digest(digest bytea) TO ddd_system_in;
+GRANT EXECUTE ON FUNCTION tenancy.key_is_contained(key text) TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.manages_access(key text) TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.pack_keys(pack text) TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.role_keys_in_use() TO ddd_system_in;
@@ -588,6 +607,7 @@ GRANT EXECUTE ON FUNCTION tenancy.holds_tenant_wide(key text) TO authenticated, 
 GRANT EXECUTE ON FUNCTION tenancy.readable_units() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.rewrite_tenant_rights() TO ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.roles_with_key(key text) TO authenticated, ddd_system_in;
+GRANT EXECUTE ON FUNCTION tenancy.seats_in_my_units() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_placements() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_roles() TO authenticated, ddd_system_in;
 GRANT EXECUTE ON FUNCTION tenancy.tenant_seats() TO authenticated, ddd_system_in;
@@ -667,7 +687,7 @@ COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON
 
 -- Seat managers issue invitations (insert) for authenticated asks the policy 'Seat managers issue invitations' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Seat managers issue invitations (insert) for authenticated" ON tenancy."Invitations" FOR INSERT TO authenticated
-    WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."Invitations"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT "IssuedAsSystem") AND ("IssuedBy" = (SELECT tenancy.caller_seat())) AND ("State" = 'Open') AND ("AcceptedAs" IS NULL AND "AcceptedAt" IS NULL));
+    WITH CHECK (("TenantId" = (SELECT tenancy.caller_tenant())) AND (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage')) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."Invitations"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k) AND NOT ("tenancy"."Invitations"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT "IssuedAsSystem") AND ("IssuedBy" = (SELECT tenancy.caller_seat())) AND ("State" = 'Open') AND ("AcceptedAs" IS NULL AND "AcceptedAt" IS NULL));
 COMMENT ON POLICY "Seat managers issue invitations (insert) for authenticated" ON tenancy."Invitations" IS 'DDDToolkit row access rule';
 
 -- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
@@ -1191,7 +1211,7 @@ COMMENT ON POLICY "Operators read every tenant (select) for tenancy_operator" ON
 
 -- Grants managers give at the unit (insert) for authenticated asks the policy 'Grants managers give at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers give at the unit (insert) for authenticated" ON tenancy."SeatRoleGrants" FOR INSERT TO authenticated
-    WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND ("GrantedBy" = (SELECT tenancy.caller_seat())) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
+    WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND ("GrantedBy" = (SELECT tenancy.caller_seat())) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers give at the unit (insert) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
 -- Tenancy work writes its tenant (insert) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
@@ -1201,8 +1221,8 @@ COMMENT ON POLICY "Tenancy work writes its tenant (insert) for ddd_system_in" ON
 
 -- Grants managers change at the unit (update) for authenticated asks the policy 'Grants managers change at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers change at the unit (update) for authenticated" ON tenancy."SeatRoleGrants" FOR UPDATE TO authenticated
-    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))))
-    WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
+    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))))
+    WITH CHECK ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (EXISTS (SELECT 1 FROM "tenancy"."Roles" r WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."TenantId" = (SELECT tenancy.caller_tenant()) AND r."Status" = 'Active')) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k)))))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k)) OR "tenancy"."SeatRoleGrants"."SeatId" <> (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers change at the unit (update) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
 -- Tenancy work writes its tenant (update) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
@@ -1213,7 +1233,7 @@ COMMENT ON POLICY "Tenancy work writes its tenant (update) for ddd_system_in" ON
 
 -- Grants managers revoke at the unit (delete) for authenticated asks the policy 'Grants managers revoke at the unit' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
 CREATE POLICY "Grants managers revoke at the unit (delete) for authenticated" ON tenancy."SeatRoleGrants" FOR DELETE TO authenticated
-    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ((("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.manages_access(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k))))))) OR "tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat())));
+    USING ((EXISTS (SELECT 1 FROM "tenancy"."Seats" s WHERE s."Id" = "tenancy"."SeatRoleGrants"."SeatId" AND s."TenantId" = (SELECT tenancy.caller_tenant()))) AND ((("UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold('tenancy.grants.manage')))) AND (NOT EXISTS (SELECT 1 FROM "tenancy"."Roles" r CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k) WHERE r."Id" = "tenancy"."SeatRoleGrants"."RoleId" AND r."Status" = 'Active' AND tenancy.key_is_contained(managed.k) AND NOT ("tenancy"."SeatRoleGrants"."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k))))))) OR "tenancy"."SeatRoleGrants"."SeatId" = (SELECT tenancy.caller_seat())));
 COMMENT ON POLICY "Grants managers revoke at the unit (delete) for authenticated" ON tenancy."SeatRoleGrants" IS 'DDDToolkit row access rule';
 
 -- Tenancy work writes its tenant (delete) for ddd_system_in asks the policy 'Tenancy work writes its tenant' of the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.
@@ -1539,6 +1559,33 @@ CREATE POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Te
     USING (false);
 COMMENT ON POLICY "Operators only read (delete) for tenancy_operator" ON tenancy."Tenants" IS 'DDDToolkit row access rule';
 
+-- The column rules: a policy cannot see which column a statement changes, so a trigger before an update of
+-- the columns a rule holds asks it of the row as it was and as it is about to be. The policies for UPDATE
+-- above still decide which rows a caller changes at all.
+
+-- A change of "DisplayName" of tenancy."Seats" is held to the column rule 'Name changes by the seat or with the seats key'.
+CREATE OR REPLACE FUNCTION tenancy.seats_displayname_column_rule() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = '' AS $body$
+BEGIN
+    -- The roles a caller's statement runs as are held; the application's own work and the tables' owner are not.
+    IF CURRENT_USER = 'authenticated' THEN
+        IF ((OLD."Id" = (SELECT tenancy.caller_seat())) OR (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage'))) IS NOT TRUE OR (OLD."Id" IS DISTINCT FROM NEW."Id" AND ((NEW."Id" = (SELECT tenancy.caller_seat())) OR (SELECT tenancy.holds_tenant_wide('tenancy.seats.manage'))) IS NOT TRUE) THEN
+            RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'The column rule ''Name changes by the seat or with the seats key'' does not let this caller change "DisplayName" of tenancy."Seats".';
+        END IF;
+    ELSIF CURRENT_USER IN ('anon', 'tenancy_operator') THEN
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'seats_displayname_column_rule', HINT = 'ddd:access.refused', MESSAGE = 'No column rule is for this caller''s role, so it may not change "DisplayName" of tenancy."Seats".';
+    END IF;
+    RETURN NEW;
+END
+$body$;
+COMMENT ON FUNCTION tenancy.seats_displayname_column_rule() IS 'DDDToolkit access function of TenantsContext';
+REVOKE ALL ON FUNCTION tenancy.seats_displayname_column_rule() FROM PUBLIC;
+DROP TRIGGER IF EXISTS seats_displayname_column_rule ON tenancy."Seats";
+CREATE TRIGGER seats_displayname_column_rule BEFORE UPDATE OF "DisplayName" ON tenancy."Seats"
+    FOR EACH ROW WHEN (OLD."DisplayName" IS DISTINCT FROM NEW."DisplayName")
+    EXECUTE FUNCTION tenancy.seats_displayname_column_rule();
+COMMENT ON TRIGGER seats_displayname_column_rule ON tenancy."Seats" IS 'DDDToolkit column rule';
+
 -- Privileges, from the policies above: what a table gave the roles of this file before is taken back, and a
 -- role then gets the commands a permissive policy allows it, and no more. UPDATE is granted on the columns
 -- that may change.
@@ -1550,9 +1597,9 @@ GRANT INSERT ON TABLE tenancy."InvitationDigests" TO ddd_system_in;
 
 REVOKE ALL ON TABLE tenancy."Invitations" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in, tenancy_operator;
 GRANT SELECT, INSERT ON TABLE tenancy."Invitations" TO authenticated;
-GRANT UPDATE ("AcceptedAs", "AcceptedAt", "Address", "ClosedAt", "DisplayName", "InvitedAccount", "State", "Version") ON TABLE tenancy."Invitations" TO authenticated;
+GRANT UPDATE ("AcceptedAs", "AcceptedAt", "Address", "ClosedAt", "InvitedAccount", "State", "Version") ON TABLE tenancy."Invitations" TO authenticated;
 GRANT SELECT, INSERT, DELETE ON TABLE tenancy."Invitations" TO ddd_system_in;
-GRANT UPDATE ("AcceptedAs", "AcceptedAt", "Address", "ClosedAt", "DisplayName", "InvitedAccount", "State", "Version") ON TABLE tenancy."Invitations" TO ddd_system_in;
+GRANT UPDATE ("AcceptedAs", "AcceptedAt", "Address", "ClosedAt", "InvitedAccount", "State", "Version") ON TABLE tenancy."Invitations" TO ddd_system_in;
 GRANT SELECT ON TABLE tenancy."Invitations" TO tenancy_operator;
 
 REVOKE ALL ON TABLE tenancy."OrganizationUnitPaths" FROM PUBLIC, anon, authenticated, ddd_system, ddd_system_in, tenancy_operator;
@@ -1945,17 +1992,6 @@ DROP TRIGGER IF EXISTS tenancy_paths_follow_the_tree ON "tenancy"."OrganizationU
 CREATE CONSTRAINT TRIGGER tenancy_paths_follow_the_tree AFTER INSERT OR UPDATE OF "ParentId" ON "tenancy"."OrganizationUnits"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
     EXECUTE FUNCTION "tenancy".paths_follow_the_tree('units');
-CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
-    LANGUAGE plpgsql SET search_path = '' AS $body$
-BEGIN
-    RAISE EXCEPTION USING ERRCODE = 'check_violation', CONSTRAINT = 'tenancy_seat_identity_is_fixed', MESSAGE = 'A seat keeps the identity and the tenant it was made with.';
-END
-$body$;
-REVOKE ALL ON FUNCTION "tenancy".seat_identity_is_fixed() FROM PUBLIC;
-DROP TRIGGER IF EXISTS tenancy_seat_identity_is_fixed ON "tenancy"."Seats";
-CREATE TRIGGER tenancy_seat_identity_is_fixed BEFORE UPDATE OF "TenantId", "Identity" ON "tenancy"."Seats"
-    FOR EACH ROW WHEN ((OLD."TenantId", OLD."Identity") IS DISTINCT FROM (NEW."TenantId", NEW."Identity"))
-    EXECUTE FUNCTION "tenancy".seat_identity_is_fixed();
 CREATE OR REPLACE FUNCTION "tenancy".placement_is_fixed() RETURNS trigger
     LANGUAGE plpgsql SET search_path = '' AS $body$
 BEGIN
@@ -1989,6 +2025,21 @@ DROP TRIGGER IF EXISTS tenancy_role_pack_is_fixed ON "tenancy"."Roles";
 CREATE TRIGGER tenancy_role_pack_is_fixed BEFORE UPDATE OF "FromPack" ON "tenancy"."Roles"
     FOR EACH ROW WHEN ((OLD."FromPack") IS DISTINCT FROM (NEW."FromPack"))
     EXECUTE FUNCTION "tenancy".role_pack_is_fixed();
+CREATE OR REPLACE FUNCTION "tenancy".seat_identity_is_fixed() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = '' AS $body$
+BEGIN
+    -- Tenancy's system work in a tenant may; the policies keep it to Tenancy's scope and to that tenant.
+    IF CURRENT_USER IS DISTINCT FROM 'ddd_system_in' THEN
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tenancy_seat_identity_is_fixed', HINT = 'ddd:access.refused', MESSAGE = 'A seat keeps the id, the identity and the tenant it was made with: only Tenancy''s system work in its tenant changes them.';
+    END IF;
+    RETURN NEW;
+END
+$body$;
+REVOKE ALL ON FUNCTION "tenancy".seat_identity_is_fixed() FROM PUBLIC;
+DROP TRIGGER IF EXISTS tenancy_seat_identity_is_fixed ON "tenancy"."Seats";
+CREATE TRIGGER tenancy_seat_identity_is_fixed BEFORE UPDATE OF "Id", "TenantId", "Identity" ON "tenancy"."Seats"
+    FOR EACH ROW WHEN ((OLD."Id", OLD."TenantId", OLD."Identity") IS DISTINCT FROM (NEW."Id", NEW."TenantId", NEW."Identity"))
+    EXECUTE FUNCTION "tenancy".seat_identity_is_fixed();
 CREATE OR REPLACE FUNCTION "tenancy".seat_status_is_managed() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $body$
 BEGIN
@@ -2002,9 +2053,9 @@ BEGIN
                    CROSS JOIN LATERAL pg_catalog.unnest(r."Keys") AS managed(k)
                    WHERE g."SeatId" = NEW."Id"
                      AND (g."EndsAt" IS NULL OR g."EndsAt" > pg_catalog.now())
-                     AND tenancy.manages_access(managed.k)
+                     AND tenancy.key_is_contained(managed.k)
                      AND NOT (g."UnitId" = ANY (ARRAY(SELECT tenancy.units_where_i_hold(managed.k))))) THEN
-        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tenancy_seat_status_is_managed', HINT = 'ddd:access.refused', MESSAGE = 'A seat''s status is changed by a seat that manages seats for the whole tenant and holds, at each of its grants, the keys that manage access the grant gives.';
+        RAISE EXCEPTION USING ERRCODE = 'insufficient_privilege', CONSTRAINT = 'tenancy_seat_status_is_managed', HINT = 'ddd:access.refused', MESSAGE = 'A seat''s status is changed by a seat that manages seats for the whole tenant and, while keys that manage access are contained, holds at each of its grants those the grant gives.';
     END IF;
     RETURN NEW;
 END
