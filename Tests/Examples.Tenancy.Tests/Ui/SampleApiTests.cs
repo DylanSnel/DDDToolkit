@@ -125,7 +125,7 @@ public sealed class SampleApiTests
         // Registered as the UI registers it, after the service defaults, which give every client a standard
         // resilience handler that retries a 503.
         using var stub = StubApi.Answering(HttpStatusCode.ServiceUnavailable);
-        var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
+        var builder = UiHost.CreateBuilder();
         builder.Configuration["Api:BaseUrl"] = StubApi.BaseAddress.ToString();
         builder.AddServiceDefaults();
         builder.Services.AddSampleUi();

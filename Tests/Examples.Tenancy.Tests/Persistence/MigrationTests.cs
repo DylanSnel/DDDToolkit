@@ -109,6 +109,11 @@ public sealed partial class MigrationTests
     [MemberData(nameof(Modules))]
     public void Dotnet_ef_makes_every_modules_context_through_the_factory_the_build_wrote(string module)
     {
+        // Entity Framework's design-time services set DOTNET_ENVIRONMENT and ASPNETCORE_ENVIRONMENT to Development for
+        // the whole process when they are not set, as dotnet ef does in its own. This process runs every test of the
+        // project, so both are put back as they were, and a host another test builds afterwards is not in Development
+        // because this test ran first.
+        using var environment = new KeptEnvironment("DOTNET_ENVIRONMENT", "ASPNETCORE_ENVIRONMENT");
         var infrastructure = SampleLayout.InfrastructureOf(module).Assembly;
 
         foreach (var startup in new[] { infrastructure, typeof(Program).Assembly })
@@ -128,6 +133,20 @@ public sealed partial class MigrationTests
             context.Database.ProviderName.Should().Be("Npgsql.EntityFrameworkCore.PostgreSQL");
             context.GetService<IHistoryRepository>().GetInsertScript(new HistoryRow("20260101000000_Probe", "10.0.0"))
                 .Should().Contain($"INSERT INTO {context.Model.GetDefaultSchema()}.\"{HistoryRepository.DefaultTableName}\"", "the history is in {0}'s schema, where the host reads it", module);
+        }
+    }
+
+    /// <summary>Environment variables of the process as they were when it was made, put back when it is disposed.</summary>
+    private sealed class KeptEnvironment(params string[] names) : IDisposable
+    {
+        private readonly (string Name, string? Value)[] _kept = [.. names.Select(name => (name, Environment.GetEnvironmentVariable(name)))];
+
+        public void Dispose()
+        {
+            foreach (var (name, value) in _kept)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
         }
     }
 

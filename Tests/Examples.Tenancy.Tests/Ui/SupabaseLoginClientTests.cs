@@ -106,7 +106,7 @@ public sealed class SupabaseLoginClientTests
         using var stub = StubApi.Answering(HttpStatusCode.ServiceUnavailable);
         IHost Ui(params (string Key, string Value)[] settings)
         {
-            var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder();
+            var builder = UiHost.CreateBuilder();
             foreach (var (key, value) in settings)
             {
                 builder.Configuration[key] = value;
