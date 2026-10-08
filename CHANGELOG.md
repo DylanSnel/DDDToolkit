@@ -1406,7 +1406,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   from `TenancyUseCases<...>` closed over them, through which every project that sees it names the use cases and
   their records, `TenantsTenancy.SeatCommands` and `TenantsTenancy.SeatOverview`, the package's own types that
   `AddTenancy` registers. HotChocolate's generator reads it in an API project as any type, so
-  `[ObjectType<TenantsTenancy.SeatOverview>]` works there. `TenancyUseCases<...>` is abstract instead of static
+  `[ObjectType<TenantsTenancy.KeyReach>]` works there; `SeatOverview` carries the application's seat, identity and
+  all, so it is selected into a record of the application's rather than answered itself (see Changed, the
+  directory's own entry). `TenancyUseCases<...>` is abstract instead of static
   for it. Membership's use cases are generic over ids alone and need nothing of the kind. See
   [Calling a use case](docs/tenancy.md#calling-a-use-case). From 3.2.0-preview.1 or 3.2.0-preview.2:
   - Delete every `global using X = DDDToolkit.Supporting.Tenancy.UseCases.TenancyUseCases<...>;`, and name the
@@ -1563,7 +1565,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   fields the application added to its classes are written in the save that provisions, and a callback that
   throws leaves nothing saved.
 - Tenancy's refusals of kind `Invalid` name the input they are about in the `Field` argument: `name`,
-  `displayName`, `description`, `reason`, `kind`, `slug`, `until`, `keys`, `identity`, `ids`, and `size` and
+  `description`, `reason`, `slug`, `until`, `keys`, `identity`, `ids`, and `size` and
   `after` of the tenants' directory. `tenancy.tenant-required` names none, and no header either, in either
   language, "This request names no tenant.": how a request names its tenant is the host's. The Dutch texts have
   no word for the reader, neither the familiar nor the formal one: which of the two fits is the application's to
@@ -2669,7 +2671,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     application or of the package that writes the same SQL leaves the files as they are, and the project that
     held the class needs no version of its own for them. The Tenancy sample's three are `20261006170417` to
     `20261006170419`, which record the roles they were written for as well (see Added, Supabase and Auth), and its
-    catalogue's project keeps no version any more.
+    catalogue's project keeps no version any more. The Tenants one, after the migration `InvitationsSuggestNoName`,
+    also holds what this release's entries on a seat write: the guards on a seat's own columns, the sample's rule
+    on a seat's name, `key_is_contained` and `seats_in_my_units`.
   - The start-up checks of both packages, and the export's refusal of a rule that asks a set nothing answers,
     say to mark the catalogue, the operators or the rules where they said to list a class; the check that finds
     Tenancy's functions written from another catalogue names `[TenancyCatalogue]` and where the export must see it.
