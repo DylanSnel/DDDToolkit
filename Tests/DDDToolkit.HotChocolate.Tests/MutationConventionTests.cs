@@ -98,7 +98,7 @@ public class MutationConventionTests
         var top = topLevel.EnumerateArray().Should().ContainSingle().Which;
         top.TryGetProperty("extensions", out _).Should().BeTrue("got {0}", after);
         top.GetProperty("extensions").GetProperty("code").GetString().Should().Be(Gate.Code);
-        top.GetProperty("extensions").GetProperty("kind").GetString().Should().Be(nameof(RefusalKind.NotPermitted));
+        top.GetProperty("extensions").GetProperty("kind").GetString().Should().Be("NOT_PERMITTED", "spelled as RefusalError.kind is in the same schema");
         top.GetProperty("path")[0].GetString().Should().Be("parcelRelabel");
         Record("A middleware inserted first in OnBeforeCompleteType of the mutation type: the refusal is a top-level coded error.");
     }
@@ -260,7 +260,7 @@ public class MutationConventionTests
         var error = response.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which;
         error.GetProperty("message").GetString().Should().Be("Returns are closed for this parcel.");
         error.GetProperty("extensions").GetProperty("code").GetString().Should().Be("parcels.return-closed");
-        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be(nameof(RefusalKind.Conflict));
+        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be("CONFLICT");
         error.GetProperty("path")[0].GetString().Should().Be("parcelReturn");
     }
 
@@ -281,7 +281,7 @@ public class MutationConventionTests
         var error = response.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which;
         error.GetProperty("message").GetString().Should().Be("The gold plan is closed.");
         error.GetProperty("extensions").GetProperty("code").GetString().Should().Be("subscription.plan-closed");
-        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be(nameof(RefusalKind.Conflict));
+        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be("CONFLICT");
         error.GetProperty("path")[0].GetString().Should().Be("refused");
     }
 

@@ -976,8 +976,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   spells the values of the application's enums `not_permitted`, as `JsonNamingPolicy.SnakeCaseLower` does
   for a REST API beside the schema; `UpperSnakeCase` is HotChocolate's own. A member with `[GraphQLName]`
   keeps its name, HotChocolate's own enums keep its spelling, and a member the lower spelling would turn
-  into `true`, `false` or `null` fails the schema's build. `AddDDDToolkitErrors(EnumValueSpelling)`
-  spells a refusal's `kind` extension the same way; without the argument it stays `NotPermitted`. See
+  into `true`, `false` or `null` fails the schema's build. `AddDDDToolkitErrors()` spells a refusal's `kind`
+  extension the same way, from that one call, and as HotChocolate does, `NOT_PERMITTED`, in a schema that does
+  not call it. See
   [Enum values, spelled your way](docs/graphql.md#enum-values-spelled-your-way).
 - **GraphQL bindings for ids of other projects.** The generated `Add{Module}GraphQlRuntimeBindings()` also
   binds the ids and single value objects of the module's other projects that have no nested provider of

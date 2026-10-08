@@ -65,6 +65,13 @@ public static class DependencyInjection
     /// <c>DDDToolkit.Localization</c>), the messages are phrased in the reader's language; otherwise they
     /// are the domain's own. See <c>docs/localization.md</c>.
     /// </para>
+    /// <para>
+    /// A refusal's <c>kind</c> extension is spelled as the schema spells its enum values: as
+    /// <see cref="AddDDDToolkitEnumValues"/> spells them where the schema calls it, before this call or after it,
+    /// and <c>NOT_PERMITTED</c>, HotChocolate's own spelling, where it does not. So <c>RefusalKind</c> reads the
+    /// same wherever a client meets it: in the extensions of a refused query, and in the <c>RefusalError</c> of a
+    /// refused mutation.
+    /// </para>
     /// </summary>
     /// <param name="builder">The request executor builder to configure.</param>
     /// <returns>The same builder, so calls can be chained.</returns>
@@ -73,38 +80,10 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(builder);
 
         // The localizer is an application service, and error filters are built from the schema's own
-        // services, so it is asked for on the root provider.
-        return builder.AddErrorFilter(services =>
-            new FailureErrorFilter(services.GetRootServiceProvider().GetService<IFailureLocalizer>()));
-    }
-
-    /// <summary>
-    /// <see cref="AddDDDToolkitErrors(IRequestExecutorBuilder)"/> for a schema whose enum values are spelled
-    /// with <see cref="AddDDDToolkitEnumValues"/>: a refusal's <c>kind</c> extension is spelled the same way,
-    /// <c>not_permitted</c> or <c>NOT_PERMITTED</c>, where the call without a spelling writes
-    /// <c>NotPermitted</c>.
-    /// <code>
-    /// services
-    ///     .AddGraphQLServer()
-    ///     .AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)
-    ///     .AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase);
-    /// </code>
-    /// <para>
-    /// Then <c>RefusalKind</c> reads the same wherever a client meets it: in the extensions of a refused
-    /// query, and in the <c>RefusalError</c> of a refused mutation.
-    /// </para>
-    /// </summary>
-    /// <param name="builder">The request executor builder to configure.</param>
-    /// <param name="kindSpelling">How a refusal's <c>kind</c> is spelled: the spelling the schema's enum values have.</param>
-    /// <returns>The same builder, so calls can be chained.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kindSpelling"/> is not one of the two spellings.</exception>
-    public static IRequestExecutorBuilder AddDDDToolkitErrors(this IRequestExecutorBuilder builder, EnumValueSpelling kindSpelling)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        EnumValueSpellings.Checked(kindSpelling, nameof(kindSpelling));
-
-        return builder.AddErrorFilter(services =>
-            new FailureErrorFilter(services.GetRootServiceProvider().GetService<IFailureLocalizer>(), kindSpelling));
+        // services, so it is asked for on the root provider. The spelling is the schema's, and so in its services.
+        return builder.AddErrorFilter(services => new FailureErrorFilter(
+            services.GetRootServiceProvider().GetService<IFailureLocalizer>(),
+            services.GetService<SchemaEnumValueSpelling>()?.Spelling ?? EnumValueSpelling.UpperSnakeCase));
     }
 
     /// <summary>
@@ -180,7 +159,8 @@ public static class DependencyInjection
     /// </para>
     /// <para>
     /// It registers HotChocolate's default naming conventions with this one change, so a schema that has
-    /// naming conventions of its own overrides <c>GetEnumValueName</c> there instead of calling this.
+    /// naming conventions of its own overrides <c>GetEnumValueName</c> there instead of calling this. The error
+    /// filter of <see cref="AddDDDToolkitErrors"/> spells a refusal's <c>kind</c> the same way, from this one call.
     /// </para>
     /// <para>
     /// <b>In a composed schema every source schema needs the same spelling.</b> An enum two source schemas
@@ -195,6 +175,11 @@ public static class DependencyInjection
     {
         ArgumentNullException.ThrowIfNull(builder);
         EnumValueSpellings.Checked(spelling, nameof(spelling));
+
+        // Kept in the schema's services for the error filter, which spells a refusal's kind as the schema does.
+        builder.ConfigureSchemaServices(services => services
+            .RemoveAll<SchemaEnumValueSpelling>()
+            .AddSingleton(new SchemaEnumValueSpelling(spelling)));
 
         return builder.AddConvention<INamingConventions>(_ => new SpelledEnumNamingConventions(spelling));
     }

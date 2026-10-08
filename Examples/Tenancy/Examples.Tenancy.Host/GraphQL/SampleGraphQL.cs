@@ -74,7 +74,7 @@ internal static class SampleGraphQL
 
     /// <summary>
     /// Typed errors in every mutation's payload and coded errors for queries; enum values spelled as the REST API
-    /// spells them; a scope of services per query field, since the fields of a query run side by side and each
+    /// spells them, a refusal's kind in a query's error included; a scope of services per query field, since the fields of a query run side by side and each
     /// reads on a context of its own, and the request's scope for a mutation, which runs alone; the check
     /// that the caller has a seat in the tenant the request names, in front of every root field but
     /// <see cref="SeatsOfMine"/> and <see cref="InvitationAccept"/>, which need none, and
@@ -89,7 +89,7 @@ internal static class SampleGraphQL
         ArgumentNullException.ThrowIfNull(graphql);
 
         return graphql
-            .AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase)
+            .AddDDDToolkitErrors()
             .AddDDDToolkitMutationConventions()
             .AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)
             .AddDDDToolkitEntityNullability()

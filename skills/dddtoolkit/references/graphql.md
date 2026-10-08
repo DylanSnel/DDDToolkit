@@ -130,8 +130,8 @@ public static async Task<IReadOnlyDictionary<ProjectId, ProjectCrew>> GetCrewByP
   stands beside the request's own access check, never in its place. When the value is part of a record a
   query answers, hold the rule in the query (answer `null` without the key), or a REST route over the same
   record gives it away; the attribute then only declares the rule.
-- Enum values in one spelling for REST and GraphQL: `AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)`
-  and `AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase)`.
+- Enum values in one spelling for REST and GraphQL: `AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)`,
+  once; `AddDDDToolkitErrors()` spells a refusal's `kind` extension the same way.
 
 ## One schema over several modules
 

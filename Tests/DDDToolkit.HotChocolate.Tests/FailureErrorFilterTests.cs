@@ -59,7 +59,7 @@ public class FailureErrorFilterTests
         var error = errors.Should().ContainSingle().Which;
         error.GetProperty("message").GetString().Should().Be("The gold plan is closed.");
         Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-closed");
-        Extensions(error).GetProperty("kind").GetString().Should().Be("Conflict");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("CONFLICT", "spelled as the schema spells its enum values, HotChocolate's way here");
         Extensions(error).GetProperty("arguments").GetProperty("Plan").GetString().Should().Be("gold");
         Extensions(error).GetProperty("arguments").GetProperty("Seats").GetInt32().Should().Be(3);
         error.GetProperty("path")[0].GetString().Should().Be("refused");
@@ -75,7 +75,7 @@ public class FailureErrorFilterTests
         // input: the same extension a validation failure names its property in.
         var error = errors.Should().ContainSingle().Which;
         Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-unknown");
-        Extensions(error).GetProperty("kind").GetString().Should().Be("Invalid");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("INVALID");
         Extensions(error).GetProperty("field").GetString().Should().Be("plan");
         Extensions(error).GetProperty("arguments").GetProperty("Field").GetString().Should().Be("plan", "and the arguments keep it as well");
     }
@@ -87,7 +87,7 @@ public class FailureErrorFilterTests
 
         var error = errors.Should().ContainSingle().Which;
         Extensions(error).GetProperty("code").GetString().Should().Be("subscription.plan-name-invalid");
-        Extensions(error).GetProperty("kind").GetString().Should().Be("Invalid");
+        Extensions(error).GetProperty("kind").GetString().Should().Be("INVALID");
         Extensions(error).GetProperty("field").GetString().Should().Be("name", "a form puts the message under the input, as it does for a validation failure");
         Extensions(error).GetProperty("arguments").GetProperty("Field").GetString().Should().Be("name", "the argument stays among the arguments");
         Extensions(error).GetProperty("arguments").GetProperty("Max").GetInt32().Should().Be(40);

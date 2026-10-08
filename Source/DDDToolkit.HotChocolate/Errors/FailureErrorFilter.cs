@@ -41,17 +41,24 @@ namespace DDDToolkit.HotChocolate.Errors;
 public sealed class FailureErrorFilter : IErrorFilter
 {
     private readonly IFailureLocalizer? _localizer;
-    private readonly EnumValueSpelling? _kindSpelling;
-
-    /// <summary>Creates the filter. A refusal's <c>kind</c> is written as the enum's member is named: <c>NotPermitted</c>.</summary>
-    /// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
-    public FailureErrorFilter(IFailureLocalizer? localizer = null) => _localizer = localizer;
+    private readonly EnumValueSpelling _kindSpelling;
 
     /// <summary>
-    /// Creates the filter for a schema whose enum values are spelled with
-    /// <see cref="DependencyInjection.AddDDDToolkitEnumValues"/>: a refusal's <c>kind</c> is spelled the same
-    /// way, <c>not_permitted</c> or <c>NOT_PERMITTED</c>, so a client reads one spelling of
-    /// <see cref="RefusalKind"/> whether it arrives in an error's extensions or in a mutation's payload.
+    /// Creates the filter for a schema that spells its enum values as HotChocolate does: a refusal's <c>kind</c>
+    /// is <c>NOT_PERMITTED</c>. <see cref="DependencyInjection.AddDDDToolkitErrors"/> builds it with the schema's
+    /// own spelling instead, where the schema has one.
+    /// </summary>
+    /// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
+    public FailureErrorFilter(IFailureLocalizer? localizer = null)
+        : this(localizer, EnumValueSpelling.UpperSnakeCase)
+    {
+    }
+
+    /// <summary>
+    /// Creates the filter for a schema whose enum values are spelled <paramref name="kindSpelling"/>: a refusal's
+    /// <c>kind</c> is spelled the same way, <c>not_permitted</c> or <c>NOT_PERMITTED</c>, so a client reads one
+    /// spelling of <see cref="RefusalKind"/> whether it arrives in an error's extensions or in a mutation's
+    /// payload. For a schema with naming conventions of its own, which registers the filter itself.
     /// </summary>
     /// <param name="localizer">Phrases the failures, or <see langword="null"/> to keep the domain's own messages.</param>
     /// <param name="kindSpelling">How a refusal's <c>kind</c> is spelled.</param>
@@ -159,7 +166,6 @@ public sealed class FailureErrorFilter : IErrorFilter
         };
     }
 
-    /// <summary>The kind as the enum's member is named, or as the schema spells its enum values when the filter was told how.</summary>
-    private string Kind(RefusalKind kind)
-        => _kindSpelling is { } spelling ? EnumValueSpellings.Spell(kind.ToString(), spelling) : kind.ToString();
+    /// <summary>The kind as the schema spells its enum values.</summary>
+    private string Kind(RefusalKind kind) => EnumValueSpellings.Spell(kind.ToString(), _kindSpelling);
 }

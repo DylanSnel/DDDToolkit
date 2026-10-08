@@ -437,8 +437,8 @@ domain's own sentence otherwise. The language is the request's UI culture, so pu
 
 For mutations there is a better place for a failure than the top of the response; see
 [Typed errors in mutation payloads](#typed-errors-in-mutation-payloads), which this filter stays beside.
-`AddDDDToolkitErrors(EnumValueSpelling)` spells a refusal's `kind` the way the schema spells its enums; see
-[Enum values, spelled your way](#enum-values-spelled-your-way).
+A refusal's `kind` is spelled the way the schema spells its enums, `NOT_PERMITTED` unless the schema chose
+otherwise; see [Enum values, spelled your way](#enum-values-spelled-your-way).
 
 ## Typed errors in mutation payloads
 
@@ -760,7 +760,7 @@ A caller that holds the key on the first product and not on the second gets:
   "errors": [{
     "message": "You may not see this.",
     "path": ["products", 1, "cost"],
-    "extensions": { "code": "catalog.not-permitted", "kind": "NotPermitted", "arguments": { "Key": "catalog.costs.view" } }
+    "extensions": { "code": "catalog.not-permitted", "kind": "NOT_PERMITTED", "arguments": { "Key": "catalog.costs.view" } }
   }]
 }
 ```
@@ -812,7 +812,7 @@ choice, made once for the schema:
 services
     .AddGraphQLServer()
     .AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)
-    .AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase);
+    .AddDDDToolkitErrors();
 ```
 
 ```graphql
@@ -829,10 +829,10 @@ variables. `LowerSnakeCase` is what `JsonNamingPolicy.SnakeCaseLower` writes, th
 enum converter of its REST JSON (`new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)`), so the
 two APIs agree by construction. `UpperSnakeCase` is HotChocolate's own.
 
-`AddDDDToolkitErrors(spelling)` is `AddDDDToolkitErrors()` with the `kind` in a refused query's extensions
-spelled the same way, so a client reads one spelling of `RefusalKind` whether it arrives there or in a
-mutation's `RefusalError`. Without the argument the extension keeps the member's name, `NotPermitted`, as
-it always was.
+`AddDDDToolkitErrors()` spells the `kind` in a refused query's extensions as the schema spells its enums,
+from that one call, whichever of the two comes first: `not_permitted` here, and `NOT_PERMITTED` in a schema
+that does not call `AddDDDToolkitEnumValues`. So a client reads one spelling of `RefusalKind` whether it
+arrives there or in a mutation's `RefusalError`.
 
 - A member that carries `[GraphQLName]` keeps that name.
 - A member whose lower spelling would be `true`, `false` or `null` is refused when the schema is built:
@@ -1459,7 +1459,7 @@ disagree about a type they all declare:
 ```csharp
 static IRequestExecutorBuilder AddHostConventions(this IRequestExecutorBuilder graphql) => graphql
     .AddDDDToolkitTypes()
-    .AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase)
+    .AddDDDToolkitErrors()
     .AddDDDToolkitMutationConventions()
     .AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)
     .AddDDDToolkitEntityNullability();

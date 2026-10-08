@@ -20,6 +20,12 @@ public enum EnumValueSpelling
     LowerSnakeCase,
 }
 
+/// <summary>
+/// The spelling <see cref="DependencyInjection.AddDDDToolkitEnumValues"/> gave a schema, kept in the schema's
+/// services, where the error filter reads it.
+/// </summary>
+internal sealed record SchemaEnumValueSpelling(EnumValueSpelling Spelling);
+
 /// <summary>The one place a value's name becomes its spelling, for the schema's enums and for the error filter's <c>kind</c>.</summary>
 internal static class EnumValueSpellings
 {

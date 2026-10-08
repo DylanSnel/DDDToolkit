@@ -32,7 +32,7 @@ internal static class ShopModules
     public static IRequestExecutorBuilder AddHostConventions(this IRequestExecutorBuilder graphql, EnumValueSpelling spelling = EnumValueSpelling.LowerSnakeCase)
         => graphql
             .AddDDDToolkitTypes()
-            .AddDDDToolkitErrors(spelling)
+            .AddDDDToolkitErrors()
             .AddDDDToolkitMutationConventions()
             .AddDDDToolkitEnumValues(spelling)
             .ModifyOptions(options =>

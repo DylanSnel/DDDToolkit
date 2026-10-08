@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using DDDToolkit.Exceptions;
+using DDDToolkit.HotChocolate.Errors;
 using DDDToolkit.HotChocolate.Tests.Domain;
 using FluentAssertions;
 using HotChocolate;
@@ -12,8 +13,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DDDToolkit.HotChocolate.Tests;
 
 /// <summary>
-/// <c>AddDDDToolkitEnumValues(...)</c> and <c>AddDDDToolkitErrors(spelling)</c>: the values of a schema's enums
-/// are spelled the way the host chose, and a refusal's <c>kind</c> the same way wherever a client meets it.
+/// <c>AddDDDToolkitEnumValues(...)</c>: the values of a schema's enums are spelled the way the host chose, once,
+/// and <c>AddDDDToolkitErrors()</c> spells a refusal's <c>kind</c> the same way, so a client meets one spelling.
 /// </summary>
 public sealed class EnumValueSpellingTests : IDisposable
 {
@@ -164,29 +165,36 @@ public sealed class EnumValueSpellingTests : IDisposable
     }
 
     [Fact]
-    public async Task The_error_filters_kind_follows_the_spelling_it_was_given()
+    public async Task The_error_filters_kind_is_spelled_as_the_schema_spells_its_enums()
     {
-        (await KindAsync(graphql => graphql.AddDDDToolkitErrors())).Should().Be("NotPermitted", "without a spelling the kind is the member's name, as before");
-        (await KindAsync(graphql => graphql.AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase))).Should().Be("not_permitted");
-        (await KindAsync(graphql => graphql.AddDDDToolkitErrors(EnumValueSpelling.UpperSnakeCase))).Should().Be("NOT_PERMITTED");
+        // HotChocolate's own spelling where the schema chose none, as RefusalError.kind is spelled there.
+        var unspelled = await BuildAsync();
+        Values(unspelled.Schema.ToString(), "enum RefusalKind").Should().Contain("NOT_PERMITTED");
+        (await KindAsync(unspelled, "NOT_PERMITTED")).Should().Be("NOT_PERMITTED", "the schema spells its enums as HotChocolate does");
+
+        // The schema's spelling, chosen once, whether the errors were registered before it or after.
+        (await KindAsync(await BuildAsync(graphql => graphql.AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase)), "not_permitted"))
+            .Should().Be("not_permitted", "AddDDDToolkitErrors() came first, and still spells as the schema does");
+        (await KindAsync(
+                await BuildAsync(errors: graphql => graphql.AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase).AddDDDToolkitErrors()),
+                "not_permitted"))
+            .Should().Be("not_permitted", "AddDDDToolkitEnumValues came first");
 
         // The same word as the schema's enum has, in both spellings: a client reads one RefusalKind.
         foreach (var spelling in Enum.GetValues<EnumValueSpelling>())
         {
-            var executor = await BuildAsync(graphql => graphql.AddDDDToolkitEnumValues(spelling), errors: graphql => graphql.AddDDDToolkitErrors(spelling));
+            var executor = await BuildAsync(graphql => graphql.AddDDDToolkitEnumValues(spelling));
             var kinds = Values(executor.Schema.ToString(), "enum RefusalKind");
 
             foreach (var (kind, index) in Enum.GetValues<RefusalKind>().Select((kind, index) => (kind, index)))
             {
-                var refused = await ExecuteAsync(executor, $"{{ refuse(kind: {kinds[index]}) }}");
-                refused.GetProperty("errors")[0].GetProperty("extensions").GetProperty("kind").GetString()
-                    .Should().Be(kinds[index], "{0} is spelled {1} in the schema", kind, kinds[index]);
+                (await KindAsync(executor, kinds[index])).Should().Be(kinds[index], "{0} is spelled {1} in the schema", kind, kinds[index]);
             }
         }
 
-        static async Task<string?> KindAsync(Action<IRequestExecutorBuilder> errors)
+        static async Task<string?> KindAsync(IRequestExecutor executor, string kind)
         {
-            var refused = await ExecuteAsync(await BuildAsync(errors: errors), "{ refuse(kind: NOT_PERMITTED) }");
+            var refused = await ExecuteAsync(executor, $"{{ refuse(kind: {kind}) }}");
             return refused.GetProperty("errors")[0].GetProperty("extensions").GetProperty("kind").GetString();
         }
     }
@@ -198,7 +206,7 @@ public sealed class EnumValueSpellingTests : IDisposable
 
         graphql.Invoking(builder => builder.AddDDDToolkitEnumValues((EnumValueSpelling)7))
             .Should().Throw<ArgumentOutOfRangeException>().WithParameterName("spelling");
-        graphql.Invoking(builder => builder.AddDDDToolkitErrors((EnumValueSpelling)7))
+        FluentActions.Invoking(() => new FailureErrorFilter(null, (EnumValueSpelling)7))
             .Should().Throw<ArgumentOutOfRangeException>().WithParameterName("kindSpelling");
     }
 

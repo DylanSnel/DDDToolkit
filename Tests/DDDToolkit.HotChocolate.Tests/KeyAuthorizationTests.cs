@@ -54,7 +54,7 @@ public class KeyAuthorizationTests
         error.GetProperty("message").GetString().Should().Be("The caller may not read this.");
         error.GetProperty("path").EnumerateArray().Select(segment => segment.ToString()).Should().Equal("folio", "marginalia");
         error.GetProperty("extensions").GetProperty("code").GetString().Should().Be(Bindery.NotPermitted);
-        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be("NotPermitted");
+        error.GetProperty("extensions").GetProperty("kind").GetString().Should().Be("NOT_PERMITTED");
         error.GetProperty("extensions").GetProperty("arguments").GetProperty("Key").GetString().Should().Be(BinderyKeys.ReadMarginalia);
         error.GetProperty("extensions").GetProperty("arguments").GetProperty("Folio").GetInt32().Should().Be(1);
 
@@ -62,13 +62,12 @@ public class KeyAuthorizationTests
     }
 
     [Fact]
-    public async Task The_refusals_kind_is_spelled_as_the_error_filter_spells_it()
+    public async Task The_refusals_kind_is_spelled_as_the_schema_spells_its_enums()
     {
         var answer = await AskAsync(
             "{ folio { marginalia } }",
             new Bindery(),
-            configure: builder => builder.AddDDDToolkitErrors(EnumValueSpelling.LowerSnakeCase),
-            errors: false);
+            configure: builder => builder.AddDDDToolkitEnumValues(EnumValueSpelling.LowerSnakeCase));
 
         Extensions(answer).GetProperty("kind").GetString().Should().Be("not_permitted");
     }
