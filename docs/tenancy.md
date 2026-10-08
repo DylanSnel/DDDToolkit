@@ -1052,7 +1052,7 @@ var caller = TenancyUseCases.CurrentCaller();          // a TenancyCaller<Tenant
 
 // The host's middleware: the selection without its ids
 var seat = await context.RequestServices.GetRequiredService<ITenantSelection>()
-    .ResolveAsync(context.SupabaseCaller(), context.Request.Headers["Tenant"], context.RequestAborted);
+    .ResolveAsync(context.GetSupabaseCaller(), context.Request.Headers["Tenant"], context.RequestAborted);
 
 // Another module, which sees only the ids: written out where they are no arguments, inferred where they are
 services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, IBillingRequest, BillingContext>();
@@ -4935,7 +4935,7 @@ sequenceDiagram
 // Each request, after authentication: the user of its token, and that user's seat in the tenant it names
 app.Use(async (context, next) =>
 {
-    var caller = context.SupabaseCaller();
+    var caller = context.GetSupabaseCaller();
     using (Callers.Begin(caller))
     {
         // The selection without its id types: the middleware names no id, and reads the same in every application

@@ -953,7 +953,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   or one `SupabaseAuthOptions` that a host builds once and hands to each: `AddSupabaseJwtBearer` in
   `DDDToolkit.Auth.Supabase.AspNetCore`, `AddSupabaseAuth` and `AddSupabaseAuthAdmin`. Each reads it when it
   is called. See [Where Auth answers](docs/supabase.md#where-auth-answers).
-- `context.SupabaseCaller()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own caller, the
+- `context.GetSupabaseCaller()`, in `DDDToolkit.Auth.Supabase.AspNetCore`, is a request's own caller, the
   user of its validated token or `Caller.Anonymous`, whatever caller is ambient, so a host can make it
   current at the start of every request.
 

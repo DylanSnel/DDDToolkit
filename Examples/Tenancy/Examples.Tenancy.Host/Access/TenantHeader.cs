@@ -32,7 +32,7 @@ public static class TenantHeader
     /// list of seats or the health check, runs as nobody without harm.
     /// <para>
     /// Both callers are begun for the request, not asked for: the toolkit's from the token
-    /// (<see cref="SupabaseHttpContextExtensions.SupabaseCaller"/>), never from whatever is ambient, and
+    /// (<see cref="SupabaseHttpContextExtensions.GetSupabaseCaller"/>), never from whatever is ambient, and
     /// Tenancy's from the seat that caller has. A caller that is somehow current when a request starts, such as
     /// system work begun around a call and never ended, is replaced for the request rather than inherited, and a
     /// warning says so: a request is never system work. The seat is looked up with the leaked Tenancy caller
@@ -71,7 +71,7 @@ public static class TenantHeader
                     context.Request.Path);
             }
 
-            var caller = context.SupabaseCaller();
+            var caller = context.GetSupabaseCaller();
             using (Callers.Begin(caller))
             {
                 ITenancyCaller? seat;

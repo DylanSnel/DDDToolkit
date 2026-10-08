@@ -93,7 +93,7 @@ public sealed class SupabaseRequestTests(SupabaseRowLevelSecurityDatabase databa
         {
             using (Callers.Begin(Caller.System))
             {
-                return Results.Text($"{context.SupabaseCaller()}|{callers.Current}");
+                return Results.Text($"{context.GetSupabaseCaller()}|{callers.Current}");
             }
         });
 

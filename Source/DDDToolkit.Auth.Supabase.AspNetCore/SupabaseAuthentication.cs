@@ -96,7 +96,7 @@ public static class SupabaseAuthentication
     /// <see cref="Callers.Begin"/>, which always wins. With
     /// <see cref="CallerServiceCollectionExtensions.RequireExplicitCallers"/>, work outside a request that
     /// began no caller throws <see cref="NoCallerException"/> instead of running as the system.
-    /// <see cref="SupabaseHttpContextExtensions.SupabaseCaller"/> is the request's own caller, whatever was
+    /// <see cref="SupabaseHttpContextExtensions.GetSupabaseCaller"/> is the request's own caller, whatever was
     /// begun around it. Each token that passes has its claims kept exactly as they were signed, so Postgres
     /// sees what PostgREST would have seen. A handler of <c>OnTokenValidated</c> set in
     /// <paramref name="configure"/> still runs, first; a token it fails is not kept.
@@ -262,6 +262,6 @@ internal sealed class HttpSupabaseCallerAccessor(IHttpContextAccessor requests, 
         // then; begin a caller around such work to keep it. A host that requires explicit callers gets
         // nobody here, rather than the system's power by default.
         null => options?.RequireExplicitCallers == true ? throw new NoCallerException() : Caller.System,
-        { } request => request.SupabaseCaller(),
+        { } request => request.GetSupabaseCaller(),
     };
 }

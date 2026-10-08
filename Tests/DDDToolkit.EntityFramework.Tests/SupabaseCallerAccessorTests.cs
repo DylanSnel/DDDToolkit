@@ -43,7 +43,7 @@ public sealed class SupabaseCallerAccessorTests
         requests.HttpContext = new DefaultHttpContext();
 
         strict.GetRequiredService<ICallerAccessor>().Current.Should().BeSameAs(Caller.Anonymous, "a request without a validated token is anon");
-        requests.HttpContext.SupabaseCaller().Should().BeSameAs(Caller.Anonymous);
+        requests.HttpContext.GetSupabaseCaller().Should().BeSameAs(Caller.Anonymous);
 
         using (Callers.BeginNone())
         {

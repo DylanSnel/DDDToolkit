@@ -15,7 +15,7 @@ public static class SupabaseHttpContextExtensions
     /// <code>
     /// app.Use(async (context, next) =>
     /// {
-    ///     using (Callers.Begin(context.SupabaseCaller()))
+    ///     using (Callers.Begin(context.GetSupabaseCaller()))
     ///     {
     ///         await next(context);
     ///     }
@@ -23,7 +23,7 @@ public static class SupabaseHttpContextExtensions
     /// </code>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
-    public static Caller SupabaseCaller(this HttpContext context)
+    public static Caller GetSupabaseCaller(this HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 

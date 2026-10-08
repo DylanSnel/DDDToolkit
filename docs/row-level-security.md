@@ -296,8 +296,8 @@ services.AddModuleIntegrationEvents<ShippingContext>(module => module
 ```
 
 A caller that leaked into a request, begun by middleware that forgot to end it, would win over the
-request's own. `context.SupabaseCaller()` is the request's caller whatever is ambient, so a host can make
-it current at the start of every request: `using (Callers.Begin(context.SupabaseCaller()))`.
+request's own. `context.GetSupabaseCaller()` is the request's caller whatever is ambient, so a host can make
+it current at the start of every request: `using (Callers.Begin(context.GetSupabaseCaller()))`.
 
 ### Token roles
 

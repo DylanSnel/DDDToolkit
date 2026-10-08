@@ -507,7 +507,7 @@ settings travel are the same on any Postgres; see
 
 With `builder.Services.RequireExplicitCallers()`, work outside a request that never said who it runs as
 fails instead of running as the system, and the toolkit's own background work says who it runs as; see
-[Fail-closed callers](row-level-security.md#fail-closed-callers). `context.SupabaseCaller()` is a request's
+[Fail-closed callers](row-level-security.md#fail-closed-callers). `context.GetSupabaseCaller()` is a request's
 own caller, the token's user or `anon`, whatever caller is ambient. Connect through the
 session pooler on port 5432, or directly: the transaction pooler on port 6543 hands each transaction
 whichever server connection is free, and is refused unless the settings travel per transaction, as
