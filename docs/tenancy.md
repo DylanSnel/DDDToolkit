@@ -303,15 +303,29 @@ role a seat adds names no pack, or is an exact copy of one, remembering exactly 
 
 Tenancy becomes a module of your application, like any other. In the order you would do it:
 
-1. **Get your classes and ids.** The shortest start is one line, `[assembly: GenerateTenancyClasses]`: the
+1. **Add the packages**, at the version of every other `Temp.DDDToolkit.*` package; they are prereleases for
+   now, so with `--prerelease`. The model goes in the project that declares your classes, the domain project,
+   and in the projects that ask its questions; the Entity Framework package in the project with the context,
+   the infrastructure project; and on Postgres the Postgres package beside it, which the host and the project
+   that exports the migrations then see through their references. The sample's projects reference them so.
+
+   ```bash
+   dotnet add Shop.Tenants.Domain package Temp.DDDToolkit.Supporting.Tenancy --prerelease
+   dotnet add Shop.Tenants.Infrastructure package Temp.DDDToolkit.Supporting.Tenancy.EntityFramework --prerelease
+   dotnet add Shop.Tenants.Infrastructure package Temp.DDDToolkit.Supporting.Tenancy.Postgres --prerelease   # on Postgres
+   ```
+
+   A contracts project that says `[assembly: GenerateTenancyIds]` takes the first package as well
+   ([In a module split by layer](#the-shortest-start-the-switch)).
+2. **Get your classes and ids.** The shortest start is one line, `[assembly: GenerateTenancyClasses]`: the
    generator writes each of the package's classes you leave out, as the package ships it, and its id
    ([The shortest start: the switch](#the-shortest-start-the-switch)). Declare a class yourself where you need
    fields and rules ([How your classes add behaviour](#how-your-classes-add-behaviour)); yours always wins.
-2. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
+3. **Map and register it.** `modelBuilder.AddTenancy(database: Database)` in a plain context of your module,
    a migration of your own, and `services.AddTenancy<TContext>()`, with your catalogue when you have one
    ([Your tenancy module](#your-tenancy-module)); each id makes its own new ones
    ([How a new id is made](#how-a-new-id-is-made)).
-3. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
+4. **Write your catalogue, when you need one.** Each module states its own keys once, on a list it marks with
    `[TenancyPermissions]`, and the host adds every module's with one generated call
    ([A module states its keys once](#a-module-states-its-keys-once)). Your part adds the role
    packs a tenant starts with, keys no module owns, and a mark on every key that manages access
@@ -319,29 +333,29 @@ Tenancy becomes a module of your application, like any other. In the order you w
    starts with Tenancy's own ([The administrators' pack](#the-administrators-pack)); need none of the rest, and
    leave the catalogue out. `SyncRolePacks()` in the host brings a pack you change later to the roles tenants
    already made from it ([Packs after provisioning](#packs-after-provisioning)).
-4. **Say who is calling, per request.** After authentication, `TenantSelection` finds the seat the token's
+5. **Say who is calling, per request.** After authentication, `TenantSelection` finds the seat the token's
    identity has in the tenant the request names, and that seat is the caller for the rest of the request
    ([How the tenant reaches a policy](#how-the-tenant-reaches-a-policy) has the middleware).
-5. **Provision a tenant.** `TenantCommands.ProvisionAsync` makes the tenant, its root unit, its roles from
+6. **Provision a tenant.** `TenantCommands.ProvisionAsync` makes the tenant, its root unit, its roles from
    the packs and its first seat, as [system work](#system-work). [Calling a use case](#calling-a-use-case)
    shows the call, and the class named after your module that every use case is named through, which the
    generator writes for you. A request that asks for a tenant says who may send it, and its handler begins the
    system work itself ([Who may ask, and what the work runs as](#who-may-ask-and-what-the-work-runs-as)).
-6. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity; `UseDDDToolkit` on its context gives it
+7. **Keep your own tables to a tenant.** `ScopeToTenant` on an entity; `UseDDDToolkit` on its context gives it
    Tenancy's save check, which `AddTenancy` brought
    ([Keeping tenants apart](#keeping-tenants-apart-the-filter-and-the-save-check)).
-7. **Ask in your modules.** A module maps the read model and asks where the caller holds a key, inside its
+8. **Ask in your modules.** A module maps the read model and asks where the caller holds a key, inside its
    own query ([Who may do what](#who-may-do-what)). A request says what it requires of its caller, and a
    check holds the caller to it before the handler runs
    ([What a request requires of its caller](#what-a-request-requires-of-its-caller)). A module answers ids,
    and a screen asks the directory what they are called ([Names](#names)).
-8. **Let people manage access.** The package's use cases place seats, give roles and change roles, each
+9. **Let people manage access.** The package's use cases place seats, give roles and change roles, each
    held to [who may give a role](#who-may-give-a-role). Put requests of your own in front of them, each
    declaring what its use case asks first, and routes in front of those.
-9. **Add what you need of the rest**: [invitations](#invitations), role names in a tenant's
-   [language](#languages), [operators](#operators), [who changed a row](#who-changed-a-row) and the
-   [access history](#access-history).
-10. **On Postgres, add the second lock**: row level security under all of it
+10. **Add what you need of the rest**: [invitations](#invitations), role names in a tenant's
+    [language](#languages), [operators](#operators), [who changed a row](#who-changed-a-row) and the
+    [access history](#access-history).
+11. **On Postgres, add the second lock**: row level security under all of it
     ([Setting it up](#setting-it-up)).
 
 The [sample](#who-may-do-what-in-the-sample) is a small application built this way.
