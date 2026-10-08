@@ -919,7 +919,7 @@ over a stub).
 
 | What | Where |
 |---|---|
-| A supporting domain extended by the application | `Tenancy/Modules/Tenants/...Tenants.Domain/Aggregates/`: the unit's own rule, the seat's job title |
+| A supporting domain extended by the application | `Tenancy/Modules/Tenants/...Tenants.Domain/Aggregates/`: the tenant's demonstration flag, the unit's kind and cost centre with its rule, the seat's name and job title with their rules, the invitation's account |
 | The classes the application adds nothing to, written by the generator: Tenancy's switch writes the organization and the role, and the classes the module declares win. The written role is the package's whole, and follows its pack when the host syncs | `...Tenants.Domain/Module.cs`, `[assembly: GenerateTenancyClasses]`; `SourceTreeTests`, `MigrationTests`, `RolePackSyncScenarios` |
 | A second supporting domain beside Tenancy: a resource's members and the roles a customer keeps for them | `Entities/CrewMember.cs` on `[Member]` and `...Projects.Domain/Aggregates/ProjectRoles/ProjectRole.cs` on `[KeptRole]`, the rules in `...Projects.Application/Access/ProjectMembership.cs` with the starter roles in `Catalogue/SampleCatalogue.cs`, `AddProjectMembershipWithTenancy` and `AddProjectMemberAccess` in `...Projects.Infrastructure/ProjectsInfrastructure.cs`; `CrewMembershipScenarios`, `ProjectRoleScenarios` |
 | An entity with entities of its own: crew members, each with dated roles | `...Projects.Domain/Aggregates/Projects/Project.cs`, with `Entities/CrewMember.cs` beside it, the nested `OwnsMany` that `HasMembers` maps in `...Projects.Infrastructure/Persistence/ProjectsContext.cs`; `ProjectCrewTests`, `CrewMembershipScenarios` |

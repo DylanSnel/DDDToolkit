@@ -4,8 +4,9 @@
 // The generator writes the package's classes this module adds nothing to, as the package ships them: the organization
 // and the role, public, in this project's root namespace, Examples.Tenancy.Tenants.Domain, each with the documentation
 // that says it was written and how to declare it yourself. The other four are declared under Aggregates, because each
-// adds something: the tenant whether it is a demonstration, the unit its kind and cost centre, the seat a job title,
-// and the invitation the account it made. A class declared here always wins, and the switch writes no second one.
+// adds something: the tenant whether it is a demonstration, the unit its kind and cost centre, the seat the name it
+// is shown by in its tenant and a job title, and the invitation the account it made. A class declared here always
+// wins, and the switch writes no second one.
 //
 // The role written is the package's whole: each tenant's roles start as copies of the catalogue's packs and are the
 // tenant's own to rename, re-key and archive, and a role made from a pack remembers what the pack gave it, so it
