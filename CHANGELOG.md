@@ -1271,6 +1271,28 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
     drops the invitations' column with the names they suggested. On Postgres, export the access files again: the
     privileges on the invitations name one column less, and those on the seats one less too when you do not keep
     the name.
+- **Tenancy: the directory answers the overview of any seat of the tenant.**
+  `TenancyDirectory.SeatOverviewAsync(seat, ct)` answers, for any seat of the caller's tenant, the `SeatOverview`
+  that `WhoAmIAsync` answers the calling seat: the application's seat, whole, with the tenant, the paths of the
+  units it is placed at, the roles its grants name, every key it holds now with where it reaches, and `AsOf`. Asked
+  about the caller's own seat, it answers what `WhoAmIAsync` answers. It asks nothing beyond what every question of
+  the directory asks, a seat of the tenant or system work in it: who may see another person's access is the
+  application's choice, which the request that sends it states,
+  `TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)` for an administration say, or
+  `TenancyAccess.InTenant()` where the database's read rules are the rule. What comes back is what the caller reads
+  through the store, as the lists read seats: on Postgres the policies give another seat's grants only where the
+  caller may read them, a read rule on the seat class decides which seats it reads, and the roles and keys are those
+  of the grants that were read; on another database, or in a context without row level security, every seat comes
+  with all its grants and keys, and the request's requirement is the only rule. A seat the caller does not read, one
+  of another tenant, one that does not exist or one a read rule leaves out, is refused with
+  `tenancy.seat-not-found`, which does not say which. The keys of an overview, a seat's own included, are now worked
+  out from the grants that were read, by the rule the rights are written by, rather than read from the rights, of
+  which a database that keeps them shows a seat only its own: a seat's own overview holds the same keys as before,
+  in as many statements. The Tenancy sample's `SeatGrants`, which `GET /tenancy/seats/{seatId}/grants` and
+  `seatGrants(seatId:)` at `/admin/graphql` send, selects its rows from it and states its own choice,
+  `tenancy.seats.manage` for the whole tenant; the read it wrote itself, `ITenancyReads.GrantsOfAsync`, is gone, and
+  a seat of another tenant is refused with `tenancy.seat-not-found`, a 404, where it answered no roles. See [Another
+  seat's overview](docs/tenancy.md#another-seats-overview).
 - **Tenancy on Postgres: the database guards a seat's own columns, and leaves the application's to it.** The policy
   on the seats lets a seat change its own row, and a seat that manages seats or grants anywhere in the tenant
   change any seat's row: every save of a seat writes its version, a grant and a placement as much as a status, so
@@ -2410,7 +2432,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `GraphQLSchemaKeyTests` runs the host in Production and downloads both schemas with the key and is refused
   without it, `GraphQLSeatGateScenarios` asks every root field of every schema without a seat, and
   `AdministrationSchemaScenarios` shows maud reading another person's roles there, leo refused, a seat of another
-  tenant having none, the read refusing leo past the mediator too, and `/graphql` refusing the field to everybody.
+  tenant not found (`tenancy.seat-not-found`), the handler reading none of another person's roles as leo past the
+  mediator too, and `/graphql` refusing the field to everybody.
 - **The Tenancy sample writes no alias of Tenancy's use cases.** The Tenants module's application, infrastructure
   and API projects, the host and the sample's tests named `SampleTenancy`, an alias over nine types each of them
   declared again, and the application project `SampleInvitations` besides. They name `TenantsTenancy`, the class
@@ -2547,8 +2570,8 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   done to a seat or a unit is saved, by the question or by a later save in the same unit of work; the units come
   from the new `IStore.ReadOrganizationAsync`, which reads the organization read only. The access rules are the
   ones before: each question's requirement in C#, and on Postgres the policies, which answer another seat's grants
-  only where the caller may read them; elsewhere a listed seat comes with all its grants, so another seat's grants
-  are shown from a question that asks a key, as the sample's `SeatGrants` does. A seat carries its identity, so
+  only where the caller may read them; elsewhere a listed seat comes with all its grants, so the request that shows
+  another seat's grants says who may see them, as the sample's `SeatGrants` does with a key. A seat carries its identity, so
   what leaves is what the application selects. The Tenancy sample's queries select its `SeatListing`, `UnitListing`, `SeatOfMine` with `TenantOfSeat`
   (now a record of the application layer, so the Tenants schema has no record of its own) and
   `SeatOverviewListing`, and its routes and both GraphQL schemas answer as before. See

@@ -81,6 +81,12 @@ public sealed class InMemoryTenancyStore
     /// </summary>
     public HashSet<RoleId> HiddenRoles { get; } = [];
 
+    /// <summary>
+    /// The seats the lists of seats leave out, while the seats' own loads still find them: what a read rule of the
+    /// host's own on its seat class does on Postgres to a caller it does not let read them.
+    /// </summary>
+    public HashSet<SeatId> HiddenSeats { get; } = [];
+
     /// <summary>The calls made since the unit of work began, in order.</summary>
     public IReadOnlyList<string> Calls => _calls;
 
@@ -249,7 +255,7 @@ public sealed class InMemoryTenancyStore
         IReadOnlyList<HostSeat> seats =
         [
             .. _seats.Values
-                .Where(seat => Visible(seat.TenantId) && seat.TenantId == tenant && (only is null || only.Contains(seat.Id)))
+                .Where(seat => Visible(seat.TenantId) && seat.TenantId == tenant && (only is null || only.Contains(seat.Id)) && !HiddenSeats.Contains(seat.Id))
                 .Select(Copies.Of),
         ];
         return Task.FromResult(seats);

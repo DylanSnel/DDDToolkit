@@ -189,10 +189,12 @@ public sealed partial class ShopSeat
   `Roles` its grants name, `Keys`, `AsOf`; `UnitOf(id)` and `RoleOf(id)` look them up). The tenant picker's
   `TenantSelection.SeatsOfAsync<Seat>(caller, ct)` answers `SeatInTenant<Seat>` (the seat, `Slug`,
   `OrganizationName`, `TenantStatus`). A seat carries its identity: select what leaves, and never return the
-  class itself from a route or a GraphQL field. A listed seat carries its placements and grants too, and only
-  Postgres's policies narrow another seat's grants: show those only from a question that asks a key (the sample's
-  `SeatGrants`, `tenancy.seats.manage` for the whole tenant). `RoleOf(id)` is `null` for a role the application's
-  own filter hides.
+  class itself from a route or a GraphQL field. `SeatOverviewAsync(seat, ct)` answers the same `SeatOverview` for
+  any seat of the tenant and asks no key: the request that sends it says who may ask (the sample's `SeatGrants`,
+  `tenancy.seats.manage` for the whole tenant), and the read rules what comes back. A listed seat and an overview
+  carry its placements and grants, and only Postgres's policies narrow another seat's grants, with the keys worked
+  out from the grants read; elsewhere the request is the only rule. A seat the caller does not read is
+  `tenancy.seat-not-found`. `RoleOf(id)` is `null` for a role the application's own filter hides.
 - **A seat has no name in Tenancy.** What a person is shown by is the application's: a field of its seat
   class (set in `ConfigureFirstSeat`, `AddSeatAsync(..., configure:)` and `AcceptAsync(..., configure:)`,
   renamed by a use case of its own), the identity provider's name, or a profile of its own by `Identity`.

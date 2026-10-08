@@ -1567,6 +1567,7 @@ kinds from Tenancy's own seats, roles and units, and answers seats and units as 
 | Question | Answers |
 |---|---|
 | `WhoAmIAsync()` | the calling seat's `SeatOverview`: your seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it is placed at, the roles its grants name, and every key it holds now with the units it reaches |
+| `SeatOverviewAsync(seat)` | the same `SeatOverview` of any seat of the tenant, as the caller reads it: the request that asks says who may ([Another seat's overview](#another-seats-overview)) |
 | `ListSeatsAsync()` | every seat of the tenant the caller reads, your own class, whole, in the order of their ids: by default every seat of the tenant, and on Postgres a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) may narrow that |
 | `ListRolesAsync()` | every role of the tenant, the active ones first, with whether each manages access |
 | `ListUnitsAsync()` | the units the caller is placed under, your own class, whole, each with its path from the root and its depth (`UnitInTree`) |
@@ -1583,12 +1584,12 @@ The lists fill a picker. The three questions by id are for a screen that was ans
 a project names its unit and the seats of its crew by id, and the screen asks what those are called. The
 roles a crew holds are the project's module's own, which it names itself (`GET /project-roles` in the sample).
 
-Whoever works in a tenant reads its names: a seat of it, or system work in it. No key is asked, for a list or
-for a question by id, and a question by id answers any seat, role or unit of the caller's tenant, of the seats
-those the caller reads, which is every seat unless a [read rule of yours](#who-reads-the-seats-a-default-you-may-replace)
-says otherwise. That is
-wider than `ListUnitsAsync`, which lists where the caller is placed: someone on a project's team works at a
-unit they are not placed under, and still reads what that unit is called. An id of another tenant, or of
+Whoever works in a tenant reads its names: a seat of it, or system work in it. No key is asked, for a list, for
+a question by id or for a seat's overview, and a question by id answers any seat, role or unit of the caller's
+tenant, of the seats those the caller reads, which is every seat unless a
+[read rule of yours](#who-reads-the-seats-a-default-you-may-replace) says otherwise. That is wider than
+`ListUnitsAsync`, which lists where the caller is placed: someone on a project's team works at a unit they are not
+placed under, and still reads what that unit is called. An id of another tenant, or of
 nothing, is left out of the answer without a word, so the answer never says which of the two it was. A
 question takes at most `TenancyDirectory.MostIds` ids, 200; more is refused with `tenancy.too-many-ids`, a
 400 whose `Max` argument says how many. A caller that is nobody is refused first, with its own code, such as
@@ -1601,9 +1602,10 @@ saved, by that question or by a save later in the same unit of work. A seat come
 class has it, so what leaves is what you select. On Postgres the policies decide what of a seat is read, as they
 do for every read: another seat's grants come with it only where the caller may read them
 ([Who reads which grants](#who-reads-which-grants)). Only those policies narrow them: on another database, or in a
-context without row level security, a listed seat comes with every placement and grant it has. So show another
-seat's grants only from a question that asks a key, as the sample's `SeatGrants` asks `tenancy.seats.manage` for
-the whole tenant, and select a list's seats into what every member may see.
+context without row level security, a listed seat comes with every placement and grant it has. So where another
+seat's grants are shown, the request that asks says who may see them, as the sample's `SeatGrants` asks
+`tenancy.seats.manage` for the whole tenant ([Another seat's overview](#another-seats-overview)), and a list's
+seats are selected into what every member may see.
 
 ```mermaid
 sequenceDiagram
@@ -1686,16 +1688,16 @@ about it. Three ways, and you may mix them:
 3. **A profile of your own, found by the seat's identity.** A table of yours, one row per person, with whatever
    you show of them, in every tenant; one read of yours for the identities a page shows.
 
-Whichever you choose, Tenancy answers your own seat class, whole: the directory's three questions about seats,
+Whichever you choose, Tenancy answers your own seat class, whole: the directory's four questions about seats,
 and the lookup of a person's own seats in every tenant for a tenant picker, `TenantSelection.SeatsOfAsync<TSeat>(caller)`.
 Each decides which seats the caller is answered and reads them in one statement, so every screen shows what you
 chose with a plain `Select` and no read more. Beside a seat comes only what is not on it: in the overview
-`WhoAmIAsync` answers (`SeatOverview`), the tenant, the path of each unit it is placed at, the roles its grants
-name and the keys it holds; in the picker (`SeatInTenant`), the tenant:
+`WhoAmIAsync` and `SeatOverviewAsync(seat)` answer (`SeatOverview`), the tenant, the path of each unit it is placed
+at, the roles its grants name and the keys it holds; in the picker (`SeatInTenant`), the tenant:
 
 ```mermaid
 flowchart LR
-    Lists["ListSeatsAsync()<br/>SeatsByIdAsync(ids)"] --> InTenant{"works in<br/>the tenant?"}
+    Lists["ListSeatsAsync()<br/>SeatsByIdAsync(ids)<br/>SeatOverviewAsync(seat)"] --> InTenant{"works in<br/>the tenant?"}
     Me["WhoAmIAsync()"] --> IsSeat{"a seat?"}
     Picker["SeatsOfAsync(caller)"] --> Seated{"signed in with<br/>a seated role?"}
     InTenant -- no --> Refused(["refused"])
@@ -1704,15 +1706,20 @@ flowchart LR
     InTenant -- yes --> Read["one statement:<br/>your seats, whole,<br/>tracked by nobody"]
     IsSeat -- yes --> Read
     Seated -- yes --> Read
+    Read -- "an overview's seat,<br/>not read" --> NotFound(["tenancy.seat-not-found"])
     Read --> Whole["your seats, with only<br/>what is not on them"]
     Whole --> Select(["your Select:<br/>the name you chose"])
 ```
+
+The lists leave out a seat the caller does not read, without a word. An overview is about one seat, so
+`SeatOverviewAsync(seat)` refuses a seat the caller does not read with `tenancy.seat-not-found` instead.
 
 Nothing you do to a seat the directory answered is saved, by that question or by a save later in the same unit of
 work. The picker reads across tenants, before one is picked: it answers your seat for the fields you keep on it,
 and where the seat is placed and what it holds are its tenant's, which a database that keeps tenants apart
 leaves out there. Nothing in an overview's record is the caller's own but the question that made it, so it fits
-any seat: the seat, and beside it only what is not on it. `UnitOf(id)` and `RoleOf(id)` give the path of a
+any seat: the seat, and beside it only what is not on it. `SeatOverviewAsync(seat)` answers it for any seat of the
+tenant ([Another seat's overview](#another-seats-overview)). `UnitOf(id)` and `RoleOf(id)` give the path of a
 placement's unit and the role a grant names; `RoleOf` answers `null` for a role a filter of your own on the role
 class hides, as the grant is the seat's all the same.
 
@@ -1800,6 +1807,114 @@ gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its 
 picker's `GET /me/seats` and `seatsOfMine` and the overview's `GET /me` and `overviewOfMine` included: each query
 selects it from the seats the package answered. In the database its
 column rule `NameChangesByTheSeatOrWithTheSeatsKey` holds the name to the rule of `RenameSeat`.
+
+### Another seat's overview
+
+`WhoAmIAsync` answers the calling seat's overview. `SeatOverviewAsync(seat)` answers the same record for any seat
+of the tenant: the seat, whole, with its placements and grants, and beside it the tenant, the path of each unit it
+is placed at, the roles its grants name, every key it holds now with the units it reaches, and the moment that
+holds for. A page about one person, the one an administration opens before it changes someone's roles say, asks
+it and shows that person the way a seat's own page shows the seat. Asked about the caller's own seat, it answers
+what `WhoAmIAsync` answers.
+
+Two rules decide what happens, and neither is the directory's own:
+
+- **Your request decides who may ask.** The directory asks no more of the caller than every question of it asks:
+  a seat of the tenant, or system work in it. Who may see another person's access is your application's choice,
+  so the request that sends the question states it, as a request states it for everything else. The sample's
+  administration lets only a seat that manages seats for the whole tenant read another person's roles,
+  `TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)`. An application that lets the managers of a unit see
+  the people of their units asks `TenancyAccess.InTenant()` and leaves the rest to the read rules.
+- **The read rules decide what comes back.** The seat is read through Tenancy's store, as the caller, the way the
+  lists read seats. On Postgres the policies decide: every member reads a seat and where it is placed (unless a
+  [read rule of yours](#who-reads-the-seats-a-default-you-may-replace) says otherwise), and its grants only where
+  the caller [may read them](#who-reads-which-grants): at the units where it manages grants, seats or units and
+  below them, or all of them for a seat that manages roles for the whole tenant. The roles and the keys are those
+  of the grants that were read.
+
+In the sample's harbor, Rhea manages seats, grants and units at North. Maud administers the tenant from the root
+and holds every key of Tenancy there. Rhea's request is refused at the door, since the sample asks for the seats
+key for the whole tenant. Were it not, the overview of Maud that Rhea reads would hold where Maud is placed and
+none of her grants, so no role and no key: her grant is above North. The overview of Vic, at North Inland, holds
+his grant there. System work in harbor reads every grant of every seat.
+
+```mermaid
+flowchart LR
+    Request["your request:<br/>RequiredAccess"] --> Ask{"may the<br/>caller ask?"}
+    Ask -- no --> Refused(["refused at the door"])
+    Ask -- yes --> Overview["SeatOverviewAsync(seat):<br/>no key of its own"]
+    Overview --> Read{"the seat, read<br/>as the caller"}
+    Read -- "not read" --> NotFound(["tenancy.seat-not-found"])
+    Read -- "Postgres policies" --> Some(["the grants it may read,<br/>and their roles and keys"])
+    Read -- "no policy" --> All(["every grant,<br/>role and key"])
+```
+
+A seat the caller does not read is refused with `tenancy.seat-not-found`, a 404: one of another tenant, one that
+does not exist, or one your read rule on the seat class leaves out, and the refusal does not say which.
+
+**Where no policy applies, your request is the only rule.** On another database, SQLite or SQL Server say, or in
+a context that runs without row level security, every seat comes with all its grants and keys to whoever the
+request lets ask. That is your choice to make, so choose the requirement as the rule you mean: a request that
+asks `TenancyAccess.InTenant()` there shows every member everybody's access.
+
+The keys are worked out from the grants that were read, by the rule the rights are written by: an active seat, an
+active role, a key the catalogue keeps live, a grant that applies at `AsOf`. They are not read from the rights,
+since a database that keeps the rights shows a seat its own alone. So a key is shown where the caller reads the
+grant that gives it, a suspended seat holds none, and a role that a filter of yours on the role class hides still
+gives its keys, as it does to the access questions; `RoleOf` answers `null` for it. The overview reads what
+`WhoAmIAsync` reads, in as many statements, and tracks nothing: what you do to the seat it answers is never saved.
+
+<details>
+<summary>Show the code: the sample's request and handler, and a request that leaves it to the policies</summary>
+
+```csharp
+// The sample's choice: whoever manages seats for the whole tenant reads another person's roles, in every unit.
+public sealed record SeatGrants(SeatId Seat) : IQuery<IReadOnlyList<SeatGrant>>, ITenantsRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage);
+}
+
+public sealed class SeatGrantsHandler(ITenancyReads reads) : IQueryHandler<SeatGrants, IReadOnlyList<SeatGrant>>
+{
+    public async ValueTask<IReadOnlyList<SeatGrant>> Handle(SeatGrants query, CancellationToken cancellationToken)
+    {
+        // The directory, in a scope of this query's own; it refuses a seat the caller does not read.
+        var overview = await reads.AskDirectoryAsync(directory => directory.SeatOverviewAsync(query.Seat, cancellationToken));
+
+        return
+        [
+            .. overview.Seat.Placements.SelectMany(placement => placement.Grants.Select(grant => new SeatGrant(
+                placement.UnitId,
+                overview.UnitOf(placement.UnitId).Path,
+                grant.RoleId,
+                overview.RoleOf(grant.RoleId)?.Name ?? string.Empty,
+                grant.StartsAt,
+                grant.EndsAt,
+                grant.AppliesAt(overview.AsOf)))),
+        ];
+    }
+}
+```
+
+```csharp
+// Another application's choice: every member may ask, and on Postgres the policies decide what each one reads.
+// Elsewhere this shows every member everybody's access.
+public sealed record PersonPage(SeatId Seat) : IQuery<PersonCard>, IShopRequest
+{
+    AccessRequirement IRequireAccess.RequiredAccess => TenancyAccess.InTenant();
+}
+```
+
+```http
+GET /tenancy/seats/c0000000-0000-4000-8000-000000000102/grants
+Authorization: Bearer <maud's token>
+Tenant: harbor
+```
+
+The route sends `SeatGrants` and answers one row per grant of Rhea's: her Area manager role at North. The
+administration's GraphQL schema has the same as `seatGrants(seatId:)`.
+
+</details>
 
 ## Who may give a role
 
@@ -4190,7 +4305,8 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   the tenant from the connection's first message and resolves it once, as tenant selection does per request.
 - **The tenant's administration has a gateway of its own, at `/admin/graphql`.** It offers everything a seat is
   offered at `/graphql`, and another person's roles besides: `seatGrants(seatId:)`, the query
-  `GET /tenancy/seats/{seatId}/grants` sends, which requires `tenancy.seats.manage` for the whole tenant. The class
+  `GET /tenancy/seats/{seatId}/grants` sends, which requires `tenancy.seats.manage` for the whole tenant, the
+  sample's own choice, and selects its rows from the package's `SeatOverviewAsync(seat)`. The class
   of that field, `SeatsAdminQueries`, is marked
   [`[GraphQLSchema("admin", OperationType.Query)]`](graphql.md#a-field-for-one-schema-only), so the module's
   generated bindings, `AddTenantsGraphQlRuntimeBindings()`, register it in the schema of that name and in no other;
@@ -4200,10 +4316,10 @@ internal sealed class CrewFieldKeys : IFieldKeys<CrewOverview>
   Inspections ([Several gateways](graphql.md#several-gateways), `SampleGateways`), bounds both alike, and maps the
   administration's at an endpoint that requires a seat, as the routes inside a tenant do. Maud, an access admin,
   reads Rhea's roles there; Leo, who holds no key, is refused with `tenancy.not-permitted`; a seat of another tenant
-  has no roles there; and `/graphql` refuses the field to everybody when it reads the document. The schema decides
-  who is offered a field, the request who may read what it answers. The operators' fields are offered at both
-  endpoints, as everything of the three modules is; since `/admin/graphql` admits seats only, there they always
-  answer `tenancy.operators-only`.
+  is not found there, `tenancy.seat-not-found`; and `/graphql` refuses the field to everybody when it reads the
+  document. The schema decides who is offered a field, the request who may read what it answers. The operators'
+  fields are offered at both endpoints, as everything of the three modules is; since `/admin/graphql` admits seats
+  only, there they always answer `tenancy.operators-only`.
 - **A tool reads the schemas with a key.** GraphQL Codegen and the Relay compiler have no token. In Development,
   where the sample runs on a developer's machine, they read either gateway's schema without one; elsewhere with the
   key the host reads at `GraphQL:SchemaKey`, from the environment variable `GraphQL__SchemaKey` or its secret store,
@@ -4446,6 +4562,7 @@ tables say where, group by group. Where one of the three is not there, the row s
 | Whoever manages a crew gives any of the tenant's project roles in use, to anyone on it, themselves included, without holding the role's keys | **Code:** [`GiveCrewRole.cs`](../Examples/Tenancy/Modules/Projects/Examples.Tenancy.Projects.Application/Crew/Commands/GiveCrewRole.cs)<br/>**Try it:** leo gives vic the surveyor's role, in the `.http` file. Preset `crew-role-without-crew-management`<br/>**Test:** `CrewRoleScenarios` |
 | A role of the organization is given by whoever manages grants where the seat is placed. A role that manages access is given only by a seat that holds its keys that do, there and for at least as long, and never to itself | **Code:** [`TenancyUseCases.Gate.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/TenancyUseCases.Gate.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as hana. Presets `give-a-role-that-manages-access`, `appoint-yourself` and `appoint-yourself-holding-its-key`<br/>**Test:** `PeopleOfficeScenarios`, `SeatCommandsTests` |
 | A seat's status and a unit's move are held to the same rule as giving and taking a role | **Code:** [`TenancyUseCases.Seats.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Seats/TenancyUseCases.Seats.cs), [`TenancyUseCases.Organization.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Organizations/TenancyUseCases.Organization.cs)<br/>**Try it:** Nothing in the demonstration shows it: whoever manages seats or units for the whole tenant there holds every key that manages access<br/>**Test:** `SeatCommandsTests`, `OrganizationCommandsTests`, `ContainmentAndLastAdminScenarios` |
+| Another seat's overview asks no key of its own: the request that asks it says who may, and the read rules what comes back. The sample's administration asks `tenancy.seats.manage` for the whole tenant, its own choice, and on Postgres the policies give a caller another seat's grants only where it may read them | **Code:** [`TenancyUseCases.Directory.cs`](../Source/DDDToolkit.Supporting.Tenancy/UseCases/Directory/TenancyUseCases.Directory.cs), [`SeatGrants.cs`](../Examples/Tenancy/Modules/Tenants/Examples.Tenancy.Tenants.Application/Seats/Queries/SeatGrants.cs)<br/>**Try it:** maud's `GET /tenancy/seats/{seatId}/grants` for juno, and maud's and leo's `seatGrants` at `/admin/graphql`, in the `.http` file<br/>**Test:** `DirectoryTests`, in Tenancy's tests and on Postgres, `ReadRulesTests`, `AdministrationSchemaScenarios` |
 | Containment is a setting of the catalogue, on unless the application turns it off, and the sample keeps it on: the database and the use cases follow the same setting, and system work gives what a handler of the application's own decided | **Code:** [`ApplicationCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/ApplicationCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Nothing in the demonstration turns it off; every refusal of `tenancy.grant-exceeds-own` and `tenancy.self-appointment` there is containment<br/>**Test:** `ContainmentTests`, in Tenancy's tests and on Postgres, `StartUpCheckTests`, `ApplicationRuleScenarios` |
 | The database knows which keys manage access: its functions are written from the catalogue the host runs with | **Code:** [`TenancyRowAccessContribution.cs`](../Source/DDDToolkit.Supporting.Tenancy.Postgres/Policies/TenancyRowAccessContribution.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs), which marks the catalogue `[TenancyCatalogue]`, `Examples/Tenancy/supabase/migrations/*_access.tenants.ddd.sql`<br/>**Try it:** Start the sample: the host starts only when the database and the catalogue agree ([On Postgres](../Examples/README.md#on-postgres))<br/>**Test:** `ContributionTests`, `StartupTests`, `SampleOnPostgresTests` |
 | An administrators' pack may list its keys, for administrators who run access and do none of the work | **Code:** [`TenancyCatalogue.cs`](../Source/DDDToolkit.Supporting.Tenancy/Catalogue/TenancyCatalogue.cs), [`SampleCatalogue.cs`](../Examples/Tenancy/Examples.Tenancy.Catalogue/SampleCatalogue.cs)<br/>**Try it:** Sign in as maud. Preset `rename-as-access-admin`<br/>**Test:** `CatalogueTests`, `AccessAdminScenarios` |
@@ -5522,7 +5639,9 @@ A fourth, `tenancy.roles.manage`, reads them all when it is held for the whole t
 The use cases need nothing more. Tenancy's store loads a seat with the grants its caller may read, and every
 command acts on grants it may read: one that gives, takes away or withdraws at a unit asks its key at that unit,
 and one that changes a seat's status, which reaches every grant of the seat, asks `tenancy.seats.manage` for the
-whole tenant, as does the administration's overview of another person's roles in the sample. The seats key at a
+whole tenant, as does the administration's overview of another person's roles in the sample. The directory's
+overview of another seat, `SeatOverviewAsync`, reads through this policy too: its grants, roles and keys are those
+this table gives the caller ([Another seat's overview](#another-seats-overview)). The seats key at a
 unit reads the grants there too, because withdrawing a placement takes its grants with it: the use case reads
 them to ask for `tenancy.grants.manage` as well, and the policy on the placements reads them, as the caller, to
 keep a placement that still has any. Were they hidden from it, a seats manager without the grants key could

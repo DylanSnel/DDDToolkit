@@ -7,7 +7,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// beside it. The seat carries its id, its identity, its status, where it is placed with the roles granted there
     /// for which period, and every field the application added; Tenancy adds the tenant it is in, the path of each
     /// unit it is placed at, the roles its grants name, and every key it holds at <see cref="AsOf"/> with where that
-    /// key reaches (<see cref="TenancyDirectory.WhoAmIAsync"/>).
+    /// key reaches. <see cref="TenancyDirectory.WhoAmIAsync"/> answers it for the calling seat, and
+    /// <see cref="TenancyDirectory.SeatOverviewAsync"/> for any seat of the tenant.
     /// <para>
     /// Nothing of it is the seat a second time, so an application shows the seat by what it chose, a name its seat
     /// class keeps or a profile found by the identity, from the seat itself, and puts its placements beside the paths
@@ -17,17 +18,22 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// <para>
     /// The seat was read for the overview and is tracked by nobody: nothing done to it is saved, by this question or
     /// by a save later in the same unit of work. Nothing in the record is the caller's own but the question that made
-    /// it, so it shows any seat the same way.
+    /// it, so it shows any seat the same way. What it holds of a seat is what the caller reads: where a database's
+    /// policies give the caller only some of another seat's grants, as Tenancy's do on Postgres, the seat comes with
+    /// those, and the roles and keys are those that they name and give.
     /// </para>
     /// </summary>
     /// <param name="Tenant">The tenant the seat is in.</param>
-    /// <param name="Seat">The seat, the application's own class, with its placements and their grants.</param>
+    /// <param name="Seat">The seat, the application's own class, with its placements and the grants the caller reads.</param>
     /// <param name="Units">Each unit the seat is placed at, once, by its path from the root.</param>
     /// <param name="Roles">
     /// Each role the seat's grants name, once, by name, whether or not the grant applies now; a role the store does
     /// not answer, one a filter of the application's own hides, is left out rather than made up.
     /// </param>
-    /// <param name="Keys">Every key the seat holds at <paramref name="AsOf"/>, where it is granted and every unit it reaches.</param>
+    /// <param name="Keys">
+    /// Every key the seat holds at <paramref name="AsOf"/> from those grants, where it is granted and every unit it
+    /// reaches: none while the seat is not active.
+    /// </param>
     /// <param name="AsOf">
     /// The moment the overview holds for: the keys are those held then, and a grant of the seat applies then when
     /// <c>grant.AppliesAt(AsOf)</c>.

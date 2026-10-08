@@ -2,6 +2,7 @@ using DDDToolkit.Abstractions.Access;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Access;
 using DDDToolkit.EntityFramework.Postgres;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy.Catalogue;
 using DDDToolkit.Supporting.Tenancy.TestHost.Domain;
 using Microsoft.Extensions.DependencyInjection;
@@ -121,6 +122,18 @@ public sealed class ReadRulesTests(TenancyPostgres postgres)
                     .Seat.Should().Be(seat);
             }
         }
+
+        // The directory's overview of a seat reads the seat as the caller, so the rule decides it as it decides the
+        // lists: Oli reads only himself, and Ada's overview is refused as a seat of another tenant is, while his own
+        // still answers. Seth manages seats at North, so he reads every seat, and gets Ada's with where she is placed
+        // and none of her grants, which are at the root, above where he manages.
+        await FluentActions.Awaiting(() => services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Ada.Seat, Cancellation)))
+            .Should().ThrowAsync<RefusalException>().Where(refusal => refusal.Code == TenancyRefusals.SeatNotFound);
+        (await services.BySeat(Oli.Identity, Harbor, Oli.Seat, scoped => scoped.Directory().SeatOverviewAsync(Oli.Seat, Cancellation))).Seat.Id.Should().Be(Oli.Seat);
+        var ada = await services.BySeat(Seth.Identity, Harbor, Seth.Seat, scoped => scoped.Directory().SeatOverviewAsync(Ada.Seat, Cancellation));
+        (ada.Seat.Id, ada.Units.Select(unit => unit.Path).Single()).Should().Be((Ada.Seat, "Harbor"));
+        ada.Seat.Placements.SelectMany(placement => placement.Grants).Should().BeEmpty();
+        ada.Keys.Should().BeEmpty();
 
         // And every command of the use cases runs as it did: none of them loads a seat its caller no longer reads.
         await EveryUseCase.RunAsync(services, Cancellation);

@@ -25,7 +25,10 @@ namespace Examples.Tenancy.Tenants.Api.Seats.GraphQL;
 [GraphQLSchema(TenantsGraphQL.AdministrationSchemaName, OperationType.Query)]
 internal static class SeatsAdminQueries
 {
-    /// <summary>The roles a seat of the tenant holds, where and for which period.</summary>
+    /// <summary>
+    /// The roles a seat of the tenant holds, where and for which period, from the package's overview of that seat. A
+    /// seat of another tenant, or of nobody, is an error with the code <c>tenancy.seat-not-found</c>.
+    /// </summary>
     public static async Task<IReadOnlyList<SeatGrant>> GetSeatGrantsAsync(SeatId seatId, [Service] ISender sender, CancellationToken cancellationToken)
         => await sender.Send(new SeatGrants(seatId), cancellationToken);
 }

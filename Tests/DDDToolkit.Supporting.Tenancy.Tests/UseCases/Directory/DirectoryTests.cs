@@ -4,7 +4,8 @@ namespace DDDToolkit.Supporting.Tenancy.Tests;
 
 /// <summary>
 /// The directory tells a seat who it is and what it may do where, with every unit named by its path from the
-/// root, lists the tenant's seats, roles and the units the caller reads, and answers what seats, roles and units
+/// root, and the same of any seat of the tenant to whoever works in it, the request that asks deciding who may;
+/// lists the tenant's seats, roles and the units the caller reads, and answers what seats, roles and units
 /// are called, by id, to whoever works in the tenant. Seats and units come as the host's own classes, whole and
 /// tracked by nobody, with only what is not on them beside them.
 /// </summary>
@@ -112,6 +113,7 @@ public class DirectoryTests
         await harness.As(bert, async h =>
         {
             (await h.Directory.WhoAmIAsync(default)).Seat.Rename("changed by the overview");
+            (await h.Directory.SeatOverviewAsync(harness.Administrator, default)).Seat.Rename("changed by another seat's overview");
             foreach (var seat in await h.Directory.ListSeatsAsync(default))
             {
                 seat.Rename("changed by the list");
@@ -151,6 +153,115 @@ public class DirectoryTests
             "who am I answers every caller that is not a seat alike");
         await Refused.WithCodeAsync(TenancyRefusals.NotSeated,
             () => harness.Run(HostCaller.Nobody(TenancyRefusals.NotSeated), h => h.Directory.ListSeatsAsync(default)));
+    }
+
+    [Fact]
+    public async Task Any_seats_overview_is_the_one_WhoAmI_answers_that_seat()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        await harness.Place(bert, harness.Harbor.South);
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack, until: Now.AddDays(7));
+        var cy = await harness.SeatAt("Cy", harness.Harbor.South);
+
+        var own = await harness.As(bert, h => h.Directory.WhoAmIAsync(default));
+        var asked = await harness.As(bert, h => h.Directory.SeatOverviewAsync(bert, default));
+        var byCy = await harness.As(cy, h => h.Directory.SeatOverviewAsync(bert, default));
+        var bySystem = await harness.BySystemWork(h => h.Directory.SeatOverviewAsync(bert, default));
+
+        foreach (var overview in new[] { asked, byCy, bySystem })
+        {
+            overview.Tenant.Should().Be(own.Tenant);
+            (overview.Seat.Id, overview.Seat.DisplayName, overview.Seat.Identity).Should().Be((bert, "Bert", own.Seat.Identity), "the host's own seat, whole");
+            overview.Units.Should().Equal(own.Units);
+            overview.Roles.Should().BeEquivalentTo(own.Roles, options => options.WithStrictOrdering());
+            overview.Keys.Should().BeEquivalentTo(own.Keys, options => options.WithStrictOrdering());
+            overview.AsOf.Should().Be(own.AsOf);
+            overview.Seat.Placements.SelectMany(placement => placement.Grants).Should().HaveCount(2);
+        }
+
+        // Cy holds no key at all: the directory asks none, so who may ask about another seat is the request's to say,
+        // and where no policy narrows the read, as here, the overview is the seat's whole.
+        byCy.Keys.Select(key => key.Key).Should().Contain(TenancyKeys.SeatsManage);
+        byCy.RoleOf(harness.RoleFromPack(HostCatalogue.WatcherPack))!.Name.Should().Be("Watcher");
+        byCy.UnitOf(harness.Harbor.South).Path.Should().Be("Harbor Works / South");
+    }
+
+    [Fact]
+    public async Task A_seat_the_caller_does_not_read_is_not_found_and_a_caller_without_a_seat_is_refused_first()
+    {
+        var harness = Harness.OfHarbor();
+        var orchard = harness.Seed(2, "orchard");
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North);
+
+        // A seat of another tenant and no seat at all are refused alike, after the one read that did not find them.
+        await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => harness.As(bert, h => h.Directory.SeatOverviewAsync(orchard.Administrator.Id, default)));
+        harness.Store.Calls.Should().Equal(["ListSeatsAsync"], "the seat is read first, and nothing else once it is not found");
+        await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => harness.As(bert, h => h.Directory.SeatOverviewAsync(SeatId.CreateSequential(), default)));
+        await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => harness.BySystemWork(h => h.Directory.SeatOverviewAsync(orchard.Administrator.Id, default)));
+
+        // Nobody is refused with its own code before anything is read, and system work outside a tenant has no tenant to read.
+        foreach (var code in new[] { TenancyRefusals.NotSeated, TenancyRefusals.SeatSuspended, TenancyRefusals.TenantRequired, TenancyRefusals.TenantInactive })
+        {
+            await Refused.WithCodeAsync(code, () => harness.Run(HostCaller.Nobody(code), h => h.Directory.SeatOverviewAsync(bert, default)));
+            harness.Store.Calls.Should().BeEmpty("a refused caller reads nothing");
+        }
+
+        await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => h.Directory.SeatOverviewAsync(bert, default))).Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task An_overviews_keys_are_those_the_grants_it_read_give_and_none_of_a_seat_that_is_not_active()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        await harness.Place(bert, harness.Harbor.South);
+        await harness.Grant(bert, harness.Harbor.South, HostCatalogue.WatcherPack);
+
+        // A database that keeps the rights shows a seat only its own: the keys come from the grants, not from those rows.
+        harness.Store.KeepsOtherSeatsRights = true;
+        var byAdministrator = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
+        byAdministrator.Keys.Select(key => key.Key).Should().Equal(
+            TenancyKeys.GrantsManage, TenancyKeys.SeatsManage, TenancyKeys.UnitsManage,
+            HostCatalogue.WidgetChange, HostCatalogue.WidgetCreate, HostCatalogue.WidgetRead);
+        byAdministrator.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
+
+        // A filter of the host's own hides the Watcher's name, and not what its grant gives, as the rights the
+        // questions decide by still hold it.
+        harness.Store.HiddenRoles.Add(harness.RoleFromPack(HostCatalogue.WatcherPack));
+        var hidden = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
+        hidden.Roles.Select(role => role.Name).Should().Equal("Supervisor");
+        hidden.Keys.Single(key => key.Key == HostCatalogue.WidgetRead).GrantedAt.Select(unit => unit.Id).Should().Equal(harness.Harbor.North, harness.Harbor.South);
+        harness.Store.SavedRights.Where(right => right.SeatId == bert && right.UnitId == harness.Harbor.South).Select(right => right.Key).Should().Equal(HostCatalogue.WidgetRead);
+
+        // A suspended seat keeps its placements and grants, and holds nothing while it is suspended.
+        await harness.BySystemWork(h => h.Seats.SuspendAsync(bert, default));
+        var suspended = await harness.As(harness.Administrator, h => h.Directory.SeatOverviewAsync(bert, default));
+        suspended.Seat.Status.Should().Be(SeatStatus.Suspended);
+        suspended.Seat.Placements.SelectMany(placement => placement.Grants).Should().HaveCount(2);
+        suspended.Keys.Should().BeEmpty("a seat that is not active holds no key, as it has no rights");
+    }
+
+    [Fact]
+    public async Task An_overview_of_a_seat_a_read_rule_leaves_out_is_refused_as_one_of_another_tenant_is()
+    {
+        var harness = Harness.OfHarbor();
+        var bert = await harness.SeatAt("Bert", harness.Harbor.North, HostCatalogue.SupervisorPack);
+        var cy = await harness.SeatAt("Cy", harness.Harbor.South);
+
+        // A read rule of the host's own on its seat class leaves Bert out of what the caller reads: the lists leave
+        // him out without a word, and his overview is refused with the code a seat of another tenant gets, so the
+        // answer does not say which it was. The rule decides which seats; the directory adds no rule of its own.
+        harness.Store.HiddenSeats.Add(bert);
+        await harness.As(cy, async h =>
+        {
+            (await h.Directory.ListSeatsAsync(default)).Select(seat => seat.Id).Should().NotContain(bert);
+            (await h.Directory.SeatsByIdAsync([bert, harness.Administrator], default)).Select(seat => seat.Id).Should().Equal(harness.Administrator);
+            (await h.Directory.SeatOverviewAsync(harness.Administrator, default)).Seat.Id.Should().Be(harness.Administrator, "a seat the rule lets the caller read is answered");
+        });
+
+        await Refused.WithCodeAsync(TenancyRefusals.SeatNotFound, () => harness.As(cy, h => h.Directory.SeatOverviewAsync(bert, default)));
+        harness.Store.Calls.Should().Equal(["ListSeatsAsync"], "the seat is read first, and nothing else once it is not read");
     }
 
     [Fact]
@@ -200,7 +311,7 @@ public class DirectoryTests
     }
 
     [Fact]
-    public async Task WhoAmI_shows_no_key_retired_since_its_rights_were_written()
+    public async Task An_overview_shows_no_key_retired_since_the_rights_were_written()
     {
         var gauge = new Permission("gauges.read", "Gauges", "Read gauges");
         var harness = Harness.OfHarbor(New.Catalogue(gauge));
@@ -208,10 +319,12 @@ public class DirectoryTests
 
         var before = await harness.As(harness.Administrator, h => h.Directory.WhoAmIAsync(default));
         var after = await harness.As(harness.Administrator, h => new HostTenancy.TenancyDirectory(h.Store, retired, h.Clock).WhoAmIAsync(default));
+        var asked = await harness.BySystemWork(h => new HostTenancy.TenancyDirectory(h.Store, retired, h.Clock).SeatOverviewAsync(harness.Administrator, default));
 
         before.Keys.Should().Contain(key => key.Key == "gauges.read");
         harness.Store.SavedRights.Should().Contain(right => right.Key == "gauges.read", "the rows are still there");
         after.Keys.Select(key => key.Key).Should().Equal(retired.LiveKeys, "a retired key holds nowhere");
+        asked.Keys.Select(key => key.Key).Should().Equal(retired.LiveKeys, "nor in another seat's overview");
     }
 
     [Fact]

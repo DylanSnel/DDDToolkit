@@ -283,6 +283,13 @@ public sealed class UseCaseTests : IDisposable
         overview.Keys.Single(reach => reach.Key == TenancyKeys.UnitsManage).Reaches.Select(unit => unit.Path)
             .Should().Equal("Harbor / North", "Harbor / North / Coast");
 
+        // Lin holds no role, and the directory asks none: with no policy on this database, Grace's overview comes to
+        // him whole, the same as her own, so who may ask is the request's to say.
+        var asked = await _services.BySeat(_harbor.Tenant, _lin, services => services.Directory().SeatOverviewAsync(_grace, TestContext.Current.CancellationToken));
+        (asked.Seat.Id, asked.Seat.DisplayName).Should().Be((_grace, "Grace"));
+        asked.Keys.Should().BeEquivalentTo(overview.Keys, options => options.WithStrictOrdering());
+        asked.Roles.Should().BeEquivalentTo(overview.Roles, options => options.WithStrictOrdering());
+
         (await BySystem(services => services.Directory().ListSeatsAsync(TestContext.Current.CancellationToken))).Select(seat => seat.DisplayName)
             .Should().BeEquivalentTo(["Ada", "Grace", "Lin"]);
         (await BySystem(services => services.Directory().ListRolesAsync(TestContext.Current.CancellationToken))).Select(role => role.FromPack)
