@@ -21,9 +21,9 @@ flowchart LR
 Each package carries its generator, so referencing it is all there is to it:
 
 ```bash
-dotnet add package Temp.DDDToolkit                   # base types and the core generator
-dotnet add package Temp.DDDToolkit.EntityFramework   # its generator: the mapping
-dotnet add package Temp.DDDToolkit.HotChocolate      # its generator: the GraphQL bindings
+dotnet add package Temp.DDDToolkit --prerelease                   # base types and the core generator
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease   # its generator: the mapping
+dotnet add package Temp.DDDToolkit.HotChocolate --prerelease      # its generator: the GraphQL bindings
 ```
 
 The registration methods the generators write are named after the module the project declares. This

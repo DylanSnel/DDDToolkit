@@ -14,13 +14,17 @@ you can go and look at the rest of it.
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit
+dotnet add package Temp.DDDToolkit --prerelease
 ```
 
 For now 3.x is published under `Temp.` package ids; `DDDToolkit` on nuget.org is still 2.0.22,
 which these pages do not describe. The namespaces are `DDDToolkit` either way. See
-[Packages](../README.md#packages). The supporting domains' packages, `Temp.DDDToolkit.Supporting.*`, are
-only published as prereleases for now, so `dotnet add package` needs `--prerelease` or a `--version` for them.
+[Packages](../README.md#packages).
+
+These pages describe 3.2.0, which is in preview: 3.2.0-preview.4 as they are written. Until 3.2.0 is
+released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with `--version 3.2.0-preview.4`,
+and keep them all at the same version. A package of this release next to 3.1.0 of another fails restore with
+NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
 
 `DDDToolkit` brings the base types and the core generators. That is all the first steps need. Each
 integration comes with a package of its own, added in the step that uses it: Entity Framework when the
@@ -281,7 +285,7 @@ Nothing so far needs a database, and neither does testing it. `DDDToolkit.Testin
 aggregate and asserts on the domain events it raised:
 
 ```bash
-dotnet add package Temp.DDDToolkit.Testing
+dotnet add package Temp.DDDToolkit.Testing --prerelease
 ```
 
 ```csharp
@@ -316,7 +320,7 @@ See [Testing](testing.md).
 ## Store it with Entity Framework
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
 ```
 
 A project whose provider asks for an older Entity Framework than one of its tools brings, such as

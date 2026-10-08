@@ -183,7 +183,7 @@ also write it yourself.
 [Mediator](https://github.com/martinothamar/Mediator):
 
 ```bash
-dotnet add package Temp.DDDToolkit.Mediator
+dotnet add package Temp.DDDToolkit.Mediator --prerelease
 ```
 
 ```csharp

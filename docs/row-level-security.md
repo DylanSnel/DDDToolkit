@@ -14,8 +14,8 @@ has the same thing with Supabase's roles and `auth` functions, and its build wri
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework.Postgres
-dotnet add package Temp.DDDToolkit.EntityFramework            # the toolkit's own, which UseDDDToolkit is
+dotnet add package Temp.DDDToolkit.EntityFramework.Postgres --prerelease
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease            # the toolkit's own, which UseDDDToolkit is
 ```
 
 The package works on its own, for any context, and with the rest of the toolkit. The examples here use the

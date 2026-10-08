@@ -25,7 +25,7 @@ events have to leave the process, the outbox delivers to a sink you implement; s
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease
 ```
 
 The package brings its own source generator, so referencing it is all the configuration there is. It
@@ -72,7 +72,7 @@ The argument to `AddDDDToolkitEntityFramework` says how events are delivered. Ha
 package, besides Mediator itself:
 
 ```bash
-dotnet add package Temp.DDDToolkit.Mediator
+dotnet add package Temp.DDDToolkit.Mediator --prerelease
 ```
 
 ```csharp

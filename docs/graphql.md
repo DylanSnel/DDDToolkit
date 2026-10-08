@@ -17,7 +17,7 @@ generates.
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.HotChocolate
+dotnet add package Temp.DDDToolkit.HotChocolate --prerelease
 ```
 
 The package brings its own source generator, so referencing it is the whole of the build-time setup.
@@ -1246,7 +1246,7 @@ Fusion gateway inside the application composes them into one schema and answers 
 them directly, in memory, with no HTTP.
 
 ```bash
-dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory
+dotnet add package Temp.DDDToolkit.HotChocolate.Fusion.InMemory --prerelease
 ```
 
 **It needs HotChocolate Fusion 16.6.6 or later**, the version `DDDToolkit.HotChocolate` asks for too. The

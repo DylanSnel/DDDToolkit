@@ -8,7 +8,7 @@ so you keep writing migrations with `dotnet ef migrations add` and Supabase appl
 ## Install
 
 ```bash
-dotnet add package Temp.DDDToolkit.EntityFramework.Supabase
+dotnet add package Temp.DDDToolkit.EntityFramework.Supabase --prerelease
 ```
 
 It depends on Entity Framework's relational layer and the dependency injection abstractions, and brings
@@ -432,8 +432,8 @@ has all of it. What is Supabase's is the token, the roles and `auth.uid()`, and 
 is about.
 
 ```bash
-dotnet add package Temp.DDDToolkit.Auth.Supabase.AspNetCore       # an ASP.NET Core application
-dotnet add package Temp.DDDToolkit.Auth.Supabase.AzureFunctions   # Azure Functions on the isolated worker
+dotnet add package Temp.DDDToolkit.Auth.Supabase.AspNetCore --prerelease       # an ASP.NET Core application
+dotnet add package Temp.DDDToolkit.Auth.Supabase.AzureFunctions --prerelease   # Azure Functions on the isolated worker
 ```
 
 Both bring `DDDToolkit.Auth.Supabase`, which validates Supabase Auth's tokens without a web framework. One

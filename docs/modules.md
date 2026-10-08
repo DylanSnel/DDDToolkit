@@ -829,8 +829,9 @@ flowchart LR
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.1.0" />
-    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.1.0" PrivateAssets="all" />
+    <!-- the version of every other Temp.DDDToolkit.* package: the attribute, the property and the step are 3.2.0's -->
+    <PackageReference Include="Temp.DDDToolkit.Abstractions" Version="3.2.0-preview.4" />
+    <PackageReference Include="Temp.DDDToolkit.Analyzers" Version="3.2.0-preview.4" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
