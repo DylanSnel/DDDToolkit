@@ -73,7 +73,8 @@ public class FollowPacksTests
         await Refused.WithCodeAsync(ToolkitRefusals.SystemOnly, () => harness.As(harness.Administrator, h => Roles(h, Later()).FollowPacksAsync(default)));
         (await FluentActions.Awaiting(() => harness.Run(HostCaller.System, h => Roles(h, Later()).FollowPacksAsync(default)))
             .Should().ThrowAsync<InvalidOperationException>("system work outside any tenant only provisions"))
-            .WithMessage("A tenant's roles are made to follow their packs by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it.");
+            .WithMessage("A tenant's roles are made to follow their packs by system work in that tenant. Begin TenancyUseCases.BeginSystemIn(tenant) for it, "
+                + "or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant) in a project that sees only the ids (TenancyUseCases is the class your use cases are named through).");
         harness.Store.Role(harness.RoleFromPack(HostCatalogue.WatcherPack)).Keys.Should().Equal(HostCatalogue.WidgetRead);
     }
 

@@ -305,7 +305,7 @@ internal sealed class TenancyQuestions<TTenantId, TSeatId, TUnitId, TRoleId>(
         => caller.Kind == TenancyCallerKind.System
             ? throw new InvalidOperationException(
                 "System work outside any tenant asks Tenancy nothing: it holds nothing in any tenant. "
-                + "Begin TenancyWork.BeginSystemIn(tenant) for work inside one.")
+                + SystemWorkAdvice.BeginInATenant<TTenantId, TSeatId>("for work inside one"))
             : caller.Kind;
 
     /// <summary>

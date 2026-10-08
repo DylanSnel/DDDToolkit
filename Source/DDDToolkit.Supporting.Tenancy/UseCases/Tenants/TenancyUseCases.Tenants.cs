@@ -11,8 +11,9 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
     /// and name, and suspending, reactivating or closing it.
     /// <para>
     /// Provisioning is the one thing system work outside any tenant does. Suspending, reactivating and closing
-    /// are system work inside the tenant, and act on that tenant: an operator begins
-    /// <c>TenancyWork.BeginSystemIn(tenant)</c> first, so acting on another tenant cannot be expressed.
+    /// are system work inside the tenant, and act on that tenant: whoever carries them out begins
+    /// <c>TenancyUseCases.BeginSystemIn(tenant)</c> first, or <c>TenancyUseCases.BeginOperatorIn(tenant, identity)</c> for an
+    /// operator, so acting on another tenant cannot be expressed.
     /// </para>
     /// </summary>
     /// <param name="store">Where the tenant is loaded and saved.</param>

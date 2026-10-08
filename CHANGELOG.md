@@ -3112,6 +3112,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
 
 ### Fixed
 
+- **Tenancy's messages about system work name a call that compiles.** System work asked about outside any tenant,
+  or a tenant provisioned from inside one, told you to begin `TenancyWork.BeginSystemIn(tenant)` or
+  `TenancyWork.BeginSystem()`, which do not compile: C# infers no id that is not an argument. They now name
+  `TenancyUseCases.BeginSystemIn(tenant)` and `TenancyUseCases.BeginSystem()`, and for a project that sees only
+  your ids the generic call with your own id types written out, such as
+  `TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)`.
+
 - **Membership no longer has Entity Framework warn of a limit without an order.** Finding the role made from a
   starter role, as opening a resource with an owner does, read at most two rows in no order, which Entity
   Framework logs as a warning the first time a process compiles the query: the Tenancy sample's seeding did,

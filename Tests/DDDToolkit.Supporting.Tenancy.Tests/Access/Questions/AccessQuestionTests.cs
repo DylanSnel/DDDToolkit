@@ -271,13 +271,15 @@ public class AccessQuestionTests
 
         foreach (var question in questions)
         {
-            question.Should().Throw<InvalidOperationException>().WithMessage("*BeginSystemIn*");
+            question.Should().Throw<InvalidOperationException>().WithMessage("*Begin TenancyUseCases.BeginSystemIn(tenant) for work inside one, or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant)*");
         }
 
         using (TenancyCallers.Begin(system))
         {
             FluentActions.Invoking(() => new TenancyAnswers<TenantId, SeatId, OrganizationUnitId, RoleId>(_harbor.Catalogue, _clock).RequireTenant())
-                .Should().Throw<InvalidOperationException>();
+                .Should().Throw<InvalidOperationException>()
+                .WithMessage("System work outside any tenant has no tenant. Begin TenancyUseCases.BeginSystemIn(tenant) for work inside one, "
+                    + "or TenancyWork.BeginSystemIn<TenantId, SeatId>(tenant) in a project that sees only the ids (TenancyUseCases is the class your use cases are named through).");
         }
     }
 

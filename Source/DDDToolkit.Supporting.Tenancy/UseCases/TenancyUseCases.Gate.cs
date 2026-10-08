@@ -95,7 +95,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
             {
                 TenancyCallerKind.Seat or TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
                 TenancyCallerKind.System => throw new InvalidOperationException(
-                    "System work outside any tenant only provisions tenants. Begin TenancyWork.BeginSystemIn(tenant) for work inside one."),
+                    "System work outside any tenant only provisions tenants. "
+                    + SystemWorkAdvice.BeginInATenant<TTenantId, TSeatId>("for work inside one")),
                 _ => throw Refusal(),
             };
 
@@ -117,7 +118,8 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                     throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);
                 case TenancyCallerKind.SystemInTenant:
                     throw new InvalidOperationException(
-                        "A tenant is provisioned by system work outside any tenant. Begin TenancyWork.BeginSystem() for it.");
+                        "A tenant is provisioned by system work outside any tenant. "
+                        + SystemWorkAdvice.BeginOutsideTenants<TTenantId, TSeatId>("for it"));
                 default:
                     throw Refusal();
             }
@@ -136,7 +138,7 @@ public abstract partial class TenancyUseCases<TTenant, TTenantId, TOrganization,
                 TenancyCallerKind.SystemInTenant => Caller.Tenant!.Value,
                 TenancyCallerKind.Seat => throw ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly),
                 TenancyCallerKind.System => throw new InvalidOperationException(
-                    $"{work} by system work in that tenant. Begin TenancyWork.BeginSystemIn(tenant) for it."),
+                    $"{work} by system work in that tenant. " + SystemWorkAdvice.BeginInATenant<TTenantId, TSeatId>("for it")),
                 _ => throw Refusal(),
             };
 
