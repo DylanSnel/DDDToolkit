@@ -288,7 +288,7 @@ attribute the application marks the value with; the package ships that attribute
 value has:
 
 ```mermaid
-flowchart LR
+flowchart TB
     Package["the package<br/>[assembly: RowAccessContribution]"] --> Constructor["its constructor<br/>[FromApplication(typeof(SubscriptionPlans))]"]
     Application["the application<br/>[SubscriptionPlans] on its plans"] --> Build["the build, where<br/>the export runs"]
     Constructor --> Build
