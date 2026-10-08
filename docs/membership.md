@@ -206,7 +206,8 @@ flowchart LR
 <details>
 <summary>Show the code: what the check does</summary>
 
-```csharp title="MemberAccessCheck<Document, DocumentId>.RequireAsync, shortened"
+```csharp
+// MemberAccessCheck<Document, DocumentId>.RequireAsync, the package's, shortened
 case MemberAccess<DocumentId>.On required:
 {
     // The caller's own refusal when it is nobody, then not-found, then not-permitted: one statement
@@ -1375,7 +1376,8 @@ sequenceDiagram
 <details>
 <summary>Show the code: what the save asks</summary>
 
-```csharp title="MemberHoldInterceptor, shortened"
+```csharp
+// MemberHoldInterceptor, the package's, shortened
 foreach (var root in ChangedRoots(context))                // changed or deleted, or a member or a role beneath it
 {
     if (resource.HoldInHand(root.Entity) is { } hold)      // Checked<MemberHold<DocumentId>>.TryFindInHand, for this document

@@ -940,7 +940,8 @@ word.
 <details>
 <summary>Show the code: the one line, and the host naming each</summary>
 
-```csharp title="Shop.Customers.Domain/Module.cs"
+```csharp
+// Shop.Customers.Domain/Module.cs
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.Supporting.Tenancy;
 
@@ -949,7 +950,8 @@ using DDDToolkit.Supporting.Tenancy;
 [assembly: TemplateFacadeName("TenancyUseCases", "CustomersTenancy")]
 ```
 
-```csharp title="Shop.Host/Provisioning.cs"
+```csharp
+// Shop.Host/Provisioning.cs
 public sealed class Provisioning(CustomersTenancy.TenantCommands customers, TenancyUseCases.TenantCommands partners)
 {
     // Customers' tenants through the name given, partners' through the package's.
@@ -3496,23 +3498,23 @@ flowchart LR
     subgraph crew ["its crew: who is on it, and until when"]
         direction TB
         Leo["leo, the owner<br/>for good"]
+        Juno["juno<br/>for good"]
         Vic["vic<br/>until 1 December"]
         Maud["maud<br/>for good"]
-        Juno["juno<br/>for good"]
     end
     LeoLead(["Crew lead<br/>for good"])
+    JunoSurveyor(["Surveyor<br/>for good"])
     VicObserver(["Observer<br/>for good"])
     VicSurveyor(["Surveyor<br/>until 1 November"])
-    JunoSurveyor(["Surveyor<br/>for good"])
     None(["no role:<br/>sees the project"])
     Project --> Leo
+    Project --> Juno
     Project --> Vic
     Project --> Maud
-    Project --> Juno
     Leo -- "holds" --> LeoLead
+    Juno -- "holds" --> JunoSurveyor
     Vic -- "holds" --> VicObserver
     Vic -- "holds" --> VicSurveyor
-    Juno -- "holds" --> JunoSurveyor
     Maud -.- None
 ```
 

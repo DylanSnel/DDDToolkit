@@ -1149,7 +1149,8 @@ flowchart TB
 <details>
 <summary>Show the code: a class of the admin schema, and a host with two schemas</summary>
 
-```csharp title="Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs"
+```csharp
+// Tenants.Api/Seats/GraphQL/SeatsAdminQueries.cs
 [GraphQLSchema("admin", OperationType.Query)]
 internal static class SeatsAdminQueries
 {
@@ -1159,7 +1160,8 @@ internal static class SeatsAdminQueries
 }
 ```
 
-```csharp title="Program.cs"
+```csharp
+// Program.cs
 foreach (var name in new[] { "user", "admin" })
 {
     builder.Services.AddGraphQLServer(name)
@@ -1682,14 +1684,16 @@ everything a user gets, and another person's roles besides, in one schema; the u
 <details>
 <summary>Show the code: a module with two schemas, and a host with two gateways</summary>
 
-```csharp title="Tenants.Api/GraphQL/TenantsGraphQL.cs"
+```csharp
+// Tenants.Api/GraphQL/TenantsGraphQL.cs
 // Two source schemas of the same calls. [GraphQLSchema("admin", ...)] puts SeatsAdminQueries into the second only;
 // the lookups are marked for both.
 var schema = Tenancy(services.AddGraphQLServer("tenants").AddSourceSchemaDefaults());
 var administration = Tenancy(services.AddGraphQLServer("admin").AddSourceSchemaDefaults());
 ```
 
-```csharp title="Program.cs"
+```csharp
+// Program.cs
 builder.Services.AddInMemoryFusionGateway("user", ["tenants", "projects", "inspections"],
     options => options.ConfigureGateway = gateway => gateway.AddMaxExecutionDepthRule(10, skipIntrospectionFields: true));
 builder.Services.AddInMemoryFusionGateway("admin", ["admin", "projects", "inspections"],
@@ -1780,14 +1784,16 @@ as it is. That is the default, and a gateway's `SchemaReaders` say otherwise whe
 openssl rand -base64 32
 ```
 
-```yaml title=".github/workflows/schema.yml"
+```yaml
+# .github/workflows/schema.yml
 # The one secret, given to the host as configuration and to the tool as its environment.
 env:
   GraphQL__SchemaKey: ${{ secrets.GRAPHQL_SCHEMA_KEY }}   # the host, when CI runs one outside Development
   GRAPHQL_SCHEMA_KEY: ${{ secrets.GRAPHQL_SCHEMA_KEY }}   # GraphQL Codegen and curl below
 ```
 
-```ts title="codegen.ts"
+```ts
+// codegen.ts
 import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
@@ -1810,7 +1816,8 @@ export default config;
 curl -H "X-GraphQL-Schema-Key: $GRAPHQL_SCHEMA_KEY" https://api.example.com/graphql/schema.graphql -o schema.graphql
 ```
 
-```csharp title="Program.cs"
+```csharp
+// Program.cs
 // A public API: every request reads the schema, wherever the application runs.
 builder.Services.AddInMemoryFusionGateway("public", ["catalog"], options => options.SchemaReaders = SchemaReaders.Everyone);
 ```

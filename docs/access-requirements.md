@@ -262,7 +262,8 @@ flowchart LR
 <details>
 <summary>Show the code: what asks the checks</summary>
 
-```csharp title="AccessChecks<TRequests>.RequireAsync, shortened"
+```csharp
+// AccessChecks<TRequests>.RequireAsync, the package's, shortened
 // The first check that decides a requirement holds the caller to it
 var requirement = request.RequiredAccess
     ?? throw new InvalidOperationException("CloseInvoice declares no access requirement. ...");
