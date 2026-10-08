@@ -1369,7 +1369,9 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   new `SeatsInMyUnits<TSeatId>()`, the seats placed at a unit the caller is placed at or at a unit below one, so
   every placed seat to a seat placed at the root, which the new function `seats_in_my_units()` answers; Tenancy's
   own default is written with them in the docs. The next build writes the access file with the function. The
-  sample keeps both defaults: its people work across units and see each other, which is the default. See
+  sample keeps both defaults: its people work across units and see each other, which is the default. Its
+  `TenancyChoicesExportTests` run the exporter's build step with a read rule on its seat, and with containment
+  off, and find the default's policy, and `key_is_contained`, the one change to the access file. See
   [Who reads the seats](docs/tenancy.md#who-reads-the-seats-a-default-you-may-replace).
 - **Tenancy: a module states its keys once.** A module marks the static list it declares its permission keys on
   with `[TenancyPermissions]`, and states them nowhere else. Tenancy's generator, which now ships inside
