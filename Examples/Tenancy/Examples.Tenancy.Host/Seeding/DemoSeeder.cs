@@ -20,8 +20,9 @@ namespace Examples.Tenancy.Host.Seeding;
 /// </summary>
 /// <remarks>
 /// It is a plain hosted service that awaits all of the seeding inside <see cref="StartAsync"/>, so the host
-/// takes no request, and a test host answers no call, before the data is there. The databases have been
-/// migrated by then, in their <c>StartingAsync</c>.
+/// takes no request, and a test host answers no call, before the data is there. By then the start-up checks have
+/// run, in their <c>StartingAsync</c>, and found every migration applied: the host applies none, whoever owns the
+/// database applies the files under <c>Examples/Tenancy/supabase/migrations</c>.
 /// <para>
 /// Nothing here writes a row by hand, and nothing here names a context: the host knows no module's storage.
 /// Provisioning is system work outside any tenant, the only thing such work may do; everything after it is
