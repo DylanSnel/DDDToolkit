@@ -364,7 +364,8 @@ composed over several: [references/graphql.md](references/graphql.md). The mista
 - A class declared with a package's template (`[SeatAggregate<SeatId>]`) gets the package's rules first and
   adds its own. Its registrations (`modelBuilder.AddTenancy()`) are generated: do not write them by hand.
 - A module asks Tenancy inside its own query, `answers.Over(db).UnitsWhereIHold(key)` as a subquery, and
-  answers ids. What a seat, a unit or a role is called is asked of Tenancy's directory, by id.
+  answers ids. The application's own seats and units, whole, and a role's name are asked of Tenancy's
+  directory, by id; a seat has no name of Tenancy's, only what the application keeps on its seat class.
 - Whether a command may run is asked when it runs, by the use case. A key set only draws a screen.
 - A role a tenant got from a pack follows a pack you change later only where the host calls
   `builder.Services.SyncRolePacks()`, beside `RunStartupChecks()` and not among the checks. Without it a key
