@@ -1568,7 +1568,7 @@ module's context:
 
 ```csharp
 // In the module that declares Tenancy's classes: generated like AddTenancy, closed over the four ids
-services.AddTenancyAccess<ITenancyRequest, TenancyContext>();
+services.AddTenancyAccess<ITenantsRequest, ShopTenancyContext>();
 
 // In any other module, which sees the ids and none of the classes: the four ids written out, as where the read
 // model is mapped (Your ids, named once)
@@ -2818,7 +2818,7 @@ flowchart TB
 
 ```csharp
 // The host: which token roles are operators'
-services.AddTenancy<TenancyContext>(options =>
+services.AddTenancy<ShopTenancyContext>(options =>
 {
     // the catalogue, when you have one
     options.OperatorTokenRoles.Add("operator");
@@ -2941,7 +2941,7 @@ modelBuilder.AddTenancyEventLogTable(Database);   // the event log, with a Tenan
 
 // Where Tenancy is registered, the project that declares your classes or your module's infrastructure project:
 // keep the events that change access
-options.UseOutbox<TenancyContext>(outbox => outbox
+options.UseOutbox<ShopTenancyContext>(outbox => outbox
     .AddTenancyDomainEvents()
     .KeepEventLog(log => log.AddTenancyEventLog()));   // both generated there, closed over your four ids
 ```
