@@ -35,7 +35,7 @@ public class RegistrationTests
         {
             store.BeginUnitOfWork();
             provisioned = await scope.ServiceProvider.GetRequiredService<HostTenancy.TenantCommands>().ProvisionAsync(
-                new HostTenancy.TenantToProvision("harbor", "Harbor", TenantShape.Flat, "Head office", Guid.NewGuid(), "Ada"),
+                new HostTenancy.TenantToProvision("harbor", "Harbor", TenantShape.Flat, "Head office", Guid.NewGuid()),
                 TestContext.Current.CancellationToken);
         }
 
