@@ -7,10 +7,10 @@
     <!-- dotnet ef runs this project as its own startup project, through the design-time factory the build writes beside its context. -->
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <!--
-      The application's own version, and not the toolkit's, as in Examples.Tenancy.Catalogue and for its reason:
-      this project holds a row access contribution, the trigger in Access, and an exported access file names the
-      project a contribution is in with its version. With the toolkit's version here, every release of the
-      toolkit would write the module's access file anew, with nothing in it changed but that number.
+      The application's own version, and not the toolkit's: this project holds the application's two row access
+      contributions, in Access, and an exported access file names the project a contribution is in with its
+      version. With the toolkit's version here, every release of the toolkit would write the module's access file
+      anew, with nothing in it changed but that number.
       TreatAsLocalProperty, on the Project element, keeps the version this project's own in a release build,
       which gives the toolkit's version on the command line (-p:Version) and only compares the exported files.
     -->
@@ -23,8 +23,8 @@
     factory dotnet ef and the Supabase export make it with beside it), the two adapters that implement the
     application project's ports (the store over the request's context, the readings each on a context of their own),
     what the database itself holds about a project's rows (Access: the row access rules the export writes as
-    policies, and the one rule the module writes as SQL of its own, the trigger that holds a project's unit to its
-    keys), and AddProjectsInfrastructure, which registers the rest, the projects with the Membership package among
+    policies, and the two rules the module writes as SQL of its own, the trigger that holds a project's unit to its
+    keys and the restrictive policy that holds a crew's seats to the project's tenant), and AddProjectsInfrastructure, which registers the rest, the projects with the Membership package among
     it. It declares none of the ids and none of the domain events, and gets their converters and their registration
     under their names anyway, generated from what the domain and contracts projects declare, because it declares the
     same module; Tenancy's published ids are registered with them. Only the module's entry, in the API project,
