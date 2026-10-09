@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Names the helpers the generators write into this assembly. The package is no module, so DDD_DeclareModule
+      keeps DDD_Module from declaring one: it is part of whichever module of an application declares a member class
+      with its template, which names the package's types freely.
+    -->
+    <DDD_Module>SupportingMembership</DDD_Module>
+    <DDD_DeclareModule>false</DDD_DeclareModule>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Membership</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;membership;members;roles;permissions;access</PackageTags>
+    <Description>Access to a resource through its members: a member class an application declares for each of its resources, the roles a member holds for a period, roles a customer makes for a resource, the rules about a resource's members, and the access questions and requirements asked about them, database-agnostic.</Description>
+    <!-- The refusal texts are written in English; Dutch ships as a satellite assembly. -->
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!--
+    This package declares an [EntityBase] parent, an [AggregateRootBase] parent and an id, so the generator
+    runs on it: it writes the parents' base classes and invariant plumbing, and the role name's value plumbing.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    The generator that writes the member list on the resource a member class names. It runs in the
+    application, where the member classes are declared, so it ships inside this package, in
+    analyzers/dotnet/cs, the way the code fixes ship inside DDDToolkit.Analyzers: built first, referenced by
+    nothing, and no package of its own, so it never arrives at another version than the types it names.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\DDDToolkit.Supporting.Membership.Analyzers\bin\$(Configuration)\netstandard2.0\DDDToolkit.Supporting.Membership.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+</Project>

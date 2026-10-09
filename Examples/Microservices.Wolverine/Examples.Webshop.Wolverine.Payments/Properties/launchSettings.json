@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.Wolverine.Payments": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65139;http://localhost:65140"
+    }
+  }
+}

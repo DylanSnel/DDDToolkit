@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    What the other modules may know of Projects: a project's id, the permission keys Projects asks for, and the
+    two kinds of question another module may put to it: in C#, whether the caller may do something to a project
+    (IProjectGate), and in a row access rule, which projects the caller sees or holds a key on (RowAccess). Inspections
+    stores a ProjectId on every inspection, and the project of Inspections that holds its context registers a
+    converter for it: the generated Add{Module}Converters() also registers the published ids of other modules. So
+    this project references neither Entity Framework nor the Tenancy packages: a module that asks Projects a
+    question does not thereby depend on how Projects answers it, nor on how anything is stored. The gate's answer
+    carries a project's planned range, a value object the modules share, so the shared domain project is here.
+
+    Every public type here is published, and none is marked [ModuleContract] for it: the modules' Directory.Build.props
+    makes each project whose name ends in .Contracts its module's contracts, with DDD_ModuleContracts.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Domain\Examples.Tenancy.Shared.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the package above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,85 @@
+<Project>
+  <!--
+    DDD_Module declares the project's module. A project that sets it is a project of that module, as
+    [assembly: Module] makes it one, so a Directory.Build.props that names the module of every project below a
+    folder makes them that module's projects without a file in each that says so, and the projects that reference
+    them see it too.
+
+    Packed as build/<package id>.targets and buildTransitive/<package id>.targets, beside the props file, so it
+    reaches every project the generators run in. Directory.Build.targets imports it for the projects in this
+    repository, which reference the generators as projects and never restore the package.
+
+    The build declares the module in a file of its own, compiled with the project:
+
+      [assembly: AssemblyMetadata("DDD_Module", "Ordering")]
+
+    because that is what every generator of the project sees. A generator never sees what another generator
+    writes, and the generators ask the project's attributes which module it is in. The toolkit's own generator then
+    writes [assembly: Module("Ordering")] from it, for the analyzers, the runtime and reflection, unless the
+    project's source declares a module already: a generator can see that, and the build cannot, which is why the
+    attribute is the generator's to write and is never declared twice. [assembly: Module] in the source wins, as it
+    always does over DDD_Module.
+
+    Two kinds of project set DDD_Module and get no file, so they are no module and the property only names their
+    generated code:
+
+    - A test project, which IsTestProject or IsTestingPlatformApplication marks. It tests the modules from outside,
+      and names what they do not publish.
+    - A project that sets DDD_DeclareModule to false, which is rare: one whose generated code wants a name of its
+      own and that is meant to be no module, such as a shared kernel every module uses, or a package of templates
+      that becomes part of whichever module declares a class with them. Declared a module, it would have every
+      module that names one of its unpublished types hear DDD00022, and its domain events stored under its name. A
+      project that wants neither the module nor the name sets no DDD_Module at all, and its code is named after its
+      assembly.
+
+    A target, not items, so it reads what the project file and the targets imported after this one set,
+    IsTestProject and IsTestingPlatformApplication among them. It runs where the SDK writes AssemblyInfo.cs: before
+    BeforeCompile, so the file is among the inputs the build compares to tell whether to compile again, and before
+    CoreCompile, which a design-time build runs alone. It rewrites the file only when what it says changes, so it
+    never makes the project compile again by itself. ".g.cs" tells the analyzers it is generated code.
+  -->
+  <ItemGroup>
+    <!--
+      Hands the generators DDD_DeclareModule, which they read for one thing: that it arrives, set or empty, says this
+      file was imported, so whatever DDD_Module came to here is what the step decided. A project whose generators
+      get DDD_Module without this file, through the props file alone or a CompilerVisibleProperty of its own, has
+      its code named after the module and is no module, and the toolkit's generator says so (DDD00064). The same
+      trick the props file plays for DDD00014.
+    -->
+    <CompilerVisibleProperty Include="DDD_DeclareModule" />
+  </ItemGroup>
+
+  <Target Name="DDDToolkitWriteModuleDeclaration"
+          BeforeTargets="BeforeCompile;CoreCompile"
+          DependsOnTargets="PrepareForBuild"
+          Condition="'$(Language)' == 'C#' and '$(DDD_Module.Trim())' != '' and '$(DDD_DeclareModule.Trim())' != 'false' and '$(IsTestProject)' != 'true' and '$(IsTestingPlatformApplication)' != 'true'">
+
+    <!--
+      A module's name names its code, its stored events and its functions, so a quote or a backslash in it is a
+      mistake. Refused here, the name needs no escape in the C# string below: an escape is a backslash, and MSBuild
+      on Linux and macOS turns every backslash in an item into a slash before the line is written.
+    -->
+    <Error Condition="$(DDD_Module.Contains('&quot;')) or $(DDD_Module.Contains('\'))"
+           Text="DDD_Module is '$(DDD_Module.Trim())', and a module's name holds no &quot; and no \: it names the module's code, its stored events and its functions. Give the module a name without them." />
+
+    <PropertyGroup>
+      <_DDDToolkitModuleFile>$(IntermediateOutputPath)$(MSBuildProjectName).DDDToolkitModule.g.cs</_DDDToolkitModuleFile>
+      <!-- The name as an item holds it: MSBuild reads ; * ? % @ $ in an item. -->
+      <_DDDToolkitModuleName>$([MSBuild]::Escape($(DDD_Module.Trim())))</_DDDToolkitModuleName>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_DDDToolkitModuleLine Include="// &lt;auto-generated/&gt;" />
+      <_DDDToolkitModuleLine Include="// Written by the build from DDD_Module, the DDDToolkit.Analyzers package's targets." />
+      <_DDDToolkitModuleLine Include="[assembly: global::System.Reflection.AssemblyMetadata(&quot;DDD_Module&quot;, &quot;$(_DDDToolkitModuleName)&quot;)]" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(_DDDToolkitModuleFile)" Lines="@(_DDDToolkitModuleLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+
+    <ItemGroup>
+      <Compile Include="$(_DDDToolkitModuleFile)" />
+      <FileWrites Include="$(_DDDToolkitModuleFile)" />
+      <_DDDToolkitModuleLine Remove="@(_DDDToolkitModuleLine)" />
+    </ItemGroup>
+  </Target>
+</Project>

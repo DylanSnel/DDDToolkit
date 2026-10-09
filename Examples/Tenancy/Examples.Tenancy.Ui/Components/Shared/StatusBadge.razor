@@ -1,0 +1,22 @@
+@using Microsoft.AspNetCore.WebUtilities
+
+@* An HTTP status as a badge: green for success, amber for a refusal, red for no answer or a fault. *@
+<span class="badge @Css" title="@Title">@Text</span>
+
+@code {
+    /// <summary>The status; 0 for no answer at all.</summary>
+    [Parameter]
+    public int Status { get; set; }
+
+    private string Text => Status == 0 ? T["status.no-answer"] : Status.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    // A status's reason phrase is HTTP's own, the same in every language.
+    private string Title => Status == 0 ? T["status.no-answer.title"] : ReasonPhrases.GetReasonPhrase(Status);
+
+    private string Css => Status switch
+    {
+        >= 200 and <= 299 => "text-bg-success",
+        >= 400 and <= 499 => "text-bg-warning",
+        _ => "text-bg-danger",
+    };
+}

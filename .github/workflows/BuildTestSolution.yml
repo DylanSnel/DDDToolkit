@@ -44,7 +44,9 @@ jobs:
       # to find out whether a generator still compiles is the wrong trade.
       #
       # The example shop's end-to-end samples are left out too: the Sample Tests workflow starts their
-      # databases and brokers in a job of its own.
+      # databases and brokers in a job of its own. So are the tests of the Tenancy sample that need its host on
+      # a database: they start Supabase's own images, carry the same category, and run in that workflow. What
+      # of that sample starts no database runs here.
       #
       # The filter reads as "not these traits". A test with neither a Provider nor a Category trait
       # satisfies every clause, which is how every other project in the solution still runs.
@@ -73,7 +75,8 @@ jobs:
   # The published packages declare the oldest dependency versions they work with (see
   # Directory.Packages.props), and the job above only ever builds against the newest. This one builds
   # and tests the whole solution against those floors, so a floor that no longer works fails here
-  # instead of in a consumer's build. The provider suites stay in their own workflow.
+  # instead of in a consumer's build. The provider suites stay in their own workflow, and the Tenancy
+  # sample's host tests run at the floors in Sample Tests, as Tenancy.Supabase.Floor.
   build-and-test-floors:
     runs-on: ubuntu-latest
 

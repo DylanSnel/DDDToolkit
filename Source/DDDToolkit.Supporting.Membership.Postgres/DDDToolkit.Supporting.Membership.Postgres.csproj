@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Membership on Postgres</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;membership;members;access;postgres;postgresql;rls;row-level-security</PackageTags>
+    <Description>Membership on Postgres with row level security: the four set functions that answer a resource's membership questions in the database, under the application's names, as a row access contribution for each kind of resource, and the start-up check that the database has them as the rules say.</Description>
+  </PropertyGroup>
+
+  <!--
+    Everything of Membership's that only Postgres understands. It declares no entities and needs no analyzer:
+    the application's classes and context are the application's, and this works from the model they build. It
+    talks to Postgres through DbConnection and DbCommand, so the application brings whichever Npgsql provider
+    it already uses. DDDToolkit.Abstractions is referenced directly, not only through the others, so the
+    Supabase export searches this assembly and finds the row access contribution it offers.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Abstractions\DDDToolkit.Abstractions.csproj" />
+    <ProjectReference Include="..\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
+    <ProjectReference Include="..\DDDToolkit.EntityFramework.Postgres\DDDToolkit.EntityFramework.Postgres.csproj" />
+  </ItemGroup>
+
+</Project>

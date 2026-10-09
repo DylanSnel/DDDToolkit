@@ -21,8 +21,14 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Localization" />
+  </ItemGroup>
+
+  <!--
+    A web host with Kestrel, for the start-up checks' runner: it runs before the server binds its port. The shared
+    framework brings the container and localization the tests use as well, so neither is a package of its own here.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>

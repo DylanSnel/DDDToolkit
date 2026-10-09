@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The host: an application with no package reference and no module of its own, only the infrastructure
+    project. NuGet hands it the analyzers of every package below it, Membership's two generators among them, so
+    they run here as well, and must write nothing here: what they write belongs to the projects below, where the
+    classes and the contexts are. The script checks that they arrived here and wrote nothing.
+
+    The Supabase package's build step and generator arrive the same way, through the infrastructure project, and
+    this is where they work: the host turns the export on, as docs/supabase.md has it, and every build writes the
+    access files of the two contexts into ../supabase/migrations, and the migration that makes the role the host
+    logs in as, which SupabaseLoginRole names. The generator also writes the call that registers both contexts for
+    the start-up check, AddSupabaseMigrations, which PressStartup makes, as it does in every application, the export
+    turned on or not. The script also gives the export's property for the whole build, the way a CI script does, and
+    holds that it then reaches this project and no other.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <SupabaseMigrationsExport>Write</SupabaseMigrationsExport>
+    <SupabaseLoginRole>press_api</SupabaseLoginRole>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Infrastructure\Acme.Press.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

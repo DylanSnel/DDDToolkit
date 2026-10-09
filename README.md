@@ -61,10 +61,15 @@ public partial class Order { }
 | [Delivering domain events](docs/event-delivery.md) | In-process dispatch or the outbox, and how to choose |
 | [Row level security](docs/row-level-security.md) | Running a context's queries as the caller, and row access rules written in C# as Postgres policies |
 | [Supabase](docs/supabase.md) | Exporting each module's migrations for `supabase db push`, as part of the build |
-| [Modules](docs/modules.md) | `[assembly: Module]` and the boundary the analyzer checks |
+| [Start-up checks](docs/startup-checks.md) | What the registrations check before the host serves anything, run with one call, in a fixed order, and turned off by name |
+| [Modules](docs/modules.md) | `DDD_Module`, `[assembly: Module]` and the boundary the analyzer checks |
 | [Module contracts](docs/module-contracts.md) | What a module publishes, why, and where to keep it |
+| [Access requirements](docs/access-requirements.md) | What a command or a query requires of its caller, the checks that hold it to that before the handler, and the behavior written for Mediator |
 | [Integration events](docs/integration-events.md) | Contracts between modules, the outbox and the inbox, versioning |
 | [Transports](docs/transports.md) | Carrying integration events out of the process: pgmq, Wolverine, MassTransit, or a sink of your own |
+| [Tenancy](docs/tenancy.md) | The first supporting domain: tenants, the organization tree, seats and roles, and who may do what where |
+| [Membership](docs/membership.md) | The second supporting domain: access to a resource through its members, their roles and its owner, for as many kinds of resource as an application has |
+| [Writing your own supporting domain](docs/writing-a-supporting-domain.md) | Shipping a domain as a package that applications extend with their own ids and classes, without losing its rules |
 | [GraphQL](docs/graphql.md) | `AddDDDToolkitTypes()`, the generated scalar bindings, errors with codes, Relay node ids, one schema over the modules |
 | [FluentValidation](docs/fluent-validation.md) | A value object's rules as a FluentValidation validator, and value objects inside a request validator |
 | [Localization](docs/localization.md) | Validation errors and invariant violations in the reader's language, looked up by code |
@@ -110,6 +115,11 @@ front of its name. The nuget.org account that owns the `DDDToolkit.*` ids cannot
 so `DDDToolkit` there is still 2.0.22. Only the package id is different. The assemblies and namespaces
 are the ones this page names, so `using DDDToolkit;` stays as it is.
 
+**3.2.0 is in preview.** This page and the docs describe it: 3.2.0-preview.3 as they are written. Until
+3.2.0 is released, add every `Temp.DDDToolkit.*` package with `--prerelease`, or with
+`--version 3.2.0-preview.3`, and keep them all at the same version. A package of this release next to 3.1.0
+of another fails restore with NU1605, a package downgrade, or fails at run time with a `MissingMethodException`.
+
 | Package | Use it for |
 |---|---|
 | `DDDToolkit` | Base types and the core generators. Start here. |
@@ -120,19 +130,25 @@ are the ones this page names, so `using DDDToolkit;` stays as it is.
 | `DDDToolkit.Messaging.MassTransit` | [MassTransit](https://masstransit.io/) 8 as that transport, for those already on it. |
 | `DDDToolkit.EntityFramework.Postgres` | Row level security on any Postgres: each connection a context opens runs as the caller, as PostgREST's do, and `[RowAccess]` rules written in C# become the policies. |
 | `DDDToolkit.EntityFramework.Supabase` | Your Entity Framework migrations and row access rules written as Supabase migration files by the build, so `supabase db push` and branching apply them, and a CI build that fails when one is missing. |
-| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes, and turned into the caller row level security runs your queries as. No Entity Framework needed. |
+| `DDDToolkit.Auth.Supabase` | Supabase Auth's access tokens validated in any host, against the keys the project publishes or its JWT secret, and turned into the caller row level security runs your queries as. No Entity Framework needed. For server code, a client for Auth's admin API: invite an address, make a user under an id of your own, and find or delete one by id. |
 | `DDDToolkit.Auth.Supabase.AspNetCore` | The same in ASP.NET Core: a JWT bearer scheme for Supabase Auth, and each request's user as the caller. |
 | `DDDToolkit.Auth.Supabase.AzureFunctions` | The same in Azure Functions on the isolated worker: a worker middleware that makes each HTTP invocation's user the caller. |
 | `DDDToolkit.Mediator` | One call that dispatches domain events through [Mediator](https://github.com/martinothamar/Mediator) instead of a hand-written delegate. |
 | `DDDToolkit.FluentValidation` | A generated validator per value object. |
 | `DDDToolkit.Localization` | Validation errors and invariant violations phrased in the reader's language, through `IStringLocalizer`. |
-| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, plus a subscription sink. |
+| `DDDToolkit.HotChocolate` | GraphQL scalar bindings and converters for typed identifiers, failures as coded errors and as typed errors in mutation payloads, plus a subscription sink. Needs HotChocolate 16.6.6 or later. |
 | `DDDToolkit.HotChocolate.Fusion.InMemory` | One GraphQL schema over a modular monolith: each module a source schema, composed by a Fusion gateway in the process. Needs HotChocolate Fusion 16.6.6 or later. |
 | `DDDToolkit.NewtonSoft.Json` | Newtonsoft converters and a contract resolver that honours `[Internal]`. |
+| `DDDToolkit.Supporting.Tenancy` | [Tenancy](docs/tenancy.md), a supporting domain: tenants, their organization tree, seats and roles over a permission catalogue, and the access questions. No database in it. |
+| `DDDToolkit.Supporting.Tenancy.EntityFramework` | Tenancy in a context of your own, with the access questions as Entity Framework queries, on every provider. |
+| `DDDToolkit.Supporting.Tenancy.Postgres` | Tenancy's questions as SQL functions, its row level security policies, and the start-up checks. |
+| `DDDToolkit.Supporting.Membership` | [Membership](docs/membership.md), a supporting domain: access to a resource through its members, the roles they hold for a period, and roles a customer makes. No database in it. Its generator writes the member list on your aggregate. |
+| `DDDToolkit.Supporting.Membership.EntityFramework` | A resource's members in a context of your own, a registration named after each resource, and the access questions inside your own statements. Its generator joins a resource to Tenancy where an application has both. |
+| `DDDToolkit.Supporting.Membership.Postgres` | A resource's access questions as SQL functions for your row access rules, and a start-up check. |
 | `DDDToolkit.Testing` | The aggregate testing kit. A test-only reference; it brings no test framework of its own. |
 
 ```bash
-dotnet add package Temp.DDDToolkit
+dotnet add package Temp.DDDToolkit --prerelease
 ```
 
 There are five more packages you never reference directly: `DDDToolkit.Analyzers` and the
@@ -154,8 +170,8 @@ prefers dependencies its users can take for free. MediatR still works perfectly 
 
 | You write | You get |
 |---|---|
-| `[EntityId<T>]` on a `readonly partial record struct` | `Value`, a constructor, `Empty`/`IsEmpty`, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions, a JSON converter, and `CreateUnique`/`CreateSequential` for `Guid` |
-| `[EntityId<T>]` on a `partial record` | A reference type identifier: `Value`, equality over it, `Parse`/`TryParse`, `CreateUnique`/`CreateSequential` for `Guid`, and a `Valid` twin. It has `null` rather than `Empty`, and no conversion operators |
+| `[EntityId<T>]` on a `readonly partial record struct` | `Value`, a constructor, `Empty`/`IsEmpty`, `Parse`/`TryParse`, `IParsable<T>`, `IComparable<T>`, explicit conversions, a JSON converter, and for `Guid` a time-ordered `Create()`, which implements `ICreatableEntityId<T>`, and `CreateUnique`/`CreateSequential` |
+| `[EntityId<T>]` on a `partial record` | A reference type identifier: `Value`, equality over it, `Parse`/`TryParse`, for `Guid` a time-ordered `Create()` (`ICreatableEntityId<T>`) and `CreateUnique`/`CreateSequential`, and a `Valid` twin. It has `null` rather than `Empty`, and no conversion operators |
 | `[SingleValueObject<T>]` on a `partial record` | A wrapper with value equality, a `Valid` twin and validation |
 | `[ValueObject]` on a `partial record`, positional or with `{ get; protected init; }` properties | Structural equality across the properties you did not exclude, a `With(...)` for changed copies, and a `Valid` twin |
 | `[Entity<TId>]` / `[AggregateRoot<TId>]` on a `partial class` | The base type, a persistence constructor, a `CheckInvariants()` seam, `GetInvariantViolations()` and `EnsureInvariants()` over it, over any nested `IInvariant<T>` rules and over every child entity it holds, an `EnsureOwnInvariants()` / `GetOwnInvariantViolations()` pair that stops at this object, and an implementation for every get-only partial collection property |
@@ -183,7 +199,8 @@ transaction as the aggregate. A sink delivers it afterwards: to another module i
 pgmq queue, to a GraphQL subscription, or to one you wrote. Versioning and upcasting keep last year's
 payload readable, and an inbox keyed by message id and consumer makes the receiving side idempotent.
 
-**[Modules](docs/modules.md).** Mark an assembly `[assembly: Module("Ordering")]` and name what it
+**[Modules](docs/modules.md).** Declare a project's module with `<DDD_Module>Ordering</DDD_Module>`, once for a
+folder of projects in a `Directory.Build.props`, or with `[assembly: Module("Ordering")]`, and name what it
 publishes with `[ModuleContract]`. An analyzer then reports where another module reaches past the
 contract. It says nothing at all until both sides opt in.
 

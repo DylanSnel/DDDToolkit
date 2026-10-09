@@ -1,0 +1,334 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+type Query {
+  tenantProjectInspections(tenant: UUID!, project: ID!): [Inspection!]!
+    @cost(weight: "10")
+  projectById(id: ID!): Project @lookup @internal @cost(weight: "10")
+}
+
+type Mutation {
+  inspectionRecord(input: InspectionRecordInput!): InspectionRecordPayload!
+    @cost(weight: "10")
+}
+
+"An aggregate that would have broken its own rules: one error for the command, with every rule that was broken in its violations. Its code, message and arguments are those of the first."
+type BrokenRulesError implements CodedError @shareable {
+  "The first rule that was broken, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The code of the first rule that was broken."
+  code: String!
+  "The values the first violation's message was built from."
+  arguments: [FailureArgument!]!
+  "Every rule that was broken, in the order the aggregate reported them, never empty."
+  violations: [RuleViolation!]!
+}
+
+type ChangedBy @shareable {
+  kind: String!
+  seat: UUID
+}
+
+"A change that lost a race: somebody else changed the same thing after the caller read it, or the version the caller expected is not the one that is stored. Read again, and decide again."
+type ConcurrencyConflictError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "Always \"concurrency-conflict\"."
+  code: String!
+  "Always empty."
+  arguments: [FailureArgument!]!
+}
+
+type DateRange @shareable {
+  from: LocalDate!
+  until: LocalDate!
+}
+
+"One of the values a message was built from, such as MaxLength and 40: its name, and its value as text."
+type FailureArgument @shareable {
+  "The value's name, as a translation's template spells it between braces."
+  name: String!
+  "The value as text: a string as it is, true or false, a number as JSON writes it, and anything else, such as an id, as its own text. Null when there was none."
+  value: String
+}
+
+type Inspection {
+  project: Project
+  recordedBy: Seat
+  id: UUID!
+  title: String!
+  days: DateRange!
+  recordedAt: DateTime!
+  changedBy: ChangedBy!
+}
+
+type InspectionRecordPayload {
+  inspection: Inspection
+  errors: [InspectionRecordError!]
+}
+
+type InspectionsConnection @shareable {
+  canRecord: Boolean! @cost(weight: "1")
+  "A list of edges."
+  edges: [InspectionsEdge!]
+  "A flattened list of the nodes"
+  nodes: [Inspection!]
+  "Information to aid in pagination."
+  pageInfo: PageInfo!
+  "Identifies the total count of items in the connection."
+  totalCount: Int! @cost(weight: "10")
+}
+
+type InspectionsEdge @shareable {
+  "The item at the end of the edge."
+  node: Inspection!
+  "A cursor for use in pagination."
+  cursor: String!
+}
+
+"A value that broke its own rules: one error for the command, with every reason in its failures. The value that was rejected is not sent back."
+type InvalidValuesError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "Always \"invalid-value\". Each of the failures has the code of its own rule."
+  code: String!
+  "Always empty: the values are those of each failure."
+  arguments: [FailureArgument!]!
+  "Every reason the value was refused, never empty."
+  failures: [ValueFailure!]!
+}
+
+"A cursor that points to a specific page."
+type PageCursor @shareable {
+  "The page number."
+  page: Int!
+  "The cursor."
+  cursor: String!
+}
+
+"Information about pagination in a connection."
+type PageInfo @shareable {
+  "Indicates whether more edges exist following the set defined by the clients arguments."
+  hasNextPage: Boolean!
+  "Indicates whether more edges exist prior the set defined by the clients arguments."
+  hasPreviousPage: Boolean!
+  "When paginating backwards, the cursor to continue."
+  startCursor: String
+  "When paginating forwards, the cursor to continue."
+  endCursor: String
+  "A list of cursors to continue paginating forwards."
+  forwardCursors: [PageCursor!]!
+  "A list of cursors to continue paginating backwards."
+  backwardCursors: [PageCursor!]!
+}
+
+type Project @key(fields: "id") {
+  inspections(
+    "Returns the first _n_ elements from the list."
+    first: Int
+    "Returns the elements in the list that come after the specified cursor."
+    after: String
+    "Returns the last _n_ elements from the list."
+    last: Int
+    "Returns the elements in the list that come before the specified cursor."
+    before: String
+  ): InspectionsConnection
+    @listSize(
+      assumedSize: 50
+      slicingArguments: ["first", "last"]
+      slicingArgumentDefaultValue: 10
+      sizedFields: ["edges", "nodes"]
+      requireOneSlicingArgument: false
+    )
+  id: ID!
+}
+
+"A command that was refused before anything changed: the refusal's code, its kind, its message and the values the message was built from."
+type RefusalError implements CodedError @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule that refused, stable across releases and languages: what a client branches on."
+  code: String!
+  "Which of the four answers it is, so a client tells \"not allowed\" from \"not found\" without a status code."
+  kind: RefusalKind!
+  "The input the refusal is about, where a form puts the message. Null for a refusal about the command as a whole."
+  field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+"One broken rule, in a BrokenRulesError. A violation in a child entity says which child it was."
+type RuleViolation @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule's code."
+  code: String!
+  "The type of the entity that reported the violation, when it said so."
+  entity: String
+  "The id of the entity that reported the violation, as text, so a violation in a child says which one."
+  entityId: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+type Seat @key(fields: "id") {
+  id: UUID!
+}
+
+"One reason a value was refused, in an InvalidValuesError."
+type ValueFailure @shareable {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String! @cost(weight: "10")
+  "The rule's code, or \"Unspecified\" when the rule gave none."
+  code: String!
+  "The property the failure belongs to, or null when it is about the whole value."
+  field: String
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+"What every error in a mutation's payload has in common: a code to branch on, a message to show, and the values the message was built from."
+interface CodedError {
+  "What went wrong, in the reader's language when the server has a translation for it, and in the domain's own words otherwise."
+  message: String!
+  "The rule that said no, stable across releases and languages: what a client branches on."
+  code: String!
+  "The values the message was built from, by name, so a client can phrase it itself."
+  arguments: [FailureArgument!]!
+}
+
+"Something that happened in the domain."
+interface DomainEvent {
+  "Unique, stable identifier of this occurrence. Use it for idempotent handling."
+  eventId: UUID!
+  "When the event occurred (UTC)."
+  occurredAt: DateTime!
+  "The runtime type name of the event."
+  eventType: String!
+}
+
+union InspectionRecordError =
+  | RefusalError
+  | InvalidValuesError
+  | BrokenRulesError
+  | ConcurrencyConflictError
+
+input DateRangeInput {
+  from: LocalDate!
+  until: LocalDate!
+}
+
+input InspectionRecordInput {
+  project: ID!
+  title: String!
+  days: DateRangeInput
+}
+
+"Defines when a policy shall be executed."
+enum ApplyPolicy {
+  "Before the resolver was executed."
+  BEFORE_RESOLVER
+  "After the resolver was executed."
+  AFTER_RESOLVER
+  "The policy is applied in the validation step before the execution."
+  VALIDATION
+}
+
+"Why a command was refused, in the four answers an edge maps to a response: the request was not acceptable, the caller may not do it, what it names does not exist, or the state it met does not allow it."
+enum RefusalKind {
+  "The request itself is not acceptable: a name too long, a key nobody declared. Usually a 400."
+  invalid
+  "The caller may not do this. Usually a 403."
+  not_permitted
+  "Something the request names does not exist, or is not the caller's to see. Usually a 404."
+  not_found
+  "The state the command met does not allow it: already archived, the last one of its kind. Usually a 409."
+  conflict
+}
+
+enum ScalarSerializationType {
+  STRING
+  BOOLEAN
+  INT
+  FLOAT
+  OBJECT
+  LIST
+}
+
+"The `DateTime` scalar type represents a date and time with time zone offset information."
+scalar DateTime
+  @serializeAs(
+    type: STRING
+    pattern: "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:[Zz]|[+-]\\d{2}:\\d{2})$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
+
+scalar FieldSelectionSet
+
+"The `LocalDate` scalar type represents a date without time or time zone information."
+scalar LocalDate
+  @serializeAs(type: STRING, pattern: "^\\d{4}-\\d{2}-\\d{2}$")
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/local-date.html")
+
+"The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562."
+scalar UUID
+  @serializeAs(
+    type: STRING
+    pattern: "^[\\da-fA-F]{8}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{4}-[\\da-fA-F]{12}$"
+  )
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/uuid.html")
+
+"The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
+directive @cost(
+  "The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc."
+  weight: String!
+) on
+  | SCALAR
+  | OBJECT
+  | FIELD_DEFINITION
+  | ARGUMENT_DEFINITION
+  | ENUM
+  | INPUT_FIELD_DEFINITION
+
+directive @internal on OBJECT | FIELD_DEFINITION
+
+"""
+The @key directive is used to designate an entity's unique key,
+which identifies how to uniquely reference an instance of
+an entity across different source schemas.
+"""
+directive @key("The field selection set syntax." fields: FieldSelectionSet!) repeatable on
+  | OBJECT
+  | INTERFACE
+
+"The purpose of the `@listSize` directive is to either inform the static analysis about the size of returned lists (if that information is statically available), or to point the analysis to where to find that information."
+directive @listSize(
+  "The `assumedSize` argument can be used to statically define the maximum length of a list returned by a field."
+  assumedSize: Int
+  "The `slicingArguments` argument can be used to define which of the field's arguments with numeric type are slicing arguments, so that their value determines the size of the list returned by that field. It may specify a list of multiple slicing arguments."
+  slicingArguments: [String!]
+  "The `slicingArgumentDefaultValue` argument can be used to define a default value for a slicing argument, which is used if the argument is not present in a query."
+  slicingArgumentDefaultValue: Int
+  "The `sizedFields` argument can be used to define that the value of the `assumedSize` argument or of a slicing argument does not affect the size of a list returned by a field itself, but that of a list returned by one of its sub-fields."
+  sizedFields: [String!]
+  "The `requireOneSlicingArgument` argument can be used to inform the static analysis that it should expect that exactly one of the defined slicing arguments is present in a query. If that is not the case (i.e., if none or multiple slicing arguments are present), the static analysis may throw an error."
+  requireOneSlicingArgument: Boolean = true
+) on FIELD_DEFINITION
+
+"""
+The @lookup directive is used within a source schema to specify output fields
+that can be used by the distributed GraphQL executor to resolve an entity by
+a stable key.
+"""
+directive @lookup on FIELD_DEFINITION
+
+directive @serializeAs(
+  "The primitive type a scalar is serialized to."
+  type: [ScalarSerializationType!]!
+  "The ECMA-262 regex pattern that the serialized scalar value conforms to."
+  pattern: String
+) on SCALAR
+
+directive @shareable repeatable on OBJECT | FIELD_DEFINITION

@@ -1,0 +1,42 @@
+@*
+    An id, picked from what the API listed or typed by hand. The typed text is what is sent, so another tenant's id,
+    or one that is not an id at all, can be sent as easily as one from the list.
+*@
+<div class="id-picker">
+    <select class="form-select form-select-sm" value="@(Options.Any(option => option.Value == Value) ? Value : string.Empty)" @onchange="PickAsync" aria-label="@Label">
+        <option value="">@(Options.Count == 0 ? T["picker.nothing"] : T["picker.pick"])</option>
+        @foreach (var option in Options)
+        {
+            <option value="@option.Value">@option.Text</option>
+        }
+    </select>
+    <input class="form-control form-control-sm font-monospace" placeholder="@T["picker.id", Label]" value="@Value" @onchange="TypeAsync" aria-label="@T["picker.id", Label]" />
+</div>
+
+@code {
+    /// <summary>What the id is of, such as <c>Seat</c>.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>The id as it will be sent.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>Told the id whenever it is picked or typed.</summary>
+    [Parameter]
+    public EventCallback<string?> ValueChanged { get; set; }
+
+    /// <summary>What the API listed: each id with the text it is shown by.</summary>
+    [Parameter]
+    public IReadOnlyList<(string Value, string Text)> Options { get; set; } = [];
+
+    private Task PickAsync(ChangeEventArgs change) => SetAsync(change.Value?.ToString());
+
+    private Task TypeAsync(ChangeEventArgs change) => SetAsync(change.Value?.ToString());
+
+    private async Task SetAsync(string? value)
+    {
+        Value = string.IsNullOrWhiteSpace(value) ? null : value;
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

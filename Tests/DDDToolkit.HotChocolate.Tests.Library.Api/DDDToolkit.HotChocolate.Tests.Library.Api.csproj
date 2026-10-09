@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A module's API project with two schemas: what every member is offered, and what the library's staff are
+    offered besides. The fields every schema has are written as HotChocolate's generator wants them, [Query] methods
+    and an [ObjectType<T>] class; the staff's are in classes marked [GraphQLSchema], which that generator does not
+    find and the toolkit's registers for one schema only. It is a project of its own because HotChocolate's
+    generator registers everything it finds in an assembly as one module: what the tests prove is what it does
+    with this one. The root namespace is Library for the reason the gallery's is Gallery: HotChocolate's generator
+    writes its names without "global::".
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Library</RootNamespace>
+  </PropertyGroup>
+
+  <!-- HotChocolate's generator arrives with the package, as it does for a NuGet consumer. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+  </ItemGroup>
+
+  <!-- The toolkit's generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

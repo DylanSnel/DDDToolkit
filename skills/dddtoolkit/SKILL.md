@@ -1,6 +1,6 @@
 ---
 name: dddtoolkit
-description: Write, review and fix .NET domain code built on DDDToolkit, the source generators behind [AggregateRoot<T>], [Entity<T>], [EntityId<T>], [ValueObject] and [SingleValueObject<T>]. Use when a project references a DDDToolkit package; when code uses those attributes, IInvariant<T>, DomainEvent, [assembly: Module], [ModuleContract] or [IntegrationEvent]; when a build reports a DDD000xx diagnostic; or when modelling aggregates, value objects, identifiers, invariants, domain events, module boundaries or their Entity Framework persistence in such a project.
+description: Write, review and fix .NET domain code built on DDDToolkit, the source generators behind [AggregateRoot<T>], [Entity<T>], [EntityId<T>], [ValueObject] and [SingleValueObject<T>]. Use when a project references a DDDToolkit package; when code uses those attributes, IInvariant<T>, DomainEvent, [assembly: Module], [ModuleContract] or [IntegrationEvent]; when a build reports a DDD000xx diagnostic; or when modelling aggregates, value objects, identifiers, invariants, domain events, module boundaries, their Entity Framework persistence, a supporting domain such as Tenancy (tenants, seats, roles, permission keys) or a HotChocolate GraphQL schema in such a project.
 ---
 
 # DDDToolkit
@@ -52,7 +52,7 @@ Namespaces:
 | `DDDToolkit.Validation` | `ValidationErrorBuilder`, `ValidationError`, `TryToValid`, `Prefixed`, `ToErrorDictionary` |
 | `DDDToolkit.Exceptions` | `ConcurrencyConflictException`, `InvariantViolationException`, `InvalidValueObjectException` |
 | `DDDToolkit.Abstractions.Access` | `Caller`, the parameter of a `[RowAccess]` rule, and `Sql.Call`/`Sql.Raw` |
-| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for |
+| `DDDToolkit.Access` | `Callers.Begin`/`FromClaims` and `ICallerAccessor`: who the application is acting for. And what a request requires of its caller: `IRequireAccess`, `AccessRequirement` (with the core's `AllowAnonymous()`, `SignedIn()` and `RequiresSystemWork()`, which `CallerAccessCheck` decides in every module), `IAccessCheck`, `AccessChecks<TRequests>`, `Checked<T>` (an answer a check worked out, kept for the code after it), `RequestInHand` (the request whose checks let it through, in the flow its handler and save run in, with the requirement it passed; `StillPassesAsync()` asks its check again); a handler acts on its request and takes nothing from the check; `[AccessRequests]` on a module's request interface has the Mediator pipeline behaviors written that ask the checks (one for requests, one for stream queries) |
 
 ## Identifiers
 
@@ -67,8 +67,11 @@ public readonly partial record struct OrderId;
   `TryParse` (prefix optional), `IParsable<T>` (so minimal API route binding works), `IComparable<T>`,
   explicit conversions to and from the raw value, and a System.Text.Json converter that writes the bare
   value. Do not add implicit conversions: they undo the type safety.
-- Create stored ids with `OrderId.CreateSequential()` (a version 7 `Guid`, index friendly), otherwise
-  `CreateUnique()`. Both exist for `Guid` only; construct other ids with the constructor.
+- Make a new id in code, before the save, with `OrderId.Create()`: for a `Guid` the generator writes it, a version 7
+  `Guid` (index friendly, as `CreateSequential()`), and implements `ICreatableEntityId<OrderId>` with it, so code that
+  is generic over ids calls `TId.Create()`. `CreateUnique()` makes a random one. An id over a `long` or a `string`
+  has no `Create()` until its partial declaration declares one, which a package that makes its ids, Tenancy, asks
+  for ([DDD00067](references/diagnostics.md)); construct other ids with the constructor. The database never makes an id.
 - A struct id cannot be null, and `default` is `Empty`. Guard with `IsEmpty`; use `OrderId?` for an
   optional id.
 - The raw type is a value type or `string` ([DDD00008](references/diagnostics.md)).
@@ -168,7 +171,7 @@ public partial class Order
             throw new InvalidOperationException("Only a draft order takes new lines.");
         }
 
-        _lines.Add(new OrderLine(OrderLineId.CreateSequential(), product, quantity));
+        _lines.Add(new OrderLine(OrderLineId.Create(), product, quantity));
         RaiseDomainEvent(new LineAdded(Id, product, quantity));
     }
 }
@@ -277,10 +280,10 @@ public sealed record OrderCancelled(OrderId OrderId, string Reason) : DomainEven
 
 - An ordinary `sealed record` deriving from `DomainEvent`, with no attribute required and no `partial`.
   `EventId` and `OccurredAt` come from the base.
-- Its stored and published name is a convention: the module from `[assembly: Module("Ordering")]` and
-  the class name, both in kebab case (`order-cancelled` without a module). A class name ending in `V`
-  and a number is that version: `OrderPlacedV2` is version 2 of `ordering.order-placed`. Do not write
-  names by hand.
+- Its stored and published name is a convention: the module, from `<DDD_Module>Ordering</DDD_Module>` or
+  `[assembly: Module("Ordering")]`, and the class name, both in kebab case (`order-cancelled` without a
+  module). A class name ending in `V` and a number is that version: `OrderPlacedV2` is version 2 of
+  `ordering.order-placed`. Do not write names by hand.
 - Renaming a class changes its name, so pin the old one when the event has been stored or published:
   `[DomainEventName("ordering.order-cancelled")]` on a domain event,
   `[IntegrationEvent("ordering.order-cancelled")]` on a contract. The generated `{Module}EventNames`
@@ -330,12 +333,57 @@ Wiring Entity Framework, choosing in-process dispatch or the outbox, declaring m
 consuming integration events: [references/persistence-and-modules.md](references/persistence-and-modules.md).
 The mistakes it prevents most often:
 
-- `UseDDDToolkit(services)` takes the provider from the `AddDbContext((services, options) => ...)`
-  callback, not the root provider.
+- `UseDDDToolkit(services)` takes the provider the registration's callback hands it,
+  `AddDbContext((services, options) => ...)` or a pool's, never one built or kept by hand. A pool hands it
+  the root provider, and `AddScopedFromPool<TContext>()` binds each rental to the scope that rents it.
+- `UseDDDToolkit` is the one call per context: it adds the toolkit's interceptors and what the registered
+  packages bring, row level security on Postgres and Tenancy's save check, each in its place, the save check
+  last. Do not write `UseSupabaseRowLevelSecurity` or `UseTenancy` next to it. A context that should do without
+  a part, one that runs as the login role, takes `UseDDDToolkitCore` and the `Use...` calls it does want; a
+  context whose model keeps rows to a tenant is refused at its first save without Tenancy's save check, so a
+  host that uses `ScopeToTenant` registers `AddTenancy`. The one call after it is Membership's expert hold,
+  `.UseMemberHolds(services)`, and only on a context the host wants every save of a resource with members held to
+  its request's check; without it the default path holds the change (`ExpectVersion`).
 - `ConfigureConventions` calls `AddDDDToolkitConventions()` and one generated `Add{Module}Converters()`
   per module, plus one per assembly that is no module and declares identifiers or single value objects.
+  Only a project that references Entity Framework gets the method. A module's projects without it
+  (domain, contracts) get none: the method of the module's project that holds the context registers
+  their ids, and the published ids of other modules, itself.
+- A package's registration closed over the module's classes, such as `modelBuilder.AddTenancy()`, is
+  generated into the module's project that holds the context, and into no project above it: an API project
+  that composes the module calls that project's own public registration, not the generated one.
 - Child entities, value objects and collections need no mapping code, and child entities get no `DbSet`.
 - A module never holds another module's entity (DDD00023) or names what it does not publish (DDD00022).
+
+## Supporting domains, Tenancy and GraphQL
+
+Tenants, seats, roles and who may do what on the Tenancy package, and how a module on it is laid out:
+[references/tenancy.md](references/tenancy.md). A GraphQL schema with HotChocolate, in one module or
+composed over several: [references/graphql.md](references/graphql.md). The mistakes they prevent most often:
+
+- A class declared with a package's template (`[SeatAggregate<SeatId>]`) gets the package's rules first and
+  adds its own. Its registrations (`modelBuilder.AddTenancy()`) are generated: do not write them by hand.
+- A module asks Tenancy inside its own query, `answers.Over(db).UnitsWhereIHold(key)` as a subquery, and
+  answers ids. The application's own seats and units, whole, and a role's name are asked of Tenancy's
+  directory, by id; a seat has no name of Tenancy's, only what the application keeps on its seat class.
+- Whether a command may run is asked when it runs, by the use case. A key set only draws a screen.
+- A role a tenant got from a pack follows a pack you change later only where the host calls
+  `builder.Services.SyncRolePacks()`, beside `RunStartupChecks()` and not among the checks. Without it a key
+  added to a pack, or a module's new keys, reach the tenants provisioned afterwards alone.
+- A row rule asks a resource with members by its id, through a one-line contract in the module that owns the
+  id: `[ResourceAccessContract<ProjectId>(ResourceAccessSet.Seen)] public static partial class ProjectsISee;`,
+  asked as `ProjectsISee.Ids().Contains(row.ProjectId)`. No rule and no contract names the SQL function: the
+  Membership contribution says which of its functions answers.
+- Tenancy's and Membership's SQL on Postgres comes with referencing their Postgres packages, from what the
+  application marks: the catalogue `[TenancyCatalogue]`, the operators' token roles `[TenancyOperators]`, each
+  resource's rules `[MembershipRules<TMember>]`. Never write a class derived from `TenancyRowAccessContribution`
+  or `MembershipRowAccessContribution<T>`; `[assembly: UseRowAccessContribution]` lists only the application's
+  own SQL, a module's trigger say, which the module offers with `[assembly: RowAccessContribution]` (DDD00069
+  until the exporting project lists it). Marks in a library are public (DDD00070).
+- In a module whose use cases are commands and queries, a route and a GraphQL resolver only send one.
+  Neither decides who may do what, and neither takes a `DbContext`.
+- A GraphQL type is `[ObjectType<T>]` over the application's own record, a list is paged by HotChocolate's
+  own paging, and a nested list is a resolver behind a generated `[DataLoader]`.
 
 ## Further reading
 
@@ -352,10 +400,16 @@ this skill:
 | Deciding what belongs in one aggregate | `aggregate-design` |
 | Events, testing | `domain-events`, `testing` |
 | Entity Framework mapping, concurrency, migrations | `entity-framework` |
+| What the registrations check at start-up, `RunStartupChecks`, turning one off | `startup-checks` |
+| Running queries as the caller, row access rules in C#, column rules | `row-level-security` |
 | Tables keyed on more than the id (`[KeyPart]`) | `composite-keys` |
 | In-process dispatch versus the outbox | `event-delivery` |
 | Modules, contracts, integration events, versioning | `modules`, `module-contracts`, `integration-events` |
+| What a request requires of its caller, access checks, the generated behavior | `access-requirements` |
 | pgmq, Wolverine, MassTransit, a custom sink | `transports` |
+| Tenants, the organization tree, seats and roles | `tenancy` |
+| Access to a resource through its members, their roles and its owner | `membership` |
+| Extending a supporting domain's aggregate, or writing one (`[AggregateRootBase]`, templates) | `writing-a-supporting-domain` |
 | GraphQL with HotChocolate, Fusion across modules | `graphql` |
 | Value object rules as FluentValidation validators | `fluent-validation` |
 | Failures in the reader's language | `localization` |

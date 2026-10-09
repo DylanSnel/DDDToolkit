@@ -23,6 +23,10 @@ public sealed class EntityGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(context.Entities(), static (productionContext, definition) => Execute(productionContext, definition));
         context.RegisterSourceOutput(context.AggregateRoots(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.EntityBases(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.AggregateRootBases(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.TemplateEntities(), static (productionContext, definition) => Execute(productionContext, definition));
+        context.RegisterSourceOutput(context.TemplateAttributeProblems(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
         context.RegisterSourceOutput(context.MisplacedKeyParts(), static (productionContext, diagnostic) => diagnostic.Report(productionContext));
     }
 
@@ -35,20 +39,31 @@ public sealed class EntityGenerator : IIncrementalGenerator
         }
 
         var type = definition.Type;
-        var baseType = definition.IsAggregateRoot ? "AggregateRoot" : "Entity";
+        var baseType = definition.BaseType
+            ?? KnownTypes.BaseTypesNamespace + "." + (definition.IsAggregateRoot ? "AggregateRoot" : "Entity") + "<" + definition.IdType + ">";
         var interfaces = definition.KeyParts.Count > 0 ? ", " + KnownTypes.HasKeyPartsInterface : string.Empty;
         var writer = new CodeWriter().Header();
 
         using (writer.TypeScope(type))
         {
-            using (writer.Block(type.PartialHeader + " : " + KnownTypes.BaseTypesNamespace + "." + baseType + "<" + definition.IdType + ">" + interfaces))
+            using (writer.Block(type.PartialHeader + " : " + baseType + interfaces))
             {
+                // Private in a sealed class, where protected means nothing and is CS0628, a warning in
+                // generated code that a project building with TreatWarningsAsErrors could not get rid of.
+                // Entity Framework finds a private constructor as readily as a protected one.
                 writer.Line("/// <summary>Parameterless constructor for persistence frameworks and serializers.</summary>");
-                using (writer.Block("protected " + type.Name + "()"))
+                using (writer.Block((type.IsSealed ? "private " : "protected ") + type.Name + "()"))
                 {
                 }
 
-                WriteInvariantSeam(writer, definition);
+                if (definition.IsBase)
+                {
+                    WriteBaseInvariantSeam(writer, definition);
+                }
+                else
+                {
+                    WriteInvariantSeam(writer, definition);
+                }
                 WriteKeyParts(writer, definition);
 
                 foreach (var collection in definition.Collections)
@@ -125,6 +140,97 @@ public sealed class EntityGenerator : IIncrementalGenerator
     {
         var what = definition.IsAggregateRoot ? "aggregate" : "entity";
 
+        WriteSeamDeclaration(writer, definition, what);
+        WriteInvariantRules(writer, definition);
+        WriteCollectInvariantViolations(writer, definition);
+        WriteCollectChildInvariantViolations(writer, definition, what);
+        WriteThrowInvariantViolations(writer, definition, what);
+        WriteGetOwnInvariantViolations(writer, definition, what);
+        WriteEnsureOwnInvariants(writer, definition, what);
+        WriteGetInvariantViolations(writer, definition, what);
+        WriteEnsureInvariants(writer, definition, what);
+    }
+
+    /// <summary>
+    /// What a parent a package ships gets: the seam and the rules, as every entity has them, two protected
+    /// methods that collect what they find, which the class declared with the template calls before it runs
+    /// anything of its own, and the four public methods built on those two alone.
+    /// <para>
+    /// The class declared with the template overrides the four again, because it knows its own rules and
+    /// children as well as the parent's and answers with a single list. The parent's are there for a class
+    /// that derives from it by hand, with no template and so no generated part: it would otherwise inherit
+    /// <c>Entity&lt;TId&gt;</c>'s, which check nothing, and the parent's rules would never run.
+    /// </para>
+    /// <para>
+    /// Every violation the parent reports names the type it is handed: the class declared with the
+    /// template passes its own, which is what the rest of its violations name, and the fallbacks pass the
+    /// object's actual type. A caller handed a list wants to know which object is wrong, and that object is
+    /// the application's own class, never the package's parent.
+    /// </para>
+    /// </summary>
+    private static void WriteBaseInvariantSeam(CodeWriter writer, EntityDefinition definition)
+    {
+        var what = definition.IsAggregateRoot ? "aggregate" : "entity";
+
+        WriteSeamDeclaration(writer, definition, what);
+        WriteInvariantRules(writer, definition);
+        WriteCollectInvariantViolations(writer, definition);
+        WriteCollectChildInvariantViolations(writer, definition, what);
+        WriteBaseFallbacks(writer, what);
+    }
+
+    /// <summary>
+    /// The four public methods of a parent, for a class that derives from it by hand: the parent's rules,
+    /// seam and children, named after the object's actual type. A class declared with the template
+    /// replaces all four.
+    /// </summary>
+    private static void WriteBaseFallbacks(CodeWriter writer, string what)
+    {
+        var violation = KnownTypes.InvariantViolation;
+        var list = "global::System.Collections.Generic.List<" + violation + ">";
+
+        foreach (var (name, walks, ensures) in new[]
+                 {
+                     ("GetOwnInvariantViolations", false, false),
+                     ("EnsureOwnInvariants", false, true),
+                     ("GetInvariantViolations", true, false),
+                     ("EnsureInvariants", true, true),
+                 })
+        {
+            writer.Line();
+            writer.Line("/// <summary>");
+            writer.Line("/// Runs the rules and <c>CheckInvariants()</c> seam of this " + what + (walks ? " and of every child entity it holds" : string.Empty) + ", and");
+            writer.Line(ensures
+                ? "/// throws when it finds something broken. A class declared with this parent's template replaces"
+                : "/// returns every rule that is broken, without throwing. A class declared with this parent's template replaces");
+            writer.Line("/// this with its own, which runs these rules and then its own; this one is for a class derived by hand.");
+            writer.Line("/// </summary>");
+            using (writer.Block("public override " + (ensures ? "void" : ViolationList) + " " + name + "()"))
+            {
+                writer.Line(list + "? violations = null;");
+                writer.Line(KnownTypes.InvariantViolationException + "? seamFailure = null;");
+                writer.Line("CollectBaseInvariantViolations(ref violations, ref seamFailure, GetType());");
+                if (walks)
+                {
+                    writer.Line("CollectBaseChildInvariantViolations(ref violations);");
+                }
+
+                writer.Line();
+                using (writer.Block("if (violations is null)"))
+                {
+                    writer.Line(ensures ? "return;" : "return global::System.Array.Empty<" + violation + ">();");
+                }
+
+                writer.Line();
+                writer.Line(ensures
+                    ? "throw new " + KnownTypes.InvariantViolationException + "(GetType(), Id, violations, seamFailure);"
+                    : "return violations;");
+            }
+        }
+    }
+
+    private static void WriteSeamDeclaration(CodeWriter writer, EntityDefinition definition, string what)
+    {
         writer.Line();
         writer.Line("/// <summary>");
         writer.Line("/// Implement this in your own part of the class to state what must be true of this");
@@ -136,15 +242,6 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// <c>IInvariant&lt;" + definition.Type.Name + "&gt;</c>, which this " + what + " runs as well.");
         writer.Line("/// </summary>");
         writer.Line("partial void CheckInvariants();");
-
-        WriteInvariantRules(writer, definition);
-        WriteCollectInvariantViolations(writer, definition);
-        WriteCollectChildInvariantViolations(writer, definition, what);
-        WriteThrowInvariantViolations(writer, definition, what);
-        WriteGetOwnInvariantViolations(writer, definition, what);
-        WriteEnsureOwnInvariants(writer, definition, what);
-        WriteGetInvariantViolations(writer, definition, what);
-        WriteEnsureInvariants(writer, definition, what);
     }
 
     /// <summary>The child entity collections this type holds, which are the ones an aggregate answers for.</summary>
@@ -168,13 +265,27 @@ public sealed class EntityGenerator : IIncrementalGenerator
     /// can erase outright.
     /// </summary>
     private static bool Collects(EntityDefinition definition)
-        => definition.Invariants.Count > 0 || Children(definition).Count > 0;
+        => CollectsOwn(definition) || WalksChildren(definition);
+
+    /// <summary>
+    /// Whether this object alone has anything to collect beyond its seam: rules of its own, or a parent
+    /// whose rules it runs. A parent from another assembly is taken to have some, because nothing here
+    /// can see whether it does, and the call costs nothing when it has none.
+    /// </summary>
+    private static bool CollectsOwn(EntityDefinition definition)
+        => definition.Invariants.Count > 0 || definition.ChainsToParent;
+
+    /// <summary>Whether this object answers for children: its own collections of them, or its parent's.</summary>
+    private static bool WalksChildren(EntityDefinition definition)
+        => Children(definition).Count > 0 || definition.ChainsToParent;
 
     /// <summary>What the self-only methods say they run, which is the seam alone until rules are stated.</summary>
     private static string Runs(EntityDefinition definition, string what)
-        => definition.Invariants.Count == 0
-            ? "this " + what + "'s <c>CheckInvariants()</c> seam"
-            : "this " + what + "'s rules and its <c>CheckInvariants()</c> seam";
+        => definition.ChainsToParent
+            ? "the rules and <c>CheckInvariants()</c> seams of its parent and of this " + what
+            : definition.Invariants.Count == 0
+                ? "this " + what + "'s <c>CheckInvariants()</c> seam"
+                : "this " + what + "'s rules and its <c>CheckInvariants()</c> seam";
 
     /// <summary>
     /// The rules this type states, one instance of each. Static and created once because an
@@ -219,13 +330,35 @@ public sealed class EntityGenerator : IIncrementalGenerator
     {
         var violation = KnownTypes.InvariantViolation;
         var list = "global::System.Collections.Generic.List<" + violation + ">";
-        var reporter = ", typeof(" + definition.Type.FullyQualifiedName + "), Id)";
+
+        // A parent is closed over a type it cannot name, so the class that calls it says which type reports.
+        var reporter = definition.IsBase ? ", entityType, Id)" : ", typeof(" + definition.Type.FullyQualifiedName + "), Id)";
+
+        // The first seam that throws is the one kept: the parent's, when both do, because it ran first.
+        var keepSeamFailure = definition.IsBase || definition.ChainsToParent ? "seamFailure ??= failure;" : "seamFailure = failure;";
 
         writer.Line();
         writer.Line("/// <summary>");
-        writer.Line("/// Runs every rule and then the seam, and adds what is broken to <paramref name=\"violations\"/>.");
-        writer.Line("/// Never throws for a broken rule: throwing is the boundary's job, and it is done in exactly");
-        writer.Line("/// one place.");
+        if (definition.IsBase)
+        {
+            writer.Line("/// Runs every rule this parent states and then its seam, and adds what is broken to");
+            writer.Line("/// <paramref name=\"violations\"/>. Called by the class that derives from this parent, before it");
+            writer.Line("/// runs anything of its own, so the parent's rules hold wherever the class is used. Never");
+            writer.Line("/// throws for a broken rule.");
+        }
+        else if (definition.ChainsToParent)
+        {
+            writer.Line("/// Runs the parent's rules and seam, then every rule of this class and its seam, and adds what");
+            writer.Line("/// is broken to <paramref name=\"violations\"/>. Never throws for a broken rule: throwing is the");
+            writer.Line("/// boundary's job, and it is done in exactly one place.");
+        }
+        else
+        {
+            writer.Line("/// Runs every rule and then the seam, and adds what is broken to <paramref name=\"violations\"/>.");
+            writer.Line("/// Never throws for a broken rule: throwing is the boundary's job, and it is done in exactly");
+            writer.Line("/// one place.");
+        }
+
         writer.Line("/// </summary>");
         writer.Line("/// <param name=\"violations\">");
         writer.Line("/// The list being built, created on the first failure and left <see langword=\"null\"/> while");
@@ -236,10 +369,38 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// What <c>CheckInvariants()</c> threw, so the caller that throws can keep it as the inner");
         writer.Line("/// exception and lose no stack trace, or <see langword=\"null\"/> when the seam was happy.");
         writer.Line("/// </param>");
-        writer.Line("private void CollectInvariantViolations(");
-        writer.Line("    ref " + list + "? violations,");
-        using (writer.Block("    out " + KnownTypes.InvariantViolationException + "? seamFailure)"))
+
+        string lastLine;
+        if (definition.IsBase)
         {
+            // Documented like the other two: a package that ships the parent and its XML documentation
+            // would otherwise get CS1573 for this parameter in every parent it declares.
+            writer.Line("/// <param name=\"entityType\">");
+            writer.Line("/// The type every violation names, the class that derives from this parent: the parent cannot");
+            writer.Line("/// name it, so its caller passes it.");
+            writer.Line("/// </param>");
+            writer.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+            writer.Line("protected void CollectBaseInvariantViolations(");
+            writer.Line("    ref " + list + "? violations,");
+            writer.Line("    ref " + KnownTypes.InvariantViolationException + "? seamFailure,");
+            lastLine = "    global::System.Type entityType)";
+        }
+        else
+        {
+            writer.Line("private void CollectInvariantViolations(");
+            writer.Line("    ref " + list + "? violations,");
+            lastLine = "    out " + KnownTypes.InvariantViolationException + "? seamFailure)";
+        }
+
+        using (writer.Block(lastLine))
+        {
+            if (definition.ChainsToParent)
+            {
+                writer.Line("seamFailure = null;");
+                writer.Line("CollectBaseInvariantViolations(ref violations, ref seamFailure, typeof(" + definition.Type.FullyQualifiedName + "));");
+                writer.Line();
+            }
+
             if (definition.Invariants.Count > 0)
             {
                 using (writer.Block("foreach (var invariant in __invariants)"))
@@ -256,8 +417,12 @@ public sealed class EntityGenerator : IIncrementalGenerator
                 writer.Line();
             }
 
-            writer.Line("seamFailure = null;");
-            writer.Line();
+            if (!definition.IsBase && !definition.ChainsToParent)
+            {
+                writer.Line("seamFailure = null;");
+                writer.Line();
+            }
+
             using (writer.Block("try"))
             {
                 writer.Line("CheckInvariants();");
@@ -268,7 +433,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
                 writer.Line("// The seam reports by throwing, because that is the shape that lets it be erased when");
                 writer.Line("// nobody implements it. Catching it here is what lets the asking stage see what it");
                 writer.Line("// found without every caller having to catch.");
-                writer.Line("seamFailure = failure;");
+                writer.Line(keepSeamFailure);
                 writer.Line("violations ??= new " + list + "();");
                 writer.Line();
                 writer.Line("var reported = failure.Violations;");
@@ -292,7 +457,8 @@ public sealed class EntityGenerator : IIncrementalGenerator
 
     /// <summary>
     /// The walk that makes an aggregate answer for what it holds. Written only for a type that holds
-    /// child entities, so nothing else pays for it.
+    /// child entities, or whose parent may, so nothing else pays for it. A parent always gets one, empty
+    /// or not, because the class that derives from it calls it without knowing what the parent holds.
     /// <para>
     /// It reads the generated backing field rather than the property, because the property hands out a
     /// read-only wrapper and this would allocate one per call, on a path whose whole point is that the
@@ -302,7 +468,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
     private static void WriteCollectChildInvariantViolations(CodeWriter writer, EntityDefinition definition, string what)
     {
         var children = Children(definition);
-        if (children.Count == 0)
+        if (!definition.IsBase && !WalksChildren(definition))
         {
             return;
         }
@@ -323,8 +489,25 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// construction misses nothing real.");
         writer.Line("/// </para>");
         writer.Line("/// </summary>");
-        using (writer.Block("private void CollectChildInvariantViolations(ref " + list + "? violations)"))
+        if (definition.IsBase)
         {
+            writer.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+        }
+
+        var signature = definition.IsBase
+            ? "protected void CollectBaseChildInvariantViolations(ref " + list + "? violations)"
+            : "private void CollectChildInvariantViolations(ref " + list + "? violations)";
+        using (writer.Block(signature))
+        {
+            if (definition.ChainsToParent)
+            {
+                writer.Line("CollectBaseChildInvariantViolations(ref violations);");
+                if (children.Count > 0)
+                {
+                    writer.Line();
+                }
+            }
+
             for (var child = 0; child < children.Count; child++)
             {
                 if (child > 0)
@@ -443,7 +626,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// walk: the save reaches the children itself, from the change tracker, and would otherwise");
         writer.Line("/// be told about each of them twice.");
         writer.Line("/// <para>");
-        if (definition.Invariants.Count == 0)
+        if (!CollectsOwn(definition))
         {
             writer.Line("/// Whatever the seam throws reaches the caller as it was thrown. At the save, broken is no");
             writer.Line("/// longer an answer.");
@@ -459,7 +642,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// </summary>");
         using (writer.Block("public override void EnsureOwnInvariants()"))
         {
-            if (definition.Invariants.Count == 0)
+            if (!CollectsOwn(definition))
             {
                 writer.Line("CheckInvariants();");
                 return;
@@ -486,7 +669,6 @@ public sealed class EntityGenerator : IIncrementalGenerator
     private static void WriteGetInvariantViolations(CodeWriter writer, EntityDefinition definition, string what)
     {
         var violation = KnownTypes.InvariantViolation;
-        var children = Children(definition);
 
         writer.Line();
         writer.Line("/// <summary>");
@@ -502,7 +684,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// </para>");
         writer.Line("/// </summary>");
 
-        if (children.Count == 0)
+        if (!WalksChildren(definition))
         {
             writer.Line("public override " + ViolationList + " GetInvariantViolations() => GetOwnInvariantViolations();");
             return;
@@ -532,7 +714,6 @@ public sealed class EntityGenerator : IIncrementalGenerator
     private static void WriteEnsureInvariants(CodeWriter writer, EntityDefinition definition, string what)
     {
         var violation = KnownTypes.InvariantViolation;
-        var children = Children(definition);
 
         writer.Line();
         writer.Line("/// <summary>");
@@ -556,7 +737,7 @@ public sealed class EntityGenerator : IIncrementalGenerator
         writer.Line("/// </para>");
         writer.Line("/// </summary>");
 
-        if (children.Count == 0)
+        if (!WalksChildren(definition))
         {
             if (!Collects(definition))
             {
@@ -604,6 +785,11 @@ public sealed class EntityGenerator : IIncrementalGenerator
     /// that builds the composite key. Reflection does not promise declaration order, so the order is
     /// written down here, where the generator still has the source. A type without key parts gets
     /// nothing, not even the interface, so its generated code is exactly what it was before.
+    /// <para>
+    /// A parent a package ships also hands its list to the class declared with its template. That class
+    /// inherits the parent's list when it has no key parts of its own; with some, it implements the list
+    /// again, and has to put the parent's in front of its own or the parent's would drop out of the key.
+    /// </para>
     /// </summary>
     private static void WriteKeyParts(CodeWriter writer, EntityDefinition definition)
     {
@@ -618,9 +804,24 @@ public sealed class EntityGenerator : IIncrementalGenerator
             names.Append(names.Length == 0 ? string.Empty : ", ").Append("nameof(").Append(name).Append(')');
         }
 
+        var list = "global::System.Collections.Generic.IReadOnlyList<string>";
+        if (definition.IsBase)
+        {
+            writer.Line();
+            writer.Line("/// <summary>This parent's <c>[KeyPart]</c> properties, for the class declared with its template to put in front of its own.</summary>");
+            writer.Line("[global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]");
+            writer.Line("protected static " + list + " __BaseKeyParts { get; } = new string[] { " + names + " };");
+        }
+
+        var value = definition.IsBase
+            ? "__BaseKeyParts"
+            : definition.ChainsToParent && definition.ParentHasKeyParts
+                ? "global::System.Linq.Enumerable.ToArray(global::System.Linq.Enumerable.Concat(__BaseKeyParts, new string[] { " + names + " }))"
+                : "new string[] { " + names + " }";
+
         writer.Line();
         writer.Line("/// <summary>The <c>[KeyPart]</c> properties of this type, in the order they join the primary key ahead of <c>Id</c>.</summary>");
-        writer.Line("static global::System.Collections.Generic.IReadOnlyList<string> " + KnownTypes.HasKeyPartsInterface + ".KeyParts => new string[] { " + names + " };");
+        writer.Line("static " + list + " " + KnownTypes.HasKeyPartsInterface + ".KeyParts => " + value + ";");
     }
 
     private static string View(CollectionPropertyInfo collection, bool readOnlySetAvailable) => collection.Backing switch

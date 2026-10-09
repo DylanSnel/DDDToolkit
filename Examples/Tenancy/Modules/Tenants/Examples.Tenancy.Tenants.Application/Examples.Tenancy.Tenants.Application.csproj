@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Tenancy's use cases as the application offers them: a command or a query for each, with its own handler. Most
+    hand their arguments to a use case of the Tenancy package, which checks the caller and decides; the queries
+    read through the port this project declares, ITenancyReads, which the infrastructure project implements. So it
+    needs the package and the domain, and neither Entity Framework nor ASP.NET Core.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Tenants.Domain\Examples.Tenancy.Tenants.Domain.csproj" />
+    <!-- What every module's paged query checks before it reads: that its page is asked for from one end, in a size of the list's own. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Application\Examples.Tenancy.Shared.Application.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Tenancy\DDDToolkit.Supporting.Tenancy.csproj" />
+    <!-- The module adds the texts of its refusals, English and Dutch, to the toolkit's localizer. No ASP.NET Core comes with it. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Localization\DDDToolkit.Localization.csproj" />
+  </ItemGroup>
+
+  <!--
+    The request and handler interfaces and the pipeline, and nothing that runs them: the mediator itself is
+    generated into the host, which is the one project that references Mediator.SourceGenerator.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Mediator.Abstractions" />
+    <!-- PagingArguments and Page<T>, which the paged query of the access history takes and answers. It has no dependencies. -->
+    <PackageReference Include="GreenDonut.Data.Primitives" />
+  </ItemGroup>
+
+  <!-- The generator. A NuGet consumer gets it through the packages above; inside this repository it is wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

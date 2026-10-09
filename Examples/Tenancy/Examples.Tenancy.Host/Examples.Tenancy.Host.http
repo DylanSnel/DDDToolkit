@@ -1,0 +1,1088 @@
+@api = http://localhost:5090
+
+# Who may do what in the Tenancy sample, one request at a time. Start the AppHost (dotnet run --project
+# Examples/Tenancy/Examples.Tenancy.AppHost, with Docker running): it starts the database and this host, in
+# Development, at the address above. Then send these from the top: each person signs in once, and the requests
+# after it use that token. Every refusal but a 401 is problem+json with a code; the comment above a request
+# says which to expect.
+#
+# The demonstration's ids are fixed (Seeding/DemoData.cs), so they are named here once. The first letter of
+# an id says what it is (a tenant, b unit, c seat, d person, e role of the organization, 9 project role,
+# f project), and its last three digits the tenant (1 harbor, 2 meadow) and the number. A seat's number is its
+# person's; a project role's is the number of the role of the organization of the same name.
+@harbor = a0000000-0000-4000-8000-000000000001
+@harborRoot = b0000000-0000-4000-8000-000000000101
+@northCoast = b0000000-0000-4000-8000-000000000103
+@northInland = b0000000-0000-4000-8000-000000000104
+@southBay = b0000000-0000-4000-8000-000000000106
+@meadowRoot = b0000000-0000-4000-8000-000000000201
+@adasSeat = c0000000-0000-4000-8000-000000000101
+@leosSeat = c0000000-0000-4000-8000-000000000103
+@junoSeat = c0000000-0000-4000-8000-000000000104
+@vicsSeat = c0000000-0000-4000-8000-000000000105
+@tovesSeat = c0000000-0000-4000-8000-000000000107
+@tovesMeadowSeat = c0000000-0000-4000-8000-000000000207
+@hanasSeat = c0000000-0000-4000-8000-000000000108
+@maudsSeat = c0000000-0000-4000-8000-000000000109
+@areaManager = e0000000-0000-4000-8000-000000000102
+@crewLead = e0000000-0000-4000-8000-000000000103
+@surveyor = e0000000-0000-4000-8000-000000000104
+@observer = e0000000-0000-4000-8000-000000000105
+@accessAdmin = e0000000-0000-4000-8000-000000000107
+@meadowTenantAdmin = e0000000-0000-4000-8000-000000000201
+@meadowSurveyor = e0000000-0000-4000-8000-000000000204
+@projectCrewLead = 90000000-0000-4000-8000-000000000103
+@projectSurveyor = 90000000-0000-4000-8000-000000000104
+@projectObserver = 90000000-0000-4000-8000-000000000105
+@pier7 = f0000000-0000-4000-8000-000000000101
+@inlandDepot = f0000000-0000-4000-8000-000000000102
+@bayBridge = f0000000-0000-4000-8000-000000000103
+@gardenShed = f0000000-0000-4000-8000-000000000201
+
+### Who can sign in: the nine people of the demonstration who have a seat, each with what signing in as them
+### shows. The dev login exists only in Development with DevLogin:Enabled; anywhere else these routes are 404.
+### orla, who works for the application and has no seat, signs in further down.
+GET {{api}}/dev/people
+
+### Sign in as rhea, area manager of North at Harbor Works. The answer has the shape of Supabase Auth's
+### POST /auth/v1/token, and the token is an ordinary Supabase access token: the API checks it with the
+### Supabase bearer and finds rhea's seats by its sub.
+# @name rhea
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "rhea" }
+
+### Her seats, in every tenant. A token and no tenant: this is how a client offers the tenants to pick from.
+GET {{api}}/me/seats
+Authorization: Bearer {{rhea.response.body.access_token}}
+
+### Who she is in harbor. The Tenant header names the tenant by its slug; the seat comes from her own seats.
+### Her Area manager role is granted at North, so every key she holds reaches North, North Coast and North
+### Inland, and nothing else.
+GET {{api}}/me
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### Where she holds one key: the three units of North, by their ids, and not the whole tenant.
+GET {{api}}/access/units?key=projects.edit
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### Her projects: Pier 7 at North Coast, reached through the organization, and Inland depot, which she owns
+### and so reaches through its crew. Bay bridge in South Bay and HQ refit at the root are not in the list.
+### A project names its unit and its crew by id, and the project roles each member holds: Projects has no name
+### of Tenancy's to give, and its project roles are named by GET /project-roles. She manages the crews of North,
+### so each member arrives with its roles. myRoleIds lists the project roles she holds on a project now: none
+### on Pier 7. Each project
+### says what she may do to it, in "can". The list comes a page at a time, by number: "items", and "next", the
+### cursor of the page after it, which is null on the last. Enum values are in lower snake case: "open", "crew".
+GET {{api}}/projects
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### One to a page, and counted: Pier 7, "total": 2, and a "next" to send as "after" for the page that holds
+### Inland depot. A size outside 1 to 200 is 400 projects.page-size-invalid.
+# @name firstPage
+GET {{api}}/projects?size=1&count=true
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### The page after it. The cursor is a place in the list by number, and the one GraphQL gives as endCursor.
+GET {{api}}/projects?size=1&after={{firstPage.response.body.next}}
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### A text that is no cursor of this list is refused, not read as a place in it: 400 projects.cursor-invalid.
+### A project's inspections and the access history answer the same of theirs, inspections.cursor-invalid and
+### tenancy.cursor-invalid, and so does a cursor of another list, or one with a head somebody wrote.
+GET {{api}}/projects?after=not-a-cursor
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### Narrowed: the open projects at North Inland or below it whose number starts with "p-" or whose name
+### contains it, whatever the case. A filter never shows a project she does not reach.
+GET {{api}}/projects?state=open&unit={{northInland}}&text=p-
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### What she holds for the whole tenant, for a client's navigation: nothing, since her role is held at North
+### and not at the root. A key the catalogue does not know is 400 tenancy.unknown-permission.
+GET {{api}}/access/keys?keys=projects.open,tenancy.grants.manage
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### What she holds on each of a page of projects, asked once: a POST that only asks, because the ids travel in
+### the body. Pier 7 and Inland depot each with their keys; Bay bridge, which she cannot see, is not in the
+### answer, exactly as an id that names nothing. More than 200 ids is 400 projects.too-many-ids.
+POST {{api}}/access/projects/keys
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "keys": ["projects.edit", "projects.close", "inspections.record"], "projects": ["{{pier7}}", "{{inlandDepot}}", "{{bayBridge}}"] }
+
+### What those ids are called: the directory, asked by id. Anyone seated in harbor may ask, about any seat of
+### harbor. The third id is tove's seat in meadow: it is left out, and nothing in the answer says so.
+POST {{api}}/tenancy/directory/seats
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "ids": ["{{leosSeat}}", "{{junoSeat}}", "{{tovesMeadowSeat}}"] }
+
+### Units, each with its path from the root. South Bay is outside her region, and she still reads what it is
+### called; meadow's root is another tenant's, and is left out.
+POST {{api}}/tenancy/directory/units
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "ids": ["{{northCoast}}", "{{southBay}}", "{{meadowRoot}}"] }
+
+### Roles of the organization, with whether each manages access. "keys" is null for her: what a role lets its holder do is answered to whoever manages the tenant's roles
+### (tenancy.roles.manage), by this route, by GET /tenancy/roles and by the field of the schema alike. Sent as
+### maud, the keys are there. A question takes at most 200 ids: more is 400 tenancy.too-many-ids.
+POST {{api}}/tenancy/directory/roles
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "ids": ["{{crewLead}}", "{{surveyor}}"] }
+
+### The project roles, the ones a crew holds: the starter roles every tenant begins with, and whatever the
+### tenant made since, archived ones too. Everybody who works in the tenant reads their names; "keys" is null for
+### her, as for a role of the organization.
+GET {{api}}/project-roles
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### Bay bridge by its id: 404 projects.not-found. A project outside her reach gets the answer a project that
+### does not exist gets, so nobody learns what is there.
+GET {{api}}/projects/{{bayBridge}}
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### Naming a tenant she has no seat in: 403 tenancy.not-seated, whether meadow exists or not.
+GET {{api}}/me
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: meadow
+
+### The same refusal in Dutch. Accept-Language chooses the language of the title; the code and the arguments
+### are the same in every language. English and Dutch are what the sample has; anything else reads English.
+GET {{api}}/me
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: meadow
+Accept-Language: nl
+
+### The seat is asked for before the request is read: a body that would not bind is still 403
+### tenancy.not-seated from a caller without a seat. With one, the same body is 400 invalid-request.
+POST {{api}}/projects
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "number": "P-100" }
+
+### Naming no tenant at all: 400 tenancy.tenant-required.
+GET {{api}}/me
+Authorization: Bearer {{rhea.response.body.access_token}}
+
+### No token: 401, before a tenant is looked at.
+GET {{api}}/projects
+Tenant: harbor
+
+### She grants leo Observer at North Coast: 204. Observer manages no access, so managing grants there is all
+### she needs; she need not hold its key. Sent a second time, it is 409 tenancy.duplicate-grant.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{observer}}", "reason": "Follows the projects on the coast" }
+
+### Crew lead at the same place: 204. Crew lead manages access, because the host marks projects.crew.manage,
+### and she holds that key at North for good, so she gives it.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{crewLead}}" }
+
+### Access admin at the same place: 403 tenancy.grant-exceeds-own. Access admin manages access, so it takes each
+### of its keys that manage access, held there; the arguments name those she lacks: tenancy.roles.manage and
+### tenancy.settings.manage.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{accessAdmin}}" }
+
+### Observer for tove at South Bay, outside North: 403 tenancy.not-permitted, naming the key and the unit.
+POST {{api}}/tenancy/seats/{{tovesSeat}}/grants
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{southBay}}", "roleId": "{{observer}}" }
+
+### An id that does not parse: 400 invalid-request, before any project is looked at.
+GET {{api}}/projects/not-a-project
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### A key the catalogue does not know: 400 tenancy.unknown-permission. Its arguments name the keys, and the input the
+### refusal is about, Field: keys, for a form to put the text under. A refusal about a command as a whole has none.
+GET {{api}}/access/units?key=projects.fly
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### A project may be planned for a range of days, two ISO dates. She owns Inland depot, and the crew lead's
+### role holds projects.edit, so she plans it: 204. With both dates left out the plan is taken away; with one,
+### or the last before the first, it is 400 projects.planned-range-invalid. Like every change to a project it
+### takes the version she read as If-Match, which leo shows below.
+PUT {{api}}/projects/{{inlandDepot}}/planned-range
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "from": "2026-10-01", "until": "2026-12-31" }
+
+### An inspection says which days it covers, the same way; left out, it is the day it is recorded. Days
+### within the plan: 201.
+POST {{api}}/projects/{{inlandDepot}}/inspections
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "title": "Foundation trench checked", "from": "2026-10-12", "until": "2026-10-13" }
+
+### Days outside the plan: 409 inspections.outside-planned-range, with the planned range as its arguments. The
+### rule crosses two modules. Projects' gate answered the plan with "may she record", and Inspections refused,
+### under a code of its own; a range of days is the one type the two share. A project without a plan, such as
+### Pier 7, takes any days.
+POST {{api}}/projects/{{inlandDepot}}/inspections
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "title": "Foundation trench checked again", "from": "2027-01-04", "until": "2027-01-05" }
+
+### ------------------------------------------------------------------------------------------------
+### juno is placed in North Coast with no organization role, and is a surveyor on Pier 7's crew.
+# @name juno
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "juno" }
+
+### Pier 7, reached through the crew as a surveyor. The can flags say what she may do to the project itself:
+### none of it. Whether she may record an inspection is for Inspections to say, below. The id parses with or
+### without its PRJ_ prefix.
+GET {{api}}/projects/PRJ_{{pier7}}
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+
+### Its crew on its own: leo, who owns it, first, then juno and vic. Who is on a crew is for whoever sees the
+### project; which roles each holds there, and until when, is for whoever manages the crew
+### (projects.crew.manage), so for her "roles" is null on every member. Sent as leo, who leads the crew, each
+### member has its roles, by id, with their dates. The same members, in the same shape, as the project above
+### carries as its crew, read in one statement. For a project she cannot see, such as Bay bridge, it is 404
+### projects.not-found.
+GET {{api}}/projects/{{pier7}}/crew
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+
+### A surveyor records inspections: 201 with the new inspection's id. Inspections asked Projects whether she
+### may, through its gate, without reading Projects' tables.
+POST {{api}}/projects/{{pier7}}/inspections
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "title": "Handrails on the north pier checked" }
+
+### The inspections, newest first, and whether she may record another. A page at a time, as the projects:
+### "next" is the marker to send as "after".
+GET {{api}}/projects/{{pier7}}/inspections?size=20
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+
+### The same list through GraphQL, as a field of the project: Projects answers the name, Inspections the
+### inspections, in one query. For all her projects at once Inspections asks Projects once and reads once.
+POST {{api}}/graphql
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects { nodes { name inspections(first: 5) { nodes { title days { from until } recordedBy { displayName } } pageInfo { hasNextPage endCursor } canRecord } } } }" }
+
+### Renaming needs projects.edit, which a surveyor does not hold: 403 projects.not-permitted, with the key.
+PUT {{api}}/projects/{{pier7}}/name
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "name": "Pier Seven" }
+
+### The same question without trying: may she close it? {"allowed": false}.
+GET {{api}}/access/projects/{{pier7}}?key=projects.close
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### vic was Observer at North Inland for four weeks that ended yesterday, and observes Pier 7's crew.
+# @name vic
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "vic" }
+
+### The grant is still there, and applies no longer: appliesNow is false, and it gives him no key.
+GET {{api}}/me
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+
+### Pier 7 only, through its crew.
+GET {{api}}/projects
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+
+### Inland depot, which only the expired grant reached: 404 projects.not-found. Nothing was written when it
+### expired; the period is compared when the question is asked.
+GET {{api}}/projects/{{inlandDepot}}
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+
+### An observer closes nothing: 403 projects.not-permitted, key projects.close.
+POST {{api}}/projects/{{pier7}}/close
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### seth's seat in harbor is suspended.
+# @name seth
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "seth" }
+
+### His seat is still his, and says so.
+GET {{api}}/me/seats
+Authorization: Bearer {{seth.response.body.access_token}}
+
+### And it gives him nothing: 403 tenancy.seat-suspended on every route in harbor.
+GET {{api}}/me
+Authorization: Bearer {{seth.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### maud is harbor's access admin: the administrators' role of a hierarchical tenant, which lists its keys.
+### She runs who may do what, and does none of the work.
+# @name maud
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "maud" }
+
+### Her keys: Tenancy's six, the five that manage access and tenancy.history.view, the two the host marks as
+### managing access (projects.owner.change and projects.crew.manage), and projects.view. No projects.edit,
+### projects.close or inspections.record.
+GET {{api}}/me
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### She sees every project of harbor, through the organization. Renaming one is 403 projects.not-permitted,
+### key projects.edit.
+PUT {{api}}/projects/{{pier7}}/name
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "name": "Pier Seven" }
+
+### The access history: every change to who may do what in harbor, newest first, each with who made it, a
+### seat by its id or the kind of whoever else it was, and the event as it was stored. It takes
+### tenancy.history.view for the whole tenant, which an access admin holds. A page at a time: "next" is the
+### marker to send as "after". A size outside 1 to 200 is 400 tenants.history.page-size-invalid, and a marker
+### this list did not give 400 tenancy.cursor-invalid.
+# @name history
+GET {{api}}/tenancy/history?size=5
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### The page after it.
+GET {{api}}/tenancy/history?size=5&after={{history.response.body.next}}
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### rhea runs North and holds no tenancy.history.view: 403 tenancy.not-permitted, naming the key.
+GET {{api}}/tenancy/history
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: harbor
+
+### What she is there for: she gives a role that manages access, here Crew lead to juno at North Coast: 204.
+### She holds projects.crew.manage, as every key that manages access, at the root for good.
+POST {{api}}/tenancy/seats/{{junoSeat}}/grants
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{crewLead}}" }
+
+### And takes it away again: 204.
+DELETE {{api}}/tenancy/seats/{{junoSeat}}/grants/{{northCoast}}/{{crewLead}}
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### Which roles juno holds now, where and for when: another person's access, which she reads with
+### tenancy.seats.manage for the whole tenant. Rhea, who holds it at North only, is answered 403. GraphQL has
+### the same as seatGrants, in the administration's schema at /admin/graphql only.
+GET {{api}}/tenancy/seats/{{junoSeat}}/grants
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### She makes a project role of harbor's own: 201, with its id. It takes tenancy.roles.manage for the whole
+### tenant, as every change to a project role does, and its keys are ones that act on a project.
+# @name rigger
+POST {{api}}/project-roles
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "name": "Rigger", "description": "Rigs the hoists", "keys": ["projects.view"] }
+
+### Its keys become exactly these: 204. The organization's keys go on no project role: with projects.owner.change
+### it is 400 projects.key-not-for-members, naming the keys.
+PUT {{api}}/project-roles/{{rigger.response.body.id}}/keys
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "keys": ["projects.view", "inspections.record"] }
+
+### Archived, it is given to nobody and changes no more: 204. The crew lead's role is not archived: every
+### project's owner holds it, so for {{projectCrewLead}} this is 409 projects.owner-role-stays.
+POST {{api}}/project-roles/{{rigger.response.body.id}}/archive
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### leo owns Pier 7 and leads its crew. The crew lead's role holds every key that acts on a project, so the
+### owner may do everything on it; opening projects and naming an owner are the organization's.
+# @name leo
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "leo" }
+
+### May he close it? {"allowed": true, "via": "crew"}.
+GET {{api}}/access/projects/{{pier7}}?key=projects.close
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### Pier 7 as he sees it, with its version: in the body, and as the ETag.
+# @name pier
+GET {{api}}/projects/{{pier7}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### He renames it, naming the version he read: 204. Had somebody changed the project since he read it, this
+### would be 409 concurrency-conflict, and he would read it again. Without If-Match the last change wins.
+PUT {{api}}/projects/{{pier7}}/name
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+If-Match: "{{pier.response.body.version}}"
+Content-Type: application/json
+
+{ "name": "Pier 7, east quay" }
+
+### The project says who changed it last: "changedBy", with the kind "seat" and his seat's id. Before his
+### rename it said "system", for the seeding that opened it. An inspection in a project's list says the same of
+### the save that recorded it. GraphQL says it too, of both: changedBy { kind seat }.
+GET {{api}}/projects/{{pier7}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### The same with the version he read before that rename: 409 concurrency-conflict, and nothing changes.
+### Anything but one strong tag, such as W/"3", is 400 invalid-request.
+PUT {{api}}/projects/{{pier7}}/name
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+If-Match: "{{pier.response.body.version}}"
+Content-Type: application/json
+
+{ "name": "Pier 7" }
+
+### Naming another owner is not the crew's to do, whatever role is on it: 403 projects.not-permitted, key
+### projects.owner.change. Rhea, who holds it at North, may, and so may ada and maud.
+PUT {{api}}/projects/{{pier7}}/owner
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "seatId": "{{junoSeat}}" }
+
+### The owner stays on the crew until someone else is named owner: 409 projects.owner-protected.
+DELETE {{api}}/projects/{{pier7}}/crew/{{leosSeat}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### And keeps the lead role until then: taking it, from himself too, is 409 projects.owner-protected.
+DELETE {{api}}/projects/{{pier7}}/crew/{{leosSeat}}/roles/{{projectCrewLead}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### A crew member holds any number of roles, each for a period of its own. vic is the crew's observer; leo
+### gives him the surveyor's role as well, until a day (pick one that is still to come): 204. Whoever manages
+### the crew gives any of the tenant's project roles in use, to anyone on it, without holding its keys.
+POST {{api}}/projects/{{pier7}}/crew/{{vicsSeat}}/roles
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "roleId": "{{projectSurveyor}}", "until": "2030-01-01T00:00:00Z" }
+
+### The same role again: 409 projects.crew-role-held. A seat holds a role once on a crew.
+POST {{api}}/projects/{{pier7}}/crew/{{vicsSeat}}/roles
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "roleId": "{{projectSurveyor}}" }
+
+### The project, with each member's roles and their periods. vic holds two.
+GET {{api}}/projects/{{pier7}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### He takes the observer's role from vic: 204. vic stays on the crew, as its surveyor.
+DELETE {{api}}/projects/{{pier7}}/crew/{{vicsSeat}}/roles/{{projectObserver}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### A role vic does not hold: 404 projects.crew-role-not-found.
+DELETE {{api}}/projects/{{pier7}}/crew/{{vicsSeat}}/roles/{{projectObserver}}
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### A role of the organization goes on no crew: Area manager for vic is 400 projects.role-not-for-members. A
+### crew holds the tenant's project roles.
+POST {{api}}/projects/{{pier7}}/crew/{{vicsSeat}}/roles
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "roleId": "{{areaManager}}" }
+
+### A seat goes on the crew with a role, for the same period, or with none. tove, with none: 204. On the crew
+### she sees Pier 7, and may do nothing to it until she is given a role.
+POST {{api}}/projects/{{pier7}}/crew
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "seatId": "{{tovesSeat}}" }
+
+### He closes Pier 7: 204. Closed, it refuses every change, a new inspection included, until it is reopened.
+POST {{api}}/projects/{{pier7}}/close
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### And reopens it: 204, and it is as it was. Whoever may close a project may reopen it. Sent a second
+### time, it is 409 projects.not-closed.
+POST {{api}}/projects/{{pier7}}/reopen
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### tove has a seat in two tenants: in harbor, in South Bay, and in meadow, as its only administrator.
+# @name tove
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "tove" }
+
+### Both seats, each with the name its tenant keeps for her.
+GET {{api}}/me/seats
+Authorization: Bearer {{tove.response.body.access_token}}
+
+### In harbor: Bay bridge, as a surveyor on its crew, and Pier 7 once leo has put her on that crew, above.
+GET {{api}}/projects
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: harbor
+
+### In meadow, the same token and another header: Garden shed.
+GET {{api}}/projects
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### Garden shed while working in harbor: 404 projects.not-found. She may see it, but not from here: every
+### read is kept to the tenant the request works in.
+GET {{api}}/projects/{{gardenShed}}
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: harbor
+
+### Meadow is flat: its root is its only unit, so a unit below it is 409 tenancy.flat-tenant.
+POST {{api}}/tenancy/units
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "parentId": "{{meadowRoot}}", "name": "Greenhouses", "kind": "area" }
+
+### Meadow has one administrator, so every way of her stepping down is refused. Withdrawing her placement at
+### meadow's root: 409 tenancy.last-admin.
+DELETE {{api}}/tenancy/seats/{{tovesMeadowSeat}}/placements/{{meadowRoot}}
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### Revoking her own Tenant admin grant: 409 tenancy.last-admin. A flat tenant's administrators' role holds
+### every key; meadow has no Access admin until it changes shape.
+DELETE {{api}}/tenancy/seats/{{tovesMeadowSeat}}/grants/{{meadowRoot}}/{{meadowTenantAdmin}}
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### Suspending her own seat: 409 tenancy.last-admin. A seat may suspend itself, and her own grant is her hold
+### of its keys; the last administrator is what stops her.
+POST {{api}}/tenancy/seats/{{tovesMeadowSeat}}/suspend
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### She invites juno, who has no seat in meadow, by her address: a seat at meadow's root as a surveyor, for
+### whoever accepts. 200 with the invitation's id, when it ends (a week from now), and its token. This is the
+### one answer that carries the token; the API keeps only its digest. Nothing is made yet but the invitation.
+### Inviting takes what adding a seat and giving the role take: tenancy.seats.manage for the whole tenant and
+### tenancy.grants.manage at the unit; without them it is 403 tenancy.not-permitted. The identity provider is
+### asked for an account at the address, and the answer says nothing of whether there was one. With the dev
+### login the demonstration people are the accounts there are; on Supabase, Auth mails a new address a link
+### that lets its person in.
+# @name invited
+POST {{api}}/tenancy/invitations
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "address": "juno@example.test", "unitId": "{{meadowRoot}}", "roleId": "{{meadowSurveyor}}" }
+
+### The open invitations, for whoever manages seats at their unit: the address, and what each offers by id.
+### Never a token.
+GET {{api}}/tenancy/invitations
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### leo holds the token and is not who it was sent to: 403 tenancy.address-mismatch. The address is the one in
+### his own access token, never one a request names. Accepting takes a token and names no tenant.
+POST {{api}}/invitations/accept
+Authorization: Bearer {{leo.response.body.access_token}}
+Content-Type: application/json
+
+{ "token": "{{invited.response.body.token}}" }
+
+### juno accepts, with the name she is shown by in meadow: 200 with the id of her new seat. The seat, its
+### placement and its role were made in one save, and GET /me/seats lists it with its tenant from now on. The
+### name is the application's own field on its seat, which Tenancy keeps none of and the invitation suggests
+### none of; without one it is 400 tenants.seat.display-name, and the invitation stays open. Sent again by her it
+### answers the same seat; by anyone else, 409 tenancy.invitation-used.
+# @name junoAccepted
+POST {{api}}/invitations/accept
+Authorization: Bearer {{juno.response.body.access_token}}
+Content-Type: application/json
+
+{ "token": "{{invited.response.body.token}}", "displayName": "Juno" }
+
+### Who she is in meadow now: Juno, placed at its root, a surveyor.
+GET {{api}}/me
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: meadow
+
+### Renaming is the application's own command, under its own rule: a seat renames itself, here juno her seat in
+### meadow: 204. Another seat takes tenancy.seats.manage for the whole tenant, which tove holds there and juno, a
+### surveyor, does not: juno renaming tove's seat there is 403 tenancy.not-permitted. A name the seat refuses,
+### blank or over 200 characters, is 400 tenants.seat.display-name.
+PUT {{api}}/tenancy/seats/{{junoAccepted.response.body.seatId}}/name
+Authorization: Bearer {{juno.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "displayName": "Juno Marsh" }
+
+### A second invitation, for an address nobody has an account for yet, and tove thinks better of it. The host
+### asked for an account at the address and kept its id with the invitation. Sent twice, the second answers
+### like the first: the address has an account by then, the one the first invitation kept, which nobody signed
+### in with, so it is mailed again with the new link.
+# @name second
+POST {{api}}/tenancy/invitations
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "address": "wren@example.test", "unitId": "{{meadowRoot}}", "roleId": "{{meadowSurveyor}}" }
+
+### Revoked: 204. Its token is then 409 tenancy.invitation-cancelled; one whose week ran out is 409
+### tenancy.invitation-lapsed, and a text that is no token 404 tenancy.invitation-not-found. The account that
+### was made for it goes too, since nobody ever signed in with it and no other open invitation keeps it.
+DELETE {{api}}/tenancy/invitations/{{second.response.body.invitationId}}
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+
+### ------------------------------------------------------------------------------------------------
+### ada is harbor's first administrator. Provisioning granted her Access admin at the root, and the seeding
+### Area manager there too, so everything in harbor is hers to do. Harbor has two administrators, ada and
+### maud, so either may step down, and not the last of them.
+# @name ada
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "ada" }
+
+### Both roles at the root, and every key of the catalogue for the whole tenant.
+GET {{api}}/me
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+
+### ------------------------------------------------------------------------------------------------
+### hana is in the people office: she holds grant management at Harbor Works' root, and nothing else.
+# @name hana
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "hana" }
+
+### She gives leo Surveyor at North Coast: 204. Surveyor manages no access, so she gives it without holding
+### any of its keys.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{hana.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{surveyor}}" }
+
+### Crew lead for leo at the same place: 403 tenancy.grant-exceeds-own, missing projects.crew.manage. The host
+### marks managing a crew, so Crew lead manages access, and she does not hold that key.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{hana.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{crewLead}}" }
+
+### Area manager for leo at the same place: 403 tenancy.grant-exceeds-own. It manages access, and of its keys
+### that do she holds only tenancy.grants.manage.
+POST {{api}}/tenancy/seats/{{leosSeat}}/grants
+Authorization: Bearer {{hana.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{northCoast}}", "roleId": "{{areaManager}}" }
+
+### Surveyor for herself at Harbor Works: 204, for no longer than she holds tenancy.grants.manage there, which
+### is for good. Every project of harbor is hers to see now.
+POST {{api}}/tenancy/seats/{{hanasSeat}}/grants
+Authorization: Bearer {{hana.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{harborRoot}}", "roleId": "{{surveyor}}" }
+
+### Area manager for herself: 403 tenancy.self-appointment. Nobody gives themselves a role that manages access,
+### whatever they hold.
+POST {{api}}/tenancy/seats/{{hanasSeat}}/grants
+Authorization: Bearer {{hana.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "unitId": "{{harborRoot}}", "roleId": "{{areaManager}}" }
+
+### ------------------------------------------------------------------------------------------------
+### orla works for the application, not for a tenant. The development settings list her under
+### DevLogin:Operators, so her token claims the operators' role, tenancy_operator, as Supabase Auth writes one
+### for a member of staff. She has no seat anywhere.
+# @name orla
+POST {{api}}/dev/auth/token
+Content-Type: application/json
+
+{ "person": "orla" }
+
+### Every tenant, by slug, each with its status and how many of its seats are in use. No Tenant header: an
+### operator works in no tenant. A page at a time, with "next" as the marker to send as "after".
+GET {{api}}/operations/tenants
+Authorization: Bearer {{orla.response.body.access_token}}
+
+### One tenant's projects, by number, each with who changed it last. The tenant is in the path.
+GET {{api}}/operations/tenants/{{harbor}}/projects
+Authorization: Bearer {{orla.response.body.access_token}}
+
+### One project's inspections, newest first.
+GET {{api}}/operations/tenants/{{harbor}}/projects/{{pier7}}/inspections
+Authorization: Bearer {{orla.response.body.access_token}}
+
+### And that tenant's access history, as its own readers see it.
+GET {{api}}/operations/tenants/{{harbor}}/history?size=5
+Authorization: Bearer {{orla.response.body.access_token}}
+
+### She changes nothing. Every route inside a tenant asks for a seat, and she has none, whatever tenant she
+### names: 403 tenancy.not-seated. And her queries run as a database role that may only read.
+PUT {{api}}/projects/{{pier7}}/name
+Authorization: Bearer {{orla.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "name": "Renamed by staff" }
+
+### And a seat is no operator, whatever it holds: ada, harbor's first administrator, is 403
+### tenancy.operators-only.
+GET {{api}}/operations/tenants
+Authorization: Bearer {{ada.response.body.access_token}}
+
+### ------------------------------------------------------------------------------------------------
+### GraphQL, at /graphql: the same use cases as the routes above, as one schema over the three modules. Each
+### module serves a schema of its own and names another module's entity by its id; the gateway asks the owner
+### for the rest. A token is needed as on every route, and a seat in the tenant the Tenant header names for
+### every field but seatsOfMine and invitationAccept, which need none, and the operators' four, which need an
+### operator. The tenant's administration has a gateway of its own, at /admin/graphql, further down.
+###
+### A project with names. Projects answers the project and the ids of its unit, its owner and its crew;
+### Tenancy answers what those are called, in the same answer. A project's id is a node id here, not the bare
+### id the routes take, so it is read from this answer for the requests below.
+# @name viaGraphQL
+POST {{api}}/graphql
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects(text: \"Pier 7\") { nodes { id number name version unit { path } owner { displayName } crew { isOwner seat { displayName } roles { role { name } } } } pageInfo { hasNextPage endCursor } } }" }
+
+### A rename with the version just read. The payload answers the project as it is now, with its new version,
+### and errors is null. Send it a second time as it stands: the version is stale by then, so project is null and
+### errors holds one ConcurrencyConflictError with the code concurrency-conflict, the route's 409.
+POST {{api}}/graphql
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "mutation($id: ID!, $version: Long) { projectRename(input: { id: $id, name: \"Pier 7, east side\", expectedVersion: $version }) { project { name version } errors { __typename ... on CodedError { code message } } } }",
+  "variables": { "id": "{{viaGraphQL.response.body.data.projects.nodes[0].id}}", "version": {{viaGraphQL.response.body.data.projects.nodes[0].version}} }
+}
+
+### A refused mutation. vic is on the crew, by now as its surveyor: he sees the project and may not rename
+### it. The answer is no top-level error: errors holds one RefusalError with the code projects.not-permitted
+### and the kind not_permitted, the route's 403.
+POST {{api}}/graphql
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "mutation($id: ID!) { projectRename(input: { id: $id, name: \"Pier 7, by vic\" }) { project { name } errors { __typename ... on CodedError { code message } ... on RefusalError { kind } } } }",
+  "variables": { "id": "{{viaGraphQL.response.body.data.projects.nodes[0].id}}" }
+}
+
+### The list as a connection, two to a page: nodes, pageInfo with the cursors of the page, and totalCount. The
+### page after it is asked with first and after: endCursor, backward with last and before: startCursor. Only
+### what is selected is read: without crew, myRoles or can this costs one statement.
+POST {{api}}/graphql
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects(first: 2) { nodes { number name via } pageInfo { hasNextPage hasPreviousPage startCursor endCursor } totalCount } }" }
+
+### A page is asked for from one end of the list. The first two and the last two at once is refused, with
+### the code projects.page-from-both-ends; so are a project's inspections and the access history, each with
+### a code of its own.
+POST {{api}}/graphql
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects(first: 2, last: 2) { nodes { number } } }" }
+
+### The gateway bounds a request as a whole: at most 200 fields in its document, and ten levels deep. A
+### project names its inspections and an inspection its project, so this one goes round three times, twelve
+### levels: refused before any module is asked. The same lists asked many times over under other names are
+### refused for their number of fields.
+POST {{api}}/graphql
+Authorization: Bearer {{ada.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects(first: 1) { nodes { inspections(first: 1) { nodes { project { inspections(first: 1) { nodes { project { inspections(first: 1) { nodes { project { number } } } } } } } } } } } }" }
+
+### A field under a key. Who holds which role on a crew is for whoever manages that crew
+### (projects.crew.manage). vic sees Pier 7 and its crew and does not manage it: every member arrives, with
+### roles null, and errors holds one projects.not-permitted for each member's roles. ada, above, read them.
+### The rule is the query's, so GET /projects/{id}/crew answers him the same members with "roles": null; the
+### field adds the refusal that says why.
+POST {{api}}/graphql
+Authorization: Bearer {{vic.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ projects { nodes { number crew { isOwner seat { displayName } roles { role { name } } } } } }" }
+
+### Without a seat in the tenant: rhea has none in meadow. A query answers a top-level error whose
+### extensions.code is tenancy.not-seated, before any use case is asked. Its message is Dutch here, as the
+### title of the route's refusal was above: Accept-Language chooses it for GraphQL too.
+POST {{api}}/graphql
+Authorization: Bearer {{rhea.response.body.access_token}}
+Tenant: meadow
+Accept-Language: nl
+Content-Type: application/json
+
+{ "query": "{ projects { nodes { name } } }" }
+
+### A rule on one field. leo leads a crew and does not manage harbor's roles: he gets every role with its name,
+### "keys": null, and one error at each roles/n/keys with the code tenancy.not-permitted. The rule is the
+### query's, so GET /tenancy/roles answers him "keys": null as well. Sent as maud, the keys are there.
+POST {{api}}/graphql
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ roles { name keys } }" }
+
+### Inviting through the schema: tove invites leo into meadow, as POST /tenancy/invitations does. The payload
+### answers the invitation's id, when it ends and its token, this once. Without the keys, errors holds one
+### RefusalError with the code tenancy.not-permitted.
+# @name invitedViaGraphQL
+POST {{api}}/graphql
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{
+  "query": "mutation($unit: UUID!, $role: UUID!) { personInvite(input: { address: \"leo@example.test\", unitId: $unit, roleId: $role }) { issuedInvitation { id token expiresAt } errors { __typename ... on CodedError { code message } } } }",
+  "variables": { "unit": "{{meadowRoot}}", "role": "{{meadowSurveyor}}" }
+}
+
+### The open invitations, with the unit, the role and who issued each by name: they are Tenancy's own, so no
+### second question is needed for what they are called. Never a token.
+POST {{api}}/graphql
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{ "query": "{ openInvitations { id address until expiresAt unit { name } role { name } issuedBy { displayName } } }" }
+
+### leo accepts, naming no tenant: the mutation needs a token and no seat, as POST /invitations/accept. The
+### token travels as a variable, not in the document. The answer is the id of his new seat; seatsOfMine lists
+### it with its tenant. Sent by anyone else, errors holds tenancy.address-mismatch.
+POST {{api}}/graphql
+Authorization: Bearer {{leo.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "query": "mutation($token: String!) { invitationAccept(input: { token: $token, displayName: \"Leo\" }) { seatId errors { __typename ... on CodedError { code message } } } }",
+  "variables": { "token": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.token}}" }
+}
+
+### Cancelling one, as DELETE /tenancy/invitations/{id}: the payload answers the id. The invitation above was
+### accepted, so this is errors with tenancy.invitation-state; an open one answers its id and errors null.
+POST {{api}}/graphql
+Authorization: Bearer {{tove.response.body.access_token}}
+Tenant: meadow
+Content-Type: application/json
+
+{
+  "query": "mutation($id: UUID!) { invitationCancel(input: { id: $id }) { invitationId errors { __typename ... on CodedError { code message } } } }",
+  "variables": { "id": "{{invitedViaGraphQL.response.body.data.personInvite.issuedInvitation.id}}" }
+}
+
+### The access history as a connection over the query GET /tenancy/history sends: newest first, each row with
+### who acted, a seat by name or the kind of whoever else it was. endCursor is the marker to send as "after",
+### and the route's "next". A page holds ten rows unless "first" says otherwise, and fifty at most. As rhea,
+### who holds no tenancy.history.view, it is one error with the code tenancy.not-permitted.
+POST {{api}}/graphql
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{ "query": "{ accessHistory(first: 5) { nodes { event occurredAt byKind bySeat { displayName } details } pageInfo { hasNextPage endCursor } totalCount } }" }
+
+### Every tenant, for an operator, as GET /operations/tenants answers them. No Tenant header: this field and
+### the three below ask for an operator where the others ask for a seat. As ada each is one error with the
+### code tenancy.operators-only.
+POST {{api}}/graphql
+Authorization: Bearer {{orla.response.body.access_token}}
+Content-Type: application/json
+
+{ "query": "{ tenants { items { slug name status activeSeats } next } }" }
+
+### One tenant's projects, as GET /operations/tenants/{tenant}/projects answers them. The unit and the owner
+### are ids: an operator has no seat for Tenancy to say their names to. A project's id is a node id, for the
+### request below.
+# @name harborViaGraphQL
+POST {{api}}/graphql
+Authorization: Bearer {{orla.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "query": "query($tenant: UUID!) { tenantProjects(tenant: $tenant) { id number name state unitId ownerSeat changedBy { kind seat } } }",
+  "variables": { "tenant": "{{harbor}}" }
+}
+
+### The inspections of the first of them, by number: Pier 7, as the operators' route for a project answers
+### them. The seat that recorded one is its id.
+POST {{api}}/graphql
+Authorization: Bearer {{orla.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "query": "query($tenant: UUID!, $project: ID!) { tenantProjectInspections(tenant: $tenant, project: $project) { title days { from until } recordedAt recordedBy { id } changedBy { kind seat } } }",
+  "variables": { "tenant": "{{harbor}}", "project": "{{harborViaGraphQL.response.body.data.tenantProjects[0].id}}" }
+}
+
+### And that tenant's access history, the connection accessHistory is. Who acted is byKind and bySeatId; asked
+### for bySeat, the one field is an error with the code tenancy.not-seated and the rows are still answered.
+POST {{api}}/graphql
+Authorization: Bearer {{orla.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "query": "query($tenant: UUID!) { tenantAccessHistory(tenant: $tenant, first: 5) { nodes { event occurredAt byKind bySeatId details } pageInfo { hasNextPage endCursor } totalCount } }",
+  "variables": { "tenant": "{{harbor}}" }
+}
+
+### The tenant's administration has a gateway of its own, at /admin/graphql: everything /graphql offers, and
+### another person's roles besides. Vic's, as maud reads them: Observer at North Inland, for four weeks that ended
+### yesterday, so appliesNow is false. Nothing above changes his roles in the organization. The same field sent to
+### /graphql is refused when the document is read, for maud as for everybody.
+POST {{api}}/admin/graphql
+Authorization: Bearer {{maud.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "query($seat: UUID!) { seatGrants(seatId: $seat) { unitPath role startsAt endsAt appliesNow } }",
+  "variables": { "seat": "{{vicsSeat}}" }
+}
+
+### The same as leo: he has a seat, so the endpoint lets him ask, and the request refuses him, one error with
+### the code tenancy.not-permitted. It wants tenancy.seats.manage for the whole tenant, as
+### GET /tenancy/seats/{seatId}/grants does.
+POST {{api}}/admin/graphql
+Authorization: Bearer {{leo.response.body.access_token}}
+Tenant: harbor
+Content-Type: application/json
+
+{
+  "query": "query($seat: UUID!) { seatGrants(seatId: $seat) { unitPath role } }",
+  "variables": { "seat": "{{vicsSeat}}" }
+}
+
+### The schema, as a tool reads it: GraphQL Codegen, or the file the Relay compiler is pointed at. No token. Here,
+### in Development, no key either; where the host runs for real it takes the key kept at GraphQL:SchemaKey, sent as
+### X-GraphQL-Schema-Key: <the key>, and without it this is a 401. The key reads the schema and nothing else.
+GET {{api}}/graphql/schema.graphql
+
+### The administration's schema, the same way.
+GET {{api}}/admin/graphql?sdl
+
+### ------------------------------------------------------------------------------------------------
+### Every call that deliberately breaks a rule, and one read that is allowed beside the same read refused, with
+### every id filled in and the answer it should get. The UI's try-it page runs these; this is the list it reads.
+GET {{api}}/dev/attempts

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    What the modules' infrastructure projects do the same way, and none of them owns: today one check, that the
+    marker a page is asked with is a cursor of the list being paged. Every module pages its lists by GreenDonut's
+    paging over Entity Framework, each in its own infrastructure project, and a module does not reference
+    another's; so what all of them need of that paging lives here, once.
+
+    Neither DDD_Module nor [assembly: Module], on purpose: it belongs to no module, so every module may name what it
+    declares. It references no module and knows nothing of any of them: a list hands it its query and the refusal
+    to answer with. Only a module's infrastructure project references it, since it reads how a query is ordered
+    and how the paging library writes a cursor, which no other layer knows. Keep it small: a type belongs here only
+    when every module's storage would otherwise carry a copy of it.
+  -->
+  <ItemGroup>
+    <!-- PagingArguments, and the paging library's own reading of a cursor. The paging library alone: no GraphQL comes with it. -->
+    <PackageReference Include="GreenDonut.Data" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    Projects' domain: a project, its crew, the project roles a tenant makes for its crews, the rules the project
+    keeps to itself, its domain events and its refusals. It references neither Entity Framework nor ASP.NET Core.
+    The infrastructure project maps the project, its crew and the project roles, stores the ids through the
+    converters generated there, and registers these domain events under their names, because it declares the
+    same module. The Membership package is here for the crew: a crew member is declared with its member template,
+    a project role with its role template, and the project keeps its crew through the member list the package's
+    generator writes on it. Tenancy's ids come from its contracts, never from the Tenants module.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Tenancy.Projects.Contracts\Examples.Tenancy.Projects.Contracts.csproj" />
+    <!-- Tenancy's ids: a project belongs to a tenant, hangs at a unit, and its crew are seats with roles. Contracts only. -->
+    <ProjectReference Include="..\..\Tenants\Examples.Tenancy.Tenants.Contracts\Examples.Tenancy.Tenants.Contracts.csproj" />
+    <!-- What the modules share and none owns: the range of days a project is planned for. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Tenancy.Shared.Domain\Examples.Tenancy.Shared.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+  </ItemGroup>
+
+  <!-- The generators. A NuGet consumer gets them through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Membership's own: it writes the member list on the project, over its crew. -->
+    <ProjectReference Include="..\..\..\..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

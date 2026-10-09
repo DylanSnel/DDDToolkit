@@ -1,0 +1,9 @@
+global using DDDToolkit.Supporting.Membership.Access;
+global using DDDToolkit.Supporting.Membership.TestHost;
+global using DDDToolkit.Supporting.Membership.TestHost.Documents;
+global using DDDToolkit.Supporting.Membership.TestHost.Folders;
+global using DDDToolkit.Supporting.Membership.TestHost.Gardens;
+global using DDDToolkit.Supporting.Membership.Tests.Support;
+global using DDDToolkit.Supporting.Membership.UseCases;
+global using FluentAssertions;
+global using Xunit;

@@ -53,7 +53,8 @@ builder.Services.AddDDDToolkitEntityFramework(options => options.DispatchWithMed
 var connectionString = builder.Configuration.GetConnectionString("ExampleContext")
     ?? $"Data Source={Path.Combine(AppContext.BaseDirectory, "example.db")}";
 
-// UseDDDToolkit adds the domain event interceptor and the optimistic concurrency interceptor. Pass the
+// UseDDDToolkit adds the toolkit's interceptors, for domain events, invariants, optimistic concurrency and a
+// save the database refused, and then what the packages the host registered bring: none in this one. Pass the
 // scoped provider so handlers resolve the same ExampleContext instance that is being saved.
 builder.Services.AddDbContext<ExampleContext>((services, options) => options
     .UseSqlite(connectionString)

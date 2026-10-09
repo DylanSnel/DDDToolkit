@@ -21,14 +21,14 @@ flowchart LR
 Each package carries its generator, so referencing it is all there is to it:
 
 ```bash
-dotnet add package Temp.DDDToolkit                   # base types and the core generator
-dotnet add package Temp.DDDToolkit.EntityFramework   # its generator: the mapping
-dotnet add package Temp.DDDToolkit.HotChocolate      # its generator: the GraphQL bindings
+dotnet add package Temp.DDDToolkit --prerelease                   # base types and the core generator
+dotnet add package Temp.DDDToolkit.EntityFramework --prerelease   # its generator: the mapping
+dotnet add package Temp.DDDToolkit.HotChocolate --prerelease      # its generator: the GraphQL bindings
 ```
 
-The registration methods the generators write are named after the module the project declares with
-`[assembly: Module]`. A project that is no module, like this sample, chooses the name with
-`DDD_Module`:
+The registration methods the generators write are named after the module the project declares. This
+sample declares module Shop with `DDD_Module` in its project file, which a `Directory.Build.props` can set
+for a whole folder of projects instead, and `[assembly: Module]` in a file of the project would say the same:
 
 ```xml
 <PropertyGroup>
@@ -85,7 +85,7 @@ public partial record Address(string Street, string City)
 public sealed record OrderPlaced(OrderId Order) : DomainEvent;
 ```
 
-58 lines in, 963 lines out, in 15 files.
+58 lines in, 995 lines out, in 16 files.
 
 ## Why generate it
 
@@ -174,7 +174,7 @@ No `OrderId.cs` exists anywhere. It is a `readonly record struct` around the `Gu
 
 ```csharp title="OrderId.g.cs, shortened"
 [System.Text.Json.Serialization.JsonConverter(typeof(OrderId.SystemTextJsonConverter))]
-public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>
+public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfaces.IEntityId<System.Guid>, System.IComparable<OrderId>, System.IParsable<OrderId>, DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>, DDDToolkit.Abstractions.Interfaces.ICreatableEntityId<OrderId>
 {
     public const string IdPrefix = "ORD";
 
@@ -184,18 +184,27 @@ public readonly partial record struct OrderId : DDDToolkit.Abstractions.Interfac
 
     public static OrderId CreateSequential() => new(System.Guid.CreateVersion7());
 
+    public static OrderId Create() => CreateSequential();
+
     public override string ToString() => /* ORD_1b4e28ba-2fa1-11d2-883f-0016d3cca427 */;
 
     public static OrderId Parse(string input) { /* the prefix is optional */ }
     public static bool TryParse(string? input, out OrderId result) { /* ... */ }
+
+    static OrderId DDDToolkit.Interfaces.ISingleValue<OrderId, System.Guid>.FromValue(System.Guid value) => new(value);
 
     public sealed class SystemTextJsonConverter : System.Text.Json.Serialization.JsonConverter<OrderId> { /* ... */ }
 }
 ```
 
 `CreateSequential()` makes a version 7 `Guid`, which is ordered by time and friendlier to a database
-index than a random one. [Identifiers](identifiers.md) covers the other value types, the record form
-and the prefix.
+index than a random one. `Create()` is the way a new `OrderId` is made, in code and before the save: here it is
+`CreateSequential()`, and it implements `ICreatableEntityId<OrderId>`, so code that is generic over ids, a
+supporting domain's use cases, makes one with `TId.Create()`. Declare a `Create()` of your own in the id's partial
+declaration and the generator writes none; an id over a `long` or a `string` gets one only that way.
+`ISingleValue` names the value and the way back from it, for a project that stores the id without declaring it.
+[Identifiers](identifiers.md#creating-identifiers) covers the other value types, the record form, the prefix,
+`Create()` and `ISingleValue`.
 
 ## `[ValueObject]`
 
@@ -259,6 +268,85 @@ public static class ShopEventNames
 name in kebab case; [Stable names](domain-events.md#stable-names) has the rule, and the checks the same
 pass runs on it.
 
+## The module
+
+This sample's build declares module Shop from its `DDD_Module`, so the toolkit's generator writes the attribute a
+project would otherwise write itself, for the analyzer, the runtime and every project that references the assembly:
+
+```csharp title="Module.g.cs, shortened"
+// The module this project's build declared: its DDD_Module. An [assembly: Module] of the project's
+// own would have been kept instead, and nothing written here.
+[assembly: global::DDDToolkit.Abstractions.Attributes.ModuleAttribute("Shop")]
+```
+
+It is not written where the project declares `[assembly: Module]` already, so it never declares the module
+twice. [A module named by its folder](modules.md#a-module-named-by-its-folder) has how and why.
+
+## The access behavior
+
+One thing the core generator writes only where another library is used. In a project that references
+[Mediator](https://github.com/martinothamar/Mediator), an interface marked `[AccessRequests]` gets the
+pipeline behavior that holds its requests to [what they require of their caller](access-requirements.md),
+and the call that registers it:
+
+```csharp
+[AccessRequests]
+public interface IShopRequest : IRequireAccess;
+```
+
+```csharp title="ShopAccessBehavior.g.cs, shortened"
+[assembly: AccessBehavior(typeof(IShopRequest), typeof(ShopAccessBehavior<,>),
+    StreamBehavior = typeof(ShopAccessStreamBehavior<,>), Registration = "services.AddShopAccessBehavior()")]
+
+public sealed class ShopAccessBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
+    where TMessage : notnull, IShopRequest, IMessage
+{
+    private readonly AccessChecks<IShopRequest> _checks;
+
+    public async ValueTask<TResponse> Handle(TMessage message, MessageHandlerDelegate<TMessage, TResponse> next, CancellationToken cancellationToken)
+    {
+        await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
+        return await next(message, cancellationToken).ConfigureAwait(false);
+    }
+}
+
+public static class ShopAccessBehaviorRegistration
+{
+    public static IServiceCollection AddShopAccessBehavior(this IServiceCollection services)
+    {
+        services.AddAccessChecks<IShopRequest>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped(typeof(IPipelineBehavior<,>), typeof(ShopAccessBehavior<,>)));
+        return services;
+    }
+}
+```
+
+A message that is answered with a stream passes a pipeline of its own in Mediator, so the same file holds a
+second class for it, which `AddShopAccessBehavior()` registers too:
+
+```csharp title="ShopAccessBehavior.g.cs, shortened"
+public sealed class ShopAccessStreamBehavior<TMessage, TResponse> : IStreamPipelineBehavior<TMessage, TResponse>
+    where TMessage : IShopRequest, IStreamMessage
+{
+    public async IAsyncEnumerable<TResponse> Handle(TMessage message, StreamHandlerDelegate<TMessage, TResponse> next, [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await _checks.RequireAsync(message, cancellationToken).ConfigureAwait(false);
+        await foreach (var item in next(message, cancellationToken).ConfigureAwait(false))
+        {
+            yield return item;
+        }
+    }
+}
+```
+
+The toolkit references no dispatcher: the library is noticed by its type, and how its behaviors are implemented
+is read from the version the project references. A project that does not reference it gets none of the classes.
+
+The file opens with what it wrote, as an attribute of the assembly: the interface, both behaviors and the call that
+registers them. Registering the interface's checks reads it to bring the start-up check
+`access.behaviors-registered`, which stops a host that handles a request of the interface without the behavior in
+its pipeline ([When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks)).
+
 ## `DDDToolkit.EntityFramework`
 
 With the Entity Framework package referenced, its generator adds the mapping. Each id gets a value
@@ -276,9 +364,8 @@ public readonly partial record struct OrderId
 }
 ```
 
-One method registers every converter in the project. It is named after
-`<DDD_Module>Shop</DDD_Module>` in the project file, because this sample declares no module, and you
-call it from `ConfigureConventions`:
+One method registers every converter in the project. It is named after the module,
+`<DDD_Module>Shop</DDD_Module>` in the project file, and you call it from `ConfigureConventions`:
 
 ```csharp title="ConverterExtensions.g.cs, shortened"
 public static Microsoft.EntityFrameworkCore.ModelConfigurationBuilder AddShopConverters(this Microsoft.EntityFrameworkCore.ModelConfigurationBuilder modelConfigurationBuilder)
@@ -303,6 +390,15 @@ outbox.RegisterEvent<Shop.OrderPlaced>("shop.order-placed", 1);
 The name is what the outbox stores, so renaming the class does not orphan rows already written. See
 [Entity Framework](entity-framework.md) and [Integration events](integration-events.md).
 
+A project without the Entity Framework package, such as a module's domain project, gets none of this. The
+core generator still makes every id and single value object implement `ISingleValue<TSelf, TValue>`, and the
+module's project that references Entity Framework writes the rest for it: its `Add{Module}Converters()`
+registers those ids with `SingleValueConverter<T, TValue>`, and its `Add{Module}IntegrationEvents()` names
+the domain project's events, which must be `public`. A registration a package closes over the module's
+classes, such as `modelBuilder.AddTenancy()`, is written into that project as well, and into no project of
+the module above it: an API project that references it calls its own public registration. See
+[A module in layers](modules.md#a-module-in-layers).
+
 ## `DDDToolkit.HotChocolate`
 
 With the HotChocolate package referenced, each id gets a type converter and a Relay node id
@@ -315,12 +411,17 @@ public static HotChocolate.Execution.Configuration.IRequestExecutorBuilder AddSh
     builder.AddTypeConverter<Shop.OrderId.ChangeTypeProvider>();
     builder.AddNodeIdValueSerializer<Shop.OrderId.NodeIdValueSerializer>();
     // the same for OrderLineId
+
+    // The struct ids, as keys HotChocolate's paging can order a list by: OrderBy(x => x.Id) in front of ToPageAsync.
+    DDDToolkit.HotChocolate.Paging.SingleValueCursorKeySerializer<Shop.OrderId, System.Guid>.Register();
+    // and for OrderLineId
+
     return builder;
 }
 ```
 
-An `OrderId` is a `UUID` in the schema and can be the key inside a Relay node id. See
-[GraphQL](graphql.md).
+An `OrderId` is a `UUID` in the schema, can be the key inside a Relay node id, and can be the key a paged
+list is ordered by. See [GraphQL](graphql.md).
 
 ## See it in your own project
 

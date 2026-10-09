@@ -194,13 +194,13 @@ jobs:
         run: supabase db push --db-url "$DATABASE_URL" --workdir Examples/ModularMonolith.Supabase --yes
 
       - name: Build
-        run: dotnet build Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj --configuration Release
+        run: dotnet build Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj --configuration Release
 
       # With ConnectionStrings__Supabase set, the AppHost starts no Postgres and points the monolith at the
       # project, where the monolith checks on start-up that every migration it knows was applied.
       - name: Test
         run: >
-          dotnet test Tests/DDDToolkit.Examples.AppHost.Tests/DDDToolkit.Examples.AppHost.Tests.csproj
+          dotnet test Tests/Examples.AppHost.Tests/Examples.AppHost.Tests.csproj
           --no-build --configuration Release --verbosity normal
           --filter "Sample=${{ matrix.sample }}"
           --logger "trx;LogFileName=supabase-live.trx"

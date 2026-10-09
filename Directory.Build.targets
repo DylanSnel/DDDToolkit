@@ -1,0 +1,9 @@
+<Project>
+  <!--
+    The build step of the DDDToolkit.Analyzers package: DDD_Module declares the project's module. A NuGet consumer
+    gets this file from the package, as build/ and buildTransitive/<package id>.targets.
+    The projects in this repository reference the generators as projects and never restore that package, so the same
+    file is imported here, as Directory.Build.props imports its props file.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)Source\DDDToolkit.Analyzers\build\DDDToolkit.Analyzers.targets" />
+</Project>

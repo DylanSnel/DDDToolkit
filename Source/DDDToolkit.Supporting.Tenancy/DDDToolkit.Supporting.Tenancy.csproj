@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Names the helpers the generators write into this assembly. The package is no module, so DDD_DeclareModule
+      keeps DDD_Module from declaring one: it becomes part of whichever module of an application declares Tenancy's
+      classes, which names the package's types freely, and its domain events carry names of their own.
+    -->
+    <DDD_Module>SupportingTenancy</DDD_Module>
+    <DDD_DeclareModule>false</DDD_DeclareModule>
+    <Title>Domain Driven Design Toolkit - Supporting domain: Tenancy</Title>
+    <PackageTags>ddd;domain;driven;design;toolkit;supporting;tenancy;multi-tenant;multitenancy;organization;roles;permissions;access</PackageTags>
+    <Description>Tenants, their organization tree, seats with placements and role grants, roles over a permission catalogue, and the access questions, database-agnostic.</Description>
+    <!-- The refusal texts are written in English; Dutch ships as a satellite assembly. -->
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
+  </ItemGroup>
+
+  <!--
+    This package declares [AggregateRootBase] and [EntityBase] parents and a value object, so the generator
+    runs on it: it writes the parents' base classes, invariant plumbing and the slug's always-valid twin.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    The generator that collects the keys every module marks with [TenancyPermissions] into the project that
+    composes the modules. It runs in the application, so it ships inside this package, in analyzers/dotnet/cs, the
+    way Membership's generator ships inside Membership's: built first, referenced by nothing, and no package of its
+    own, so it never arrives at another version than the attribute it reads.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\DDDToolkit.Supporting.Tenancy.Analyzers\DDDToolkit.Supporting.Tenancy.Analyzers.csproj" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <None Include="..\DDDToolkit.Supporting.Tenancy.Analyzers\bin\$(Configuration)\netstandard2.0\DDDToolkit.Supporting.Tenancy.Analyzers.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
+</Project>

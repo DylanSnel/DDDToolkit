@@ -24,6 +24,9 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
 
     public static readonly Guid Carol = Guid.Parse("ca401000-0000-4000-8000-000000000003");
 
+    /// <summary>The desk's rules, as the database has them.</summary>
+    public static readonly RowAccessRule[] Rules = [DeskRules.Owners, DeskRules.Teammates, DeskRules.Public, DeskRules.Watchers, DeskRules.TeamFiles];
+
     private PgmqDatabase? _database;
 
     /// <summary>Whether the container started; a test skips or fails through <see cref="Require"/> when it did not.</summary>
@@ -68,7 +71,7 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
                 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA desk TO anon, authenticated;
                 """,
                 cancellation);
-            await RunAsOwnerAsync(PostgresRowAccess.Script(model, [DeskRules.Owners, DeskRules.Teammates, DeskRules.Public, DeskRules.Watchers], [DeskRules.IsWatcher]), cancellation);
+            await RunAsOwnerAsync(PostgresRowAccess.Script(model, Rules, [DeskRules.IsWatcher]), cancellation);
         }
 
         // As the application itself, which owns the tables: the rules are for callers.
@@ -100,6 +103,29 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         await using var context = CreateContext(caller);
         return await context.Tickets.AsNoTracking().ToListAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The titles of every ticket <paramref name="caller"/> may read, by SQL that names no other column, so it
+    /// still answers after a test dropped one the model maps.
+    /// </summary>
+    public async Task<List<string>> TitlesAsync(Caller caller, CancellationToken cancellationToken)
+    {
+        await using var context = CreateContext(caller);
+        return await context.Database.SqlQueryRaw<string>("""SELECT "Title" AS "Value" FROM desk."Tickets" """).ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// How <paramref name="user"/>, a login role whose password is its name, connects to
+    /// <paramref name="databaseName"/>, or to the desk's database when that is left out.
+    /// </summary>
+    public string ConnectionStringFor(string user, string? databaseName = null)
+        => new NpgsqlConnectionStringBuilder(Database.ConnectionString)
+        {
+            Username = user,
+            Password = user,
+            Database = databaseName ?? new NpgsqlConnectionStringBuilder(Database.ConnectionString).Database,
+            Pooling = false,
+        }.ConnectionString;
 
     /// <summary>Every comment <paramref name="caller"/> may read, asked of the comments' own table.</summary>
     public async Task<List<string>> CommentsAsync(Caller caller, CancellationToken cancellationToken)
@@ -142,6 +168,29 @@ public sealed class PostgresRowAccessDatabase : IAsyncLifetime
         }
 
         return functions;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="sql"/> as <paramref name="caller"/>, the way SQL of the application's own or a
+    /// client of the Data API would, with <c>{0}</c>, <c>{1}</c> for <paramref name="parameters"/>, and
+    /// returns the number of rows it affected.
+    /// </summary>
+    public async Task<int> RunAsAsync(Caller caller, string sql, CancellationToken cancellationToken, params object[] parameters)
+    {
+        await using var context = CreateContext(caller);
+        return await context.Database.ExecuteSqlRawAsync(sql, parameters, cancellationToken);
+    }
+
+    /// <summary>An open connection as the superuser, for what the rules have no say in.</summary>
+    public Task<NpgsqlConnection> OpenAsOwnerAsync(CancellationToken cancellationToken) => Database.OpenAsync(cancellationToken);
+
+    /// <summary>Runs <paramref name="sql"/> as the application's login role itself, as its migrations would.</summary>
+    public async Task RunAsApplicationAsync(string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(ApplicationConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Runs <paramref name="sql"/> as the superuser.</summary>

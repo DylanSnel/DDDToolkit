@@ -229,8 +229,8 @@ You can still implement `IDomainEvent` directly. You then write the two properti
 `[DomainEventName]` is new and optional. Without it, an event is named by convention: its module and its
 class name in kebab case, `ordering.order-placed`. Add the attribute when you rename a class whose name
 is already stored or published, to keep the old name; see [Stable names](domain-events.md#stable-names).
-The outbox uses the name as the message name, and `DomainEventName.Of` resolves it. (Early 3.0 builds used
-the bare class name instead; rows they wrote are still read.)
+The outbox uses the name as the message name, and `DomainEventName.For` resolves it (`DomainEventName.Of` up to
+3.1). Early 3.0 builds used the bare class name instead; rows they wrote are still read.
 
 ### Making the timestamp deterministic in tests
 
@@ -675,9 +675,10 @@ An analyzer then reports where one module names another module's unpublished typ
 carry `[assembly: Module]`, so adding the attribute to one project changes nothing, and adding it to
 a second gives you a list rather than a build break.
 
-Do not confuse it with `DDD_Module`. That MSBuild property names the generated `Add{Module}Converters`
-method in a project that is no module, and describes no boundary to anybody. A project that does
-declare a module has its generated code named after the module, whatever the property says. Adopt one
+`DDD_Module`, the MSBuild property that names the generated `Add{Module}Converters` method, declares the
+module as well from 3.2 on: the build writes the attribute from it, so a project that sets it to name its
+methods is a module ([A module named by its folder](modules.md#a-module-named-by-its-folder)). A project
+that declares the attribute itself has its generated code named after it, whatever the property says. Adopt one
 project at a time; [Modules](modules.md#adopting-this-on-an-existing-codebase) has the order to do it in.
 
 ## From an earlier 3.0 build

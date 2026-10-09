@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="projects.not-found" xml:space="preserve">
+    <value>There is no such project, or it is not one you can see.</value>
+  </data>
+  <data name="projects.not-permitted" xml:space="preserve">
+    <value>Doing this to the project needs the key {Key}.</value>
+  </data>
+  <data name="projects.closed" xml:space="preserve">
+    <value>The project is closed; nothing about it changes until it is reopened.</value>
+  </data>
+  <data name="projects.not-closed" xml:space="preserve">
+    <value>The project is open; only a closed project can be reopened.</value>
+  </data>
+  <data name="projects.number-taken" xml:space="preserve">
+    <value>Another project in this tenant already has the number {Number}.</value>
+  </data>
+  <data name="projects.no-lead-role" xml:space="preserve">
+    <value>The tenant has no active crew lead role to give a project's owner.</value>
+  </data>
+  <data name="projects.owner-protected" xml:space="preserve">
+    <value>The owner keeps the lead role on the crew until somebody else is named owner.</value>
+  </data>
+  <data name="projects.already-on-crew" xml:space="preserve">
+    <value>That seat is on the crew already, or is due to join it. Give it a crew role instead.</value>
+  </data>
+  <data name="projects.crew-role-held" xml:space="preserve">
+    <value>That seat already has this role on the crew.</value>
+  </data>
+  <data name="projects.crew-role-not-found" xml:space="preserve">
+    <value>That seat does not have this role on the crew.</value>
+  </data>
+  <data name="projects.already-owner" xml:space="preserve">
+    <value>That seat owns the project already.</value>
+  </data>
+  <data name="projects.member-not-found" xml:space="preserve">
+    <value>That seat is not on the project's crew, or its time on it has ended.</value>
+  </data>
+  <data name="projects.seat-not-active" xml:space="preserve">
+    <value>That seat is suspended or deactivated, or is not one of this tenant's.</value>
+  </data>
+  <data name="projects.unit-not-active" xml:space="preserve">
+    <value>That unit is archived, or is not one of this tenant's.</value>
+  </data>
+  <data name="projects.name-invalid" xml:space="preserve">
+    <value>A project's name is 1 to {Max} characters.</value>
+  </data>
+  <data name="projects.number-invalid" xml:space="preserve">
+    <value>A project's number is 1 to {Max} characters.</value>
+  </data>
+  <data name="projects.planned-range-invalid" xml:space="preserve">
+    <value>A project's planned range has a first and a last day, and the last is not before the first.</value>
+  </data>
+  <data name="projects.cursor-invalid" xml:space="preserve">
+    <value>That page marker does not belong to this list. Start again from the first page.</value>
+  </data>
+  <data name="projects.page-size-invalid" xml:space="preserve">
+    <value>A page holds 1 to {Max} projects.</value>
+  </data>
+  <data name="projects.page-from-both-ends" xml:space="preserve">
+    <value>A page is the first of a list or the last of it. Ask with first or with last, not with both.</value>
+  </data>
+  <data name="projects.too-many-ids" xml:space="preserve">
+    <value>Ask about at most {Max} projects at a time.</value>
+  </data>
+  <data name="projects.role-not-for-members" xml:space="preserve">
+    <value>That role is not one of this tenant's project roles in use, so it cannot go on a crew.</value>
+  </data>
+  <data name="projects.invalid-period" xml:space="preserve">
+    <value>A time on the crew ends after it starts.</value>
+  </data>
+  <data name="projects.role-not-found" xml:space="preserve">
+    <value>There is no such project role in this tenant.</value>
+  </data>
+  <data name="projects.role-archived" xml:space="preserve">
+    <value>That project role is archived: it changes no more, and goes to nobody.</value>
+  </data>
+  <data name="projects.role-name-invalid" xml:space="preserve">
+    <value>Enter {Min} to {Max} characters.</value>
+  </data>
+  <data name="projects.role-name-taken" xml:space="preserve">
+    <value>Another project role of this tenant is called {Name} already.</value>
+  </data>
+  <data name="projects.key-not-for-members" xml:space="preserve">
+    <value>A project role cannot give these keys: {Keys}.</value>
+  </data>
+  <data name="projects.owner-role-stays" xml:space="preserve">
+    <value>The role every project's owner holds is not archived.</value>
+  </data>
+  <data name="projects.role-keys-not-normalized" xml:space="preserve">
+    <value>A project role's keys are each there once, none of them blank, in order.</value>
+  </data>
+</root>

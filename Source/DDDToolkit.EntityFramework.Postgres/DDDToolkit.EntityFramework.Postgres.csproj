@@ -25,4 +25,23 @@
     <ProjectReference Include="..\DDDToolkit\DDDToolkit.csproj" />
   </ItemGroup>
 
+  <!--
+    How a model marks a table that only grows, an event log for one, and which entity types are the outbox's
+    and the inbox's. DDDToolkit.EntityFramework writes the marks; this package reads them, to write such a
+    table's guard and privileges, and references that package no more than it references Npgsql. So the one
+    file that spells the marks is compiled into both assemblies, as internal types.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework\Storage\KeptRows.cs" Link="Storage\KeptRows.cs" />
+  </ItemGroup>
+
+  <!--
+    The hint an access guard of the database refuses with. DDDToolkit.EntityFramework reads it from a failed save
+    and answers access.refused; this package writes it into every access guard it writes, and hands it to a guard
+    of the application's own through RowAccessModel.Refusal. One file, compiled into both, as KeptRows is.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.EntityFramework\Interceptors\GuardMark.cs" Link="Interceptors\GuardMark.cs" />
+  </ItemGroup>
+
 </Project>

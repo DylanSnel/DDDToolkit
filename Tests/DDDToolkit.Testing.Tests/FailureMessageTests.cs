@@ -25,7 +25,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 2))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 2))
             .Raised<OrderConfirmed>());
 
         message.Should().Contain("Expected Order to raise OrderConfirmed, but it did not.");
@@ -37,7 +37,7 @@ public class FailureMessageTests
     public void AMissingEventInAnEmptyBatchSaysSoRatherThanPrintingAnEmptyList()
     {
         var order = Draft();
-        order.AddLine(Sku.Of("SKU-1"), 1);
+        order.AddLine(Sku.From("SKU-1"), 1);
         order.Confirm();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
@@ -55,8 +55,8 @@ public class FailureMessageTests
         var message = MessageOf(() => AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
-                o.AddLine(Sku.Of("SKU-2"), 2);
+                o.AddLine(Sku.From("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-2"), 2);
             })
             .Raised<LineAdded>(added => added.Quantity == 9));
 
@@ -70,7 +70,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 1))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 1))
             .Raised<OrderShipped>(shipped => shipped.TrackingCode == "TRACK-1"));
 
         message.Should().Contain("it raised no OrderShipped at all.");
@@ -82,8 +82,8 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 2))
-            .Raised(new LineAdded(order.Id, Sku.Of("SKU-1"), 5)));
+            .When(o => o.AddLine(Sku.From("SKU-1"), 2))
+            .Raised(new LineAdded(order.Id, Sku.From("SKU-1"), 5)));
 
         message.Should().Contain("Quantity = 5 }, but no raised event carried that payload.");
         message.Should().Contain("Quantity was 2, expected 5");
@@ -96,7 +96,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 2))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 2))
             .Raised(new OrderCancelled(order.Id, "out of stock")));
 
         message.Should().Contain("It raised no OrderCancelled at all.");
@@ -108,7 +108,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 2))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 2))
             .RaisedNothing());
 
         message.Should().Contain("Expected Order to raise no events, but it raised 1.");
@@ -123,8 +123,8 @@ public class FailureMessageTests
         var message = MessageOf(() => AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
-                o.AddLine(Sku.Of("SKU-2"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-2"), 1);
             })
             .RaisedNo<LineAdded>());
 
@@ -139,7 +139,7 @@ public class FailureMessageTests
         var message = MessageOf(() => AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
                 o.Confirm();
             })
             .RaisedExactly<OrderConfirmed, LineAdded>());
@@ -155,7 +155,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 1))
+            .When(o => o.AddLine(Sku.From("SKU-1"), 1))
             .RaisedExactly<LineAdded, OrderConfirmed>());
 
         message.Should().Contain("The first difference is at index 1: expected OrderConfirmed, was nothing.");
@@ -169,11 +169,11 @@ public class FailureMessageTests
         var message = MessageOf(() => AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
                 o.Confirm();
             })
             .RaisedExactlyThese(
-                new LineAdded(order.Id, Sku.Of("SKU-1"), 1),
+                new LineAdded(order.Id, Sku.From("SKU-1"), 1),
                 new OrderConfirmed(order.Id, 7)));
 
         message.Should().Contain("Expected Order to raise exactly these 2 events:");
@@ -187,8 +187,8 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .When(o => o.AddLine(Sku.Of("SKU-1"), 1))
-            .RaisedExactlyThese(new LineAdded(order.Id, Sku.Of("SKU-1"), 1), new OrderConfirmed(order.Id, 1)));
+            .When(o => o.AddLine(Sku.From("SKU-1"), 1))
+            .RaisedExactlyThese(new LineAdded(order.Id, Sku.From("SKU-1"), 1), new OrderConfirmed(order.Id, 1)));
 
         message.Should().Contain("It raised 1.");
     }
@@ -201,8 +201,8 @@ public class FailureMessageTests
         var message = MessageOf(() => AggregateScenario.Given(order)
             .When(o =>
             {
-                o.AddLine(Sku.Of("SKU-1"), 1);
-                o.AddLine(Sku.Of("SKU-2"), 1);
+                o.AddLine(Sku.From("SKU-1"), 1);
+                o.AddLine(Sku.From("SKU-2"), 1);
             })
             .SingleEvent<LineAdded>());
 
@@ -217,7 +217,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var message = MessageOf(() => AggregateScenario.Given(order)
-            .WhenThrows<InvalidOperationException>(o => o.AddLine(Sku.Of("SKU-1"), 1)));
+            .WhenThrows<InvalidOperationException>(o => o.AddLine(Sku.From("SKU-1"), 1)));
 
         message.Should().Contain("Expected Order to throw InvalidOperationException, but the call returned normally.");
         message.Should().Contain("[0] LineAdded");
@@ -229,7 +229,7 @@ public class FailureMessageTests
         var order = Draft();
 
         var failure = Record.Exception(() => AggregateScenario.Given(order)
-            .WhenThrows<InvalidOperationException>(o => o.AddLine(Sku.Of("SKU-1"), 0)));
+            .WhenThrows<InvalidOperationException>(o => o.AddLine(Sku.From("SKU-1"), 0)));
 
         failure.Should().BeOfType<AggregateAssertionException>();
         failure!.Message.Should().Contain(

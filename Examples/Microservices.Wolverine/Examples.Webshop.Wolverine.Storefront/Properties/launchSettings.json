@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Examples.Webshop.Wolverine.Storefront": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:65131;http://localhost:65132"
+    }
+  }
+}

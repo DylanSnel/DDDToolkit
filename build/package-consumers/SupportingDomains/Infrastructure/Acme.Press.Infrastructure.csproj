@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Where the domain is stored and registered. Of the toolkit's packages it references the two Postgres ones and
+    the Supabase export. Everything else has to arrive as a dependency of the package above it: Tenancy's and
+    Membership's Entity Framework packages, the toolkit's own Entity Framework integration, and the generators that
+    write what this project calls: the toolkit's own and Entity Framework's, each in a package of its own, and
+    Membership's Entity Framework generator, which ships inside Membership's Entity Framework package. The code
+    calls what each of them writes, so a package that is missing, or a generator that did not arrive, fails
+    this build; the script reads which generators wrote a file.
+
+    The Supabase package is referenced here, where the contexts are, marked [SupabaseMigrations], as docs/supabase.md
+    says. Its generator writes their design-time factories here, beside them; the script holds that it wrote them.
+    Its export runs in the host, which gets the package's build step and generator through this project. Both arrive
+    here as well, and must export nothing here, however the export was turned on.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- dotnet ef runs this project as its own startup project, through the design-time factories the build writes here. -->
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <!--
+      DDD00054 says a package's row access SQL is not written for want of what the application marks, and only the
+      project that runs the export hears it. It stays a warning here, so a build that hands this library the export
+      shows what follows that first sign: the build step running a library. The script holds that it is never
+      reported at all.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);DDD00054</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Acme.Press.Domain.csproj" />
+    <!--
+      These two Postgres packages declare themselves contributors of row level security: the export the host
+      runs writes their SQL because this project references them, from what the domain project marks.
+    -->
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Tenancy.Postgres" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.Supporting.Membership.Postgres" Version="$(DDDToolkitPackageVersion)" />
+    <PackageReference Include="$(DDDPackageIdPrefix)DDDToolkit.EntityFramework.Supabase" Version="$(DDDToolkitPackageVersion)" />
+    <!--
+      The provider the export builds the contexts with. The toolkit's packages reference Npgsql, not its Entity
+      Framework provider, whose version is the application's to choose; this one asks for the Entity Framework
+      the packages' floors name, so nothing is raised under them.
+    -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -30,6 +30,12 @@ namespace DDDToolkit.EntityFramework.Integration;
 /// that says the message went out.
 /// </para>
 /// <para>
+/// <b>It is the outbox's own work.</b> Where the host requires explicit callers
+/// (<see cref="DDDToolkit.Access.CallerServiceCollectionExtensions.RequireExplicitCallers"/>), it runs inside the
+/// processor's <c>Caller.System</c>, which under row level security reads past every policy: read only rows
+/// the event's own module may publish, such as the aggregate the event is about.
+/// </para>
+/// <para>
 /// Returning <see langword="null"/> drops that one occurrence. Throwing fails the delivery like a
 /// failing sink does: the row records the error and is retried.
 /// </para>

@@ -1,0 +1,43 @@
+<Project>
+  <!--
+    The sample's modules: a folder each, and in it a project per layer. Modules/Projects/Examples.Tenancy.Projects.Domain
+    is a project of module Projects, because it is in the folder Projects. That is said once, here, for every project
+    below: DDD_Module is the name of the folder a project's folder is in, and that is the module the project declares,
+    as [assembly: Module("Projects")] would. No project has a file that says so, and a layer added to a module is that
+    module's from its first build.
+
+    So Projects' five projects, Tenants' five and Inspections' four are three modules. To the boundary analyzer, a
+    project may name what the projects of its own module declare, and of another module only what that one publishes:
+    the public types of its contracts project, its ids, keys and gates (DDD00022), and never its entities (DDD00023).
+    Both are errors here, so the boundary is held and not only reported. To the generators, an infrastructure
+    project is written the registrations its module's other projects need: the converters of their
+    ids, their domain events under their names, and a package's registrations closed over their classes, such as
+    modelBuilder.AddTenancy() in Tenants' and AddProjectMembershipWithTenancy in Projects'. Tenants' domain project,
+    which declares Tenancy's classes, gets TenancyUseCases: Tenancy's use cases closed over those classes, under the
+    package's own name for them, which every project above it names a use case and its records through, so none of
+    them writes the nine types.
+
+    The build writes the declaration into each project, and the toolkit's generator writes [assembly: Module] from it;
+    see "A module named by its folder" in docs/modules.md. The host, the shared projects and the tests are outside this
+    folder, and none of them is a module.
+
+    A module's contracts project is said once here as well: a project whose name ends in .Contracts sets
+    DDD_ModuleContracts, and the toolkit's generator writes [assembly: ModuleContracts] into it, so every public type
+    of it is published and none carries [ModuleContract]. That condition on the name is this sample's own convention,
+    not the toolkit's, which never takes a project for contracts because of its name; see "A contracts project" in
+    docs/modules.md. A type a contracts project keeps to itself is internal.
+
+    MSBuild reads the nearest Directory.Build.props only, so this one imports the repository's, which the projects
+    below need as much as any other.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <DDD_Module>$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($(MSBuildProjectDirectory)))))</DDD_Module>
+    <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(MSBuildProjectName.EndsWith('.Contracts'))">
+    <DDD_ModuleContracts>true</DDD_ModuleContracts>
+  </PropertyGroup>
+</Project>

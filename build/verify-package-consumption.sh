@@ -10,13 +10,34 @@
 # untested by a green solution build, and it has broken before.
 #
 # What it proves, in order:
-#   1. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
+#   1. Every assembly a package ships in lib/<tfm>/ has its XML documentation beside it, which is where
+#      an editor reads the package's comments from.
+#   2. Examples/DDDToolkit.NugetApi: every generator arrives as a dependency of the package above it
 #      and produces what Check.cs names.
-#   2. build/package-consumers: DDD_Module reaches the generators wherever they run. With only
+#   3. build/package-consumers: DDD_Module reaches the generators wherever they run, and declares the
+#      project's module there, with the build step that arrives beside the props file. With only
 #      Abstractions and Analyzers, with only the DDDToolkit package, and in a project that gets the
-#      toolkit through a project reference.
-#   3. DDD00014: a project that has the generators and not their props file is told so, and a project
-#      that has both and sets no DDD_Module is not.
+#      toolkit through a project reference. DDD_DeclareModule set to false keeps the name and leaves the
+#      module out. DDD_ModuleContracts reaches the generator in the contracts project, which writes
+#      [assembly: ModuleContracts] from it.
+#   4. DDD00014: a project that has the generators and not their props file is told so, and a project
+#      that has both and sets no DDD_Module is not. DDD00064: one that lists DDD_Module by hand instead is
+#      told that it is no module, and none that imports the targets file is.
+#   5. The supporting domains: an application with Tenancy and Membership, in a domain project on their
+#      domain packages, an infrastructure project on their Postgres packages and a host, builds with
+#      everything it needs arriving as a dependency, Membership's two generators among it, which ship
+#      inside Membership's packages and write nothing in the host; Tenancy's generator, which ships inside
+#      Tenancy's package and writes the modules' keys into the host and nowhere else; the toolkit's, which
+#      writes Tenancy's use cases closed over the classes, TenancyUseCases, into the domain project alone, for
+#      the host to name them through; and the packages carry their Dutch texts. Its module is declared by
+#      DDD_Module, from a Directory.Build.props, and not by a file in either project: the package's targets
+#      declare it, and its generator writes the attribute.
+#   6. The Supabase export of that application runs in its host, also when SupabaseMigrationsExport is
+#      given for the whole build, on the command line: every other project ignores it, with no crash and
+#      no warning. The host's SupabaseLoginRole reaches the export, which writes the login role's file.
+#      The application declares no administrators' pack, and the access file has Tenancy's default one. Tenancy's
+#      and Membership's SQL is written because the infrastructure project references their Postgres packages,
+#      made in the host from the catalogue and the rules the domain project marks, with no line of the host's.
 #
 # Usage: build/verify-package-consumption.sh [version]
 #   version  defaults to 0.0.0-ci, matching what the Build and Test workflow packs.
@@ -49,6 +70,11 @@ core_id="$(dotnet msbuild "$root/Source/DDDToolkit/DDDToolkit.csproj" -getProper
 prefix="${core_id%DDDToolkit}"
 analyzers_id="${prefix}DDDToolkit.Analyzers"
 
+# NuGet lowercases the version for that folder as well. A release tag may carry a prerelease suffix in
+# capitals, v3.2.0-RC.1, and the folder is then 3.2.0-rc.1: Windows finds it either way, the release
+# job runs on Linux.
+version_folder="$(tr '[:upper:]' '[:lower:]' <<< "$version")"
+
 echo "==> Verifying package consumption at version $version, package ids ${prefix}DDDToolkit.*"
 
 if ! compgen -G "$feed/$core_id.$version.nupkg" > /dev/null; then
@@ -56,6 +82,39 @@ if ! compgen -G "$feed/$core_id.$version.nupkg" > /dev/null; then
   echo "  for p in \$(find ./Source -name '*.csproj'); do dotnet pack \"\$p\" -c Release -o nupkgs -p:PackageVersion=$version; done" >&2
   exit 1
 fi
+
+# The XML documentation beside every assembly in lib/<tfm>/. Visual Studio and every other editor read a
+# package's /// comments from that file and nowhere else, and nothing in a build reads it, so a package
+# packed without it restores and builds like any other, and its consumers see none of its comments. That
+# is how 3.2.0-preview.1 shipped. Read from the packed packages themselves, every one of them, rather than
+# from the few the consumers below restore. A satellite assembly, nl/<name>.resources.dll, is one folder
+# deeper and needs none; a package that only carries generators has no lib/ and nothing to check.
+echo "==> The XML documentation beside every assembly in lib/"
+undocumented=""
+assemblies=0
+for nupkg in "$feed/${prefix}"DDDToolkit*."$version".nupkg; do
+  entries="$(unzip -Z1 "$nupkg" | tr -d '\r')"
+  while IFS= read -r assembly; do
+    assemblies=$((assemblies + 1))
+    if ! grep -qxF "${assembly%.dll}.xml" <<< "$entries"; then
+      undocumented+="    $(basename "$nupkg"): $assembly"$'\n'
+    fi
+  done < <(grep -E '^lib/[^/]+/[^/]+\.dll$' <<< "$entries" || true)
+done
+
+if [ -n "$undocumented" ]; then
+  echo "FAILED: these assemblies have no XML documentation beside them, so an editor shows none of their comments." >&2
+  echo "        GenerateDocumentationFile is set for the packages in Directory.Build.props." >&2
+  printf '%s' "$undocumented" >&2
+  exit 1
+fi
+
+if [ "$assemblies" = 0 ]; then
+  echo "FAILED: no package in $feed at $version has an assembly in lib/, so there was no documentation to check." >&2
+  exit 1
+fi
+
+echo "    $assemblies assemblies, each with its XML documentation"
 
 # A fresh package folder every run. NuGet caches by id and version, so without this a second run at
 # the same version would restore the packages from the first one and verify nothing.
@@ -105,7 +164,7 @@ dotnet restore "$work/consumer/DDDToolkit.NugetApi.csproj" \
 # The code fixes need the Workspaces layer, which the compiler does not load, so they are a separate
 # assembly packed next to the generators rather than a package of their own. Nothing in a build uses
 # them, so nothing below would notice them missing; only the IDE would, silently.
-analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version"
+analyzers_package="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$analyzers_id")/$version_folder"
 analyzers_folder="$analyzers_package/analyzers/dotnet/cs"
 for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
   if [ ! -f "$analyzers_folder/$assembly" ]; then
@@ -115,15 +174,17 @@ for assembly in DDDToolkit.Analyzers.dll DDDToolkit.Analyzers.CodeFixes.dll; do
 done
 
 # The props file that declares the properties the generators read, in the package that carries the
-# generators. Both folders, and under the package's id, because NuGet imports no other name: build/ for
-# a client that knows nothing of buildTransitive/, and buildTransitive/ for every project that does not
-# reference the package itself. The consumers below prove it is imported; this says which file was
-# missing or misnamed when they fail.
+# generators, and the targets file whose build step declares the module DDD_Module names. Both folders, and under
+# the package's id, because NuGet imports no other name: build/ for a client that knows nothing of
+# buildTransitive/, and buildTransitive/ for every project that does not reference the package itself. The
+# consumers below prove they are imported; this says which file was missing or misnamed when they fail.
 for folder in build buildTransitive; do
-  if [ ! -f "$analyzers_package/$folder/$analyzers_id.props" ]; then
-    echo "FAILED: $folder/$analyzers_id.props is missing from the $analyzers_id package." >&2
-    exit 1
-  fi
+  for extension in props targets; do
+    if [ ! -f "$analyzers_package/$folder/$analyzers_id.$extension" ]; then
+      echo "FAILED: $folder/$analyzers_id.$extension is missing from the $analyzers_id package." >&2
+      exit 1
+    fi
+  done
 done
 
 echo "==> Building the consumer"
@@ -153,14 +214,16 @@ do
 done
 
 # ---------------------------------------------------------------------------------------------------
-# DDD_Module reaches the generators wherever they run.
+# DDD_Module reaches the generators wherever they run, and declares the module there.
 #
 # The project above references DDDToolkit itself and two packages that depend on it, which is one of
 # several ways the generators arrive. The projects in build/package-consumers are the others. Each sets
 # <DDD_Module>Billing</DDD_Module> and declares one event, so the generator writes {Module}EventNames:
 # BillingEventNames when the property reached it, and a class named after the assembly when it did not.
 # That fallback compiles, which is why it went unnoticed, and why this reads the generated file instead
-# of leaving it to the compiler.
+# of leaving it to the compiler. The property also declares module Billing, through the build step that
+# arrives beside the props file, which writes the declaration into obj/ for the generator to write
+# [assembly: Module] from; that is read from the files as well.
 # ---------------------------------------------------------------------------------------------------
 
 cp -r "$consumers" "$work/package-consumers"
@@ -214,22 +277,87 @@ expect_no_missing_properties_warning() {
     echo "FAILED: $1: DDD00014 was reported, so the props file of $analyzers_id was not imported." >&2
     exit 1
   fi
+
+  # DDD00064 is the targets file's half: DDD_Module reached the generators, and the step that declares the
+  # module did not run, or did not tell them it ran.
+  if grep -q 'DDD00064' "$build_log"; then
+    echo "FAILED: $1: DDD00064 was reported, so the targets file of $analyzers_id was not imported, or hands the generators no DDD_DeclareModule." >&2
+    exit 1
+  fi
+}
+
+# The project folder $1 must be a project of module $2, declared by the build: the targets of the Analyzers
+# package wrote DDD_Module into obj/, and the packaged generator wrote [assembly: Module] from it. With $2 empty
+# it must be no module, with neither file.
+expect_module() {
+  local folder="$work/package-consumers/$1/obj" declaration attribute
+  declaration="$(find "$folder" -name '*.DDDToolkitModule.g.cs' | head -n 1)"
+  attribute="$(find "$folder" -path '*generated*' -name 'Module.g.cs' | head -n 1)"
+
+  if [ -z "$2" ]; then
+    if [ -n "$declaration$attribute" ]; then
+      echo "FAILED: $1: a module was declared in a project that is meant to be none." >&2
+      exit 1
+    fi
+
+    echo "    $1: no module"
+    return
+  fi
+
+  if [ -z "$declaration" ] || ! grep -qF "AssemblyMetadata(\"DDD_Module\", \"$2\")" "$declaration"; then
+    echo "FAILED: $1: the targets of $analyzers_id did not declare module $2 from DDD_Module." >&2
+    exit 1
+  fi
+
+  if [ -z "$attribute" ] || ! grep -qF "ModuleAttribute(\"$2\")" "$attribute"; then
+    echo "FAILED: $1: the generator wrote no [assembly: Module(\"$2\")] from the build's declaration." >&2
+    exit 1
+  fi
+
+  echo "    $1: module $2, declared by the build"
+}
+
+# The project folder $1 must be its module's contracts: DDD_ModuleContracts reached the packaged generator through
+# the props file, and it wrote [assembly: ModuleContracts] from it. No build step is involved.
+expect_module_contracts() {
+  local file
+  file="$(find "$work/package-consumers/$1/obj" -path '*generated*' -name 'ModuleContracts.g.cs' | head -n 1)"
+
+  if [ -z "$file" ] || ! grep -qF 'ModuleContractsAttribute]' "$file"; then
+    echo "FAILED: $1: the generator wrote no [assembly: ModuleContracts] from DDD_ModuleContracts." >&2
+    exit 1
+  fi
+
+  echo "    $1: its module's contracts, from DDD_ModuleContracts"
 }
 
 echo "==> Only Abstractions and Analyzers, the way a contracts project references the toolkit"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly Billing
+expect_module_contracts ContractsOnly
 
 echo "==> Only the DDDToolkit package"
 build_consumer CoreOnly/Acme.Billing.csproj
 expect_no_missing_properties_warning CoreOnly
 expect_event_names_class CoreOnly BillingEventNames
+expect_module CoreOnly Billing
 
 echo "==> The toolkit through a project reference, and no package reference of its own"
 build_consumer ThroughProjectReference/Billing/Acme.Billing.csproj
 expect_no_missing_properties_warning ThroughProjectReference/Billing
 expect_event_names_class ThroughProjectReference/Billing BillingEventNames
+expect_module ThroughProjectReference/Billing Billing
+
+# The rare project that wants the name and not the module, a shared kernel say, sets DDD_DeclareModule to false.
+# The build step reads it, so this is what proves the package's step honours it: the class keeps the name, and
+# nothing is declared. And that the step tells the generators it ran: nothing declared, and no DDD00064.
+echo "==> DDD_DeclareModule false: the name, and no module"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_DeclareModule=false
+expect_no_missing_properties_warning ContractsOnly
+expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly ""
 
 # The other half: when the props file does not arrive, the build has to say so. This is the contracts
 # project again, with a reference that keeps the generators and excludes the package's build assets.
@@ -237,6 +365,7 @@ expect_event_names_class ThroughProjectReference/Billing BillingEventNames
 echo "==> Without the props file: DDD00014"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:WithoutToolkitBuildAssets=true
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+expect_module ContractsOnly ""
 
 if ! grep -q 'warning DDD00014' "$build_log"; then
   echo "FAILED: the generators ran without their props file and DDD00014 was not reported." >&2
@@ -248,12 +377,386 @@ if ! grep -q 'docs/diagnostics#ddd00014' "$build_log"; then
   exit 1
 fi
 
+# What DDD00014 suggests for a generator that arrives without the props file: list DDD_Module by hand. The name
+# comes back and the module does not, since the build step stayed behind with the props file, and DDD00064 says
+# so instead of leaving the project no module without a word.
+echo "==> Without the build files, DDD_Module listed by hand: the name, no module, and DDD00064"
+build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:WithoutToolkitBuildAssets=true -p:ListModulePropertyByHand=true
+expect_event_names_class ContractsOnly BillingEventNames
+expect_module ContractsOnly ""
+
+if grep -q 'DDD00014' "$build_log"; then
+  echo "FAILED: DDD_Module was listed by hand and DDD00014 was still reported." >&2
+  exit 1
+fi
+
+if ! grep -q 'warning DDD00064' "$build_log"; then
+  echo "FAILED: DDD_Module reached the generators without the build step that declares the module, and DDD00064 was not reported." >&2
+  exit 1
+fi
+
 # And the case DDD00014 must stay out of: the props file is imported and the project sets no
 # DDD_Module. The property then reaches the generator as an empty value, which is not the same as not
 # reaching it. If the two were confused, every project that leaves the name to the assembly would warn.
-echo "==> With the props file and no DDD_Module: named after the assembly, and no warning"
+echo "==> With the props file and no DDD_Module: named after the assembly, no module, and no warning"
 build_consumer ContractsOnly/Acme.Billing.Contracts.csproj -p:DDD_Module=
 expect_no_missing_properties_warning ContractsOnly
 expect_event_names_class ContractsOnly AcmeBillingContractsEventNames
+expect_module ContractsOnly ""
+
+# ---------------------------------------------------------------------------------------------------
+# The supporting domains, Tenancy and Membership, three packages each.
+#
+# SupportingDomains is an application with both, in the layers an application has. Its domain project
+# declares Tenancy's classes with the package's templates, and a resource with members and a role it
+# keeps for that resource with Membership's, and references the two domain packages alone. Its
+# infrastructure project maps and registers them and references only the two Postgres packages of the
+# supporting domains, beside the Supabase export and the provider it needs, so the Entity Framework
+# packages, the toolkit's own and every generator it needs have to arrive as a dependency, at the version
+# given. Its host references the infrastructure project and nothing else.
+#
+# Membership's two generators are no packages of their own: they ship inside Membership's packages, in
+# analyzers/dotnet/cs, so a package packed without one would still restore, and only a build that needs
+# what it writes would notice. This one does, since each project calls what its generators write, and
+# treats a generator the compiler could not load, which is a warning, as an error. A generator also
+# reaches every project above the one it is meant for, so the host is checked to have been handed both
+# of them and to have been written nothing by either.
+# ---------------------------------------------------------------------------------------------------
+
+# The file $2 must be in the restored package $1.
+expect_in_package() {
+  local folder
+  folder="$packages/$(tr '[:upper:]' '[:lower:]' <<< "$1")/$version_folder"
+
+  if [ ! -f "$folder/$2" ]; then
+    echo "FAILED: $2 is missing from the $1 package." >&2
+    exit 1
+  fi
+}
+
+# The generators that wrote a file in the project folder $1, one per line.
+generators_that_wrote() {
+  find "$work/package-consumers/$1/obj" -path '*generated*' -name '*.g.cs' | sed "s#.*/generated/##" | cut -d/ -f1 | sort -u
+}
+
+# Each generator named after $1 wrote a file in the project folder $1.
+expect_generators_wrote() {
+  local project="$1" written expected
+  shift
+  written="$(generators_that_wrote "$project")"
+
+  for expected in "$@"; do
+    if ! grep -qxF "$expected" <<< "$written"; then
+      echo "FAILED: $project: $expected produced nothing. It should have arrived with the package that carries it." >&2
+      exit 1
+    fi
+
+    echo "    $project: $expected"
+  done
+}
+
+echo "==> The supporting domains, in a domain, an infrastructure and a host project"
+build_consumer SupportingDomains/Host/Acme.Press.Host.csproj
+expect_no_missing_properties_warning SupportingDomains
+
+expect_generators_wrote SupportingDomains/Domain \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.Supporting.Membership.Analyzers"
+
+expect_generators_wrote SupportingDomains/Infrastructure \
+  "DDDToolkit.Analyzers" \
+  "DDDToolkit.EntityFramework.Analyzers" \
+  "DDDToolkit.Supporting.Membership.EntityFramework.Analyzers" \
+  "DDDToolkit.EntityFramework.Supabase.Analyzers"
+
+# The Supabase package's generator writes the design-time factory of each context marked [SupabaseMigrations]
+# beside it, in the infrastructure project, where dotnet ef looks for one; the project has none of its own.
+for factory in TenancyContextDesignTimeFactory PressContextDesignTimeFactory; do
+  if [ -z "$(find "$work/package-consumers/SupportingDomains/Infrastructure/obj" -path '*generated*' -name "Acme.Press.Persistence.$factory.g.cs" | head -n 1)" ]; then
+    echo "FAILED: SupportingDomains/Infrastructure: the Supabase generator wrote no $factory beside its marked context." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Infrastructure: a design-time factory beside each marked context"
+
+# The host is handed Membership's generators too, as a dependency of a dependency, and has nothing of
+# theirs to be written: the classes and the contexts are below it. A second member list or a second
+# registration there would be a generator that writes for what a project only references.
+host_assets="$work/package-consumers/SupportingDomains/Host/obj/project.assets.json"
+host_written="$(generators_that_wrote SupportingDomains/Host)"
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers; do
+  if ! grep -qF "analyzers/dotnet/cs/$generator.dll" "$host_assets"; then
+    echo "FAILED: SupportingDomains/Host: $generator was not handed to the host, so finding nothing written by it proves nothing." >&2
+    exit 1
+  fi
+
+  if grep -qxF "$generator" <<< "$host_written"; then
+    echo "FAILED: SupportingDomains/Host: $generator wrote a file in the host, which declares nothing of its own." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: handed both of Membership's generators, and written nothing by either"
+
+# Tenancy's generator is the other way round: the host, which declares no module and references the module that
+# marks its keys with [TenancyPermissions], is where it writes the list of them and the call that registers them,
+# which PressStartup makes, and the module's own projects get nothing of it.
+expect_generators_wrote SupportingDomains/Host "DDDToolkit.Supporting.Tenancy.Analyzers"
+for project in Domain Infrastructure; do
+  if grep -qxF "DDDToolkit.Supporting.Tenancy.Analyzers" <<< "$(generators_that_wrote "SupportingDomains/$project")"; then
+    echo "FAILED: SupportingDomains/$project: Tenancy's generator wrote into a project of the module, which composes no module's keys." >&2
+    exit 1
+  fi
+done
+
+# The module, Press, is declared by the build: DDD_Module in SupportingDomains' Directory.Build.props, and no
+# Module.cs. The build above compiled only because the infrastructure project took the domain project for one of
+# its module's projects; this says which half did not arrive when it does not. The package's targets wrote the
+# declaration into each project's obj/, and its generator wrote [assembly: Module] from it. The host sets no
+# DDD_Module and is given no module.
+expect_module SupportingDomains/Domain Press
+expect_module SupportingDomains/Infrastructure Press
+expect_module SupportingDomains/Host ""
+
+# Tenancy's use cases closed over the classes, TenancyUseCases, are written by the toolkit's generator into the domain
+# project that declares the classes, and into no project above it: those see that one, and PressSeats in the host
+# names the directory through it, so the host does not compile without it.
+tenancy_use_cases() {
+  find "$work/package-consumers/SupportingDomains/$1/obj" -path '*generated*' -name 'TenancyUseCases.TemplateFacade.g.cs'
+}
+if [ -z "$(tenancy_use_cases Domain)" ]; then
+  echo "FAILED: SupportingDomains/Domain: the toolkit's generator wrote no TenancyUseCases, which the host names Tenancy's use cases through." >&2
+  exit 1
+fi
+for project in Infrastructure Host; do
+  if [ -n "$(tenancy_use_cases "$project")" ]; then
+    echo "FAILED: SupportingDomains/$project: TenancyUseCases was written again above the domain project, which already has it." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Domain: TenancyUseCases, which the host names Tenancy's use cases through"
+
+# Where each generator ships, and the Dutch texts of both domains, which nothing in a build reads.
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership.EntityFramework" analyzers/dotnet/cs/DDDToolkit.Supporting.Membership.EntityFramework.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" analyzers/dotnet/cs/DDDToolkit.Supporting.Tenancy.Analyzers.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Tenancy" lib/net10.0/nl/DDDToolkit.Supporting.Tenancy.resources.dll
+expect_in_package "${prefix}DDDToolkit.Supporting.Membership" lib/net10.0/nl/DDDToolkit.Supporting.Membership.resources.dll
+
+for generator in DDDToolkit.Supporting.Membership.Analyzers DDDToolkit.Supporting.Membership.EntityFramework.Analyzers DDDToolkit.Supporting.Tenancy.Analyzers; do
+  if [ -f "$feed/$prefix$generator.$version.nupkg" ]; then
+    echo "FAILED: $prefix$generator was packed as a package of its own. It ships inside the package that needs it." >&2
+    exit 1
+  fi
+done
+
+# ---------------------------------------------------------------------------------------------------
+# The Supabase export of the same application.
+#
+# The infrastructure project references the Supabase package, where its marked contexts and the factories the
+# build wrote beside them are, and the host turns the export on in its project file, as docs/supabase.md says.
+# Both Postgres packages declare themselves contributors, so the host writes their row access SQL without a line
+# of its own, from what the domain project marks, and the build above wrote the two contexts' access files. The
+# package's build step and generator reach both projects through buildTransitive, so both import them; through
+# project references only the host did, which is how a property that reached the others went unnoticed.
+#
+# A CI script may give the property on the command line instead, and a Directory.Build.props sets it for
+# every project: either way it reaches every project the build reaches. The step starts the program the
+# project built, and in the infrastructure project, a library, it started the library: MissingMethodException,
+# "Entry point not found", and MSB3073. So each value the property takes is given here for the whole build:
+# Write and Check reach the host, which exports, and no other project, which hears nothing of it, not even
+# DDD00054 about what only the host makes; an empty value turns the export off in the host as well.
+# ---------------------------------------------------------------------------------------------------
+
+supabase_migrations="$work/package-consumers/SupportingDomains/supabase/migrations"
+
+# Whether the Supabase package's generator wrote the file named $2 in the project folder $1: its export hook,
+# DDDToolkit.SupabaseMigrationSources.g.cs, where the export runs, and SupabaseMigrationsOfModules.g.cs, the list
+# and AddSupabaseMigrations(), in every application. In the infrastructure project it writes the design-time
+# factories, which are no part of the export.
+supabase_wrote() {
+  [ -n "$(find "$work/package-consumers/$1/obj" -path '*generated*/DDDToolkit.EntityFramework.Supabase.Analyzers/*' -name "$2" | head -n 1)" ]
+}
+
+# What the export said, one line per file: "<status> <file>".
+export_lines() {
+  { grep -E 'Supabase migrations: ' "$build_log" || true; } | sed 's/.*Supabase migrations: *//' | tr -d '\r' | sort -u
+}
+
+# The export ran in the host and in no other project, and said $1 of every file.
+expect_exported_by_the_host_only() {
+  local status="$1" project lines
+
+  if ! supabase_wrote SupportingDomains/Host DDDToolkit.SupabaseMigrationSources.g.cs; then
+    echo "FAILED: SupportingDomains/Host: the Supabase generator wrote no list of sources in the host that turned the export on." >&2
+    exit 1
+  fi
+
+  for project in Domain Infrastructure; do
+    if supabase_wrote "SupportingDomains/$project" DDDToolkit.SupabaseMigrationSources.g.cs \
+      || supabase_wrote "SupportingDomains/$project" SupabaseMigrationsOfModules.g.cs; then
+      echo "FAILED: SupportingDomains/$project: the Supabase generator wrote its export hook or its registration into a project that is not the host." >&2
+      exit 1
+    fi
+  done
+
+  lines="$(export_lines)"
+  if grep -vqE "^$status " <<< "$lines"; then
+    echo "FAILED: the export said something other than $status:" >&2
+    echo "$lines" >&2
+    exit 1
+  fi
+
+  if [ "$(grep -cE '_access\.press\.ddd\.sql$' <<< "$lines")" != 2 ]; then
+    echo "FAILED: the export did not report the access files of both contexts:" >&2
+    echo "$lines" >&2
+    exit 1
+  fi
+
+  echo "    SupportingDomains/Host: exported"
+  echo "$lines" | sed 's/^/      /'
+}
+
+# Nothing in the log is a warning: not DDD00054 in a project that is not the host, and not the step's own.
+expect_no_warning() {
+  if grep -q 'DDD00054' "$build_log"; then
+    echo "FAILED: $1: DDD00054 was reported. The host makes the packages' row access contributions from what the domain project marks, and no other project may run the generator that asks for them." >&2
+    exit 1
+  fi
+
+  if grep -qE ': warning [A-Z]+[0-9]+:|warning : ' "$build_log"; then
+    echo "FAILED: $1: the build warned:" >&2
+    grep -E ': warning [A-Z]+[0-9]+:|warning : ' "$build_log" | sort -u >&2
+    exit 1
+  fi
+}
+
+# Starts the three projects from nothing, so what a build writes in obj/ is its own.
+clean_supporting_domains() {
+  local project
+  for project in Domain Infrastructure Host; do
+    rm -rf "$work/package-consumers/SupportingDomains/$project/obj" "$work/package-consumers/SupportingDomains/$project/bin"
+  done
+}
+
+echo "==> The Supabase export, turned on in the host's project file"
+expect_exported_by_the_host_only Created
+expect_no_warning SupportingDomains
+
+if [ "$(find "$supabase_migrations" -name '*_access.press.ddd.sql' | wc -l | tr -d ' ')" != 2 ]; then
+  echo "FAILED: the export did not write the access files of both contexts into $supabase_migrations." >&2
+  exit 1
+fi
+
+# The house declares no administrators' pack, so the packaged catalogue adds Tenancy's own, and pack_keys in the
+# access file the export wrote from that catalogue answers its keys: every live key, the manuscripts' included,
+# which the house never listed for it.
+if ! grep -qE "WHEN 'administrator' THEN ARRAY\[[^]]*'manuscripts\.edit'" "$supabase_migrations"/*_access.press.ddd.sql; then
+  echo "FAILED: the access files in $supabase_migrations have no pack_keys answer for the default administrators' pack, 'administrator', holding the manuscripts' keys." >&2
+  exit 1
+fi
+
+echo "    SupportingDomains/Host: pack_keys answers the default administrators' pack"
+
+# The packages' contributions were made where the export runs, in the file named for them, from what the domain
+# project marks: Tenancy's from the catalogue, and one of Membership's for the manuscripts, closed over their editors.
+# No other project gets the file, and the host lists nothing for either.
+packages_file="$(find "$work/package-consumers/SupportingDomains/Host/obj" -path '*generated*' -name 'DDDToolkit.RowAccessContributionsOfPackages.g.cs' | head -n 1)"
+if [ -z "$packages_file" ]; then
+  echo "FAILED: SupportingDomains/Host: the Supabase generator wrote no DDDToolkit.RowAccessContributionsOfPackages.g.cs, so the packages' row access SQL was not made from what the application marks." >&2
+  exit 1
+fi
+
+for expected in 'class TenancyRowAccessContribution ' 'application: global::Acme.Press.Tenants.PressCatalogue.Application' \
+  'class MembershipRowAccessContributionOfManuscriptEditor ' 'rules: global::Acme.Press.Manuscripts.ManuscriptMembership.Rules'; do
+  if ! grep -qF "$expected" "$packages_file"; then
+    echo "FAILED: SupportingDomains/Host: $(basename "$packages_file") has no '$expected':" >&2
+    cat "$packages_file" >&2
+    exit 1
+  fi
+done
+
+for project in Domain Infrastructure; do
+  if find "$work/package-consumers/SupportingDomains/$project/obj" -path '*generated*' -name 'DDDToolkit.RowAccessContributionsOfPackages.g.cs' | grep -q .; then
+    echo "FAILED: SupportingDomains/$project: the packages' row access contributions were made in a project that does not run the export." >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: $(basename "$packages_file"), Tenancy's from the marked catalogue and Membership's for the manuscripts"
+
+# The access file names what wrote each package's SQL by the package's class and assembly, without a version: not
+# the class the build wrote into the host, whose version is the application's, nor the package's version, either of
+# which would make every release write the access file again with nothing in its SQL changed.
+for expected in \
+  '-- Written by the row access contribution DDDToolkit.Supporting.Tenancy.Postgres.TenancyRowAccessContribution in DDDToolkit.Supporting.Tenancy.Postgres.' \
+  '-- Written by the row access contribution DDDToolkit.Supporting.Membership.Postgres.MembershipRowAccessContribution<Acme.Press.Manuscripts.ManuscriptEditor> in DDDToolkit.Supporting.Membership.Postgres.'; do
+  if ! grep -qxF -- "$expected" "$supabase_migrations"/*_access.press.ddd.sql; then
+    echo "FAILED: the access files in $supabase_migrations have no line '$expected'." >&2
+    grep -h -- '-- Written by the row access contribution' "$supabase_migrations"/*_access.press.ddd.sql | sort -u >&2
+    exit 1
+  fi
+done
+
+echo "    SupportingDomains/Host: the access file names the packages' classes, without a version"
+
+# The host names the role it logs in as with SupabaseLoginRole, which the packaged build step hands the export
+# among its variables: the export wrote the migration that makes the role, after every other file, granting it
+# the roles callers run as and nothing else. The host maps no role in SupabaseRowAccessRoles, so they are the
+# defaults: anon for a caller without a token, authenticated for a signed-in user, ddd_system_in for the
+# application's own work inside the policies, and ddd_system, the bookkeeping role, for the outbox, the inbox and
+# which migrations ran.
+login_role_file="$(find "$supabase_migrations" -name '*_login_role.press_api.ddd.sql')"
+if [ -z "$login_role_file" ] || [ "$(wc -l <<< "$login_role_file" | tr -d ' ')" != 1 ]; then
+  echo "FAILED: the export did not write the login role's file into $supabase_migrations, so SupabaseLoginRole did not reach it." >&2
+  exit 1
+fi
+
+if [ "$(find "$supabase_migrations" -name '*.sql' -exec basename {} \; | LC_ALL=C sort | tail -n 1)" != "$(basename "$login_role_file")" ]; then
+  echo "FAILED: the login role's file is not the last in $supabase_migrations, after the access files that make the roles it grants." >&2
+  exit 1
+fi
+
+# Each role in a statement of its own, in the order the file grants them.
+granted="$(tr -d '\r' < "$login_role_file" | sed -n 's/^ *GRANT \(.*\) TO press_api;$/\1/p' | paste -sd ' ' -)"
+if [ "$granted" != "anon authenticated ddd_system_in ddd_system" ]; then
+  echo "FAILED: the login role's file grants press_api '$granted', not the roles callers run as:" >&2
+  cat "$login_role_file" >&2
+  exit 1
+fi
+
+echo "    SupportingDomains/Host: $(basename "$login_role_file")"
+
+for mode in Check Write ""; do
+  echo "==> SupabaseMigrationsExport='$mode' for the whole build, on the command line"
+  clean_supporting_domains
+
+  if ! build_consumer SupportingDomains/Host/Acme.Press.Host.csproj "-p:SupabaseMigrationsExport=$mode"; then
+    if grep -qE 'MissingMethodException|MSB3073' "$build_log"; then
+      echo "FAILED: SupabaseMigrationsExport=$mode for the whole build ran the export's step in a project that is not the host, and the program it started has no entry point." >&2
+    else
+      echo "FAILED: the build with SupabaseMigrationsExport=$mode for the whole build failed." >&2
+    fi
+    exit 1
+  fi
+
+  expect_no_warning "SupabaseMigrationsExport=$mode"
+
+  if [ -n "$mode" ]; then
+    # The files the first build wrote are what the model and the rules give, so Write writes none and Check finds them so.
+    expect_exported_by_the_host_only Unchanged
+  elif [ -n "$(export_lines)" ] || supabase_wrote SupportingDomains/Host DDDToolkit.SupabaseMigrationSources.g.cs; then
+    echo "FAILED: an empty SupabaseMigrationsExport for the whole build did not turn the export off in the host." >&2
+    exit 1
+  elif ! supabase_wrote SupportingDomains/Host SupabaseMigrationsOfModules.g.cs; then
+    # PressStartup calls AddSupabaseMigrations(), so the build would have failed without it; said here all the same.
+    echo "FAILED: SupportingDomains/Host: without the export the Supabase generator wrote no AddSupabaseMigrations(), which every application gets." >&2
+    exit 1
+  else
+    echo "    SupportingDomains/Host: no export, and AddSupabaseMigrations() all the same"
+  fi
+done
 
 echo "==> Package consumption verified"

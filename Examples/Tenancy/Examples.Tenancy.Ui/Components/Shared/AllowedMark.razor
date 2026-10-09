@@ -1,0 +1,12 @@
+@* One thing the API says the person may or may not do, as a tick or a cross. *@
+<span class="allowed-mark @(Allowed ? "yes" : "no")" title="@(Allowed ? T["allowed.yes"] : T["allowed.no"])">@(Allowed ? "✓" : "✗") @Label</span>
+
+@code {
+    /// <summary>What may or may not be done.</summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>Whether it may.</summary>
+    [Parameter]
+    public bool Allowed { get; set; }
+}

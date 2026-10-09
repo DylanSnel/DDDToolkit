@@ -31,6 +31,19 @@ internal static class DDDOptionsProvider
         });
 
     /// <summary>
+    /// The project file, as a location for what is said about the project's module when nothing in its source
+    /// declares it: a module the build declared from <c>DDD_Module</c> has no <c>[assembly: Module]</c> to point
+    /// at, and the file the build wrote the declaration into is one nobody edits. Null when
+    /// <c>MSBuildProjectFullPath</c> did not reach the compiler; the diagnostic then has no location, as one about
+    /// the whole project has.
+    /// </summary>
+    public static IncrementalValueProvider<LocationInfo?> ProjectFile(this IncrementalGeneratorInitializationContext context)
+        => context.AnalyzerConfigOptionsProvider.Select(static (provider, _) =>
+            provider.GlobalOptions.TryGetValue("build_property.MSBuildProjectFullPath", out var path) && !string.IsNullOrWhiteSpace(path)
+                ? new LocationInfo(path.Trim(), default, default)
+                : null);
+
+    /// <summary>
     /// The name in the generated registration methods, <c>Add{Module}Converters</c> and the others, as a
     /// cacheable value. See <see cref="ResolveModuleName(DDDOptions, string?, string?)"/> for where it
     /// comes from.
@@ -47,7 +60,8 @@ internal static class DDDOptionsProvider
     /// <summary>
     /// The name generated code is given. The module the assembly declares with <c>[assembly: Module]</c>
     /// always wins. <c>DDD_Module</c> is the default beneath it, which a <c>Directory.Build.props</c> can
-    /// set for a whole folder, and the assembly name is what is left when a project has neither.
+    /// set for a whole folder, and the assembly name is what is left when a project has neither. A module the
+    /// build declared from <c>DDD_Module</c> arrives here as the module, so it is spelled as one.
     /// </summary>
     public static string ResolveModuleName(this DDDOptions options, string? module, string? assemblyName)
     {
@@ -83,38 +97,90 @@ internal static class DDDOptionsProvider
         string methodSuffix)
         => context.CompilationProvider.Select((compilation, _) =>
         {
-            var module = ModuleBoundary.ModuleOf(compilation.Assembly);
-            if (module is null)
-            {
-                return EquatableArray<string>.Empty;
-            }
-
-            var calls = new List<string>();
-
-            foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
-            {
-                if (!string.Equals(ModuleBoundary.ModuleOf(referenced), module, StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                var type = referenced.GetTypeByMetadataName(Identifiers.NamespaceFrom(referenced.Name) + "." + className);
-                if (type is not { IsStatic: true, DeclaredAccessibility: Accessibility.Public })
-                {
-                    continue;
-                }
-
-                // Found by its shape rather than by the name this assembly would give it: an assembly built
-                // by an earlier version named its method after DDD_Module.
-                calls.AddRange(type.GetMembers()
-                    .OfType<IMethodSymbol>()
-                    .Where(method => method is { IsExtensionMethod: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 1 }
-                        && method.Name.StartsWith("Add", StringComparison.Ordinal)
-                        && method.Name.EndsWith(methodSuffix, StringComparison.Ordinal))
-                    .Select(method => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + method.Name));
-            }
+            var calls = RegistrationsOfTheSameModule(compilation, className, methodSuffix)
+                .SelectMany(static registration => registration.Calls)
+                .ToList();
 
             calls.Sort(StringComparer.Ordinal);
             return new EquatableArray<string>(calls.ToArray());
         });
+
+    /// <summary>
+    /// The assemblies of this compilation's module that it references and that generated a registration of
+    /// their own, each with the calls to it. Empty when the compilation declares no module.
+    /// <para>
+    /// A generator that also registers types of other projects asks this before it does: what one of these
+    /// assemblies registers is reached through the call to it, and is not written a second time.
+    /// </para>
+    /// </summary>
+    /// <param name="compilation">The project the registration is written into.</param>
+    /// <param name="className">The generated class, under the assembly's namespace: <c>Converters.ConverterExtensions</c>.</param>
+    /// <param name="methodSuffix">What the method's name ends in: <c>Converters</c>.</param>
+    public static IReadOnlyList<ModuleRegistration> RegistrationsOfTheSameModule(Compilation compilation, string className, string methodSuffix)
+    {
+        var module = ModuleBoundary.ModuleOf(compilation.Assembly);
+        if (module is null)
+        {
+            return Array.Empty<ModuleRegistration>();
+        }
+
+        var registrations = new List<ModuleRegistration>();
+
+        foreach (var referenced in compilation.SourceModule.ReferencedAssemblySymbols)
+        {
+            if (!string.Equals(ModuleBoundary.ModuleOf(referenced), module, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var type = referenced.GetTypeByMetadataName(Identifiers.NamespaceFrom(referenced.Name) + "." + className);
+            if (type is not { IsStatic: true, DeclaredAccessibility: Accessibility.Public })
+            {
+                continue;
+            }
+
+            // Found by its shape rather than by the name this assembly would give it: an assembly built
+            // by an earlier version named its method after DDD_Module.
+            var calls = type.GetMembers()
+                .OfType<IMethodSymbol>()
+                .Where(method => method is { IsExtensionMethod: true, DeclaredAccessibility: Accessibility.Public, Parameters.Length: 1 }
+                    && method.Name.StartsWith("Add", StringComparison.Ordinal)
+                    && method.Name.EndsWith(methodSuffix, StringComparison.Ordinal))
+                .Select(method => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + method.Name)
+                .ToArray();
+
+            if (calls.Length > 0)
+            {
+                registrations.Add(new ModuleRegistration(referenced, calls));
+            }
+        }
+
+        return registrations;
+    }
+}
+
+/// <summary>An assembly of the module that generated a registration of its own, as the assembly that references it sees it.</summary>
+/// <param name="Assembly">The referenced assembly.</param>
+/// <param name="Calls">Its registration methods, fully qualified, ready to be written as calls.</param>
+internal sealed record ModuleRegistration(IAssemblySymbol Assembly, IReadOnlyList<string> Calls)
+{
+    /// <summary>
+    /// Whether this assembly references <paramref name="other"/>, which is the first thing it needs to have
+    /// registered a type of it.
+    /// </summary>
+    public bool References(IAssemblySymbol other)
+    {
+        foreach (var part in Assembly.Modules)
+        {
+            foreach (var reference in part.ReferencedAssemblySymbols)
+            {
+                if (SymbolEqualityComparer.Default.Equals(reference, other))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }

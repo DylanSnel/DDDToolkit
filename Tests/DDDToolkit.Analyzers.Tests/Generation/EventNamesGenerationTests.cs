@@ -167,7 +167,7 @@ public class EventNamesGenerationTests
             var type = emitted.Type(name);
             outbox.EventTypes.TryDescribe(type, out var generatedName, out var generatedVersion).Should().BeTrue();
 
-            generatedName.Should().Be(DomainEventName.Of(type), $"the generator and the runtime name {name} alike");
+            generatedName.Should().Be(DomainEventName.For(type), $"the generator and the runtime name {name} alike");
             generatedVersion.Should().Be(IntegrationEventContract.VersionOf(type), $"the generator and the runtime version {name} alike");
         }
 
@@ -175,8 +175,8 @@ public class EventNamesGenerationTests
 
         // And what the generated constants say, against the same types.
         var constants = emitted.Type("DDDToolkit.Sample.SalesEventNames");
-        Constant(constants, "OrderPlaced").Should().Be(DomainEventName.Of(emitted.Type("Sales.OrderPlaced")));
-        Constant(constants, "OrderDispatched").Should().Be(DomainEventName.Of(emitted.Type("Sales.OrderShipped")));
+        Constant(constants, "OrderPlaced").Should().Be(DomainEventName.For(emitted.Type("Sales.OrderPlaced")));
+        Constant(constants, "OrderDispatched").Should().Be(DomainEventName.For(emitted.Type("Sales.OrderShipped")));
     }
 
     [Fact]

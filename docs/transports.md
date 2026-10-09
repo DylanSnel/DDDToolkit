@@ -108,7 +108,7 @@ consumer read the installed version when the application starts, and refuse topi
 see [Queues, creation and the missing extension](#queues-creation-and-the-missing-extension).
 
 ```bash
-dotnet add package Temp.DDDToolkit.Messaging.Postgres
+dotnet add package Temp.DDDToolkit.Messaging.Postgres --prerelease
 ```
 
 ```csharp
@@ -252,7 +252,7 @@ services.AddPgmqConsumer(queues, "shop");
 var host = new ModuleHost(database, outbox => outbox.SendToPgmq());
 ```
 
-*[`ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs`](../Examples/ModularMonolith.Supabase/DDDToolkit.Examples.Host/Program.cs)*
+*[`ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs`](../Examples/ModularMonolith.Supabase/Examples.Webshop.Host/Program.cs)*
 
 No module sink is involved, so nothing reaches a module except through the queue. That makes it the
 step before a module moves out: its messages already travel through the database rather than a method
@@ -303,9 +303,18 @@ The extension has to be on the server first. `ghcr.io/pgmq/pg17-pgmq` is an imag
 managed Postgres that offers queues generally has it already.
 
 That failure comes when the application starts, not with the first message. `AddPgmqSink` and
-`AddPgmqConsumer` register a check that runs before any hosted service starts, the consumers and the
-outbox processor included. It reads the installed version once per database, however many sinks and
-consumers share it:
+`AddPgmqConsumer` register a [start-up check](startup-checks.md), `pgmq.extension-installed`, which the host runs
+with its other checks by calling `RunStartupChecks()`, before any hosted service starts, the consumers and the
+outbox processor included:
+
+```csharp
+builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.UseTopics());
+builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.BindTopics = true);
+
+builder.Services.RunStartupChecks();
+```
+
+It reads the installed version once per database, however many sinks and consumers share it:
 
 ```sql
 select extversion from pg_extension where extname = 'pgmq';
@@ -325,13 +334,20 @@ UseQueue or UseQueues instead of UseTopics, and leave BindTopics off. ...
 `PgmqQueue.InstalledVersionAsync` returns the same version for a check of your own, and
 `PgmqQueue.EnsureTopicRoutingAsync` throws the same two exceptions.
 
-The check needs the database when the application starts. It runs in `StartingAsync`, and the host calls
-that for its services in the order they were registered, unless it starts them concurrently. A migration
-applied before `RunAsync` is done by then. Something that installs the extension as the host starts, a
-hosted service running a migration with `CREATE EXTENSION` for instance, has to be registered before the
-sink and the consumer. Where neither fits, turn the check off on the sink and on the consumer:
+The check needs the database when the application starts. It runs in `StartingAsync`, which the host calls
+for every lifecycle service before any hosted service's `StartAsync`, and for the lifecycle services in the
+order they were registered, unless it starts them concurrently. A migration applied before `RunAsync` is done
+by then. Something that installs the extension as the host starts, with `CREATE EXTENSION` in a migration for
+instance, does it before `app.Run()`, or in the `StartingAsync` of an `IHostedLifecycleService` registered
+before `RunStartupChecks()`, which puts the checks where it is called. A plain hosted service starts after the
+checks, whatever its order ([Before the server binds its port](startup-checks.md#before-the-server-binds-its-port)).
+Where none of these fits, turn the check off by its name, or leave one sink's or consumer's database out of it:
 
 ```csharp
+builder.Services.SkipStartupCheck(
+    PgmqQueue.ExtensionInstalledCheck, reason: "the host's own migration installs the extension");
+
+// or, for the database of one registration
 builder.Services.AddPgmqSink(dataSource, pgmq => pgmq.CheckExtensionOnStart = false);
 builder.Services.AddPgmqConsumer(dataSource, "fulfilment", consumer => consumer.CheckExtensionOnStart = false);
 ```

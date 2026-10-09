@@ -136,5 +136,5 @@ public readonly partial record struct CustomerId;
 public readonly partial record struct Sku
 {
     /// <summary>Wraps an existing value, which reads better at a call site than the constructor.</summary>
-    public static Sku Of(string value) => new(value);
+    public static Sku From(string value) => new(value);
 }

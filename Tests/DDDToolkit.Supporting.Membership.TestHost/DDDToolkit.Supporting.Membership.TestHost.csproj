@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    An application's module with two kinds of resource that have members, as small as one can be: documents
+    shared with users and folders with staff on them, each with its own ids, its own member class declared
+    with the package's template, its own rules, and both kept in one context. The tests run against these
+    rather than against hand-written stand-ins, so they prove that the generator runs on the package and on a
+    host that references it, and that two resources in one project do not touch each other.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!--
+      The application's one module, Filing: the build declares it from this property, which also names the
+      generated AddFilingConverters method. The package declares no module of its own: once an application
+      references it, it is part of whichever module declares the member classes.
+    -->
+    <DDD_Module>Filing</DDD_Module>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership\DDDToolkit.Supporting.Membership.csproj" />
+    <!-- So the ids get their value converters, which the Entity Framework generator writes into this assembly. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <!--
+      Membership stored with Entity Framework: the application's context and its registrations live here,
+      where the member classes are declared, as they would in an application.
+    -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.EntityFramework\DDDToolkit.Supporting.Membership.EntityFramework.csproj" />
+  </ItemGroup>
+
+  <!-- Generators. A NuGet consumer gets these through the packages above; inside this repository they are wired by hand. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- Membership's own, which writes the member list on each resource a member class names. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.Supporting.Membership.Analyzers\DDDToolkit.Supporting.Membership.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

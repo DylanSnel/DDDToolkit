@@ -9,9 +9,10 @@ namespace DDDToolkit.EntityFramework.Tests.Infrastructure;
 
 /// <summary>
 /// A Postgres set up the way a Supabase project is for row level security, and no further: the three
-/// roles PostgREST switches between, <c>auth.uid()</c>, <c>auth.jwt()</c> and <c>auth.role()</c> as
-/// Supabase defines them, and one table of notes that a policy keeps to their owner. The application
-/// logs in as <c>shop_app</c>, which may do nothing but switch to those roles.
+/// roles PostgREST switches between, <c>auth.uid()</c>, <c>auth.jwt()</c>, <c>auth.role()</c> and
+/// <c>auth.email()</c> as Supabase defines them, and one table of notes that a policy keeps to their owner. The application
+/// logs in as <c>shop_app</c>, which may do nothing but switch to those roles and to the scoped system
+/// role, <c>ddd_system_in</c>, which may read the notes but has no policy that lets it see one.
 /// </summary>
 public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
 {
@@ -21,13 +22,18 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
 
     public static readonly Guid Bob = Guid.Parse("b0b00000-0000-4000-8000-000000000002");
 
-    private const string Setup = """
+    /// <summary>The roles, which are the server's rather than a database's.</summary>
+    private const string Roles = """
         CREATE ROLE anon NOLOGIN NOINHERIT;
         CREATE ROLE authenticated NOLOGIN NOINHERIT;
         CREATE ROLE service_role NOLOGIN NOINHERIT BYPASSRLS;
+        CREATE ROLE ddd_system_in NOLOGIN NOINHERIT;
         CREATE ROLE shop_app LOGIN NOINHERIT PASSWORD 'shop_app';
-        GRANT anon, authenticated, service_role TO shop_app;
+        GRANT anon, authenticated, service_role, ddd_system_in TO shop_app;
+        """;
 
+    /// <summary>What each database has: Supabase's caller functions and the notes.</summary>
+    private const string Setup = """
         CREATE SCHEMA auth;
         CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
             SELECT coalesce(
@@ -44,7 +50,12 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
                 nullif(current_setting('request.jwt.claim.role', true), ''),
                 (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'))::text
         $$;
-        GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+        CREATE FUNCTION auth.email() RETURNS text LANGUAGE sql STABLE AS $$
+            SELECT coalesce(
+                nullif(current_setting('request.jwt.claim.email', true), ''),
+                (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email'))::text
+        $$;
+        GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role, ddd_system_in;
 
         CREATE SCHEMA notes;
         CREATE TABLE notes."Notes" (
@@ -56,8 +67,8 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
         CREATE POLICY "A note is its owner's" ON notes."Notes" FOR ALL TO authenticated
             USING ("Owner" = (SELECT auth.uid()))
             WITH CHECK ("Owner" = (SELECT auth.uid()));
-        GRANT USAGE ON SCHEMA notes TO anon, authenticated, service_role;
-        GRANT SELECT, INSERT, UPDATE, DELETE ON notes."Notes" TO anon, authenticated, service_role;
+        GRANT USAGE ON SCHEMA notes TO anon, authenticated, service_role, ddd_system_in;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON notes."Notes" TO anon, authenticated, service_role, ddd_system_in;
         """;
 
     private PgmqDatabase? _database;
@@ -86,9 +97,46 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
         }
 
         await using var connection = await _database.OpenAsync(TestContext.Current.CancellationToken);
-        await using var command = new NpgsqlCommand(Setup, connection);
-        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        await SetUpAsync(connection, TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// Makes a fresh server what this fixture is: the roles, Supabase's caller functions and the notes, over
+    /// <paramref name="owner"/>, a superuser's connection to the database the tests use. For a fixture that
+    /// starts its own container, behind a pooler for one.
+    /// </summary>
+    public static async Task SetUpAsync(NpgsqlConnection owner, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(Roles + Setup, owner);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Another database on the same server, set up as the first one is, as the owner's connection string: for
+    /// a test that changes something about a database as a whole.
+    /// </summary>
+    public async Task<string> CreateDatabaseAsync(string name)
+    {
+        await using (var connection = await Database.OpenAsync(TestContext.Current.CancellationToken))
+        {
+            await using var create = new NpgsqlCommand($"CREATE DATABASE {name}", connection);
+            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var connectionString = new NpgsqlConnectionStringBuilder(Database.ConnectionString) { Database = name }.ConnectionString;
+        await using (var connection = new NpgsqlConnection(connectionString))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var setup = new NpgsqlCommand(Setup, connection);
+            await setup.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        return connectionString;
+    }
+
+    /// <summary><paramref name="connectionString"/>, an owner's, as <see cref="LoginRole"/> instead.</summary>
+    public static string AsApplication(string connectionString)
+        => new NpgsqlConnectionStringBuilder(connectionString) { Username = LoginRole, Password = LoginRole }.ConnectionString;
 
     /// <summary>Skips the calling test without Docker, or fails it where containers are required.</summary>
     public void Require()
@@ -108,9 +156,13 @@ public sealed class SupabaseRowLevelSecurityDatabase : IAsyncLifetime
 
     /// <summary>A context on <paramref name="connectionString"/>, the application's by default, running as whoever <paramref name="callers"/> names.</summary>
     public NotesContext CreateContext(ICallerAccessor callers, PostgresRowLevelSecurityOptions? options = null, string? connectionString = null)
+        => CreateContext(new PostgresRowLevelSecurityInterceptor(callers, options ?? new PostgresRowLevelSecurityOptions()), connectionString);
+
+    /// <summary>A context on <paramref name="connectionString"/>, the application's by default, with <paramref name="interceptor"/>.</summary>
+    public NotesContext CreateContext(PostgresRowLevelSecurityInterceptor interceptor, string? connectionString = null)
         => new(new DbContextOptionsBuilder<NotesContext>()
             .UseNpgsql(connectionString ?? ApplicationConnectionString)
-            .AddInterceptors(new PostgresRowLevelSecurityInterceptor(callers, options ?? new PostgresRowLevelSecurityOptions()))
+            .AddInterceptors(interceptor)
             .Options);
 
     /// <summary>The claims Supabase Auth would sign for <paramref name="user"/>.</summary>
@@ -142,6 +194,22 @@ public class NotesContext(DbContextOptions<NotesContext> options) : DbContext(op
 
         // Owner is the database's to fill in, from the caller's token, when the application leaves it out.
         modelBuilder.Entity<PrivateNote>().Property(note => note.Owner).HasDefaultValueSql("auth.uid()");
+    }
+}
+
+/// <summary>The same notes, with a note's text as its concurrency token: a save that finds another text than it read changes nothing.</summary>
+public class GuardedNotesContext(DbContextOptions<GuardedNotesContext> options) : DbContext(options)
+{
+    public DbSet<PrivateNote> Notes => Set<PrivateNote>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("notes");
+        modelBuilder.Entity<PrivateNote>(note =>
+        {
+            note.Property(each => each.Owner).HasDefaultValueSql("auth.uid()");
+            note.Property(each => each.Text).IsConcurrencyToken();
+        });
     }
 }
 

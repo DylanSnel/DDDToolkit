@@ -31,10 +31,14 @@ sample.
 
 In the docs, a code block with a title is generated code: ```` ```csharp title="Order.g.cs, shortened" ````
 renders with a "Generated" label (`src/css/custom.css`). Give a title to generated files only, and copy
-their content from a real build rather than writing it by hand.
+their content from a real build rather than writing it by hand. Any other code shortened to its point, the
+packages' own say, names itself in a first-line comment and says `shortened` after the language,
+```` ```csharp shortened ````: it renders as any block, and the docs' tests read it rather than compile it.
 
 Diagrams are Mermaid, in ```` ```mermaid ```` blocks: GitHub draws them in `docs/` and the site draws them
-through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). A diagram gets a
+through `@docusaurus/theme-mermaid`, in its colours (`src/css/custom.css`). The theme's component is swizzled
+in `src/theme/Mermaid` so a diagram drawn again when the colour mode settles is not left blank in light mode;
+check that file again when the theme's version changes. A diagram gets a
 `<details><summary>Show the code: ...</summary>` directly under it with the registration or setup it
 shows; leave a blank line after `<summary>` and before `</details>`, or the Markdown inside is not read.
 Keep Mermaid labels free of `;`, which ends a statement.

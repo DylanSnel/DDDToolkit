@@ -1,0 +1,134 @@
+@page "/history"
+@inherits SessionPage
+
+<PageTitle>@T["nav.history"] · Tenancy sample</PageTitle>
+
+<h1>@T["nav.history"]</h1>
+<p class="text-body-secondary">@T.Html("history.intro", Session.Tenant ?? T["common.no-tenant"])</p>
+
+@if (_history is null || _names is null)
+{
+    <p><em>@T["common.loading"]</em></p>
+}
+else if (_history.Value?.Items is not { } rows)
+{
+    <ApiOutcomeView Answer="_history" />
+}
+else if (rows.Count == 0)
+{
+    <p>@T["history.none"]</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>@T["history.when"]</th><th>@T["history.what"]</th><th>@T["history.by"]</th><th>@T["history.details"]</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var row in rows)
+                {
+                    <tr>
+                        <td class="small text-nowrap">@Moment(row.OccurredAt)</td>
+                        <td><code>@row.Event</code></td>
+                        <td><ActorName Actor="row.By" Names="_names" /></td>
+                        <td class="small">
+                            @foreach (var (name, value) in Told(row.Details))
+                            {
+                                <span class="text-nowrap me-2"><span class="text-body-secondary">@name</span> @value</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_history.Value?.Next is { } next)
+    {
+        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => MoreAsync(next)">@T["common.more"]</button>
+    }
+}
+
+@code {
+    // A screenful at a time, so the demonstration's history shows how the next page is asked for.
+    private const int PageSize = 20;
+
+    private ApiOutcome<HistoryPageInfo>? _history;
+    private DirectoryNames? _names;
+
+    protected override async Task LoadAsync()
+    {
+        // The rows first, then the names of the seats that acted: shown together, so a reload never shows ids
+        // for a moment. Without the key the answer is the API's refusal, and that is what the page shows.
+        var history = await Api.AccessHistoryAsync(size: PageSize);
+        var names = new DirectoryNames(Api);
+        await NameAsync(names, history.Value?.Items);
+
+        (_history, _names) = (history, names);
+    }
+
+    // The next page, older rows, goes under the ones shown. A refused page is shown as the answer it is.
+    private async Task MoreAsync(string after)
+    {
+        var more = await Api.AccessHistoryAsync(after, PageSize);
+        if (more.Value is { } page && _history?.Value is { } shown && _names is { } names)
+        {
+            await NameAsync(names, page.Items);
+            _history = more with { Value = page with { Items = [.. shown.Items, .. page.Items] } };
+        }
+        else
+        {
+            _history = more;
+        }
+    }
+
+    // The seats that acted, and every id an event names. An event says a seat, a unit or a role by its id and
+    // not which of the three it is, so each id is asked of all three: the directory answers the one it knows.
+    private static Task NameAsync(DirectoryNames names, IReadOnlyList<HistoryRowInfo>? rows)
+    {
+        if (rows is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        var named = rows.SelectMany(row => IdsIn(row.Details)).Distinct().ToList();
+        return names.EnsureAsync(seats: [.. rows.Select(row => row.By.SeatId).OfType<Guid>(), .. named], units: named, roles: named);
+    }
+
+    private static IEnumerable<Guid> IdsIn(JsonElement details) => details.ValueKind switch
+    {
+        JsonValueKind.Object => details.EnumerateObject().SelectMany(property => IdsIn(property.Value)),
+        JsonValueKind.Array => details.EnumerateArray().SelectMany(IdsIn),
+        JsonValueKind.String when details.TryGetGuid(out var id) => [id],
+        _ => [],
+    };
+
+    // What an event says, a name and a value at a time: a name as the API's answers spell one, an id as what it
+    // is called where the directory knows it, and what is left out left out. The row as it was sent is in the
+    // API's last answer, at the top of the page.
+    private IEnumerable<(string Name, string Value)> Told(JsonElement details, string? under = null)
+    {
+        if (details.ValueKind != JsonValueKind.Object)
+        {
+            return [(under ?? "–", Shown(details))];
+        }
+
+        return details.EnumerateObject()
+            .Where(property => property.Value.ValueKind != JsonValueKind.Null)
+            .SelectMany(property =>
+            {
+                var name = (under is null ? string.Empty : under + ".") + JsonNamingPolicy.CamelCase.ConvertName(property.Name);
+                return property.Value.ValueKind == JsonValueKind.Object ? Told(property.Value, name) : [(name, Shown(property.Value))];
+            });
+    }
+
+    private string Shown(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String when value.TryGetGuid(out var id) => _names?.NameOf(id) ?? id.ToString(),
+        JsonValueKind.String => value.GetString() ?? string.Empty,
+        JsonValueKind.Array => string.Join(", ", value.EnumerateArray().Select(Shown)),
+        _ => value.GetRawText(),
+    };
+
+    private static string Moment(DateTimeOffset moment) => moment.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'", System.Globalization.CultureInfo.InvariantCulture);
+}

@@ -88,7 +88,7 @@ public sealed class PublishOrderPlaced : IOutboundIntegrationEvent<OrderPlaced, 
 }
 ```
 
-*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/DDDToolkit.Examples.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
+*[`Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs`](../Examples/Modules/Ordering/Examples.Webshop.Ordering/Application/Orders/IntegrationEvents/Outbound/PublishOrderPlaced.cs)*
 
 </details>
 
@@ -243,10 +243,6 @@ sequenceDiagram
     Processor->>Outbox: set ProcessedAt
 ```
 
-A handler that fails fails the delivery, and the processor tries again later. Every module is offered
-the message again, and the inboxes skip what they already applied, which is what makes at-least-once
-delivery safe.
-
 <details>
 <summary>Show the code: both modules' registration</summary>
 
@@ -297,6 +293,10 @@ Both contexts map their tables: `modelBuilder.AddDomainEventOutbox(Database)` in
 part.
 
 </details>
+
+A handler that fails fails the delivery, and the processor tries again later. Every module is offered
+the message again, and the inboxes skip what they already applied, which is what makes at-least-once
+delivery safe.
 
 Each module registers its own half, next to its own context. The producing module says what it publishes
 and that it goes to the other modules:
@@ -432,6 +432,62 @@ module failing does not make the first run again: each module's inbox remembers 
 Delivering needs no reflection. `Handle<TContract, THandler>()` captures a typed call to the handler when
 it is registered, and the sink uses that.
 
+### Who the handlers run as
+
+Under [row level security](row-level-security.md), who a handler runs as decides which rows it sees and
+may write, and its inbox row is written in the same transaction. A caller the handler begins itself
+comes too late for that: the inbox has read and begun its transaction by then, and the scope has ended
+before the inbox saves. So a module says it where it registers its handlers, with a scope the delivery
+begins before the inbox is asked anything and ends after its commit:
+
+```csharp
+services.AddModuleIntegrationEvents<ShippingContext>(module => module
+    .Around((services, message, contract) => Callers.Begin(Caller.SystemIn("shipping")))
+    .Handle<OrderPlacedV1, BookShipment>());
+```
+
+```mermaid
+sequenceDiagram
+    participant Sink as module sink
+    participant Scope as the module's scope
+    participant Inbox
+    participant Handler as BookShipment
+    Sink->>Scope: begin, for this handler
+    Sink->>Inbox: applied before?
+    Inbox->>Inbox: begin the transaction
+    Inbox->>Handler: handle the contract
+    Inbox->>Inbox: save the handler's work and the inbox row, commit
+    Sink->>Scope: end
+```
+
+<details>
+<summary>Show the code: a scope that asks the message</summary>
+
+```csharp
+services.AddModuleIntegrationEvents<ShippingContext>(module => module
+    // begun around every delivery, outermost first
+    .Around((services, message, contract) => Callers.Begin(Caller.SystemIn(
+        message.Name == "ordering.order-placed" ? "shipping" : "shipping-cancellations")))
+    .Handle<OrderPlacedV1, BookShipment>()
+    .Handle<OrderCancelledV1, CancelShipment>());
+```
+
+</details>
+
+A scope may return `null` to begin nothing for a message. The handler then runs as whoever is current,
+and, where the host requires explicit callers, as nobody, so its first query fails: under that option a
+module begins a caller for every message it handles.
+
+Each handler gets a scope of its own, and a failing handler ends it all the same. `Around` may be called
+more than once; the scopes nest in the order they were added. Every way a message reaches a module goes
+through here: the module sink, and the receiver of pgmq, Wolverine and MassTransit.
+
+`IntegrationEventScopes.System` runs the handlers as the application itself, past row level security.
+Where the host [requires explicit callers](row-level-security.md#fail-closed-callers) it is the only
+way they run as the system, so that choice is written down where they are registered. There a module with
+no scope does not run its handlers at all: the delivery fails with a `NoCallerException` that names the
+module, before its inbox is read, and the outbox or the transport tries it again.
+
 ### What it does not do
 
 It does not give a consumer its own retry schedule. One outbox row is one message, so a consumer that
@@ -445,9 +501,9 @@ It does not order anything. See [the guarantees](#the-guarantees-honestly).
 
 `DDDToolkit.EntityFramework.Analyzers` writes a module's integration event registration as code, one
 `Add{Module}IntegrationEvents()` for each of the three places that need it, in the namespace
-`{assembly}.IntegrationEvents`. `{Module}` is the module the assembly declares with `[assembly: Module]`.
-A project that is no module takes it from its `<DDD_Module>`, or else from its assembly name without the
-dots; [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
+`{assembly}.IntegrationEvents`. `{Module}` is the module the assembly declares, with `<DDD_Module>` or
+`[assembly: Module]`. A project that is no module takes it from its `<DDD_Module>` where it has one, or else
+from its assembly name without the dots; [DDD_Module, and the package that brings it](modules.md#ddd_module-and-the-package-that-brings-it)
 has the order.
 
 Ordering, in the example on this page, declares one domain event, `OrderPlaced`, and one outbound class,
@@ -739,7 +795,7 @@ sequenceDiagram
     Db-->>A: none
     B->>Db: an inbox row for this message and billing.invoicer?
     Db-->>B: none
-    Note over A,B: both run the handler, each in a transaction of its own
+    Note over A,B: both run the handler,<br/>each in a transaction of its own
     A->>Db: the invoice and the inbox row, commit
     Note over A: true: this copy applied it
     B->>Db: the invoice and the inbox row
@@ -999,14 +1055,6 @@ flowchart LR
     Inbox -.->|"applied recently"| Kept
 ```
 
-Each run deletes with `ExecuteDelete`, in the database and past the change tracker, `BatchSize` rows per
-statement (1000 by default). A large backlog therefore goes in many short transactions, not one long one.
-Both windows count from `ProcessedAt`, which both tables already index. Leave a window unset and that table
-is not touched. A context with only an inbox sets only `KeepInboxFor`.
-
-Only delivered outbox rows are deleted. A row still waiting, or one that ran out of attempts, stays however
-old it is, because it is not history yet; it is work somebody still has to look at.
-
 <details>
 <summary>Show the code: what the example shop keeps, and running it yourself</summary>
 
@@ -1042,6 +1090,16 @@ await retention.DeleteDeliveredOutboxMessagesAsync(DateTimeOffset.UtcNow.AddDays
 
 </details>
 
+Each run deletes with `ExecuteDelete`, in the database and past the change tracker, `BatchSize` rows per
+statement (1000 by default). A large backlog therefore goes in many short transactions, not one long one.
+Both windows count from `ProcessedAt`, which both tables already index. Leave a window unset and that table
+is not touched. A context with only an inbox sets only `KeepInboxFor`. An
+[event log](entity-framework.md#an-event-log) has a window of its own, `KeepEventLogFor`, which counts
+from `RecordedAt` and is never shorter than the log's table lets a row go.
+
+Only delivered outbox rows are deleted. A row still waiting, or one that ran out of attempts, stays however
+old it is, because it is not history yet; it is work somebody still has to look at.
+
 ### How long to keep the inbox
 
 The inbox window needs more thought than the outbox's. An inbox row is what makes a repeat a repeat, and once
@@ -1061,6 +1119,29 @@ sequenceDiagram
     Broker->>Inbox: message 42 again, day 40
     Note over Inbox: no row any more: applied a second time
 ```
+
+<details>
+<summary>Show the code: the window, and what the consumer is answered each time</summary>
+
+```csharp
+// inside AddBillingModule: the window of Billing's inbox
+services.AddDomainEventRetention<BillingContext>(retention => retention.KeepInboxFor = TimeSpan.FromDays(30));
+```
+
+```csharp
+var applied = await inbox.ExecuteOnceAsync<OrderPlacedV2>(message, "billing.invoicer", (order, received, token) =>
+{
+    context.Invoices.Add(new Invoice(order.OrderId, order.Total));
+    return Task.CompletedTask;
+},
+cancellationToken);
+
+// day 0:  true, the invoice and the inbox row are written
+// day 3:  false, the row is there, so the message is a repeat
+// day 40: true, the row went on day 31: a second invoice
+```
+
+</details>
 
 So keep inbox rows longer than any message can take to come back: the broker's own retention, the outbox's
 retries, and an operator resetting `Attempts` on a row that failed last week. Days is usually right for the

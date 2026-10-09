@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="invalid-value" xml:space="preserve">
+    <value>A value in the request is not valid.</value>
+  </data>
+  <data name="invalid-request" xml:space="preserve">
+    <value>The request could not be read.</value>
+  </data>
+  <data name="concurrency-conflict" xml:space="preserve">
+    <value>Somebody else changed this at the same moment. Load it again and retry.</value>
+  </data>
+  <data name="sample.unknown-person" xml:space="preserve">
+    <value>There is no demonstration person called '{Person}'. Ask GET /dev/people who there is.</value>
+  </data>
+</root>

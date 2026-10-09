@@ -1,10 +1,11 @@
+using DDDToolkit.Exceptions;
 using DDDToolkit.Invariants;
 using DDDToolkit.Validation;
 
 namespace DDDToolkit.Localization;
 
 /// <summary>
-/// Phrases a failure in the reader's language.
+/// Phrases a failure, or a refusal, in the reader's language.
 /// <para>
 /// The domain reports what is wrong with a stable code, a message in its own words and the values the
 /// message was built from. None of that depends on who is reading, and it must not: an invariant runs on
@@ -17,6 +18,12 @@ namespace DDDToolkit.Localization;
 /// <c>IStringLocalizer</c> reads, so ASP.NET Core's request localization middleware sets it per request
 /// with nothing else to wire. Values in the message are formatted with
 /// <see cref="System.Globalization.CultureInfo.CurrentCulture"/>.
+/// </para>
+/// <para>
+/// Where there is no request to take the language from, such as a mail written by a job, or where the
+/// request's culture is out of reach, as it is in an exception handler, the caller names the culture:
+/// <see cref="CultureScope"/> sets both for a block of work, and the <c>Localize</c> overloads of
+/// <see cref="FailureLocalizationExtensions"/> take one for a single failure.
 /// </para>
 /// <para>
 /// The interface lives here, in the core, so an integration such as <c>DDDToolkit.HotChocolate</c> can
@@ -40,4 +47,15 @@ public interface IFailureLocalizer
     /// </summary>
     /// <param name="violation">The violation to phrase.</param>
     string Localize(InvariantViolation violation);
+
+    /// <summary>
+    /// The refusal in the reader's language, or its own message when no translation is known for its
+    /// <see cref="RefusalException.Code"/>.
+    /// <para>
+    /// A default member, so a localizer written before refusals existed keeps compiling and answers with
+    /// the domain's own message. <c>FailureLocalizer</c> looks the code up like any other failure's.
+    /// </para>
+    /// </summary>
+    /// <param name="refusal">The refusal to phrase.</param>
+    string Localize(RefusalException refusal) => (refusal ?? throw new ArgumentNullException(nameof(refusal))).Message;
 }

@@ -55,3 +55,21 @@ public sealed class SqlServerContainerTests(SqlServerFixture fixture) : Provider
     /// <inheritdoc />
     protected override string ExpectedImage => ContainerImages.SqlServer;
 }
+
+/// <summary>What a unique index refuses with, against SQL Server.</summary>
+[Collection(SqlServerCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.SqlServer)]
+public sealed class SqlServerRefusalTests(SqlServerFixture fixture) : ProviderRefusalTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string DefaultSchema => "dbo";
+}
+
+/// <summary>Where two modules keep their migration histories, against SQL Server.</summary>
+[Collection(SqlServerCollection.Name)]
+[Trait(ProviderTraits.Key, ProviderTraits.SqlServer)]
+public sealed class SqlServerMigrationHistoryTests(SqlServerFixture fixture) : ProviderMigrationHistoryTests(fixture)
+{
+    /// <inheritdoc />
+    protected override string ProvidersDefaultSchema => "dbo";
+}

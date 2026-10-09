@@ -21,7 +21,7 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// SupabaseMigrations.EnsureInSync(context, "supabase/migrations");
 /// </code>
 /// <para>
-/// Usually the build calls this for you: mark the design-time factory <see cref="SupabaseMigrationsAttribute"/>
+/// Usually the build calls this for you: mark the context <see cref="SupabaseMigrationsAttribute"/>
 /// and set <c>SupabaseMigrationsExport</c> in the project that references the modules. Call it yourself
 /// from a test or a tool of your own.
 /// </para>
@@ -44,7 +44,9 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// Several contexts can export into one directory, which is the usual shape for a modular monolith on
 /// one Supabase project: each module's migrations, in its own schema, in one history. A context only
 /// ever reports its own files as orphaned, and two migrations that share a timestamp are reported as
-/// <see cref="SupabaseMigrationStatus.VersionTaken"/> rather than written.
+/// <see cref="SupabaseMigrationStatus.VersionTaken"/> rather than written. Where the options name the role the
+/// application logs in as, <see cref="SupabaseMigrationOptions.LoginRole"/>, the export of the sources also
+/// writes the migration that makes it, after every module's files.
 /// </para>
 /// <para>
 /// The <c>__EFMigrationsHistory</c> insert stays in. After Supabase applies a file, Entity Framework
@@ -58,13 +60,22 @@ namespace DDDToolkit.EntityFramework.Supabase;
 /// Postgres SQL, but a connection string that points nowhere is enough.
 /// </para>
 /// </summary>
-public static class SupabaseMigrations
+public static partial class SupabaseMigrations
 {
     /// <summary>Where the Supabase CLI looks for migrations, relative to the project root.</summary>
     public const string DefaultDirectory = "supabase/migrations";
 
     /// <summary>The provider whose SQL Supabase can run.</summary>
     public const string NpgsqlProviderName = "Npgsql.EntityFrameworkCore.PostgreSQL";
+
+    /// <summary>
+    /// The start-up check <c>AddSupabaseMigrations</c> brings, by the name a host turns it off with
+    /// (<c>services.SkipStartupCheck(...)</c>): every registered context has every one of its migrations applied
+    /// (<c>EnsureSupabaseMigrationsAppliedAsync</c>). It runs in the stage of the migrations, after the login role
+    /// was found to be able to switch to the system caller's role, which it asks as, and before the checks of the
+    /// database's policies and functions, which a missing migration would leave missing too.
+    /// </summary>
+    public const string AppliedCheck = "supabase.migrations-applied";
 
     // The first line of every exported file. It names the context as well as the migration, because
     // several contexts can export into one directory, and a file belongs to exactly one of them.
@@ -83,6 +94,12 @@ public static class SupabaseMigrations
     private static readonly Regex AccessDropBlock = new(
         Regex.Escape(AccessDropNote) + @".*?\$ddd\$;\n\n",
         RegexOptions.CultureInvariant | RegexOptions.Singleline);
+
+    // What a function returns, after its parameters: the type, up to the first of the function's options or the
+    // end of the line.
+    private static readonly Regex ReturnsClause = new(
+        @"^\s+RETURNS\s+(?<type>.+?)(?=\s+(LANGUAGE|AS|SET|SECURITY|EXTERNAL|STABLE|IMMUTABLE|VOLATILE|STRICT|CALLED|RETURNS|COST|ROWS|PARALLEL|LEAKPROOF|NOT|WINDOW|SUPPORT|TRANSFORM|BEGIN)\b|\s*$)",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     private static readonly Regex MigrationIdPattern = new(@"^[0-9]{14}_.+$", RegexOptions.CultureInvariant);
 
@@ -189,9 +206,10 @@ public static class SupabaseMigrations
         var migrator = context.GetService<IMigrator>();
         var sql = context.GetService<ISqlGenerationHelper>();
 
-        // A module with rules starts every migration by taking its policies off, so no policy stops a column
-        // it reads from being dropped or changed; the access file after the migration makes them again.
-        var dropRules = PostgresRowAccess.RulesOf(context, options.RowAccessRules).Count > 0
+        // A module with rules or contributions starts every migration by taking its policies off, so no policy
+        // stops a column it reads from being dropped or changed; the access file after the migration makes
+        // them again.
+        var dropRules = PostgresRowAccess.RulesOf(context, options.RowAccessRules).Count > 0 || Contributes(context, options)
             ? AccessDropNote + "\n-- the way of, and the file of row access rules after this one makes them again.\n" + PostgresRowAccess.DropStatement(context) + "\n"
             : string.Empty;
 
@@ -226,22 +244,25 @@ public static class SupabaseMigrations
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Compare(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, null, directory, options, write: false);
+        => Run(context, null, directory, options, write: false, names: null, script: null);
 
     /// <summary>
     /// Writes a file for every migration that has none, and reports on the rest. It never overwrites or
     /// deletes a file: once Supabase has applied a version it will not apply it again, so a rewritten file
     /// would change nothing on a database that already ran it and quietly diverge from one that did not.
-    /// Check <see cref="SupabaseMigrationReport.IsInSync"/>, or call <see cref="EnsureInSync"/> afterwards.
+    /// Check <see cref="SupabaseMigrationReport.IsInSync"/>, or call
+    /// <see cref="EnsureInSync(DbContext, string, SupabaseMigrationOptions?)">EnsureInSync</see> afterwards.
     /// </summary>
     /// <param name="context">A context configured with the Npgsql provider; it is not opened.</param>
     /// <param name="directory">The Supabase migrations directory; it is created when missing.</param>
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is empty or white space.</exception>
+    /// <exception cref="InvalidOperationException">While the files write the privileges, the options' bookkeeping role is one of Postgres's or Supabase's own.</exception>
     public static SupabaseMigrationReport Export(DbContext context, string directory = DefaultDirectory, SupabaseMigrationOptions? options = null)
-        => Run(context, null, directory, options, write: true);
+        => Run(context, null, directory, options, write: true, names: null, script: null);
 
     /// <summary>
     /// Throws unless every migration has its file, as generated, and no exported file has outlived its
@@ -261,16 +282,24 @@ public static class SupabaseMigrations
     }
 
     /// <summary>
-    /// <see cref="Export(DbContext, string, SupabaseMigrationOptions?)"/> for every source, in order, into
-    /// one directory. Needs no host: each context comes from its source's design-time factory, so this
-    /// can run from a test, a small console app or the top of <c>Program.cs</c> without loading the
-    /// application's configuration.
+    /// <see cref="Export(DbContext, string, SupabaseMigrationOptions?)"/> for every source, into one
+    /// directory: each after the sources that define a function its rules, access functions or contributions
+    /// ask, so its access file comes after theirs, and otherwise in the order given. Needs no host: each
+    /// context comes from its source's design-time factory, so this can run from a test, a small console app
+    /// or the top of <c>Program.cs</c> without loading the application's configuration.
     /// </summary>
     /// <param name="sources">The contexts to export, typically one per module.</param>
     /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
-    /// <returns>One report per source, in the order given.</returns>
+    /// <returns>
+    /// One report per source, in the order they were exported, and where the options name a
+    /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file, written after all of them.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The options' login role is one of the roles callers run as, or, while the files write the privileges, their
+    /// bookkeeping role is one of Postgres's or Supabase's own.
+    /// </exception>
     public static IReadOnlyList<SupabaseMigrationReport> Export(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: true);
 
@@ -281,8 +310,15 @@ public static class SupabaseMigrations
     /// <param name="sources">The contexts to compare, typically one per module.</param>
     /// <param name="directory">The Supabase migrations directory, or <see langword="null"/> to <see cref="FindDirectory"/> it.</param>
     /// <param name="options">How the files are written, or <see langword="null"/> for the defaults.</param>
-    /// <returns>One report per source, in the order given.</returns>
+    /// <returns>
+    /// One report per source, in the order an export would write them, and where the options name a
+    /// <see cref="SupabaseMigrationOptions.LoginRole"/>, one more for its file.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The options' login role is one of the roles callers run as, or, while the files write the privileges, their
+    /// bookkeeping role is one of Postgres's or Supabase's own.
+    /// </exception>
     public static IReadOnlyList<SupabaseMigrationReport> Compare(IEnumerable<SupabaseMigrationSource> sources, string? directory = null, SupabaseMigrationOptions? options = null)
         => RunAll(sources, directory, options, write: false);
 
@@ -293,8 +329,8 @@ public static class SupabaseMigrations
     /// [Fact]
     /// public void Supabase_has_every_migration()
     ///     => SupabaseMigrations.EnsureInSync([
-    ///         SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextFactory&gt;(),
-    ///         SupabaseMigrationSource.For&lt;ShippingContext, ShippingContextFactory&gt;()]);
+    ///         SupabaseMigrationSource.For&lt;OrderingContext, OrderingContextDesignTimeFactory&gt;(),
+    ///         SupabaseMigrationSource.For&lt;ShippingContext, ShippingContextDesignTimeFactory&gt;()]);
     /// </code>
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="sources"/> is null.</exception>
@@ -308,52 +344,125 @@ public static class SupabaseMigrations
         }
     }
 
+    /// <summary>
+    /// Every source, in the order <see cref="PostgresRowAccess.Scripts"/> writes their scripts: a source before
+    /// every source that asks a function it defines, because a policy or a function of another module that asks
+    /// one is refused while it does not exist, and access files written in one run are numbered in the order
+    /// they are written. Each script is written knowing where every module's functions live, which only the
+    /// module's own context knows, and who asks them.
+    /// </summary>
     private static List<SupabaseMigrationReport> RunAll(IEnumerable<SupabaseMigrationSource> sources, string? directory, SupabaseMigrationOptions? options, bool write)
     {
         ArgumentNullException.ThrowIfNull(sources);
         directory ??= FindDirectory();
+        options ??= new SupabaseMigrationOptions();
 
-        var reports = new List<SupabaseMigrationReport>();
-        foreach (var source in OwnersOfFunctionsFirst(sources, options))
+        // Refused before anything is written: the role the application logs in as is no role a caller runs as.
+        // Asked here rather than where it was set, since the roles may have been set after it.
+        if (options.LoginRole is { } login && CallerRoleNamed(login, options.Roles) is { } key)
         {
-            using var context = source.CreateDesignTimeContext();
-            reports.Add(Run(context, source.Module, directory, options, write));
+            throw new InvalidOperationException(
+                $"The login role '{login}' is the role of {key} among the roles callers run as. The role the application logs in as only switches to those, and is a role of its own; name another, such as {ExampleLoginRole}.");
         }
 
-        return reports;
+        EnsureOwnBookkeepingRole(options);
+
+        var all = sources.ToList();
+        var contexts = new List<DbContext>(all.Count);
+        try
+        {
+            foreach (var source in all)
+            {
+                contexts.Add(source.CreateDesignTimeContext());
+            }
+
+            var names = PostgresRowAccess.FunctionNamesOf(contexts, options.RowAccessFunctions, ExportOf(options, names: null));
+            var export = ExportOf(options, names);
+            foreach (var context in contexts)
+            {
+                EnsureDefined(context, options, export);
+            }
+
+            var reports = new List<SupabaseMigrationReport>(all.Count + 1);
+            foreach (var (context, script) in PostgresRowAccess.Scripts(contexts, options.RowAccessRules, options.RowAccessFunctions, export))
+            {
+                reports.Add(Run(context, all[contexts.IndexOf(context)].Module, directory, options, write, names, script));
+            }
+
+            // Last, so a new file comes after every module's, the access files that make the roles it grants among
+            // them, and is a report of its own: it belongs to no module.
+            if (options.LoginRole is { } loginRole)
+            {
+                reports.Add(new SupabaseMigrationReport(directory, [LoginRoleEntry(loginRole, directory, options, write)]));
+            }
+
+            return reports;
+        }
+        finally
+        {
+            foreach (var context in contexts)
+            {
+                context.Dispose();
+            }
+        }
     }
 
     /// <summary>
-    /// The sources, those whose context writes an access function first. A policy of another module that
-    /// calls one is refused while the function does not exist, and access files written in one run are
-    /// numbered in the order they are written.
+    /// Why <paramref name="options"/>' bookkeeping role, <see cref="RowAccessRoleNames.System"/>, is none the access
+    /// files can make; <see langword="null"/> when it is, when none is set, and while the files write no privileges.
+    /// While they write them, every file makes that role and holds it to the policies, refusing, where it is applied,
+    /// one that can log in or bypass row level security. Postgres's and Supabase's own roles are not the
+    /// application's to make, and the one a system caller most often runs as, <c>service_role</c>, bypasses row level
+    /// security: so such a name is refused before anything is written, rather than by every file at deployment.
+    /// Without the privileges a file makes the role only where something of it is for the role by its symbol, as
+    /// <see cref="RowAccessExport"/> does, and a host whose system caller runs as a role of another kind gets the
+    /// files it always got.
     /// </summary>
-    private static List<SupabaseMigrationSource> OwnersOfFunctionsFirst(IEnumerable<SupabaseMigrationSource> sources, SupabaseMigrationOptions? options)
+    internal static string? NotAnOwnBookkeepingRole(SupabaseMigrationOptions options)
+        => options.WriteGrants && options.Roles.System is { } system && IsPlatformRole(system)
+            ? $"'{system}' is one of Postgres's or Supabase's own roles. While the access files write the privileges, each makes the bookkeeping role, without a login and held to row level security, and gives it the outbox, the inbox and the migration history: a role of the platform's is none the application makes, and one that can log in or bypass row level security fails every file where it is applied."
+            : null;
+
+    /// <summary>Throws before anything is written when <see cref="NotAnOwnBookkeepingRole"/> has a reason.</summary>
+    private static void EnsureOwnBookkeepingRole(SupabaseMigrationOptions options)
     {
-        var all = sources.ToList();
-        if (options is null || options.RowAccessFunctions.Count == 0)
+        if (NotAnOwnBookkeepingRole(options) is { } problem)
         {
-            return all;
+            throw new InvalidOperationException(
+                $"The bookkeeping role, Roles.System, is not one the access files can make. {problem} Set it to null where the system caller runs as service_role, as system=service_role in SupabaseRowAccessRoles does, or name a role of the application's own, such as ddd_system.");
         }
-
-        var owners = new HashSet<SupabaseMigrationSource>();
-        foreach (var source in all)
-        {
-            using var context = source.CreateDesignTimeContext();
-            if (PostgresRowAccess.FunctionsOf(context, options.RowAccessFunctions).Count > 0)
-            {
-                owners.Add(source);
-            }
-        }
-
-        // OrderBy is stable, so the rest keep the order they came in.
-        return [.. all.OrderBy(source => owners.Contains(source) ? 0 : 1)];
     }
 
-    private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write)
+    /// <summary>
+    /// What the policies are written with: the options' roles, caller functions and contributions, where the
+    /// functions of other modules live, and whether the files write privileges and force row level security.
+    /// </summary>
+    private static RowAccessExport ExportOf(SupabaseMigrationOptions options, IReadOnlyDictionary<string, string>? names)
+        => new()
+        {
+            CallerFunctions = options.CallerFunctions,
+            Roles = options.Roles,
+            Contributions = [.. options.RowAccessContributions],
+            FunctionNames = names ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+            WriteGrants = options.WriteGrants,
+            ForceRowLevelSecurity = options.ForceRowLevelSecurity,
+        };
+
+    /// <summary>Whether a row access contribution of the options writes anything for the context.</summary>
+    private static bool Contributes(DbContext context, SupabaseMigrationOptions options)
+    {
+        var export = ExportOf(options, names: null);
+        return options.RowAccessContributions.Any(contribution => contribution.Contribute(context, export) is not null);
+    }
+
+    private static SupabaseMigrationReport Run(DbContext context, string? module, string directory, SupabaseMigrationOptions? options, bool write, IReadOnlyDictionary<string, string>? names, string? script)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+        if (options is not null)
+        {
+            EnsureOwnBookkeepingRole(options);
+        }
 
         var files = Generate(context, module ?? ModuleNameOf(context.GetType()), options);
         var existing = ExistingFiles(directory);
@@ -399,7 +508,9 @@ public static class SupabaseMigrations
             }
         }
 
-        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options ?? new SupabaseMigrationOptions(), write) is { } access)
+        options ??= new SupabaseMigrationOptions();
+        names ??= PostgresRowAccess.FunctionNamesOf([context], options.RowAccessFunctions, ExportOf(options, names: null));
+        if (Access(context, module ?? ModuleNameOf(context.GetType()), directory, existing, files, options, names, script, write) is { } access)
         {
             entries.Add(access);
         }
@@ -408,11 +519,23 @@ public static class SupabaseMigrations
     }
 
     /// <summary>
-    /// The module's file of row access rules: unchanged when the newest one says what the rules say now
-    /// and no migration of the module came after it, and otherwise a new one, written after everything
-    /// else in the directory, so the Supabase CLI applies it last. Nothing for a module that has no rules
-    /// and never had any.
+    /// The module's file of row access rules: unchanged when the newest one says what the rules and the
+    /// contributions say now and no migration of the module came after it, and otherwise a new one, written
+    /// after everything else in the directory, so the Supabase CLI applies it last. Nothing for a module that
+    /// has no rules, access functions or contributions and never had any, unless the file has something to say
+    /// about it all the same: the guard of an event log, or, where the files write privileges, those of its
+    /// outbox, inbox or event log, and the bookkeeping role's right to read its migration history, which the system
+    /// caller reads as that role, <c>ddd_system</c> unless the project says otherwise.
     /// </summary>
+    /// <param name="context">The context whose rules, access functions and contributions the file says; the access files whose first line names its type are its own.</param>
+    /// <param name="module">The module the file is named after, <c>&lt;version&gt;_access.&lt;module&gt;.ddd.sql</c>.</param>
+    /// <param name="directory">The Supabase migrations directory.</param>
+    /// <param name="existing">The files in the directory, by version; a file written here is added to it.</param>
+    /// <param name="migrations">The context's migrations, written or not; an access file older than the newest of them is written again.</param>
+    /// <param name="options">The rules, access functions and contributions to choose from, and how the file is written.</param>
+    /// <param name="names">Where the access functions of every module live, by logical name.</param>
+    /// <param name="script">The module's script, written with every other module's; null to write it knowing this module alone.</param>
+    /// <param name="write">Whether to write a new file; when not, the file a write would add is reported missing.</param>
     private static SupabaseMigrationEntry? Access(
         DbContext context,
         string module,
@@ -420,6 +543,8 @@ public static class SupabaseMigrations
         Dictionary<string, List<string>> existing,
         List<SupabaseMigrationFile> migrations,
         SupabaseMigrationOptions options,
+        IReadOnlyDictionary<string, string> names,
+        string? script,
         bool write)
     {
         var owner = context.GetType().Name;
@@ -430,21 +555,33 @@ public static class SupabaseMigrations
             .OrderBy(path => Path.GetFileName(path), StringComparer.Ordinal)
             .ToList();
 
-        if (rules.Count == 0 && functions.Count == 0 && files.Count == 0)
+        var export = ExportOf(options, names);
+        if (rules.Count == 0 && functions.Count == 0 && files.Count == 0 && !Contributes(context, options) && !PostgresRowAccess.WritesFor(context, export))
         {
             return null;
         }
 
-        EnsureDefined(rules.Select(rule => ($"The rule '{rule.Name}'", rule.Sql)).Concat(functions.Select(function => ($"The access function '{function.Name}'", function.Sql))), options);
+        EnsureDefined(context, options, export);
 
         var sql = new StringBuilder()
             .Append("-- Written by DDDToolkit from the row access rules of ").Append(owner).Append('.').Append('\n')
             .Append("-- Written from those rules; change the rules, not this file. Every file like it says what the").Append('\n')
             .Append("-- rules are now: it drops the policies the one before it made, and makes them again.").Append('\n')
             .Append('\n')
-            .Append(PostgresRowAccess.DropStatement(context))
-            .Append(PostgresRowAccess.CreateStatements(context, rules, functions, SupabaseRowLevelSecurity.CallerFunctions))
+            // With the line endings every exported file has, whatever the script was written with: a contribution's
+            // SQL may carry the platform's, and a file is compared with what the next run writes.
+            .Append(Normalize(script ?? PostgresRowAccess.Script(context, rules, functions, export)))
+            // Last, the roles the file was written for, which the application compares its own with when it starts.
+            // Every file says them, so roles that change write every module's file again, and the newest file
+            // applied records what the newest export said.
+            .Append('\n')
+            .Append(SupabaseCallerRoles.RecordStatement(options.Roles))
             .ToString();
+
+        if (files.LastOrDefault() is { } newest)
+        {
+            EnsureSignaturesKept(Normalize(File.ReadAllText(newest)), sql);
+        }
 
         var newestMigration = migrations.Count == 0 ? "" : migrations.Max(file => file.Version)!;
         if (files.LastOrDefault() is { } latest
@@ -470,23 +607,112 @@ public static class SupabaseMigrations
     }
 
     /// <summary>
-    /// Refuses SQL that asks an access function no module defines: a contract published without its
-    /// definition, or a definition whose name changed. Postgres would refuse the policy when Supabase applies
-    /// the file; this says so when the file is written, and names the rule.
+    /// Refuses SQL of the context that asks a function no module defines: a contract published without its
+    /// definition, a definition whose name changed, or a contribution the host does not use. Postgres would
+    /// refuse the policy when Supabase applies the file; this says so when the file is written, and names the
+    /// rule. A function is asked by the name it was given with its schema, by its logical name,
+    /// <c>owner/name</c>, or by the name that resolves to in the database; the functions of the contributions
+    /// the host uses are defined too.
     /// </summary>
-    private static void EnsureDefined(IEnumerable<(string What, string Sql)> asking, SupabaseMigrationOptions options)
+    private static void EnsureDefined(DbContext context, SupabaseMigrationOptions options, RowAccessExport export)
     {
-        var defined = options.RowAccessFunctions.Select(function => function.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var asking = PostgresRowAccess.RulesOf(context, options.RowAccessRules).Select(rule => ($"The rule '{rule.Name}'", rule.Sql))
+            .Concat(PostgresRowAccess.FunctionsOf(context, options.RowAccessFunctions).Select(function => ($"The access function '{function.LogicalName}'", function.Sql)));
+        foreach (var contribution in options.RowAccessContributions)
+        {
+            if (contribution.Contribute(context, export) is { } result)
+            {
+                var what = $"The row access contribution {contribution.GetType().FullName}";
+                asking = asking.Concat((result.Functions ?? []).Select(function => (what, function.Body ?? "")))
+                    .Concat((result.Policies ?? []).Select(policy => (what, policy.Using + " " + policy.WithCheck)))
+                    .Concat((result.Statements ?? []).Select(statement => (what, statement ?? "")));
+            }
+        }
+
+        var defined = options.RowAccessFunctions.Where(function => function.IsQualified).Select(function => function.LogicalName)
+            .Concat(export.FunctionNames.Keys)
+            .Concat(export.FunctionNames.Values)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var (what, sql) in asking)
         {
             if (PostgresRowAccess.FunctionsAskedBy(sql).FirstOrDefault(name => !defined.Contains(name)) is { } missing)
             {
+                if (ResourceAccessAnswer.IsName(missing))
+                {
+                    // Asked through a [ResourceAccessContract], by the resource's id: no function of a module answers it,
+                    // and a contribution answers it for the context that maps the resource, which may not be among these.
+                    throw new InvalidOperationException(
+                        $"{what} asks {ResourceAccessAnswer.Described(missing)}, and no row access contribution this host uses answers that set for the modules exported. " +
+                        "Reference the package that keeps the resource's access, Membership on Postgres for a resource with members, and mark the resource's rules [MembershipRules<TMember>], or list a contribution of your own that answers it with [assembly: UseRowAccessContribution]. " +
+                        "Where it answers for another module, the one whose context maps the resource, export the modules together, SupabaseMigrations.Export with a source for each, as the build that exports every module does.");
+                }
+
                 throw new InvalidOperationException(
                     $"{what} asks the access function {missing}, which no [AccessFunction] in the modules this host references defines. " +
-                    $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")].");
+                    $"Define it in the module whose aggregate it is about, with [AccessFunction<TAggregate>(\"{missing}\")], reference the package whose row access contribution writes it, or list a contribution of your own that does with [assembly: UseRowAccessContribution].");
             }
         }
     }
+
+    /// <summary>
+    /// Refuses <paramref name="sql"/> when a function it still writes takes other parameters or returns
+    /// something else than in <paramref name="newest"/>, the newest access file of the module: Postgres cannot
+    /// change either in place, and cannot drop the function while policies of other modules use it, short of
+    /// dropping those along with it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A function changed its parameters or what it returns.</exception>
+    private static void EnsureSignaturesKept(string newest, string sql)
+    {
+        var before = FunctionHeaders(newest);
+        foreach (var (name, (parameters, returns)) in FunctionHeaders(sql))
+        {
+            if (before.TryGetValue(name, out var old) && (!SameText(old.Parameters, parameters) || !SameText(old.Returns, returns)))
+            {
+                throw new InvalidOperationException(
+                    $"The function {name} changed from ({old.Parameters}) RETURNS {old.Returns} to ({parameters}) RETURNS {returns}. Postgres cannot change it in place while other policies use it; give it a new name.");
+            }
+        }
+
+        static bool SameText(string left, string right)
+            => string.Equals(Regex.Replace(left.Trim(), @"\s+", " "), Regex.Replace(right.Trim(), @"\s+", " "), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The functions an access file makes, by name, with their parameters and what they return, read from the
+    /// first line of each <c>CREATE OR REPLACE FUNCTION</c>: the parameters between the parentheses after the
+    /// name, and the type after <c>RETURNS</c>, up to the first of the function's options. A contributed
+    /// statement may write a whole function on that line, whose options and body are not its signature.
+    /// </summary>
+    private static Dictionary<string, (string Parameters, string Returns)> FunctionHeaders(string sql)
+    {
+        const string Create = "CREATE OR REPLACE FUNCTION ";
+        var headers = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in sql.Split('\n').Where(line => line.StartsWith(Create, StringComparison.Ordinal)))
+        {
+            var header = line[Create.Length..].TrimEnd('\r');
+            var open = header.IndexOf('(', StringComparison.Ordinal);
+            if (open <= 0)
+            {
+                continue;
+            }
+
+            // The parenthesis that closes the parameters, which may hold a type's own, numeric(10, 2).
+            var close = -1;
+            for (int i = open, depth = 0; i < header.Length && close < 0; i++)
+            {
+                depth += header[i] switch { '(' => 1, ')' => -1, _ => 0 };
+                close = depth == 0 ? i : -1;
+            }
+
+            if (close > open && ReturnsClause.Match(header[(close + 1)..]) is { Success: true } returns)
+            {
+                headers[header[..open].Trim()] = (header[(open + 1)..close], returns.Groups["type"].Value);
+            }
+        }
+
+        return headers;
+    }
+
 
     /// <summary>
     /// A version for a new file that sorts after every file in the directory, a second on from the newest

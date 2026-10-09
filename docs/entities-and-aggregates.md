@@ -228,6 +228,55 @@ flowchart LR
     Order -. "CustomerId, an id and nothing more" .-> Customer["Customer, another aggregate"]
 ```
 
+<details>
+<summary>Show the code: the aggregate in the box, and the customer outside it</summary>
+
+```csharp
+// Inside the box: the root, with the lines and the address it owns
+[AggregateRoot<OrderId>]
+public partial class Order
+{
+    public Order(OrderId id, CustomerId buyer, Address shipTo) : base(id)
+        => (Buyer, ShipTo) = (buyer, shipTo);
+
+    // The dotted arrow: which customer, and nothing more
+    public CustomerId Buyer { get; private set; }
+
+    // A value object: no id, part of the order
+    public Address ShipTo { get; private set; }
+
+    // Entities that exist only inside this order
+    public partial IReadOnlyList<OrderLine> Lines { get; }
+
+    public void AddLine(OrderLine line) => _lines.Add(line);
+}
+
+[Entity<OrderLineId>]
+public partial class OrderLine
+{
+    public OrderLine(OrderLineId id, ProductId product, int quantity) : base(id)
+        => (Product, Quantity) = (product, quantity);
+
+    public ProductId Product { get; private set; }
+
+    public int Quantity { get; private set; }
+}
+
+[ValueObject]
+public partial record Address(string Street, string City, string PostalCode);
+
+// Outside it: an aggregate of its own, loaded and saved by itself, with a Version of its own
+[AggregateRoot<CustomerId>]
+public partial class Customer
+{
+    public Customer(CustomerId id, string name) : base(id) => Name = name;
+
+    public string Name { get; private set; }
+}
+```
+
+</details>
+
 Everything inside the box is loaded and saved with the order and answers to its invariants. The
 customer is outside it: the order knows which customer, and nothing else about it.
 
@@ -409,6 +458,14 @@ a question about your rules and your write patterns that no compiler can see. Va
 rules of aggregate design are the best short guide to it. [Designing aggregates](aggregate-design.md)
 says why each rule exists, what the toolkit does for it, and, for the rule it cannot help with, what to
 ask yourself instead.
+
+## Aggregates a supporting domain ships
+
+A [supporting domain](writing-a-supporting-domain.md) can ship an aggregate for you to extend. You declare
+your own class with the package's attribute instead of `[AggregateRoot<T>]`,
+`[Subscription<SubscriptionId>] partial class ShopSubscription`, and the generator derives it from the
+package's parent, whose rules then run with yours. See
+[What the application writes](writing-a-supporting-domain.md#what-the-application-writes).
 
 ## Persistence
 

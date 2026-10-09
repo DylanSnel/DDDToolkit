@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <WarningsAsErrors>$(WarningsAsErrors);DDD00022;DDD00023</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Examples.Webshop.Payments.Contracts\Examples.Webshop.Payments.Contracts.csproj" />
+    <ProjectReference Include="..\..\Ordering\Examples.Webshop.Ordering.Contracts\Examples.Webshop.Ordering.Contracts.csproj" />
+    <ProjectReference Include="..\..\Inventory\Examples.Webshop.Inventory.Contracts\Examples.Webshop.Inventory.Contracts.csproj" />
+    <ProjectReference Include="..\..\SharedKernel\Examples.Webshop.SharedKernel\Examples.Webshop.SharedKernel.csproj" />
+    <!-- Where the module's tables live is the host's choice, made through ModuleDatabase. -->
+    <ProjectReference Include="..\..\..\Shared\Examples.Hosting\Examples.Hosting.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit\DDDToolkit.csproj" />
+    <!-- GraphQL: the schema types in Api/GraphQL, and the generated bindings that print this assembly's ids as UUIDs. -->
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework\DDDToolkit.EntityFramework.csproj" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase\DDDToolkit.EntityFramework.Supabase.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.Analyzers\DDDToolkit.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Analyzers\DDDToolkit.EntityFramework.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.HotChocolate.Analyzers\DDDToolkit.HotChocolate.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <!-- The Supabase package's: it writes the design-time factory of the context marked [SupabaseMigrations]. -->
+    <ProjectReference Include="..\..\..\..\Source\DDDToolkit.EntityFramework.Supabase.Analyzers\DDDToolkit.EntityFramework.Supabase.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

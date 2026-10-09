@@ -6,10 +6,25 @@
     <Title>Domain Driven Design Toolkit</Title>
     <PackageTags>ddd;domain;driven;design;toolkit</PackageTags>
     <Description>Base types and source generators that make domain driven design in .NET less repetitive: entities, aggregate roots, strongly typed ids, value objects and domain events.</Description>
+    <!--
+      Some public members have no comment yet: ValueObject, SingleValueObject and ISingleValueObject
+      themselves, constructors, equality and values of the base types, the exceptions, and AddDDDToolkit
+      with its builder. They are left without one rather than given one that only repeats their name, and
+      everything documented ships all the same (see Directory.Build.props). Remove this once the last of
+      them has a comment of its own.
+    -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <!--
+      For the start-up checks (Startup/): the runner is a hosted lifecycle service, so that it runs before the
+      server binds its port in every kind of host, and it logs what it ran and what was turned off. Both are
+      abstractions only, which the shared framework of an ASP.NET Core host has already.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

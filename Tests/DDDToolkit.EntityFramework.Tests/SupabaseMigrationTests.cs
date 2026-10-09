@@ -134,7 +134,10 @@ public sealed class SupabaseMigrationTests : IDisposable
     {
         var report = Export();
 
-        report.Created.Select(e => e.MigrationId).Should().Equal(CreateShelves.Id, AddShelfCapacity.Id);
+        var created = report.Created.Select(e => e.MigrationId).ToList();
+        created.Should().HaveCount(3);
+        created.Take(2).Should().Equal(CreateShelves.Id, AddShelfCapacity.Id);
+        created[2].Should().EndWith("_access", "the module's outbox gets its privileges in an access file after the migrations");
         report.IsInSync.Should().BeTrue();
         File.ReadAllText(Path.Combine(_directory, FileOf(CreateShelves.Id))).Should().Be(Generate()[0].Sql);
 
@@ -159,7 +162,9 @@ public sealed class SupabaseMigrationTests : IDisposable
 
         var report = Export();
 
-        report.Entries.Select(e => e.Status).Should().Equal(SupabaseMigrationStatus.Unchanged, SupabaseMigrationStatus.Created);
+        report.Entries.Select(e => e.Status).Should().Equal(
+            [SupabaseMigrationStatus.Unchanged, SupabaseMigrationStatus.Created, SupabaseMigrationStatus.Unchanged],
+            "the migration that is there, the one that was missing, and the access file of the module's outbox");
     }
 
     [Fact]
@@ -231,7 +236,10 @@ public sealed class SupabaseMigrationTests : IDisposable
         Export();
         using (var ledger = SupabaseLedgerContext.Create())
         {
-            SupabaseMigrations.Export(ledger, _directory).Created.Should().ContainSingle();
+            // Its migration, and its access file, which lets the bookkeeping role read its migration history.
+            SupabaseMigrations.Export(ledger, _directory).Created.Select(entry => Path.GetFileName(entry.Path)).Should().HaveCount(2)
+                .And.Contain(FileOf(CreateLedger.Id, "supabaseledger"))
+                .And.ContainSingle(name => name.EndsWith("_access.supabaseledger.ddd.sql", StringComparison.Ordinal));
             SupabaseMigrations.Compare(ledger, _directory).IsInSync.Should().BeTrue();
         }
 
@@ -262,7 +270,9 @@ public sealed class SupabaseMigrationTests : IDisposable
         var reports = SupabaseMigrations.Export([Shelves, Ledger], _directory);
 
         reports.Should().HaveCount(2);
-        reports.SelectMany(r => r.Created).Select(e => e.MigrationId).Should().Equal(CreateShelves.Id, AddShelfCapacity.Id, CreateLedger.Id);
+        reports.SelectMany(r => r.Created).Select(e => e.MigrationId).Where(id => !id.EndsWith("_access", StringComparison.Ordinal))
+            .Should().Equal(CreateShelves.Id, AddShelfCapacity.Id, CreateLedger.Id);
+        reports[0].Created.Should().ContainSingle(e => e.MigrationId.EndsWith("_access", StringComparison.Ordinal), "the shelves' outbox gets its privileges in an access file");
         SupabaseMigrations.Compare([Shelves, Ledger], _directory).Should().OnlyContain(r => r.IsInSync);
     }
 

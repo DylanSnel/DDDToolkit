@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
-    <!-- Name used for the generated Add<Module>Converters method. -->
+    <!-- Module Benchmarks, which also names the generated AddBenchmarksConverters method. -->
     <DDD_Module>Benchmarks</DDD_Module>
     <!--
       BenchmarkDotNet refuses to measure a Debug build, so the numbers in docs/performance.md come

@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace DDDToolkit.Analyzers.Common;
 
@@ -19,9 +23,26 @@ namespace DDDToolkit.Analyzers.Common;
 /// cannot carry an attribute, so several modules inside one project cannot be described this way and
 /// are not supported.
 /// </para>
+/// <para>
+/// The build declares the module as well: a project that sets <c>DDD_Module</c> is compiled with it written into it
+/// as <c>AssemblyMetadata</c>, by the targets of the DDDToolkit.Analyzers package, and is that module's project as if
+/// it declared <c>[assembly: Module]</c>. A test project, and one that sets <c>DDD_DeclareModule</c> to false, get
+/// nothing written and are no module. The attribute still decides wherever there is one. See <see cref="ModuleOf"/>.
+/// </para>
+/// <para>
+/// What a module publishes is read off the type, and off its assembly: <c>[ModuleContract]</c> and
+/// <c>[IntegrationEvent]</c> on the type, or <c>[assembly: ModuleContracts]</c> on a module's contracts project, which
+/// publishes every public type of it. See <see cref="IsPublished"/>.
+/// </para>
 /// </summary>
 internal static class ModuleBoundary
 {
+    /// <summary>
+    /// The <c>AssemblyMetadata</c> key the build declares a project's module under: its <c>DDD_Module</c>, written only
+    /// into a project the property makes a module.
+    /// </summary>
+    public const string ModuleNameMetadata = "DDD_Module";
+
     /// <summary>File name suffixes Roslyn treats as generated code, matched the same way here.</summary>
     private static readonly string[] GeneratedFileSuffixes =
     [
@@ -31,7 +52,21 @@ internal static class ModuleBoundary
         ".designer.cs",
     ];
 
-    /// <summary>The name of the module this assembly declares, or null when it declares none.</summary>
+    /// <summary>
+    /// The name of the module this assembly declares, or null when it declares none.
+    /// <para>
+    /// <c>[assembly: Module]</c> decides, wherever it is written: in a file of the project, or in the
+    /// <c>AssemblyInfo.cs</c> an <c>AssemblyAttribute</c> item gives it. Without one, the module the build declared:
+    /// the project's <c>DDD_Module</c>. The build writes it into the project for every generator of it to read here,
+    /// because a generator never sees what another one writes: the <c>[assembly: Module]</c> the toolkit's generator
+    /// writes from it comes too late for the others. That attribute is for what reads the compiled assembly: the
+    /// analyzers, the runtime and reflection.
+    /// </para>
+    /// <para>
+    /// An assembly whose <c>[assembly: Module]</c> names no module declares none, and does not fall back on the
+    /// build's either: the attribute is there, so nothing writes a second one, and both answers stay the same.
+    /// </para>
+    /// </summary>
     public static string? ModuleOf(IAssemblySymbol? assembly)
     {
         if (assembly is null)
@@ -39,16 +74,61 @@ internal static class ModuleBoundary
             return null;
         }
 
-        foreach (var attribute in assembly.GetAttributes())
+        var attributes = assembly.GetAttributes();
+        var declared = false;
+        foreach (var attribute in attributes)
         {
             if (!IsToolkitAttribute(attribute, KnownTypes.ModuleAttribute))
             {
                 continue;
             }
 
+            declared = true;
             if (attribute.ConstructorArguments.Length == 1
                 && attribute.ConstructorArguments[0].Value is string name
                 && !string.IsNullOrWhiteSpace(name))
+            {
+                return name.Trim();
+            }
+        }
+
+        return declared ? null : BuildModuleOf(attributes);
+    }
+
+    /// <summary>
+    /// Whether the assembly carries <c>[assembly: Module]</c> at all, whatever it names. Where it does, the build's
+    /// declaration is not read, and the toolkit's generator writes no attribute of its own.
+    /// </summary>
+    public static bool HasModuleAttribute(IAssemblySymbol assembly)
+    {
+        foreach (var attribute in assembly.GetAttributes())
+        {
+            if (IsToolkitAttribute(attribute, KnownTypes.ModuleAttribute))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The module the build declared in the assembly: the project's <c>DDD_Module</c>, as the targets wrote it. Null
+    /// when the project sets no <c>DDD_Module</c>, is a test project, sets <c>DDD_DeclareModule</c> to false, or was
+    /// built without the toolkit's targets, as an earlier version of the toolkit built every project.
+    /// </summary>
+    public static string? BuildModuleOf(IAssemblySymbol assembly) => BuildModuleOf(assembly.GetAttributes());
+
+    private static string? BuildModuleOf(ImmutableArray<AttributeData> attributes)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.AttributeClass is { Name: "AssemblyMetadataAttribute" } attributeClass
+                && attribute.ConstructorArguments.Length == 2
+                && attribute.ConstructorArguments[0].Value is ModuleNameMetadata
+                && attribute.ConstructorArguments[1].Value is string name
+                && !string.IsNullOrWhiteSpace(name)
+                && attributeClass.ContainingNamespace.ToDisplayString() == "System.Reflection")
             {
                 return name.Trim();
             }
@@ -123,7 +203,13 @@ internal static class ModuleBoundary
 
     /// <summary>
     /// Whether the type is part of its module's published contract: it carries <c>[ModuleContract]</c> or
-    /// <c>[IntegrationEvent]</c>, or it is nested inside a type that does.
+    /// <c>[IntegrationEvent]</c>, or it is nested inside a type that does, or it is public in an assembly that is its
+    /// module's contracts, <c>[assembly: ModuleContracts]</c>.
+    /// <para>
+    /// Public means public all the way out: a public type nested in an internal one is no more published than the
+    /// internal one, and an internal type another module may name through <c>InternalsVisibleTo</c> is not published
+    /// either. The assembly's name counts for nothing: a project called <c>Legal.Contracts</c> may be a module's domain.
+    /// </para>
     /// </summary>
     public static bool IsPublished(ITypeSymbol type)
     {
@@ -136,13 +222,69 @@ internal static class ModuleBoundary
             }
         }
 
+        return IsPublic(type) && type.ContainingAssembly is { } assembly && HasModuleContractsAttribute(assembly);
+    }
+
+    /// <summary>
+    /// Whether the assembly says it is its module's contracts: it carries <c>[assembly: ModuleContracts]</c>, declared
+    /// in its source, through an <c>AssemblyAttribute</c> item, or by the toolkit's generator from
+    /// <c>DDD_ModuleContracts</c>. The other modules read it from the compiled assembly, where all three are. A
+    /// generator of the project itself sees the first two only, since no generator sees what another one writes, so
+    /// one that asks about the project's own types reads <see cref="IsContractsByTheBuild"/> beside it.
+    /// </summary>
+    public static bool HasModuleContractsAttribute(IAssemblySymbol assembly)
+    {
+        foreach (var attribute in assembly.GetAttributes())
+        {
+            if (IsToolkitAttribute(attribute, KnownTypes.ModuleContractsAttribute))
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
-    /// <summary>Whether the type carries <c>[Entity&lt;T&gt;]</c> or <c>[AggregateRoot&lt;T&gt;]</c>.</summary>
+    /// <summary>
+    /// Whether the project's build makes it its module's contracts: its <c>DDD_ModuleContracts</c> is <c>true</c>, and
+    /// the toolkit's generator can write <c>[assembly: ModuleContracts]</c> from it, because the project can name the
+    /// attribute. A generator of the project that asks whether one of the project's own types is published reads this
+    /// as well as <see cref="IsPublished"/>, which sees an attribute in source and not the one written from the
+    /// property. So both ways of saying it write the same code, as the <c>[ModuleContract]</c> on
+    /// <c>{Module}EventNames</c> does.
+    /// </summary>
+    public static bool IsContractsByTheBuild(Compilation compilation, AnalyzerConfigOptions options)
+        => SaysModuleContracts(options) && compilation.GetTypeByMetadataName(KnownTypes.ModuleContractsAttribute) is not null;
+
+    /// <summary>
+    /// Whether the project's <c>DDD_ModuleContracts</c> is <c>true</c>: in any case and with spaces around it, as
+    /// MSBuild compares it. Anything else, an empty value included, says nothing. Only the property is read, never the
+    /// project's name.
+    /// </summary>
+    public static bool SaysModuleContracts(AnalyzerConfigOptions options)
+        => options.TryGetValue("build_property.DDD_ModuleContracts", out var value)
+           && string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether the type, and every type it is nested in, is public: what <c>[assembly: ModuleContracts]</c> publishes
+    /// of a type that carries no mark of its own.
+    /// </summary>
+    public static bool IsPublic(ITypeSymbol type)
+    {
+        for (ITypeSymbol? current = type; current is not null; current = current.ContainingType)
+        {
+            if (current.DeclaredAccessibility != Accessibility.Public)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether the type is declared an entity or an aggregate root, in any of the ways <see cref="EntityDeclarations"/> knows.</summary>
     public static bool IsEntity(INamedTypeSymbol type)
-        => DefinitionFactory.HasAttribute(type, KnownTypes.EntityAttribute)
-           || DefinitionFactory.HasAttribute(type, KnownTypes.AggregateRootAttribute);
+        => EntityDeclarations.IsEntityOrAggregateRoot(type);
 
     /// <summary>
     /// The first location of a symbol in code somebody wrote, or null when it is only declared in
@@ -160,6 +302,57 @@ internal static class ModuleBoundary
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Where a diagnostic about the project's module points: the project's <c>[assembly: Module]</c>, in a file somebody
+    /// edits, or else <paramref name="projectFile"/>. A module the build declared has no attribute in the source, and
+    /// one an <c>AssemblyAttribute</c> item declares is in the <c>AssemblyInfo.cs</c> the build writes into
+    /// <c>obj/</c>, which nobody edits: either way the project file is where the module is declared.
+    /// </summary>
+    /// <param name="compilation">The project.</param>
+    /// <param name="projectFile">The project file, from <c>MSBuildProjectFullPath</c>, or null when it is not known.</param>
+    /// <param name="cancellationToken">Stops the lookup.</param>
+    public static LocationInfo? WhereTheModuleIsDeclared(Compilation compilation, LocationInfo? projectFile, CancellationToken cancellationToken)
+    {
+        foreach (var attribute in compilation.Assembly.GetAttributes())
+        {
+            if (IsToolkitAttribute(attribute, KnownTypes.ModuleAttribute)
+                && attribute.ApplicationSyntaxReference is { } reference
+                && !IsGenerated(reference.SyntaxTree, cancellationToken))
+            {
+                return LocationInfo.From(reference.GetSyntax(cancellationToken));
+            }
+        }
+
+        return projectFile;
+    }
+
+    /// <summary>
+    /// Whether a file is generated code as Roslyn tells it: by its name, or by an <c>&lt;auto-generated&gt;</c>
+    /// comment at its top, which the <c>AssemblyInfo.cs</c> the SDK writes has.
+    /// </summary>
+    public static bool IsGenerated(SyntaxTree tree, CancellationToken cancellationToken)
+    {
+        if (IsGenerated(tree.FilePath))
+        {
+            return true;
+        }
+
+        foreach (var trivia in tree.GetRoot(cancellationToken).GetLeadingTrivia())
+        {
+            if (trivia.IsKind(SyntaxKind.SingleLineCommentTrivia) || trivia.IsKind(SyntaxKind.MultiLineCommentTrivia))
+            {
+                var text = trivia.ToString();
+                if (text.IndexOf("<auto-generated", StringComparison.OrdinalIgnoreCase) >= 0
+                    || text.IndexOf("<autogenerated", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Whether a file path is one Roslyn treats as generated code.</summary>

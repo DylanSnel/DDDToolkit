@@ -23,6 +23,34 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate.Fusion.InMemory\DDDToolkit.HotChocolate.Fusion.InMemory.csproj" />
+    <!-- The toolkit's conventions on the modules' source schemas: typed errors, enum spelling, shareable types. -->
+    <ProjectReference Include="..\..\Source\DDDToolkit.HotChocolate\DDDToolkit.HotChocolate.csproj" />
+    <!--
+      A module written with HotChocolate's own generator, type classes over its application's records: the source
+      schema whose entities another module references, and whose field carries a rule.
+    -->
+    <ProjectReference Include="..\DDDToolkit.HotChocolate.Tests.Gallery.Api\DDDToolkit.HotChocolate.Tests.Gallery.Api.csproj" />
+  </ItemGroup>
+
+  <!--
+    The source schema of internal types that DDDToolkit.HotChocolate.Tests builds by itself. The same file is
+    compiled here, so what is composed with a second schema is those types and not a copy.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\InternalTypes\DepotSchema.cs" LinkBase="InternalTypes" />
+  </ItemGroup>
+
+  <!--
+    The batch dispatcher for a test that counts what a data loader's batch costs: one file for every suite that
+    counts, so a batch is sent when it is whole in each of them and by the clock in none.
+  -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\WholeBatches.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
+
+  <!-- What a schema says of its types, and a printed schema read without it: one file for both suites. -->
+  <ItemGroup>
+    <Compile Include="..\DDDToolkit.HotChocolate.Tests\Infrastructure\SchemaDescriptions.cs" LinkBase="Infrastructure" />
   </ItemGroup>
 
 </Project>
