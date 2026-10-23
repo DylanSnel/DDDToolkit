@@ -183,8 +183,8 @@ public class MembershipRowAccessContribution<TMember> : IRowAccessContribution
             return null;
         }
 
-        // Where the functions are: the context's default schema, as every contributed function's is.
-        var schema = context.Model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema;
+        // Where the functions are: the context's default schema, as every contributed function's is, quoted.
+        var schema = RowAccessModel.Schema(context.Model);
         return new RowAccessContributionResult(
             MembershipSql.Functions(mapping, Rules, Owner, export.Roles.SystemIn),
             MembershipSql.Policies(mapping, Rules, Owner),

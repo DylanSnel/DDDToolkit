@@ -6,6 +6,7 @@ using DDDToolkit.EntityFramework.Conventions;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Tenancy.EntityFramework;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Campus.Persistence;
 
@@ -40,17 +41,29 @@ public sealed class CampusContext(DbContextOptions<CampusContext> options) : DbC
     public DbSet<Lab> Labs => Set<Lab>();
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        modelBuilder.HasDefaultSchema(Schema);
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => Build(modelBuilder, Database, Schema, TenancyContext.Schema);
 
-        if (Database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
+    /// <summary>
+    /// The model of this context in <paramref name="schema"/>, reading Tenancy's rows from
+    /// <paramref name="tenancySchema"/>: what <see cref="OnModelCreating"/> builds in <see cref="Schema"/> and
+    /// <see cref="TenancyContext.Schema"/>, and what a host that names the schemas otherwise builds, in ones
+    /// Postgres keeps only in double quotes, say.
+    /// </summary>
+    /// <param name="modelBuilder">The builder of the context's model.</param>
+    /// <param name="database">The context's database, whose provider decides where the read model's rows come from.</param>
+    /// <param name="schema">The schema the courses' and the labs' tables, and on Postgres their functions, are in.</param>
+    /// <param name="tenancySchema">The schema of Tenancy's context, which the read model reads.</param>
+    public static void Build(ModelBuilder modelBuilder, DatabaseFacade database, string schema, string tenancySchema)
+    {
+        modelBuilder.HasDefaultSchema(schema);
+
+        if (database.ProviderName == "Npgsql.EntityFrameworkCore.PostgreSQL")
         {
-            modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyContext.Schema);
+            modelBuilder.AddTenancyReadFunctions<TenantId, SeatId, OrganizationUnitId, RoleId>(tenancySchema);
         }
         else
         {
-            modelBuilder.AddTenancyReadModel<TenantId, SeatId, OrganizationUnitId, RoleId>(TenancyContext.Schema);
+            modelBuilder.AddTenancyReadModel<TenantId, SeatId, OrganizationUnitId, RoleId>(tenancySchema);
         }
 
         modelBuilder.Entity<Course>(course =>

@@ -756,21 +756,6 @@ public sealed class RowAccessContributionTests
     }
 
     [Fact]
-    public void A_function_schema_Postgres_would_not_keep_as_written_is_refused()
-    {
-        using var capitalized = CapitalizedMemosContext.Create();
-
-        var relative = () => PostgresRowAccess.Script(capitalized, [], [RowAccessFunction.For<Memo>("memos/is_member", "TRUE")]);
-        var contributed = () => PostgresRowAccess.Script(capitalized, [], [], With(new SpotContribution("memos", _ => new([new ContributedFunction("is_member", "", "boolean", "SELECT true")], [], []))));
-
-        relative.Should().Throw<InvalidOperationException>().WithMessage(
-            "The function memos/is_member would be created in the schema 'Memos' of CapitalizedMemosContext, and a script writes a function's name without quotes, so Postgres would read it as a function of another schema, or of none. Give the schema a name of lower case letters, digits and underscores, or name the function with its schema.");
-        contributed.Should().Throw<InvalidOperationException>().WithMessage("The function memos/is_member would be created in the schema 'Memos'*digits and underscores.");
-        PostgresRowAccess.Script(capitalized, [], [RowAccessFunction.For<Memo>("memos.is_member", "TRUE")])
-            .Should().Contain("CREATE OR REPLACE FUNCTION memos.is_member(uuid) RETURNS boolean", "a function named with its schema is created as it is named");
-    }
-
-    [Fact]
     public void Two_policies_of_one_name_on_a_table_are_refused()
     {
         using var desk = DeskContext.Create();

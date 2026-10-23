@@ -86,7 +86,7 @@ public sealed class UnitChangesWithItsKeys : IRowAccessContribution
         }
 
         var table = RowAccessModel.Table(projects);
-        var schema = $"\"{context.Model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema}\"";
+        var schema = RowAccessModel.Schema(context.Model);
         var function = $"{schema}.{Function}";
         string Column(string property) => RowAccessModel.Column(projects, property);
         var (id, tenant, unit) = (Column(nameof(Project.Id)), Column(nameof(Project.TenantId)), Column(nameof(Project.UnitId)));

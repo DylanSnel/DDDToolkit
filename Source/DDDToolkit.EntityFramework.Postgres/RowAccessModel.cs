@@ -33,6 +33,23 @@ public static class RowAccessModel
     }
 
     /// <summary>
+    /// The schema a script makes a context's functions in, the default schema of <paramref name="model"/> or else
+    /// <see cref="PostgresRowAccess.DefaultSchema"/>, quoted: <c>"desk"</c>, <c>"Desk"</c>. What a contribution's
+    /// statements name a function of their own with, a trigger's say, which the script does not name for them as
+    /// it names the functions asked by <c>{fn:owner/name}</c>:
+    /// <code>
+    /// $"CREATE OR REPLACE FUNCTION {RowAccessModel.Schema(context.Model)}.entry_is_kept() RETURNS trigger ..."
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is null.</exception>
+    public static string Schema(IModel model)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+
+        return Quote(model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema);
+    }
+
+    /// <summary>
     /// The column <paramref name="property"/> of <paramref name="entity"/> is stored in: <c>"TenantId"</c>, or
     /// the column of a value object's property stored in the same table, <c>Period.EndsAt</c>.
     /// </summary>

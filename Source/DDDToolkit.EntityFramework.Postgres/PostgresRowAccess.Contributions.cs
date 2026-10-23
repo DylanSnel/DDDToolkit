@@ -104,7 +104,7 @@ public static partial class PostgresRowAccess
         }
 
         var names = new List<Named>();
-        var byResolved = new Dictionary<string, Named>(StringComparer.OrdinalIgnoreCase);
+        var byResolved = new Dictionary<string, Named>(RowAccessNames.Functions);
         void Define(Named named)
         {
             if (byResolved.TryGetValue(named.Resolved, out var other))
@@ -820,7 +820,7 @@ public static partial class PostgresRowAccess
 
     /// <summary>The functions <paramref name="sql"/> asks, by the names they have in the database.</summary>
     private static List<string> Asks(string sql, IReadOnlyDictionary<string, string> names)
-        => [.. FunctionsAskedBy(sql).Select(name => names.TryGetValue(name, out var resolved) ? resolved : name).Distinct(StringComparer.OrdinalIgnoreCase)];
+        => [.. FunctionsAskedBy(sql).Select(name => names.TryGetValue(name, out var resolved) ? resolved : name).Distinct(RowAccessNames.Functions)];
 
     /// <summary>
     /// The roles <paramref name="roles"/> names, resolved: symbolic ones to the roles of the script, and a
@@ -859,13 +859,13 @@ public static partial class PostgresRowAccess
         string Resolve(string asked) => names.TryGetValue(asked, out var resolved) ? resolved : asked;
 
         // Each access function by the name it has in the database, with its logical name and the functions its body asks.
-        var access = new Dictionary<string, (string Logical, IReadOnlyList<string> Asks)>(StringComparer.OrdinalIgnoreCase);
+        var access = new Dictionary<string, (string Logical, IReadOnlyList<string> Asks)>(RowAccessNames.Functions);
         foreach (var function in prepared.SelectMany(each => each.Functions))
         {
-            access.TryAdd(Resolve(function.LogicalName), (function.LogicalName, [.. FunctionsAskedBy(function.Sql).Select(Resolve).Distinct(StringComparer.OrdinalIgnoreCase)]));
+            access.TryAdd(Resolve(function.LogicalName), (function.LogicalName, [.. FunctionsAskedBy(function.Sql).Select(Resolve).Distinct(RowAccessNames.Functions)]));
         }
 
-        var contributedFunctions = new Dictionary<string, (string Logical, IReadOnlyList<string> GrantTo)>(StringComparer.OrdinalIgnoreCase);
+        var contributedFunctions = new Dictionary<string, (string Logical, IReadOnlyList<string> GrantTo)>(RowAccessNames.Functions);
         foreach (var each in prepared)
         {
             foreach (var contributed in each.Contributions)
@@ -878,10 +878,10 @@ public static partial class PostgresRowAccess
             }
         }
 
-        var grantees = new Dictionary<string, SortedSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var grantees = new Dictionary<string, SortedSet<string>>(RowAccessNames.Functions);
         void Asked(string what, IReadOnlyList<string> roles, string? sql, Func<string, IReadOnlyList<string>, string> advice)
         {
-            foreach (var asked in FunctionsAskedBy(sql ?? "").Select(Resolve).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var asked in FunctionsAskedBy(sql ?? "").Select(Resolve).Distinct(RowAccessNames.Functions))
             {
                 if (contributedFunctions.ContainsKey(asked))
                 {
@@ -905,7 +905,7 @@ public static partial class PostgresRowAccess
         // granted to no role is a helper for the functions that run as their owner, which an access function is.
         void Through(string what, string first, IReadOnlyList<string> roles, Func<string, IReadOnlyList<string>, string> advice)
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { first };
+            var seen = new HashSet<string>(RowAccessNames.Functions) { first };
             var path = new Stack<(string Function, IReadOnlyList<string> Via)>();
             path.Push((first, [access[first].Logical]));
             while (path.Count > 0)
@@ -994,13 +994,13 @@ public static partial class PostgresRowAccess
     /// <exception cref="InvalidOperationException">The functions ask each other in a circle.</exception>
     private static List<Definition> InDependencyOrder(DbContext context, IReadOnlyList<Definition> definitions)
     {
-        var inScript = definitions.ToDictionary(definition => definition.Resolved, StringComparer.OrdinalIgnoreCase);
+        var inScript = definitions.ToDictionary(definition => definition.Resolved, RowAccessNames.Functions);
         var remaining = definitions.OrderBy(definition => definition.Resolved, StringComparer.Ordinal).ToList();
-        var written = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var written = new HashSet<string>(RowAccessNames.Functions);
         var ordered = new List<Definition>(definitions.Count);
 
         IEnumerable<string> Waiting(Definition definition)
-            => definition.Asks.Where(asked => inScript.ContainsKey(asked) && !written.Contains(asked) && !string.Equals(asked, definition.Resolved, StringComparison.OrdinalIgnoreCase));
+            => definition.Asks.Where(asked => inScript.ContainsKey(asked) && !written.Contains(asked) && !RowAccessNames.Functions.Equals(asked, definition.Resolved));
 
         while (remaining.Count > 0)
         {
@@ -1026,7 +1026,7 @@ public static partial class PostgresRowAccess
     /// <exception cref="InvalidOperationException">The contexts ask each other's functions in a circle.</exception>
     private static List<Prepared> InDependencyOrder(IReadOnlyList<Prepared> prepared, IReadOnlyDictionary<string, string> names)
     {
-        var definers = new Dictionary<string, List<Prepared>>(StringComparer.OrdinalIgnoreCase);
+        var definers = new Dictionary<string, List<Prepared>>(RowAccessNames.Functions);
         foreach (var each in prepared)
         {
             foreach (var named in each.Names)
@@ -1045,7 +1045,7 @@ public static partial class PostgresRowAccess
             each => each,
             each =>
             {
-                var own = each.Names.Select(named => named.Resolved).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var own = each.Names.Select(named => named.Resolved).ToHashSet(RowAccessNames.Functions);
                 return AskedByAnything(each)
                     .SelectMany(asked => Asks(asked, names))
                     .Where(asked => !own.Contains(asked) && definers.ContainsKey(asked))

@@ -4859,7 +4859,9 @@ public static class ShopCatalogue
   from the default catalogue. An application with [operators](#operators) marks their token roles
   `[TenancyOperators]` too. On a Postgres of your own, pass `new TenancyRowAccessContribution(catalogue)` to
   `PostgresRowAccess.Scripts` in `RowAccessExport.Contributions`. The functions go into the default schema of
-  the context that maps Tenancy's tables, so give it one in lower case, such as `tenancy`.
+  the context that maps Tenancy's tables, `tenancy` or `Tenancy` or any name Entity Framework takes, which the
+  SQL names as Entity Framework does: `tenancy.caller_seat()`, `"Tenancy".caller_seat()`
+  ([Names relative to the module](row-level-security.md#names-relative-to-the-module)).
 - **The checks** are [start-up checks](startup-checks.md): `AddTenancyPostgres()` brings them, and the host runs
   them with every other check it has, before the server binds its port, in an order that says the cause before
   its effects. A host that runs them by hand calls `TenancyPostgresChecks.EnsureExplicitCallers`,

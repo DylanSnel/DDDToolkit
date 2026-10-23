@@ -417,6 +417,24 @@ every module with its one `AddSupabaseMigrations()`. The host's project file tur
 locally and `Check` in CI, and `supabase/migrations` holds the committed files. See
 [its README](../Examples/README.md#on-supabase) to run it against a local Supabase.
 
+### A schema with capitals
+
+A module's schema may have capitals, `HasDefaultSchema("Tenancy")`, as any name Entity Framework takes may
+be. Entity Framework creates it in double quotes, `CREATE SCHEMA "Tenancy"`, and the exported files name it
+the same way wherever Postgres needs the quotes, the access files' functions, policies, triggers and grants
+included. Where a project does serve such a schema through the Data API, it lists it as the model spells it,
+without quotes, in `config.toml` and in `SupabaseMigrationOptions.RowLevelSecuritySchemas` alike:
+
+```toml title="supabase/config.toml"
+[api]
+schemas = ["public", "graphql_public", "Tenancy"]
+```
+
+PostgREST takes each name as it is written, capitals and all, and quotes it itself, in its queries and in
+the search path it sets, so `"\"Tenancy\""` would be a schema whose name holds the quotes. A client picks the
+schema the same way: `supabase.schema("Tenancy")`, or the `Accept-Profile: Tenancy` header. None of the samples
+serves a module's schema through the Data API, so this is the one place it is shown.
+
 ## Row level security for your own queries
 
 An application that connects as `postgres` is the owner of its tables, and row level security does not

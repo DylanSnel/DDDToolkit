@@ -45,19 +45,24 @@ public sealed class PgmqDatabase : IAsyncDisposable
     /// <summary>Starts <paramref name="image"/>, one of the pgmq images, or returns <see langword="null"/> without Docker.</summary>
     public static async Task<PgmqDatabase?> StartAsync(string image, CancellationToken cancellationToken)
     {
-        var container = new PostgreSqlBuilder(image)
-            .WithDatabase("ddd")
-            .WithUsername("postgres")
-            .WithPassword("postgres")
-            .Build();
-
+        // Built inside the try: the builder asks for Docker already, and says it is missing by throwing.
+        PostgreSqlContainer? container = null;
         try
         {
+            container = new PostgreSqlBuilder(image)
+                .WithDatabase("ddd")
+                .WithUsername("postgres")
+                .WithPassword("postgres")
+                .Build();
             await container.StartAsync(cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            await container.DisposeAsync();
+            if (container is not null)
+            {
+                await container.DisposeAsync();
+            }
+
             return null;
         }
 

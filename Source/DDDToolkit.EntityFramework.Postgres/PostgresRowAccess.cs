@@ -561,7 +561,10 @@ public static partial class PostgresRowAccess
     /// <param name="contexts">The contexts, typically one per module.</param>
     /// <param name="functions">Every access function; each is defined by the contexts that map its aggregate.</param>
     /// <param name="export">The contributions to ask as well; none when left out.</param>
-    /// <returns>Each logical name, and the name its function has in the database, <c>schema.name</c>.</returns>
+    /// <returns>
+    /// Each logical name, and the name its function has in the database, <c>schema.name</c> as SQL writes it: the
+    /// schema delimited as Entity Framework delimits it, <c>desk.tickets_i_watch</c> or <c>"Desk".tickets_i_watch</c>.
+    /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="contexts"/> or <paramref name="functions"/> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// Two functions have one name, or one logical name would be two functions, in two contexts with
@@ -594,7 +597,7 @@ public static partial class PostgresRowAccess
             foreach (var definition in each.Names)
             {
                 if (definers.TryGetValue(definition.Logical, out var other)
-                    && !string.Equals(names[definition.Logical], definition.Resolved, StringComparison.OrdinalIgnoreCase))
+                    && !RowAccessNames.Functions.Equals(names[definition.Logical], definition.Resolved))
                 {
                     throw new InvalidOperationException(ResourceAccessAnswer.IsName(definition.Logical)
                         ? $"Two contexts answer {ResourceAccessAnswer.Described(definition.Logical)}: {other.Context} with {names[definition.Logical]} and {each.Context.GetType().Name} with {definition.Resolved}. One function answers a set for a resource, so a rule that asks it is written with that one: write the resource's access for the context that keeps the resource."
@@ -636,7 +639,7 @@ public static partial class PostgresRowAccess
     /// <exception cref="InvalidOperationException">Two would be one.</exception>
     private static void EnsureOneFunctionPerName(IReadOnlyDictionary<string, string> names, IReadOnlyDictionary<string, (string Context, string About)> definers)
     {
-        var byResolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var byResolved = new Dictionary<string, string>(RowAccessNames.Functions);
 
         // A resource access set is another name for the function a contribution says answers it, never a function of its own.
         foreach (var (logical, resolved) in names.Where(pair => !ResourceAccessAnswer.IsName(pair.Key)).OrderBy(pair => pair.Key, StringComparer.Ordinal))
@@ -659,9 +662,9 @@ public static partial class PostgresRowAccess
     /// <summary>
     /// The name <paramref name="function"/> has in the database when <paramref name="context"/> writes it:
     /// its own for a name with its schema, and otherwise its name in the schema of the context, the model's
-    /// default schema or else that of the aggregate's table.
+    /// default schema or else that of the aggregate's table, as <see cref="FunctionSchema"/> writes it.
     /// </summary>
-    /// <exception cref="InvalidOperationException">That schema is not a name Postgres keeps as a script writes it.</exception>
+    /// <exception cref="InvalidOperationException">That schema is longer than Postgres keeps a name.</exception>
     private static string ResolvedName(DbContext context, RowAccessFunction function)
     {
         if (function.IsQualified)
@@ -670,29 +673,29 @@ public static partial class PostgresRowAccess
         }
 
         var schema = context.Model.GetDefaultSchema() ?? TableOf(RootOf(context, function.AggregateTypeName)).Schema ?? DefaultSchema;
-        return FunctionSchema(context, schema, function.LogicalName, qualifiable: true) + "." + RowAccessNames.Unqualified(function.LogicalName);
+        return FunctionSchema(context, schema, function.LogicalName) + "." + RowAccessNames.Unqualified(function.LogicalName);
     }
 
     /// <summary>
-    /// <paramref name="schema"/>, the schema of <paramref name="context"/> that a function a script names by
-    /// its logical name is created in, refused unless Postgres keeps it as a script writes it: a script writes
-    /// a function's name without quotes, which Postgres folds to lower case, while Entity Framework quotes the
-    /// schema it creates. A model's <c>"Desk"</c> would then be one schema and the functions' <c>Desk.f()</c>
-    /// another, <c>desk</c>.
+    /// <paramref name="schema"/>, the schema of <paramref name="context"/> that a function a script names by its
+    /// logical name is created in, as the script writes it: delimited by the provider, as Entity Framework
+    /// delimits the schema it creates, so the two name one schema whatever it is called. <c>desk</c> is written
+    /// as it is; <c>Desk</c>, <c>Field_Work</c> and <c>order</c> as <c>"Desk"</c>, <c>"Field_Work"</c> and
+    /// <c>"order"</c>, since Postgres would fold the first two to lower case and read the last as a word of its own.
+    /// The function's name itself is the module's or the package's, and stays as it is written.
     /// </summary>
     /// <param name="context">The context whose schema it is.</param>
-    /// <param name="schema">The schema.</param>
+    /// <param name="schema">The schema, as the model names it.</param>
     /// <param name="logical">The logical name of the function, for the message.</param>
-    /// <param name="qualifiable">Whether the function could be named with a schema of its own instead, as an access function can.</param>
-    /// <exception cref="InvalidOperationException">It is not lower case letters, digits and underscores.</exception>
-    private static string FunctionSchema(DbContext context, string schema, string logical, bool qualifiable = false)
-        => schema.Length > 0
-           && schema.Length <= MaxIdentifierBytes
-           && (schema[0] is (>= 'a' and <= 'z') or '_')
-           && schema.All(static character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_')
-            ? schema
+    /// <exception cref="InvalidOperationException">
+    /// The schema is longer than the 63 bytes Postgres keeps of a name: Postgres would cut it, and the script's own
+    /// lookups, which name the schema in full, would miss the functions and policies it made.
+    /// </exception>
+    private static string FunctionSchema(DbContext context, string schema, string logical)
+        => Encoding.UTF8.GetByteCount(schema) <= MaxIdentifierBytes
+            ? context.GetService<ISqlGenerationHelper>().DelimitIdentifier(schema)
             : throw new InvalidOperationException(
-                $"The function {logical} would be created in the schema '{schema}' of {context.GetType().Name}, and a script writes a function's name without quotes, so Postgres would read it as a function of another schema, or of none. Give the schema a name of lower case letters, digits and underscores{(qualifiable ? ", or name the function with its schema" : "")}.");
+                $"The function {logical} would be created in the schema '{schema}' of {context.GetType().Name}, which is longer than the {MaxIdentifierBytes} bytes Postgres keeps of a name. Postgres would cut it, and a script that names the schema in full would no longer find what it made there. Give the schema a shorter name.");
 
     /// <summary>
     /// A statement that drops every policy made from a rule on this context's tables, and every trigger made from
@@ -1727,14 +1730,15 @@ public static partial class PostgresRowAccess
     }
 
     /// <summary>
-    /// The functions a script writes, <c>schema.name</c>, as the schema and name Postgres keeps: in lower case,
-    /// since a script writes them unquoted.
+    /// The functions a script writes, <c>schema.name</c> as SQL writes them, as the schema and the name Postgres
+    /// keeps (<see cref="RowAccessNames.Kept"/>), to compare with the catalog's: <c>("desk", "f")</c> for
+    /// <c>desk.f</c>, <c>("Desk", "f")</c> for <c>"Desk".f</c>.
     /// </summary>
     private static List<string> NamePairs(IEnumerable<string> names)
         => [.. names
             .Order(StringComparer.Ordinal)
-            .Select(name => name.ToLowerInvariant().Split('.'))
-            .Select(parts => $"({Literal(parts[0])}, {Literal(parts[1])})")];
+            .Select(name => RowAccessNames.Kept(name) ?? throw new InvalidOperationException($"'{name}' is no function's name with its schema, schema.name, which a script can drop or grant."))
+            .Select(kept => $"({Literal(kept.Schema)}, {Literal(kept.Name)})")];
 
     private static IEntityType RootOf(DbContext context, string aggregateTypeName)
         => context.Model.GetEntityTypes().Single(entity => entity.ClrType.FullName == aggregateTypeName && !entity.IsOwned());

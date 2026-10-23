@@ -430,7 +430,7 @@ internal static class MembershipSql
     /// <param name="mapping">The resource and its member tables, as the context's model maps them.</param>
     /// <param name="rules">The resource's rules.</param>
     /// <param name="owner">The owner the functions' logical names start with.</param>
-    /// <param name="schema">The schema the resource's functions are in.</param>
+    /// <param name="schema">The schema the resource's functions are in, as SQL names it: <see cref="RowAccessModel.Schema"/>.</param>
     /// <param name="roles">The database roles the rules' symbolic roles are written as.</param>
     /// <exception cref="InvalidOperationException">
     /// The rules name a role no policy can be for, a trigger's name is too long, what a trigger is written from
@@ -516,8 +516,11 @@ internal static class MembershipSql
         ];
     }
 
-    /// <summary>A function of the schema the resource's functions are in, by a name that needs no quotes, as a statement names it.</summary>
-    private static string FunctionIn(string schema, string name) => Braces("\"" + schema.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"") + "." + name;
+    /// <summary>
+    /// A function of the schema the resource's functions are in, <paramref name="schema"/> as SQL names it, by a
+    /// name that needs no quotes, as a statement names it.
+    /// </summary>
+    private static string FunctionIn(string schema, string name) => Braces(schema) + "." + name;
 
     /// <summary>
     /// The lock on the owner column, for rules that name the key that changes the owner

@@ -211,7 +211,7 @@ public static class TenancyPostgresChecks
                 "Something turned it off after AddTenancyPostgres(), or AddTenancyPostgres() was not called; call it, and leave the option to it.");
         }
 
-        await AsSystemAsync(services, async (connection, tenancy) =>
+        await AsSystemAsync(services, async (connection, tenancy, _) =>
         {
             // Each function with the table it answers from, whose policies its owner has to read past.
             (string Function, IEntityType Table)[] reads =
@@ -353,7 +353,7 @@ public static class TenancyPostgresChecks
             return Task.CompletedTask;
         }
 
-        return AsSystemAsync(services, async (connection, tenancy) =>
+        return AsSystemAsync(services, async (connection, tenancy, _) =>
         {
             var problems = await ListAsync(
                 connection,
@@ -505,7 +505,7 @@ public static class TenancyPostgresChecks
 
         var operatorRoles = OperatorDatabaseRoles(services);
 
-        return AsSystemAsync(services, async (connection, tenancy) =>
+        return AsSystemAsync(services, async (connection, tenancy, sql) =>
         {
             // The operators' database roles, each with the policy that lets it read the tenants: the first table
             // an operator reads, and written with every other of Tenancy's by the same contribution.
@@ -643,13 +643,13 @@ public static class TenancyPostgresChecks
                 if (name == TenancySql.KeyIsContained && written.Count == 1
                     && written[0].Trim() == TenancySql.KeyIsContainedBody(catalogue, !catalogue.ContainAccessManagingKeys))
                 {
-                    throw ContainmentDisagrees(tenancy.Schema, catalogue.ContainAccessManagingKeys);
+                    throw ContainmentDisagrees(sql.DelimitIdentifier(TenancySql.KeyIsContained, tenancy.Schema), catalogue.ContainAccessManagingKeys);
                 }
 
                 if (written.Count != 1 || written[0].Trim() != body)
                 {
                     throw new InvalidOperationException(
-                        "The function " + tenancy.Schema + "." + name + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
+                        "The function " + sql.DelimitIdentifier(name, tenancy.Schema) + " in the database " + (written.Count == 1 ? "was written from another catalogue" : "is missing") +
                         ": " + says + ". Export the access files with the catalogue the application runs with, and apply them: the export writes them from the ApplicationCatalogue " +
                         "marked [TenancyCatalogue], the one handed to TenancyOptions.Catalogue, which is public and static where the project that runs the export sees it, " +
                         "and from the modules' keys marked [TenancyPermissions].");
@@ -853,12 +853,14 @@ public static class TenancyPostgresChecks
     /// round from the catalogue the application runs with (<see cref="TenancyCatalogue.ContainAccessManagingKeys"/>):
     /// which way each one is, what the difference lets through or refuses, and how to put it right.
     /// </summary>
-    /// <param name="schema">Tenancy's schema, where <c>key_is_contained</c> is.</param>
+    /// <param name="function">
+    /// <c>key_is_contained</c> in Tenancy's schema, as SQL names it: <c>tenancy.key_is_contained</c>, <c>"Tenancy".key_is_contained</c>.
+    /// </param>
     /// <param name="applicationContains">Whether the application runs with containment on.</param>
-    private static InvalidOperationException ContainmentDisagrees(string schema, bool applicationContains)
+    private static InvalidOperationException ContainmentDisagrees(string function, bool applicationContains)
         => new(
             "The access files in the database were written with ApplicationCatalogue.ContainAccessManagingKeys " + (applicationContains ? "off" : "on") +
-            ", and the application runs with it " + (applicationContains ? "on" : "off") + ", as the function " + schema + "." + TenancySql.KeyIsContained + " says. " +
+            ", and the application runs with it " + (applicationContains ? "on" : "off") + ", as the function " + function + " says. " +
             (applicationContains
                 ? "The database would let a seat give, take away or stop, by a query of its own, the roles that manage access it does not hold, which the use cases refuse. "
                 : "The database would refuse what the use cases allow: a seat that manages grants giving a role that manages access it does not hold, or giving one to itself, and a seat that manages seats stopping one that holds such a role. ") +
@@ -877,9 +879,10 @@ public static class TenancyPostgresChecks
     /// Runs <paramref name="check"/> on the connection of a context that maps Tenancy's tables, made in a scope of its
     /// own, as <see cref="Caller.System"/>, begun around it alone and outside any ambient transaction. The caller
     /// is begun before the context is taken, so a host that makes a context for whoever is calling makes this
-    /// one for the application itself.
+    /// one for the application itself. The check is handed the context's SQL generation helper as well, so a message
+    /// names a function as SQL does, <c>"Tenancy".key_is_live</c>, which a developer can look up as it is written.
     /// </summary>
-    private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, Task> check, CancellationToken cancellationToken)
+    private static async Task AsSystemAsync(IServiceProvider services, Func<DbConnection, TenancyTables, ISqlGenerationHelper, Task> check, CancellationToken cancellationToken)
     {
         using (new TransactionScope(TransactionScopeOption.Suppress, TransactionScopeAsyncFlowOption.Enabled))
         using (Callers.Begin(Caller.System))
@@ -890,7 +893,7 @@ public static class TenancyPostgresChecks
             await context.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await check(context.Database.GetDbConnection(), tenancy).ConfigureAwait(false);
+                await check(context.Database.GetDbConnection(), tenancy, context.GetService<ISqlGenerationHelper>()).ConfigureAwait(false);
             }
             finally
             {

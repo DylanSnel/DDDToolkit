@@ -1728,7 +1728,7 @@ internal static class TenancySql
     /// </summary>
     private static IEnumerable<string> Triggers(TenancyTables tenancy, Written written)
     {
-        var schema = Quoted(tenancy.Schema);
+        var schema = RowAccessModel.Schema(tenancy.Tenants.Model);
         foreach (var statement in RightsFollowTriggers(tenancy, schema))
         {
             yield return statement;
@@ -2353,7 +2353,7 @@ internal static class TenancySql
             yield break;
         }
 
-        var function = $"{Quoted(model.GetDefaultSchema() ?? PostgresRowAccess.DefaultSchema)}.{AttributionMatchesCaller}";
+        var function = $"{RowAccessModel.Schema(model)}.{AttributionMatchesCaller}";
         var seatKind = RowAccessModel.Literal(TenancyActorKinds.Seat);
 
         // The columns, as the trigger's arguments name them: who wrote the row first, then who changed it last,
@@ -2416,7 +2416,4 @@ internal static class TenancySql
             "    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW" + (when.Length == 0 ? "" : $" WHEN ({when})") + "\n" +
             $"    EXECUTE FUNCTION {function}({RowAccessModel.Literal(kind)})";
     }
-
-    /// <summary>A schema as SQL names it, in double quotes.</summary>
-    private static string Quoted(string identifier) => "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 }

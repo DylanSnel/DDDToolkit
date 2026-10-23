@@ -83,6 +83,7 @@ public static partial class PostgresRowAccess
         return [.. sets.Select((set, index) =>
         {
             var name = twice.Contains(names[index]) ? ColumnTriggerName(set.Table, set.Columns, hashed: true) : names[index];
+            // In the schema of the context, delimited as Entity Framework delimits the schema it creates.
             var schema = FunctionSchema(context, context.Model.GetDefaultSchema() ?? set.Table.Schema ?? DefaultSchema, name);
             return ColumnTriggerOf(prepared, contributed, writing, set.Table, set.Columns, set.Rules, name, schema + "." + name);
         })];

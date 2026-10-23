@@ -8,9 +8,10 @@ namespace DDDToolkit.Supporting.Together.Tests;
 /// Who reads which seats is the application's to say, with a read rule on its seat class in the place of Tenancy's
 /// default, and a member list joined to Tenancy admits a seat by asking Tenancy's seats as the caller. So under a
 /// narrower read a member list takes the seats its caller reads, and refuses another as it refuses a seat that does
-/// not exist, telling the caller nothing about a seat it may not see. On Postgres alone, where the rule is a policy.
+/// not exist, telling the caller nothing about a seat it may not see. On Postgres alone, where the rule is a policy, in
+/// the campus' own schemas and in schemas Postgres keeps only in double quotes.
 /// </summary>
-public sealed class SeatReadRuleTests(CampusPostgres postgres)
+public abstract class SeatReadRuleTests(CampusPostgresServer postgres)
 {
     /// <summary>The campus's own rules, and one that lets a member read the people of its own part of the college.</summary>
     private static readonly IReadOnlyList<RowAccessRule> WithThePeopleOfTheirUnits =
@@ -21,6 +22,9 @@ public sealed class SeatReadRuleTests(CampusPostgres postgres)
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
+    /// <summary>Tenancy's schema as SQL names it: <c>tenancy</c>, <c>"Tenancy"</c>.</summary>
+    private string Tenancy => postgres.Delimited(postgres.Schemas.Tenancy);
+
     [Fact]
     public async Task Under_a_narrower_read_of_the_seats_a_member_list_takes_the_seats_its_caller_reads_and_one_that_manages_seats_takes_any()
     {
@@ -30,7 +34,7 @@ public sealed class SeatReadRuleTests(CampusPostgres postgres)
         // By default every member reads every seat of the college: Owen, at Physics, makes Ned, at Arts, a member.
         await AdmitAsync(campus, data.Owen, data.NedSeat);
 
-        foreach (var script in CampusPostgres.AccessScripts(rules: WithThePeopleOfTheirUnits))
+        foreach (var script in CampusPostgres.AccessScripts(rules: WithThePeopleOfTheirUnits, schemas: postgres.Schemas))
         {
             await CampusPostgres.ExecuteAsync(campus.ConnectionString!, script, Cancellation);
         }
@@ -52,9 +56,9 @@ public sealed class SeatReadRuleTests(CampusPostgres postgres)
         // Past the application the rule hides Ned's seat from Owen, as a row and through tenant_seats(), which modules
         // and the admission read. That the seat is there it does not hide: the placements keep Tenancy's own read.
         await using var owen = await CallerSession.BeginAsync(campus.ConnectionString!, data.Owen, data.Alder);
-        (await owen.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.\"Seats\"")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
-        (await owen.ListAsync<Guid>("SELECT \"Id\" FROM tenancy.tenant_seats()")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
-        (await owen.ListAsync<Guid>("SELECT \"SeatId\" FROM tenancy.\"SeatPlacements\"")).Should().Contain(data.NedSeat.Value);
+        (await owen.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.\"Seats\"")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
+        (await owen.ListAsync<Guid>($"SELECT \"Id\" FROM {Tenancy}.tenant_seats()")).Should().NotContain(data.NedSeat.Value).And.Contain(data.TomSeat.Value);
+        (await owen.ListAsync<Guid>($"SELECT \"SeatId\" FROM {Tenancy}.\"SeatPlacements\"")).Should().Contain(data.NedSeat.Value);
     }
 
     /// <summary>Requires <paramref name="person"/>, in Alder, to be able to make <paramref name="seat"/> a member of a course and of a lab.</summary>
@@ -65,3 +69,12 @@ public sealed class SeatReadRuleTests(CampusPostgres postgres)
             await provider.GetRequiredService<MemberAdmission<LabId, SeatId, RoleId>>().RequireMemberAsync(seat, Cancellation);
         });
 }
+
+/// <summary>The rule in the campus' own schemas, <c>tenancy</c> and <c>campus</c>.</summary>
+public sealed class SeatReadRuleTestsOnPostgres(CampusPostgres postgres) : SeatReadRuleTests(postgres);
+
+/// <summary>
+/// The rule in <c>"Tenancy"</c> and <c>"Campus_Life"</c>: the access files written again over a database that has
+/// them already, which find what they made before by the names the catalog keeps, capitals and all.
+/// </summary>
+public sealed class SeatReadRuleTestsInQuotedSchemas(QuotedCampusPostgres postgres) : SeatReadRuleTests(postgres);

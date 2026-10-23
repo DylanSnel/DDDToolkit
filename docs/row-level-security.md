@@ -1144,7 +1144,11 @@ the files of the modules that call it, and refuses a rule that asks a function n
 
 `Sql.Call` stays for functions defined outside C#, in a migration of your own: an existing
 `extras.can_export("Id")`, say. The build does not look for those among the access functions; they are
-yours.
+yours. It writes the name as you give it, without quotes, which Postgres reads in lower case:
+`Sql.Call<bool>("Tenancy.my_check", ...)` asks `tenancy.my_check`. A function of your own in a schema with
+capitals is asked with `Sql.Raw<bool>`, whose SQL names the schema in double quotes,
+`Sql.Raw<bool>("\"Tenancy\".my_check(\"Id\")")`, or is written as an access function named
+[relative to its module](#names-relative-to-the-module), which the export quotes for you.
 
 `Any` is over the aggregate's own collections, with or without a condition. Inside an `Any`, the entity may be
 asked about its own entities in the same way, as deep as the model goes:
@@ -1334,10 +1338,26 @@ ask a function another module defines. For a script of one context whose rules a
 names with `RowAccessExport.FunctionNames`, from `PostgresRowAccess.FunctionNamesOf(contexts, functions)`.
 A rule that asks a logical name nothing defines is refused when its script is written, naming the rule.
 
-A script writes a function's name without quotes, which Postgres reads in lower case, while Entity
-Framework quotes the schema it creates. So the schema a relative name lands in, the context's default
-schema or its aggregate table's, is lower case letters, digits and underscores; a script refuses a
-function it would create in `"Desk"`.
+The schema a relative name lands in, the context's default schema or its aggregate table's, is any name
+Entity Framework takes, and a script writes it as Entity Framework writes the schema it creates: as it is
+where Postgres keeps it so, and in double quotes where Postgres would otherwise fold it to lower case or
+read a word of its own. The function's own name is the module's, and is written as it is.
+
+| The context says | The function is made as |
+|---|---|
+| `HasDefaultSchema("desk")` | `desk.tickets_i_watch()` |
+| `HasDefaultSchema("Desk")` | `"Desk".tickets_i_watch()` |
+| `HasDefaultSchema("Help_Desk")` | `"Help_Desk".tickets_i_watch()` |
+| `HasDefaultSchema("order")` | `"order".tickets_i_watch()` |
+
+So the functions, policies, triggers and grants a script writes are where the tables are, whatever the
+schema is called, and a rule that asks `{fn:desk/tickets_i_watch}` asks the function by that name. Where a
+script finds what an earlier one made, to drop it, keep it or take its grants back, it compares the schema
+and the name the catalog keeps, `('Desk', 'tickets_i_watch')`, capitals and all. Only a schema longer than
+the 63 bytes Postgres keeps of a name is refused: Postgres would cut it, and the script would no longer find
+what it made there. A name with its schema is SQL as you write it, which Postgres reads in lower case:
+`Desk.tickets_i_watch` is `desk.tickets_i_watch`, a function of another schema than `"Desk"`. So a function in a
+schema with capitals is named relative to its module instead.
 
 ### A resource's access, asked by its id
 
@@ -1828,7 +1848,8 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
 - **Functions** are created in the default schema of the context the contribution answered for, or in
   `public` when it has none, as `LANGUAGE sql` with `SET search_path = ''`, so their bodies name everything
   with its schema. Unlike an access function's, the schema is not a table's: a contribution may write for
-  several tables.
+  several tables. It is any schema Entity Framework takes, written as
+  [a relative name's](#names-relative-to-the-module) is: `"Tenancy".caller_seat()` in `"Tenancy"`.
   `SecurityDefiner` is false unless the contribution says otherwise. Rules and other contributions ask one
   by its logical name, `{fn:audit/entries_i_wrote}`, with the contribution's `Owner`, and a script writes
   it after the functions it asks. It carries the context's function comment, so the next script keeps it
@@ -1887,9 +1908,11 @@ COMMENT ON POLICY "Entries are read by who wrote them (select) for authenticated
   function that runs as its owner is a `ContributedFunction`.
 - In all of these, `{fn:owner/name}` and `{caller:uid}`, `{caller:role}`, `{caller:claims}`,
   `{caller:signedin}` and `{caller:claim:path}` are filled in as they are in a rule, with the export's
-  caller functions; write a brace itself as `{{` or `}}`. `RowAccessModel` writes the names from the model:
-  `Table`, `Column`, `ColumnType`, `Stored` for a value as its column stores it, `EntityTablesOf` for the
-  tables of an aggregate's entities and the way up to its own, and `Literal`. `Refusal` writes the statement a
+  caller functions; write a brace itself as `{{` or `}}`. `RowAccessModel` writes the names from the model,
+  each in double quotes, so it means them as the model spells them: `Table`, `Column`, `ColumnType`, `Stored`
+  for a value as its column stores it, `EntityTablesOf` for the tables of an aggregate's entities and the way
+  up to its own, `Schema` for the schema a statement makes a trigger's function in,
+  `$"{RowAccessModel.Schema(context.Model)}.entry_is_kept()"`, and `Literal`. `Refusal` writes the statement a
   trigger refuses with, so a save it refuses is answered as one a policy refuses is: see
   [When the database refuses](#when-the-database-refuses).
 

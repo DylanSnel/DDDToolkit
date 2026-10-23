@@ -2931,6 +2931,27 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   already; one over a `long`, an `int` or a `string` declares it in its partial declaration, or the class over it is
   DDD00067, whose code fix adds a `Create()` for you to write. See
   [How a new id is made](docs/tenancy.md#how-a-new-id-is-made).
+- **For the 3.2.0 previews: a module's schema may have capitals.** `HasDefaultSchema("Tenancy")` works as
+  `HasDefaultSchema("tenancy")` does, and so does any schema Entity Framework takes. A script, and so every Supabase
+  access file, names the schema of what it makes as Entity Framework names the schema it creates: as it is where
+  Postgres keeps it so, `tenancy.caller_seat()`, and in double quotes where Postgres would fold it to lower case or
+  read a word of its own, `"Tenancy".caller_seat()`, `"Help_Desk"`, `"order"`. That holds for the access functions
+  named relative to their module, the functions a contribution writes, Tenancy's and Membership's among them, the
+  functions of column rules and the triggers that run them, the name a rule's `{fn:owner/name}` becomes, and what
+  `PostgresRowAccess.FunctionNamesOf` answers. Where a script finds what an earlier one made, to drop it, keep it or
+  take back its grants, it compares the schema and the name the catalog keeps, capitals and all, and two names are
+  one function where Postgres keeps them as one. Up to `3.2.0-preview.3` a script refused a function it would make in
+  a schema that was not lower case letters, digits and underscores; that refusal is gone, and a schema longer than
+  the 63 bytes Postgres keeps of a name is the only one refused. For a lower-case schema that is no word of Postgres's
+  own nothing changes: the export writes the same files, byte for byte, so it writes no new access file. One that is,
+  such as `order`, was written without quotes before, which Postgres could not run, and is now quoted.
+  `RowAccessModel.Schema(model)` is new, the schema a contribution's statements make a trigger's function in, quoted
+  as every name `RowAccessModel` writes is; Tenancy and Membership name theirs with it, and so does the Tenancy
+  sample's own contribution. Tenancy's start-up checks name a function of its schema as SQL does,
+  `"Tenancy".key_is_live`, so the name in the message is one to look up as it is. On Supabase, a schema with capitals
+  that the Data API serves goes into `[api] schemas` as the model spells it, without quotes. See
+  [Names relative to the module](docs/row-level-security.md#names-relative-to-the-module) and
+  [A schema with capitals](docs/supabase.md#a-schema-with-capitals).
 - **The pgmq check is one of the start-up checks, and runs once the host asks for them.** `AddPgmqSink` and
   `AddPgmqConsumer` register it with the others, where they registered a hosted service of its own that ran in
   every host with a sink or a consumer. It now runs, in `StartingAsync` as before, in a host that calls

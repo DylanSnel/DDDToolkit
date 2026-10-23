@@ -481,3 +481,9 @@ public sealed class SeatsAsMembersTestsOnSqlite() : SeatsAsMembersTests(CampusDa
 
 /// <summary>The claims on Postgres, under row level security: Tenancy's read model is its read functions, and every statement runs as the caller.</summary>
 public sealed class SeatsAsMembersTestsOnPostgres(CampusPostgres postgres) : SeatsAsMembersTests(postgres);
+
+/// <summary>
+/// The claims on Postgres with Tenancy's tables and functions in <c>"Tenancy"</c> and the courses' and the labs' in
+/// <c>"Campus_Life"</c>: schemas Postgres keeps only in double quotes, which every statement then names in them.
+/// </summary>
+public sealed class SeatsAsMembersTestsInQuotedSchemas(QuotedCampusPostgres postgres) : SeatsAsMembersTests(postgres);

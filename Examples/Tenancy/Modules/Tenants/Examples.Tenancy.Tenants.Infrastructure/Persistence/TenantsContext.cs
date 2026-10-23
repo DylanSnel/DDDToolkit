@@ -43,7 +43,12 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Persistence;
 [SupabaseMigrations]
 public sealed class TenantsContext(DbContextOptions<TenantsContext> options) : DbContext(options)
 {
-    /// <summary>The schema Tenancy's tables live in, with the module's migration history.</summary>
+    /// <summary>
+    /// The schema Tenancy's tables live in, with the module's migration history, and on Postgres Tenancy's functions.
+    /// Any name Entity Framework takes would do, one with capitals such as <c>Tenancy</c> too: the access files name
+    /// the schema as Entity Framework does, in double quotes where Postgres needs them. Once a database has the
+    /// schema, another name is a migration of its own.
+    /// </summary>
     public const string Schema = "tenancy";
 
     /// <summary>The outbox table, named after the module, so a table says whose it is without its schema.</summary>

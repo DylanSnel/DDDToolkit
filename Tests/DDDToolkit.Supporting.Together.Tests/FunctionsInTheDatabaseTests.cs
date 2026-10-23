@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.Postgres;
@@ -9,11 +10,16 @@ namespace DDDToolkit.Supporting.Together.Tests;
 /// <summary>
 /// The two domains in the database itself, on Postgres: the functions Membership writes for the courses and the
 /// labs ask Tenancy's, by the logical names the resources' rules give, and answer what the access questions
-/// answer in C#. Nothing joins the two packages' SQL but those names, and the one export that writes both.
+/// answer in C#. Nothing joins the two packages' SQL but those names, and the one export that writes both. Each
+/// claim holds in the campus' own schemas and in schemas Postgres keeps only in double quotes.
 /// </summary>
-public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
+public abstract class FunctionsInTheDatabaseTests(CampusPostgresServer postgres)
 {
-    private const string Campus = CampusContext.Schema + ".";
+    /// <summary>The courses' schema as SQL names it, with the dot a name in it follows: <c>campus.</c>, <c>"Campus_Life".</c>.</summary>
+    private string Campus => postgres.Delimited(postgres.Schemas.Campus) + ".";
+
+    /// <summary>Tenancy's schema as SQL names it: <c>tenancy</c>, <c>"Tenancy"</c>.</summary>
+    private string Tenancy => postgres.Delimited(postgres.Schemas.Tenancy);
 
     private static CancellationToken Cancellation => TestContext.Current.CancellationToken;
 
@@ -129,7 +135,7 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
         await using var command = new NpgsqlCommand(
             $"""
             SELECT p.proname || ': ' || p.prosrc FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
-            WHERE n.nspname = '{CampusContext.Schema}' ORDER BY 1
+            WHERE n.nspname = '{postgres.Schemas.Campus}' ORDER BY 1
             """,
             connection);
         var bodies = new List<string>();
@@ -144,41 +150,41 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
         string Body(string name) => bodies.Single(body => body.StartsWith(name + ":", StringComparison.Ordinal));
 
         // Who the caller is as a member: the calling seat, as Tenancy answers it, in Tenancy's own schema.
-        Body("courses_as_member").Should().Contain("m.\"MemberId\" = (SELECT tenancy.caller_seat())");
-        Body("labs_as_member").Should().Contain("m.\"MemberId\" = (SELECT tenancy.caller_seat())");
+        Body("courses_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.caller_seat())");
+        Body("labs_as_member").Should().Contain($"m.\"MemberId\" = (SELECT {Tenancy}.caller_seat())");
 
         // Which roles give a key: the rows of the courses' own role class, and Tenancy's answer for a lab, each behind
         // what the rules let a member's role give.
         Body("courses_as_member_with").Should()
-            .Contain("\"campus\".\"CourseRoles\"")
+            .Contain($"\"{postgres.Schemas.Campus}\".\"CourseRoles\"")
             .And.Contain("$1 IN ('courses.see', 'courses.grade', 'courses.outline')")
             .And.NotContain("roles_with_key");
         Body("labs_as_member_with").Should()
             .Contain("$1 IN ('labs.see', 'labs.equip', 'labs.calibrate')")
-            .And.Contain("h.\"RoleId\" IN (SELECT giving.role FROM tenancy.roles_with_key($1) AS giving(role))");
+            .And.Contain($"h.\"RoleId\" IN (SELECT giving.role FROM {Tenancy}.roles_with_key($1) AS giving(role))");
 
         // Reach from above: where the resource sits, against the units where the calling seat holds the key.
-        Body("courses_i_see").Should().Contain("r.\"UnitId\" IN (SELECT reached.place FROM tenancy.units_where_i_hold('courses.see') AS reached(place))");
+        Body("courses_i_see").Should().Contain($"r.\"UnitId\" IN (SELECT reached.place FROM {Tenancy}.units_where_i_hold('courses.see') AS reached(place))");
         Body("courses_where_i_hold").Should()
-            .Contain("r.\"UnitId\" IN (SELECT reached.place FROM tenancy.units_where_i_hold($1) AS reached(place))")
-            .And.Contain("r.\"OwnerSeatId\" = (SELECT tenancy.caller_seat())");
-        Body("labs_where_i_hold").Should().Contain("tenancy.units_where_i_hold($1)").And.NotContain("\"OwnerSeatId\"", "a lab states no key of its own, so nothing is held by owning one");
+            .Contain($"r.\"UnitId\" IN (SELECT reached.place FROM {Tenancy}.units_where_i_hold($1) AS reached(place))")
+            .And.Contain($"r.\"OwnerSeatId\" = (SELECT {Tenancy}.caller_seat())");
+        Body("labs_where_i_hold").Should().Contain($"{Tenancy}.units_where_i_hold($1)").And.NotContain("\"OwnerSeatId\"", "a lab states no key of its own, so nothing is held by owning one");
     }
 
     [Fact]
     public void The_access_files_of_both_domains_are_written_together_and_tenancys_come_first()
     {
-        var scripts = CampusPostgres.AccessScripts();
+        var scripts = CampusPostgres.AccessScripts(schemas: postgres.Schemas);
 
         // One export, two contexts: Tenancy's file defines what the courses' file asks, so it runs first.
         scripts.Should().HaveCount(2);
-        scripts[0].Should().Contain("FUNCTION tenancy.caller_seat()").And.Contain("FUNCTION tenancy.units_where_i_hold(key text)").And.NotContain("courses_i_see");
-        scripts[1].Should().Contain("FUNCTION campus.courses_i_see()").And.Contain("FUNCTION campus.labs_where_i_hold(text)").And.NotContain("FUNCTION tenancy.");
+        scripts[0].Should().Contain($"FUNCTION {Tenancy}.caller_seat()").And.Contain($"FUNCTION {Tenancy}.units_where_i_hold(key text)").And.NotContain("courses_i_see");
+        scripts[1].Should().Contain($"FUNCTION {Campus}courses_i_see()").And.Contain($"FUNCTION {Campus}labs_where_i_hold(text)").And.NotContain($"FUNCTION {Tenancy}.");
 
         // Written with the resources' contributions and without Tenancy's, as for an application that leaves
         // Tenancy's out, nothing is written: the names the rules give are defined nowhere in what the files are
         // written with.
-        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)]))
+        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new MembershipRowAccessContribution<CourseTutor>(CourseMembership.Rules), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)], schemas: postgres.Schemas))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*asks the function tenancy/*, and none of the functions this is written with is called that*");
 
@@ -190,7 +196,7 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
             seeKey: CourseKeys.See,
             memberKeys: MemberKeys.Only(CourseKeys.See),
             rolesKept: true);
-        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new TenancyRowAccessContribution(CampusCatalogue.Built), new MembershipRowAccessContribution<CourseTutor>(misnamed), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)]))
+        FluentActions.Invoking(() => CampusPostgres.AccessScripts([new TenancyRowAccessContribution(CampusCatalogue.Built), new MembershipRowAccessContribution<CourseTutor>(misnamed), new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules)], schemas: postgres.Schemas))
             .Should().Throw<InvalidOperationException>()
             .WithMessage("*asks the function tenancy/calling_seat, and none of the functions this is written with is called that*");
     }
@@ -207,4 +213,92 @@ public sealed class FunctionsInTheDatabaseTests(CampusPostgres postgres)
         // the catalogue the application runs with, the courses' and the labs' keys among it.
         await TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(campus.Services.Provider, Cancellation);
     }
+
+    [Fact]
+    public async Task Tenancys_checks_of_its_system_work_pass_in_its_schema_and_find_a_grant_made_there_by_hand()
+    {
+        using var campus = await postgres.CreateAsync();
+
+        // The reads before any tenant is known, found by their schema and name and asked by Entity Framework through
+        // the function's name as the provider writes it; and the scoped system role, kept to its tenant.
+        await TenancyPostgresChecks.EnsureSystemReadsAcrossTenantsAsync(campus.Services.Provider, Cancellation);
+        await TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(campus.Services.Provider, Cancellation);
+
+        // A function of Tenancy's that runs as its owner, given to every role by hand: the check looks for such grants
+        // in the schema by the name the catalog keeps, capitals and all, and finds it.
+        await CampusPostgres.ExecuteAsync(campus.ConnectionString!, $"GRANT EXECUTE ON FUNCTION {Tenancy}.caller_seat() TO PUBLIC", Cancellation);
+        await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsureSystemInRoleIsConfinedAsync(campus.Services.Provider, Cancellation))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"*- every role may execute {Tenancy}.caller_seat(), which runs as its owner: REVOKE EXECUTE ON FUNCTION {Tenancy}.caller_seat() FROM PUBLIC;*");
+    }
+
+    [Fact]
+    public async Task The_definer_owner_check_finds_the_functions_of_both_schemas_once_a_table_there_is_forced()
+    {
+        using var campus = await postgres.CreateAsync();
+        using var scope = campus.Services.Provider.CreateScope();
+        var tenancy = scope.ServiceProvider.GetRequiredService<TenancyContext>();
+        var courses = scope.ServiceProvider.GetRequiredService<CampusContext>();
+
+        // The login role made the functions and owns the tables they read, as on a Postgres of your own, and Postgres
+        // exempts a table's owner from its policies while the table does not force them: nothing to say.
+        await PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(tenancy, Cancellation);
+        await PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(courses, Cancellation);
+
+        // One forced table in each schema, and the functions there that run as that owner would read it under the
+        // owner's policies: found by the schema the catalog keeps, and named as SQL names them.
+        await CampusPostgres.ExecuteAsync(
+            campus.ConnectionString!,
+            $"ALTER TABLE {Tenancy}.\"Seats\" FORCE ROW LEVEL SECURITY; ALTER TABLE {Campus}\"Courses\" FORCE ROW LEVEL SECURITY;",
+            Cancellation);
+        await FluentActions.Awaiting(() => PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(tenancy, Cancellation))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"Functions in the schemas of 'TenancyContext' run as their owner*- {Tenancy}.caller_seat() is owned by {CampusPostgres.LoginRole}. Fix: ALTER FUNCTION {Tenancy}.caller_seat() OWNER TO*");
+        await FluentActions.Awaiting(() => PostgresRowAccessChecks.EnsureDefinerOwnersBypassAsync(courses, Cancellation))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"Functions in the schemas of 'CampusContext' run as their owner*- {Campus}courses_i_see() is owned by {CampusPostgres.LoginRole}. Fix: ALTER FUNCTION {Campus}courses_i_see() OWNER TO*");
+    }
+
+    [Fact]
+    public async Task The_policies_check_names_a_function_of_tenancys_written_from_another_catalogue_as_sql_names_it()
+    {
+        using var campus = await postgres.CreateAsync();
+
+        // The live keys as another catalogue would write them, in Tenancy's schema.
+        await CampusPostgres.ExecuteAsync(
+            campus.ConnectionString!,
+            $"CREATE OR REPLACE FUNCTION {Tenancy}.key_is_live(key text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT true $$",
+            Cancellation);
+
+        await FluentActions.Awaiting(() => TenancyPostgresChecks.EnsurePoliciesAreInPlaceAsync(campus.Services.Provider, Cancellation))
+            .Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage($"The function {Tenancy}.key_is_live in the database was written from another catalogue: the live keys are *", "a name a developer can look up or paste into SQL as it is");
+    }
+
+    [Fact]
+    public void Every_function_the_access_files_name_is_named_in_its_schema_as_entity_framework_names_that_schema()
+    {
+        var scripts = CampusPostgres.AccessScripts(schemas: postgres.Schemas);
+
+        // Where Tenancy's file makes a function, where the courses' functions ask it, and where each file finds the
+        // functions it made before, by the schema and the name the catalog keeps: as they are, capitals and all.
+        scripts[0].Should().Contain($"CREATE OR REPLACE FUNCTION {Tenancy}.caller_seat()")
+            .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Tenancy)}, 'caller_seat')")
+            .And.Contain($"EXECUTE FUNCTION \"{postgres.Schemas.Tenancy}\".rights_follow_grants('grants')", "Tenancy's triggers name their functions with the schema quoted, as every name of the model is");
+        scripts[1].Should().Contain($"(SELECT {Tenancy}.caller_seat())")
+            .And.Contain($"({RowAccessModel.Literal(postgres.Schemas.Campus)}, 'courses_i_see')");
+
+        // A schema Postgres would fold to lower case without its quotes never goes without them.
+        foreach (var schema in new[] { postgres.Schemas.Tenancy, postgres.Schemas.Campus }.Where(schema => postgres.Delimited(schema) != schema))
+        {
+            var unquoted = new Regex(@"(?<![\w""'.])" + Regex.Escape(schema) + @"\.\w+\(", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            scripts.Should().AllSatisfy(script => unquoted.Matches(script).Select(match => match.Value).Should().BeEmpty("{0} is a schema Postgres keeps only in double quotes", schema));
+        }
+    }
 }
+
+/// <summary>The functions in the campus' own schemas, <c>tenancy</c> and <c>campus</c>, which SQL writes as they are.</summary>
+public sealed class FunctionsInTheDatabaseTestsOnPostgres(CampusPostgres postgres) : FunctionsInTheDatabaseTests(postgres);
+
+/// <summary>The functions in <c>"Tenancy"</c> and <c>"Campus_Life"</c>, schemas Postgres keeps only in double quotes.</summary>
+public sealed class FunctionsInTheDatabaseTestsInQuotedSchemas(QuotedCampusPostgres postgres) : FunctionsInTheDatabaseTests(postgres);

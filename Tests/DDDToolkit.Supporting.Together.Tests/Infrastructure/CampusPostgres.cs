@@ -2,10 +2,13 @@ using DDDToolkit.Abstractions.Attributes;
 using DDDToolkit.EntityFramework.Postgres;
 using DDDToolkit.Supporting.Membership.Postgres;
 using DDDToolkit.Supporting.Tenancy.Postgres;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
 [assembly: AssemblyFixture(typeof(DDDToolkit.Supporting.Together.Tests.Infrastructure.CampusPostgres))]
+[assembly: AssemblyFixture(typeof(DDDToolkit.Supporting.Together.Tests.Infrastructure.QuotedCampusPostgres))]
 
 namespace DDDToolkit.Supporting.Together.Tests.Infrastructure;
 
@@ -23,26 +26,13 @@ namespace DDDToolkit.Supporting.Together.Tests.Infrastructure;
 /// databases and the schemas. Every connection that fills or copies the template is unpooled: a database
 /// cannot be copied while anybody is connected to it.
 /// </remarks>
-public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
+public sealed class CampusPostgres() : CampusPostgresServer(CampusSchemas.Default)
 {
     /// <summary>Postgres 17, the image the toolkit's other suites start as well.</summary>
     public const string Image = "ghcr.io/pgmq/pg17-pgmq:v1.5.1";
 
     /// <summary>The role the application logs in as: it owns the tables, and switches to the callers' roles.</summary>
     public const string LoginRole = "campus_app";
-
-    private const string LoginPassword = "campus_app";
-    private const string Template = "campus_template";
-
-    /// <summary>A template cannot be copied twice at once, so every copy waits its turn.</summary>
-    private static readonly SemaphoreSlim Copying = new(1, 1);
-
-    private readonly Lock _starting = new();
-    private Task<bool>? _start;
-    private PostgreSqlContainer? _container;
-    private string? _notStarted;
-    private TimeProvider _clock = TimeProvider.System;
-    private int _databases;
 
     /// <summary>The application's own row access rules, as a script is written from them.</summary>
     public static IReadOnlyList<RowAccessRule> Rules { get; } =
@@ -66,6 +56,141 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
         new MembershipRowAccessContribution<LabTechnician>(LabMembership.Rules),
     ];
 
+    /// <summary>Tenancy's context on Npgsql, in <paramref name="schemas"/> or the campus' own, for its model: it never connects.</summary>
+    public static TenancyContext TenancyModel(CampusSchemas? schemas = null)
+        => new((DbContextOptions<TenancyContext>)(schemas ?? CampusSchemas.Default).Configure(new DbContextOptionsBuilder<TenancyContext>().UseNpgsql("Host=model-only")).Options);
+
+    /// <summary>The courses' context on Npgsql, in <paramref name="schemas"/> or the campus' own, for its model: it never connects.</summary>
+    public static CampusContext CampusModel(CampusSchemas? schemas = null)
+        => new((DbContextOptions<CampusContext>)(schemas ?? CampusSchemas.Default).Configure(new DbContextOptionsBuilder<CampusContext>().UseNpgsql("Host=model-only")).Options);
+
+    /// <summary>
+    /// The access files of the application's two contexts, in the order to run them: written together, with
+    /// <paramref name="contributions"/>, or <see cref="Contributions"/>, and with <paramref name="rules"/>, or the
+    /// application's own, so a function of the courses' finds Tenancy's wherever Tenancy's context puts it: in
+    /// <paramref name="schemas"/>, or the campus' own.
+    /// </summary>
+    public static IReadOnlyList<string> AccessScripts(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null, CampusSchemas? schemas = null)
+    {
+        using var tenancy = TenancyModel(schemas);
+        using var campus = CampusModel(schemas);
+        return [.. PostgresRowAccess.Scripts([tenancy, campus], rules ?? Rules, [], new RowAccessExport { Contributions = contributions ?? Contributions }).Select(each => each.Script)];
+    }
+
+    /// <summary>Runs <paramref name="sql"/> on a new, unpooled connection, closed when it is done.</summary>
+    public static async Task ExecuteAsync(string connectionString, string sql, CancellationToken cancellationToken)
+    {
+        await using var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(connectionString) { Pooling = false }.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// The campus of <see cref="CampusPostgres"/> on a Postgres of its own, in schemas Postgres keeps only in double
+/// quotes (<see cref="CampusSchemas.Quoted"/>): what a host that names its schemas <c>"Tenancy"</c> and
+/// <c>"Campus_Life"</c> runs on. Started the first time a test asks for it, and only then.
+/// </summary>
+public sealed class QuotedCampusPostgres() : CampusPostgresServer(CampusSchemas.Quoted);
+
+/// <summary>
+/// The schemas the campus' two contexts are in: Tenancy's, and the courses' and the labs'. The campus' own, which
+/// its contexts name themselves, or ones that need quotes, which a host names in their place.
+/// </summary>
+public sealed class CampusSchemas
+{
+    private CampusSchemas(string tenancy, string campus)
+    {
+        Tenancy = tenancy;
+        Campus = campus;
+    }
+
+    /// <summary>The campus' own: <c>tenancy</c> and <c>campus</c>, which Postgres keeps as SQL writes them.</summary>
+    public static CampusSchemas Default { get; } = new(TenancyContext.Schema, CampusContext.Schema);
+
+    /// <summary>
+    /// <c>Tenancy</c>, with a capital, and <c>Campus_Life</c>, with a capital and an underscore: schemas Entity
+    /// Framework creates in double quotes, and which Postgres would fold to lower case without them.
+    /// </summary>
+    public static CampusSchemas Quoted { get; } = new("Tenancy", "Campus_Life");
+
+    /// <summary>The schema of Tenancy's context.</summary>
+    public string Tenancy { get; }
+
+    /// <summary>The schema of the courses' and the labs' context.</summary>
+    public string Campus { get; }
+
+    /// <summary>
+    /// <paramref name="options"/>, with what makes the contexts build their models in these schemas: nothing for
+    /// the campus' own, and for the quoted ones the model a host that names them builds (<see cref="QuotedCampusModel"/>).
+    /// </summary>
+    public DbContextOptionsBuilder Configure(DbContextOptionsBuilder options)
+        => ReferenceEquals(this, Quoted) ? options.ReplaceService<IModelCustomizer, QuotedCampusModel>() : options;
+
+    /// <inheritdoc />
+    public override string ToString() => $"{Tenancy} and {Campus}";
+}
+
+/// <summary>
+/// The campus' models as a host builds them that names their schemas <see cref="CampusSchemas.Quoted"/>: the same
+/// calls the contexts make (<see cref="TenancyContext.Build"/>, <see cref="CampusContext.Build"/>), in those
+/// schemas. It replaces a service of the context's options, so a context with it has a model of its own, built
+/// once and cached apart from the one the same class has in the campus' own schemas.
+/// </summary>
+internal sealed class QuotedCampusModel(ModelCustomizerDependencies dependencies) : RelationalModelCustomizer(dependencies)
+{
+    /// <inheritdoc />
+    public override void Customize(ModelBuilder modelBuilder, DbContext context)
+    {
+        switch (context)
+        {
+            case TenancyContext:
+                TenancyContext.Build(modelBuilder, context.Database, CampusSchemas.Quoted.Tenancy);
+                break;
+            case CampusContext:
+                CampusContext.Build(modelBuilder, context.Database, CampusSchemas.Quoted.Campus, CampusSchemas.Quoted.Tenancy);
+                break;
+            default:
+                base.Customize(modelBuilder, context);
+                break;
+        }
+    }
+}
+
+/// <summary>
+/// What <see cref="CampusPostgres"/> and <see cref="QuotedCampusPostgres"/> share: a server started the first time a
+/// test asks, a template made from the campus' models in <see cref="Schemas"/>, and a database of its own for each test.
+/// </summary>
+/// <param name="schemas">The schemas the campus' contexts are in.</param>
+public abstract class CampusPostgresServer(CampusSchemas schemas) : CampusDatabases, IAsyncLifetime
+{
+    private const string LoginPassword = "campus_app";
+    private const string Template = "campus_template";
+
+    /// <summary>A template cannot be copied twice at once, so every copy waits its turn.</summary>
+    private static readonly SemaphoreSlim Copying = new(1, 1);
+
+    private readonly Lock _starting = new();
+    private Task<bool>? _start;
+    private PostgreSqlContainer? _container;
+    private string? _notStarted;
+    private TimeProvider _clock = TimeProvider.System;
+    private int _databases;
+
+    /// <summary>The schemas the campus' contexts are in on this server.</summary>
+    public CampusSchemas Schemas { get; } = schemas;
+
+    /// <summary>
+    /// <paramref name="schema"/> as SQL names it, quoted where Postgres needs it, as Entity Framework writes it:
+    /// <c>tenancy</c>, <c>"Tenancy"</c>.
+    /// </summary>
+    public string Delimited(string schema)
+    {
+        using var model = CampusPostgres.TenancyModel(Schemas);
+        return model.GetService<ISqlGenerationHelper>().DelimitIdentifier(schema);
+    }
+
     /// <inheritdoc />
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
@@ -78,24 +203,6 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
         }
     }
 
-    /// <summary>Tenancy's context on Npgsql, for its model: it never connects.</summary>
-    public static TenancyContext TenancyModel() => new(new DbContextOptionsBuilder<TenancyContext>().UseNpgsql("Host=model-only").Options);
-
-    /// <summary>The courses' context on Npgsql, for its model: it never connects.</summary>
-    public static CampusContext CampusModel() => new(new DbContextOptionsBuilder<CampusContext>().UseNpgsql("Host=model-only").Options);
-
-    /// <summary>
-    /// The access files of the application's two contexts, in the order to run them: written together, with
-    /// <paramref name="contributions"/>, or <see cref="Contributions"/>, and with <paramref name="rules"/>, or the
-    /// application's own, so a function of the courses' finds Tenancy's wherever Tenancy's context puts it.
-    /// </summary>
-    public static IReadOnlyList<string> AccessScripts(IReadOnlyList<IRowAccessContribution>? contributions = null, IReadOnlyList<RowAccessRule>? rules = null)
-    {
-        using var tenancy = TenancyModel();
-        using var campus = CampusModel();
-        return [.. PostgresRowAccess.Scripts([tenancy, campus], rules ?? Rules, [], new RowAccessExport { Contributions = contributions ?? Contributions }).Select(each => each.Script)];
-    }
-
     /// <inheritdoc />
     /// <remarks>Skips the test without Docker, or fails it where containers are required.</remarks>
     public override async Task<CampusApp> CreateAsync(CampusContexts contexts = CampusContexts.OfTheRequest)
@@ -106,13 +213,13 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
             available,
             RequiredContainers.Required,
             "PostgreSQL",
-            $"'{Image}' could not be started, so the two domains together are covered on SQLite alone on this machine. The start said: {_notStarted ?? "nothing"}");
+            $"'{CampusPostgres.Image}' could not be started, so the two domains together are covered on SQLite alone on this machine. The start said: {_notStarted ?? "nothing"}");
 
         var name = $"campus_{Interlocked.Increment(ref _databases)}";
         await Copying.WaitAsync(cancellation);
         try
         {
-            await ExecuteAsync(Superuser(), $"CREATE DATABASE {name} TEMPLATE {Template} OWNER {LoginRole}", cancellation);
+            await CampusPostgres.ExecuteAsync(Superuser(), $"CREATE DATABASE {name} TEMPLATE {Template} OWNER {CampusPostgres.LoginRole}", cancellation);
         }
         finally
         {
@@ -121,11 +228,12 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
 
         var connectionString = Login(name);
         var clock = _clock;
+        var schemas = Schemas;
 
         // Made for the moment the test runs at, since the database's functions ask the database's clock.
         var campus = new CampusApp(
             from => new CampusServices(
-                options => options.UseNpgsql(connectionString),
+                options => schemas.Configure(options.UseNpgsql(connectionString)),
                 clock,
                 host: host =>
                 {
@@ -137,7 +245,7 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
             contexts,
             new CampusScenario(clock.GetUtcNow()),
             "PostgreSQL",
-            "tenancy.caller_rights()")
+            Delimited(schemas.Tenancy) + ".caller_rights()")
         {
             ConnectionString = connectionString,
         };
@@ -145,15 +253,6 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
         await campus.Scenario.SaveAsync(campus.Services);
         campus.Services.Commands.Reset();
         return campus;
-    }
-
-    /// <summary>Runs <paramref name="sql"/> on a new, unpooled connection, closed when it is done.</summary>
-    public static async Task ExecuteAsync(string connectionString, string sql, CancellationToken cancellationToken)
-    {
-        await using var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(connectionString) { Pooling = false }.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private string Superuser(string? database = null)
@@ -167,7 +266,7 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
         => new NpgsqlConnectionStringBuilder(_container!.GetConnectionString())
         {
             Database = database,
-            Username = LoginRole,
+            Username = CampusPostgres.LoginRole,
             Password = LoginPassword,
             IncludeErrorDetail = true,
             ConnectionIdleLifetime = 10,
@@ -194,15 +293,17 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
     private async Task<bool> StartServerAsync()
     {
         // Every test has a database of its own, and the pools of the tests before it keep idle connections to
-        // theirs open for a while: more than the default hundred.
-        var container = new PostgreSqlBuilder(Image)
-            .WithDatabase("postgres")
-            .WithUsername("postgres")
-            .WithPassword("postgres")
-            .WithCommand("-c", "max_connections=300")
-            .Build();
+        // theirs open for a while: more than the default hundred. Built inside the try: the builder asks for
+        // Docker already, and says it is missing by throwing.
+        PostgreSqlContainer? container = null;
         try
         {
+            container = new PostgreSqlBuilder(CampusPostgres.Image)
+                .WithDatabase("postgres")
+                .WithUsername("postgres")
+                .WithPassword("postgres")
+                .WithCommand("-c", "max_connections=300")
+                .Build();
             await container.StartAsync(CancellationToken.None);
         }
         catch (Exception failed)
@@ -210,12 +311,16 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
             // Kept, and said where a test is skipped or failed: no Docker, an image that could not be pulled
             // and a start that timed out are three things, and only the text tells them apart.
             _notStarted = failed.GetType().Name + ": " + failed.Message;
-            await container.DisposeAsync();
+            if (container is not null)
+            {
+                await container.DisposeAsync();
+            }
+
             return false;
         }
 
         _container = container;
-        await ExecuteAsync(Superuser(), $"CREATE ROLE {LoginRole} LOGIN NOINHERIT PASSWORD '{LoginPassword}'", CancellationToken.None);
+        await CampusPostgres.ExecuteAsync(Superuser(), $"CREATE ROLE {CampusPostgres.LoginRole} LOGIN NOINHERIT PASSWORD '{LoginPassword}'", CancellationToken.None);
         _clock = await DatabaseClock.MeasureAsync(Superuser(), CancellationToken.None);
         await PrepareTemplateAsync(CancellationToken.None);
         return true;
@@ -225,38 +330,42 @@ public sealed class CampusPostgres : CampusDatabases, IAsyncLifetime
     /// The template: its schemas made by the superuser for the login role, the setup script run by the superuser,
     /// which makes the callers' roles and the scoped system role and grants them to the login role, the tables
     /// made by the login role from the two contexts' models, with what callers may do with them: everything, so
-    /// that only the policies and Tenancy's triggers stand in a caller's way; and the access files, in order.
+    /// that only the policies and Tenancy's triggers stand in a caller's way; and the access files, in order. Each
+    /// schema is named as Entity Framework names it, in double quotes where Postgres needs them.
     /// </summary>
     private async Task PrepareTemplateAsync(CancellationToken cancellationToken)
     {
-        await ExecuteAsync(Superuser(), $"CREATE DATABASE {Template} OWNER {LoginRole}", cancellationToken);
+        var login = CampusPostgres.LoginRole;
+        await CampusPostgres.ExecuteAsync(Superuser(), $"CREATE DATABASE {Template} OWNER {login}", cancellationToken);
 
+        var tenancySchema = Delimited(Schemas.Tenancy);
+        var campusSchema = Delimited(Schemas.Campus);
         var owner = Superuser(Template);
-        await ExecuteAsync(
+        await CampusPostgres.ExecuteAsync(
             owner,
-            $"CREATE SCHEMA ddd AUTHORIZATION {LoginRole}; CREATE SCHEMA {TenancyContext.Schema} AUTHORIZATION {LoginRole}; CREATE SCHEMA {CampusContext.Schema} AUTHORIZATION {LoginRole};",
+            $"CREATE SCHEMA ddd AUTHORIZATION {login}; CREATE SCHEMA {tenancySchema} AUTHORIZATION {login}; CREATE SCHEMA {campusSchema} AUTHORIZATION {login};",
             cancellationToken);
-        await ExecuteAsync(owner, PostgresRowAccess.SetupScript(loginRole: LoginRole), cancellationToken);
+        await CampusPostgres.ExecuteAsync(owner, PostgresRowAccess.SetupScript(loginRole: login), cancellationToken);
 
-        var login = Login(Template);
-        await using (var tenancy = TenancyModel())
-        await using (var campus = CampusModel())
+        var asLogin = Login(Template);
+        await using (var tenancy = CampusPostgres.TenancyModel(Schemas))
+        await using (var campus = CampusPostgres.CampusModel(Schemas))
         {
-            await ExecuteAsync(login, tenancy.Database.GenerateCreateScript(), cancellationToken);
-            await ExecuteAsync(login, campus.Database.GenerateCreateScript(), cancellationToken);
+            await CampusPostgres.ExecuteAsync(asLogin, tenancy.Database.GenerateCreateScript(), cancellationToken);
+            await CampusPostgres.ExecuteAsync(asLogin, campus.Database.GenerateCreateScript(), cancellationToken);
         }
 
-        await ExecuteAsync(
-            login,
+        await CampusPostgres.ExecuteAsync(
+            asLogin,
             $"""
-            GRANT USAGE ON SCHEMA {TenancyContext.Schema}, {CampusContext.Schema} TO authenticated, anon, ddd_system_in;
-            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {TenancyContext.Schema}, {CampusContext.Schema} TO authenticated, anon, ddd_system_in;
+            GRANT USAGE ON SCHEMA {tenancySchema}, {campusSchema} TO authenticated, anon, ddd_system_in;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {tenancySchema}, {campusSchema} TO authenticated, anon, ddd_system_in;
             """,
             cancellationToken);
 
-        foreach (var script in AccessScripts())
+        foreach (var script in CampusPostgres.AccessScripts(schemas: Schemas))
         {
-            await ExecuteAsync(login, script, cancellationToken);
+            await CampusPostgres.ExecuteAsync(asLogin, script, cancellationToken);
         }
 
         NpgsqlConnection.ClearAllPools();
