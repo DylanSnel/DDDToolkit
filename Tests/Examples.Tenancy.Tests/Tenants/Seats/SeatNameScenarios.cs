@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using DDDToolkit.Exceptions;
 using DDDToolkit.Supporting.Tenancy;
 using FluentAssertions;
 
@@ -64,10 +65,12 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         using var rhea = await host.ClientAsync("rhea", Harbor.Slug);
         using var ada = await host.ClientAsync("ada", Harbor.Slug);
 
-        // Rhea manages seats at North, where leo is: not for the whole tenant, which renaming another seat takes.
+        // Rhea manages seats at North, where leo is: not for the whole tenant, which renaming another seat takes. Leo's
+        // seat is not hers either, so neither way of sending it is met, and the one refusal carries both reasons.
         using (var refused = await rhea.PutAsJsonAsync($"/tenancy/seats/{Leo}/name", new { displayName = "Leopold" }, Cancellation))
         {
-            (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, TenancyRefusals.NotPermitted)).Argument("Key").Should().Be(RenameSeat.RequiredKey);
+            (await refused.ShouldBeRefusedAsync(HttpStatusCode.Forbidden, ToolkitRefusals.Refused)).Reasons
+                .Should().Equal([ToolkitRefusals.NotOwn, TenancyRefusals.NotPermitted], "her own seat is asked first, and the key after it");
         }
 
         // Ada administers harbor and holds it. A name the seat's rule refuses is refused with the rule's own code.
@@ -95,7 +98,7 @@ public sealed class SeatNameScenarios(SampleHosts sample) : IClassFixture<Sample
         // In GraphQL a refusal arrives in the payload, with the seat left out.
         var payload = (await rhea.GraphQLDataAsync(Rename, new { seat = Leo, name = "Leo" })).GetProperty("seatRename");
         payload.GetProperty("seat").ValueKind.Should().Be(JsonValueKind.Null);
-        payload.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.Text("code").Should().Be(TenancyRefusals.NotPermitted);
+        payload.GetProperty("errors").EnumerateArray().Should().ContainSingle().Which.Text("code").Should().Be(ToolkitRefusals.Refused);
     }
 
     [Fact]

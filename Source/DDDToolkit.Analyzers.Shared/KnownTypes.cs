@@ -146,6 +146,27 @@ internal static class KnownTypes
     /// <summary>On a package's assembly: what <c>[RequiresKey]</c> means on a request that marks no member.</summary>
     public const string KeyWithoutMarkerAttribute = "DDDToolkit.Access.KeyWithoutMarkerAttribute";
 
+    /// <summary>On a request: anyone may send it. The core's, which goes beside no other requirement attribute.</summary>
+    public const string AllowAnonymousAttribute = "DDDToolkit.Access.AllowAnonymousAttribute";
+
+    /// <summary>On a request: it is about the caller's own alone, the member marked <c>[Own]</c>.</summary>
+    public const string OwnOnlyAttribute = "DDDToolkit.Access.OwnOnlyAttribute";
+
+    /// <summary>On a member of an <c>[OwnOnly]</c> request: the value compared with the caller's own.</summary>
+    public const string OwnAttribute = "DDDToolkit.Access.OwnAttribute";
+
+    /// <summary>On a member of a request that requires a key: the caller's own, which the key is the alternative of.</summary>
+    public const string OrOwnAttribute = "DDDToolkit.Access.OrOwnAttribute";
+
+    /// <summary>On a package's assembly: a type its handle says the caller's own of, or a template whose classes' ids it is.</summary>
+    public const string CallersOwnAttribute = "DDDToolkit.Access.CallersOwnAttribute";
+
+    /// <summary>What says the caller's own value of a type: an application's handle is found by it.</summary>
+    public const string CallersOwnInterface = "DDDToolkit.Access.ICallersOwn`1";
+
+    /// <summary>The core's requirement, whose static methods combine cases and make the caller's own.</summary>
+    public const string AccessRequirementUsage = "global::DDDToolkit.Access.AccessRequirement";
+
     /// <summary>What every command of the Mediator library implements: a requirement for queries only is not stated on one.</summary>
     public const string MediatorBaseCommand = "Mediator.IBaseCommand";
 

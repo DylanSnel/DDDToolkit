@@ -13,16 +13,16 @@ public class RefusalExceptionTests
     [Fact]
     public void The_toolkits_own_refusals_have_a_code_a_kind_and_a_text()
     {
-        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly);
+        ToolkitRefusals.Codes.Should().Equal(ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly, ToolkitRefusals.NotOwn);
         ToolkitRefusals.Refused.Should().Be("access.refused");
         ToolkitRefusals.KindOf(ToolkitRefusals.Refused).Should().Be(RefusalKind.NotPermitted, "the caller may not do this, and a retry gives the same answer");
-        ToolkitRefusals.TemplateOf(ToolkitRefusals.Refused).Should().Be("The database refused this change.");
+        ToolkitRefusals.TemplateOf(ToolkitRefusals.Refused).Should().Be("Access to this was refused.");
 
         var cause = new InvalidOperationException("What the database said.");
         var refusal = ToolkitRefusals.Refuse(ToolkitRefusals.Refused, cause);
         refusal.Code.Should().Be(ToolkitRefusals.Refused);
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-        refusal.Message.Should().Be("The database refused this change.");
+        refusal.Message.Should().Be("Access to this was refused.");
         refusal.Arguments.Should().BeEmpty("the caller is told no more than that");
         refusal.InnerException.Should().BeSameAs(cause, "what it was made of is kept, for a log to show");
         ToolkitRefusals.Refuse(ToolkitRefusals.Refused).InnerException.Should().BeNull();
@@ -43,6 +43,15 @@ public class RefusalExceptionTests
         ToolkitRefusals.TemplateOf(ToolkitRefusals.SystemOnly).Should().Be("Only the application itself can do this.");
 
         ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly).Arguments.Should().BeEmpty("it says nothing of the caller, whatever they hold");
+    }
+
+    [Fact]
+    public void A_request_about_somebody_else_s_own_is_refused_with_one_code_and_says_nothing_of_whose()
+    {
+        ToolkitRefusals.NotOwn.Should().Be("access.not-own");
+        ToolkitRefusals.KindOf(ToolkitRefusals.NotOwn).Should().Be(RefusalKind.NotPermitted, "the same request from the same caller gets the same answer");
+        ToolkitRefusals.TemplateOf(ToolkitRefusals.NotOwn).Should().Be("Only whoever this is about can do this.");
+        ToolkitRefusals.ReasonsArgument.Should().Be("Reasons", "what a client reads the reasons of one refusal of several ways under");
     }
 
     [Fact]
@@ -74,7 +83,7 @@ public class RefusalExceptionTests
 
         ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", null)).Message.Should().EndWith("here: .");
         ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Other", "x")).Message.Should().EndWith("here: {Role}.");
-        ToolkitRefusals.Refuse(ToolkitRefusals.Refused, ("Role", "intern")).Message.Should().Be("The database refused this change.", "a text without placeholders is as it is");
+        ToolkitRefusals.Refuse(ToolkitRefusals.Refused, ("Role", "intern")).Message.Should().Be("Access to this was refused.", "a text without placeholders is as it is");
 
         FluentActions.Invoking(() => ToolkitRefusals.Refuse("access.unheard-of", ("Role", "intern"))).Should().Throw<ArgumentException>();
         FluentActions.Invoking(() => ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ((string, object?)[])null!)).Should().Throw<ArgumentNullException>();

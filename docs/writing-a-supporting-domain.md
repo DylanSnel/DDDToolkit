@@ -1041,6 +1041,24 @@ the package's docs has to have explained. These can be the package's to write:
   key without any marker means, which one package of an application says: Tenancy, for the whole tenant. The call's
   types are checked by the compiler in the line written, so a declaration that does not fit is the package's to find
   in its own tests of a request that carries the attribute.
+
+  An application stacks your attribute beside others, and all of them hold, `AccessRequirement.All` of their calls in
+  the order they are written ([Stacked attributes are all](access-requirements.md#stacked-attributes-are-all)), so a
+  module's own attribute declared this way stacks as yours does. Three more things the marks say, each with a default:
+  `Implies = [typeof(SignedInAttribute)]` on any of the three marks names the requirement attributes yours already
+  requires, so one of them stacked beside it is a warning, [DDD00084](diagnostics.md#ddd00084), as Tenancy's
+  `[RequiresOperator]` names `[SignedIn]` and its key cases `[InTenant]`; `OwnAlternative = nameof(...)` on
+  `[KeyMarker]` says that the marked member is what the request acts on, so `[OrOwn]` may stand beside it, and names the
+  method of your factory, taking what the marker's method takes, whose case the caller's own way through still meets
+  there: Membership's `[OnResource]` names `MemberAccess.Sees`, so a caller acting on its own still sees the resource,
+  and `[OrOwn]` beside it is `Any(All(Own(member), Sees(key, resource)), On(key, resource))`; without it `[OrOwn]` is
+  [DDD00085](diagnostics.md#ddd00085); and a type your package says the caller's own of, with an `ICallersOwn<TValue>`
+  it registers, goes in `[assembly: CallersOwn(typeof(...))]`, or, for an id the application declares with your
+  template, `[assembly: CallersOwn(IdOf = typeof(SeatAggregateAttribute<>))]` as Tenancy says for its seat id, so the
+  generator reports `[OrOwn]` on another type, [DDD00086](diagnostics.md#ddd00086), with `Implies` there for what a
+  caller who has such an own meets already, as Tenancy names `[InTenant]` and `[SignedIn]` for its seat id.
+  Register the handle with `TryAdd`, so a host's own, registered before yours with `AddCallersOwn`, stays; one
+  registered after takes its place.
 - **The package's texts.** The registration that knows the codes offers the texts under them, and an
   application that localizes its failures adds no line: `services.AddFailureTexts<MembershipFailures>(codes.TextKeys)`.
   An offer changes nothing for an application that does not, and the application's own texts come first

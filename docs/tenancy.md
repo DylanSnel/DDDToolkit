@@ -1393,13 +1393,35 @@ public sealed record CloseTheBooks(int Year) : IBillingRequest;
 | a key for the whole tenant | `[RequiresKey(key)]`, with no marker | `TenancyAccess.ForTheWholeTenant(key)` | whoever holds the key at the tenant's root now, and system work in the tenant | `tenancy.not-permitted`, naming the key |
 | a key at a unit | `[RequiresKey(key)]`, with `[AtUnit]` on the unit | `TenancyAccess.AtUnit(key, unit)` | whoever holds the key at that unit now, there or above it, and system work in the tenant at a unit of its own | `tenancy.not-permitted`, with the key and the unit |
 | one of the application's operators, on a query | `[RequiresOperator]` | `TenancyAccess.RequiresOperator()` | an [operator](#operators) | `tenancy.operators-only`, for a seat and for system work too |
+| the caller's own seat, or a key | `[RequiresKey(key)]`, with `[OrOwn]` on the seat | `AccessRequirement.Any(TenancyAccess.Own(seat), ...)` | the seat the request names, where it is the caller's own seat in the tenant; else whoever holds the key | one `access.refused`, with `access.not-own` and the key's reason |
+| the caller's own seat alone | `[OwnOnly]`, with `[Own]` on the seat | `TenancyAccess.Own(seat)` | the seat itself, and nobody else: not system work, which has no seat of its own | `access.not-own` |
 
 Beside them a request of a module with Tenancy uses the toolkit's own, which are about who is calling and
-nothing else: `[AllowAnonymousCallers]` for anyone and `[SignedIn]` for a signed-in user who has no seat yet, as for
-accepting an invitation or picking a tenant. They are [the vocabulary](access-requirements.md#the-vocabulary) every
-request picks one from. None of them is system work: what only the application does is a scope its trusted code
+nothing else: `[AllowAnonymous]` for anyone and `[SignedIn]` for a signed-in user who has no seat yet, as for
+accepting an invitation or picking a tenant. They are [the vocabulary](access-requirements.md#the-vocabulary) a request
+picks from, and attributes stacked on one request all hold. None of them is system work: what only the application does is a scope its trusted code
 begins around the work ([System work](#system-work)), and a request it sends says who may send it like any other,
-`[InTenant]` for system work in a tenant.
+`[InTenant]` for system work in a tenant. `[InTenant]` beside a key of Tenancy's says nothing more, since only a seat in
+the tenant or system work there holds one, and the generator warns of it, [DDD00084](diagnostics.md#ddd00084).
+
+**A seat of the caller's own.** `TenancyAccess.Own(seat)`, and `[OrOwn]` or `[Own]` on a member of your seat id, compare
+the seat the request names with the caller's seat in the tenant of the request, at the door, with nothing read:
+`AddTenancy` registers what says so, an `ICallersOwn<TSeatId>` over Tenancy's caller, which is found from the verified
+identity and the tenant the request names, never from the request. The sample's `RenameSeat` lets a seat rename itself
+and anybody with `tenancy.seats.manage` for the whole tenant rename any seat that way. `[OrOwn]` does not go beside
+`[AtUnit]`, [DDD00085](diagnostics.md#ddd00085): the unit is where the key is checked, and a caller would send a unit
+where it holds the key for somebody else's seat ([Yours, or the key](access-requirements.md#yours-or-the-key)). Only a
+seat in the tenant has a seat of its own there, so Tenancy says with `Implies` on its `[assembly: CallersOwn]` that the
+caller's own seat requires `[InTenant]` and `[SignedIn]` already: beside `[OwnOnly]` with `[Own]` on the seat id either
+is [DDD00084](diagnostics.md#ddd00084), a warning, and so is `[InTenant]` beside a key of Tenancy's with `[OrOwn]` on
+the seat.
+
+**Combined with other cases.** Tenancy's cases combine with the core's, a module's own and Membership's, in
+`AccessRequirement.All` and `Any` ([Requirements that combine](access-requirements.md#requirements-that-combine)):
+moving a seat between two units takes the key at both, `All(TenancyAccess.AtUnit(key, From), TenancyAccess.AtUnit(key, To))`,
+and its handler moves it from `From` and no other unit; a tenant's audit log for operators or for a seat that
+manages seats is `Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))`,
+with a row rule for each way in ([The door and the rows](access-requirements.md#the-door-and-the-rows)).
 
 `[AtUnit]` is for a command that acts at a unit the request names: one the package's use case decides, such as
 placing a seat or giving a role there, and one that makes something at a unit, where nothing exists yet that a
@@ -1490,7 +1512,7 @@ first administrator:
 | Who may send it | Its requirement | Where the first administrator comes from |
 |---|---|---|
 | a signed-in person who registers an organization | `[SignedIn]` | the caller's own token, read before the system work begins, never the request; an anonymous sign-in is refused |
-| anyone, through a public registration form, or a development route | `[AllowAnonymousCallers]` | there is no caller to take it from: the form carries an address, and the handler makes that account with `IIdentityAccounts.InviteByEmailAsync` and provisions for the id it answers |
+| anyone, through a public registration form, or a development route | `[AllowAnonymous]` | there is no caller to take it from: the form carries an address, and the handler makes that account with `IIdentityAccounts.InviteByEmailAsync` and provisions for the id it answers |
 | a job or a console tool the application runs, such as an import or the seeding | no request at all: trusted code begins `TenancyUseCases.BeginSystem()` and calls the use case, as the sample's seeding does | the job's own input |
 
 The provisioning use case is what refuses everyone but system work outside any tenant, `access.system-only`, so
@@ -1549,7 +1571,7 @@ public sealed class RegisterOrganizationHandler(TenancyUseCases.TenantCommands t
 }
 ```
 
-A form anyone may fill in declares `[AllowAnonymousCallers]` and carries an address instead, and its
+A form anyone may fill in declares `[AllowAnonymous]` and carries an address instead, and its
 handler makes the account before it provisions. An address that has an account already is answered as if it
 had none: the form must not tell anyone who has one, and that person signs in and registers as above.
 
@@ -1879,7 +1901,9 @@ carry it.
 
 The sample keeps a name per tenant on its `Seat`, with its rule (`tenants.seat.display-name`, in English and
 Dutch): its demo seeder names each seat in the callbacks, `POST /invitations/accept` takes the name the person
-gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its own command `RenameSeat`, and
+gives, `PUT /tenancy/seats/{seatId}/name` and the mutation `seatRename` are its own command `RenameSeat`, which a
+seat sends for itself and a seat with `tenancy.seats.manage` for the whole tenant for anybody, `[RequiresKey]` with
+`[OrOwn]` on the seat, and
 `SeatListing` is what every answer about a seat shows, in REST, in GraphQL and in the access history, the tenant
 picker's `GET /me/seats` and `seatsOfMine` and the overview's `GET /me` and `overviewOfMine` included: each query
 selects it from the seats the package answered. In the database its
@@ -3137,8 +3161,9 @@ The application project declares two ports and the infrastructure project regist
 A command loads, changes and saves through `IProjectStore`, on the request's context, its unit of work. A
 query reads through `IProjectReads`, on a context of its own: the queries of one request may run side by
 side, and a context runs one at a time. The access check before any request reads
-that way too, and so does a command for what it asks of Tenancy before it changes anything, on one reading for
-all of it. A reading takes Tenancy's answers as sets, so the projects a seat may see are still one statement
+that way too, on a reading for each case it asks (two for `OpenProject` naming another seat as the owner: the
+key to open, and the owner's key), and so does a command for what it asks of Tenancy before it changes anything,
+on one reading for all of it. A reading takes Tenancy's answers as sets, so the projects a seat may see are still one statement
 ([Who may do what](#who-may-do-what)), and answers with data, never with an entity. The roles a crew holds are
 not Tenancy's: they are project roles, the module's own, kept with the
 [Membership package](membership.md), so a command asks about a crew's role of the module's own table, on the
@@ -3277,10 +3302,10 @@ can say beforehand:
 | `ProjectsById`, `CrewsOfProjects`, `AbilitiesOnProjects`, `KeysOnProjects` (queries about several projects) | seen with `projects.view` | a project out of sight is left out of the answer |
 | `KeysHeldAtRoot` (query) | a caller that works in a tenant | |
 | `TenantProjects` (query) | an operator, and nobody else | |
-| `OpenProject` | `projects.open` at the unit | `projects.owner.change` at the unit, to name somebody else as owner |
+| `OpenProject` | `projects.open` at the unit; naming an owner, also the owner is the caller's own seat or `projects.owner.change` is held at the unit, computed from whether it names one (`AccessRequirement.All`, `Any` and `Own`) | that the unit is active, and that the owner may be on a crew |
 | `ChangeProjectName` | `projects.edit` on the project | |
 | `PlanProject` | `projects.edit` on the project | |
-| `MoveProjectToUnit` | `projects.edit` on the project | `projects.open` at the unit it goes to |
+| `MoveProjectToUnit` | both, `AccessRequirement.All`: `projects.edit` on the project, and `projects.open` at the unit it goes to, the module's own case | that the unit is active |
 | `CloseProject`, `ReopenProject` | `projects.close` on the project | |
 | `AddCrewMember` | `projects.crew.manage` on the project | that the seat is active, and that a role given with it is one of the tenant's project roles in use |
 | `GiveCrewRole` | `projects.crew.manage` on the project | that the role is one of the tenant's project roles in use, which the module answers from its own table |
@@ -3318,7 +3343,7 @@ nothing about a project, as a query that declares `MemberAccess.SeenWith` is fil
 | `MakeGrant`, `RevokeGrant` | `tenancy.grants.manage` at the unit | for a role that manages access, that the caller holds its keys that do, there and for long enough, and never gives it to itself; that the tenant keeps an administrator |
 | `SuspendTenantSeat`, `ReactivateTenantSeat`, `DeactivateTenantSeat` | `tenancy.seats.manage` for the whole tenant | what taking or giving each of the seat's roles would need; that the tenant keeps an administrator |
 | `SeatGrants` (query) | computed from the request: `tenancy.seats.manage` for the whole tenant, or at the unit asked about (`?unit=`) | the seat's roles in every unit, or at that unit alone |
-| `RenameSeat` | a caller that works in a tenant | no use case of the package: the name is the sample's own field, and its handler asks the sample's own rule, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)), and a column rule of the sample's holds the name to the same rule in the database ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
+| `RenameSeat` | yours, or the key: the caller's own seat, or `tenancy.seats.manage` for the whole tenant, `[RequiresKey]` with `[OrOwn]` on the seat | no use case of the package: the name is the sample's own field, and the rule is the sample's own, that a seat renames itself and another seat takes `tenancy.seats.manage` for the whole tenant ([How a seat is shown](#how-a-seat-is-shown)), and a column rule of the sample's holds the name to the same rule in the database ([What the database guards on a seat](#what-the-database-guards-on-a-seat)) |
 | `CreateTenantRole`, `SetRoleKeys`, `ArchiveTenantRole` | `tenancy.roles.manage` for the whole tenant | that only an administrator adds, takes out or archives what manages access |
 | `InvitePerson` | `tenancy.seats.manage` for the whole tenant | `tenancy.grants.manage` at the unit, and the rule every grant is held to |
 | `CancelInvitation` | a caller that works in a tenant | `tenancy.seats.manage` at the invitation's unit, which only the use case reads; anyone else is told there is no such invitation |
@@ -5660,8 +5685,9 @@ flowchart TB
 <summary>Show the code: the sample's column rule on a seat's name, the trigger that keeps what a seat is, and a one-off that links a seat to another identity</summary>
 
 The sample keeps a name per tenant on its seat, and renames it with its own command, `RenameSeat`: a seat renames
-itself, and another seat takes `tenancy.seats.manage` for the whole tenant. Its column rule says the same to the
-database. The job title has no command, and no rule: it is as writable as the row.
+itself, and another seat takes `tenancy.seats.manage` for the whole tenant, which the request says at the door with
+`[RequiresKey(RequiredKey)]` and `[OrOwn]` on the seat. Its column rule says the same two branches to the database,
+for each row. The job title has no command, and no rule: it is as writable as the row.
 
 ```csharp
 // Examples.Tenancy.Tenants.Infrastructure/Access/NameChangesByTheSeatOrWithTheSeatsKey.cs

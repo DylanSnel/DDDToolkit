@@ -77,8 +77,11 @@ DDD00075 | DDDToolkit.Entities | Warning | Every class a package's use cases are
 DDD00076 | DDDToolkit.Entities | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets
 DDD00077 | DDDToolkit.Access | Error | A request says what it requires of its caller
 DDD00078 | DDDToolkit.Access | Error | A request says what it requires in one way
-DDD00079 | DDDToolkit.Access | Error | A request carries one requirement attribute
+DDD00079 | DDDToolkit.Access | Error | [AllowAnonymous] goes with no other requirement attribute
 DDD00080 | DDDToolkit.Access | Error | A marker on a request says where the key of its [RequiresKey] is held
 DDD00081 | DDDToolkit.Access | Error | A marker is on a member of the id it marks
 DDD00082 | DDDToolkit.Access | Error | A requirement for queries only is on a query
 DDD00083 | DDDToolkit.Access | Error | A request's requirement attributes are read where its module's interface is partial
+DDD00084 | DDDToolkit.Access | Warning | A requirement attribute beside another adds what that one does not require already
+DDD00085 | DDDToolkit.Access | Error | [OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly]
+DDD00086 | DDDToolkit.Access | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of

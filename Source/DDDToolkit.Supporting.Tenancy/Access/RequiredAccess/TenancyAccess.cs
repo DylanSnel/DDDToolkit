@@ -1,4 +1,5 @@
 using DDDToolkit.Abstractions.Interfaces;
+using DDDToolkit.Access;
 
 namespace DDDToolkit.Supporting.Tenancy.Access;
 
@@ -69,4 +70,29 @@ public static class TenancyAccess
     /// as well.
     /// </remarks>
     public static TenancyRequirement.Operator RequiresOperator() => new();
+
+    /// <summary>
+    /// The request is about the caller's own seat: <paramref name="seat"/> is the caller's seat in the tenant of the
+    /// request. Anyone else is refused with <c>access.not-own</c>: another seat, a caller with no seat there, an operator,
+    /// and system work, which holds every key in its tenant but has no seat of its own. Spelled beside the other cases,
+    /// for a requirement that combines them:
+    /// <code>
+    /// AccessRequirement IRequireAccess.RequiredAccess =&gt; AccessRequirement.Any(
+    ///     TenancyAccess.Own(Seat),
+    ///     TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
+    /// </code>
+    /// which a request says with attributes as well: <c>[RequiresKey(TenancyKeys.SeatsManage)]</c> and
+    /// <c>[OrOwn] SeatId Seat</c>.
+    /// </summary>
+    /// <remarks>
+    /// The case is the core's, <see cref="AccessRequirement.Own{TValue}"/>, decided by the core's check of who is calling:
+    /// what the caller's own seat is, Tenancy says with the handle <c>AddTenancy</c> registers, from the caller's verified
+    /// identity and the tenant the request names. So it reads nothing, and it is the same requirement as
+    /// <c>AccessRequirement.Own(seat)</c>.
+    /// </remarks>
+    /// <param name="seat">The seat the request names.</param>
+    /// <typeparam name="TSeatId">The application's seat id.</typeparam>
+    public static AccessRequirement.Owned<TSeatId> Own<TSeatId>(TSeatId seat)
+        where TSeatId : struct, IEntityId, IEquatable<TSeatId>
+        => AccessRequirement.Own(seat);
 }

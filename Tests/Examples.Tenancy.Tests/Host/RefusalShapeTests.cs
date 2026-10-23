@@ -88,7 +88,7 @@ public sealed class RefusalShapeTests
         handled.Should().BeTrue();
         response.Status.Should().Be(HttpStatusCode.Forbidden);
         response.Code.Should().Be("access.refused");
-        response.Title.Should().Be("The database refused this change.");
+        response.Title.Should().Be("Access to this was refused.");
     }
 
     [Fact]

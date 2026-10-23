@@ -19,7 +19,10 @@ public static class AccessCheckServiceCollectionExtensions
     /// <para>
     /// The set asks the core's <see cref="CallerAccessCheck"/> first, so the requirements that are about who is
     /// calling and nothing else work in every module, with no check added:
-    /// <see cref="AccessRequirement.AllowAnonymous"/> and <see cref="AccessRequirement.SignedIn"/>. Who is calling
+    /// <see cref="AccessRequirement.AllowAnonymous"/>, <see cref="AccessRequirement.SignedIn"/>, and
+    /// <see cref="AccessRequirement.Own{TValue}"/> for a type something says the caller's own of
+    /// (<see cref="AddCallersOwn{TValue, TCallersOwn}"/>). The set itself decides what combines their cases, and every
+    /// other, <see cref="AccessRequirement.All"/> and <see cref="AccessRequirement.Any"/>. Who is calling
     /// is what the host's <see cref="ICallerAccessor"/> answers, and without one what <see cref="Callers.Begin"/>
     /// made current (<see cref="AmbientCallerAccessor"/>). Anything else a request declares is stopped unless a
     /// check the module added decides it.
@@ -49,7 +52,7 @@ public static class AccessCheckServiceCollectionExtensions
         services.TryAddScoped(static provider => new AccessChecks<TRequests>(
             provider.GetServices<RegisteredAccessCheck<TRequests>>()
                 .Select(static registered => registered.Check)
-                .Prepend(new CallerAccessCheck(provider.GetService<ICallerAccessor>() ?? new AmbientCallerAccessor(provider.GetService<CallerOptions>())))));
+                .Prepend(new CallerAccessCheck(provider.GetService<ICallerAccessor>() ?? new AmbientCallerAccessor(provider.GetService<CallerOptions>()), provider))));
         services.TryAddScoped(typeof(Checked<>));
 
         // The checks hold nobody to anything until something asks them. Where that is a behavior the toolkit
@@ -87,6 +90,33 @@ public static class AccessCheckServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Scoped<RegisteredAccessCheck<TRequests>, RegisteredAccessCheck<TRequests, TCheck>>());
 
         return services.AddAccessChecks<TRequests>();
+    }
+
+    /// <summary>
+    /// Says what the caller's own <typeparamref name="TValue"/> is, for every module's requests about the caller's own
+    /// (<see cref="AccessRequirement.Own{TValue}"/>, <see cref="OrOwnAttribute"/>, <see cref="OwnAttribute"/>): the
+    /// handle an application writes for a kind of its own, its own user id say.
+    /// <code>
+    /// services.AddCallersOwn&lt;UserId, CallersUser&gt;();
+    /// </code>
+    /// </summary>
+    /// <remarks>
+    /// One per type, for the whole host: a later call for the same type takes the place of an earlier one, so a host
+    /// replaces a package's handle by registering its own after the package's registration, and a package registers its
+    /// own without replacing one the host registered before. The core says it for a <see cref="Guid"/>, the caller's
+    /// verified identity, without a registration, and one registered for <see cref="Guid"/> takes its place. Registered
+    /// per scope, so a handle may take what the scope knows of its caller.
+    /// </remarks>
+    /// <typeparam name="TValue">What a request names as the caller's own.</typeparam>
+    /// <typeparam name="TCallersOwn">The handle, made by the container once per scope.</typeparam>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is null.</exception>
+    public static IServiceCollection AddCallersOwn<TValue, TCallersOwn>(this IServiceCollection services)
+        where TValue : struct, IEquatable<TValue>
+        where TCallersOwn : class, ICallersOwn<TValue>
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        return services.Replace(ServiceDescriptor.Scoped<ICallersOwn<TValue>, TCallersOwn>());
     }
 }
 

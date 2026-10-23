@@ -32,6 +32,12 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
 
     private static readonly OrganizationUnitId TheUnit = OrganizationUnitId.CreateSequential();
 
+    /// <summary>A unit a request names besides <see cref="TheUnit"/>, where a project moves to.</summary>
+    private static readonly OrganizationUnitId TheOtherUnit = OrganizationUnitId.CreateSequential();
+
+    /// <summary>A seat a request names as the caller's own, or as somebody else's.</summary>
+    private static readonly SeatId TheSeat = SeatId.CreateSequential();
+
     private static readonly TenantId TheTenant = TenantId.CreateSequential();
 
     /// <summary>The projects of a request about several: one list, so the requirement that names it equals the one expected.</summary>
@@ -51,10 +57,12 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new KeyOnProject(TheProject, ProjectKeys.Edit), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
         (new KeysOnProjects([TheProject], [ProjectKeys.Edit]), MemberAccess.SeenWith<ProjectId>(ProjectKeys.View)),
         (new KeysHeldAtRoot([ProjectKeys.Open]), TenancyAccess.InTenant()),
-        (new OpenProject("P-900", "Quay wall", TheUnit, SeatId.CreateSequential(), ProjectId.CreateSequential()), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit)),
+        (new OpenProject("P-900", "Quay wall", TheUnit, TheSeat, ProjectId.CreateSequential()), AccessRequirement.All(
+            new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit),
+            AccessRequirement.Any(AccessRequirement.Own(TheSeat), new ProjectsRequirement.AtUnit(ProjectKeys.ChangeOwner, TheUnit)))),
         (new ChangeProjectName(TheProject, "Quay wall, east", ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
         (new PlanProject(TheProject, DateRange.OneDay(new DateOnly(2026, 10, 5)), ExpectedVersion: 7), MemberAccess.On(ProjectKeys.Edit, TheProject, 7)),
-        (new MoveProjectToUnit(TheProject, OrganizationUnitId.CreateSequential()), MemberAccess.On(ProjectKeys.Edit, TheProject)),
+        (new MoveProjectToUnit(TheProject, TheOtherUnit, ExpectedVersion: 7), AccessRequirement.All(MemberAccess.On(ProjectKeys.Edit, TheProject, 7), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheOtherUnit))),
         (new CloseProject(TheProject), MemberAccess.On(ProjectKeys.Close, TheProject)),
         (new ReopenProject(TheProject), MemberAccess.On(ProjectKeys.Close, TheProject)),
         (new AddCrewMember(TheProject, SeatId.CreateSequential(), ProjectRoleId.CreateSequential(), Until: null), MemberAccess.On(ProjectKeys.ManageCrew, TheProject)),
@@ -93,7 +101,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         (new SuspendTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
         (new ReactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
         (new DeactivateTenantSeat(SeatId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)),
-        (new RenameSeat(SeatId.CreateSequential(), "Bert"), TenancyAccess.InTenant()),
+        (new RenameSeat(TheSeat, "Bert"), AccessRequirement.Any(TenancyAccess.Own(TheSeat), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))),
         (new CreateTenantRole("Storekeeper", "Keeps the stores", []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new SetRoleKeys(RoleId.CreateSequential(), []), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
         (new ArchiveTenantRole(RoleId.CreateSequential()), TenancyAccess.ForTheWholeTenant(TenancyKeys.RolesManage)),
@@ -212,7 +220,8 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
             Decides(scope.ServiceProvider, module, AccessRequirement.SignedIn()).Should().BeTrue("{0}'s set asks the toolkit who is calling", module);
         }
 
-        Declared.Select(row => row.Declares.GetType().DeclaringType ?? row.Declares.GetType()).Distinct().Should().BeEquivalentTo(
+        // A combination is the toolkit's, and holds cases of any of them: its cases are counted, each where it comes from.
+        Declared.SelectMany(row => CasesOf(row.Declares)).Select(each => each.GetType().DeclaringType ?? each.GetType()).Distinct().Should().BeEquivalentTo(
             [typeof(AccessRequirement), typeof(TenancyRequirement), typeof(MemberAccess<>), typeof(ProjectsRequirement), typeof(InspectionsRequirement)],
             "the toolkit's cases of who is calling, the Tenancy package's cases, the Membership package's, and the two modules' own");
     }
@@ -234,8 +243,10 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
     public void A_request_says_what_it_requires_with_an_attribute_unless_it_computes_it_or_it_is_its_module_s_own()
     {
         // A requirement that reads no value of the request but a key and an id it carries is an attribute on it, and
-        // the line the generator writes; the property is for what an attribute cannot say: a case of the module's own,
-        // which no package's attribute stands for, and a requirement computed from the request's values.
+        // the line the generator writes, stacked attributes and [OrOwn] beside a key included; the property is for
+        // what an attribute cannot say: a case of the module's own, which no package's attribute stands for, a
+        // requirement computed from the request's values, and a combination no stack of attributes says, two keys in
+        // two places.
         var answeringItself = Requests
             .Where(request => request.Type.GetInterfaceMap(typeof(IRequireAccess)).TargetMethods.Single().DeclaringType == request.Type)
             .ToDictionary(request => request.Type, request => DeclaredBy(Declared.Single(row => row.Request.GetType() == request.Type).Request)!);
@@ -243,13 +254,48 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         answeringItself.Should().NotBeEmpty("or this proves nothing");
         foreach (var (type, declares) in answeringItself)
         {
-            (declares is ProjectsRequirement or InspectionsRequirement || type == typeof(SeatGrants)).Should().BeTrue(
-                "{0} answers RequiredAccess itself, so it declares a case of its module's own or computes it, and {1} is neither", type.Name, declares.GetType().Name);
+            (OfTheModuleOrTwoKeys(declares) || type == typeof(SeatGrants)).Should().BeTrue(
+                "{0} answers RequiredAccess itself, so it declares a case of its module's own, two keys, or computes it, and {1} is none of them", type.Name, declares.GetType().Name);
         }
 
         answeringItself.Should().ContainKey(typeof(SeatGrants), "the sample keeps a requirement computed from the request's values");
+        answeringItself.Should().ContainKey(typeof(MoveProjectToUnit), "and one of two keys in two places");
+        answeringItself.Should().NotContainKey(typeof(RenameSeat), "the caller's own or the key is said with attributes");
         Requests.Where(request => !answeringItself.ContainsKey(request.Type)).Should().NotBeEmpty("and the others say it with an attribute");
     }
+
+    [Fact]
+    public void The_guard_of_the_property_takes_what_no_attribute_says_and_nothing_a_stack_of_them_does()
+    {
+        // The guard of the test above, held to the cases it tells apart, so an application that copies it copies a guard
+        // that holds: a stack of attributes says All of a sign-in and a key, and [OrOwn] beside a key says Any of the two.
+        OfTheModuleOrTwoKeys(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[SignedIn] [RequiresKey(key)] says it");
+        OfTheModuleOrTwoKeys(AccessRequirement.Any(AccessRequirement.Own(TheSeat), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeFalse("[RequiresKey(key)] with [OrOwn] says it");
+        OfTheModuleOrTwoKeys(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)).Should().BeFalse("[RequiresKey(key)] says it");
+
+        OfTheModuleOrTwoKeys(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage))).Should().BeTrue("one caller or another is no stack");
+        OfTheModuleOrTwoKeys(AccessRequirement.All(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheOtherUnit))).Should().BeTrue("two keys at once");
+        OfTheModuleOrTwoKeys(AccessRequirement.All(TenancyAccess.InTenant(), new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit))).Should().BeTrue("the module's own case, in a combination too");
+    }
+
+    /// <summary>
+    /// What may answer the property rather than an attribute: a case of the module's own, alone or in a combination; one
+    /// caller or another where neither way is the caller's own, which no stack of attributes says; or two keys at once,
+    /// where one <c>[RequiresKey]</c> says one.
+    /// </summary>
+    private static bool OfTheModuleOrTwoKeys(AccessRequirement declares) => declares switch
+    {
+        ProjectsRequirement or InspectionsRequirement => true,
+        AccessRequirement.Combined combined when combined.Cases.Any(OfTheModuleOrTwoKeys) => true,
+        AccessRequirement.AnyOf any => any.Cases.All(each => each is not AccessRequirement.Owned<SeatId>),
+        AccessRequirement.AllOf all => all.Cases.Count(IsAKey) > 1,
+        _ => false,
+    };
+
+    /// <summary>A key, of Tenancy's for the whole tenant or at a unit, or of Membership's on a resource.</summary>
+    private static bool IsAKey(AccessRequirement each)
+        => each is TenancyRequirement.ForTheWholeTenant or TenancyRequirement.AtUnit<OrganizationUnitId>
+           || (each.GetType().IsGenericType && each.GetType().GetGenericTypeDefinition() == typeof(MemberAccess<>.On));
 
     [Fact]
     public void A_requirement_computed_from_the_request_s_values_is_the_property_s_answer()
@@ -259,14 +305,33 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
 
         DeclaredBy(new SeatGrants(seat)).Should().Be(TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage));
         DeclaredBy(new SeatGrants(seat, TheUnit)).Should().Be(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, TheUnit));
+
+        // A project opened for its caller takes the key at the unit; one opened for an owner it names takes, beside
+        // that key, the owner's being the caller's own seat or the organization's key to name somebody else.
+        DeclaredBy(new OpenProject("P-900", "Quay wall", TheUnit)).Should().Be(new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit));
+        DeclaredBy(new OpenProject("P-900", "Quay wall", TheUnit, TheSeat)).Should().Be(AccessRequirement.All(
+            new ProjectsRequirement.AtUnit(ProjectKeys.Open, TheUnit),
+            AccessRequirement.Any(AccessRequirement.Own(TheSeat), new ProjectsRequirement.AtUnit(ProjectKeys.ChangeOwner, TheUnit))));
+    }
+
+    [Fact]
+    public void A_request_about_the_caller_s_own_seat_names_the_seat_and_lets_the_key_stand_in_for_it()
+    {
+        // Yours, or the key: the request names the seat, and the door compares it with the caller's own, so the request
+        // never says whose it is. The key is the alternative, asked only where the seat is not the caller's.
+        var declares = DeclaredBy(new RenameSeat(TheSeat, "Bert")).Should().BeOfType<AccessRequirement.AnyOf>().Subject;
+
+        declares.Cases.Should().Equal(AccessRequirement.Own(TheSeat), TenancyAccess.ForTheWholeTenant(RenameSeat.RequiredKey));
+        declares.Cases[0].Should().Be(TenancyAccess.Own(TheSeat), "Tenancy's spelling of the caller's own seat is the core's case");
     }
 
     [Fact]
     public void Nothing_requires_system_work_and_what_only_it_may_do_is_sent_by_a_caller_in_the_tenant()
     {
         // System work is a scope the seeding begins around what it sends, never a requirement. The two commands only it
-        // sends say who may send them, a caller in the tenant, and their handlers refuse everyone but system work.
-        typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser"]);
+        // sends say who may send them, a caller in the tenant, and their handlers refuse everyone but system work. The
+        // core's cases are about who is calling, or combine cases: none of them is about the work.
+        typeof(AccessRequirement).GetNestedTypes().Select(each => each.Name).Should().BeEquivalentTo(["Anyone", "SignedInUser", "Owned`1", "Combined", "AllOf", "AnyOf"]);
         DeclaredBy(new MarkTenantAsDemo()).Should().Be(TenancyAccess.InTenant());
         DeclaredBy(new SetUpProjectRoles()).Should().Be(TenancyAccess.InTenant());
     }
@@ -349,7 +414,7 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         // cases and Tenancy's, and has no case of its own, and no check of its own.
         Declared.Where(row => ModuleOf(row.Request) == "Tenants").Select(row => row.Declares)
             .Should().OnlyContain(
-                declares => declares is TenancyRequirement || declares is AccessRequirement.SignedInUser,
+                declares => OfTenancyOrTheCore(declares),
                 "the Tenants module has no case of its own, and so no check of its own");
         Requests.Select(request => request.Module).Distinct().Should().BeEquivalentTo(SampleLayout.Modules, "every module's requests are held to it");
 
@@ -545,11 +610,25 @@ public sealed class AccessDeclarationTests(SampleWithoutDatabase sample) : IClas
         return (bool)checks.GetType().GetMethod(nameof(AccessChecks<IRequireAccess>.Decides))!.Invoke(checks, [requirement])!;
     }
 
-    /// <summary>The permission key a requirement names, if it names one.</summary>
-    private static IEnumerable<string> KeysOf(object requirement)
-        => requirement.GetType().GetProperties()
-            .Where(property => property.PropertyType == typeof(string) && property.Name.EndsWith("Key", StringComparison.Ordinal))
-            .Select(property => (string)property.GetValue(requirement)!);
+    /// <summary>The cases a requirement is made of: itself, or the cases of each it combines, however deep.</summary>
+    private static IEnumerable<AccessRequirement> CasesOf(AccessRequirement requirement)
+        => requirement is AccessRequirement.Combined combined ? combined.Cases.SelectMany(CasesOf) : [requirement];
+
+    /// <summary>The permission keys a requirement names, its cases' where it combines several.</summary>
+    private static IEnumerable<string> KeysOf(AccessRequirement requirement)
+        => requirement is AccessRequirement.Combined combined
+            ? combined.Cases.SelectMany(KeysOf)
+            : requirement.GetType().GetProperties()
+                .Where(property => property.PropertyType == typeof(string) && property.Name.EndsWith("Key", StringComparison.Ordinal))
+                .Select(property => (string)property.GetValue(requirement)!);
+
+    /// <summary>A case of Tenancy's or of the core's, or a combination of nothing else: what a module without a check of its own declares.</summary>
+    private static bool OfTenancyOrTheCore(AccessRequirement requirement) => requirement switch
+    {
+        TenancyRequirement or AccessRequirement.SignedInUser or AccessRequirement.Owned<SeatId> => true,
+        AccessRequirement.Combined combined => combined.Cases.All(OfTenancyOrTheCore),
+        _ => false,
+    };
 
     /// <summary>
     /// A use-case class of the Tenancy package that changes something: its tenant, organization, seat, role and

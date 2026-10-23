@@ -204,7 +204,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   implements its module's interface, which derives from `IRequireAccess`, and says who may send it with an
   attribute, or answers `RequiredAccess` with an `AccessRequirement` where it computes the requirement (see
   Requirements as attributes, below). The vocabulary is small: the core's own two, which are about who is calling
-  and nothing else, `[AllowAnonymousCallers]` or `AccessRequirement.AllowAnonymous()` (anyone, a caller who did not
+  and nothing else, `[AllowAnonymous]` or `AccessRequirement.AllowAnonymous()` (anyone, a caller who did not
   sign in too) and `[SignedIn]` or `AccessRequirement.SignedIn()` (a signed-in user, who need not hold anything
   yet), and the cases a package or a module declares. There is no requirement that says nothing, none that leaves
   the decision to a package, and none for the application's own work, which is a scope trusted code begins around
@@ -240,7 +240,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   its requests require only what the core decides. All of it is in `DDDToolkit.Access`. See
   [Access requirements](docs/access-requirements.md) and [the vocabulary](docs/access-requirements.md#the-vocabulary).
 - **Requirements as attributes.** A request says who may send it with an attribute where the requirement reads no
-  value of the request but a key and an id it carries: the core's `[AllowAnonymousCallers]`, `[SignedIn]` and one
+  value of the request but a key and an id it carries: the core's `[AllowAnonymous]`, `[SignedIn]` and one
   `[RequiresKey(key)]`, whose marker on one of the request's members says where the key is held (none for the whole
   tenant, Tenancy's `[AtUnit]` at a unit, Membership's `[OnResource]` on a resource, with `[ExpectedVersion]` on the
   version read), Tenancy's `[InTenant]` and `[RequiresOperator]`, and Membership's `[SeenWith<TResourceId>(key)]`. A
@@ -253,15 +253,17 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   costs anything when a request is sent, the request need not be partial, and a request that answers
   `RequiredAccess` itself, for a requirement computed from its values or a case of its module's own, answers with
   its own, which C# takes over the interface's. So every reader of the property reads the same requirement: the
-  checks, a handler that asks them again, a test. The attribute is not `[AllowAnonymous]`, because ASP.NET Core and
-  HotChocolate each have one of that name, and a route or a resolver that imports either beside `DDDToolkit.Access`
-  would not compile. What an attribute stands for is its package's to say, with the core's
+  checks, a handler that asks them again, a test. `[AllowAnonymous]` is named as ASP.NET Core's and HotChocolate's
+  are: it goes on requests, in the application layer, which references neither; a file that imports either
+  namespace beside `DDDToolkit.Access` writes `[DDDToolkit.Access.AllowAnonymous]` or an alias,
+  `using AllowAnonymous = DDDToolkit.Access.AllowAnonymousAttribute;` (CS0104 otherwise). Stacked requirement
+  attributes all hold (see Requirements that combine, below). What an attribute stands for is its package's to say, with the core's
   `[StatesRequirement(typeof(Factory), "Method", QueriesOnly = ...)]` on the attribute's class, `[KeyMarker(...,
   IdOf = ...)]` and `[KeyMarkerArgument(...)]` on a marker's, and `[assembly: KeyWithoutMarker(...)]` for a key
   without a marker, which Tenancy says; the generator knows no package's attribute by name. DDD00077 to DDD00083
   report, as errors: a request that says nothing of what it requires where its interface is partial (DDD00077, as
-  the compiler's CS0535 still does where it is not), an attribute and the property on one request (DDD00078), two
-  requirement attributes (DDD00079), a marker without `[RequiresKey]`, two markers of where, `[ExpectedVersion]`
+  the compiler's CS0535 still does where it is not), an attribute and the property on one request (DDD00078),
+  `[AllowAnonymous]` beside another requirement attribute (DDD00079), a marker without `[RequiresKey]`, two markers of where, `[ExpectedVersion]`
   without `[OnResource]`, a marker on a member the requirement cannot read, and a key without a marker where no
   package says where it is held (DDD00080), a marker on a member of another id than it marks, the application's unit
   id for `[AtUnit]` and a resource with members for `[OnResource]`, or on one that may be null (DDD00081), a
@@ -274,7 +276,64 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   using alias of `IRequireAccess`, so a module's own namespace called `DDDToolkit`, `Contoso.DDDToolkit.Billing`,
   takes nothing from it. See
   [What a request declares](docs/access-requirements.md#what-a-request-declares) and
-  [What combines](docs/access-requirements.md#what-combines).
+  [What goes together](docs/access-requirements.md#what-goes-together).
+- **Requirements that combine.** `AccessRequirement.All(params AccessRequirement[])` holds when every case does,
+  asked in their order, and a refusal is the first failing case's own; `AccessRequirement.Any(params
+  AccessRequirement[])` lets the first case that holds through, asks nothing after it, and where none does refuses with
+  one `access.refused` (`ToolkitRefusals.Refused`, `NotPermitted`), whose argument `Reasons`
+  (`ToolkitRefusals.ReasonsArgument`) lists each case's own refusal as a `RefusalReason`, its code and its arguments, in
+  order, and whose message names them for a log. A combination may hold another, and cases of different owners
+  combine, Tenancy's with Membership's or a module's own: each case is decided by the check that decides it alone, and
+  every case needs its check before any is asked, so a combination with a case nothing decides is stopped.
+  `AllowAnonymous()` combines with nothing. Both are records with value equality over their cases (`AllOf`, `AnyOf`,
+  `Combined.Cases`), `AccessChecks<TRequests>.Decides` answers for every case, `RequestInHand.ToString()` names their
+  cases' types, and HotChocolate's error filter writes the reasons as a list of objects. Requirement attributes stacked
+  on one request are `All` of their calls, in the order they are written above it, as several `[Authorize]` are in
+  ASP.NET Core: `[RequiresPlan(Plan.Pro)] [RequiresKey(BoardKeys.Export)]` is
+  `All(BillingAccess.RequiresPlan(Plan.Pro), TenancyAccess.ForTheWholeTenant("boards.export"))`, a module's own attribute
+  stacking as a package's does, and a marker keeps saying where the key of `[RequiresKey]` is held. A request with
+  attributes of its own that derives from one carrying them holds to both, its base's first, as `[Authorize]` on a
+  controller and on the one it derives from do, with the base's markers, a bare one on the base record's parameter
+  too; one without attributes of its own takes its base's line. `Any` and two keys stay the property, and so a second
+  `[RequiresKey]` below a base's is DDD00080. DDD00084, a warning, reports a stacked attribute its neighbour already
+  requires, `[InTenant]` beside a key of Tenancy's and `[SignedIn]` beside `[RequiresOperator]`, which a package says
+  with the new `Implies` on `[StatesRequirement]`, `[KeyMarker]` and `[KeyWithoutMarker]`, and one its base carries
+  already. What a case's check keeps (`Checked<T>`) is held back until the whole combination is decided: kept for the
+  cases the caller was let through by, every case of an `All` and the one of an `Any` that let it in, and nothing of a
+  combination that refused, whichever of its cases passed. Cases that each keep a `T`, a key on each of two documents
+  say, keep one each, in order: `Checked<T>.TakeAllFor(request)` hands them out, `TakeFor` refuses to pick one of
+  several, `Checked<T>.FindAllInHand()` and `Checked<T>.TryFindInHand(match, out var kept)` find them in the handling,
+  and Membership's expert hold holds each save to the hold on its own resource. A nested combination's reasons are
+  written in the log line, `access.refused (Reasons = [...])`, and compared one by one. See
+  [Requirements that combine](docs/access-requirements.md#requirements-that-combine) and
+  [The door and the rows](docs/access-requirements.md#the-door-and-the-rows), which says why each way of an `Any`
+  onto a table of the application's own needs a row rule of its own.
+- **Yours, or the key: the caller's own.** `AccessRequirement.Own(value)` is a request about the caller's own: the
+  check compares the value the request names with the caller's own value of its type at the door, so the request never
+  says whose it is; anyone else is refused with `access.not-own` (`ToolkitRefusals.NotOwn`, in English and Dutch).
+  `[OrOwn]` on the member beside `[RequiresKey(key)]` is `Any(Own(member), the key's case)`, the caller's own first,
+  never with `[AtUnit]`; beside `[OnResource]` the caller's own way through still sees the resource,
+  `Any(All(Own(member), MemberAccess.Sees(key, resource, version)), MemberAccess.On(key, resource, version))`, so the
+  resource is read, refused as `not-found` where the caller does not see it, its version compared and its hold kept
+  for the expert hold on either way. `MemberAccess.Sees` is Membership's new case for it, and a resource whose rules
+  name `changeMembersKey` has its member rows locked to that key in the database, so the handler saves the caller's own
+  place as the application's own work once the request is the one in hand (the docs show it). `[OwnOnly]` on the
+  request with `[Own]` on the member is `Own(member)` alone. What the caller's own is, an `ICallersOwn<TValue>` says (`TValue? Find(Caller caller)`): the core
+  for a `Guid`, the caller's verified identity, with nothing registered; Tenancy for the application's seat id, the
+  caller's seat in the tenant of the request, which `AddTenancy` registers, and `TenancyAccess.Own(seat)` spells beside
+  its other cases; an application for a kind of its own with a small handle of its own beside its requests, registered
+  by the host with `services.AddCallersOwn<UserId, CallersUser>()`, which takes the place of one registered before. The
+  core's `CallerAccessCheck` decides the case, and now takes the scope's services, `new CallerAccessCheck(callers,
+  services)`. A package names the types its handles are for with `[assembly: CallersOwn(typeof(...))]` or, for an id of
+  the application's class, `[assembly: CallersOwn(IdOf = typeof(Template<>))]`, with `Implies` there for what its
+  caller's own requires already (the core's `Guid` `[SignedIn]`, Tenancy's seat id `[InTenant]` and `[SignedIn]`, which
+  DDD00084 counts beside `[OwnOnly]`, and beside a key with `[OrOwn]` where the key requires it too), and says a marker
+  may stand beside `[OrOwn]` by naming the case its caller's own way through still meets there with
+  `OwnAlternative = nameof(...)` on `[KeyMarker]`, as Membership's `[OnResource]` names `MemberAccess.Sees`. DDD00085
+  reports `[OrOwn]` without a key or beside a marker that names none, `[AtUnit]`, `[Own]` without `[OwnOnly]` and the
+  other way round, and a member marked twice; DDD00086 `[OrOwn]` or `[Own]` on a type nothing says the caller's own of,
+  one that may be null, or a `string`, a class or an enum, which never has one. See
+  [Yours, or the key](docs/access-requirements.md#yours-or-the-key).
 - **An access behavior, written where the Mediator library is used.** Mark a module's request interface,
   `[AccessRequests] public interface IBillingRequest : IRequireAccess;`, and in a project that references
   [Mediator](https://github.com/martinothamar/Mediator) (`Mediator.Abstractions`) the generator writes
@@ -2707,13 +2766,13 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   3.2.0-preview.3:
   - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.RequiresSystemWork();` says who may send
     the request instead: `[InTenant]` where system work in a tenant sends it, as the seeding does,
-    `[AllowAnonymousCallers]` for a development route, `[SignedIn]` for a signed-in person's registration. Begin the
+    `[AllowAnonymous]` for a development route, `[SignedIn]` for a signed-in person's registration. Begin the
     system work around the send or inside the handler, `using (TenancyUseCases.BeginSystemIn(tenant)) { ... }`, and
     refuse everyone else where only system work may go on, `if (!answers.RequireTenant().BySystem) throw
     ToolkitRefusals.Refuse(ToolkitRefusals.SystemOnly);`, as the sample's `MarkTenantAsDemo` does; Tenancy's
     provisioning refuses everyone else itself. A job that sends nothing calls the use case inside the scope.
   - A request that only system work outside any tenant sends, or one of a module without Tenancy, passes
-    `[AllowAnonymousCallers]` alone, since system work is nobody's sign-in: declare that, hold it to the list of
+    `[AllowAnonymous]` alone, since system work is nobody's sign-in: declare that, hold it to the list of
     requests anyone may send, and refuse everyone else in its handler with `Callers.RequireSystemWork(callers)`,
     which throws `access.system-only` unless trusted code began system work for the flow, as the removed requirement
     did at the door. Never test `callers.Current.Kind` for it: a host that does not require explicit callers answers
@@ -2721,7 +2780,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - What a client is answered changes where a caller who is no system work sends such a request: past the door it is
     the handler's `access.system-only`, as before, and at the door the requirement's own refusal, `tenancy.not-seated`
     for a caller in no tenant where it was `access.system-only`.
-  - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();` is `[AllowAnonymousCallers]`
+  - `AccessRequirement IRequireAccess.RequiredAccess => AccessRequirement.AllowAnonymous();` is `[AllowAnonymous]`
     on the request, `=> AccessRequirement.SignedIn();` is `[SignedIn]`, `=> TenancyAccess.InTenant();` is `[InTenant]`,
     `=> TenancyAccess.RequiresOperator();` is `[RequiresOperator]`, `=> TenancyAccess.ForTheWholeTenant(key);` is
     `[RequiresKey(key)]`, `=> TenancyAccess.AtUnit(key, Unit);` is `[RequiresKey(key)]` with `[AtUnit]` on `Unit`,
@@ -2734,13 +2793,51 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   - `RequiredAccess` no longer has to be written on every request where the module's interface is partial, so a
     request that says nothing is DDD00077 there instead of the compiler's CS0535.
   - The message of a request that declares nothing names the attributes: `state what it requires with an attribute,
-    such as [SignedIn], or answer RequiredAccess with it, and say [AllowAnonymousCallers] where anyone may send it`.
+    such as [SignedIn], or answer RequiredAccess with it, and say [AllowAnonymous] where anyone may send it`.
   - The Tenancy sample follows: every request that reads no computed value says its requirement with an attribute,
     its three request interfaces are partial, `SeatGrants(SeatId Seat, OrganizationUnitId? At = null)` reads the roles
     at one unit for a caller who manages seats there (`GET /tenancy/seats/{seatId}/grants?unit=`) and computes its
     requirement, and `MarkTenantAsDemo` and `SetUpProjectRoles` declare `[InTenant]`. The Tenancy and Membership test
     hosts' request interfaces are marked and partial, and their requests say what they require with attributes.
     See [System work is a scope](docs/access-requirements.md#system-work-is-a-scope).
+- **For the 3.2.0 previews: requirements combine, and the caller's own is a requirement.** From 3.2.0-preview.3:
+  - A rule a handler asked by hand beside its request's requirement, a second key or the caller's own, is the
+    requirement now, checked at the door before the handler: `if (!own && !await KeyIsHeldAsync(...)) throw ...` in a
+    handler is `[RequiresKey(key)]` with `[OrOwn]` on the member, and a second key a handler asked at another place is
+    `AccessRequirement.All(first, second)` as the property.
+  - What a client is answered changes for such a request: a caller who meets neither way is refused with one
+    `access.refused`, a 403, whose `arguments.Reasons` lists each way's own refusal, `access.not-own` and the key's,
+    where the handler answered the key's refusal alone, `tenancy.not-permitted` say. A combination of `All` refuses
+    with the failing case's own code, as before.
+  - `access.refused`'s text is `Access to this was refused.` (Dutch `De toegang hiertoe is geweigerd.`), where it was
+    `The database refused this change.`: the code is the database's refusal of a save, as before, and the door's
+    refusal of a request none of whose ways was met. Its code and kind are as they were.
+  - `new CallerAccessCheck(callers)` still compiles; given the scope's services, `new CallerAccessCheck(callers,
+    services)`, it decides the caller's own of every type a handle is registered for, and without them a `Guid`'s
+    alone. The set `AddAccessChecks` makes gives it the scope's services.
+  - The door asks the host who is calling once, before any check, whatever the request requires. In a host that
+    requires explicit callers (`RequireExplicitCallers`), work nobody began a caller for now fails with
+    `NoCallerException` for every request sent through the checks, where a request of `TenancyAccess.InTenant()` or a
+    key of Tenancy's was refused with `tenancy.not-seated`, since Tenancy's check asks its own caller, and one of
+    `AccessRequirement.AllowAnonymous()` was let through. Begin the caller in that work, `Callers.Begin(...)` or a
+    supporting domain's own way, as such a host requires everywhere else. A set of checks made by hand asks it of the
+    `CallerAccessCheck` it holds; one without it asks nobody.
+  - `Checked<T>.KeepFor` called by the check of a case of a combination keeps nothing until the combination let the
+    caller through, and `TakeFor` throws where the cases of one kept several of `T`, pointing at the new `TakeAllFor`.
+    A requirement of one case keeps and hands out as before.
+  - The Tenancy sample follows: `RenameSeat` is `[RequiresKey(TenancyKeys.SeatsManage)]` with `[OrOwn]` on the seat,
+    and its handler asks nothing of the caller; `MoveProjectToUnit` requires `AccessRequirement.All(MemberAccess.On(
+    ProjectKeys.Edit, Id, ExpectedVersion), new ProjectsRequirement.AtUnit(ProjectKeys.Open, UnitId))`, and its handler
+    no longer asks the key at the destination; `OpenProject` computes its requirement, the key at the unit and, for an
+    owner it names, the caller's own seat or `projects.owner.change` there, and its handler no longer asks that key.
+    `ProjectAccess.RequireAtAsync(reading, unit, key, cancellationToken)` is gone: only the check asks a key at a unit.
+    The Together test host's `ICampusRequest` combines a course's key with a key at a unit, the Tenancy test host
+    states `[OrOwn]`, `[OwnOnly]` and stacked attributes, and the Membership test host's `LeaveDocument` takes a member
+    off a document with `[OrOwn]` beside `[OnResource]`, its handler saving the caller's own place as the application's
+    own work under the database's member lock. The sample's scenarios send `OpenProject` for another owner without
+    `projects.owner.change`, over REST and GraphQL, and its guard of the property form takes no combination a stack of
+    attributes says. See
+    [Requirements that combine](docs/access-requirements.md#requirements-that-combine).
 - **For the 3.2.0 previews: every request says what it requires.** `3.2.0-preview.1` and `3.2.0-preview.2`
   shipped `AccessRequirement.Open(reason)` and Tenancy's `DecidedByThePackage`, `SystemWorkInTenant` and
   `OperatorsOnly`. They are gone, so a request that still declares one no longer compiles; each maps onto the
@@ -3027,7 +3124,7 @@ Releases before 3.0.0 have no changelog entry. Their history is in the
   `AddDbContextFactory`, a container that validates scopes used to refuse while the options were built;
   it now refuses at the first in-process dispatch, and a save with nothing to dispatch goes through.
 - `FailureTranslations.ToolkitCodes()` expects `access.refused`, `access.role-not-allowed`,
-  `access.not-signed-in` and `access.system-only` as well. They ship in English and Dutch; for any other
+  `access.not-signed-in`, `access.system-only` and `access.not-own` as well. They ship in English and Dutch; for any other
   language your check now reports them until your own resource has the keys.
 - **Row level security: a token's role claim no longer runs as a signed-in user whatever it says.** A
   signed-in user's queries ran as `UserRole` for any `role` claim. The claim now picks the database role

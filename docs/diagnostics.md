@@ -77,11 +77,14 @@ type looks annotated and behaves like a plain class. Every misuse below reports 
 | [DDD00076](#ddd00076) | Warning | [assembly: TemplateFacadeName] names, once, a class this project gets |
 | [DDD00077](#ddd00077) | Error | A request says what it requires of its caller |
 | [DDD00078](#ddd00078) | Error | A request says what it requires in one way |
-| [DDD00079](#ddd00079) | Error | A request carries one requirement attribute |
+| [DDD00079](#ddd00079) | Error | [AllowAnonymous] goes with no other requirement attribute |
 | [DDD00080](#ddd00080) | Error | A marker on a request says where the key of its [RequiresKey] is held |
 | [DDD00081](#ddd00081) | Error | A marker is on a member of the id it marks |
 | [DDD00082](#ddd00082) | Error | A requirement for queries only is on a query |
 | [DDD00083](#ddd00083) | Error | A request's requirement attributes are read where its module's interface is partial |
+| [DDD00084](#ddd00084) | Warning | A requirement attribute beside another adds what that one does not require already |
+| [DDD00085](#ddd00085) | Error | [OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly] |
+| [DDD00086](#ddd00086) | Error | [OrOwn] and [Own] mark a member of a type something says the caller's own of |
 
 Most of these say the generator could not do what you asked. The rest are a different kind: they are
 rules about the model rather than about the declaration, and each of them names code that compiles,
@@ -112,8 +115,8 @@ enforces differently from the C# that states it, asks more often than it has to,
 [DDD00056](#ddd00056) to [DDD00058](#ddd00058) and [DDD00061](#ddd00061) are about the
 [access behavior written for a request interface](access-requirements.md#the-generated-behavior-with-mediator), where it
 is a message that reaches its handler with nothing having asked what it requires, and [DDD00077](#ddd00077) to
-[DDD00083](#ddd00083) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
-request that says nothing, or reads as if it said one thing with its attributes and says another.
+[DDD00086](#ddd00086) about [what a request declares](access-requirements.md#what-a-request-declares), where it is a
+request that says nothing, reads as if it said one thing with its attributes and says another, or says a thing twice.
 [DDD00059](#ddd00059) and [DDD00060](#ddd00060) are about the
 [member list of a resource](membership.md#the-member-list-is-written-for-you), and say what the generator of
 the Membership package could not tell, and which member class names the wrong resource.
@@ -2759,7 +2762,7 @@ runs: with an attribute, `[SignedIn]` or `[RequiresKey(key)]` with a marker of w
 ([What a request declares](access-requirements.md#what-a-request-declares)). Where the module's interface is
 `partial`, the generator implements `RequiredAccess` in it, so the compiler no longer asks a request for the
 property, and a request that says neither is reported here instead: sent, it would be stopped every time with an
-exception that says it declares nothing. A request anyone may send says `[AllowAnonymousCallers]`.
+exception that says it declares nothing. A request anyone may send says `[AllowAnonymous]`.
 
 ```csharp
 [RequiresKey(BillingKeys.Close)]
@@ -2790,18 +2793,25 @@ say: C# takes that default over the module's, so the message says the request an
 
 ## DDD00079
 
-**A request carries one requirement attribute.**
+**`[AllowAnonymous]` goes with no other requirement attribute.**
 
 ```csharp
-[AllowAnonymousCallers, RequiresKey(BillingKeys.Close)]            // DDD00079: two requirements
+[AllowAnonymous, RequiresKey(BillingKeys.Close)]                   // DDD00079: open beside closed
 public sealed record CloseInvoice(InvoiceId Invoice) : IBillingRequest;
 ```
 
-A request requires one thing of its caller, and its module's checks hold the caller to that one. Two requirement
-attributes say two things no check can hold together: `[AllowAnonymousCallers]` with `[RequiresKey]` would open the
-door the key closes, and `[InTenant]` with `[RequiresKey]` says less than the key alone. Keep the one it requires. A
-requirement that is one thing or another depending on the request's values is computed, and written as
-`RequiredAccess` ([A requirement computed from the request](access-requirements.md#a-requirement-computed-from-the-request)).
+Requirement attributes stacked on one request all hold, as several `[Authorize]` attributes do in ASP.NET Core
+([Stacked attributes are all](access-requirements.md#stacked-attributes-are-all)). `[AllowAnonymous]` says that
+anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it
+contradicts it: read one way the door is open, read the other it is closed, and a review cannot tell which was meant.
+It is an error beside any other requirement attribute, `[RequiresKey]` and `[OwnOnly]` included, and no line is
+written. Keep the one the request requires; a request anyone may send says `[AllowAnonymous]` alone. A request holds
+to the attributes of the requests it derives from as well, theirs first, so `[AllowAnonymous]` on a request that
+derives from one carrying `[SignedIn]` is the same contradiction, and is reported at the derived request, naming the
+base's attribute: a derived request cannot take back what its base requires.
+
+Two other requirement attributes on one request are no diagnostic: they stack, and both hold. One that its neighbour
+already requires is [DDD00084](#ddd00084), a warning.
 
 ## DDD00080
 
@@ -2829,6 +2839,7 @@ the whole tenant, `[AtUnit]` at that unit or above it, `[OnResource]` on that re
 | marks a parameter of a class's primary constructor | it is no member the requirement reads: mark the property; a positional record's parameter is its property, and is fine |
 | marks a private or protected property | the requirement is read in the module's interface, which needs a public or internal getter |
 | requires a key and marks nothing, where no package says where such a key is held | Tenancy says it for the whole tenant, `[assembly: KeyWithoutMarker]`; a project with Membership alone, or two such packages, asks for a marker |
+| requires two keys, its own `[RequiresKey]` and one of a request it derives from | the attributes of a request and of its base all hold, and one marker says where for one key; two keys are `AccessRequirement.All` of the two, as `RequiredAccess` |
 
 An abstract request is a shape the requests that derive from it share, a record that carries the unit say, so it is
 not reported for a marker without a key: each request that derives from it says its key, and one that does not is
@@ -2916,6 +2927,109 @@ to change:
 | has type parameters | answer `RequiredAccess`: a line names one type |
 | is nested private in another type | make it internal, or answer `RequiredAccess`: the interface cannot name it |
 | implements two module interfaces that are both `partial` | answer `RequiredAccess`, or implement one of them: each implements the property, and C# takes neither (its CS8705) |
+
+## DDD00084
+
+**A requirement attribute beside another adds what that one does not require already.** A warning.
+
+```csharp
+[InTenant]                                                          // DDD00084: the key requires it already
+[RequiresKey(BillingKeys.Close)]
+public sealed record CloseTheBooks(int Year) : IBillingRequest;
+
+[SignedIn, RequiresOperator]                                        // DDD00084: an operator is signed in
+public sealed record AllLedgers : IQuery<IReadOnlyList<Ledger>>, IBillingRequest;
+
+[OwnOnly, SignedIn]                                                 // DDD00084: only a signed-in user has an identity
+public sealed record CloseAccount([Own] Guid User) : IAccountsRequest;
+```
+
+Stacked attributes all hold, so one its neighbour already requires says nothing more: only a seat in the tenant or
+system work there holds a key of Tenancy's, with or without `[AtUnit]`, and `[RequiresOperator]` lets only a signed-in
+user with an operator's token role through. It checks nothing wrong, and the line is written; a reader takes it for a
+second condition and looks for what it adds, so take it off. What a requirement already requires its package says
+with `Implies` on its mark, `[StatesRequirement]`, `[KeyMarker]` or `[KeyWithoutMarker]`, so a module's own
+attribute is held to it the same way. What the caller's own requires, the package of its type says with `Implies` on
+`[assembly: CallersOwn]`: a `Guid` is a signed-in user's identity, `[SignedIn]`, and Tenancy's seat id is a seat in
+the tenant, `[InTenant]` and `[SignedIn]`. Beside `[OwnOnly]` with `[Own]` on such a member, they are reported; beside a
+key with `[OrOwn]`, only what both the key and the caller's own require is. An attribute that a request the request
+derives from carries already is reported too, since the base's attributes hold for it as well. Reported and not:
+
+| Beside | Reported | Because |
+|---|---|---|
+| `[SignedIn]` beside `[RequiresKey]` | no | system work holds every key and is nobody's sign-in, so the two say more than the key alone |
+| `[InTenant]` beside `[RequiresKey]` with `[OrOwn]` on the seat id | yes | either way through the caller is in the tenant: its own seat, or a key of Tenancy's |
+| `[InTenant]` beside `[RequiresKey]` with `[OrOwn]` on a `Guid` | no | a caller's verified identity is no seat, so the caller's own way says nothing of the tenant |
+| `[SignedIn]` beside `[RequiresKey]` with `[OrOwn]` on the seat id | no | system work holds the key and is nobody's sign-in |
+| `[InTenant]` on `CloseTheBooks : Closing`, where `Closing` is `[RequiresKey(key)]` | yes | the base's key holds for it as well |
+
+## DDD00085
+
+**`[OrOwn]` goes beside `[RequiresKey]`, and `[Own]` with `[OwnOnly]`.**
+
+```csharp
+[InTenant]
+public sealed record RenameSeat([OrOwn] SeatId Seat) : ITenantsRequest;                              // DDD00085: no key to be the alternative of
+
+[RequiresKey(TenancyKeys.SeatsManage)]
+public sealed record MoveSeat([OrOwn] SeatId Seat, [AtUnit] OrganizationUnitId To) : ITenantsRequest;   // DDD00085: beside [AtUnit]
+```
+
+A request about the caller's own says it one of two ways ([Yours, or the key](access-requirements.md#yours-or-the-key)):
+`[OrOwn]` on the member, beside `[RequiresKey(key)]`, for the caller's own or the key, and `[Own]` on the member, with
+`[OwnOnly]` on the request, for the caller's own alone. Reported, at the marker or the request:
+
+| It | Because |
+|---|---|
+| marks `[OrOwn]`, and requires no key | `[OrOwn]` makes the caller's own the alternative of the key; for the caller's own alone, `[OwnOnly]` with `[Own]` |
+| marks `[Own]`, and is not `[OwnOnly]` | `[Own]` names the value of a request about the caller's own alone |
+| carries `[OwnOnly]`, and marks no member `[Own]` | it names no value to compare with the caller's |
+| marks one member `[Own]` and `[OrOwn]` | one says the caller's own alone, the other the caller's own or the key |
+| marks two members `[OrOwn]`, or two `[Own]` | the caller's own is one value; a request about one of two computes its requirement as `RequiredAccess` |
+| marks `[OrOwn]` beside `[AtUnit]` | the unit says where the key is checked, not what the request acts on: a caller would send a unit where it holds the key for another person's seat, and a key held at one unit would act on a seat anywhere |
+| marks a parameter of a class's primary constructor, or a private property | the line is written in the module's interface, which reads a property with a public or internal getter |
+
+`[OrOwn]` beside `[OnResource]` is fine: the resource is what the request acts on, as Membership says with
+`OwnAlternative` on its `[KeyMarker]`, which names the case the caller's own way through still meets there,
+`MemberAccess.Sees`: the caller sees the resource, and the check reads it, compares its version and keeps its hold
+([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)). A package's marker of where
+a key is checked whatever the request acts on names none, and `[OrOwn]` beside it is reported the same way.
+
+## DDD00086
+
+**`[OrOwn]` and `[Own]` mark a member of a type something says the caller's own of.**
+
+```csharp
+[RequiresKey(ProfileKeys.Edit)]
+public sealed record EditProfile([OrOwn] UserId User) : IProfilesRequest;                          // DDD00086: nothing says the caller's own UserId
+
+[OwnOnly]
+public sealed record LeaveTenant([Own] SeatId? Seat) : ITenantsRequest;                             // DDD00086: may be null
+```
+
+The check compares the value the request names with the caller's own value of its type, at the door. What that is,
+whoever knows says, with an `ICallersOwn<TValue>`: the core for a `Guid`, the caller's verified identity; Tenancy
+for your seat id, the caller's seat in the tenant of the request; and you for a kind of your own, with a small
+handle beside your requests, which the host registers:
+
+```csharp
+public sealed class CallersUser : ICallersOwn<UserId>
+{
+    public UserId? Find(Caller caller) => caller.UserId is { } id ? new UserId(id) : null;
+}
+
+services.AddCallersOwn<UserId, CallersUser>();
+```
+
+On a type nothing says that for, the request would be stopped every time it is sent, so it is reported, and no line
+is written. The generator finds a handle in the requests' project, or public in a project it references; a package
+names its types with `[assembly: CallersOwn(...)]`. Where a package names its type by the template an application
+declares its class with, Tenancy's seat id say, and the project sees no class declared with it, nothing can be told,
+and the check says so when the request is sent. A member that may be null names no value where it is left out: a
+requirement computed from whether it is given is written as `RequiredAccess`. And the caller's own is a value
+compared with the caller's, a struct that is `IEquatable` of itself, such as a `Guid` or an id declared with
+`[EntityId]`: a member that is a `string`, a class or an enum has no own whatever the project sees, and is reported
+always, `[OrOwn] string Name` say.
 
 ## Building the model fails: the owned type must carry the key part
 

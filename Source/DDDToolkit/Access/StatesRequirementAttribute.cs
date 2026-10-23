@@ -20,8 +20,11 @@ namespace DDDToolkit.Access;
 /// <see cref="AccessRequirement"/>, and takes what the attribute's constructor takes, in that order: what does not is
 /// the package's mistake, which the compiler reports in the line the generator wrote.
 /// <para>
-/// A request carries one requirement, so an attribute marked this way does not go with another, nor with
-/// <see cref="RequiresKeyAttribute"/>, nor with a request that answers the property itself (DDD00078, DDD00079).
+/// Attributes stacked on one request all hold: the generator writes <c>AccessRequirement.All(...)</c> of their calls, in
+/// the order they are written above the request, so a module's own attribute stacks beside a package's as theirs do.
+/// None goes with a request that answers the property itself (DDD00078), and none with <c>[AllowAnonymous]</c>, which
+/// would open the door the other closes (DDD00079). One that says less than another beside it, which already requires
+/// it, is reported as redundant (DDD00084): say so with <see cref="Implies"/>.
 /// </para>
 /// </remarks>
 /// <param name="factory">The class whose static method makes the requirement: <c>typeof(TenancyAccess)</c>.</param>
@@ -43,4 +46,11 @@ public sealed class StatesRequirementAttribute(Type factory, string method) : At
     /// A request of another dispatcher, which the generator cannot tell for a command or a query, is not reported.
     /// </summary>
     public bool QueriesOnly { get; set; }
+
+    /// <summary>
+    /// The requirement attributes this one already requires, so that one of them stacked beside it says nothing more:
+    /// Tenancy's <c>[RequiresOperator]</c> lets only a signed-in user through, so it names <see cref="SignedInAttribute"/>,
+    /// and <c>[SignedIn]</c> beside it is DDD00084, a warning. Empty by default.
+    /// </summary>
+    public Type[] Implies { get; set; } = [];
 }

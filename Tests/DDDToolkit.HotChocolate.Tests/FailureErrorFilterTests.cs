@@ -94,6 +94,19 @@ public class FailureErrorFilterTests
     }
 
     [Fact]
+    public async Task A_refusal_of_every_way_a_request_may_be_sent_carries_each_way_s_reason_as_an_object()
+    {
+        var errors = await ErrorsAsync("{ refusedEveryWay }");
+
+        var error = errors.Should().ContainSingle().Which;
+        Extensions(error).GetProperty("code").GetString().Should().Be(ToolkitRefusals.Refused);
+        Extensions(error).GetProperty("kind").GetString().Should().Be("NOT_PERMITTED");
+        var reasons = Extensions(error).GetProperty("arguments").GetProperty(ToolkitRefusals.ReasonsArgument).EnumerateArray().ToList();
+        reasons.Select(reason => reason.GetProperty("code").GetString()).Should().Equal("tenancy.operators-only", "tenancy.not-permitted");
+        reasons[1].GetProperty("arguments").GetProperty("Key").GetString().Should().Be("tenancy.seats.manage", "each reason keeps its arguments, written as a refusal's are");
+    }
+
+    [Fact]
     public async Task A_registered_localizer_phrases_every_message()
     {
         var errors = await ErrorsAsync("{ refuse breakInvariant refused }", new Upper());

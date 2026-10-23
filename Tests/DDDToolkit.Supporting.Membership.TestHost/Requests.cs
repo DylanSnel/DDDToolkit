@@ -38,6 +38,15 @@ public sealed record ShareDocument([OnResource] DocumentId Document, UserId With
 [RequiresKey(FolderKeys.Staff)]
 public sealed record AdmitStaff([OnResource] FolderId Folder, StaffCode Staff, NamedRole Role, DateTimeOffset? Until = null, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
 
+/// <summary>
+/// Takes a user off a document: a member takes itself off a document it sees, or whoever holds the key that shares it
+/// takes anybody off. Yours, or the key on the resource: the caller's own <see cref="UserId"/> is what
+/// <see cref="CallersUser"/> says, and either way the document is read at the door, its version compared, and what the
+/// expert hold holds the save to kept.
+/// </summary>
+[RequiresKey(DocumentKeys.Share)]
+public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member, [ExpectedVersion] long? ExpectedVersion = null) : IFilingRequest;
+
 /// <summary>Lists the documents the caller sees: nothing is refused, the statement filters.</summary>
 [SeenWith<DocumentId>(DocumentKeys.View)]
 public sealed record ListDocuments : IFilingRequest;

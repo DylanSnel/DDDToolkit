@@ -56,4 +56,24 @@ public static class MemberAccess
     public static MemberAccess<TResourceId>.SeenWith SeenWith<TResourceId>(string key)
         where TResourceId : struct, IEntityId, IEquatable<TResourceId>
         => new(key);
+
+    /// <summary>
+    /// The caller sees <paramref name="resource"/>, whether or not it holds <paramref name="key"/> there: what a request
+    /// about the caller's own on the resource requires of it, beside the caller's own, where the key is the other way
+    /// through. <c>[OrOwn]</c> beside <c>[OnResource]</c> says it:
+    /// <code>
+    /// [RequiresKey(DocumentKeys.Share)]                                    // take yourself off, or anybody with the key
+    /// public sealed record LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId Member) : IDocumentsRequest;
+    /// </code>
+    /// is <c>AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Member), MemberAccess.Sees(DocumentKeys.Share,
+    /// request.Document)), MemberAccess.On(DocumentKeys.Share, request.Document))</c>.
+    /// </summary>
+    /// <param name="key">The key the other way through requires on the resource: asked about, and not required.</param>
+    /// <param name="resource">The resource, from the request.</param>
+    /// <param name="expectedVersion">The version of the resource the caller last read, for a command that says so.</param>
+    /// <typeparam name="TResourceId">The resource's id.</typeparam>
+    /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
+    public static MemberAccess<TResourceId>.Sees Sees<TResourceId>(string key, TResourceId resource, long? expectedVersion = null)
+        where TResourceId : struct, IEntityId, IEquatable<TResourceId>
+        => new(key, resource, expectedVersion);
 }

@@ -35,6 +35,26 @@ public sealed record Problem(HttpStatusCode Status, string? ContentType, JsonEle
         return null;
     }
 
+    /// <summary>
+    /// The code of each case's own refusal, in their order, of an <c>access.refused</c> a request that lets one caller or
+    /// another through answered: its argument <c>Reasons</c>. Empty for any other refusal.
+    /// </summary>
+    public IReadOnlyList<string?> Reasons
+    {
+        get
+        {
+            if (Body.ValueKind != JsonValueKind.Object || !Body.TryGetProperty("arguments", out var arguments) || arguments.ValueKind != JsonValueKind.Object)
+            {
+                return [];
+            }
+
+            var reasons = arguments.EnumerateObject().FirstOrDefault(argument => string.Equals(argument.Name, "Reasons", StringComparison.OrdinalIgnoreCase));
+            return reasons.Value.ValueKind == JsonValueKind.Array
+                ? [.. reasons.Value.EnumerateArray().Select(static reason => reason.EnumerateObject().FirstOrDefault(property => string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase)).Value.GetString())]
+                : [];
+        }
+    }
+
     private string? Text(string property)
         => Body.ValueKind == JsonValueKind.Object && Body.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()

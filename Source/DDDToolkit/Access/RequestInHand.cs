@@ -34,7 +34,7 @@ namespace DDDToolkit.Access;
 /// <para>
 /// What a check keeps for the request it let through (<see cref="Checked{T}.KeepFor"/>) is kept with the request
 /// in hand as well, so code that runs in the handling finds it without the request
-/// (<see cref="Checked{T}.TryFindInHand"/>): how a package checks at the save what its check read before the
+/// (<see cref="Checked{T}.TryFindInHand(out T)"/>): how a package checks at the save what its check read before the
 /// handler.
 /// </para>
 /// <para>
@@ -55,12 +55,15 @@ public sealed class RequestInHand
 
     private static readonly AsyncLocal<bool> AskingAgain = new();
 
+    private static readonly AsyncLocal<Pending?> Holding = new();
+
     /// <summary>The check that decided the requirement; <see langword="null"/> for a request anyone may send, which asks nobody.</summary>
     private readonly IAccessCheck? _check;
 
     private readonly Lock _gate = new();
 
-    private readonly Dictionary<Type, object> _kept = [];
+    /// <summary>What the checks kept, by its type, in the order they kept it: several of one type where cases of a combination each kept one.</summary>
+    private readonly Dictionary<Type, List<object>> _kept = [];
 
     private volatile bool _passed;
 
@@ -86,6 +89,12 @@ public sealed class RequestInHand
 
     /// <summary>Whether this flow is asking a check again, for <see cref="Checked{T}"/>, which then keeps nothing.</summary>
     internal static bool IsAskingAgain => AskingAgain.Value;
+
+    /// <summary>
+    /// What holds back what the checks keep in this flow, while the case of a combined requirement they decide is
+    /// asked: <see langword="null"/> outside a combination, where a check keeps at once.
+    /// </summary>
+    internal static Pending? HeldBack => Holding.Value;
 
     /// <summary>
     /// Asks the check the request passed again, now, as the caller of this flow, about the same requirement of the
@@ -124,10 +133,11 @@ public sealed class RequestInHand
 
     /// <summary>
     /// The request's type and that of its requirement, as their authors write them, <c>CloseInvoice
-    /// (BillingAccess.OnInvoice)</c>: what a log line names the request by, so that whoever reads it sees what was
-    /// asked again. Nothing of their values, which may say more than a log should.
+    /// (BillingAccess.OnInvoice)</c>, and of each case of a combination, <c>RenameSeat (AccessRequirement.Any(AccessRequirement.Owned&lt;SeatId&gt;,
+    /// TenancyRequirement.ForTheWholeTenant))</c>: what a log line names the request by, so that whoever reads it sees
+    /// what was asked again. Nothing of their values, which may say more than a log should.
     /// </summary>
-    public override string ToString() => $"{WrittenTypeNames.Of(Request.GetType())} ({WrittenTypeNames.Of(Requirement.GetType())})";
+    public override string ToString() => $"{WrittenTypeNames.Of(Request.GetType())} ({WrittenTypeNames.OfRequirement(Requirement)})";
 
     /// <summary>
     /// Puts <paramref name="request"/> in hand for the rest of this flow of work and asks <paramref name="check"/>
@@ -166,31 +176,60 @@ public sealed class RequestInHand
     /// <param name="request">A request.</param>
     internal static RequestInHand? Of(object request) => Ambient.Value is { } hand && ReferenceEquals(hand.Request, request) ? hand : null;
 
-    /// <summary>Keeps <paramref name="value"/> as what was kept of <typeparamref name="T"/>, in the place of an earlier one. Safe from several tasks of the flow.</summary>
+    /// <summary>
+    /// Begins holding back what the checks keep in this flow, for the case of a combined requirement about to be asked:
+    /// inside the one that holds back already, if any. End it with <see cref="EndHoldingBack"/> in the same method.
+    /// </summary>
+    internal static Pending HoldBack()
+    {
+        var pending = new Pending(Holding.Value);
+        Holding.Value = pending;
+        return pending;
+    }
+
+    /// <summary>Ends <paramref name="pending"/>: what is kept from here on goes where it went before it began.</summary>
+    internal static void EndHoldingBack(Pending pending) => Holding.Value = pending.Outer;
+
+    /// <summary>Keeps <paramref name="value"/> beside what else was kept of <typeparamref name="T"/>. Safe from several tasks of the flow.</summary>
     internal void Keep<T>(T value)
         where T : notnull
     {
         lock (_gate)
         {
-            _kept[typeof(T)] = value;
+            if (!_kept.TryGetValue(typeof(T), out var kept))
+            {
+                _kept.Add(typeof(T), kept = []);
+            }
+
+            kept.Add(value);
         }
     }
 
-    /// <summary>What was kept of <typeparamref name="T"/>, left where it is.</summary>
-    internal bool TryFind<T>(out T value)
+    /// <summary>The first of what was kept of <typeparamref name="T"/> that <paramref name="match"/> takes, left where it is.</summary>
+    internal bool TryFind<T>(Func<T, bool> match, out T value)
         where T : notnull
     {
-        lock (_gate)
+        foreach (var kept in FindAll<T>())
         {
-            if (_kept.TryGetValue(typeof(T), out var kept))
+            if (match(kept))
             {
-                value = (T)kept;
+                value = kept;
                 return true;
             }
         }
 
         value = default!;
         return false;
+    }
+
+    /// <summary>Everything kept of <typeparamref name="T"/>, in the order it was kept, left where it is.</summary>
+    internal IReadOnlyList<T> FindAll<T>()
+        where T : notnull
+    {
+        lock (_gate)
+        {
+            return _kept.TryGetValue(typeof(T), out var kept) ? [.. kept.Cast<T>()] : [];
+        }
     }
 
     /// <summary>
@@ -201,5 +240,57 @@ public sealed class RequestInHand
     {
         await asked.ConfigureAwait(false);
         hand._passed = true;
+    }
+
+    /// <summary>
+    /// What the checks of the cases of a combined requirement kept, held back until the combination is decided: kept
+    /// once it let the caller through by those cases, into the combination around it where there is one, and dropped
+    /// when it refused. So a refused <see cref="AccessRequirement.All"/> leaves nothing of a case that passed before
+    /// the one that refused, and a branch of <see cref="AccessRequirement.Any"/> that did not let the caller through
+    /// leaves nothing of its own.
+    /// </summary>
+    /// <param name="outer">The one that held back already where this began, or <see langword="null"/>.</param>
+    internal sealed class Pending(Pending? outer)
+    {
+        private readonly Lock _gate = new();
+        private readonly List<Action> _keeps = [];
+
+        /// <summary>The one that held back already where this began, or <see langword="null"/>.</summary>
+        public Pending? Outer { get; } = outer;
+
+        /// <summary>Holds back one keep, in the order the checks kept.</summary>
+        public void Add(Action keep)
+        {
+            lock (_gate)
+            {
+                _keeps.Add(keep);
+            }
+        }
+
+        /// <summary>
+        /// Lets what was held back through, in its order: into <see cref="Outer"/>, which a combination around this one
+        /// decides, or kept now where there is none.
+        /// </summary>
+        public void Commit()
+        {
+            Action[] keeps;
+            lock (_gate)
+            {
+                keeps = [.. _keeps];
+                _keeps.Clear();
+            }
+
+            foreach (var keep in keeps)
+            {
+                if (Outer is { } outer)
+                {
+                    outer.Add(keep);
+                }
+                else
+                {
+                    keep();
+                }
+            }
+        }
     }
 }

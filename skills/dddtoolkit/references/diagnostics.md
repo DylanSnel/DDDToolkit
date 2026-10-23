@@ -666,10 +666,11 @@ module in either.
 Error, on a request whose module's interface is `partial` (so the compiler no longer asks for the property) and
 that says nothing of what it requires. Put the requirement attribute on it that says who may send it: `[SignedIn]`,
 `[InTenant]`, `[RequiresKey(key)]` with `[AtUnit]` or `[OnResource]` on the member where the key is held,
-`[SeenWith<TResourceId>(key)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymousCallers]` only
-where anyone may send it. Answer `RequiredAccess` instead only for a case of the module's own or a requirement
-computed from the request's values. A request of another project than its interface answers `RequiredAccess`. Never
-answer it with `[AllowAnonymousCallers]` to make it build, and never with system work: there is no such requirement.
+`[SeenWith<TResourceId>(key)]` on a list, `[RequiresOperator]` on an operator's query, `[AllowAnonymous]` only
+where anyone may send it, `[OrOwn]` on the member beside the key for the caller's own or the key, several stacked
+where all hold. Answer `RequiredAccess` instead only for a case of the module's own, a requirement computed from the
+request's values, or one caller or another and two keys (`AccessRequirement.Any`, `All`). A request of another project than its interface answers `RequiredAccess`. Never
+answer it with `[AllowAnonymous]` to make it build, and never with system work: there is no such requirement.
 
 ## DDD00078
 
@@ -681,9 +682,11 @@ or drop the attribute.
 
 ## DDD00079
 
-Error: two requirement attributes on one request (`[AllowAnonymousCallers]` with `[RequiresKey]`, `[InTenant]` with
-`[RequiresKey]`, `[SignedIn]` with `[InTenant]`). Keep the one the request requires: a key needs nothing beside it. A
-requirement that is one or the other depending on the request is `RequiredAccess`, computed.
+Error: `[AllowAnonymous]` beside another requirement attribute. Stacked attributes all hold
+(`AccessRequirement.All`, in the order written), so anyone beside a key contradicts it. Keep the one the request
+requires; a request anyone may send says `[AllowAnonymous]` alone. Two other requirement attributes are no diagnostic:
+they stack. A request holds to the attributes of the requests it derives from too, theirs first, so `[AllowAnonymous]`
+on one that derives from a request carrying a requirement is reported as well: do not derive it from that request.
 
 ## DDD00080
 
@@ -696,7 +699,8 @@ parameter (mark the property; a positional record parameter is fine); a marker o
 key is held, as in a project with Membership and no Tenancy (mark `[OnResource]` on the resource). An abstract
 record that carries the unit is not reported; a request that derives from it and "inherits" a marker without
 `[RequiresKey]` is (add the key). A derived record's positional parameter may carry `[AtUnit]` even where its base
-declares the property.
+declares the property. A request with a `[RequiresKey]` of its own that derives from one with a `[RequiresKey]`
+requires two keys: write `AccessRequirement.All` of the two as `RequiredAccess`.
 
 ## DDD00081
 
@@ -724,6 +728,38 @@ module's interface `partial` (`[AccessRequests] public partial interface IBillin
 the module's interface, move the request into the project that declares it, or, for a generic request, one nested
 private, or one that implements two partial module interfaces (C# takes neither's property, CS8705), answer
 `RequiredAccess` itself (or make the nested type internal, or implement one interface).
+
+## DDD00084
+
+Warning, at a stacked requirement attribute its neighbour already requires: `[InTenant]` beside `[RequiresKey]` (a key
+of Tenancy's, with or without `[AtUnit]`, is held only by a seat in the tenant or system work there), `[SignedIn]`
+beside `[RequiresOperator]`, `[SignedIn]` beside `[OwnOnly]` with `[Own]` on a `Guid` (only a signed-in user has an
+identity), `[InTenant]` or `[SignedIn]` beside `[OwnOnly]` with `[Own]` on the seat id, `[InTenant]` beside a key of
+Tenancy's with `[OrOwn]` on the seat id (either way the caller is in the tenant), and an attribute a request the
+request derives from carries already. Take it off. Not reported: `[SignedIn]` beside `[RequiresKey]` (it keeps system
+work out), with or without `[OrOwn]`, and `[InTenant]` beside a key with `[OrOwn]` on a `Guid`. A package says what its
+requirement implies with `Implies` on its mark, and what its caller's own implies with `Implies` on
+`[assembly: CallersOwn]`.
+
+## DDD00085
+
+Error, at the marker or the request: the caller's own out of place. `[OrOwn]` goes on the member that names the
+caller's own, beside `[RequiresKey]` (add the key, or use `[OwnOnly]` with `[Own]` for the caller's own alone); `[Own]`
+goes with `[OwnOnly]` on the request, and `[OwnOnly]` needs a member marked `[Own]`; one member is marked one way,
+once; `[OrOwn]` never beside `[AtUnit]` (the caller would send a unit where it holds the key for another subject):
+compute such a requirement as `RequiredAccess`. Beside `[OnResource]` it is fine: its `[KeyMarker]` names
+`OwnAlternative = nameof(MemberAccess.Sees)`, so the caller's own way through still sees the resource, and the line is
+`Any(All(Own(member), MemberAccess.Sees(key, resource)), MemberAccess.On(key, resource))`. A marker on a class's
+primary constructor parameter or a private property: mark a property with a public or internal getter.
+
+## DDD00086
+
+Error, at `[OrOwn]` or `[Own]`: nothing says what the caller's own value of the member's type is, or the member may be
+null. A `Guid` is the caller's verified identity (the core), the application's seat id the caller's seat (Tenancy).
+For a type of the application's own, write a small `ICallersOwn<T>` beside the requests (`T? Find(Caller caller)`,
+public where another project declares it) and register it in the host, `services.AddCallersOwn<T, TCallersOwn>()`.
+A nullable member: compute the requirement as `RequiredAccess`. A `string`, a class or an enum never has an own (the
+case compares a struct that is `IEquatable` of itself): mark the member that names the caller's id instead.
 
 ## Not a diagnostic: the owned type must carry the key part
 

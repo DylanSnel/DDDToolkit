@@ -17,6 +17,6 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// is no query, a command or a plain request, it is DDD00082. The toolkit's generator turns it into <c>TenancyAccess.RequiresOperator()</c> at compile time, in the
 /// module's request interface (<c>[AccessRequests]</c>, declared <c>partial</c>).
 /// </remarks>
-[StatesRequirement(typeof(TenancyAccess), nameof(TenancyAccess.RequiresOperator), QueriesOnly = true)]
+[StatesRequirement(typeof(TenancyAccess), nameof(TenancyAccess.RequiresOperator), QueriesOnly = true, Implies = [typeof(SignedInAttribute)])]
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public sealed class RequiresOperatorAttribute : Attribute;

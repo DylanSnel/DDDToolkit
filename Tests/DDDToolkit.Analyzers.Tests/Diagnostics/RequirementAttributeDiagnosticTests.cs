@@ -26,7 +26,7 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldHaveExactlyDiagnostics("DDD00077");
         Message(result, "DDD00077", at: "CloseInvoice").Should()
             .Contain("'CloseInvoice' implements 'IBillingRequest' and says nothing of what it requires of its caller")
-            .And.Contain("[AllowAnonymousCallers] where anyone may send it");
+            .And.Contain("[AllowAnonymous] where anyone may send it");
         result.ShouldHaveDiagnostic("DDD00077", at: "CloseInvoice").Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
     }
 
@@ -146,19 +146,31 @@ public class RequirementAttributeDiagnosticTests
         result.ShouldNotContain("BillingAccessBehavior.", "CloseTheBooks", "no line is written that nothing would read");
     }
 
-    // ------------------------------------------------------------------ DDD00079: one requirement attribute
+    // ------------------------------------------------------------------ DDD00079: [AllowAnonymous] beside nothing else
 
     [Theory]
-    [InlineData("[AllowAnonymousCallers, RequiresKey(\"billing.close\")]", "[AllowAnonymousCallers] and [RequiresKey]")]
-    [InlineData("[InTenant, RequiresKey(\"billing.close\")]", "[InTenant] and [RequiresKey]")]
-    [InlineData("[SignedIn, InTenant]", "[SignedIn] and [InTenant]")]
-    public void Two_requirement_attributes_on_one_request_is_DDD00079(string attributes, string named)
+    [InlineData("[AllowAnonymous, RequiresKey(\"billing.close\")]", "[RequiresKey]")]
+    [InlineData("[AllowAnonymous, SignedIn]", "[SignedIn]")]
+    [InlineData("[InTenant, AllowAnonymous, RequiresOperator]", "[InTenant] and [RequiresOperator]")]
+    public void AllowAnonymous_beside_another_requirement_attribute_is_DDD00079(string attributes, string named)
     {
         var result = Run(attributes + " public sealed record CloseTheBooks(int Year) : IBillingRequest;");
 
         result.ShouldHaveExactlyDiagnostics("DDD00079");
-        Message(result, "DDD00079", at: "CloseTheBooks").Should().Contain("carries " + named + ": a request requires one thing of its caller");
-        result.ShouldNotContain("BillingAccessBehavior.", "CloseTheBooks", "no line is written for a request that says two things");
+        Message(result, "DDD00079", at: "CloseTheBooks").Should().Contain("carries [AllowAnonymous] beside " + named + ": requirement attributes stacked on a request all hold");
+        result.ShouldHaveDiagnostic("DDD00079", at: "CloseTheBooks").Severity.Should().Be(Microsoft.CodeAnalysis.DiagnosticSeverity.Error, "an open door beside a closed one is a contradiction");
+        result.ShouldNotContain("BillingAccessBehavior.", "CloseTheBooks", "no line is written for a request that says two contrary things");
+    }
+
+    [Theory]
+    [InlineData("[SignedIn, InTenant]")]
+    [InlineData("[SignedIn, RequiresKey(\"billing.close\")]")]
+    public void Two_requirement_attributes_that_say_more_than_each_alone_stack_with_no_diagnostic(string attributes)
+    {
+        var result = Run(attributes + " public sealed record CloseTheBooks(int Year) : IBillingRequest;");
+
+        result.ShouldHaveExactlyDiagnostics();
+        result.ShouldContain("BillingAccessBehavior.", "global::Shop.Billing.CloseTheBooks => global::DDDToolkit.Access.AccessRequirement.All(", "stacked attributes are all of them");
     }
 
     // ------------------------------------------------------------------ DDD00080: a marker in its place

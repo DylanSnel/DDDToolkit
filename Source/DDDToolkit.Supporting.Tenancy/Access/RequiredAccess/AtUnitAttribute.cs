@@ -18,7 +18,12 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// be left out, <c>OrganizationUnitId?</c>, is a requirement computed from whether it is given, so the request answers
 /// <c>RequiredAccess</c> itself: <c>Unit is { } unit ? TenancyAccess.AtUnit(key, unit) : TenancyAccess.ForTheWholeTenant(key)</c>.
 /// A key without any marker is held for the whole tenant.
+/// <para>
+/// Not beside <c>[OrOwn]</c>: the caller would send the unit the key is checked at for another subject, so a key held at
+/// one unit would act on a seat anywhere (DDD00085). A key at a unit is held by a seat in the tenant or by system work
+/// there, so <c>[InTenant]</c> beside it says nothing more, and is a warning (DDD00084).
+/// </para>
 /// </remarks>
-[KeyMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtUnit), IdOf = typeof(OrganizationUnitAttribute<>))]
+[KeyMarker(typeof(TenancyAccess), nameof(TenancyAccess.AtUnit), IdOf = typeof(OrganizationUnitAttribute<>), Implies = [typeof(InTenantAttribute)])]
 [AttributeUsage(AttributeTargets.Parameter | AttributeTargets.Property, Inherited = false)]
 public sealed class AtUnitAttribute : Attribute;

@@ -237,12 +237,13 @@ public sealed class AccessStatementTests(SampleHosts hosts) : IClassFixture<Samp
                 new OpenProject("P-900", "Quay wall", Harbor.Root, Harbor.SeatOf(DemoPeople.Leo)),
                 Cancellation);
 
-            // Three contexts: the access check's reading, one reading for everything the handler asks of Tenancy,
-            // and the request's own, the unit of work, for the number and the save. Each is taken from the pool, so
-            // they are counted by rental: the handler's reading may well be handed the instance the check gave back.
-            counter.Rentals.Should().HaveCount(3, "the check reads on one context, the handler asks on one more, and the command saves on the request's");
+            // Four contexts: a reading for each case the access check asks, the key to open and, as Leo is not Ada,
+            // the owner's key; one reading for everything the handler asks of Tenancy; and the request's own, the unit
+            // of work, for the number and the save. Each is taken from the pool, so they are counted by rental: a
+            // later reading may well be handed the instance an earlier one gave back.
+            counter.Rentals.Should().HaveCount(4, "the check reads on a context per case it asks, the handler asks on one more, and the command saves on the request's");
             counter.Rentals[^1].Should().Be(ofTheScope.ContextId, "what changes is saved on the request's context, last");
-            counter.Rentals.Take(2).Should().NotContain(ofTheScope.ContextId, "and nothing of Tenancy is read on it");
+            counter.Rentals.Take(3).Should().NotContain(ofTheScope.ContextId, "and nothing of Tenancy is read on it");
             counter.Commands.Take(4).Should().AllSatisfy(
                 statement => statement.Should().StartWith("SELECT").And.Contain($"FROM {TenantsContext.Schema}.").And.NotContain(AnyTableOfTenancy).And.NotContain($"FROM {ProjectsTable}"),
                 "the four questions of Tenancy's come first, each asked of a function of Tenancy's: the key to open, the owner's key, the unit and the seat");

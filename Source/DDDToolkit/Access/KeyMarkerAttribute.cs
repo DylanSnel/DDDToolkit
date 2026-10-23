@@ -52,4 +52,28 @@ public sealed class KeyMarkerAttribute(Type factory, string method) : Attribute
     /// with <c>Argument = 3, IdOfArgument = true</c> makes the member a <c>DocumentId</c>.
     /// </summary>
     public bool IdOfArgument { get; set; }
+
+    /// <summary>
+    /// The requirement attributes a key held where this marker says already requires, so that one of them stacked
+    /// beside <see cref="RequiresKeyAttribute"/> says nothing more: a key at a unit of Tenancy's is held by a seat in the
+    /// tenant or by system work there, so <c>[AtUnit]</c> names <c>[InTenant]</c>, and <c>[InTenant]</c> beside it is
+    /// DDD00084, a warning. Empty by default.
+    /// </summary>
+    public Type[] Implies { get; set; } = [];
+
+    /// <summary>
+    /// Says that <see cref="OrOwnAttribute"/> may go beside this marker, by naming the method of <see cref="Factory"/>
+    /// whose case the caller's own way through still meets where the marker says: the member it marks is what the request
+    /// acts on, so a caller who holds the key there acts on it, and one who acts on its own acts on its own there, and is
+    /// held to it there too. The method takes what <see cref="Method"/> takes, the key, the marked member and the
+    /// arguments beside it. Membership's <c>[OnResource]</c> names <c>MemberAccess.Sees</c>:
+    /// <c>LeaveCrew([OnResource] ProjectId Project, [OrOwn] SeatId Seat)</c> takes the caller off a crew of a project it
+    /// sees, or anyone with the key on the project, and is
+    /// <c>Any(All(Own(request.Seat), MemberAccess.Sees(key, request.Project)), MemberAccess.On(key, request.Project))</c>,
+    /// so the project's check reads it, compares the version the request names and keeps what a save is held to, either
+    /// way. <see langword="null"/> by default, for a marker of where a key is checked whatever the request acts on, as
+    /// Tenancy's <c>[AtUnit]</c> is: beside it the caller would send a unit where it holds the key for another subject, so
+    /// <c>[OrOwn]</c> there is DDD00085.
+    /// </summary>
+    public string? OwnAlternative { get; set; }
 }

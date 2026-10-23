@@ -89,23 +89,39 @@ internal static class FailureValues
             ? localizer.Localize(new RefusalException(code, kind, own))
             : own;
 
+    /// <summary>
+    /// A value as any GraphQL serializer can write it. The reasons of a refusal at the door that let one caller or another
+    /// through, <see cref="ToolkitRefusals.ReasonsArgument"/>, are a list of objects, each with its code and arguments.
+    /// </summary>
     private static object? Plain(object? value)
         => value switch
         {
             null or string or bool => value,
             byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal => value,
             Type type => type.Name,
+            IEnumerable<RefusalReason> reasons => reasons
+                .Select(static reason => new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["code"] = reason.Code,
+                    ["arguments"] = AsExtension(reason.Arguments),
+                })
+                .ToList(),
             _ => value.ToString(),
         };
 
-    /// <summary>The value as JSON would write it, without the quotes: no culture decides how a number looks.</summary>
+    /// <summary>
+    /// The value as JSON would write it, without the quotes: no culture decides how a number looks. A refusal's reasons
+    /// are their codes and arguments, one after the other.
+    /// </summary>
     private static string? Text(object? value)
-        => Plain(value) switch
-        {
-            null => null,
-            string text => text,
-            bool flag => flag ? "true" : "false",
-            IFormattable number => number.ToString(null, CultureInfo.InvariantCulture),
-            var other => other.ToString(),
-        };
+        => value is IEnumerable<RefusalReason> reasons
+            ? string.Join("; ", reasons)
+            : Plain(value) switch
+            {
+                null => null,
+                string text => text,
+                bool flag => flag ? "true" : "false",
+                IFormattable number => number.ToString(null, CultureInfo.InvariantCulture),
+                var other => other.ToString(),
+            };
 }

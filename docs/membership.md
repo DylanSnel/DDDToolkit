@@ -195,7 +195,30 @@ expectedVersion)`), and `[SeenWith<TResourceId>(key)]` for a query that shows th
 `[SignedIn]` and the rest, and Tenancy's `[InTenant]` and the rest: a request of a module with members says which,
 and none leaves it to a package. `[OnResource]` marks the id of a resource with members, an aggregate root a class
 declared with `[Member<...>]` names; on another id it is [DDD00081](diagnostics.md#ddd00081). A requirement computed
-from the request's values answers `RequiredAccess` with the calls instead. With the behavior, `AddDocumentMemberAccess`
+from the request's values answers `RequiredAccess` with the calls instead.
+
+Membership's cases combine with the others ([Requirements that combine](access-requirements.md#requirements-that-combine)).
+The resource is what the request acts on, so `[OrOwn]` goes beside `[OnResource]`: a member leaves on their own, or
+anybody with the key on the resource takes them off, `LeaveDocument([OnResource] DocumentId Document, [OrOwn] UserId
+Member)`, which is `AccessRequirement.Any(AccessRequirement.All(AccessRequirement.Own(request.Member),
+MemberAccess.Sees(key, request.Document)), MemberAccess.On(key, request.Document))`, with what says the caller's own
+`UserId` registered beside it ([Yours, or the key](access-requirements.md#yours-or-the-key)). `MemberAccess.Sees` is the
+caller's own way through on the resource: the caller sees the document, holding the key there or not, and the check
+reads it, refuses one it does not see with `documents.not-found`, compares the version `[ExpectedVersion]` names and
+keeps the hold, as `On` does. The handler still finds the member on that document. Where the rules name
+`changeMembersKey`, the database's lock lets a member row change only for a caller that holds it, so the handler saves
+the caller's own place as the application's own work once its request is the one in hand
+([The caller's own on a resource](access-requirements.md#the-callers-own-on-a-resource)).
+
+A key of Membership's and one of Tenancy's on one request are `AccessRequirement.All`: moving a project takes the key
+to edit it, on the project, and the key that opens a project, at the unit it goes to,
+`All(MemberAccess.On(ProjectKeys.Edit, Project, ExpectedVersion), TenancyAccess.AtUnit(ProjectKeys.Open, To))`. The
+check of each case is the one that decides it alone, so the two packages' checks, registered for the same interface,
+each answer theirs. What a case of Membership's keeps for the [expert hold](#the-expert-hold) is kept once the whole
+combination let the caller through, and only for the cases it was let through by; a key on each of two documents keeps
+a hold on each, `All(MemberAccess.On(key, From), MemberAccess.On(key, To))`, and each save is held to its own.
+
+With the behavior, `AddDocumentMemberAccess`
 also brings the start-up check that the behavior is in the pipeline, and a handler called past it is a warning;
 see [When nothing asks the checks](access-requirements.md#when-nothing-asks-the-checks).
 

@@ -87,7 +87,7 @@ public sealed class DatabaseRefusalPostgresTests(PalletDepotDatabase database) :
         var refusal = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<RefusalException>()).Which;
         refusal.Code.Should().Be(ToolkitRefusals.Refused);
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-        refusal.Message.Should().Be("The database refused this change.");
+        refusal.Message.Should().Be("Access to this was refused.");
         refusal.Arguments.Should().BeEmpty("the caller is told no more than that");
         refusal.InnerException.Should().BeOfType<DbUpdateException>()
             .Which.InnerException.Should().BeOfType<PostgresException>().Which.SqlState.Should().Be(PostgresErrorCodes.InsufficientPrivilege);
@@ -473,7 +473,7 @@ public sealed class DatabaseRefusalPostgresTests(PalletDepotDatabase database) :
                 var refusal = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<RefusalException>()).Which;
                 refusal.Code.Should().Be(ToolkitRefusals.Refused);
                 refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-                refusal.Message.Should().Be("The database refused this change.");
+                refusal.Message.Should().Be("Access to this was refused.");
                 refusal.Arguments.Should().BeEmpty("the caller is told no more than that, and nothing of the guard");
                 var failure = refusal.InnerException.Should().BeOfType<DbUpdateException>().Subject;
                 failure.InnerException.Should().BeOfType<PostgresException>().Which.MessageText.Should().Be("A pallet keeps its number.");

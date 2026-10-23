@@ -13,7 +13,7 @@ namespace DDDToolkit.Supporting.Tenancy.TestHost.Requests;
 public static class StatedRequests
 {
     /// <summary>Anyone may send it.</summary>
-    [AllowAnonymousCallers]
+    [AllowAnonymous]
     public sealed record ForAnyone : IHostRequest;
 
     /// <summary>A signed-in user, who need not have a seat.</summary>
@@ -36,4 +36,19 @@ public static class StatedRequests
     /// <summary>One of the application's operators.</summary>
     [RequiresOperator]
     public sealed record ForOperators : IHostRequest;
+
+    /// <summary>A seat renames itself, and any seat with the key that manages seats for the whole tenant: yours, or the key.</summary>
+    /// <param name="Seat">The seat.</param>
+    [RequiresKey(TenancyKeys.SeatsManage)]
+    public sealed record RenameSeat([OrOwn] SeatId Seat) : IHostRequest;
+
+    /// <summary>A seat gives up its own place, and no key stands in for it.</summary>
+    /// <param name="Seat">The seat.</param>
+    [OwnOnly]
+    public sealed record LeaveOwnPlace([Own] SeatId Seat) : IHostRequest;
+
+    /// <summary>A signed-in seat with the key that manages seats for the whole tenant: both, so system work, nobody's sign-in, is not let through.</summary>
+    [SignedIn]
+    [RequiresKey(TenancyKeys.SeatsManage)]
+    public sealed record ManageEverySeatAsAPerson : IHostRequest;
 }

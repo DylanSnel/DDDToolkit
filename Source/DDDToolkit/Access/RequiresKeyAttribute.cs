@@ -32,6 +32,13 @@ namespace DDDToolkit.Access;
 /// case wherever that is read. A requirement computed from the request's values, a key at a unit where one is given
 /// and for the whole tenant otherwise say, is written as that property instead.
 /// </para>
+/// <para>
+/// <see cref="OrOwnAttribute"/> on the member that names the caller's own makes the key an alternative: the request is
+/// about the caller's own, or the caller holds the key, <c>AccessRequirement.Any(AccessRequirement.Own(request.Seat), ...)</c>.
+/// Stacked beside another requirement attribute both hold, <c>AccessRequirement.All(...)</c>, in the order they are
+/// written; a second key is not stacked, since its marker could not tell which key it says where of, and two keys are
+/// written as the property, <c>AccessRequirement.All(TenancyAccess.AtUnit(key, From), TenancyAccess.AtUnit(key, To))</c>.
+/// </para>
 /// </remarks>
 /// <param name="key">The key the caller holds: a constant, one of the catalogue's.</param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]

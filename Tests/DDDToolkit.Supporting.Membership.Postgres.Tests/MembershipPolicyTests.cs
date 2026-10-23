@@ -399,6 +399,40 @@ public sealed class MembershipPolicyTests(FilingPostgres postgres)
     }
 
     [Fact]
+    public async Task A_member_who_takes_itself_off_without_the_key_saves_its_own_place_as_the_applications_own_work_once_its_request_passed_the_door()
+    {
+        using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);
+        var data = filing.Scenario;
+
+        // Dee is a member of the minutes and holds no key that changes their members. As herself, the lock keeps her own
+        // member row too: the database asks for the key the rules name, whoever the row is of. The limit, pinned here.
+        var asHerself = await FluentActions.Awaiting(() => filing.Services.AsAsync(TestCallers.User(data.Dee), async provider =>
+        {
+            var context = provider.GetRequiredService<FilingContext>();
+            var minutes = await context.Documents.SingleAsync(document => document.Id == data.Minutes, Cancellation);
+            minutes.Unshare(data.Dee);
+            await context.SaveChangesAsync(Cancellation);
+        })).Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
+        asHerself.Which.Code.Should().Be(DDDToolkit.Exceptions.ToolkitRefusals.Refused);
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().Contain(share => share.MemberId == data.Dee);
+
+        // Sent as the request, [OrOwn] beside [OnResource]: the door lets her through for herself on a document she sees,
+        // and the handler saves her own place as the application's own work, with the request in hand.
+        await filing.Services.SendAsync(TestCallers.User(data.Dee), new LeaveDocument(data.Minutes, data.Dee));
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Dee);
+
+        // Whoever holds the key takes another member off as the caller, and the lock lets that row go.
+        await filing.Services.SendAsync(TestCallers.User(data.Ada), new LeaveDocument(data.Minutes, data.Cy));
+        (await filing.Services.ReadAsync(data.Minutes)).Shares.Should().NotContain(share => share.MemberId == data.Cy);
+
+        // And a member without the key takes nobody else off: the door refuses, and nothing is asked of the database.
+        var refused = await FluentActions.Awaiting(() => filing.Services.SendAsync(TestCallers.User(data.Ben), new LeaveDocument(data.Minutes, data.Fay)))
+            .Should().ThrowAsync<DDDToolkit.Exceptions.RefusalException>();
+        ((IReadOnlyList<DDDToolkit.Exceptions.RefusalReason>)refused.Which.Arguments[DDDToolkit.Exceptions.ToolkitRefusals.ReasonsArgument]!)
+            .Select(reason => reason.Code).Should().Equal(DDDToolkit.Exceptions.ToolkitRefusals.NotOwn, DocumentRefusals.Membership[MembershipRefusals.NotPermitted]);
+    }
+
+    [Fact]
     public async Task The_application_itself_and_the_tables_owner_are_not_held_by_the_lock()
     {
         using var filing = await PostgresFiling.CreateAsync(postgres, FilingPostgres.Template.Secured, asCaller: true);

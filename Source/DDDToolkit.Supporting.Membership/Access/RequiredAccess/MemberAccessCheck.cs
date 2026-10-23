@@ -39,7 +39,13 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// with the request in hand: that costs nothing, and it is what the expert hold holds a save to, where a
 /// context asks for it (<c>UseMemberHolds</c> of the Entity Framework package). Then a save that changes the
 /// resource is refused when it is at another version than the check read, and one that changes a resource no
-/// check of the request in hand read is refused outright.
+/// check of the request in hand read is refused outright. A request whose requirement names several resources, two
+/// documents of <c>AccessRequirement.All</c> say, has a hold kept for each, and each save is held to its own.
+/// </para>
+/// <para>
+/// The caller's own way through a request about a resource (<see cref="MemberAccess{TResourceId}.Sees"/>, which
+/// <c>[OrOwn]</c> beside <c>[OnResource]</c> writes) is decided the same way, without the key: <c>not-found</c> for a
+/// resource the caller may not see, the version compared, and the hold kept.
 /// </para>
 /// <para>
 /// It decides the cases of its own resource only. A module with two kinds of resource registers two, and a
@@ -83,6 +89,24 @@ public sealed class MemberAccessCheck<TResource, TResourceId>(IMemberQuestions<T
 
                 // Kept under the request, and with it in hand: what the expert hold holds the save to, where a
                 // context asks for it. The handler needs none of it.
+                kept.KeepFor(request, hold);
+                break;
+            }
+
+            case MemberAccess<TResourceId>.Sees required:
+            {
+                // The caller's own way through a request about a resource: the resource seen, in the same order of
+                // refusals as a key on it, and no key required. Read, compared and kept as a key's case is, so a save of
+                // the resource is held to what was read whichever way the caller came through.
+                access.RequireCaller();
+                var hold = await access.HoldAsync(required.Resource, required.Key, cancellationToken).ConfigureAwait(false)
+                           ?? throw access.Rules.Codes.Refuse(MembershipRefusals.NotFound);
+
+                if (required.ExpectedVersion is { } expected && expected != hold.Version)
+                {
+                    throw new ConcurrencyConflictException(typeof(TResource), required.Resource);
+                }
+
                 kept.KeepFor(request, hold);
                 break;
             }

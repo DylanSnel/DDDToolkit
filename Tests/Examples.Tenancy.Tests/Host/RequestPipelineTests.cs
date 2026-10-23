@@ -64,8 +64,14 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         using var mine = new Activity("the test's own requests").Start();
         var notAKey = new UnitsWhereIHold("projects.nothing");
 
-        // Nobody: the access check refuses before the handler sees the key, which it would have refused.
-        var asNobody = await RefusalOfAsync(host, notAKey);
+        // Nobody, a caller who did not sign in: the access check refuses before the handler sees the key, which it would
+        // have refused. The host requires every flow to say who it runs as, so the test says so too.
+        RefusalException asNobody;
+        using (Callers.Begin(Caller.Anonymous))
+        {
+            asNobody = await RefusalOfAsync(host, notAKey);
+        }
+
         asNobody.Code.Should().Be(TenancyRefusals.NotSeated, "the access check comes before the handler");
 
         // A seat: the access check lets it through, and the handler refuses the key.
@@ -352,9 +358,10 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
             refused.Arguments["Key"].Should().Be(TenancyKeys.RolesManage);
         }
 
-        // Nobody is refused as nobody, before anything is read.
-        await using (var scope = host.Services.CreateAsyncScope())
+        // Nobody, a caller who did not sign in, is refused as nobody, before anything is read.
+        using (Callers.Begin(Caller.Anonymous))
         {
+            await using var scope = host.Services.CreateAsyncScope();
             var handle = async () => await ArchiveHandlerOf(scope).Handle(archive, Cancellation);
             (await handle.Should().ThrowAsync<RefusalException>()).Which.Code.Should().Be(TenancyRefusals.NotSeated);
         }
@@ -722,8 +729,11 @@ public sealed class RequestPipelineTests(SampleHosts sample) : IClassFixture<Sam
         var outOfSight = DemoData.Meadow.ProjectNamed("Garden shed").Id;
         const string Blank = "   ";
 
-        // Nobody, whatever the project and the title.
-        (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(TenancyRefusals.NotSeated);
+        // Nobody, a caller who did not sign in, whatever the project and the title.
+        using (Callers.Begin(Caller.Anonymous))
+        {
+            (await RefusalOfAsync(host, new RecordInspection(outOfSight, Blank))).Code.Should().Be(TenancyRefusals.NotSeated);
+        }
 
         // System work that acts for no seat is a mistake in the calling code, found before the project is asked about.
         using (TenancyUseCases.BeginSystemIn(Harbor.Id))

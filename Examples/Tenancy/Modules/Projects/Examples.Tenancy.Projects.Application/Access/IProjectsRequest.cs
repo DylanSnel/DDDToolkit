@@ -11,8 +11,9 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// the project and <c>[ExpectedVersion]</c> on the version the caller read, or <c>[SeenWith&lt;ProjectId&gt;(key)]</c>
 /// on a list; or one of Tenancy's, <c>[InTenant]</c> and <c>[RequiresKey(key)]</c> for the whole tenant. A case of the
 /// module's own, a key held at a unit where a project is to be opened (<see cref="ProjectsRequirement"/>), has no
-/// attribute, so its request answers <see cref="IRequireAccess.RequiredAccess"/> itself, as <c>OpenProject</c> does;
-/// it implements the member explicitly, so the requirement is said next to the request's own fields without becoming
+/// attribute, so its request answers <see cref="IRequireAccess.RequiredAccess"/> itself, as <c>OpenProject</c> does, and
+/// so does a request that requires two keys in two places, <c>AccessRequirement.All</c> of them, as
+/// <c>MoveProjectToUnit</c> does; it implements the member explicitly, so the requirement is said next to the request's own fields without becoming
 /// one of them. The interface is partial because the toolkit's generator writes
 /// <see cref="IRequireAccess.RequiredAccess"/> into it, one line per request that says it with an attribute, and the
 /// pipeline behavior beside it, <c>ProjectsAccessBehavior&lt;TMessage, TResponse&gt;</c>, which asks the checks

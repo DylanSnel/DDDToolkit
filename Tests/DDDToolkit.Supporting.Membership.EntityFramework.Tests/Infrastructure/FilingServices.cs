@@ -141,6 +141,14 @@ public sealed class FilingServices : IDisposable
             await provider.GetRequiredService<ShareDocumentHandler>().HandleAsync(command, TestContext.Current.CancellationToken);
         });
 
+    /// <summary>Sends a request to take a user off a document as <paramref name="caller"/>: the checks first, then its handler.</summary>
+    public Task SendAsync(Caller caller, LeaveDocument command)
+        => AsAsync(caller, async provider =>
+        {
+            await provider.GetRequiredService<AccessChecks<IFilingRequest>>().RequireAsync(command, TestContext.Current.CancellationToken);
+            await provider.GetRequiredService<LeaveDocumentHandler>().HandleAsync(command, TestContext.Current.CancellationToken);
+        });
+
     /// <summary>Sends a request to put staff on a folder as <paramref name="caller"/>: the checks first, then its handler.</summary>
     public Task SendAsync(Caller caller, AdmitStaff command)
         => AsAsync(caller, async provider =>

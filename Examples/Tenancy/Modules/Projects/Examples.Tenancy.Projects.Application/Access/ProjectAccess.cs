@@ -108,8 +108,8 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
 
     /// <summary>
     /// Requires the caller to hold <paramref name="key"/> at <paramref name="unit"/>, there or above it: the check
-    /// a command asked at a unit passes before its handler, where no crew can give the key. One statement, on a
-    /// reading of its own.
+    /// a command asked at a unit passes before its handler, where no crew can give the key, alone or as one case of
+    /// several, the unit a project moves to beside the key on the project. One statement, on a reading of its own.
     /// </summary>
     /// <param name="unit">The unit.</param>
     /// <param name="key">The key the request needs there.</param>
@@ -125,27 +125,6 @@ public sealed class ProjectAccess(IMemberQuestions<ProjectId> members, IProjectR
         answers.RequireTenant();
 
         await using var reading = reads.Open();
-        await RequireAtAsync(reading, unit, key, cancellationToken);
-    }
-
-    /// <summary>
-    /// Requires the caller to hold <paramref name="key"/> at <paramref name="unit"/>, there or above it: for a
-    /// second key a command's own rule asks for, such as the one at the unit a project moves to. One statement,
-    /// on the reading the command opened for what it asks of Tenancy.
-    /// </summary>
-    /// <param name="reading">The reading of the command that asks.</param>
-    /// <param name="unit">The unit.</param>
-    /// <param name="key">The key the command needs there.</param>
-    /// <param name="cancellationToken">Cancels the query.</param>
-    /// <exception cref="Exceptions.RefusalException">
-    /// The caller's own refusal when it is nobody; <c>projects.not-permitted</c>, with the <c>Key</c> and the
-    /// <c>Unit</c>, when it does not hold the key there.
-    /// </exception>
-    /// <exception cref="ArgumentException">The catalogue does not know <paramref name="key"/>.</exception>
-    public async Task RequireAtAsync(IProjectReading reading, OrganizationUnitId unit, string key, CancellationToken cancellationToken)
-    {
-        answers.RequireTenant();
-
         if (!await Questions(reading).HoldsAtAsync(key, unit, cancellationToken))
         {
             throw ProjectRefusals.Refuse(ProjectRefusals.NotPermitted, ("Key", key), ("Unit", unit));

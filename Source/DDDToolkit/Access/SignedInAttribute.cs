@@ -13,8 +13,9 @@ namespace DDDToolkit.Access;
 /// <remarks>
 /// The toolkit's generator turns it into <c>AccessRequirement.SignedIn()</c> at compile time, in the module's
 /// request interface (<c>[AccessRequests]</c>, declared <c>partial</c>), so the request answers
-/// <see cref="IRequireAccess.RequiredAccess"/> with it wherever that is read. A request carries one requirement:
-/// this, another requirement attribute, or the property it computes itself.
+/// <see cref="IRequireAccess.RequiredAccess"/> with it wherever that is read. Stacked beside another requirement
+/// attribute both hold, <c>AccessRequirement.All(...)</c>; beside one that already lets only a signed-in user through,
+/// <c>[RequiresOperator]</c> say, it says nothing more, and the generator warns of it (DDD00084).
 /// </remarks>
 [StatesRequirement(typeof(AccessRequirement), nameof(AccessRequirement.SignedIn))]
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]

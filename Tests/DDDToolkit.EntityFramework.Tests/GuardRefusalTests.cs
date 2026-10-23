@@ -155,7 +155,7 @@ public sealed class GuardRefusalTests : IDisposable
         var refusal = (await FluentActions.Awaiting(() => context.SaveChangesAsync(Cancellation)).Should().ThrowAsync<RefusalException>()).Which;
         refusal.Code.Should().Be(ToolkitRefusals.Refused);
         refusal.Kind.Should().Be(RefusalKind.NotPermitted);
-        refusal.Message.Should().Be("The database refused this change.", "the caller is told it may not, and nothing of the guard");
+        refusal.Message.Should().Be("Access to this was refused.", "the caller is told it may not, and nothing of the guard");
         refusal.Arguments.Should().BeEmpty();
         refusal.InnerException.Should().BeOfType<DbUpdateException>("the refusal keeps the failure it stands for")
             .Which.InnerException.Should().BeOfType<PostgresException>().Which.ConstraintName.Should().Be("pallets_depot_is_held");

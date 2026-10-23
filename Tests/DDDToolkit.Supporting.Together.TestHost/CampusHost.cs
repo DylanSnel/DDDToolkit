@@ -1,3 +1,4 @@
+using Campus.Access;
 using Campus.Courses;
 using Campus.Labs;
 using Campus.Persistence;
@@ -34,6 +35,10 @@ public static class CampusHost
 
         // A lab: the same, with the college's own roles, which the member class says by holding them by Tenancy's role id.
         services.AddLabMembershipWithTenancy<CampusContext>(LabMembership.Rules);
+
+        // The campus' requests, held to Tenancy's cases and to the courses' both: a requirement may combine the two.
+        services.AddTenancyAccess<TenantId, SeatId, OrganizationUnitId, RoleId, ICampusRequest, TenancyContext>();
+        services.AddCourseMemberAccess<ICampusRequest>();
 
         return services;
     }

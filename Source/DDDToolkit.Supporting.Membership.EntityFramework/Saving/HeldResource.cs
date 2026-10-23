@@ -32,8 +32,11 @@ internal abstract class HeldResource(MembershipRegistration registration)
     /// <param name="entity">A tracked resource of this kind.</param>
     public abstract HeldVersion? HoldInHand(object entity);
 
-    /// <summary>The resource of this kind the request in hand passed its check on, or <see langword="null"/>: for a message.</summary>
-    public abstract object? ResourceInHand();
+    /// <summary>
+    /// The resources of this kind the request in hand passed its checks on, <c>a and b</c>, or <see langword="null"/>:
+    /// for a message.
+    /// </summary>
+    public abstract string? ResourceInHand();
 
     /// <summary>The id of <paramref name="entity"/>, for a message.</summary>
     /// <param name="entity">A tracked resource of this kind.</param>
@@ -50,12 +53,20 @@ internal sealed class HeldResource<TResource, TResourceId>(MembershipRegistratio
 {
     /// <inheritdoc />
     public override HeldVersion? HoldInHand(object entity)
-        => Checked<MemberHold<TResourceId>>.TryFindInHand(out var hold) && hold.Resource.Equals(((TResource)entity).Id)
+    {
+        // The hold on this very resource: a request whose requirement names two of this kind, All of a key on each say,
+        // has a hold for each, and each save is held to its own.
+        var id = ((TResource)entity).Id;
+        return Checked<MemberHold<TResourceId>>.TryFindInHand(hold => hold.Resource.Equals(id), out var hold)
             ? new HeldVersion(hold, hold.Resource, hold.Version)
             : null;
+    }
 
     /// <inheritdoc />
-    public override object? ResourceInHand() => Checked<MemberHold<TResourceId>>.TryFindInHand(out var hold) ? hold.Resource : null;
+    public override string? ResourceInHand()
+        => Checked<MemberHold<TResourceId>>.FindAllInHand() is { Count: > 0 } holds
+            ? string.Join(" and ", holds.Select(static hold => hold.Resource.ToString()))
+            : null;
 
     /// <inheritdoc />
     public override object IdOf(object entity) => ((TResource)entity).Id;

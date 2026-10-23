@@ -42,7 +42,7 @@ public interface IRequireAccess
 {
     /// <summary>
     /// What the request requires of its caller. Never null: a request that anyone may send says so with
-    /// <see cref="AllowAnonymousCallersAttribute"/> or <see cref="AccessRequirement.AllowAnonymous"/>, and one that
+    /// <see cref="AllowAnonymousAttribute"/> or <see cref="AccessRequirement.AllowAnonymous"/>, and one that
     /// declares nothing is stopped.
     /// </summary>
     AccessRequirement RequiredAccess { get; }

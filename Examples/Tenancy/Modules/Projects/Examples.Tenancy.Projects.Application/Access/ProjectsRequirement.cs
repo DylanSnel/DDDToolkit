@@ -19,8 +19,11 @@ namespace Examples.Tenancy.Projects.Application.Access;
 /// </para>
 /// <para>
 /// A closed set: the constructor is private, so the cases below are all there are, and each is a record, so two
-/// requirements that say the same are equal. What a requirement cannot say stays in the handler, in plain sight:
-/// that naming somebody else as owner needs a second key, that moving a project needs one at the destination.
+/// requirements that say the same are equal. A case combines with the packages' cases at the door: moving a project
+/// needs the key on it and this one at the destination, <c>AccessRequirement.All</c>, and naming somebody else as the
+/// owner of a new project needs the caller's own seat or this one with the owner's key, <c>AccessRequirement.Any</c>.
+/// What no requirement can say, because it is about the tenant's state rather than the caller's rights, stays in the
+/// handler, in plain sight: that the unit takes anything new.
 /// </para>
 /// </remarks>
 public abstract record ProjectsRequirement : AccessRequirement

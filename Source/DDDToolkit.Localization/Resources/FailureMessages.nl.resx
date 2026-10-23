@@ -13,7 +13,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="access.refused" xml:space="preserve">
-    <value>De database heeft deze wijziging geweigerd.</value>
+    <value>De toegang hiertoe is geweigerd.</value>
   </data>
   <data name="access.role-not-allowed" xml:space="preserve">
     <value>De rol van deze aanmelding geeft hier geen toegang: {Role}.</value>
@@ -23,6 +23,9 @@
   </data>
   <data name="access.system-only" xml:space="preserve">
     <value>Dit kan alleen de applicatie zelf.</value>
+  </data>
+  <data name="access.not-own" xml:space="preserve">
+    <value>Dit kan alleen degene om wie het gaat.</value>
   </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is niet geldig.</value>

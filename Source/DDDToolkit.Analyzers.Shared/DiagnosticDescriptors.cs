@@ -670,7 +670,7 @@ internal static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor RequestStatesNoRequirement = Create(
         id: "DDD00077",
         title: "A request says what it requires of its caller",
-        messageFormat: "'{0}' implements '{1}' and says nothing of what it requires of its caller: {2}. Put a requirement attribute on it, [SignedIn] say, or [RequiresKey(key)] with a marker of where the key is held, or answer RequiredAccess where the requirement is computed; [AllowAnonymousCallers] where anyone may send it.",
+        messageFormat: "'{0}' implements '{1}' and says nothing of what it requires of its caller: {2}. Put a requirement attribute on it, [SignedIn] say, or [RequiresKey(key)] with a marker of where the key is held, or answer RequiredAccess where the requirement is computed; [AllowAnonymous] where anyone may send it.",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -685,14 +685,41 @@ internal static class DiagnosticDescriptors
         isEnabledByDefault: true,
         description: "A request says what it requires with an attribute, [SignedIn], [InTenant] or [RequiresKey(key)] with its marker, or by answering RequiredAccess itself, for a requirement computed from the request's values. Both on one request read as two requirements, while C# takes the request's own property and the attribute does nothing: a review that reads the attribute is misled. So it is an error. A request that derives from one that answers RequiredAccess answers it too, and carries no requirement attribute of its own; so does a request whose interface between it and the module's gives RequiredAccess a default of its own, which C# takes over the module's.");
 
-    public static readonly DiagnosticDescriptor RequestCarriesTwoRequirements = Create(
+    public static readonly DiagnosticDescriptor AnonymousBesideARequirement = Create(
         id: "DDD00079",
-        title: "A request carries one requirement attribute",
-        messageFormat: "'{0}' carries {1}: a request requires one thing of its caller, so keep the one it requires",
+        title: "[AllowAnonymous] goes with no other requirement attribute",
+        messageFormat: "'{0}' carries [AllowAnonymous] beside {1}: requirement attributes stacked on a request all hold, and beside what {1} requires, anyone may send it contradicts it; keep the one it requires",
         category: Access,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "A request requires one thing of its caller, and its module's checks hold the caller to that one: [AllowAnonymousCallers], [SignedIn], [InTenant], [RequiresOperator], [RequiresKey(key)] or [SeenWith<TResourceId>(key)]. Two of them on one request, [AllowAnonymousCallers] with [RequiresKey] or [InTenant] with [RequiresKey], say two things no check can hold together: one would open the door the other closes. A caller who holds a key is let through whoever else it is, so [RequiresKey] needs nothing beside it; a requirement only a computation can say, one thing or another depending on the request's values, is written as RequiredAccess.");
+        description: "Requirement attributes stacked on one request all hold, as several [Authorize] attributes do in ASP.NET Core: [RequiresPlan(Plan.Pro)] [RequiresKey(BoardKeys.Export)] is AccessRequirement.All of the two, in the order they are written. [AllowAnonymous] says that anyone may send the request, a caller who did not sign in too, so beside a requirement that says who may it contradicts it: read one way the door is open, read the other way it is closed, and a review cannot tell which was meant. So it is an error, whichever other requirement attribute it stands beside, [RequiresKey] and [OwnOnly] included. A request anyone may send says [AllowAnonymous] alone.");
+
+    public static readonly DiagnosticDescriptor RedundantRequirement = Create(
+        id: "DDD00084",
+        title: "A requirement attribute beside another adds what that one does not require already",
+        messageFormat: "'{0}' carries {1} beside {2}, which requires it already: {1} adds nothing to what the request requires, so take it off",
+        category: Access,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Requirement attributes stacked on one request all hold, so one that another beside it already requires says nothing more: [InTenant] beside a key of Tenancy's, [RequiresKey(key)] with or without [AtUnit], which only a seat in the tenant or system work there holds, and [SignedIn] beside [RequiresOperator], which lets only a signed-in user with an operator's token role through. It does no harm to what is checked, but a reader takes it for a second condition and looks for what it adds. What a requirement already requires its package says, with Implies on [StatesRequirement], [KeyMarker] or [KeyWithoutMarker], so a module's own attribute is held to it the same way. The caller's own requires what its package says with Implies on [assembly: CallersOwn]: a Guid is the identity of a signed-in user, so [SignedIn] beside [OwnOnly] with [Own] on a Guid says nothing more, and Tenancy's seat id is a seat in the tenant, so [InTenant] beside [OwnOnly] with [Own] on it says nothing more either. A key with [OrOwn] beside it lets the caller's own through as well, so only what both the key and the caller's own require is counted for it. An attribute that the request it derives from carries already says nothing more either: the requirement attributes of a request and of the requests it derives from all hold.");
+
+    public static readonly DiagnosticDescriptor OwnMarkerOutOfPlace = Create(
+        id: "DDD00085",
+        title: "[OrOwn] goes beside [RequiresKey], and [Own] with [OwnOnly]",
+        messageFormat: "'{0}' {1}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A request about the caller's own says it one of two ways. [OrOwn] on the member that names the caller's own, beside [RequiresKey(key)], says the caller's own or the key: AccessRequirement.Any(AccessRequirement.Own(request.Seat), the key's case). [Own] on that member, with [OwnOnly] on the request, says the caller's own alone: AccessRequirement.Own(request.Seat). So [OrOwn] without [RequiresKey] is the alternative of nothing, [Own] without [OwnOnly] is read by nothing, and [OwnOnly] without a member marked [Own] names no value; one member marked both ways, or two members marked one way, say two values where one is compared. [OrOwn] does not go beside a marker that says where a key is checked without being what the request acts on, Tenancy's [AtUnit]: a caller who may act on its own would send a unit where it holds the key for another subject, so a key held at one unit would act on a seat anywhere; such a request computes its requirement as RequiredAccess. A package's marker says it may, with OwnAlternative on [KeyMarker], which names the case the caller's own way through still meets where the marker says, as Membership's [OnResource] does: beside it, the caller sees the resource, MemberAccess.Sees. A marker goes on a positional parameter of a record, which is its property, or on a property the module's interface can read.");
+
+    public static readonly DiagnosticDescriptor OwnOnATypeWithoutOwn = Create(
+        id: "DDD00086",
+        title: "[OrOwn] and [Own] mark a member of a type something says the caller's own of",
+        messageFormat: "'{0}' marks '{1}' [{2}], {3}",
+        category: Access,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The check compares the value a request names with the caller's own of the same type, at the door, so the request need not know who sends it. What the caller's own is, whoever knows says, with an ICallersOwn<TValue>: the core for a Guid, the caller's verified identity, which is the id its token names; Tenancy for the application's seat id, the caller's seat in the tenant of the request; and an application for a kind of its own, its own user id say, with a small implementation beside its requests, which the host registers with services.AddCallersOwn<UserId, CallersUser>(). On a member of a type nothing says that for, the request would be stopped every time it is sent, so it is reported where the project can tell: a package says its types with [assembly: CallersOwn], and an application's ICallersOwn is found in the requests' project or one it references. A member that may be null, SeatId?, names no value where it is left out: a requirement computed from whether it is given is written as RequiredAccess. And the caller's own is a value compared with the caller's, a struct that is IEquatable of itself, so a member that is a string, a class or an enum is reported whatever the project sees.");
 
     public static readonly DiagnosticDescriptor KeyMarkerOutOfPlace = Create(
         id: "DDD00080",

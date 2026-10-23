@@ -25,7 +25,7 @@ namespace DDDToolkit.Supporting.Tenancy.Access;
 /// </para>
 /// <para>
 /// Who may send a request is not what its handler runs with. A handler that provisions a tenant begins system
-/// work here itself, in trusted code, whatever its request requires: <c>[AllowAnonymousCallers]</c> for a
+/// work here itself, in trusted code, whatever its request requires: <c>[AllowAnonymous]</c> for a
 /// registration form anyone may fill in, <c>[SignedIn]</c> for a signed-in user who registers an organization. A
 /// tool only the application runs is trusted code itself: it begins the work here and calls the use case, or sends
 /// its request inside it. The requirement decides who gets as far as the handler; what the work may then do is

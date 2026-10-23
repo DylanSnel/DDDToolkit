@@ -38,4 +38,17 @@ internal static class WrittenTypeNames
 
         return name;
     }
+
+    /// <summary>
+    /// A requirement by the types it is made of, for a log line that names nothing of its values: a case is its type
+    /// (<see cref="Of"/>), and a combination names its cases in their order,
+    /// <c>AccessRequirement.Any(TenancyRequirement.Operator, TenancyRequirement.ForTheWholeTenant)</c>.
+    /// </summary>
+    /// <param name="requirement">The requirement to name.</param>
+    public static string OfRequirement(AccessRequirement requirement) => requirement switch
+    {
+        AccessRequirement.AllOf all => "AccessRequirement.All(" + string.Join(", ", all.Cases.Select(OfRequirement)) + ")",
+        AccessRequirement.AnyOf any => "AccessRequirement.Any(" + string.Join(", ", any.Cases.Select(OfRequirement)) + ")",
+        _ => Of(requirement.GetType()),
+    };
 }

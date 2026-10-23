@@ -140,12 +140,12 @@ public class FailureLocalizerTests
 
         using (new Culture("en-US"))
         {
-            FailureLocalizer.Default.Localize(refused).Should().Be("The database refused this change.").And.Be(refused.Message, "the neutral text is the refusal's own");
+            FailureLocalizer.Default.Localize(refused).Should().Be("Access to this was refused.").And.Be(refused.Message, "the neutral text is the refusal's own");
         }
 
         using (new Culture("nl-NL"))
         {
-            FailureLocalizer.Default.Localize(refused).Should().Be("De database heeft deze wijziging geweigerd.");
+            FailureLocalizer.Default.Localize(refused).Should().Be("De toegang hiertoe is geweigerd.");
         }
 
         var notAllowed = ToolkitRefusals.Refuse(ToolkitRefusals.RoleNotAllowed, ("Role", "intern"));

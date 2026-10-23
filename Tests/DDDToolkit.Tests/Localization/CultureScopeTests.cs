@@ -216,7 +216,7 @@ public class CultureScopeTests
 
         using (CultureScope.Use(British))
         {
-            localizer.Localize(refusal, Dutch).Should().Be("De database heeft deze wijziging geweigerd.");
+            localizer.Localize(refusal, Dutch).Should().Be("De toegang hiertoe is geweigerd.");
             localizer.Localize(error, Dutch).Should().Be("Mystery is niet geldig.");
             localizer.Localize(violation, Dutch).Should().Be(
                 "In deze kassa mag hooguit 100,00 zitten, en er zit 150,00 in.",
@@ -228,7 +228,7 @@ public class CultureScopeTests
 
         using (CultureScope.Use(Dutch))
         {
-            localizer.Localize(refusal, British).Should().Be("The database refused this change.");
+            localizer.Localize(refusal, British).Should().Be("Access to this was refused.");
             localizer.Localize(error, British).Should().Be("Mystery is not valid.");
             localizer.Localize(violation, British).Should().Be("A till holds at most 100.00; this one holds 150.00.");
         }

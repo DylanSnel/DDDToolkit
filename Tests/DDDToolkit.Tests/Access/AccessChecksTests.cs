@@ -268,7 +268,7 @@ public class AccessChecksTests
         var failure = await FluentActions.Awaiting(() => checks.RequireAsync(new CloseInvoice(7, null!), TestContext.Current.CancellationToken).AsTask())
             .Should().ThrowAsync<InvalidOperationException>();
 
-        failure.Which.Message.Should().Contain("CloseInvoice declares no access requirement").And.Contain("[AllowAnonymousCallers]");
+        failure.Which.Message.Should().Contain("CloseInvoice declares no access requirement").And.Contain("[AllowAnonymous]");
         asked.Entries.Should().BeEmpty("not even a check that decides everything is asked about nothing");
     }
 

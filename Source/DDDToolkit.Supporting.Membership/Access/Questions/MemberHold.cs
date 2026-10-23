@@ -16,7 +16,9 @@ namespace DDDToolkit.Supporting.Membership.Access;
 /// <param name="Resource">The resource that was read.</param>
 /// <param name="Via">
 /// How the caller holds the key on it, or <see langword="null"/> when the caller sees the resource without
-/// holding the key. Never <see langword="null"/> on a hold a requirement let through.
+/// holding the key. So never <see langword="null"/> on a hold the key's requirement let through
+/// (<see cref="MemberAccess{TResourceId}.On"/>), and <see langword="null"/> on one the caller's own way through let
+/// through (<see cref="MemberAccess{TResourceId}.Sees"/>) where the caller does not hold the key as well.
 /// </param>
 /// <param name="Version">
 /// The resource's version when it was read. Under the expert hold a save of the resource at another version is

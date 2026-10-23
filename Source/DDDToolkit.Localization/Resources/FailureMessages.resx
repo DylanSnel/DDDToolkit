@@ -13,8 +13,8 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="access.refused" xml:space="preserve">
-    <value>The database refused this change.</value>
-    <comment>ToolkitRefusals.Refused: a row level security policy denied a save the application's own checks let through. No arguments.</comment>
+    <value>Access to this was refused.</value>
+    <comment>ToolkitRefusals.Refused: the database refused a save the application's own checks let through, by a policy or a guard; or a request that lets one caller or another through met neither, and its argument Reasons lists each case's code and arguments. No placeholders.</comment>
   </data>
   <data name="access.role-not-allowed" xml:space="preserve">
     <value>The role this sign-in carries gives no access here: {Role}.</value>
@@ -27,6 +27,10 @@
   <data name="access.system-only" xml:space="preserve">
     <value>Only the application itself can do this.</value>
     <comment>ToolkitRefusals.SystemOnly: what only the application's own work may do, refused past the door by a use case or a handler, and the caller is a user or did not sign in. No arguments.</comment>
+  </data>
+  <data name="access.not-own" xml:space="preserve">
+    <value>Only whoever this is about can do this.</value>
+    <comment>ToolkitRefusals.NotOwn: a request is about the caller's own, a seat or a user, and names one that is not the caller's. No arguments.</comment>
   </data>
   <data name="Unspecified" xml:space="preserve">
     <value>{ValueObject} is not valid.</value>

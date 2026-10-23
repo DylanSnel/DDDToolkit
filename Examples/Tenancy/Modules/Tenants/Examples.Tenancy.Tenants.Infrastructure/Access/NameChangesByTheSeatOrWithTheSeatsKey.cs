@@ -10,13 +10,15 @@ namespace Examples.Tenancy.Tenants.Infrastructure.Access;
 // every save of a seat writes its version: a placement and a grant as much as a rename. The package holds its own
 // columns of the row, the id, the identity, the tenant and the status, and decides nothing about this module's, so
 // without this rule a seat that only gives roles at one unit would rename every seat of the tenant with a statement of
-// its own, past the check in RenameSeat. Nothing here is run by the application: the export writes a trigger on the
-// column the name is stored in. The job title has no command, and no rule: it is as writable as the row.
+// its own, past RenameSeat's requirement at the door. Nothing here is run by the application: the export writes a
+// trigger on the column the name is stored in. The job title has no command, and no rule: it is as writable as the row.
 
 /// <summary>
 /// A seat's name changes only for the seat itself, or for a seat that manages seats for the whole tenant
-/// (<see cref="RenameSeat.RequiredKey"/>): what <see cref="RenameSeat"/> asks. Asked of the seat as it was and as it
-/// is about to be, beside the policy that lets the caller change the row at all.
+/// (<see cref="RenameSeat.RequiredKey"/>): what <see cref="RenameSeat"/> requires at the door, <c>[RequiresKey]</c> with
+/// <c>[OrOwn]</c> on the seat, said once more for each row. Both branches are here, since the door decided per request
+/// and this decides per row: the seat's own row, or any row with the key. Asked of the seat as it was and as it is about
+/// to be, beside the policy that lets the caller change the row at all.
 /// </summary>
 /// <remarks>
 /// For a signed-in user, the one role a seat's statement runs as. Any other role a caller's statement runs as, an

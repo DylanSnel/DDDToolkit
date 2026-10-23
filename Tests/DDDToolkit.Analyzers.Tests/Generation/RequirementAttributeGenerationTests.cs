@@ -129,7 +129,7 @@ public class RequirementAttributeGenerationTests
     [Fact]
     public void A_request_anyone_may_send_answers_AllowAnonymous()
     {
-        var result = Module("[AllowAnonymousCallers] public sealed record ListPlans : IBillingRequest;").RunCore();
+        var result = Module("[AllowAnonymous] public sealed record ListPlans : IBillingRequest;").RunCore();
 
         result.ShouldCompile();
         result.ShouldHaveExactlyDiagnostics();
@@ -290,13 +290,16 @@ public class RequirementAttributeGenerationTests
     }
 
     [Fact]
-    public void A_derived_request_is_matched_by_its_own_line_before_the_one_it_derives_from()
+    public void A_derived_request_with_attributes_of_its_own_holds_to_its_base_s_as_well_the_base_s_first_on_a_line_before_the_base_s()
     {
         var result = Module(
             """
             [InTenant] public abstract record Report : IBillingRequest;
             public sealed record MonthlyReport(int Month) : Report;
             [SignedIn] public sealed record MyReport : Report;
+
+            [RequiresKey("tenancy.seats.manage")] public abstract record SeatCommand([OrOwn] SeatId Seat) : IBillingRequest;
+            [SignedIn] public sealed record RenameMySeat(SeatId Seat) : SeatCommand(Seat);
             """).RunCore();
 
         result.ShouldCompile();
@@ -304,8 +307,16 @@ public class RequirementAttributeGenerationTests
         var source = result.Source(Hint);
         source.IndexOf("global::Shop.Billing.MyReport =>", StringComparison.Ordinal)
             .Should().BeLessThan(source.IndexOf("global::Shop.Billing.Report =>", StringComparison.Ordinal), "a line for a base would otherwise take the derived request too");
-        Asked(result, "MyReport").Should().Be(AccessRequirement.SignedIn());
+
+        // As several [Authorize] on a controller and the one it derives from: what the derived request carries adds to what
+        // its base requires, and never takes its place, so a signed-in caller who is no seat of the tenant is not let in.
+        Asked(result, "MyReport").Should().Be(AccessRequirement.All(TenancyAccess.InTenant(), AccessRequirement.SignedIn()));
         Asked(result, "MonthlyReport", 5).Should().Be(TenancyAccess.InTenant(), "a request without attributes of its own takes its base's line");
+        result.ShouldContain(
+            Hint,
+            "global::Shop.Billing.RenameMySeat request => global::DDDToolkit.Access.AccessRequirement.All(global::DDDToolkit.Access.AccessRequirement.Any(global::DDDToolkit.Access.AccessRequirement.Own(request.Seat), "
+            + "global::DDDToolkit.Supporting.Tenancy.Access.TenancyAccess.ForTheWholeTenant(\"tenancy.seats.manage\")), global::DDDToolkit.Access.AccessRequirement.SignedIn()),",
+            "the base's key, with the caller's own it marks, then the derived request's own attribute");
     }
 
     [Fact]

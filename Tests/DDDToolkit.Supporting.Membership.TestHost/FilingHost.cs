@@ -1,3 +1,4 @@
+using DDDToolkit.Access;
 using DDDToolkit.Supporting.Membership.EntityFramework;
 using DDDToolkit.Supporting.Membership.TestHost.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,9 +33,13 @@ public static class FilingHost
         services.AddDocumentMemberAccess<IFilingRequest>();
         services.AddFolderMemberAccess<IFilingRequest>();
 
+        // What the caller's own UserId is, for a request about the caller's own: the host's to say, for its own kind.
+        services.AddCallersOwn<UserId, CallersUser>();
+
         // Who may change the members is the host's to decide, so the handlers that do are the host's own.
         services.TryAddScoped<ShareDocumentHandler>();
         services.TryAddScoped<AdmitStaffHandler>();
+        services.TryAddScoped<LeaveDocumentHandler>();
 
         return services;
     }

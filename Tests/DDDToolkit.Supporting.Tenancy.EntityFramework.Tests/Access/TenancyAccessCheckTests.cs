@@ -304,6 +304,127 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
         }
     }
 
+    // ------------------------------------------------------------------ the caller's own, and cases that combine
+
+    [Fact]
+    public async Task A_seat_is_its_own_with_nothing_read_and_the_key_stands_in_for_another_seat()
+    {
+        var renameWes = new StatedRequests.RenameSeat(_wes);
+        ((IHostRequest)renameWes).RequiredAccess.Should().Be(
+            AccessRequirement.Any(TenancyAccess.Own(_wes), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)), "[OrOwn] beside the key is the caller's own, or the key");
+
+        // Wes renames himself: his own seat in the tenant, compared at the door, and the key after it is not asked.
+        _services.Commands.Reset();
+        await _services.BySeat(_harbor.Tenant, _wes, scoped => Stated(scoped, renameWes));
+        _services.Commands.Commands.Should().BeEmpty("the caller's own reads nothing, and the key is asked only where it is not the caller's");
+
+        // Ada renames Wes with the key: his seat is not hers, so the key is asked, in one statement.
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => Stated(scoped, renameWes));
+        _services.Commands.Count.Should().Be(1);
+
+        // Seth manages seats at North, not for the whole tenant, and Wes's seat is not his: one refusal, both reasons.
+        var refusal = await RefusedOnceAsync(() => _services.BySeat(_harbor.Tenant, _seth, scoped => Stated(scoped, renameWes)));
+        Reasons(refusal).Select(reason => reason.Code).Should().Equal(ToolkitRefusals.NotOwn, TenancyRefusals.NotPermitted);
+        Reasons(refusal)[1].Arguments["Key"].Should().Be(TenancyKeys.SeatsManage, "each reason carries what its case's refusal carries");
+
+        // System work in the tenant has no seat of its own, and holds every key there.
+        await _services.BySystemIn(_harbor.Tenant, scoped => Stated(scoped, renameWes));
+
+        // Nobody has no seat, and is refused by the key as nobody, with the reason it was given.
+        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        {
+            await using var scope = _services.Scope();
+            Reasons(await RefusedOnceAsync(() => Stated(scope.ServiceProvider, renameWes))).Select(reason => reason.Code)
+                .Should().Equal(ToolkitRefusals.NotOwn, TenancyRefusals.NotSeated);
+        }
+    }
+
+    [Fact]
+    public async Task What_is_about_the_seat_alone_lets_the_seat_through_and_no_key_stands_in()
+    {
+        await _services.BySeat(_harbor.Tenant, _wes, scoped => Stated(scoped, new StatedRequests.LeaveOwnPlace(_wes)));
+
+        await RefusedByTheToolkitAsync(
+            ToolkitRefusals.NotOwn,
+            () => _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => Stated(scoped, new StatedRequests.LeaveOwnPlace(_wes))),
+            "no key stands in for the seat itself, its tenant's administrator's included");
+        await RefusedByTheToolkitAsync(
+            ToolkitRefusals.NotOwn,
+            () => _services.BySystemIn(_harbor.Tenant, scoped => Stated(scoped, new StatedRequests.LeaveOwnPlace(_wes))),
+            "system work in the tenant has no seat of its own, and acts for one at most as who is recorded");
+    }
+
+    [Fact]
+    public async Task Stacked_attributes_all_hold_and_the_first_that_fails_refuses_with_its_own_reason()
+    {
+        var asAPerson = new StatedRequests.ManageEverySeatAsAPerson();
+        ((IHostRequest)asAPerson).RequiredAccess.Should().Be(AccessRequirement.All(AccessRequirement.SignedIn(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)));
+
+        // Ada signed in, and administers Harbor.
+        using (Callers.Begin(Caller.User(Guid.NewGuid())))
+        {
+            await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => Stated(scoped, asAPerson));
+            (await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _seth, scoped => Stated(scoped, asAPerson))))
+                .Arguments["Key"].Should().Be(TenancyKeys.SeatsManage, "the second case fails, with its own reason");
+        }
+
+        // System work in the tenant holds the key, and is nobody's sign-in: the first case refuses it, and the key is never asked.
+        _services.Commands.Reset();
+        using (TenancyWork.BeginSystemIn<TenantId, SeatId>(_harbor.Tenant))
+        {
+            await RefusedByTheToolkitAsync(ToolkitRefusals.NotSignedIn, () => StatedInScope(asAPerson));
+        }
+
+        _services.Commands.Commands.Should().BeEmpty("what follows the first refusal is not asked");
+    }
+
+    [Fact]
+    public async Task One_caller_or_another_is_let_through_by_the_first_case_it_meets_and_refused_once_with_each_reason()
+    {
+        // The tenant's access history: one of the application's operators, or a seat that manages seats for the whole tenant.
+        var auditLog = new Declaring(AccessRequirement.Any(TenancyAccess.RequiresOperator(), TenancyAccess.ForTheWholeTenant(TenancyKeys.SeatsManage)));
+
+        // An operator is let through by the first case, with nothing read.
+        _services.Commands.Reset();
+        await using (var scope = _services.Scope())
+        using (Callers.Begin(Caller.User(Guid.NewGuid(), OperatorRole)))
+        using (TenancyCallers.Begin(HostCaller.Nobody(TenancyRefusals.NotSeated)))
+        {
+            await RequireAsync(scope.ServiceProvider, auditLog);
+        }
+
+        _services.Commands.Commands.Should().BeEmpty("the operator passed the first case, and the key was never asked");
+
+        // Ada is no operator, and holds the key: let through by the second, in one statement.
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, auditLog));
+        _services.Commands.Count.Should().Be(1);
+
+        // Seth is neither: one access.refused, with the operators' reason and the key's, in order.
+        var refusal = await RefusedOnceAsync(() => _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, auditLog)));
+        refusal.Kind.Should().Be(RefusalKind.NotPermitted);
+        Reasons(refusal).Select(reason => reason.Code).Should().Equal(TenancyRefusals.OperatorsOnly, TenancyRefusals.NotPermitted);
+    }
+
+    [Fact]
+    public async Task Two_keys_in_two_places_are_both_asked_and_the_first_that_is_not_held_refuses()
+    {
+        // A seat moves from one unit to another: the key to manage seats at both, the one it leaves first.
+        static Declaring MoveSeat(OrganizationUnitId from, OrganizationUnitId to)
+            => new(AccessRequirement.All(TenancyAccess.AtUnit(TenancyKeys.SeatsManage, from), TenancyAccess.AtUnit(TenancyKeys.SeatsManage, to)));
+
+        // Seth manages seats at North: within North he moves a seat, and not to the root.
+        var northPier = await _services.AddUnitAsync(_harbor.Tenant, _north, "North Pier");
+        _services.Commands.Reset();
+        await _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, MoveSeat(_north, northPier)));
+        _services.Commands.Count.Should().Be(2, "each key at its unit, in a statement of its own");
+
+        var refusal = await Refused.WithCodeAsync(TenancyRefusals.NotPermitted, () => _services.BySeat(_harbor.Tenant, _seth, scoped => RequireAsync(scoped, MoveSeat(_north, _harbor.RootUnit))));
+        refusal.Arguments["Unit"].Should().Be(_harbor.RootUnit, "the case that failed refuses, naming its own unit");
+
+        // Ada holds it at the root, and so everywhere below it.
+        await _services.BySeat(_harbor.Tenant, _harbor.AdminSeat, scoped => RequireAsync(scoped, MoveSeat(_north, _harbor.RootUnit)));
+    }
+
     // ------------------------------------------------------------------ whose cases, and whose context
 
     [Fact]
@@ -421,6 +542,25 @@ public abstract class TenancyAccessCheckTests(TestDatabases databases) : IAsyncL
     /// <summary>Asserts that <paramref name="act"/> is refused with one of the toolkit's own codes, which Tenancy's table does not hold.</summary>
     private static async Task RefusedByTheToolkitAsync(string code, Func<Task> act, string because = "")
         => (await FluentActions.Awaiting(act).Should().ThrowAsync<RefusalException>(because)).Which.Code.Should().Be(code, because);
+
+    /// <summary>Asserts that <paramref name="act"/> is refused once for every way it may be sent, and hands the refusal back.</summary>
+    private static async Task<RefusalException> RefusedOnceAsync(Func<Task> act)
+    {
+        var refusal = (await FluentActions.Awaiting(act).Should().ThrowAsync<RefusalException>()).Which;
+        refusal.Code.Should().Be(ToolkitRefusals.Refused, refusal.Message);
+        return refusal;
+    }
+
+    /// <summary>The reason of each case of a refusal that none of them let through, in the order of the cases.</summary>
+    private static IReadOnlyList<RefusalReason> Reasons(RefusalException refusal)
+        => (IReadOnlyList<RefusalReason>)refusal.Arguments[ToolkitRefusals.ReasonsArgument]!;
+
+    /// <summary>Holds a request that states its requirement with attributes to it in a scope of its own, as whoever the caller begun around it is.</summary>
+    private async Task StatedInScope(IHostRequest request)
+    {
+        await using var scope = _services.Scope();
+        await Stated(scope.ServiceProvider, request);
+    }
 
     /// <summary>Holds <paramref name="request"/> to what it declares in a scope of its own, as whoever the caller begun around it is.</summary>
     private async Task InScope(Declaring request)

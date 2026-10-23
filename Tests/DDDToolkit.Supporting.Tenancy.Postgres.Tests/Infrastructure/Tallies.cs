@@ -140,9 +140,10 @@ public static class TallyDatabase
     /// <summary>
     /// A copy of the seeded template under <paramref name="names"/>, with the tallies' table and the access files
     /// of all three contexts. With <paramref name="operators"/>, the host maps its operators' token role, the
-    /// contribution is told about it, and the module's rule for operators is among the rules.
+    /// contribution is told about it, and the module's rule for operators is among the rules. With
+    /// <paramref name="tallyRules"/>, the tallies' module has those rules in the place of its own.
     /// </summary>
-    public static async Task<TestDatabase> CreateAsync(TenancyPostgres postgres, CancellationToken cancellationToken, TenancyNaming? names = null, bool operators = false)
+    public static async Task<TestDatabase> CreateAsync(TenancyPostgres postgres, CancellationToken cancellationToken, TenancyNaming? names = null, bool operators = false, IReadOnlyList<RowAccessRule>? tallyRules = null)
     {
         names ??= TenancyNaming.Default;
         var database = await postgres.CreateDatabaseAsync(TenancyPostgres.Template.Secured, cancellationToken, names);
@@ -161,7 +162,7 @@ public static class TallyDatabase
             callers += ", " + TallyRules.OperatorRole;
         }
 
-        foreach (var script in Scripts(names, operators))
+        foreach (var script in Scripts(names, operators, tallyRules: tallyRules))
         {
             await TenancyPostgres.ExecuteAsync(database.ConnectionString, script, cancellationToken);
         }
@@ -179,7 +180,7 @@ public static class TallyDatabase
     }
 
     /// <summary>The access files of Tenancy, the widgets and the tallies, as <see cref="CreateAsync"/> applies them.</summary>
-    public static IReadOnlyList<string> Scripts(TenancyNaming? names = null, bool operators = false, Func<RowAccessExport, RowAccessExport>? export = null)
+    public static IReadOnlyList<string> Scripts(TenancyNaming? names = null, bool operators = false, Func<RowAccessExport, RowAccessExport>? export = null, IReadOnlyList<RowAccessRule>? tallyRules = null)
     {
         names ??= TenancyNaming.Default;
         var options = new PostgresRowLevelSecurityOptions();
@@ -190,7 +191,7 @@ public static class TallyDatabase
 
         using var tallies = TallyContext.ForModel(names);
         return TenancyPostgres.AccessScripts(
-            rules: [.. WidgetRules.All, TallyRules.Kept, .. operators ? new[] { TallyRules.Shared } : []],
+            rules: [.. WidgetRules.All, .. tallyRules ?? [TallyRules.Kept, .. operators ? new[] { TallyRules.Shared } : []]],
             names: names,
             roles: RowAccessRoleNames.From(options),
             operators: operators ? [TallyRules.OperatorTokenRole] : null,

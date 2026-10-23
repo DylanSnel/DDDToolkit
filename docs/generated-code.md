@@ -359,6 +359,13 @@ public partial interface IShopRequest : IRequireAccess;
 
 [RequiresKey("shop.orders.cancel")]
 public sealed record CancelOrder([OnResource] OrderId Order, [ExpectedVersion] long? ExpectedVersion = null) : IShopRequest;
+
+[RequiresKey("shop.orders.watchers")]                          // stop watching an order yourself, or take a watcher off with the key
+public sealed record StopWatching([OnResource] OrderId Order, [OrOwn] Guid Watcher) : IShopRequest;
+
+[SignedIn]                                                     // stacked: both hold, in this order
+[RequiresKey("shop.reports.export")]
+public sealed record ExportSales : IShopRequest;
 ```
 
 ```csharp title="ShopAccessBehavior.g.cs, shortened"
@@ -367,12 +374,24 @@ partial interface IShopRequest
     AccessRequirement IRequireAccess.RequiredAccess => this switch
     {
         CancelOrder request => MemberAccess.On("shop.orders.cancel", request.Order, request.ExpectedVersion),
+        StopWatching request => AccessRequirement.Any(
+            AccessRequirement.All(AccessRequirement.Own(request.Watcher), MemberAccess.Sees("shop.orders.watchers", request.Order)),
+            MemberAccess.On("shop.orders.watchers", request.Order)),
+        ExportSales => AccessRequirement.All(
+            AccessRequirement.SignedIn(),
+            TenancyAccess.ForTheWholeTenant("shop.reports.export")),
         _ => throw new InvalidOperationException(GetType().FullName + " declares no access requirement: ..."),
     };
 }
 ```
 
-A request that answers `RequiredAccess` itself gets no line: C# takes its own over the interface's.
+A request that answers `RequiredAccess` itself gets no line: C# takes its own over the interface's. Several
+attributes stacked on a request are `AccessRequirement.All` of their calls, and `[OrOwn]` beside a key is
+`AccessRequirement.Any` of the caller's own and the key, the caller's own first; beside `[OnResource]` the caller's own
+way through still sees the resource, `MemberAccess.Sees`, so the order is read, its version compared and its hold kept
+either way ([Requirements that combine](access-requirements.md#requirements-that-combine)). The member marked
+`[OrOwn]` names the subject the request acts on, the watcher who leaves, and the handler acts on that watcher of that
+order alone: the door compares it with the caller, and says nothing of who owns the order.
 
 ## `DDDToolkit.EntityFramework`
 

@@ -432,19 +432,21 @@ application's choice, and a text without either is right in both.
 
 ## The toolkit's own messages
 
-The toolkit writes six messages itself, and ships them in English and Dutch:
+The toolkit writes seven messages itself, and ships them in English and Dutch:
 
 | Code | Where it comes from | Placeholders |
 | --- | --- | --- |
 | `Unspecified` | a `Validate()` that returned `false` without saying why | `{ValueObject}` |
 | `ValueObjectValidator` | `MustBeValid()` in `DDDToolkit.FluentValidation` | `{PropertyName}`, `{ValueObject}` |
-| `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy or a guard of the database denied, refused by `DDDToolkit.EntityFramework` | none |
+| `access.refused` | `ToolkitRefusals.Refused`: a save that a row level security policy or a guard of the database denied, refused by `DDDToolkit.EntityFramework`; and a request that lets one caller or another through (`AccessRequirement.Any`, `[OrOwn]`) and met neither, whose argument `Reasons` lists each way's own code and arguments | none |
 | `access.role-not-allowed` | `ToolkitRefusals.RoleNotAllowed`: a token whose role is on no list of the host's, refused by `DDDToolkit.EntityFramework.Postgres` before anything runs for it | `{Role}` |
 | `access.not-signed-in` | `ToolkitRefusals.NotSignedIn`: a request that requires a signed-in user (`AccessRequirement.SignedIn()`), sent by anybody else | none |
 | `access.system-only` | `ToolkitRefusals.SystemOnly`: what only the application's own work may do, past the door: Tenancy's use cases that only system work calls, and a handler that only system work may run, reached by a user or by work nobody began a caller for | none |
+| `access.not-own` | `ToolkitRefusals.NotOwn`: a request about the caller's own (`AccessRequirement.Own(value)`, `[Own]`) that names a value the caller does not have | none |
 
 They are asked last, so a key of the same name in your own resx overrides them, and adding another
-language is adding those six keys to it.
+language is adding those seven keys to it. A refusal of one way or another is phrased by its own code, `access.refused`;
+a client that shows each reason phrases each of `Reasons` by its code the same way.
 
 Override them in every language you support, not only in your neutral resx. `IStringLocalizer` falls
 back from `SharedFailures.nl.resx` to `SharedFailures.resx` before the toolkit is asked at all, so an

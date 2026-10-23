@@ -283,18 +283,22 @@ database guards on a seat".
   `Crew/Rest/CrewEndpoints.cs`, `Crew/GraphQL/CrewMutations.cs`. A route and a field only send the
   feature's command or query.
 - **The namespace of a type is its folder**, in every project and in the tests.
-- **A request says who may send it**, by implementing its module's request interface and carrying one
-  requirement attribute. The interface is marked `[AccessRequests]` and declared `partial`, so the module's
+- **A request says who may send it**, by implementing its module's request interface and carrying
+  requirement attributes, which all hold where several are stacked. The interface is marked `[AccessRequests]` and declared `partial`, so the module's
   pipeline behavior is generated, which asks the module's checks before the handler runs, and `RequiredAccess` is
   written into it from the attributes. A module writes a check (`IAccessCheck`) only for cases of its own;
   `AddTenancyAccess` adds the package's check for Tenancy's cases, and `AddProjectMemberAccess<IProjectsRequest>()`,
   generated for the Membership package's member class, the check for a key held on a project. The attributes:
-  the toolkit's `[AllowAnonymousCallers]` and `[SignedIn]`, Tenancy's `[InTenant]` and `[RequiresOperator]` (queries
+  the toolkit's `[AllowAnonymous]` and `[SignedIn]`, Tenancy's `[InTenant]` and `[RequiresOperator]` (queries
   only), `[RequiresKey(key)]` for the whole tenant, with Tenancy's `[AtUnit]` on the unit for a key there, or with
   Membership's `[OnResource]` on the resource and `[ExpectedVersion]` on the version read, and Membership's
-  `[SeenWith<TResourceId>(key)]` for a query that shows the resources the key is held on. A request answers
-  `RequiredAccess` itself only for a case of the module's own or a requirement computed from its values
-  (`SeatGrants`). None leaves the decision to a package: a request handed to Tenancy's use case says what that use
+  `[SeenWith<TResourceId>(key)]` for a query that shows the resources the key is held on, and the core's `[OrOwn]`
+  on a seat beside `[RequiresKey]` for the caller's own seat or the key (`RenameSeat`; not beside `[AtUnit]`), and
+  `[OwnOnly]` with `[Own]` for the seat alone. A request answers `RequiredAccess` itself only for a case of the
+  module's own, a requirement computed from its values (`SeatGrants`, `OpenProject`), or one that combines what no
+  stack of attributes says: two keys, `AccessRequirement.All(MemberAccess.On(...), new ProjectsRequirement.AtUnit(...))`
+  (`MoveProjectToUnit`), or one caller or another, `AccessRequirement.Any(TenancyAccess.RequiresOperator(),
+  TenancyAccess.ForTheWholeTenant(key))`, with a row rule for each way onto the module's own table. None leaves the decision to a package: a request handed to Tenancy's use case says what that use
   case asks first, and the use case keeps the rest. System work is no requirement: trusted code begins it around
   the work (`TenancyUseCases.BeginSystemIn(tenant)`), a request it sends in a tenant is `[InTenant]`, and the
   handler refuses everyone else (`access.system-only`). A request that declares nothing is DDD00077.

@@ -17,16 +17,42 @@ namespace DDDToolkit.Exceptions;
 public static class ToolkitRefusals
 {
     /// <summary>
-    /// The database refused a change the application's own checks let through: a row level security policy
-    /// denied the row a save would insert, change or delete, or a guard of the database, a trigger that raises
-    /// <c>42501</c> with the toolkit's hint, refused the statement. The caller may not do this, whatever the
-    /// application thought, so it is <see cref="RefusalKind.NotPermitted"/>, and the same command gives the same
-    /// answer until somebody's rights change. <c>DDDToolkit.EntityFramework</c> makes it of a failed save, and
-    /// logs what it was: a warning when the application and the database disagree about a rule, and an
-    /// information line when the caller's rights changed between the request's access check and the save, which
-    /// it tells by asking that check again (<see cref="Access.RequestInHand.StillPassesAsync"/>).
+    /// Access was refused, with no one rule of a module's to name: the caller may not do this, so it is
+    /// <see cref="RefusalKind.NotPermitted"/>, and the same request gives the same answer until somebody's rights
+    /// change. Two places make it.
+    /// <list type="bullet">
+    /// <item><description>
+    /// The database refused a change the application's own checks let through: a row level security policy denied the
+    /// row a save would insert, change or delete, or a guard of the database, a trigger that raises <c>42501</c> with
+    /// the toolkit's hint, refused the statement. <c>DDDToolkit.EntityFramework</c> makes it of a failed save, and logs
+    /// what it was: a warning when the application and the database disagree about a rule, and an information line when
+    /// the caller's rights changed between the request's access check and the save, which it tells by asking that check
+    /// again (<see cref="Access.RequestInHand.StillPassesAsync"/>). No arguments.
+    /// </description></item>
+    /// <item><description>
+    /// A request lets one caller or another through (<see cref="Access.AccessRequirement.Any"/>, or
+    /// <see cref="Access.OrOwnAttribute"/> beside a key), and the caller is neither: its argument
+    /// <see cref="ReasonsArgument"/> is each case's own refusal, its code and its arguments, in the order of the cases
+    /// (<see cref="RefusalReason"/>), and the refusal's message names them for a log.
+    /// </description></item>
+    /// </list>
     /// </summary>
     public const string Refused = "access.refused";
+
+    /// <summary>
+    /// The argument of a <see cref="Refused"/> made at the door that holds each case's own refusal, in their order: a
+    /// list of <see cref="RefusalReason"/>, its code and its arguments each, which a client reads as a list of objects.
+    /// </summary>
+    public const string ReasonsArgument = "Reasons";
+
+    /// <summary>
+    /// A request is about the caller's own (<see cref="Access.AccessRequirement.Own{TValue}"/>, <see cref="Access.OwnAttribute"/>)
+    /// and names a value the caller does not have: another person's seat, another user. It is
+    /// <see cref="RefusalKind.NotPermitted"/>, and the same request gets the same answer from the same caller. The core's
+    /// <c>CallerAccessCheck</c> makes it, before the handler runs, for anyone the value is not the own of: a caller who did
+    /// not sign in and the application's own work too. No arguments: the value is the request's, and the caller sent it.
+    /// </summary>
+    public const string NotOwn = "access.not-own";
 
     /// <summary>
     /// A signed-in user's token carries a role the host gave no database role: neither the role of a signed-in
@@ -62,10 +88,11 @@ public static class ToolkitRefusals
     private static readonly IReadOnlyDictionary<string, (RefusalKind Kind, string Template)> Table =
         new ReadOnlyDictionary<string, (RefusalKind Kind, string Template)>(new Dictionary<string, (RefusalKind Kind, string Template)>(StringComparer.Ordinal)
         {
-            [Refused] = (RefusalKind.NotPermitted, "The database refused this change."),
+            [Refused] = (RefusalKind.NotPermitted, "Access to this was refused."),
             [RoleNotAllowed] = (RefusalKind.NotPermitted, "The role this sign-in carries gives no access here: {Role}."),
             [NotSignedIn] = (RefusalKind.NotPermitted, "Only a signed-in user can do this."),
             [SystemOnly] = (RefusalKind.NotPermitted, "Only the application itself can do this."),
+            [NotOwn] = (RefusalKind.NotPermitted, "Only whoever this is about can do this."),
         });
 
     /// <summary>Every code, in the order the table lists them.</summary>
@@ -111,6 +138,24 @@ public static class ToolkitRefusals
         }
 
         return new RefusalException(code, kind, Fill(template, named), named);
+    }
+
+    /// <summary>
+    /// The one <see cref="Refused"/> of a combination none of whose cases the caller met: each case's own refusal, in
+    /// their order, as its <see cref="ReasonsArgument"/>, and named in its message, after the code's own text, for a log.
+    /// What a localizer phrases is the code's text alone, since the reasons' codes are for a client to branch on.
+    /// </summary>
+    /// <param name="reasons">Each case's refusal, at least one.</param>
+    internal static RefusalException NoneMet(IReadOnlyList<RefusalReason> reasons)
+    {
+        var (kind, template) = Row(Refused);
+        var named = new Dictionary<string, object?>(1, StringComparer.OrdinalIgnoreCase)
+        {
+            [ReasonsArgument] = new ReadOnlyCollection<RefusalReason>([.. reasons]),
+        };
+
+        var message = template.TrimEnd('.') + ": " + string.Join("; ", reasons) + ".";
+        return new RefusalException(Refused, kind, message, named);
     }
 
     /// <summary>

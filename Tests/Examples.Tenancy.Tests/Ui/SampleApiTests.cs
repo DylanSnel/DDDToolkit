@@ -333,6 +333,10 @@ public sealed class SampleApiTests
             "/names-no-unit" => Refused("tenancy.not-permitted", """{"Key":"tenancy.history.view"}"""),
             "/at-a-unit" => Refused("tenancy.not-permitted", """{"Key":"tenancy.grants.manage","Unit":"c0000000-0000-4000-8000-000000000004"}"""),
             "/another-rule" => Refused("tenancy.grant-exceeds-own", """{"Missing":"tenancy.seats.manage"}"""),
+
+            // A request a seat sends for itself or with the key: neither way met, the key's refusal among the reasons.
+            "/yours-or-the-key" => Refused("access.refused", """{"Reasons":[{"code":"access.not-own","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Key":"tenancy.seats.manage"}}]}"""),
+            "/one-or-another-at-a-unit" => Refused("access.refused", """{"Reasons":[{"code":"tenancy.operators-only","arguments":{}},{"code":"tenancy.not-permitted","arguments":{"Key":"tenancy.seats.manage","Unit":"c0000000-0000-4000-8000-000000000004"}}]}"""),
             _ => Refused("projects.not-permitted", """{"Key":"projects.close"}"""),
         });
         var api = new SampleApi(stub.Client(), SignedIn());
@@ -347,6 +351,8 @@ public sealed class SampleApiTests
         (await WholeTenantAsync("/at-a-unit")).Should().BeFalse("the key was needed at that unit, which the arguments show by name");
         (await WholeTenantAsync("/another-rule")).Should().BeFalse("only the refusal for a key that is not held says where the key was needed");
         (await WholeTenantAsync("/a-project")).Should().BeFalse("a project's refusal is about the project, and names no unit either");
+        (await WholeTenantAsync("/yours-or-the-key")).Should().BeTrue("one of the ways the request may be sent was the key for the whole tenant");
+        (await WholeTenantAsync("/one-or-another-at-a-unit")).Should().BeFalse("the key of that way was needed at a unit");
         ApiProblem.WithoutArguments(null, "Unauthorized").KeyNeededForTheWholeTenant.Should().BeFalse();
     }
 

@@ -23,4 +23,10 @@ public sealed class KeyWithoutMarkerAttribute(Type factory, string method) : Att
 
     /// <summary>The name of the method that makes it.</summary>
     public string Method { get; } = method;
+
+    /// <summary>
+    /// The requirement attributes a key without a marker already requires, as <see cref="KeyMarkerAttribute.Implies"/>
+    /// says for a marker's: Tenancy's key for the whole tenant names <c>[InTenant]</c>. Empty by default.
+    /// </summary>
+    public Type[] Implies { get; set; } = [];
 }

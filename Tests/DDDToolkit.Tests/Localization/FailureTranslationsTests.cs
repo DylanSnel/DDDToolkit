@@ -65,7 +65,7 @@ public class FailureTranslationsTests
         var findings = FailureTranslations.Check(Localizer<TestFailures>(), "en", "de").ToolkitCodes().Findings();
 
         findings.Select(f => f.Key).Should().BeEquivalentTo(
-            ValidationError.UnspecifiedCode, "ValueObjectValidator", ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly);
+            ValidationError.UnspecifiedCode, "ValueObjectValidator", ToolkitRefusals.Refused, ToolkitRefusals.RoleNotAllowed, ToolkitRefusals.NotSignedIn, ToolkitRefusals.SystemOnly, ToolkitRefusals.NotOwn);
         findings.Should().OnlyContain(f => f.Culture.Name == "de" && f.Problem == FailureTranslationProblem.FallsBack);
     }
 
